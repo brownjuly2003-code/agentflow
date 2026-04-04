@@ -1,0 +1,63 @@
+groups:
+  - name: agentflow_pipeline
+    interval: 30s
+    rules:
+      # ── Freshness SLA ────────────────────────────────────────
+      - alert: FreshnessSLABreach
+        expr: agentflow_sla_compliance_ratio < 0.95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Data freshness SLA below 95%"
+          description: >
+            Topic {{ $labels.topic }} SLA compliance is {{ $value | humanizePercentage }}.
+            Events are arriving later than the 30s SLA threshold.
+
+      - alert: HighPipelineLatency
+        expr: histogram_quantile(0.99, rate(agentflow_pipeline_latency_seconds_bucket[5m])) > 10
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline p99 latency above 10s"
+          description: >
+            Topic {{ $labels.topic }} p99 latency is {{ $value | humanizeDuration }}.
+
+      # ── Throughput ───────────────────────────────────────────
+      - alert: LowThroughput
+        expr: rate(agentflow_freshness_events_total[5m]) < 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline throughput dropped below 10 events/sec"
+          description: >
+            Topic {{ $labels.topic }} throughput is {{ $value | humanize }} events/sec.
+
+      - alert: ZeroThroughput
+        expr: rate(agentflow_freshness_events_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No events flowing through pipeline"
+          description: >
+            Topic {{ $labels.topic }} has had zero throughput for 5 minutes.
+
+      # ── Component Health ─────────────────────────────────────
+      - alert: ComponentUnhealthy
+        expr: agentflow_pipeline_health == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pipeline component {{ $labels.component }} is unhealthy"
+
+      - alert: ComponentDegraded
+        expr: agentflow_pipeline_health == 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline component {{ $labels.component }} is degraded"

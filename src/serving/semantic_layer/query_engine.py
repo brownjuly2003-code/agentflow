@@ -35,12 +35,16 @@ class QueryEngine:
 
     def __init__(self, catalog: DataCatalog, db_path: str | None = None):
         self.catalog = catalog
-        self._db_path = db_path or os.getenv("DUCKDB_PATH", ":memory:")
+        self._db_path: str = db_path or os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
         self._conn = duckdb.connect(self._db_path)
         self._init_sample_data()
 
     def _init_sample_data(self):
-        """Seed DuckDB with sample data for local development."""
+        """Seed DuckDB with all tables declared in the catalog.
+
+        Every entity and metric in the catalog must have a backing table here.
+        This ensures the local demo never returns fake 200s for missing tables.
+        """
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS orders_v2 (
                 order_id VARCHAR PRIMARY KEY,
@@ -72,6 +76,23 @@ class QueryEngine:
                 unique_pages INTEGER,
                 funnel_stage VARCHAR,
                 is_conversion BOOLEAN DEFAULT FALSE
+            )
+        """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS users_enriched (
+                user_id VARCHAR PRIMARY KEY,
+                total_orders INTEGER DEFAULT 0,
+                total_spent DECIMAL(10,2) DEFAULT 0,
+                first_order_at TIMESTAMP,
+                last_order_at TIMESTAMP,
+                preferred_category VARCHAR
+            )
+        """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_events (
+                event_id VARCHAR,
+                topic VARCHAR,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -191,7 +212,11 @@ class QueryEngine:
         return "1 hour"  # default
 
     def get_entity(self, entity_type: str, entity_id: str) -> dict | None:
-        """Look up a single entity by type and ID."""
+        """Look up a single entity by type and ID.
+
+        Raises ValueError if the backing table doesn't exist or query fails.
+        Returns None only when the entity genuinely doesn't exist in the table.
+        """
         entity_def = self.catalog.entities.get(entity_type)
         if not entity_def:
             return None
@@ -202,20 +227,26 @@ class QueryEngine:
         )
         try:
             result = self._conn.execute(sql, [entity_id]).fetchone()
-            if not result:
-                return None
-            columns = [desc[0] for desc in self._conn.description]
-            return dict(zip(columns, result, strict=False))
-        except duckdb.Error:
-            logger.exception(
-                "entity_lookup_failed",
-                entity_type=entity_type,
-                entity_id=entity_id,
+        except duckdb.CatalogException as e:
+            msg = (
+                f"Table '{entity_def.table}' for entity '{entity_type}' "
+                f"is not materialized yet"
             )
+            raise ValueError(msg) from e
+        except duckdb.Error as e:
+            raise ValueError(f"Entity lookup failed: {e}") from e
+
+        if not result:
             return None
+        columns = [desc[0] for desc in self._conn.description]
+        return dict(zip(columns, result, strict=False))
 
     def get_metric(self, metric_name: str, window: str = "1h") -> dict:
-        """Compute a metric value for the given time window."""
+        """Compute a metric value for the given time window.
+
+        Raises ValueError if the backing table doesn't exist.
+        Returns value=0 only when the query succeeds but yields no data.
+        """
         metric_def = self.catalog.metrics.get(metric_name)
         if not metric_def:
             return {"value": 0, "unit": "unknown"}
@@ -226,9 +257,15 @@ class QueryEngine:
         try:
             result = self._conn.execute(sql).fetchone()
             value = float(result[0]) if result and result[0] is not None else 0.0
-        except duckdb.Error:
-            logger.exception("metric_query_failed", metric=metric_name)
-            value = 0.0
+        except duckdb.CatalogException as e:
+            table_match = re.search(r"Table.*?(\w+).*?not found", str(e))
+            table_name = table_match.group(1) if table_match else "unknown"
+            raise ValueError(
+                f"Metric '{metric_name}' depends on table '{table_name}' "
+                f"which is not materialized yet"
+            ) from e
+        except duckdb.Error as e:
+            raise ValueError(f"Metric query failed: {e}") from e
 
         return {
             "value": round(value, 4),

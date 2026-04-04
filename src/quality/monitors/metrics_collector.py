@@ -34,6 +34,11 @@ CONSUMER_LAG = Gauge(
 )
 
 
+class CheckSource(StrEnum):
+    LIVE = "live"
+    PLACEHOLDER = "placeholder"
+
+
 @dataclass
 class ComponentHealth:
     name: str
@@ -41,6 +46,7 @@ class ComponentHealth:
     message: str
     last_check: datetime
     metrics: dict
+    source: CheckSource = CheckSource.LIVE
 
 
 @dataclass
@@ -59,6 +65,7 @@ class PipelineHealth:
                     "status": c.status,
                     "message": c.message,
                     "metrics": c.metrics,
+                    "source": c.source.value,
                 }
                 for c in self.components
             ],
@@ -69,7 +76,7 @@ class HealthCollector:
     """Aggregates health from all pipeline components."""
 
     def __init__(self):
-        self._checks: list[callable] = [
+        self._checks: list = [
             self._check_kafka,
             self._check_flink,
             self._check_freshness,
@@ -166,23 +173,30 @@ class HealthCollector:
         )
 
     def _check_freshness(self) -> ComponentHealth:
-        """Check SLA compliance from Prometheus metrics."""
-        # In production, this would query Prometheus.
-        # For now, return a placeholder that's wired up in integration tests.
+        """Check SLA compliance from Prometheus metrics.
+
+        NOTE: placeholder until Prometheus query is wired.
+        Agents see source=placeholder and should caveat accordingly.
+        """
         return ComponentHealth(
             name="freshness",
-            status=HealthStatus.HEALTHY,
-            message="SLA compliance: 99.7%",
+            status=HealthStatus.DEGRADED,
+            message="Placeholder — no live Prometheus connection",
             last_check=datetime.now(UTC),
-            metrics={"sla_compliance_pct": 99.7},
+            metrics={"sla_compliance_pct": None},
+            source=CheckSource.PLACEHOLDER,
         )
 
     def _check_quality_score(self) -> ComponentHealth:
-        """Check data quality score from validation results."""
+        """Check data quality score from validation results.
+
+        NOTE: placeholder until quality metrics pipeline is wired.
+        """
         return ComponentHealth(
             name="quality",
-            status=HealthStatus.HEALTHY,
-            message="Quality score: 0.98",
+            status=HealthStatus.DEGRADED,
+            message="Placeholder — no live quality metrics",
             last_check=datetime.now(UTC),
-            metrics={"quality_score": 0.98},
+            metrics={"quality_score": None},
+            source=CheckSource.PLACEHOLDER,
         )

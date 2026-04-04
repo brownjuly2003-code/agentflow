@@ -36,7 +36,7 @@ class ValidationResult:
 
 
 # Map event type prefixes to their Pydantic models
-_SCHEMA_MAP: dict[str, type] = {
+_SCHEMA_MAP: dict = {
     "order.": OrderEvent,
     "payment.": PaymentEvent,
     "click": ClickstreamEvent,
@@ -46,7 +46,7 @@ _SCHEMA_MAP: dict[str, type] = {
 }
 
 
-def _get_model_for_event(event_type: str) -> type | None:
+def _get_model_for_event(event_type: str):  # -> BaseModel subclass | None
     for prefix, model in _SCHEMA_MAP.items():
         if event_type.startswith(prefix) or event_type == prefix:
             return model

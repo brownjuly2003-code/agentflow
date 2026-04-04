@@ -45,59 +45,81 @@ class EventTimestampAssigner(TimestampAssigner):
 
 
 class ValidateAndEnrich(ProcessFunction):
-    """Validates schema, enriches with processing metadata, routes invalid events.
+    """Validates, enriches, and routes events using the shared quality layer.
 
-    Validation:
-    - Required fields present (event_id, event_type, timestamp, source)
-    - Event type is known
-    - Timestamp is not in the future (with 5min tolerance)
+    Pipeline per event:
+    1. Parse JSON
+    2. Schema validation via quality.validators.schema_validator
+    3. Semantic validation via quality.validators.semantic_validator
+    4. Domain enrichment via processing.transformations.enrichment
+    5. Processing metadata (latency, version)
 
-    Enrichment:
-    - processing_time: when this event was processed
-    - pipeline_latency_ms: ingestion-to-processing delay
-    - partition_key: deterministic key for downstream partitioning
+    Invalid events (schema or semantic errors) → dead letter topic.
     """
-
-    REQUIRED_FIELDS = {"event_id", "event_type", "timestamp", "source"}
-    KNOWN_TYPES = {
-        "order.created", "order.updated", "order.cancelled",
-        "payment.initiated", "payment.completed", "payment.failed",
-        "click", "page_view", "add_to_cart",
-        "product.updated",
-    }
 
     def process_element(self, value, ctx: ProcessFunction.Context):
         from datetime import UTC, datetime
 
+        from src.processing.transformations.enrichment import (
+            compute_payment_risk_score,
+            enrich_clickstream,
+            enrich_order,
+        )
+        from src.quality.validators.schema_validator import validate_event
+        from src.quality.validators.semantic_validator import validate_semantics
+
+        # 1. Parse JSON
         try:
             event = json.loads(value)
         except json.JSONDecodeError as e:
             ctx.output(DEAD_LETTER_TAG, json.dumps({
                 "raw": value[:1000],
                 "error": f"JSON parse error: {e}",
-                "stage": "validation",
+                "stage": "parse",
             }))
             return
 
-        # Schema validation
-        missing = self.REQUIRED_FIELDS - set(event.keys())
-        if missing:
+        event_id = event.get("event_id", "unknown")
+        event_type = event.get("event_type", "unknown")
+
+        # 2. Schema validation (Pydantic models)
+        schema_result = validate_event(event)
+        if not schema_result.is_valid:
             ctx.output(DEAD_LETTER_TAG, json.dumps({
-                "event_id": event.get("event_id", "unknown"),
-                "error": f"Missing fields: {missing}",
-                "stage": "validation",
+                "event_id": event_id,
+                "error": schema_result.errors,
+                "stage": "schema_validation",
             }))
             return
 
-        if event["event_type"] not in self.KNOWN_TYPES:
-            ctx.output(DEAD_LETTER_TAG, json.dumps({
-                "event_id": event["event_id"],
-                "error": f"Unknown event type: {event['event_type']}",
-                "stage": "validation",
-            }))
-            return
+        # 3. Semantic validation (business rules)
+        semantic_result = validate_semantics(event)
+        if not semantic_result.is_clean:
+            error_issues = [
+                i.to_dict() if hasattr(i, "to_dict") else {
+                    "rule": i.rule, "severity": i.severity,
+                    "field": i.field, "message": i.message,
+                }
+                for i in semantic_result.issues
+                if i.severity == "error"
+            ]
+            if error_issues:
+                ctx.output(DEAD_LETTER_TAG, json.dumps({
+                    "event_id": event_id,
+                    "error": error_issues,
+                    "stage": "semantic_validation",
+                }))
+                return
 
-        # Enrichment
+        # 4. Domain enrichment by event type
+        if event_type.startswith("order."):
+            event = enrich_order(event)
+        elif event_type in ("click", "page_view", "add_to_cart"):
+            event = enrich_clickstream(event)
+        elif event_type.startswith("payment."):
+            event = compute_payment_risk_score(event)
+
+        # 5. Processing metadata
         now = datetime.now(UTC)
         try:
             event_ts = datetime.fromisoformat(event["timestamp"])
@@ -113,8 +135,9 @@ class ValidateAndEnrich(ProcessFunction):
             "processor_version": "1.0.0",
         }
 
-        # Deterministic partition key for downstream
-        event["_partition_key"] = event.get("user_id") or event.get("order_id") or event["event_id"]
+        event["_partition_key"] = (
+            event.get("user_id") or event.get("order_id") or event["event_id"]
+        )
 
         yield json.dumps(event)
 

@@ -110,35 +110,65 @@ AgentFlow solves all four.
 
 See [Architecture Decision Records](docs/decisions/) for detailed trade-off analysis.
 
+## Local Demo vs Production
+
+This project runs in two modes. The README describes both — don't confuse them.
+
+| Aspect | Local Demo | Production (AWS) |
+|--------|-----------|-----------------|
+| Kafka | 1 broker, replication=1 | 3+ brokers (MSK), replication=3, min.insync=2 |
+| Flink | Docker containers, 2 TM | Managed Flink, autoscaling 4-12 KPU |
+| Storage | MinIO (S3-compatible) | S3 + Iceberg with lifecycle policies |
+| Query engine | DuckDB in-memory | Trino / Athena over Iceberg |
+| Health checks | Kafka/Flink live, freshness/quality **placeholder** | All live via Prometheus |
+| Data | Simulated events | Real production traffic |
+
+The Agent API works identically in both modes. Health responses include a `source` field (`"live"` or `"placeholder"`) so agents know which checks are real.
+
 ## Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose v2+
 - Python 3.11+
-- Make
+- Make (optional — all commands work without it)
 
-### Run locally
+### Setup
 
 ```bash
-# Clone and start infrastructure
 git clone https://github.com/username/agentflow.git
 cd agentflow
 cp .env.example .env
 
+# Create virtualenv and install dependencies
+make setup
+# Or manually:
+python -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install -e ".[dev]"
+```
+
+### Run locally (API only — no Docker needed)
+
+```bash
+# Run tests
+make test
+
+# Start the Agent API (uses in-memory DuckDB)
+make api
+# Open http://localhost:8000/docs
+```
+
+### Run locally (full stack with Docker)
+
+```bash
 # Start Kafka, Flink, MinIO, Prometheus, Grafana
 make up
-
-# Wait for services to be ready (~30s)
-make wait-healthy
 
 # Start producing sample events (e-commerce simulation)
 make produce
 
 # Start the Agent Query API
 make api
-
-# Run quality checks
-make quality
 
 # Open dashboards
 # Grafana:     http://localhost:3000 (admin/admin)

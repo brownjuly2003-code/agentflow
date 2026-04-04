@@ -66,9 +66,10 @@ class FreshnessMonitor:
                 msg = self.consumer.poll(timeout=1.0)
                 if msg is None:
                     continue
-                if msg.error():
-                    if msg.error().code() != KafkaError._PARTITION_EOF:
-                        logger.error("kafka_error", error=str(msg.error()))
+                err = msg.error()
+                if err:
+                    if err.code() != KafkaError._PARTITION_EOF:
+                        logger.error("kafka_error", error=str(err))
                     continue
 
                 self._process_message(msg)

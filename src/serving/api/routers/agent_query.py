@@ -102,9 +102,15 @@ async def get_entity(entity_type: str, entity_id: str, req: Request):
             f"Available: {list(catalog.entities.keys())}",
         )
 
-    result = engine.get_entity(entity_type, entity_id)
+    try:
+        result = engine.get_entity(entity_type, entity_id)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from None
+
     if result is None:
-        raise HTTPException(status_code=404, detail=f"{entity_type}/{entity_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"{entity_type}/{entity_id} not found"
+        )
 
     now = datetime.now(UTC)
     last_updated = result.get("_last_updated")
@@ -122,7 +128,7 @@ async def get_entity(entity_type: str, entity_id: str, req: Request):
 
 
 @router.get("/metrics/{metric_name}", response_model=MetricResponse)
-async def get_metric(metric_name: str, window: str = "1h", req: Request = None):
+async def get_metric(metric_name: str, req: Request, window: str = "1h"):
     """Get a real-time metric value.
 
     Supported metrics: revenue, order_count, avg_order_value, conversion_rate,
@@ -142,7 +148,10 @@ async def get_metric(metric_name: str, window: str = "1h", req: Request = None):
             detail=f"Unknown metric: {metric_name}. Available: {list(catalog.metrics.keys())}",
         )
 
-    result = engine.get_metric(metric_name, window=window)
+    try:
+        result = engine.get_metric(metric_name, window=window)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from None
 
     return MetricResponse(
         metric_name=metric_name,

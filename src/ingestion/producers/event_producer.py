@@ -97,7 +97,7 @@ def generate_order() -> tuple[str, OrderEvent]:
         )
         for p in products
     ]
-    total = sum(item.quantity * item.unit_price for item in items)
+    total = sum((item.quantity * item.unit_price for item in items), Decimal(0))
     order_id = f"ORD-{_now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
 
     event = OrderEvent(
@@ -180,7 +180,7 @@ def run_producer():
         "acks": "all",
     })
 
-    generators = [
+    generators: list[tuple] = [
         (config.order_ratio, generate_order),
         (config.payment_ratio, generate_payment),
         (config.click_ratio, generate_click),

@@ -37,19 +37,18 @@ class DataCatalog:
     def _register_defaults(self):
         self.register_entity(EntityDefinition(
             name="order",
-            description="Customer orders with line items and status",
+            description="Customer orders with status and total",
             table="orders_v2",
             primary_key="order_id",
             fields={
                 "order_id": "Unique order identifier (ORD-YYYYMMDD-NNNN)",
                 "user_id": "Customer identifier",
                 "status": "Current status: pending, confirmed, shipped, delivered, cancelled",
-                "items": "List of ordered products with quantities and prices",
                 "total_amount": "Order total in USD",
                 "currency": "Currency code (USD, EUR, GBP)",
                 "created_at": "Order creation timestamp",
             },
-            relationships={"user": "user_id", "payment": "order_id"},
+            relationships={"user": "user_id"},
         ))
 
         self.register_entity(EntityDefinition(

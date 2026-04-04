@@ -95,6 +95,104 @@ class QueryEngine:
                 processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        self._seed_demo_data()
+
+    def _seed_demo_data(self):
+        """Insert realistic sample data so the local demo returns meaningful results."""
+        # Only seed if tables are empty
+        row = self._conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
+        count = row[0] if row else 0
+        if count > 0:
+            return
+
+        self._conn.execute("""
+            INSERT INTO products_current VALUES
+            ('PROD-001', 'Wireless Headphones', 'electronics', 79.99, TRUE, 142),
+            ('PROD-002', 'Running Shoes', 'footwear', 129.99, TRUE, 58),
+            ('PROD-003', 'Coffee Maker', 'kitchen', 49.99, TRUE, 203),
+            ('PROD-004', 'Mechanical Keyboard', 'electronics', 149.99, TRUE, 37),
+            ('PROD-005', 'Yoga Mat', 'fitness', 34.99, TRUE, 315),
+            ('PROD-006', 'Backpack', 'accessories', 89.99, TRUE, 94),
+            ('PROD-007', 'Water Bottle', 'fitness', 24.99, TRUE, 421),
+            ('PROD-008', 'Desk Lamp', 'home', 44.99, FALSE, 0),
+            ('PROD-009', 'Bluetooth Speaker', 'electronics', 59.99, TRUE, 167),
+            ('PROD-010', 'Sunglasses', 'accessories', 119.99, TRUE, 72)
+        """)
+
+        self._conn.execute("""
+            INSERT INTO orders_v2 VALUES
+            ('ORD-20260404-1001', 'USR-10001', 'delivered',
+             159.98, 'USD', NOW() - INTERVAL '2 hours'),
+            ('ORD-20260404-1002', 'USR-10002', 'shipped',
+             129.99, 'USD', NOW() - INTERVAL '90 minutes'),
+            ('ORD-20260404-1003', 'USR-10001', 'confirmed',
+             249.97, 'USD', NOW() - INTERVAL '1 hour'),
+            ('ORD-20260404-1004', 'USR-10003', 'pending',
+             79.99, 'USD', NOW() - INTERVAL '45 minutes'),
+            ('ORD-20260404-1005', 'USR-10004', 'delivered',
+             89.99, 'USD', NOW() - INTERVAL '30 minutes'),
+            ('ORD-20260404-1006', 'USR-10002', 'cancelled',
+             34.99, 'USD', NOW() - INTERVAL '20 minutes'),
+            ('ORD-20260404-1007', 'USR-10005', 'confirmed',
+             179.98, 'USD', NOW() - INTERVAL '15 minutes'),
+            ('ORD-20260404-1008', 'USR-10003', 'pending',
+             59.99, 'USD', NOW() - INTERVAL '5 minutes')
+        """)
+
+        self._conn.execute("""
+            INSERT INTO users_enriched VALUES
+            ('USR-10001', 15, 2340.50, NOW() - INTERVAL '180 days',
+             NOW() - INTERVAL '1 hour', 'electronics'),
+            ('USR-10002', 8, 890.20, NOW() - INTERVAL '90 days',
+             NOW() - INTERVAL '20 minutes', 'footwear'),
+            ('USR-10003', 3, 210.00, NOW() - INTERVAL '30 days',
+             NOW() - INTERVAL '5 minutes', 'electronics'),
+            ('USR-10004', 22, 4100.75, NOW() - INTERVAL '365 days',
+             NOW() - INTERVAL '30 minutes', 'accessories'),
+            ('USR-10005', 1, 179.98, NOW() - INTERVAL '1 day',
+             NOW() - INTERVAL '15 minutes', 'electronics')
+        """)
+
+        self._conn.execute("""
+            INSERT INTO sessions_aggregated VALUES
+            ('SES-a1b2c3', 'USR-10001',
+             NOW() - INTERVAL '2 hours',
+             NOW() - INTERVAL '100 minutes',
+             1200, 14, 6, 'checkout', TRUE),
+            ('SES-d4e5f6', 'USR-10002',
+             NOW() - INTERVAL '90 minutes',
+             NOW() - INTERVAL '70 minutes',
+             1200, 8, 4, 'add_to_cart', FALSE),
+            ('SES-g7h8i9', NULL,
+             NOW() - INTERVAL '60 minutes',
+             NOW() - INTERVAL '58 minutes',
+             120, 2, 2, 'bounce', FALSE),
+            ('SES-j1k2l3', 'USR-10003',
+             NOW() - INTERVAL '45 minutes',
+             NOW() - INTERVAL '20 minutes',
+             1500, 11, 5, 'checkout', TRUE),
+            ('SES-m4n5o6', 'USR-10004',
+             NOW() - INTERVAL '30 minutes',
+             NOW() - INTERVAL '15 minutes',
+             900, 6, 3, 'product_view', FALSE),
+            ('SES-p7q8r9', 'USR-10005',
+             NOW() - INTERVAL '20 minutes',
+             NULL, NULL, 3, 2, 'browse', FALSE)
+        """)
+
+        self._conn.execute("""
+            INSERT INTO pipeline_events VALUES
+            ('evt-001', 'events.validated', NOW() - INTERVAL '10 minutes'),
+            ('evt-002', 'events.validated', NOW() - INTERVAL '9 minutes'),
+            ('evt-003', 'events.validated', NOW() - INTERVAL '8 minutes'),
+            ('evt-004', 'events.deadletter', NOW() - INTERVAL '7 minutes'),
+            ('evt-005', 'events.validated', NOW() - INTERVAL '6 minutes'),
+            ('evt-006', 'events.validated', NOW() - INTERVAL '5 minutes'),
+            ('evt-007', 'events.validated', NOW() - INTERVAL '4 minutes'),
+            ('evt-008', 'events.validated', NOW() - INTERVAL '3 minutes'),
+            ('evt-009', 'events.deadletter', NOW() - INTERVAL '2 minutes'),
+            ('evt-010', 'events.validated', NOW() - INTERVAL '1 minute')
+        """)
 
     def execute_nl_query(
         self, question: str, context: dict | None = None

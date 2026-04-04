@@ -77,8 +77,14 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 
 ## Security
 
-- Kafka: TLS in-transit, SASL authentication (production)
+### Implemented
+- **API authentication**: API key via `X-API-Key` header (set `AGENTFLOW_API_KEYS` env var)
+- **Rate limiting**: Per-key sliding window, configurable via `AGENTFLOW_RATE_LIMIT_RPM` (default: 120/min)
+- **Health/docs exempt**: `/v1/health`, `/docs`, `/metrics` don't require auth
+- **No secrets in code**: All credentials via environment variables
+- **Terraform state**: Encrypted S3 backend with DynamoDB locking
+
+### Production (via infrastructure)
+- Kafka: TLS in-transit, SASL authentication (MSK config)
 - S3: SSE-KMS encryption, bucket policy restricts to VPC endpoints
-- API: API key authentication, rate limiting per agent
-- Terraform state: Encrypted S3 backend with DynamoDB locking
-- No secrets in code: all credentials via environment variables or AWS Secrets Manager
+- Network: Private subnets, security groups per component

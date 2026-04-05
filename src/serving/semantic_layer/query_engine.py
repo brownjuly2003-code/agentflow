@@ -199,11 +199,12 @@ class QueryEngine:
     ) -> dict:
         """Translate a natural language question to SQL and execute it.
 
-        Uses pattern matching against known query templates.
-        For production, this would integrate with an LLM for translation.
+        Uses Claude API if ANTHROPIC_API_KEY is set, falls back to rule-based.
         """
+        from src.serving.semantic_layer.nl_engine import translate_nl_to_sql
+
         start = time.monotonic()
-        sql = self._nl_to_sql(question)
+        sql = translate_nl_to_sql(question, self.catalog)
 
         if not sql:
             msg = (
@@ -231,83 +232,6 @@ class QueryEngine:
             "execution_time_ms": elapsed_ms,
             "freshness_seconds": None,
         }
-
-    def _nl_to_sql(self, question: str) -> str | None:
-        """Simple pattern-based NL→SQL translation.
-
-        Production systems would use an LLM here. This rule-based approach
-        handles common agent queries without external dependencies.
-        """
-        q = question.lower().strip()
-
-        # Order lookups
-        order_match = re.search(r"order\s+(ORD-[\w-]+)", question, re.IGNORECASE)
-        if order_match:
-            oid = order_match.group(1)
-            return f"SELECT * FROM orders_v2 WHERE order_id = '{oid}'"
-
-        # Revenue queries
-        if "revenue" in q or "total sales" in q:
-            window = self._extract_window(q)
-            return (
-                f"SELECT SUM(total_amount) as revenue "
-                f"FROM orders_v2 "
-                f"WHERE status != 'cancelled' "
-                f"AND created_at >= NOW() - INTERVAL '{window}'"
-            )
-
-        # Average order value
-        if "average order" in q or "avg order" in q or "aov" in q:
-            window = self._extract_window(q)
-            return (
-                f"SELECT AVG(total_amount) as avg_order_value "
-                f"FROM orders_v2 "
-                f"WHERE status != 'cancelled' "
-                f"AND created_at >= NOW() - INTERVAL '{window}'"
-            )
-
-        # Top products
-        if "top" in q and "product" in q:
-            limit = 5
-            limit_match = re.search(r"top\s+(\d+)", q)
-            if limit_match:
-                limit = int(limit_match.group(1))
-            return (
-                f"SELECT name, category, price, stock_quantity "
-                f"FROM products_current "
-                f"ORDER BY price DESC "
-                f"LIMIT {limit}"
-            )
-
-        # Conversion rate
-        if "conversion" in q:
-            window = self._extract_window(q)
-            return (
-                f"SELECT "
-                f"COUNT(*) FILTER (WHERE is_conversion) as conversions, "
-                f"COUNT(*) as total_sessions, "
-                f"ROUND(COUNT(*) FILTER (WHERE is_conversion)::FLOAT "
-                f"/ NULLIF(COUNT(*), 0) * 100, 2) as conversion_pct "
-                f"FROM sessions_aggregated "
-                f"WHERE started_at >= NOW() - INTERVAL '{window}'"
-            )
-
-        return None
-
-    def _extract_window(self, question: str) -> str:
-        """Extract time window from natural language."""
-        patterns = {
-            r"last\s+(\d+)\s*min": lambda m: f"{m.group(1)} minutes",
-            r"last\s+(\d+)\s*hour": lambda m: f"{m.group(1)} hours",
-            r"last\s+(\d+)\s*day": lambda m: f"{m.group(1)} days",
-            r"today": lambda _: "24 hours",
-            r"this\s+hour": lambda _: "1 hour",
-        }
-        for pattern, builder in patterns.items():
-            match = re.search(pattern, question)
-            if match:
-                return builder(match)
-        return "1 hour"  # default
 
     def get_entity(self, entity_type: str, entity_id: str) -> dict | None:
         """Look up a single entity by type and ID.

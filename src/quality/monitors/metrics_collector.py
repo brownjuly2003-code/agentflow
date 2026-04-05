@@ -173,30 +173,108 @@ class HealthCollector:
         )
 
     def _check_freshness(self) -> ComponentHealth:
-        """Check SLA compliance from Prometheus metrics.
+        """Check data freshness from the most recent pipeline event."""
+        try:
+            import duckdb
 
-        NOTE: placeholder until Prometheus query is wired.
-        Agents see source=placeholder and should caveat accordingly.
-        """
+            db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
+            conn = duckdb.connect(db_path, read_only=True)
+            row = conn.execute(
+                "SELECT MAX(processed_at) FROM pipeline_events"
+            ).fetchone()
+            conn.close()
+
+            if row and row[0]:
+                last_event = row[0]
+                if hasattr(last_event, "timestamp"):
+                    age_s = (
+                        datetime.now(UTC) - last_event.replace(tzinfo=UTC)
+                    ).total_seconds()
+                else:
+                    age_s = -1.0
+
+                sla = int(os.getenv("FRESHNESS_SLA_SECONDS", "30"))
+                if age_s <= sla:
+                    status = HealthStatus.HEALTHY
+                    msg = f"Last event {age_s:.0f}s ago (SLA: {sla}s)"
+                elif age_s <= sla * 3:
+                    status = HealthStatus.DEGRADED
+                    msg = f"Last event {age_s:.0f}s ago (SLA: {sla}s)"
+                else:
+                    status = HealthStatus.UNHEALTHY
+                    msg = f"Last event {age_s:.0f}s ago (SLA: {sla}s)"
+
+                return ComponentHealth(
+                    name="freshness",
+                    status=status,
+                    message=msg,
+                    last_check=datetime.now(UTC),
+                    metrics={
+                        "last_event_age_seconds": round(age_s, 1),
+                        "sla_seconds": sla,
+                    },
+                    source=CheckSource.LIVE,
+                )
+        except Exception:
+            logger.debug("freshness_check_skipped", exc_info=True)
+
         return ComponentHealth(
             name="freshness",
             status=HealthStatus.DEGRADED,
-            message="Placeholder — no live Prometheus connection",
+            message="No pipeline events found (run local pipeline first)",
             last_check=datetime.now(UTC),
-            metrics={"sla_compliance_pct": None},
+            metrics={"last_event_age_seconds": None},
             source=CheckSource.PLACEHOLDER,
         )
 
     def _check_quality_score(self) -> ComponentHealth:
-        """Check data quality score from validation results.
+        """Check data quality from dead letter ratio in pipeline events."""
+        try:
+            import duckdb
 
-        NOTE: placeholder until quality metrics pipeline is wired.
-        """
+            db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
+            conn = duckdb.connect(db_path, read_only=True)
+            row = conn.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (
+                        WHERE topic = 'events.deadletter'
+                    ) as dead
+                FROM pipeline_events
+                WHERE processed_at >= NOW() - INTERVAL '1 hour'
+            """).fetchone()
+            conn.close()
+
+            if row and row[0] and row[0] > 0:
+                total, dead = row[0], row[1]
+                pass_rate = (total - dead) / total
+                if pass_rate >= 0.99:
+                    status = HealthStatus.HEALTHY
+                elif pass_rate >= 0.95:
+                    status = HealthStatus.DEGRADED
+                else:
+                    status = HealthStatus.UNHEALTHY
+
+                return ComponentHealth(
+                    name="quality",
+                    status=status,
+                    message=f"Pass rate: {pass_rate:.1%} ({dead}/{total} rejected)",
+                    last_check=datetime.now(UTC),
+                    metrics={
+                        "pass_rate": round(pass_rate, 4),
+                        "total_events": total,
+                        "rejected_events": dead,
+                    },
+                    source=CheckSource.LIVE,
+                )
+        except Exception:
+            logger.debug("quality_check_skipped", exc_info=True)
+
         return ComponentHealth(
             name="quality",
             status=HealthStatus.DEGRADED,
-            message="Placeholder — no live quality metrics",
+            message="No pipeline events found (run local pipeline first)",
             last_check=datetime.now(UTC),
-            metrics={"quality_score": None},
+            metrics={"pass_rate": None},
             source=CheckSource.PLACEHOLDER,
         )

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.serving.api.main import app
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.serving.semantic_layer.nl_engine import translate_nl_to_sql
 from src.serving.semantic_layer.query_engine import QueryEngine
 
 
@@ -132,16 +133,14 @@ class TestQueryEngine:
 
     def test_nl_to_sql_revenue(self):
         catalog = DataCatalog()
-        engine = QueryEngine(catalog=catalog)
-        sql = engine._nl_to_sql("what is the revenue today")
+        sql = translate_nl_to_sql("what is the revenue today", catalog)
         assert sql is not None
         assert "SUM(total_amount)" in sql
         assert "24 hours" in sql
 
     def test_nl_to_sql_top_products(self):
         catalog = DataCatalog()
-        engine = QueryEngine(catalog=catalog)
-        sql = engine._nl_to_sql("show me top 3 products")
+        sql = translate_nl_to_sql("show me top 3 products", catalog)
         assert sql is not None
         assert "LIMIT 3" in sql
 

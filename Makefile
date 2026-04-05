@@ -1,4 +1,4 @@
-.PHONY: up down produce api test quality lint format build deploy-dev wait-healthy clean setup
+.PHONY: up down produce api test quality lint format build deploy-dev wait-healthy clean setup demo pipeline load-test
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -25,12 +25,29 @@ produce:
 	python -m src.ingestion.producers.event_producer
 
 api:
-	uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000 --reload
+	DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# ── End-to-End Demo (no Docker needed) ───────────────────────────
+
+demo:
+	@echo "=== AgentFlow Demo ==="
+	@echo "Step 1: Seeding 500 events through the full pipeline..."
+	python -m src.processing.local_pipeline --burst 500
+	@echo ""
+	@echo "Step 2: Starting API server (Ctrl+C to stop)..."
+	@echo "  Open http://localhost:8000/docs"
+	@echo "  Try:  curl http://localhost:8000/v1/metrics/revenue?window=24h"
+	@echo "  Try:  curl http://localhost:8000/v1/entity/user/USR-10001"
+	@echo "  Try:  curl http://localhost:8000/v1/health"
+	DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+
+pipeline:
+	python -m src.processing.local_pipeline --eps 10
 
 # ── Testing ───────────────────────────────────────────────────────
 
 test:
-	pytest tests/ -v --tb=short
+	pytest tests/ -v --tb=short --ignore=tests/load
 
 test-unit:
 	pytest tests/unit/ -v --tb=short
@@ -40,6 +57,12 @@ test-integration:
 
 quality:
 	python -m src.quality.validators.semantic_validator --check-all
+
+# ── Load Testing ──────────────────────────────────────────────────
+
+load-test:
+	@echo "Starting load test (50 users, 60s). API must be running on :8000"
+	locust -f tests/load/locustfile.py --host http://localhost:8000 --headless -u 50 -r 10 --run-time 60s
 
 # ── Code Quality ──────────────────────────────────────────────────
 
@@ -69,3 +92,4 @@ clean:
 	python -c "import shutil, pathlib; [shutil.rmtree(p) for p in pathlib.Path('.').rglob('__pycache__')]" 2>/dev/null || true
 	python -c "import shutil, pathlib; [shutil.rmtree(p) for p in pathlib.Path('.').rglob('.pytest_cache')]" 2>/dev/null || true
 	python -c "import shutil; [shutil.rmtree(p, True) for p in ['.coverage', 'htmlcov', 'dist', 'build']]" 2>/dev/null || true
+	python -c "import pathlib; [p.unlink() for p in pathlib.Path('.').glob('*.duckdb*')]" 2>/dev/null || true

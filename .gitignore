@@ -39,3 +39,4 @@ htmlcov/
 coverage.xml
 
 docker-compose.override.yml
+*.duckdb

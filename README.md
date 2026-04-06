@@ -4,8 +4,9 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> A production-grade streaming data platform that serves real-time context to AI agents.
+> Streaming data platform that serves real-time context to AI agents.
 > Built with Kafka, Flink, Apache Iceberg, and FastAPI.
+> Runs end-to-end locally without Docker — `make demo` and go.
 
 ## Why This Exists
 
@@ -120,10 +121,12 @@ This project runs in two modes. The README describes both — don't confuse them
 | Flink | Docker containers, 2 TM | Managed Flink, autoscaling 4-12 KPU |
 | Storage | MinIO (S3-compatible) | S3 + Iceberg with lifecycle policies |
 | Query engine | DuckDB in-memory | Trino / Athena over Iceberg |
-| Health checks | Kafka/Flink live, freshness/quality **placeholder** | All live via Prometheus |
+| Health checks | Kafka/Flink live; freshness/quality **live from DuckDB** | All live via Prometheus |
 | Data | Simulated events | Real production traffic |
 
 The Agent API works identically in both modes. Health responses include a `source` field (`"live"` or `"placeholder"`) so agents know which checks are real.
+
+NL→SQL supports Claude API (set `ANTHROPIC_API_KEY`) or falls back to built-in pattern matching.
 
 ## Quick Start
 
@@ -147,15 +150,27 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
 ```
 
-### Run locally (API only — no Docker needed)
+### Run end-to-end demo (no Docker needed)
 
 ```bash
-# Run tests
-make test
-
-# Start the Agent API (uses in-memory DuckDB)
-make api
+# Seed 500 events through the full pipeline, then start API
+make demo
 # Open http://localhost:8000/docs
+```
+
+This runs the complete path: generate events → validate (schema + semantic) → enrich → write to DuckDB → serve via API. All 5 tables get populated with real data.
+
+To run the pipeline continuously in the background:
+```bash
+make pipeline   # 10 events/sec into DuckDB
+make api        # in another terminal
+```
+
+### Run tests
+
+```bash
+make test       # 42 tests (unit + integration)
+make lint       # ruff + mypy
 ```
 
 ### Run locally (full stack with Docker)
@@ -200,10 +215,15 @@ curl http://localhost:8000/v1/health
 ```
 agentflow/
 ├── src/
-│   ├── ingestion/          # Kafka producers, Avro schemas, CDC connectors
-│   ├── processing/         # Flink jobs (stream processor, session aggregator)
+│   ├── ingestion/          # Kafka producers, Pydantic schemas, CDC connectors
+│   ├── processing/
+│   │   ├── flink_jobs/     # Stream processor, session aggregator (production)
+│   │   ├── transformations/# Enrichment functions (shared by Flink + local)
+│   │   └── local_pipeline.py  # End-to-end local pipeline (no Kafka/Flink needed)
 │   ├── quality/            # Schema & semantic validators, freshness monitors
-│   ├── serving/            # FastAPI agent API + semantic layer catalog
+│   ├── serving/
+│   │   ├── api/            # FastAPI + auth middleware + rate limiting
+│   │   └── semantic_layer/ # Catalog, query engine, NL→SQL (Claude + fallback)
 │   └── orchestration/      # Dagster DAGs for batch & quality workflows
 ├── infrastructure/
 │   └── terraform/          # AWS modules: MSK, Managed Flink, S3+Iceberg, CloudWatch
@@ -212,14 +232,17 @@ agentflow/
 │   ├── prometheus/         # Metrics collection config
 │   └── alerting/           # Alert rules (freshness SLA, error rate, throughput)
 ├── tests/
-│   ├── unit/               # Validators, enrichment logic
-│   └── integration/        # End-to-end pipeline tests with testcontainers
+│   ├── unit/               # Validators, enrichment logic (22 tests)
+│   ├── integration/        # API + query engine + demo data (20 tests)
+│   └── load/               # Locust load test (50 users, realistic traffic)
 ├── docs/
-│   ├── architecture.md     # C4-style architecture deep dive
+│   ├── architecture.md     # System design deep dive
+│   ├── product.md          # ICP, agent use cases, success metrics, MVP scope
 │   ├── decisions/          # ADRs for every major choice
 │   ├── cost-analysis.md    # $/GB breakdown, optimization strategies
 │   └── runbook.md          # On-call procedures
-└── .github/workflows/      # CI: lint, test, deploy
+├── help.md                 # Analyst-friendly guide (RU)
+└── .github/workflows/      # CI: lint, test, Terraform validate
 ```
 
 ## Performance

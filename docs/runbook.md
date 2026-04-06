@@ -4,14 +4,46 @@
 
 | Service | Local URL | Health check |
 |---------|-----------|-------------|
+| Agent API | http://localhost:8000/docs | `curl http://localhost:8000/v1/health` |
 | Kafka | localhost:9092 | `kafka-broker-api-versions --bootstrap-server localhost:9092` |
 | Flink UI | http://localhost:8081 | `curl http://localhost:8081/overview` |
 | MinIO | http://localhost:9001 | `curl http://localhost:9000/minio/health/live` |
-| Agent API | http://localhost:8000/docs | `curl http://localhost:8000/v1/health` |
 | Prometheus | http://localhost:9090 | `curl http://localhost:9090/-/healthy` |
 | Grafana | http://localhost:3000 | `curl http://localhost:3000/api/health` |
 
-## Common Operations
+## Local Pipeline Operations
+
+### Start the end-to-end demo (no Docker)
+
+```bash
+make demo          # Seeds 500 events, starts API
+```
+
+### Run continuous local pipeline
+
+```bash
+make pipeline      # 10 events/sec, writes to agentflow_demo.duckdb
+```
+
+### Inspect local DuckDB
+
+```bash
+duckdb agentflow_demo.duckdb
+```
+```sql
+SELECT COUNT(*) FROM pipeline_events;
+SELECT * FROM orders_v2 ORDER BY created_at DESC LIMIT 5;
+SELECT topic, COUNT(*) FROM pipeline_events GROUP BY topic;
+```
+
+### Reset local data
+
+```bash
+make clean         # Removes .duckdb files + caches
+make demo          # Start fresh
+```
+
+## Docker Stack Operations
 
 ### Restart a Flink job
 

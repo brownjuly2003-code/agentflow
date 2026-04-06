@@ -37,19 +37,32 @@ AgentFlow is a real-time data platform designed to serve AI agents — not dashb
 
 ## Data Flow
 
-### Streaming Path (p50 latency: ~220ms)
+### Production: Kafka → Flink → Iceberg (p50 latency: ~220ms)
 
 1. **Ingestion**: Events arrive via Kafka producers (orders, payments, clicks) or CDC (product catalog)
-2. **Processing**: Flink validates, enriches, deduplicates, and routes events
+2. **Processing**: Flink validates (schema + semantic), enriches, deduplicates, and routes events
 3. **Storage**: Valid events land in Iceberg tables on S3, partitioned by date/entity
 4. **Quality**: Pre-storage gates check schema + semantic rules. Failures → dead letter topic
-5. **Serving**: Agent API reads from Iceberg via DuckDB (local) or Trino (production)
+5. **Serving**: Agent API reads from Iceberg via Trino / Athena
+
+### Local: Generate → Validate → Enrich → DuckDB
+
+Same pipeline logic, no infrastructure dependencies:
+
+1. **Generate**: `local_pipeline.py` creates realistic e-commerce events
+2. **Validate**: Schema validation (Pydantic) + semantic validation (business rules)
+3. **Enrich**: Domain enrichment per event type (order sizing, click classification, payment risk)
+4. **Store**: Validated events written to DuckDB file (`agentflow_demo.duckdb`)
+5. **Serve**: Agent API reads from same DuckDB via `QueryEngine`
+
+Both paths use the **same validator and enrichment code** (`src/quality/`, `src/processing/transformations/`).
 
 ### Batch Path (daily)
 
-1. **Orchestration**: Dagster triggers daily compaction, aggregation, and quality reports
-2. **Compaction**: Iceberg snapshot expiry + data file compaction
-3. **Aggregation**: Pre-compute daily metrics, user profiles, product summaries
+1. **Orchestration**: Dagster triggers compaction, aggregation, and quality reports
+2. **User profiles**: Materialized from `orders_v2` → `users_enriched`
+3. **Quality report**: Row counts, null rates, dead letter ratio
+4. **Compaction**: Iceberg snapshot expiry + data file compaction (production only)
 
 ## Technology Choices
 

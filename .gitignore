@@ -59,12 +59,13 @@ node_modules/
 # Mutation testing output
 mutants/
 
-# Session artifact files
+# Session notes (temp .md created during Codex/Claude sessions).
+# NOTE: BCG_audit.md was removed from this list on 2026-04-19 -
+# it was a release artifact, not a session note.
 codex_res.md
 res_co.md
 rep.md
 more_help.md
-BCG_audit.md
 About_DE_project.md
 RELEASING.md
 AgentFlow*

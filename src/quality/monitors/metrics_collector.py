@@ -8,9 +8,15 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 
+import duckdb
+import httpx
 import structlog
+import yaml  # type: ignore[import-untyped]
+from confluent_kafka import KafkaException
 from prometheus_client import Gauge
+from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
 
 logger = structlog.get_logger()
 
@@ -81,21 +87,13 @@ class HealthCollector:
             self._check_flink,
             self._check_freshness,
             self._check_quality_score,
+            self._check_iceberg,
         ]
 
     def collect(self) -> PipelineHealth:
         components = []
         for check in self._checks:
-            try:
-                components.append(check())
-            except Exception as e:
-                components.append(ComponentHealth(
-                    name=check.__name__.replace("_check_", ""),
-                    status=HealthStatus.UNHEALTHY,
-                    message=f"Check failed: {e}",
-                    last_check=datetime.now(UTC),
-                    metrics={},
-                ))
+            components.append(check())
 
         # Overall status: worst component determines it
         statuses = [c.status for c in components]
@@ -121,8 +119,24 @@ class HealthCollector:
         from confluent_kafka.admin import AdminClient
 
         bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-        admin = AdminClient({"bootstrap.servers": bootstrap})
-        cluster_meta = admin.list_topics(timeout=5)
+        try:
+            admin = AdminClient({"bootstrap.servers": bootstrap})
+            cluster_meta = admin.list_topics(timeout=5)
+        except (KafkaException, OSError) as exc:
+            logger.warning(
+                "kafka_check_unavailable",
+                bootstrap_servers=bootstrap,
+                error=str(exc),
+                exc_info=True,
+            )
+            return ComponentHealth(
+                name="kafka",
+                status=HealthStatus.UNHEALTHY,
+                message=f"Kafka unavailable: {exc}",
+                last_check=datetime.now(UTC),
+                metrics={"brokers": 0, "topics": 0},
+                source=CheckSource.PLACEHOLDER,
+            )
         topic_count = len(cluster_meta.topics)
         broker_count = len(cluster_meta.brokers)
 
@@ -145,11 +159,26 @@ class HealthCollector:
 
     def _check_flink(self) -> ComponentHealth:
         """Check Flink JobManager and running jobs."""
-        import httpx
-
         flink_url = os.getenv("FLINK_JOBMANAGER_URL", "http://localhost:8081")
-        resp = httpx.get(f"{flink_url}/overview", timeout=5)
-        data = resp.json()
+        try:
+            resp = httpx.get(f"{flink_url}/overview", timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning(
+                "flink_check_unavailable",
+                flink_url=flink_url,
+                error=str(exc),
+                exc_info=True,
+            )
+            return ComponentHealth(
+                name="flink",
+                status=HealthStatus.UNHEALTHY,
+                message=f"Flink unavailable: {exc}",
+                last_check=datetime.now(UTC),
+                metrics={"running_jobs": None, "failed_jobs": None},
+                source=CheckSource.PLACEHOLDER,
+            )
 
         running = data.get("jobs-running", 0)
         failed = data.get("jobs-failed", 0)
@@ -175,8 +204,6 @@ class HealthCollector:
     def _check_freshness(self) -> ComponentHealth:
         """Check data freshness from the most recent pipeline event."""
         try:
-            import duckdb
-
             db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
             conn = duckdb.connect(db_path, read_only=True)
             row = conn.execute(
@@ -215,8 +242,13 @@ class HealthCollector:
                     },
                     source=CheckSource.LIVE,
                 )
-        except Exception:
-            logger.debug("freshness_check_skipped", exc_info=True)
+        except duckdb.Error as exc:
+            logger.warning(
+                "freshness_check_unavailable",
+                db_path=db_path,
+                error=str(exc),
+                exc_info=True,
+            )
 
         return ComponentHealth(
             name="freshness",
@@ -230,8 +262,6 @@ class HealthCollector:
     def _check_quality_score(self) -> ComponentHealth:
         """Check data quality from dead letter ratio in pipeline events."""
         try:
-            import duckdb
-
             db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
             conn = duckdb.connect(db_path, read_only=True)
             row = conn.execute("""
@@ -267,8 +297,13 @@ class HealthCollector:
                     },
                     source=CheckSource.LIVE,
                 )
-        except Exception:
-            logger.debug("quality_check_skipped", exc_info=True)
+        except duckdb.Error as exc:
+            logger.warning(
+                "quality_check_unavailable",
+                db_path=db_path,
+                error=str(exc),
+                exc_info=True,
+            )
 
         return ComponentHealth(
             name="quality",
@@ -277,4 +312,60 @@ class HealthCollector:
             last_check=datetime.now(UTC),
             metrics={"pass_rate": None},
             source=CheckSource.PLACEHOLDER,
+        )
+
+    def _check_iceberg(self) -> ComponentHealth:
+        """Check Iceberg catalog accessibility and row counts."""
+        config_path = Path(os.getenv("AGENTFLOW_ICEBERG_CONFIG", "config/iceberg.yaml"))
+        if not config_path.exists():
+            return ComponentHealth(
+                name="iceberg",
+                status=HealthStatus.DEGRADED,
+                message="Iceberg config not found",
+                last_check=datetime.now(UTC),
+                metrics={"row_counts": {}},
+                source=CheckSource.PLACEHOLDER,
+            )
+
+        try:
+            from src.processing.iceberg_sink import IcebergSink
+
+            sink = IcebergSink(config_path=config_path)
+            row_counts = sink.row_counts()
+        except (
+            ImportError,
+            OSError,
+            KeyError,
+            ValueError,
+            yaml.YAMLError,
+            NoSuchPropertyException,
+            RESTError,
+            ValidationError,
+        ) as exc:
+            logger.warning(
+                "iceberg_check_unavailable",
+                config_path=str(config_path),
+                error=str(exc),
+                exc_info=True,
+            )
+            return ComponentHealth(
+                name="iceberg",
+                status=HealthStatus.DEGRADED,
+                message=f"Iceberg unavailable: {exc}",
+                last_check=datetime.now(UTC),
+                metrics={"row_counts": {}},
+                source=CheckSource.PLACEHOLDER,
+            )
+
+        total_rows = sum(row_counts.values())
+        return ComponentHealth(
+            name="iceberg",
+            status=HealthStatus.HEALTHY,
+            message=f"{len(row_counts)} tables, {total_rows} rows",
+            last_check=datetime.now(UTC),
+            metrics={
+                "row_counts": row_counts,
+                "total_rows": total_rows,
+            },
+            source=CheckSource.LIVE,
         )

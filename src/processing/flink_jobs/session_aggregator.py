@@ -24,7 +24,10 @@ from pyflink.datastream.connectors.kafka import (
 from pyflink.datastream.functions import KeyedProcessFunction
 from pyflink.datastream.state import ValueStateDescriptor
 
-SESSION_GAP_MS = 30 * 60 * 1000  # 30 minutes
+SESSION_GAP_MINUTES = 30
+SESSION_GAP_MS = SESSION_GAP_MINUTES * 60 * 1000
+WATERMARK_OUT_OF_ORDERNESS_SECONDS = 10
+CHECKPOINT_INTERVAL_MS = 30_000
 
 
 class ClickTimestampAssigner(TimestampAssigner):
@@ -153,7 +156,7 @@ class SessionWindowFunction(KeyedProcessFunction):
 
 def build_pipeline():
     env = StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(30_000)
+    env.enable_checkpointing(CHECKPOINT_INTERVAL_MS)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
@@ -167,7 +170,9 @@ def build_pipeline():
         .build()
 
     watermark_strategy = WatermarkStrategy \
-        .for_bounded_out_of_orderness(timedelta(seconds=10)) \
+        .for_bounded_out_of_orderness(
+            timedelta(seconds=WATERMARK_OUT_OF_ORDERNESS_SECONDS)
+        ) \
         .with_timestamp_assigner(ClickTimestampAssigner())
 
     stream = env.from_source(source, watermark_strategy, "clicks-source")

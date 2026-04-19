@@ -40,7 +40,7 @@ class EventTimestampAssigner(TimestampAssigner):
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=UTC)
             return int(ts.timestamp() * 1000)
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, ValueError):
             return record_timestamp
 
 

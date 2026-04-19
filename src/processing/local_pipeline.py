@@ -14,9 +14,12 @@ import json
 import os
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 import duckdb
 import structlog
+import yaml
+from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
 
 from src.ingestion.producers.event_producer import (
     generate_click,
@@ -24,6 +27,8 @@ from src.ingestion.producers.event_producer import (
     generate_payment,
     generate_product,
 )
+from src.logger import configure_logging
+from src.processing.iceberg_sink import IcebergSink
 from src.processing.transformations.enrichment import (
     compute_payment_risk_score,
     enrich_clickstream,
@@ -31,8 +36,6 @@ from src.processing.transformations.enrichment import (
 )
 from src.quality.validators.schema_validator import validate_event
 from src.quality.validators.semantic_validator import validate_semantics
-
-logger = structlog.get_logger()
 
 DB_PATH = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
 
@@ -94,62 +97,99 @@ def _ensure_tables(conn: duckdb.DuckDBPyConnection):
 
 
 def _process_event(
-    conn: duckdb.DuckDBPyConnection, event: dict
+    conn: duckdb.DuckDBPyConnection,
+    event: dict,
+    iceberg_sink: IcebergSink | None = None,
 ) -> tuple[bool, str]:
     """Validate, enrich, and store a single event. Returns (success, reason)."""
     event_type = event.get("event_type", "")
     event_id = event.get("event_id", "unknown")
 
-    # Schema validation
-    schema_result = validate_event(event)
-    if not schema_result.is_valid:
-        conn.execute(
-            "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
-            [event_id, event_type, datetime.now(UTC)],
-        )
-        return False, f"schema: {schema_result.errors[0]}"
-
-    # Semantic validation
-    semantic_result = validate_semantics(event)
-    error_issues = [
-        i for i in semantic_result.issues if i.severity == "error"
-    ]
-    if error_issues:
-        conn.execute(
-            "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
-            [event_id, event_type, datetime.now(UTC)],
-        )
-        return False, f"semantic: {error_issues[0].rule}"
-
-    # Enrichment
-    if event_type.startswith("order."):
-        event = enrich_order(event)
-        _upsert_order(conn, event)
-    elif event_type in ("click", "page_view", "add_to_cart"):
-        event = enrich_clickstream(event)
-        _upsert_session(conn, event)
-    elif event_type.startswith("payment."):
-        event = compute_payment_risk_score(event)
-    elif event_type.startswith("product."):
-        _upsert_product(conn, event)
-
-    # Record in pipeline_events
-    ts = event.get("timestamp", "")
+    conn.execute("BEGIN")
     try:
-        event_ts = datetime.fromisoformat(ts)
-        if event_ts.tzinfo is None:
-            event_ts = event_ts.replace(tzinfo=UTC)
-        latency_ms = int(
-            (datetime.now(UTC) - event_ts).total_seconds() * 1000
-        )
-    except (ValueError, TypeError):
-        latency_ms = 0
+        # Schema validation
+        schema_result = validate_event(event)
+        if not schema_result.is_valid:
+            conn.execute(
+                "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
+                [event_id, event_type, datetime.now(UTC)],
+            )
+            if iceberg_sink is not None:
+                iceberg_sink.write_batch("dead_letter", [{
+                    "event_id": event.get("event_id"),
+                    "event_type": event.get("event_type"),
+                    "reason": f"schema: {schema_result.errors[0]}",
+                    "source_topic": "events.deadletter",
+                    "received_at": datetime.now(UTC),
+                    "payload": event,
+                }])
+            conn.execute("COMMIT")
+            return False, f"schema: {schema_result.errors[0]}"
 
-    conn.execute(
-        "INSERT INTO pipeline_events VALUES (?, 'events.validated', ?, ?, ?)",
-        [event_id, event_type, latency_ms, datetime.now(UTC)],
-    )
-    return True, "ok"
+        # Semantic validation
+        semantic_result = validate_semantics(event)
+        error_issues = [
+            i for i in semantic_result.issues if i.severity == "error"
+        ]
+        if error_issues:
+            conn.execute(
+                "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
+                [event_id, event_type, datetime.now(UTC)],
+            )
+            if iceberg_sink is not None:
+                iceberg_sink.write_batch("dead_letter", [{
+                    "event_id": event.get("event_id"),
+                    "event_type": event.get("event_type"),
+                    "reason": f"semantic: {error_issues[0].rule}",
+                    "source_topic": "events.deadletter",
+                    "received_at": datetime.now(UTC),
+                    "payload": event,
+                }])
+            conn.execute("COMMIT")
+            return False, f"semantic: {error_issues[0].rule}"
+
+        # Enrichment
+        if event_type.startswith("order."):
+            event = enrich_order(event)
+            _upsert_order(conn, event)
+            if iceberg_sink is not None:
+                iceberg_sink.write_batch("orders", [event])
+        elif event_type in ("click", "page_view", "add_to_cart"):
+            event = enrich_clickstream(event)
+            _upsert_session(conn, event)
+            if iceberg_sink is not None:
+                iceberg_sink.write_batch("clickstream", [event])
+        elif event_type.startswith("payment."):
+            event = compute_payment_risk_score(event)
+            if iceberg_sink is not None:
+                iceberg_sink.write_batch("payments", [event])
+        elif event_type.startswith("product."):
+            _upsert_product(conn, event)
+            if iceberg_sink is not None:
+                iceberg_sink.write_batch("inventory", [event])
+
+        # Record in pipeline_events
+        ts = event.get("timestamp", "")
+        try:
+            event_ts = datetime.fromisoformat(ts)
+            if event_ts.tzinfo is None:
+                event_ts = event_ts.replace(tzinfo=UTC)
+            latency_ms = int(
+                (datetime.now(UTC) - event_ts).total_seconds() * 1000
+            )
+        except (ValueError, TypeError):
+            latency_ms = 0
+
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES (?, 'events.validated', ?, ?, ?)",
+            [event_id, event_type, latency_ms, datetime.now(UTC)],
+        )
+        conn.execute("COMMIT")
+        return True, "ok"
+    except Exception:  # nosec B110 - rollback must preserve the original pipeline failure
+        # Transaction rollback must happen before unexpected errors propagate.
+        conn.execute("ROLLBACK")
+        raise
 
 
 def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict):
@@ -270,8 +310,36 @@ def _generate_random_event() -> tuple[str, dict]:
 
 def run(events_per_second: int = 10, burst: int = 0):
     """Run the local pipeline."""
+    configure_logging()
+    logger = structlog.get_logger()
     conn = duckdb.connect(DB_PATH)
     _ensure_tables(conn)
+    iceberg_sink = None
+    iceberg_config = os.getenv("AGENTFLOW_ICEBERG_CONFIG")
+    if not iceberg_config:
+        default_iceberg_config = Path("config/iceberg.yaml")
+        if default_iceberg_config.exists():
+            iceberg_config = str(default_iceberg_config)
+    if iceberg_config:
+        try:
+            iceberg_sink = IcebergSink(config_path=iceberg_config)
+            iceberg_sink.create_tables_if_not_exist()
+        except (
+            OSError,
+            KeyError,
+            ValueError,
+            yaml.YAMLError,
+            NoSuchPropertyException,
+            RESTError,
+            ValidationError,
+        ) as exc:
+            iceberg_sink = None
+            logger.warning(
+                "iceberg_sink_unavailable",
+                config=iceberg_config,
+                error=str(exc),
+                exc_info=True,
+            )
 
     logger.info(
         "local_pipeline_started",
@@ -289,7 +357,7 @@ def run(events_per_second: int = 10, burst: int = 0):
         count = burst if burst > 0 else float("inf")
         while total < count:
             _, event = _generate_random_event()
-            success, reason = _process_event(conn, event)
+            success, reason = _process_event(conn, event, iceberg_sink=iceberg_sink)
 
             total += 1
             if success:

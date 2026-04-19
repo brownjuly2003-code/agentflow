@@ -120,6 +120,16 @@ services:
         mc mb local/agentflow-lake/checkpoints --ignore-existing
         echo "MinIO buckets created."
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
   # ── Prometheus ────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.54.0

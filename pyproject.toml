@@ -34,10 +34,16 @@ llm = [
 load = [
     "locust>=2.29,<3",
 ]
+integrations = [
+    "langchain>=0.3,<1",
+    "llama-index-core>=0.12,<1",
+]
 dev = [
+    "hypothesis>=6,<7",
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<1",
     "pytest-cov>=5,<6",
+    "testcontainers[kafka]>=4.9,<5",
     "ruff>=0.6,<1",
     "mypy>=1.11,<2",
 ]
@@ -61,8 +67,29 @@ ignore = ["S101", "S311", "S608"]
 testpaths = ["tests"]
 markers = [
     "integration: marks tests requiring Docker services",
+    "requires_docker: marks tests that require local Docker",
 ]
 asyncio_mode = "auto"
+
+[tool.mutmut]
+paths_to_mutate = [
+    "src/serving/api/auth.py",
+    "src/serving/masking.py",
+    "src/serving/semantic_layer/query_engine.py",
+    "src/processing/outbox.py",
+    "src/serving/api/rate_limiter.py",
+]
+also_copy = [
+    "src",
+    "config",
+    "sdk",
+]
+tests_dir = [
+    "tests/unit",
+    "tests/property",
+    "tests/integration/test_outbox.py",
+]
+mutate_only_covered_lines = true
 
 [tool.mypy]
 python_version = "3.11"

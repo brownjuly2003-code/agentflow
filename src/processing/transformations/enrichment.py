@@ -6,6 +6,15 @@ and batch transformations alike — keeping logic DRY across streaming and batch
 
 from decimal import Decimal
 
+ORDER_SIZE_SMALL_MAX_TOTAL = Decimal("50")
+ORDER_SIZE_MEDIUM_MAX_TOTAL = Decimal("200")
+ORDER_SIZE_LARGE_MAX_TOTAL = Decimal("1000")
+MOBILE_VIEWPORT_MAX_WIDTH = 768
+PAYMENT_RISK_HIGH_AMOUNT_THRESHOLD = 500
+PAYMENT_RISK_MEDIUM_AMOUNT_THRESHOLD = 200
+PAYMENT_RISK_HIGH_SCORE_THRESHOLD = 0.5
+PAYMENT_RISK_MEDIUM_SCORE_THRESHOLD = 0.2
+
 
 def enrich_order(event: dict) -> dict:
     """Add derived fields to an order event.
@@ -23,11 +32,11 @@ def enrich_order(event: dict) -> dict:
     unique_products = len({i["product_id"] for i in items if "product_id" in i})
     avg_price = total / item_count if item_count > 0 else Decimal("0")
 
-    if total < 50:
+    if total < ORDER_SIZE_SMALL_MAX_TOTAL:
         bucket = "small"
-    elif total < 200:
+    elif total < ORDER_SIZE_MEDIUM_MAX_TOTAL:
         bucket = "medium"
-    elif total < 1000:
+    elif total < ORDER_SIZE_LARGE_MAX_TOTAL:
         bucket = "large"
     else:
         bucket = "whale"
@@ -72,7 +81,7 @@ def enrich_clickstream(event: dict) -> dict:
         is_product_page = False
 
     event["_derived"] = {
-        "is_mobile": viewport is not None and viewport < 768,
+        "is_mobile": viewport is not None and viewport < MOBILE_VIEWPORT_MAX_WIDTH,
         "page_category": page_category,
         "is_product_page": is_product_page,
     }
@@ -90,9 +99,9 @@ def compute_payment_risk_score(event: dict) -> dict:
     score = 0.0
     amount = float(event.get("amount", 0))
 
-    if amount > 500:
+    if amount > PAYMENT_RISK_HIGH_AMOUNT_THRESHOLD:
         score += 0.3
-    elif amount > 200:
+    elif amount > PAYMENT_RISK_MEDIUM_AMOUNT_THRESHOLD:
         score += 0.1
 
     if event.get("method") == "card":
@@ -105,6 +114,12 @@ def compute_payment_risk_score(event: dict) -> dict:
 
     event["_derived"] = {
         "risk_score": min(score, 1.0),
-        "risk_level": "high" if score > 0.5 else "medium" if score >= 0.2 else "low",
+        "risk_level": (
+            "high"
+            if score > PAYMENT_RISK_HIGH_SCORE_THRESHOLD
+            else "medium"
+            if score >= PAYMENT_RISK_MEDIUM_SCORE_THRESHOLD
+            else "low"
+        ),
     }
     return event

@@ -1,4 +1,4 @@
-.PHONY: up down produce api test quality lint format build deploy-dev wait-healthy clean setup demo pipeline load-test
+.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo pipeline flink-local load-test benchmark bench
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -16,6 +16,14 @@ up:
 down:
 	docker compose down -v
 
+stack-dev:
+	docker compose up -d
+	@echo "Dev stack is starting from docker-compose.yml"
+
+stack-prod:
+	docker compose -f docker-compose.prod.yml up -d
+	@echo "Prod-like stack is starting from docker-compose.prod.yml"
+
 wait-healthy:
 	@echo "Waiting for services..."
 	python -c "import time, urllib.request; [time.sleep(2) for _ in range(30) if not (lambda: (urllib.request.urlopen('http://localhost:8081/overview'), True)[-1])()]" 2>/dev/null || echo "Flink not ready yet"
@@ -25,7 +33,11 @@ produce:
 	python -m src.ingestion.producers.event_producer
 
 api:
+	docker compose up -d redis
 	DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+tools:
+	python scripts/export_openapi.py
 
 # ── End-to-End Demo (no Docker needed) ───────────────────────────
 
@@ -34,6 +46,10 @@ demo:
 	@echo "Step 1: Seeding 500 events through the full pipeline..."
 	python -m src.processing.local_pipeline --burst 500
 	@echo ""
+	@echo "Step 1.5: Seeding benchmark fixture rows into agentflow_demo.duckdb..."
+	python -c "from pathlib import Path; from scripts.run_benchmark import seed_benchmark_fixtures; seed_benchmark_fixtures(Path('agentflow_demo.duckdb'))"
+	@echo ""
+	docker compose up -d redis
 	@echo "Step 2: Starting API server (Ctrl+C to stop)..."
 	@echo "  Open http://localhost:8000/docs"
 	@echo "  Try:  curl http://localhost:8000/v1/metrics/revenue?window=24h"
@@ -43,6 +59,13 @@ demo:
 
 pipeline:
 	python -m src.processing.local_pipeline --eps 10
+
+flink-local:
+ifeq ($(OS),Windows_NT)
+	powershell -ExecutionPolicy Bypass -File scripts/run_flink_local.ps1
+else
+	bash scripts/run_flink_local.sh
+endif
 
 # ── Testing ───────────────────────────────────────────────────────
 
@@ -63,6 +86,12 @@ quality:
 load-test:
 	@echo "Starting load test (50 users, 60s). API must be running on :8000"
 	locust -f tests/load/locustfile.py --host http://localhost:8000 --headless -u 50 -r 10 --run-time 60s
+
+benchmark:
+	python scripts/run_benchmark.py
+
+bench:
+	python scripts/run_benchmark.py
 
 # ── Code Quality ──────────────────────────────────────────────────
 

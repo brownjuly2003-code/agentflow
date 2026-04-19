@@ -62,7 +62,7 @@ def _llm_translate(question: str, catalog: DataCatalog) -> str | None:
     client = anthropic.Anthropic(api_key=_ANTHROPIC_KEY)
     start = time.monotonic()
 
-    response = client.messages.create(  # type: ignore[union-attr]
+    response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=300,
         messages=[{"role": "user", "content": question}],
@@ -81,7 +81,16 @@ def _llm_translate(question: str, catalog: DataCatalog) -> str | None:
     )
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
-    sql: str = str(response.content[0].text).strip()
+    sql = ""
+    for block in response.content:
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            sql = text.strip()
+            if sql:
+                break
+    if not sql:
+        logger.warning("llm_returned_no_text_blocks")
+        return None
 
     # Basic safety: must be a SELECT
     if not sql.upper().startswith("SELECT"):
@@ -99,12 +108,12 @@ def _rule_based_translate(question: str) -> str | None:
     order_match = re.search(r"order\s+(ORD-[\w-]+)", question, re.IGNORECASE)
     if order_match:
         oid = order_match.group(1)
-        return f"SELECT * FROM orders_v2 WHERE order_id = '{oid}'"
+        return f"SELECT * FROM orders_v2 WHERE order_id = '{oid}'"  # nosec B608 - order IDs are regex-validated before interpolation
 
     if "revenue" in q or "total sales" in q:
         window = _extract_window(q)
         return (
-            f"SELECT SUM(total_amount) as revenue "
+            f"SELECT SUM(total_amount) as revenue "  # nosec B608 - window text comes from _extract_window's numeric allowlist
             f"FROM orders_v2 "
             f"WHERE status != 'cancelled' "
             f"AND created_at >= NOW() - INTERVAL '{window}'"
@@ -113,7 +122,7 @@ def _rule_based_translate(question: str) -> str | None:
     if "average order" in q or "avg order" in q or "aov" in q:
         window = _extract_window(q)
         return (
-            f"SELECT AVG(total_amount) as avg_order_value "
+            f"SELECT AVG(total_amount) as avg_order_value "  # nosec B608 - window text comes from _extract_window's numeric allowlist
             f"FROM orders_v2 "
             f"WHERE status != 'cancelled' "
             f"AND created_at >= NOW() - INTERVAL '{window}'"
@@ -125,7 +134,7 @@ def _rule_based_translate(question: str) -> str | None:
         if limit_match:
             limit = int(limit_match.group(1))
         return (
-            f"SELECT name, category, price, stock_quantity "
+            f"SELECT name, category, price, stock_quantity "  # nosec B608 - limit is parsed as an integer from the question text
             f"FROM products_current "
             f"ORDER BY price DESC "
             f"LIMIT {limit}"
@@ -134,7 +143,7 @@ def _rule_based_translate(question: str) -> str | None:
     if "conversion" in q:
         window = _extract_window(q)
         return (
-            f"SELECT "
+            f"SELECT "  # nosec B608 - window text comes from _extract_window's numeric allowlist
             f"COUNT(*) FILTER (WHERE is_conversion) as conversions, "
             f"COUNT(*) as total_sessions, "
             f"ROUND(COUNT(*) FILTER (WHERE is_conversion)::FLOAT "
@@ -147,7 +156,7 @@ def _rule_based_translate(question: str) -> str | None:
         user_match = re.search(r"(USR-\d+)", question)
         if user_match:
             uid = user_match.group(1)
-            return f"SELECT * FROM users_enriched WHERE user_id = '{uid}'"
+            return f"SELECT * FROM users_enriched WHERE user_id = '{uid}'"  # nosec B608 - user IDs are regex-validated before interpolation
 
     if "out of stock" in q or "stock" in q:
         return (

@@ -82,12 +82,30 @@ class FreshnessMonitor:
         topic = msg.topic()
         try:
             event = json.loads(msg.value().decode())
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            logger.warning(
+                "freshness_message_skipped",
+                topic=topic,
+                partition=msg.partition(),
+                offset=msg.offset(),
+                reason="invalid_payload",
+                error=str(exc),
+                exc_info=True,
+            )
             return
 
         # Calculate latency from event timestamp to now
         event_ts_str = event.get("timestamp")
         if not event_ts_str:
+            logger.warning(
+                "freshness_message_skipped",
+                topic=topic,
+                partition=msg.partition(),
+                offset=msg.offset(),
+                reason="missing_timestamp",
+                event_id=event.get("event_id"),
+                event_type=event.get("event_type", "unknown"),
+            )
             return
 
         try:
@@ -96,7 +114,19 @@ class FreshnessMonitor:
                 event_ts = event_ts.replace(tzinfo=UTC)
             now = datetime.now(UTC)
             latency = (now - event_ts).total_seconds()
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
+            logger.warning(
+                "freshness_message_skipped",
+                topic=topic,
+                partition=msg.partition(),
+                offset=msg.offset(),
+                reason="invalid_timestamp",
+                event_id=event.get("event_id"),
+                event_type=event.get("event_type", "unknown"),
+                timestamp=event_ts_str,
+                error=str(exc),
+                exc_info=True,
+            )
             return
 
         event_type = event.get("event_type", "unknown")

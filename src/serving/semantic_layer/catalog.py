@@ -6,6 +6,8 @@ what data is available and how to query it, without knowing table schemas.
 
 from dataclasses import dataclass, field
 
+from src.serving.semantic_layer.contract_registry import ContractRegistry
+
 
 @dataclass
 class EntityDefinition:
@@ -15,6 +17,7 @@ class EntityDefinition:
     primary_key: str
     fields: dict[str, str]  # field_name -> description
     relationships: dict[str, str] = field(default_factory=dict)
+    contract_version: str | None = None
 
 
 @dataclass
@@ -24,14 +27,16 @@ class MetricDefinition:
     sql_template: str
     unit: str
     available_windows: list[str] = field(default_factory=lambda: ["5m", "15m", "1h", "6h", "24h"])
+    contract_version: str | None = None
 
 
 class DataCatalog:
     """Registry of all data assets available to agents."""
 
-    def __init__(self):
+    def __init__(self, contract_registry: ContractRegistry | None = None):
         self.entities: dict[str, EntityDefinition] = {}
         self.metrics: dict[str, MetricDefinition] = {}
+        self.contract_registry = contract_registry or ContractRegistry()
         self._register_defaults()
 
     def _register_defaults(self):
@@ -49,6 +54,7 @@ class DataCatalog:
                 "created_at": "Order creation timestamp",
             },
             relationships={"user": "user_id"},
+            contract_version=self.contract_registry.latest_contract_version("order"),
         ))
 
         self.register_entity(EntityDefinition(
@@ -65,6 +71,7 @@ class DataCatalog:
                 "preferred_category": "Most frequently ordered category",
             },
             relationships={"orders": "user_id", "sessions": "user_id"},
+            contract_version=self.contract_registry.latest_contract_version("user"),
         ))
 
         self.register_entity(EntityDefinition(
@@ -80,6 +87,7 @@ class DataCatalog:
                 "in_stock": "Whether the product is currently available",
                 "stock_quantity": "Current inventory count",
             },
+            contract_version=self.contract_registry.latest_contract_version("product"),
         ))
 
         self.register_entity(EntityDefinition(
@@ -99,6 +107,7 @@ class DataCatalog:
                 "is_conversion": "Whether the session resulted in a checkout",
             },
             relationships={"user": "user_id"},
+            contract_version=self.contract_registry.latest_contract_version("session"),
         ))
 
         # Metrics
@@ -112,6 +121,7 @@ class DataCatalog:
                 "AND created_at >= NOW() - INTERVAL '{window}'"
             ),
             unit="USD",
+            contract_version=self.contract_registry.latest_contract_version("metric.revenue"),
         ))
 
         self.register_metric(MetricDefinition(
@@ -123,6 +133,7 @@ class DataCatalog:
                 "WHERE created_at >= NOW() - INTERVAL '{window}'"
             ),
             unit="count",
+            contract_version=self.contract_registry.latest_contract_version("metric.order_count"),
         ))
 
         self.register_metric(MetricDefinition(
@@ -135,6 +146,7 @@ class DataCatalog:
                 "AND created_at >= NOW() - INTERVAL '{window}'"
             ),
             unit="USD",
+            contract_version=self.contract_registry.latest_contract_version("metric.avg_order_value"),
         ))
 
         self.register_metric(MetricDefinition(
@@ -148,6 +160,7 @@ class DataCatalog:
                 "WHERE started_at >= NOW() - INTERVAL '{window}'"
             ),
             unit="ratio",
+            contract_version=self.contract_registry.latest_contract_version("metric.conversion_rate"),
         ))
 
         self.register_metric(MetricDefinition(
@@ -161,6 +174,7 @@ class DataCatalog:
             ),
             unit="count",
             available_windows=["now"],
+            contract_version=self.contract_registry.latest_contract_version("metric.active_sessions"),
         ))
 
         self.register_metric(MetricDefinition(
@@ -174,6 +188,7 @@ class DataCatalog:
                 "WHERE processed_at >= NOW() - INTERVAL '{window}'"
             ),
             unit="ratio",
+            contract_version=self.contract_registry.latest_contract_version("metric.error_rate"),
         ))
 
     def register_entity(self, entity: EntityDefinition):
@@ -181,3 +196,25 @@ class DataCatalog:
 
     def register_metric(self, metric: MetricDefinition):
         self.metrics[metric.name] = metric
+
+    def serialize_entities(self) -> dict[str, dict]:
+        return {
+            name: {
+                "description": entity.description,
+                "fields": entity.fields,
+                "primary_key": entity.primary_key,
+                "contract_version": entity.contract_version,
+            }
+            for name, entity in self.entities.items()
+        }
+
+    def serialize_metrics(self) -> dict[str, dict]:
+        return {
+            name: {
+                "description": metric.description,
+                "unit": metric.unit,
+                "available_windows": metric.available_windows,
+                "contract_version": metric.contract_version,
+            }
+            for name, metric in self.metrics.items()
+        }

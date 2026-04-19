@@ -1,0 +1,227 @@
+{% macro status_class(status) -%}
+{% if status == "healthy" %}status-ok{% elif status == "degraded" %}status-warn{% else %}status-fail{% endif %}
+{%- endmacro %}
+{% if not partial %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentFlow Admin</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --surface: #ffffff;
+      --line: #dde2d8;
+      --text: #19211a;
+      --muted: #5f685f;
+      --ok: #1d7a43;
+      --warn: #ad7b16;
+      --fail: #b33a2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #fbfbf9 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      font-weight: 600;
+      letter-spacing: -0.04em;
+    }
+    .lede {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(25, 33, 26, 0.05);
+    }
+    .section-title {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-family: "Segoe UI", sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .metric {
+      font-size: 2rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .subtle {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .status-ok { color: var(--ok); }
+    .status-warn { color: var(--warn); }
+    .status-fail { color: var(--fail); }
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 0.92rem;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    code {
+      font-family: "Consolas", "SFMono-Regular", monospace;
+      font-size: 0.84rem;
+    }
+    @media (max-width: 640px) {
+      main { padding: 24px 14px 36px; }
+      .card { padding: 16px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body data-admin-key="{{ admin_key }}">
+  <main>
+    <h1>AgentFlow Admin</h1>
+    <p class="lede">Read-only production summary for health, traffic, cache, and tenant key usage.</p>
+    <div id="summary">
+{% endif %}
+      <section class="grid">
+        <article class="card">
+          <p class="section-title">System Summary</p>
+          <div class="metric {{ status_class(health.status) }}">{{ health.status }}</div>
+          <p class="subtle">{{ health.components|length }} components checked</p>
+        </article>
+        <article class="card">
+          <p class="section-title">QPS Last Minute</p>
+          <div class="metric">{{ "%.2f"|format(qps_1m) }}</div>
+          <p class="subtle">Derived from `api_sessions` over the trailing 60s.</p>
+        </article>
+        <article class="card">
+          <p class="section-title">Configured Keys</p>
+          <div class="metric">{{ configured_keys }}</div>
+          <p class="subtle">Tracked admin-managed API keys.</p>
+        </article>
+        <article class="card">
+          <p class="section-title">Cache</p>
+          <div class="metric">{{ cache_stats.backend }}</div>
+          <p class="subtle">Entity TTL {{ cache_stats.entity_ttl_seconds }}s, rate limits via {{ cache_stats.rate_limit_backend }}.</p>
+        </article>
+      </section>
+      <section class="stack">
+        <article class="card">
+          <p class="section-title">Health Components</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Status</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for component in health.components %}
+              <tr>
+                <td><code>{{ component.name }}</code></td>
+                <td class="{{ status_class(component.status) }}">{{ component.status }}</td>
+                <td>{{ component.message }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </article>
+        <article class="card">
+          <p class="section-title">Database Pool</p>
+          <table>
+            <tbody>
+              <tr>
+                <th>Pool Size</th>
+                <td>{{ db_pool.pool_size }}</td>
+              </tr>
+              <tr>
+                <th>Read In Use</th>
+                <td>{{ db_pool.read_in_use }}</td>
+              </tr>
+              <tr>
+                <th>Read Available</th>
+                <td>{{ db_pool.read_available }}</td>
+              </tr>
+              <tr>
+                <th>Write Locked</th>
+                <td>{{ db_pool.write_locked }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+        <article class="card">
+          <p class="section-title">Tenant Key Usage</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Name</th>
+                <th>RPM</th>
+                <th>24h Requests</th>
+                <th>Rotation</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for item in key_usage %}
+              <tr>
+                <td>{{ item.tenant }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.rate_limit_rpm }}</td>
+                <td>{{ item.requests_last_24h }}</td>
+                <td>{{ item.rotation_phase }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+{% if not partial %}
+    </div>
+  </main>
+  <script>
+    const adminKey = document.body.dataset.adminKey;
+    const refreshSummary = async () => {
+      const response = await fetch("/admin/partials/summary", {
+        headers: adminKey ? { "X-Admin-Key": adminKey } : {},
+      });
+      if (!response.ok) {
+        return;
+      }
+      document.getElementById("summary").innerHTML = await response.text();
+    };
+    window.setInterval(refreshSummary, 5000);
+  </script>
+</body>
+</html>
+{% endif %}

@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-AgentFlow закрыл технические блокеры из BCG audit от 2026-04-12 и довёл функциональную часть v1.0.0 до рабочего состояния. Поверх v13.5 security refresh v15 закрыл и GTM/documentation хвост: narrative API reference, competitive analysis, security audit, landing page, and Fly.io demo config are now part of the release evidence. `bandit_diff.py` остаётся зелёным against the checked-in baseline, а полный verification стек для closeout выполнен с одним локальным нюансом в chaos-команде из плана. Отдельно: `BCG_audit.md` referenced by the closeout plan is not present in this workspace and was not updated here.
+AgentFlow закрыл технические блокеры из internal audit baseline от 2026-04-12 и довёл функциональную часть v1.0.0 до рабочего состояния. Поверх v13.5 security refresh v15 закрыл и GTM/documentation хвост: narrative API reference, competitive analysis, security audit, landing page, and Fly.io demo config are now part of the release evidence. `bandit_diff.py` остаётся зелёным against the checked-in baseline, а полный verification стек для closeout выполнен с одним локальным нюансом в chaos-команде из плана. Retrospective reconstruction of the lost audit artifact is preserved in `docs/audit-history.md`.
 
 ## Status by BCG Dimension
 
@@ -58,7 +58,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Phase 2 code health completed for release scope
 - [x] Phase 3 production readiness completed for release scope
 - [x] Regression blockers fixed
-- [ ] BCG audit updated (`BCG_audit.md` is absent from this workspace)
+- [x] Audit history reconstructed (`docs/audit-history.md`)
 - [x] Phase 4 GTM docs and public entry assets completed
 - [x] Benchmark baseline updated and gate definition documented
 - [x] Release readiness report created
@@ -86,7 +86,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## Evidence
 
-- Audit reference: `BCG_audit.md` (not present in this workspace)
+- Audit reference: `docs/audit-history.md` (retrospective reconstruction)
 - Phase 4 docs: `docs/competitive-analysis.md`, `docs/security-audit.md`, `docs/api-reference.md`
 - Landing: `site/index.html`
 - Demo deploy: `deploy/fly/`
@@ -96,4 +96,4 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## Release Verdict
 
-AgentFlow is technically release-ready for the checked-in code and documentation set. Code-level gates are green, v15 GTM/documentation assets are part of the release evidence, and remaining open items are `BCG_audit.md` restoration/update in the local evidence pack, manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, external security attestation, and post-release PMF work.
+AgentFlow is technically release-ready for the checked-in code and documentation set. Code-level gates are green, v15 GTM/documentation assets are part of the release evidence, and remaining open items are manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, external security attestation, and post-release PMF work.

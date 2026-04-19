@@ -1,0 +1,14 @@
+alerts: []
+# Example rule shape:
+# - id: "high-error-rate"
+#   escalation:
+#     - level: 1
+#       after_minutes: 0
+#       webhook_url: "https://hooks.slack.com/..."
+#     - level: 2
+#       after_minutes: 15
+#       webhook_url: "https://pagerduty.example/..."
+#   flap_detection:
+#     enabled: true
+#     window_minutes: 5
+#     max_changes: 3

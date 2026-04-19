@@ -1,0 +1,406 @@
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --text: #1a1a1a;
+  --muted: #666666;
+  --line: #d9dde3;
+  --line-strong: #c5ccd6;
+  --accent: #0f62fe;
+  --accent-soft: #e8f0ff;
+  --success: #16a34a;
+  --shadow: 0 10px 30px rgba(15, 24, 40, 0.04);
+  --radius: 18px;
+  --radius-small: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+pre,
+code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.shell {
+  width: min(1080px, calc(100vw - 2rem));
+  margin: 0 auto;
+}
+
+.narrow {
+  width: min(760px, calc(100vw - 2rem));
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(250, 250, 250, 0.96);
+  border-bottom: 1px solid rgba(197, 204, 214, 0.7);
+  backdrop-filter: blur(10px);
+}
+
+.header-row,
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 72px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-nav {
+  display: flex;
+  gap: 1.25rem;
+  color: var(--muted);
+  font-size: 0.96rem;
+}
+
+.header-nav a:hover,
+.header-nav a:focus-visible {
+  color: var(--text);
+}
+
+.hero,
+.section {
+  padding: 4rem 0;
+}
+
+.hero {
+  padding-top: 5rem;
+}
+
+.hero-grid,
+.install-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 1.5rem;
+}
+
+.eyebrow,
+.section-kicker,
+.panel-label {
+  margin: 0 0 0.85rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  max-width: 10ch;
+  font-size: clamp(2.7rem, 6vw, 5.2rem);
+  line-height: 0.94;
+  letter-spacing: -0.06em;
+}
+
+h2 {
+  max-width: 15ch;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+h3 {
+  font-size: 1.15rem;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.hero-text,
+.section-text,
+.section-note,
+.panel-note,
+.tile p,
+.link-card span,
+.metric span,
+.hero-facts dd,
+.footer-row,
+.journey-card p {
+  color: var(--muted);
+}
+
+.hero-text,
+.section-text {
+  max-width: 62ch;
+  margin-top: 1.25rem;
+  font-size: 1.05rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.button-secondary {
+  background: var(--surface);
+}
+
+.button:hover,
+.button:focus-visible {
+  transform: translateY(-1px);
+}
+
+.hero-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 2rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.hero-facts dt {
+  margin-bottom: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero-facts dd {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.hero-panel,
+.journey-card,
+.tile,
+.metric,
+.link-card,
+.install-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.hero-panel,
+.journey-card,
+.tile,
+.metric,
+.link-card {
+  padding: 1.5rem;
+}
+
+.hero-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hero-panel pre,
+.journey-card pre,
+.install-block {
+  overflow-x: auto;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f3f5f8;
+  border: 1px solid #e2e7ef;
+  border-radius: var(--radius-small);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.journey-grid,
+.tile-grid,
+.metrics-grid,
+.links-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.journey-grid,
+.tile-grid,
+.links-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metrics-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.journey-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  color: var(--muted);
+  font-size: 0.83rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.tile h3,
+.journey-card h3,
+.metric strong {
+  margin-bottom: 0.75rem;
+}
+
+.metrics-section {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 160px;
+}
+
+.metric strong {
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+
+.install-block {
+  margin: 0;
+}
+
+.links-panel {
+  padding: 0;
+}
+
+.link-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 150px;
+}
+
+.link-card strong {
+  font-size: 1.05rem;
+}
+
+.muted-card {
+  background: #f6f7f9;
+  border-style: dashed;
+}
+
+.site-footer {
+  border-top: 1px solid var(--line);
+}
+
+.site-footer p {
+  font-size: 0.95rem;
+}
+
+@media (max-width: 960px) {
+  .hero-grid,
+  .install-grid,
+  .journey-grid,
+  .tile-grid,
+  .metrics-grid,
+  .links-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .section-head,
+  .header-row,
+  .footer-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-row {
+    padding: 1rem 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero,
+  .section {
+    padding: 3rem 0;
+  }
+
+  .hero {
+    padding-top: 4rem;
+  }
+
+  .header-nav {
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+  }
+
+  .button {
+    width: 100%;
+  }
+}

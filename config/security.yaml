@@ -1,0 +1,9 @@
+security:
+  key_hashing: bcrypt
+  bcrypt_rounds: 12
+  min_key_length: 32
+  max_failed_auth_per_ip_per_hour: 10
+  sensitive_headers_to_redact:
+    - Authorization
+    - X-API-Key
+  request_size_limit_bytes: 1048576

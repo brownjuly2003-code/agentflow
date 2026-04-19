@@ -1,0 +1,21 @@
+slos:
+  - name: api_latency_p95
+    description: "95th percentile API latency < 100ms for entity queries"
+    target: 0.99
+    measurement: p95_latency_ms
+    threshold: 100
+    window_days: 30
+
+  - name: data_freshness
+    description: "Pipeline data freshness < 30 seconds"
+    target: 0.999
+    measurement: freshness_seconds
+    threshold: 30
+    window_days: 7
+
+  - name: error_rate
+    description: "API error rate (5xx) < 0.1%"
+    target: 0.999
+    measurement: error_rate_percent
+    threshold: 0.1
+    window_days: 30

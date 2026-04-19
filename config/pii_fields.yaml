@@ -1,0 +1,21 @@
+masking:
+  default_strategy: partial
+
+  entity_fields:
+    user:
+      - field: email
+        strategy: partial
+      - field: phone
+        strategy: partial
+      - field: full_name
+        strategy: partial
+      - field: ip_address
+        strategy: hash
+
+    order:
+      - field: shipping_address
+        strategy: partial
+
+  pii_exempt_tenants:
+    - "internal-analytics"
+    - "compliance-audit"

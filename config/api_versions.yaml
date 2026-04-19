@@ -1,0 +1,12 @@
+versions:
+  - date: "2026-01-01"
+    status: stable
+    changes: []
+
+  - date: "2026-04-11"
+    status: latest
+    changes:
+      - type: additive
+        description: "Added meta.is_historical to entity responses"
+      - type: additive
+        description: "Added X-PII-Masked response header"

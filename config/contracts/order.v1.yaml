@@ -1,0 +1,36 @@
+entity: order
+version: '1'
+released: '2026-04-01'
+status: deprecated
+fields:
+- name: order_id
+  type: string
+  required: true
+  description: Unique order identifier (ORD-{n} format)
+- name: status
+  type: enum
+  required: true
+  values:
+  - pending
+  - confirmed
+  - shipped
+  - delivered
+  - cancelled
+- name: total_amount
+  type: float
+  required: true
+  unit: USD
+- name: currency
+  type: enum
+  required: true
+  values:
+  - USD
+  - EUR
+  - GBP
+- name: user_id
+  type: string
+  required: true
+- name: created_at
+  type: datetime
+  required: true
+breaking_changes: []

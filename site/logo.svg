@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 32" role="img" aria-labelledby="title">
+  <title>AgentFlow</title>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="7" fill="#0f62fe"/>
+  <path d="M8 22.5 14.2 9.5h3.1l6.2 13h-3.2l-1.1-2.5h-7l-1.1 2.5H8Zm5.4-5.1h4.7l-2.3-5.3-2.4 5.3Z" fill="#fff"/>
+  <path d="M45 21V11h6.4c2.9 0 4.6 1.4 4.6 3.9 0 2.6-1.7 4.1-4.6 4.1h-3.5V21H45Zm3-4.5h3.2c1.2 0 1.9-.6 1.9-1.6 0-1-.7-1.5-1.9-1.5H48v3.1Zm10.3 4.5V11h3v10H58.3Zm6.2 0V11h8.1v2.4h-5.1v1.6H72v2.3h-4.5v1.7h5.3V21h-8.3Zm10.5 0V11h2.8l4.7 5.9V11h3v10h-2.7L78 15.1V21h-3Zm12.6 0V11h8.3v2.5h-5.3v1.7h4.6v2.4h-4.6V21h-3Zm10.6 0V11h3v10h-3Zm5.2 0V11h3v7.4h4.8V21h-7.8Zm9.7 0V11h8.1v2.4h-5.1v1.6h4.5v2.3h-4.5v1.7h5.3V21h-8.3Z" fill="#1a1a1a"/>
+</svg>

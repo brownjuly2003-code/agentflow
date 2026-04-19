@@ -1,0 +1,18 @@
+tenants:
+  - id: acme-corp
+    display_name: "Acme Corp"
+    kafka_topic_prefix: "acme"
+    duckdb_schema: "acme"
+    max_events_per_day: 1000000
+    max_api_keys: 10
+    allowed_entity_types: null
+
+  - id: demo
+    display_name: "Demo Tenant"
+    kafka_topic_prefix: "demo"
+    duckdb_schema: "demo"
+    max_events_per_day: 10000
+    max_api_keys: 2
+    allowed_entity_types:
+      - "order"
+      - "product"

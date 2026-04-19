@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentFlow - Real-time data for AI agents</title>
+  <meta name="description" content="Real-time data platform for AI agents. Fresh operational context, dual SDKs, contract-aware schemas, and a simple serving layer.">
+  <meta property="og:title" content="AgentFlow - Real-time data for AI agents">
+  <meta property="og:description" content="Fresh operational context for support, ops, and merch agents.">
+  <meta property="og:image" content="/og-image.png">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-row">
+      <a class="brand" href="#top" aria-label="AgentFlow home">
+        <img src="logo.svg" alt="" width="140" height="28">
+      </a>
+      <nav class="header-nav" aria-label="Primary">
+        <a href="../docs/api-reference.md">Docs</a>
+        <a href="../docs/benchmark.md">Benchmark</a>
+        <a href="../docs/competitive-analysis.md">Market</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Agent data serving platform</p>
+          <h1>Real-time data platform for AI agents</h1>
+          <p class="hero-text">
+            Fresh business context for support, ops, and merch workflows.
+            Query live entities, metrics, and natural-language questions without
+            building one-off agent APIs around your warehouse.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="../docs/api-reference.md">View docs</a>
+            <a class="button button-secondary" href="../README.md">Repository</a>
+          </div>
+          <dl class="hero-facts">
+            <div>
+              <dt>Core stack</dt>
+              <dd>Kafka -> Flink -> DuckDB or Iceberg -> FastAPI</dd>
+            </div>
+            <div>
+              <dt>SDKs</dt>
+              <dd>Python and TypeScript</dd>
+            </div>
+            <div>
+              <dt>License</dt>
+              <dd>MIT</dd>
+            </div>
+          </dl>
+        </div>
+        <aside class="hero-panel" aria-label="API example">
+          <p class="panel-label">Support workflow</p>
+          <pre><code>from agentflow import AgentFlowClient
+
+client = AgentFlowClient(
+    "https://api.agentflow.dev",
+    api_key="demo-key",
+)
+order = client.get_order("ORD-20260404-1001")
+print(order.status)</code></pre>
+          <p class="panel-note">Order freshness is returned with the response, so the caller can decide whether to trust it.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell narrow">
+        <p class="section-kicker">Problem</p>
+        <h2>Your agent is only as useful as the context behind it.</h2>
+        <p class="section-text">
+          Most agent stacks still answer from stale warehouse snapshots, ad hoc
+          service calls, or brittle prompt glue. That breaks down fastest in
+          support, operations, and merchandising, where a six-hour-old answer is
+          often worse than no answer at all. AgentFlow turns live operational
+          data into a serving layer with typed entities, metrics, query endpoints,
+          and explicit freshness signals.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">User journeys</p>
+            <h2>Built for the moments where stale context costs money.</h2>
+          </div>
+        </div>
+        <div class="journey-grid">
+          <article class="journey-card">
+            <div class="journey-meta">
+              <span>Support</span>
+              <span class="status">Live entity lookup</span>
+            </div>
+            <h3>Answer "where is my order?" from current state.</h3>
+            <pre><code>GET /v1/entity/order/ORD-20260404-1001
+
+{
+  "status": "delivered",
+  "freshness_seconds": 12.4
+}</code></pre>
+          </article>
+          <article class="journey-card">
+            <div class="journey-meta">
+              <span>Ops</span>
+              <span class="status">Freshness and SLO</span>
+            </div>
+            <h3>Check pipeline health before the incident worsens.</h3>
+            <pre><code>GET /v1/health
+GET /v1/slo
+
+healthy
+error_budget_remaining: 0.91</code></pre>
+          </article>
+          <article class="journey-card">
+            <div class="journey-meta">
+              <span>Merch</span>
+              <span class="status">Query and ranking</span>
+            </div>
+            <h3>Rank top products without writing SQL by hand.</h3>
+            <pre><code>POST /v1/query
+
+{
+  "question": "top products by revenue today",
+  "limit": 5
+}</code></pre>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Why AgentFlow</p>
+            <h2>A serving layer, not another dashboard tool.</h2>
+          </div>
+        </div>
+        <div class="tile-grid">
+          <article class="tile">
+            <h3>Freshness surfaced</h3>
+            <p>Responses carry freshness and health context so agents can caveat or escalate instead of bluffing.</p>
+          </article>
+          <article class="tile">
+            <h3>Dual SDK parity</h3>
+            <p>The same core API is reachable from Python and TypeScript without custom wrappers per workflow.</p>
+          </article>
+          <article class="tile">
+            <h3>Contracts, not guesswork</h3>
+            <p>Schema contracts, diffs, and version-aware responses make downstream agent tooling safer to evolve.</p>
+          </article>
+          <article class="tile">
+            <h3>Self-directed deployment</h3>
+            <p>Run the local demo path now, or extend toward the full streaming stack without rewriting the API surface.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section metrics-section">
+      <div class="shell">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Performance baseline</p>
+            <h2>Current benchmark numbers from the repository baseline.</h2>
+          </div>
+          <p class="section-note">Source: <a href="../docs/benchmark-baseline.json">docs/benchmark-baseline.json</a>, checked on 2026-04-18.</p>
+        </div>
+        <div class="metrics-grid">
+          <article class="metric">
+            <strong>56 ms</strong>
+            <span>aggregate p50 latency</span>
+          </article>
+          <article class="metric">
+            <strong>260 ms</strong>
+            <span>aggregate p95 latency</span>
+          </article>
+          <article class="metric">
+            <strong>330 ms</strong>
+            <span>aggregate p99 latency</span>
+          </article>
+          <article class="metric">
+            <strong>27.8 RPS</strong>
+            <span>single-node requests per second</span>
+          </article>
+          <article class="metric">
+            <strong>0%</strong>
+            <span>observed failure rate</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell install-grid">
+        <div>
+          <p class="section-kicker">Get started</p>
+          <h2>Run the local path first.</h2>
+          <p class="section-text">
+            Start with the demo path, inspect the API surface, then move into the
+            benchmark, contracts, and operational routes. The quickest way to get
+            signal is to query a seeded order and one live metric.
+          </p>
+        </div>
+        <pre class="install-block"><code>pip install agentflow
+
+from agentflow import AgentFlowClient
+
+client = AgentFlowClient(
+    "http://localhost:8000",
+    api_key="dev-key",
+)
+print(client.get_metric("revenue", "24h").value)</code></pre>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell links-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Links</p>
+            <h2>Everything you need to evaluate the current state.</h2>
+          </div>
+        </div>
+        <div class="links-grid">
+          <a class="link-card" href="../docs/api-reference.md">
+            <strong>Docs</strong>
+            <span>API reference, security audit, competitive analysis</span>
+          </a>
+          <a class="link-card" href="../README.md">
+            <strong>Repository</strong>
+            <span>Repository, setup, CI workflows, local demo path</span>
+          </a>
+          <div class="link-card muted-card" aria-disabled="true">
+            <strong>Discord</strong>
+            <span>Community link not published in this repository snapshot</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-row">
+      <p>AgentFlow is released under the MIT license.</p>
+      <p>Contact: open an issue in the repository.</p>
+    </div>
+  </footer>
+</body>
+</html>

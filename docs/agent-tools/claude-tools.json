@@ -1,0 +1,125 @@
+[
+  {
+    "name": "natural_language_query_v1_query_post",
+    "description": "Natural Language Query\n\nExecute a natural language query against the data platform.\n\nThe query engine translates natural language to SQL, executes it,\nand returns structured results. Designed for LLM tool-use.\n\nExample:\n    POST /v1/query {\"question\": \"Top 5 products by revenue today\"}",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 3,
+          "title": "Question",
+          "examples": [
+            "What is the average order value in the last hour?"
+          ]
+        },
+        "context": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context",
+          "description": "Additional context for query generation"
+        }
+      },
+      "required": [
+        "question"
+      ]
+    }
+  },
+  {
+    "name": "get_entity_v1_entity__entity_type___entity_id__get",
+    "description": "Get Entity\n\nLook up a specific entity by type and ID.\n\nSupported entity types: order, user, product, session.\nReturns the latest known state of the entity.\n\nExample:\n    GET /v1/entity/order/ORD-20260401-7829",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "entity_type": {
+          "type": "string",
+          "title": "Entity Type"
+        },
+        "entity_id": {
+          "type": "string",
+          "title": "Entity Id"
+        }
+      },
+      "required": [
+        "entity_type",
+        "entity_id"
+      ]
+    }
+  },
+  {
+    "name": "get_metric_v1_metrics__metric_name__get",
+    "description": "Get Metric\n\nGet a real-time metric value.\n\nSupported metrics: revenue, order_count, avg_order_value, conversion_rate,\nactive_sessions, error_rate.\n\nWindow options: 5m, 15m, 1h, 6h, 24h.\n\nExample:\n    GET /v1/metrics/revenue?window=1h",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "metric_name": {
+          "type": "string",
+          "title": "Metric Name"
+        },
+        "window": {
+          "type": "string",
+          "default": "1h",
+          "title": "Window"
+        }
+      },
+      "required": [
+        "metric_name"
+      ]
+    }
+  },
+  {
+    "name": "stream_events_v1_stream_events_get",
+    "description": "Stream real-time validated events via SSE\n\nServer-Sent Events stream of validated pipeline events.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Type"
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entity Id"
+        }
+      }
+    }
+  },
+  {
+    "name": "catalog_v1_catalog_get",
+    "description": "Catalog\n\nList available entities, metrics, and streaming sources for agents.",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "health_v1_health_get",
+    "description": "Health\n\nPipeline health check \u2014 agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health.\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]

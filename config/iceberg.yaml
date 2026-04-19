@@ -1,0 +1,16 @@
+iceberg:
+  catalog_type: rest
+  catalog_uri: http://localhost:8181
+  warehouse: /warehouse
+  namespace: agentflow
+  tables:
+    - name: orders
+      partition_by: [days(created_at)]
+    - name: payments
+      partition_by: [days(created_at)]
+    - name: clickstream
+      partition_by: [hours(created_at)]
+    - name: inventory
+      partition_by: [days(created_at)]
+    - name: dead_letter
+      partition_by: [days(received_at)]

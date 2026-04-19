@@ -1,0 +1,4 @@
+opentelemetry-sdk>=1.41,<2
+opentelemetry-exporter-otlp-proto-grpc>=1.41,<2
+opentelemetry-instrumentation-fastapi>=0.62b0,<1
+opentelemetry-instrumentation-httpx>=0.62b0,<1

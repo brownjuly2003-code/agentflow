@@ -1,0 +1,10 @@
+backend: duckdb
+
+clickhouse:
+  host: localhost
+  port: 8123
+  user: default
+  password: ""
+  database: agentflow
+  secure: false
+  timeout_seconds: 10

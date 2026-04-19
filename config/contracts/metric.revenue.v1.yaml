@@ -1,0 +1,19 @@
+entity: metric.revenue
+version: '1'
+released: '2026-04-11'
+status: stable
+fields:
+- name: value
+  type: float
+  required: true
+  unit: USD
+- name: unit
+  type: string
+  required: true
+- name: window
+  type: string
+  required: true
+- name: computed_at
+  type: datetime
+  required: true
+breaking_changes: []

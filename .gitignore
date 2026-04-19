@@ -40,3 +40,33 @@ coverage.xml
 
 docker-compose.override.yml
 *.duckdb
+
+# Runtime artifacts
+.artifacts/
+.hypothesis/
+.iceberg/
+.tmp/
+.dora/
+.bandit-baseline.json
+
+# DuckDB runtime state
+*.duckdb.wal
+*.duckdb.tmp/
+
+# Node
+node_modules/
+
+# Mutation testing output
+mutants/
+
+# Session artifact files
+codex_res.md
+res_co.md
+rep.md
+more_help.md
+BCG_audit.md
+About_DE_project.md
+RELEASING.md
+AgentFlow*
+agentflow_bench_debug*.duckdb*
+agentflow_demo_api.duckdb*

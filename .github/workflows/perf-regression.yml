@@ -1,0 +1,42 @@
+name: Performance Regression
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  perf-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,load]"
+
+      - name: Run benchmark
+        run: |
+          python scripts/run_benchmark.py \
+            --report-path .artifacts/load/benchmark.md \
+            --results-json .artifacts/load/results.json
+
+      - name: Enforce release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/load
+          python scripts/check_performance.py docs/benchmark-baseline.json .artifacts/load/results.json | tee .artifacts/load/perf-regression-report.md
+
+      - name: Upload performance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-regression-results
+          path: .artifacts/load/

@@ -1,0 +1,81 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+      confirm:
+        description: Type APPLY to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    if: inputs.confirm == 'APPLY'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.TF_AWS_ROLE }}
+          aws-region: us-east-1
+
+      - name: Validate tfvars presence
+        working-directory: infrastructure/terraform
+        run: |
+          if [ ! -f "environments/${{ inputs.environment }}.tfvars" ]; then
+            echo "Missing environments/${{ inputs.environment }}.tfvars"
+            echo "Copy the matching .tfvars.example file and provide real network values."
+            exit 1
+          fi
+
+      - name: Terraform plan
+        working-directory: infrastructure/terraform
+        run: |
+          terraform init
+          terraform plan -var-file="environments/${{ inputs.environment }}.tfvars" -out=tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment }}
+          path: infrastructure/terraform/tfplan
+
+  apply:
+    if: inputs.confirm == 'APPLY'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.TF_AWS_ROLE }}
+          aws-region: us-east-1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment }}
+          path: infrastructure/terraform
+
+      - name: Terraform apply
+        working-directory: infrastructure/terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve tfplan

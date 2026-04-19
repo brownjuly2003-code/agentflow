@@ -1,0 +1,63 @@
+name: Publish Python SDK
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify release tag matches SDK metadata
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not tag.startswith("sdk-v"):
+              raise SystemExit(f"Unexpected tag format: {tag}")
+
+          expected_version = tag.removeprefix("sdk-v")
+          pyproject = tomllib.loads(Path("sdk/pyproject.toml").read_text(encoding="utf-8"))
+          package_json = json.loads(Path("sdk-ts/package.json").read_text(encoding="utf-8"))
+
+          python_version = pyproject["project"]["version"]
+          ts_version = package_json["version"]
+
+          if python_version != expected_version:
+              raise SystemExit(
+                  f"sdk/pyproject.toml version {python_version} does not match tag {expected_version}"
+              )
+          if ts_version != expected_version:
+              raise SystemExit(
+                  f"sdk-ts/package.json version {ts_version} does not match tag {expected_version}"
+              )
+          PY
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade build twine
+
+      - name: Build SDK distribution
+        run: python -m build sdk/
+
+      - name: Check distribution metadata
+        run: python -m twine check sdk/dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: python -m twine upload sdk/dist/*

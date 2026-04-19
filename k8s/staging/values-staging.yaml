@@ -1,0 +1,68 @@
+replicaCount: 1
+
+image:
+  repository: agentflow/api
+  tag: "staging"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+ingress:
+  enabled: false
+
+service:
+  type: NodePort
+  nodePort: 30080
+
+autoscaling:
+  enabled: false
+
+persistence:
+  enabled: false
+
+probes:
+  readiness:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 15
+    failureThreshold: 12
+  liveness:
+    initialDelaySeconds: 90
+    periodSeconds: 20
+    timeoutSeconds: 15
+    failureThreshold: 6
+
+config:
+  corsOrigins: http://localhost:3000,http://127.0.0.1:3000
+  redisUrl: redis://agentflow-redis:6379/0
+
+secrets:
+  adminKey: af-admin-staging-local-1234567890abcdef
+  apiKeys: |
+    keys:
+      - key: "af-prod-agent-support-abc123"
+        name: "Support Agent"
+        tenant: "default"
+        rate_limit_rpm: 120
+        allowed_entity_types:
+          - "order"
+          - "user"
+        created_at: "2026-04-12"
+      - key: "af-prod-agent-ops-def456"
+        name: "Ops Agent"
+        tenant: "default"
+        rate_limit_rpm: 300
+        allowed_entity_types: null
+        created_at: "2026-04-12"
+      - key: "af-prod-agent-rate-e2e000"
+        name: "Rate Limit Agent"
+        tenant: "default"
+        rate_limit_rpm: 120
+        allowed_entity_types: null
+        created_at: "2026-04-12"

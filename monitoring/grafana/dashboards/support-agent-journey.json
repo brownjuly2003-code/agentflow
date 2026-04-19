@@ -1,0 +1,195 @@
+{
+  "title": "AgentFlow Support Agent Journey",
+  "uid": "agentflow-support",
+  "tags": ["agentflow", "support", "journey"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Order Lookup Latency (p50 / p95 / p99)",
+      "description": "Expects Prometheus histogram agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"order\"}. Until exported, validate against /v1/admin/analytics/latency.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"order\"}[5m])))",
+          "legendFormat": "p50 order"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"order\"}[5m])))",
+          "legendFormat": "p95 order"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"order\"}[5m])))",
+          "legendFormat": "p99 order"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "User Lookup Latency (p50 / p95 / p99)",
+      "description": "Expects Prometheus histogram agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"user\"}. Until exported, validate against /v1/admin/analytics/latency.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"user\"}[5m])))",
+          "legendFormat": "p50 user"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"user\"}[5m])))",
+          "legendFormat": "p95 user"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(agentflow_api_entity_lookup_duration_seconds_bucket{entity_type=\"user\"}[5m])))",
+          "legendFormat": "p99 user"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Entity Cache Hit Rate",
+      "description": "Expects counter agentflow_api_cache_result_total{scope=\"entity\",result=\"hit|miss\"}. Mirrors X-Cache behaviour from the API.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(agentflow_api_cache_result_total{scope=\"entity\",result=\"hit\"}[5m])) / clamp_min(sum(rate(agentflow_api_cache_result_total{scope=\"entity\"}[5m])), 1)",
+          "legendFormat": "entity cache"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 0.6},
+              {"color": "green", "value": 0.8}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active Support Agent Sessions",
+      "description": "Expects metric exporter gauge agentflow_metric_value{metric=\"active_sessions\",window=\"1h\"}.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+      "targets": [
+        {
+          "expr": "max(agentflow_metric_value{metric=\"active_sessions\",window=\"1h\"})",
+          "legendFormat": "active sessions"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Data Freshness (p99)",
+      "description": "Support answers must stay within the product freshness SLA of < 30 seconds.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(agentflow_pipeline_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99 freshness"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 30},
+              {"color": "red", "value": 60}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Support Readiness",
+      "description": "High-level journey health using the freshness SLA ratio already emitted by the pipeline monitor.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+      "targets": [
+        {
+          "expr": "min(agentflow_sla_compliance_ratio)",
+          "legendFormat": "readiness"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 0.95},
+              {"color": "green", "value": 0.99}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

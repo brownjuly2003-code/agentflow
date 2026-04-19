@@ -1,0 +1,138 @@
+{
+  "title": "AgentFlow Merch Agent Journey",
+  "uid": "agentflow-merch",
+  "tags": ["agentflow", "merch", "journey"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Revenue (24h)",
+      "description": "Expects metric exporter gauge agentflow_metric_value{metric=\"revenue\",window=\"24h\"}. Matches GET /v1/metrics/revenue?window=24h.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "agentflow_metric_value{metric=\"revenue\",window=\"24h\"}",
+          "legendFormat": "revenue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Conversion Rate",
+      "description": "Expects metric exporter gauge agentflow_metric_value{metric=\"conversion_rate\",window=\"24h\"}.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "agentflow_metric_value{metric=\"conversion_rate\",window=\"24h\"}",
+          "legendFormat": "conversion"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Top 5 Products by Revenue",
+      "description": "Expects per-product gauge agentflow_product_revenue_usd{product_id=...,window=\"24h\"}.",
+      "type": "barchart",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "topk(5, agentflow_product_revenue_usd{window=\"24h\"})",
+          "legendFormat": "{{ product_id }}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "NL Query Latency (p50 / p95)",
+      "description": "Expects Prometheus histogram agentflow_query_duration_seconds_bucket{endpoint=\"/v1/query\"}.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(agentflow_query_duration_seconds_bucket{endpoint=\"/v1/query\"}[5m])))",
+          "legendFormat": "p50 query"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(agentflow_query_duration_seconds_bucket{endpoint=\"/v1/query\"}[5m])))",
+          "legendFormat": "p95 query"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Query Engine Mix",
+      "description": "Expects counter agentflow_query_requests_total{engine=\"llm|rule_based\"}.",
+      "type": "piechart",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "sum by (engine) (increase(agentflow_query_requests_total[1h]))",
+          "legendFormat": "{{ engine }}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Metric Freshness (p99)",
+      "description": "Pipeline freshness guardrail for merch answers.",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(agentflow_pipeline_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99 freshness"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 30},
+              {"color": "red", "value": 60}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

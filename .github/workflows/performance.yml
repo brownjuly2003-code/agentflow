@@ -1,0 +1,70 @@
+name: Nightly Performance
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  performance-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e ".[dev,load]"
+      - name: Run benchmark
+        run: python scripts/run_benchmark.py
+      - name: Convert benchmark report to JSON
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          report_path = Path("docs/benchmark.md")
+          report = report_path.read_text(encoding="utf-8")
+          lines = [line.strip() for line in report.splitlines() if line.startswith("|")]
+          if len(lines) < 3:
+              raise SystemExit("Benchmark results table not found in docs/benchmark.md")
+
+          generated_at_match = re.search(r"Generated: `([^`]+)`", report)
+          endpoints = {}
+          for line in lines[2:]:
+              columns = [column.strip() for column in line.strip("|").split("|")]
+              if len(columns) != 8:
+                  continue
+              endpoint, requests, failures, failure_rate, rps, p50, p95, p99 = columns
+              endpoints[endpoint] = {
+                  "request_count": int(requests),
+                  "failure_count": int(failures),
+                  "failure_rate_percent": float(failure_rate.removesuffix("%")),
+                  "requests_per_second": float(rps),
+                  "p50_latency_ms": float(p50.removesuffix(" ms")),
+                  "p95_latency_ms": float(p95.removesuffix(" ms")),
+                  "p99_latency_ms": float(p99.removesuffix(" ms")),
+              }
+
+          aggregate = endpoints.pop("ALL", None)
+          if aggregate is None:
+              raise SystemExit("Missing ALL aggregate row in benchmark report.")
+
+          current_report = {
+              "generated_at": generated_at_match.group(1) if generated_at_match else None,
+              "source": str(report_path),
+              "aggregate": aggregate,
+              "endpoints": endpoints,
+          }
+          Path("/tmp/current.json").write_text(
+              json.dumps(current_report, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - name: Compare to baseline
+        run: python scripts/check_performance.py docs/benchmark-baseline.json /tmp/current.json

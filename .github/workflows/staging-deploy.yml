@@ -1,0 +1,48 @@
+name: Staging Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AGENTFLOW_E2E_BASE_URL: http://127.0.0.1:8080
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+          python -m pip install -r requirements.txt
+          python -m pip install click rich pyyaml pytest-timeout
+
+      - uses: azure/setup-helm@v4.3.0
+
+      - uses: helm/kind-action@v1.14.0
+        with:
+          cluster_name: agentflow-staging
+          config: k8s/kind-config.yaml
+
+      - name: Lint Helm chart
+        run: helm lint helm/agentflow -f k8s/staging/values-staging.yaml
+
+      - name: Deploy staging
+        run: bash scripts/k8s_staging_up.sh
+
+      - name: Run rate-limit E2E against staging
+        run: python -m pytest tests/e2e/test_smoke.py::test_rate_limit_returns_429_after_threshold -v --tb=short
+
+      - name: Run remaining E2E suite against staging
+        run: python -m pytest tests/e2e/ -k "not test_rate_limit_returns_429_after_threshold" -v --tb=short
+
+      - name: Tear down staging
+        if: always()
+        run: bash scripts/k8s_staging_down.sh

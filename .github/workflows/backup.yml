@@ -1,0 +1,113 @@
+name: Nightly Backup
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Prepare backup fixture
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          import duckdb
+
+          pipeline_db = Path("agentflow_demo.duckdb")
+          usage_db = Path("agentflow_api.duckdb")
+          for path in (pipeline_db, usage_db):
+              if path.exists():
+                  path.unlink()
+              wal_path = Path(f"{path}.wal")
+              if wal_path.exists():
+                  wal_path.unlink()
+
+          tenants_content = Path("config/tenants.yaml").read_text(encoding="utf-8")
+          tenant_schemas = re.findall(
+              r'^\s*duckdb_schema:\s*["\']?([^"\']+)["\']?\s*$',
+              tenants_content,
+              flags=re.MULTILINE,
+          )
+
+          conn = duckdb.connect(str(pipeline_db))
+          try:
+              for schema in tenant_schemas:
+                  conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+                  conn.execute(
+                      f'''
+                      CREATE TABLE IF NOT EXISTS "{schema}".orders_v2 (
+                          order_id VARCHAR PRIMARY KEY,
+                          user_id VARCHAR,
+                          status VARCHAR,
+                          total_amount DECIMAL(10,2),
+                          currency VARCHAR,
+                          created_at TIMESTAMP
+                      )
+                      '''
+                  )
+                  conn.execute(
+                      f'''
+                      INSERT INTO "{schema}".orders_v2 VALUES
+                      (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                      ''',
+                      [f"ORD-{schema.upper()}-001", f"USR-{schema.upper()}", "confirmed", 42.0, "USD"],
+                  )
+          finally:
+              conn.close()
+
+          conn = duckdb.connect(str(usage_db))
+          try:
+              conn.execute(
+                  """
+                  CREATE TABLE IF NOT EXISTS api_usage (
+                      tenant TEXT,
+                      key_name TEXT,
+                      endpoint TEXT,
+                      ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                  )
+                  """
+              )
+              conn.execute(
+                  """
+                  INSERT INTO api_usage (tenant, key_name, endpoint)
+                  VALUES ('demo', 'backup-workflow', '/v1/health')
+                  """
+              )
+          finally:
+              conn.close()
+          PY
+      - name: Create backup archive
+        run: python scripts/backup.py --output backup-artifacts
+      - name: Resolve backup path
+        id: backup
+        shell: bash
+        run: |
+          archive_path="$(ls -1t backup-artifacts/*.tar.gz | head -n 1)"
+          echo "archive_path=$archive_path" >> "$GITHUB_OUTPUT"
+      - name: Verify backup manifest
+        run: python scripts/verify_backup.py "${{ steps.backup.outputs.archive_path }}"
+      - name: Restore smoke test
+        run: |
+          python scripts/restore.py \
+            --backup "${{ steps.backup.outputs.archive_path }}" \
+            --target-root /tmp/agentflow-restore
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentflow-nightly-backup
+          path: ${{ steps.backup.outputs.archive_path }}
+          retention-days: 7

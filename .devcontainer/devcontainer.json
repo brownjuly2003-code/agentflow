@@ -1,0 +1,55 @@
+{
+  "name": "AgentFlow Dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
+  },
+  "postCreateCommand": "pip install -e '.[dev]'",
+  "postStartCommand": "bash -lc \"pip install -e sdk/ && cd sdk-ts && npm install && cd .. && if [ ! -f agentflow_demo.duckdb ]; then python -m src.processing.local_pipeline --burst 500; fi\"",
+  "forwardPorts": [8000, 8080, 8081, 8474, 9090, 3000, 9001, 16686],
+  "portsAttributes": {
+    "8000": {
+      "label": "AgentFlow API"
+    },
+    "8080": {
+      "label": "Kafka UI"
+    },
+    "8081": {
+      "label": "Flink UI"
+    },
+    "8474": {
+      "label": "Toxiproxy API"
+    },
+    "9090": {
+      "label": "Prometheus"
+    },
+    "3000": {
+      "label": "Grafana"
+    },
+    "9001": {
+      "label": "MinIO Console"
+    },
+    "16686": {
+      "label": "Jaeger UI"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff"
+      ]
+    }
+  }
+}

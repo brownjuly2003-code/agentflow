@@ -1,0 +1,34 @@
+app = "agentflow-demo"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../../Dockerfile.api"
+
+[env]
+  DUCKDB_PATH = "/data/agentflow-demo.duckdb"
+  AGENTFLOW_USAGE_DB_PATH = "/data/agentflow-demo-api.duckdb"
+  AGENTFLOW_DEMO_MODE = "true"
+  AGENTFLOW_SEED_ON_BOOT = "true"
+
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.http_checks]
+    interval = "30s"
+    path = "/v1/health"
+
+[[mounts]]
+  source = "agentflow_demo_data"
+  destination = "/data"

@@ -1,0 +1,10 @@
+services:
+  iceberg-rest:
+    image: tabulario/iceberg-rest:0.6.0
+    ports:
+      - "8181:8181"
+    environment:
+      CATALOG_WAREHOUSE: /warehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
+    volumes:
+      - ./.iceberg/rest-warehouse:/warehouse

@@ -1,0 +1,68 @@
+name: Publish TypeScript SDK
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify release tag matches SDK metadata
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs");
+
+          const tag = process.env.GITHUB_REF_NAME;
+          if (!tag || !tag.startsWith("sdk-v")) {
+            throw new Error(`Unexpected tag format: ${tag ?? "<missing>"}`);
+          }
+
+          const expectedVersion = tag.slice("sdk-v".length);
+          const pyproject = fs.readFileSync("sdk/pyproject.toml", "utf8");
+          const packageJson = JSON.parse(fs.readFileSync("sdk-ts/package.json", "utf8"));
+          const pythonMatch = pyproject.match(/^version = "([^"]+)"$/m);
+
+          if (!pythonMatch) {
+            throw new Error("Could not read sdk/pyproject.toml version");
+          }
+          if (pythonMatch[1] !== expectedVersion) {
+            throw new Error(
+              `sdk/pyproject.toml version ${pythonMatch[1]} does not match tag ${expectedVersion}`,
+            );
+          }
+          if (packageJson.version !== expectedVersion) {
+            throw new Error(
+              `sdk-ts/package.json version ${packageJson.version} does not match tag ${expectedVersion}`,
+            );
+          }
+          NODE
+
+      - name: Install dependencies
+        working-directory: sdk-ts
+        run: npm install
+
+      - name: Build SDK
+        working-directory: sdk-ts
+        run: npm run build
+
+      - name: Preview package contents
+        working-directory: sdk-ts
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        working-directory: sdk-ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

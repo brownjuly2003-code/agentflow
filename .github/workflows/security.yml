@@ -1,0 +1,115 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Bandit
+        run: python -m pip install --upgrade pip bandit
+      - name: Run Bandit
+        run: |
+          bandit -r src sdk --ini .bandit --severity-level medium -f json -o /tmp/bandit-current.json || true
+          python scripts/bandit_diff.py .bandit-baseline.json /tmp/bandit-current.json
+
+  safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build security requirements
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          root = Path(".")
+          output_dir = root / ".tmp-security"
+          output_dir.mkdir(exist_ok=True)
+
+          def load_project_dependencies(pyproject_path: Path) -> list[str]:
+              if not pyproject_path.exists():
+                  return []
+              data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+              return list(data.get("project", {}).get("dependencies", []))
+
+          def load_requirements(requirements_path: Path) -> list[str]:
+              if not requirements_path.exists():
+                  return []
+              requirements: list[str] = []
+              for line in requirements_path.read_text(encoding="utf-8").splitlines():
+                  stripped = line.strip()
+                  if not stripped or stripped.startswith("#"):
+                      continue
+                  requirements.append(stripped)
+              return requirements
+
+          def write_requirements(target: Path, entries: list[str]) -> None:
+              deduped = list(dict.fromkeys(entries))
+              target.write_text("\n".join(deduped) + "\n", encoding="utf-8")
+
+          write_requirements(
+              output_dir / "requirements-main.txt",
+              load_project_dependencies(root / "pyproject.toml")
+              + load_requirements(root / "requirements.txt"),
+          )
+          write_requirements(
+              output_dir / "requirements-sdk.txt",
+              load_project_dependencies(root / "sdk" / "pyproject.toml"),
+          )
+          PY
+      - name: Install Safety
+        run: python -m pip install --upgrade pip "safety<3"
+      - name: Run Safety
+        run: safety check -r .tmp-security/requirements-main.txt -r .tmp-security/requirements-sdk.txt
+
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        env:
+          COMPOSE_PROJECT_NAME: agentflow-security
+        run: |
+          docker compose -f docker-compose.prod.yml build agentflow-api
+          if (-not (docker image inspect agentflow-security-agentflow-api:latest 2>$null)) {
+            throw "agentflow-security-agentflow-api:latest was not built"
+          }
+          docker tag agentflow-security-agentflow-api:latest agentflow-api:security-scan
+        shell: pwsh
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: agentflow-api:security-scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif

@@ -1,0 +1,62 @@
+name: Load Test
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/load/**"
+      - "scripts/check_performance.py"
+      - "docs/benchmark-baseline.json"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[load]"
+
+      - name: Run load test gate
+        shell: bash
+        env:
+          DUCKDB_PATH: .artifacts/load/agentflow-load.duckdb
+          AGENTFLOW_API_KEYS: af-prod-agent-support-abc123:Support Agent,af-prod-agent-ops-def456:Ops Agent,af-prod-agent-rate-e2e000:Rate Limit Agent
+          AGENTFLOW_USAGE_DB_PATH: .artifacts/load/agentflow-api-usage.duckdb
+          AGENTFLOW_WEBHOOKS_FILE: .artifacts/load/webhooks.yaml
+          AGENTFLOW_LOAD_API_KEY: af-prod-agent-ops-def456
+          OTEL_SDK_DISABLED: "true"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/load
+          python tests/load/run_load_test.py --duckdb-path "$DUCKDB_PATH" --seed-data --seed-only
+          python -m uvicorn src.serving.api.main:app --host 127.0.0.1 --port 8011 > .artifacts/load/api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid"' EXIT
+          python scripts/wait_for_services.py --url http://127.0.0.1:8011 --timeout 120
+          python tests/load/run_load_test.py \
+            --host http://127.0.0.1:8011 \
+            --stats-prefix .artifacts/load/results \
+            --results-json .artifacts/load/results.json
+
+      - name: Check performance regression
+        run: python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
+
+      - name: Upload load-test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: .artifacts/load/

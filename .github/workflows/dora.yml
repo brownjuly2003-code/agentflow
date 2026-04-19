@@ -1,0 +1,112 @@
+name: DORA Metrics
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  dora-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Generate DORA report
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/dora_metrics.py --days 30 --output dora-report.json
+      - name: Render markdown summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("dora-report.json").read_text(encoding="utf-8"))
+          metrics = report["metrics"]
+          deployment = metrics["deployment_frequency"]
+          lead_time = metrics["lead_time_for_changes"]
+          failure_rate = metrics["change_failure_rate"]
+          mttr = metrics["mttr"]
+
+          def format_value(value, suffix=""):
+              return "n/a" if value is None else f"{value}{suffix}"
+
+          lines = [
+              "## DORA Metrics",
+              "",
+              f"- Window: last {report['window_days']} days",
+              f"- Branch: `{report['branch']}`",
+              f"- Deployment frequency: {deployment['deployments']} total / {format_value(deployment['per_week'], ' per week')}",
+              f"- Lead time for changes: avg {format_value(lead_time['average_hours'], 'h')} / median {format_value(lead_time['median_hours'], 'h')}",
+              f"- Change failure rate: {format_value(failure_rate['percentage'], '%')} ({failure_rate['failed_deployments']}/{failure_rate['deployments']})",
+              f"- MTTR: {format_value(mttr['average_hours'], 'h')} across {mttr['incidents']} incident(s)",
+          ]
+          if mttr.get("note"):
+              lines.extend(["", f"MTTR note: {mttr['note']}"])
+          if report.get("notes"):
+              lines.extend(["", "Notes:"])
+              lines.extend([f"- {note}" for note in report["notes"]])
+
+          summary = "\n".join(lines) + "\n"
+          Path("dora-summary.md").write_text(summary, encoding="utf-8")
+          Path("dora-comment.md").write_text(
+              "<!-- dora-report -->\n" + summary,
+              encoding="utf-8",
+          )
+          PY
+          cat dora-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload DORA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dora-report
+          path: |
+            dora-report.json
+            dora-summary.md
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const body = fs.readFileSync("dora-comment.md", "utf8");
+            const marker = "<!-- dora-report -->";
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }

@@ -1,0 +1,72 @@
+services:
+  kafka:
+    environment:
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,HOST://0.0.0.0:19092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+      - "9101:9101"
+
+  flink-jobmanager:
+    build:
+      context: ./src
+      dockerfile: processing/flink_jobs/Dockerfile
+    image: agentflow-flink-local:latest
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        printf '%s\n' "$$FLINK_PROPERTIES" >> /opt/flink/conf/flink-conf.yaml
+        printf '%s\n' 'jobmanager.memory.process.size: 1600m' >> /opt/flink/conf/flink-conf.yaml
+        exec /opt/flink/bin/jobmanager.sh start-foreground
+    environment:
+      PYTHONPATH: /opt/agentflow
+
+  flink-taskmanager:
+    build:
+      context: ./src
+      dockerfile: processing/flink_jobs/Dockerfile
+    image: agentflow-flink-local:latest
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        printf '%s\n' "$$FLINK_PROPERTIES" >> /opt/flink/conf/flink-conf.yaml
+        printf '%s\n' 'taskmanager.memory.process.size: 1728m' >> /opt/flink/conf/flink-conf.yaml
+        exec /opt/flink/bin/taskmanager.sh start-foreground
+    environment:
+      PYTHONPATH: /opt/agentflow
+
+  flink-job-runner:
+    build:
+      context: ./src
+      dockerfile: processing/flink_jobs/Dockerfile
+    image: agentflow-flink-local:latest
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      flink-jobmanager:
+        condition: service_healthy
+      flink-taskmanager:
+        condition: service_started
+    working_dir: /opt/agentflow
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FLINK_PARALLELISM: "2"
+      PYTHONPATH: /opt/agentflow
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+        until curl -fsS http://flink-jobmanager:8081/overview >/dev/null; do
+          sleep 2
+        done
+        /opt/flink/bin/flink run -d -m flink-jobmanager:8081 -py /opt/agentflow/src/processing/flink_jobs/stream_processor.py
+        echo "Submitted src/processing/flink_jobs/stream_processor.py to the local Flink cluster."
+        tail -f /dev/null

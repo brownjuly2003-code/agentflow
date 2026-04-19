@@ -64,6 +64,17 @@ resource "aws_kinesisanalyticsv2_application" "stream_processor" {
   service_execution_role = aws_iam_role.flink.arn
 
   application_configuration {
+    application_code_configuration {
+      code_content_type = "ZIPFILE"
+
+      code_content {
+        s3_content_location {
+          bucket_arn = var.s3_bucket_arn
+          file_key   = var.jar_s3_key
+        }
+      }
+    }
+
     flink_application_configuration {
       checkpoint_configuration {
         configuration_type = "CUSTOM"

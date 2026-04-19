@@ -1,111 +1,185 @@
 {
-  "dashboard": {
-    "title": "AgentFlow Pipeline Health",
-    "uid": "agentflow-pipeline",
-    "tags": ["agentflow", "pipeline"],
-    "timezone": "utc",
-    "refresh": "10s",
-    "panels": [
-      {
-        "title": "Pipeline Status",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
-        "targets": [
-          {
-            "expr": "min(agentflow_pipeline_health)",
-            "legendFormat": "Overall"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "mappings": [
-              {"type": "value", "options": {"1": {"text": "HEALTHY", "color": "green"}}},
-              {"type": "value", "options": {"0.5": {"text": "DEGRADED", "color": "yellow"}}},
-              {"type": "value", "options": {"0": {"text": "UNHEALTHY", "color": "red"}}}
+  "title": "AgentFlow Pipeline Health",
+  "uid": "agentflow-pipeline",
+  "tags": ["agentflow", "pipeline", "ops"],
+  "timezone": "utc",
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "version": 2,
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pipeline Status",
+      "description": "Overall status derived from the HealthCollector.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "min(agentflow_pipeline_health)",
+          "legendFormat": "overall"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"1": {"text": "HEALTHY", "color": "green"}}},
+            {"type": "value", "options": {"0.5": {"text": "DEGRADED", "color": "yellow"}}},
+            {"type": "value", "options": {"0": {"text": "UNHEALTHY", "color": "red"}}}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "green", "value": 1}
             ]
           }
         }
-      },
-      {
-        "title": "SLA Compliance",
-        "type": "gauge",
-        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
-        "targets": [
-          {
-            "expr": "agentflow_sla_compliance_ratio",
-            "legendFormat": "{{ topic }}"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percentunit",
-            "min": 0,
-            "max": 1,
-            "thresholds": {
-              "steps": [
-                {"value": 0, "color": "red"},
-                {"value": 0.9, "color": "yellow"},
-                {"value": 0.95, "color": "green"}
-              ]
-            }
-          }
-        }
-      },
-      {
-        "title": "Events/sec by Topic",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-        "targets": [
-          {
-            "expr": "rate(agentflow_freshness_events_total[1m])",
-            "legendFormat": "{{ topic }}"
-          }
-        ]
-      },
-      {
-        "title": "Pipeline Latency (p50 / p99)",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.5, rate(agentflow_pipeline_latency_seconds_bucket[5m]))",
-            "legendFormat": "p50 {{ topic }}"
-          },
-          {
-            "expr": "histogram_quantile(0.99, rate(agentflow_pipeline_latency_seconds_bucket[5m]))",
-            "legendFormat": "p99 {{ topic }}"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s"
-          }
-        }
-      },
-      {
-        "title": "Latency Distribution",
-        "type": "heatmap",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-        "targets": [
-          {
-            "expr": "rate(agentflow_pipeline_latency_seconds_bucket[5m])",
-            "legendFormat": "{{ le }}"
-          }
-        ]
-      },
-      {
-        "title": "Component Health",
-        "type": "table",
-        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
-        "targets": [
-          {
-            "expr": "agentflow_pipeline_health",
-            "legendFormat": "{{ component }}",
-            "format": "table",
-            "instant": true
-          }
-        ]
       }
-    ]
-  }
+    },
+    {
+      "id": 2,
+      "title": "Freshness SLO Compliance",
+      "description": "Rolling freshness SLA ratio from the freshness monitor.",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "min(agentflow_sla_compliance_ratio)",
+          "legendFormat": "overall"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 0.95},
+              {"color": "green", "value": 0.99}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Events/sec by Topic",
+      "description": "Observed throughput from the freshness monitor scrape target.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(agentflow_freshness_events_total[1m]))",
+          "legendFormat": "{{ topic }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Pipeline Latency (p50 / p95 / p99)",
+      "description": "End-to-end ingestion-to-serving latency across all monitored topics.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(agentflow_pipeline_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(agentflow_pipeline_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(agentflow_pipeline_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Latency Distribution by Topic",
+      "description": "Bucketed latency heatmap from the pipeline histogram.",
+      "type": "heatmap",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "sum by (le, topic) (rate(agentflow_pipeline_latency_seconds_bucket[5m]))",
+          "legendFormat": "{{ topic }} / {{ le }}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Component Health",
+      "description": "Instant view of the latest per-component status values.",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "targets": [
+        {
+          "expr": "agentflow_pipeline_health",
+          "legendFormat": "{{ component }}",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Kafka Consumer Lag",
+      "description": "Uses the consumer lag gauge when lag collection is enabled.",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 18},
+      "targets": [
+        {
+          "expr": "max by (group_id, topic) (agentflow_consumer_lag)",
+          "legendFormat": "{{ group_id }} / {{ topic }}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Pipeline Health Timeline",
+      "description": "Trend of component health values over time.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "agentflow_pipeline_health",
+          "legendFormat": "{{ component }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1
+        }
+      }
+    }
+  ]
 }

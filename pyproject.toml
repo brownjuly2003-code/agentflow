@@ -45,6 +45,7 @@ integrations = [
     "llama-index-core>=0.12,<1",
 ]
 dev = [
+    "bandit>=1.9,<2",
     "hypothesis>=6,<7",
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<1",

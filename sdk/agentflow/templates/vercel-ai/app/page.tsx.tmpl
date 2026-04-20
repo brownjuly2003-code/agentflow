@@ -1,0 +1,46 @@
+"use client";
+
+import { useChat } from "ai/react";
+
+export default function Home() {
+  const { messages, input, handleInputChange, handleSubmit, status } = useChat();
+
+  return (
+    <main style={{ fontFamily: "system-ui, sans-serif", margin: "0 auto", maxWidth: 720, padding: 32 }}>
+      <h1>__PROJECT_NAME__</h1>
+      <p>Ask questions about orders and metrics through AgentFlow tools.</p>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            style={{
+              background: message.role === "user" ? "#eef6ff" : "#f5f5f5",
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <strong style={{ display: "block", marginBottom: 8 }}>{message.role}</strong>
+            <div>{message.content}</div>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12, marginTop: 24 }}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="What is the latest status of order ORD-001?"
+          style={{ border: "1px solid #ccc", borderRadius: 10, padding: 12 }}
+        />
+        <button
+          type="submit"
+          disabled={status === "streaming"}
+          style={{ border: 0, borderRadius: 10, padding: "12px 16px" }}
+        >
+          {status === "streaming" ? "Thinking..." : "Send"}
+        </button>
+      </form>
+    </main>
+  );
+}

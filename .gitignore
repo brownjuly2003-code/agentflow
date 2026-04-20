@@ -69,5 +69,9 @@ more_help.md
 About_DE_project.md
 RELEASING.md
 AgentFlow*
+!sdk/agentflow/
+!sdk/agentflow/**
+!integrations/agentflow_integrations/
+!integrations/agentflow_integrations/**
 agentflow_bench_debug*.duckdb*
 agentflow_demo_api.duckdb*

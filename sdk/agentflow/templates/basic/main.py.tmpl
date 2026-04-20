@@ -1,0 +1,25 @@
+from agentflow import AgentFlowClient
+
+client = AgentFlowClient(
+    base_url="__BASE_URL__",
+    api_key="__API_KEY__",
+)
+
+
+def main() -> None:
+    health = client.health()
+    print(f"Pipeline status: {health.status}")
+
+    order = client.get_order("ORD-001")
+    print(f"Order {order.order_id}: {order.status} ({order.total_amount} {order.currency})")
+
+    revenue = client.get_metric("revenue", window="24h")
+    print(f"Revenue (24h): {revenue.value} {revenue.unit}")
+
+    result = client.query("total orders today")
+    print(f"SQL: {result.sql}")
+    print(f"Answer: {result.answer}")
+
+
+if __name__ == "__main__":
+    main()

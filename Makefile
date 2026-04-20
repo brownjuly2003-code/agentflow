@@ -4,7 +4,7 @@
 
 setup:
 	python -m venv .venv
-	.venv/Scripts/pip install -e ".[dev]" 2>/dev/null || .venv/bin/pip install -e ".[dev]"
+	.venv/Scripts/pip install -e ".[dev,integrations]" 2>/dev/null || .venv/bin/pip install -e ".[dev,integrations]"
 	@echo "Setup complete. Activate with: source .venv/Scripts/activate (Windows) or source .venv/bin/activate (Unix)"
 
 # ── Local Development ─────────────────────────────────────────────

@@ -1,0 +1,37 @@
+import { openai } from "@ai-sdk/openai";
+import { AgentFlowClient } from "@agentflow/client";
+import { convertToModelMessages, streamText, tool } from "ai";
+import { z } from "zod";
+
+const client = new AgentFlowClient(
+  process.env.AGENTFLOW_BASE_URL ?? "__BASE_URL__",
+  process.env.AGENTFLOW_API_KEY ?? "__API_KEY__",
+);
+
+export async function POST(request: Request) {
+  const { messages } = await request.json();
+
+  const result = streamText({
+    model: openai("gpt-4o-mini"),
+    system:
+      "You are an operations assistant. Use AgentFlow tools before answering questions about orders and metrics.",
+    messages: convertToModelMessages(messages),
+    tools: {
+      getOrder: tool({
+        description: "Look up an order by order ID.",
+        parameters: z.object({ orderId: z.string() }),
+        execute: async ({ orderId }) => client.getOrder(orderId),
+      }),
+      getMetric: tool({
+        description: "Fetch a business metric from AgentFlow.",
+        parameters: z.object({
+          name: z.string(),
+          window: z.string().default("24h"),
+        }),
+        execute: async ({ name, window }) => client.getMetric(name, window),
+      }),
+    },
+  });
+
+  return result.toUIMessageStreamResponse();
+}

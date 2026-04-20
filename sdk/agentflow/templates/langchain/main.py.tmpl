@@ -1,0 +1,28 @@
+import os
+
+from langchain.agents import AgentType, initialize_agent
+from langchain_openai import ChatOpenAI
+
+from agentflow_integrations.langchain import AgentFlowToolkit
+
+
+def main() -> None:
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("Set OPENAI_API_KEY before running this template.")
+
+    toolkit = AgentFlowToolkit("__BASE_URL__", api_key="__API_KEY__")
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    agent = initialize_agent(
+        toolkit.get_tools(),
+        llm,
+        agent=AgentType.OPENAI_FUNCTIONS,
+        verbose=True,
+    )
+    result = agent.invoke(
+        {"input": "Summarize order ORD-001 and the latest revenue metric."}
+    )
+    print(result["output"] if isinstance(result, dict) else result)
+
+
+if __name__ == "__main__":
+    main()

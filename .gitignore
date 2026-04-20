@@ -73,5 +73,9 @@ AgentFlow*
 !sdk/agentflow/**
 !integrations/agentflow_integrations/
 !integrations/agentflow_integrations/**
+sdk/agentflow/**/__pycache__/
+sdk/agentflow/**/*.py[cod]
+integrations/agentflow_integrations/**/__pycache__/
+integrations/agentflow_integrations/**/*.py[cod]
 agentflow_bench_debug*.duckdb*
 agentflow_demo_api.duckdb*

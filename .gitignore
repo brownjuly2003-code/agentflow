@@ -48,6 +48,7 @@ docker-compose.override.yml
 .tmp/
 .dora/
 .bandit-baseline.json
+!.bandit-baseline.json
 
 # DuckDB runtime state
 *.duckdb.wal

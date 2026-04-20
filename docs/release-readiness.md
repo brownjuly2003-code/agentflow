@@ -1,22 +1,22 @@
 # AgentFlow Release Readiness
 
-**Date**: 2026-04-19  
-**Version**: v1.0.0  
-**Status**: Technical release-ready; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
+**Date**: 2026-04-20  
+**Version**: v1.0.1  
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
 
 ## Executive Summary
 
-AgentFlow закрыл технические блокеры из internal audit baseline от 2026-04-12 и довёл функциональную часть v1.0.0 до рабочего состояния. Поверх v13.5 security refresh v15 закрыл и GTM/documentation хвост: narrative API reference, competitive analysis, security audit, landing page, and Fly.io demo config are now part of the release evidence. `bandit_diff.py` остаётся зелёным against the checked-in baseline, а полный verification стек для closeout выполнен с одним локальным нюансом в chaos-команде из плана. Retrospective reconstruction of the lost audit artifact is preserved in `docs/audit-history.md`.
+AgentFlow закрыл технические блокеры из internal audit baseline от 2026-04-12, опубликовал v1.0.0 на GitHub 2026-04-20 и выпустил v1.0.1 patch release для clean-clone установки. Поверх v13.5 security refresh работы v15-v18 закрыли GTM/documentation хвост: narrative API reference, competitive analysis, security audit, landing page, README/glossary/LICENSE/CHANGELOG, public repo, and Fly.io demo config are now part of the release evidence. `bandit_diff.py` остаётся зелёным against the checked-in baseline, а clean-clone verification для patch release зафиксирован в `CHANGELOG.md` (`pytest tests/unit -q`: 340 passed). Retrospective reconstruction of the lost audit artifact is preserved in `docs/audit-history.md`.
 
 ## Status by BCG Dimension
 
-| Направление | Было (2026-04-12) | Стало (2026-04-19) | Комментарий |
+| Направление | Было (2026-04-12) | Стало (2026-04-20) | Комментарий |
 |-------------|-------------------|---------------------|-------------|
 | Продукт | 6.5 / 10 | 6.5 / 10 | Competitive analysis is done, but PMF validation remains post-release |
 | Дизайн | 7.5 / 10 | 8.0 / 10 | Added minimal `/admin` dashboard |
 | Код | 7.0 / 10 | 9.0 / 10 | Performance, query safety, code health closure |
 | DevOps | 8.5 / 10 | 9.0 / 10 | CI gates, chaos/load workflows, terraform validation |
-| Документация | 9.0 / 10 | 9.5 / 10 | v15 closes competitive, security, and narrative API-reference gaps |
+| Документация | 9.0 / 10 | 9.7 / 10 | v15-v17 close competitive, security, narrative API-reference, glossary, and publication docs |
 
 ## Performance Summary
 
@@ -91,9 +91,27 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 - Landing: `site/index.html`
 - Demo deploy: `deploy/fly/`
 - Baseline data: `docs/benchmark-baseline.json`
-- Plan trail: `docs/plans/2026-04-17-v8-followup.md`, `docs/plans/2026-04-17-v8-windows-flake.md`, `docs/plans/2026-04-17-v9-code-health.md`, `docs/plans/2026-04-17-v10-production-readiness.md`, `docs/plans/2026-04-17-v11-finalization.md`, `docs/plans/2026-04-17-v12-blocker-fix.md`, `docs/plans/2026-04-17-v13-release-closure.md`, `docs/plans/2026-04-17-v13-5-bandit-refresh.md`, `docs/plans/2026-04-17-v14-cleanup.md`, `docs/plans/2026-04-17-v15-gtm-phase4.md`, `docs/plans/2026-04-19-v15-closeout.md`
+- Plan trail: `docs/plans/2026-04-17-v8-*.md` ... `docs/plans/2026-04-20-v19-doc-completion.md`
+  - v16 research: `2026-04-20-v16-research.md`, `2026-04-20-v16-synthetic-interviews.md`
+  - v17 publication: `2026-04-20-v17-publication.md`
+  - v18 GitHub: `2026-04-20-v18-github-publish.md`
+  - v19 doc completion: `2026-04-20-v19-doc-completion.md`
+- Derived artifacts:
+  - Public repo: https://github.com/brownjuly2003-code/agentflow
+  - v1.0.0 release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.0.0
+  - v1.0.1 patch release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.0.1
 - Security triage: `.artifacts/security/bandit-triage-2026-04-17.md`
 
 ## Release Verdict
 
-AgentFlow is technically release-ready for the checked-in code and documentation set. Code-level gates are green, v15 GTM/documentation assets are part of the release evidence, and remaining open items are manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, external security attestation, and post-release PMF work.
+**v1.0.0 published 2026-04-20, v1.0.1 patch released for clean-clone support.**
+
+AgentFlow is technically release-ready and publicly available. All code-level gates remain green on fresh clone (`pytest tests/unit: 340 passed`). Remaining open items are non-code:
+- Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
+- Manual GH Actions setup: staging/prod environments with required reviewers
+- AWS OIDC role setup for real terraform apply
+- External pen-test attestation
+- Public benchmark on production hardware (`c8g.4xlarge+`)
+- First paying customers (sales track)
+
+v1.1 direction informed by research sprint (`docs/v1-1-research.md`): read-first MCP surface, thin LangChain adapter, freshness primitives as differentiation. Confidence is medium - real interviews required before implementation.

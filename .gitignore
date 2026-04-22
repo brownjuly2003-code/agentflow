@@ -74,6 +74,8 @@ AgentFlow*
 !sdk/agentflow/**
 !integrations/agentflow_integrations/
 !integrations/agentflow_integrations/**
+!helm/agentflow/
+!helm/agentflow/**
 sdk/agentflow/**/__pycache__/
 sdk/agentflow/**/*.py[cod]
 integrations/agentflow_integrations/**/__pycache__/

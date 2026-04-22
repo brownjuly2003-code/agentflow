@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentflow.fullname" . }}
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentflow.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "agentflow.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agentflow
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - uvicorn
+            - src.serving.api.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: DUCKDB_PATH
+              value: {{ .Values.config.duckdbPath | quote }}
+            - name: AGENTFLOW_USAGE_DB_PATH
+              value: {{ .Values.config.usageDbPath | quote }}
+            - name: AGENTFLOW_API_KEYS_FILE
+              value: {{ .Values.config.apiKeysPath | quote }}
+            - name: AGENTFLOW_TENANTS_FILE
+              value: {{ .Values.config.tenantsPath | quote }}
+            - name: AGENTFLOW_SLO_FILE
+              value: {{ .Values.config.sloPath | quote }}
+            - name: AGENTFLOW_PII_CONFIG
+              value: {{ .Values.config.piiFieldsPath | quote }}
+            - name: AGENTFLOW_SECURITY_CONFIG_FILE
+              value: {{ .Values.config.securityPath | quote }}
+            - name: AGENTFLOW_API_VERSIONS_FILE
+              value: {{ .Values.config.apiVersionsPath | quote }}
+            - name: AGENTFLOW_CONTRACTS_DIR
+              value: {{ .Values.config.contractsDir | quote }}
+            - name: AGENTFLOW_RATE_LIMIT_RPM
+              value: {{ .Values.config.rateLimitRpm | quote }}
+            - name: CACHE_TTL_SECONDS
+              value: {{ .Values.config.cacheTtlSeconds | quote }}
+            - name: AGENTFLOW_CORS_ORIGINS
+              value: {{ .Values.config.corsOrigins | quote }}
+            - name: AGENTFLOW_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentflow.fullname" . }}
+                  key: admin-key
+            {{- if .Values.config.redisUrl }}
+            - name: REDIS_URL
+              value: {{ .Values.config.redisUrl | quote }}
+            {{- end }}
+            {{- if .Values.config.otlpEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.config.otlpServiceName | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath | quote }}
+            - name: config
+              mountPath: /etc/agentflow/config
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/agentflow/secret
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "agentflow.fullname" . }}
+        - name: secrets
+          secret:
+            secretName: {{ include "agentflow.fullname" . }}
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "agentflow.fullname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

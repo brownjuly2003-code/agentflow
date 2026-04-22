@@ -19,6 +19,33 @@ that moves the p99 needle on `/v1/entity/{type}/{id}`.
 - `.github/perf-history.json` + `make perf-plot` — rolling trend of
   the aggregate load-test metrics. Useful for spotting slow drifts.
 
+## Stack requirements for meaningful numbers
+
+Attempting to measure `/v1/entity/{type}/{id}` against a bare uvicorn
+without the supporting services produces misleading numbers:
+
+- `/v1/health` fans out to Kafka via `rdkafka` and blocks for ~10 s
+  while retrying the missing broker. A health probe issued concurrently
+  with a load run stalls the event loop.
+- `QueryCache` logs one warning per `get`/`set` when Redis is
+  unreachable, i.e. two synchronous stderr writes per request. At
+  concurrency 16 this alone can dominate the latency budget.
+- The auth middleware logs each request through the usage DB
+  (`agentflow_api.duckdb`), which is single-writer.
+
+Before benchmarking, bring up the full compose stack:
+
+```bash
+docker compose up -d redis kafka
+make demo
+```
+
+When running inside Docker is not possible, set `REDIS_URL` to a
+reachable redis instance anyway (even a port-forwarded one) so the
+cache stays on its happy path. Do not benchmark an API that is still
+emitting `query_cache_unavailable` warnings — you are measuring
+logging, not the serving path.
+
 ## Recommended workflow for a hypothesis
 
 1. Start the API in a clean terminal: `make demo` (or equivalent). Note

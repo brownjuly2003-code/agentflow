@@ -33,7 +33,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: python -m pip install --upgrade pip
-      - run: pip install -e .
+      - run: pip install -e ".[dev,cloud]"
       - run: pip install schemathesis==4.15.1
       - run: python scripts/generate_contracts.py --check
       - run: python -m pytest tests/contract -v --tb=short

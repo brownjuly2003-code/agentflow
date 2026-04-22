@@ -30,7 +30,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[load]"
+        run: pip install -e ".[load,cloud]"
 
       - name: Run load test gate
         shell: bash

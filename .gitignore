@@ -39,9 +39,10 @@ htmlcov/
 coverage.xml
 
 docker-compose.override.yml
-*.duckdb
 
-# Runtime artifacts
+# runtime artifacts
+*.duckdb
+*.duckdb.wal
 .artifacts/
 .hypothesis/
 .iceberg/
@@ -51,7 +52,6 @@ docker-compose.override.yml
 !.bandit-baseline.json
 
 # DuckDB runtime state
-*.duckdb.wal
 *.duckdb.tmp/
 
 # Node

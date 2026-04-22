@@ -9,7 +9,7 @@ on:
         type: choice
         options:
           - staging
-          - prod
+          - production
       confirm:
         description: Type APPLY to confirm
         required: true
@@ -28,16 +28,26 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
+      - name: Resolve Terraform tfvars file
+        id: tfvars
+        run: |
+          case "${{ inputs.environment }}" in
+            staging) echo "file=environments/staging.tfvars" >> "$GITHUB_OUTPUT" ;;
+            production) echo "file=environments/prod.tfvars" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Unsupported environment: ${{ inputs.environment }}" >&2; exit 1 ;;
+          esac
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.TF_AWS_ROLE }}
-          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-terraform-${{ github.run_id }}
 
       - name: Validate tfvars presence
         working-directory: infrastructure/terraform
         run: |
-          if [ ! -f "environments/${{ inputs.environment }}.tfvars" ]; then
-            echo "Missing environments/${{ inputs.environment }}.tfvars"
+          if [ ! -f "${{ steps.tfvars.outputs.file }}" ]; then
+            echo "Missing ${{ steps.tfvars.outputs.file }}"
             echo "Copy the matching .tfvars.example file and provide real network values."
             exit 1
           fi
@@ -46,7 +56,7 @@ jobs:
         working-directory: infrastructure/terraform
         run: |
           terraform init
-          terraform plan -var-file="environments/${{ inputs.environment }}.tfvars" -out=tfplan
+          terraform plan -var-file="${{ steps.tfvars.outputs.file }}" -out=tfplan
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,10 +74,20 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
+      - name: Resolve Terraform tfvars file
+        id: tfvars
+        run: |
+          case "${{ inputs.environment }}" in
+            staging) echo "file=environments/staging.tfvars" >> "$GITHUB_OUTPUT" ;;
+            production) echo "file=environments/prod.tfvars" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Unsupported environment: ${{ inputs.environment }}" >&2; exit 1 ;;
+          esac
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.TF_AWS_ROLE }}
-          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-terraform-${{ github.run_id }}
 
       - uses: actions/download-artifact@v4
         with:

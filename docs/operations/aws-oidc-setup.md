@@ -1,0 +1,83 @@
+# AWS OIDC setup for Terraform apply
+
+## Purpose
+
+This guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml`.
+
+## Prerequisites
+
+- AWS account with administrator credentials available for the initial bootstrap only.
+- Existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`.
+- GitHub repository admin access for repository variables and environment protection rules.
+- Terraform CLI or an equivalent container image available on the bootstrap machine.
+
+## Bootstrap the role
+
+1. Start from a trusted local machine with temporary administrator credentials in AWS.
+2. Change into `infrastructure/terraform`.
+3. Review `dev.tfvars` or `prod.tfvars` and update the placeholder VPC, subnet, and SNS values for your account.
+4. Run:
+
+```bash
+terraform init
+terraform plan -var-file=prod.tfvars
+terraform apply -var-file=prod.tfvars
+```
+
+5. Capture the resulting role ARN from `terraform state show module.github_oidc.aws_iam_role.github_actions`.
+
+The first apply must be local because the role does not exist yet. After the role exists, GitHub Actions can assume it through OIDC.
+
+## Configure GitHub
+
+1. Open `Settings -> Secrets and variables -> Actions -> Variables`.
+2. Create `AWS_TERRAFORM_ROLE_ARN` with the ARN output from Terraform.
+3. Create `AWS_REGION` with the same region used by Terraform, for example `us-east-1`.
+4. Remove legacy long-lived credentials such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `TF_AWS_ROLE` if they exist.
+5. Open `Settings -> Environments` and create `staging` and `production`.
+6. Add required reviewers to both environments before allowing apply runs.
+
+The workflow maps the GitHub `production` environment to `environments/prod.tfvars` and the `staging` environment to `environments/staging.tfvars`.
+
+## Verify OIDC is active
+
+1. Open the `Terraform Apply` workflow and confirm the run includes `aws-actions/configure-aws-credentials@v4`.
+2. Confirm the workflow uses repository variables `AWS_TERRAFORM_ROLE_ARN` and `AWS_REGION`, not AWS access key secrets.
+3. Inspect the AWS CloudTrail event for `AssumeRoleWithWebIdentity` and confirm the federated principal is `token.actions.githubusercontent.com`.
+4. Confirm the job has `permissions.id-token: write`.
+
+If a run succeeds without `AWS_ACCESS_KEY_ID` and CloudTrail shows `AssumeRoleWithWebIdentity`, the workflow is using OIDC.
+
+## Thumbprint rotation
+
+The checked-in thumbprint as of 2026-04-22 is:
+
+```text
+dd55b4520291e276588f0dd02fafd83a7368e0fa
+```
+
+To refresh it:
+
+1. Follow the AWS IAM procedure for obtaining the top intermediate CA thumbprint for an OIDC provider.
+2. Re-check the certificate chain for `token.actions.githubusercontent.com`.
+3. Update `infrastructure/terraform/modules/github-oidc/main.tf`.
+4. Run `terraform plan` and apply the change with trusted credentials.
+
+Example PowerShell check used for this repository:
+
+```powershell
+$tcp = [System.Net.Sockets.TcpClient]::new('token.actions.githubusercontent.com', 443)
+try {
+  $ssl = [System.Net.Security.SslStream]::new($tcp.GetStream(), $false, ({ $true }))
+  $ssl.AuthenticateAsClient('token.actions.githubusercontent.com')
+  $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
+  $chain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
+  $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
+  $null = $chain.Build($cert)
+  $chain.ChainElements | Select-Object Subject, Thumbprint
+}
+finally {
+  if ($ssl) { $ssl.Dispose() }
+  $tcp.Dispose()
+}
+```

@@ -90,3 +90,15 @@ variable "freshness_sla_seconds" {
   type        = number
   default     = 30
 }
+
+variable "github_org" {
+  description = "GitHub organization or user allowed to assume the Terraform OIDC role"
+  type        = string
+  default     = "brownjuly2003-code"
+}
+
+variable "github_repo" {
+  description = "GitHub repository allowed to assume the Terraform OIDC role"
+  type        = string
+  default     = "agentflow"
+}

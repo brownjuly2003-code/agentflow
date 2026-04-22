@@ -1,0 +1,20 @@
+environment        = "prod"
+aws_region         = "us-east-1"
+vpc_id             = "vpc-xxxxxxxx"
+private_subnet_ids = ["subnet-aaaaaaa", "subnet-bbbbbbb", "subnet-ccccccc"]
+
+kafka_instance_type      = "kafka.m5.large"
+kafka_broker_count       = 3
+kafka_ebs_volume_size_gb = 200
+
+flink_parallelism         = 4
+flink_parallelism_per_kpu = 1
+
+storage_glacier_after_days = 90
+storage_expire_after_days  = 365
+
+sns_alert_topic_arn   = "arn:aws:sns:us-east-1:123456789012:agentflow-prod-alerts"
+freshness_sla_seconds = 30
+
+github_org  = "brownjuly2003-code"
+github_repo = "agentflow"

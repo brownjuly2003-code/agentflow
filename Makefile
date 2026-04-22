@@ -1,4 +1,4 @@
-.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo pipeline flink-local load-test benchmark bench
+.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo pipeline flink-local load-test benchmark bench perf-plot
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -92,6 +92,10 @@ benchmark:
 
 bench:
 	python scripts/run_benchmark.py
+
+perf-plot:
+	python -m pip install --quiet "plotly>=5,<7"
+	python scripts/plot_perf_history.py --output docs/perf/
 
 # ── Code Quality ──────────────────────────────────────────────────
 

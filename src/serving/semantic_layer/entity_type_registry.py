@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from src.serving.semantic_layer.catalog import EntityDefinition as EntityDefinitionT

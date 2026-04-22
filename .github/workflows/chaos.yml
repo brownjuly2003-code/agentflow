@@ -7,7 +7,7 @@ on:
       - "tests/chaos/**"
       - "docker-compose.chaos.yml"
   schedule:
-    - cron: "0 3 * * 2,4"
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -65,9 +65,9 @@ jobs:
         run: docker compose -p agentflow-chaos -f docker-compose.chaos.yml down -v
 
   chaos-full:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -83,12 +83,12 @@ jobs:
           mkdir -p .artifacts/chaos
           docker compose -p agentflow-chaos -f docker-compose.chaos.yml up -d --wait --wait-timeout 120
 
-      - name: Run chaos tests
+      - name: Run chaos full suite
         env:
           AGENTFLOW_CHAOS_CI_MODE: "1"
           AGENTFLOW_CHAOS_STARTUP_TIMEOUT: "120"
           PYTHONUNBUFFERED: "1"
-        run: python -m pytest tests/chaos/ -v --tb=short --json-report --json-report-file=.artifacts/chaos/chaos-report.json
+        run: python -m pytest tests/chaos/ --ignore=tests/chaos/test_chaos_smoke.py -v --tb=short --json-report --json-report-file=.artifacts/chaos/chaos-report.json
 
       - name: Generate chaos report
         if: always()
@@ -102,23 +102,18 @@ jobs:
         if: always()
         run: docker compose -p agentflow-chaos -f docker-compose.chaos.yml logs --no-color > .artifacts/chaos/docker-compose.log
 
-      - name: Create issue on chaos failure
-        if: failure() && !cancelled()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ ! -f .artifacts/chaos/chaos-summary.md ]; then
-            cat <<EOF > .artifacts/chaos/chaos-summary.md
-          # Chaos workflow failed
-
-          - workflow: ${GITHUB_WORKFLOW}
-          - run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          - sha: ${GITHUB_SHA}
-          EOF
-          fi
-          gh issue create \
-            --title "Chaos workflow failed for ${GITHUB_SHA::7}" \
-            --body-file .artifacts/chaos/chaos-summary.md
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Chaos scheduled run failed — ${new Date().toISOString().split('T')[0]}`,
+              body: `Workflow run: ${context.payload.workflow_run?.html_url || `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`}\n\nReview logs and investigate which scenario regressed.`,
+              labels: ['chaos-failure', 'severity:high']
+            })
 
       - name: Upload chaos artifacts
         if: always()

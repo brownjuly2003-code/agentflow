@@ -276,9 +276,7 @@ def build_server(
         return list(AGENTFLOW_TOOLS)
 
     @server.call_tool()
-    async def _call_tool(
-        name: str, arguments: dict[str, Any] | None
-    ) -> list[types.TextContent]:
+    async def _call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
         return handle_tool_call(name, arguments, _client())
 
     return server

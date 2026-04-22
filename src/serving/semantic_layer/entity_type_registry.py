@@ -36,14 +36,10 @@ class ContractValidationError(ValueError):
 def _validate_contract(path: Path, data: dict) -> None:
     for key in _REQUIRED_KEYS:
         if key not in data:
-            raise ContractValidationError(
-                f"{path.name}: missing required key '{key}'."
-            )
+            raise ContractValidationError(f"{path.name}: missing required key '{key}'.")
     fields = data["fields"]
     if not isinstance(fields, dict) or not fields:
-        raise ContractValidationError(
-            f"{path.name}: 'fields' must be a non-empty mapping."
-        )
+        raise ContractValidationError(f"{path.name}: 'fields' must be a non-empty mapping.")
     primary_key = data["primary_key"]
     if primary_key not in fields:
         raise ContractValidationError(
@@ -51,9 +47,7 @@ def _validate_contract(path: Path, data: dict) -> None:
         )
     relationships = data.get("relationships") or {}
     if not isinstance(relationships, dict):
-        raise ContractValidationError(
-            f"{path.name}: 'relationships' must be a mapping."
-        )
+        raise ContractValidationError(f"{path.name}: 'relationships' must be a mapping.")
     stem_name = path.stem
     if data["name"] != stem_name:
         raise ContractValidationError(
@@ -75,15 +69,11 @@ def load_entity_contracts(
 
     directory = contracts_dir or DEFAULT_CONTRACTS_DIR
     if not directory.is_dir():
-        raise ContractValidationError(
-            f"Entity contracts directory not found: {directory}"
-        )
+        raise ContractValidationError(f"Entity contracts directory not found: {directory}")
 
     files = sorted(directory.glob("*.yaml"))
     if not files:
-        raise ContractValidationError(
-            f"No entity contracts found under {directory}"
-        )
+        raise ContractValidationError(f"No entity contracts found under {directory}")
 
     seen_names: set[str] = set()
     entities: list[EntityDefinition] = []
@@ -92,20 +82,14 @@ def load_entity_contracts(
         try:
             data = yaml.safe_load(raw)
         except yaml.YAMLError as exc:
-            raise ContractValidationError(
-                f"{path.name}: invalid YAML ({exc})."
-            ) from exc
+            raise ContractValidationError(f"{path.name}: invalid YAML ({exc}).") from exc
         if not isinstance(data, dict):
-            raise ContractValidationError(
-                f"{path.name}: top-level document must be a mapping."
-            )
+            raise ContractValidationError(f"{path.name}: top-level document must be a mapping.")
 
         _validate_contract(path, data)
         name = data["name"]
         if name in seen_names:
-            raise ContractValidationError(
-                f"Duplicate entity name '{name}' in {path.name}."
-            )
+            raise ContractValidationError(f"Duplicate entity name '{name}' in {path.name}.")
         seen_names.add(name)
 
         entities.append(

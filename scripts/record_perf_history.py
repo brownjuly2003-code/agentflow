@@ -62,9 +62,7 @@ def load_history(path: Path) -> list[dict[str, object]]:
     return data
 
 
-def build_entry(
-    results_path: Path, commit_sha: str, branch: str
-) -> dict[str, object]:
+def build_entry(results_path: Path, commit_sha: str, branch: str) -> dict[str, object]:
     payload = json.loads(results_path.read_text(encoding="utf-8"))
     aggregate = payload.get("aggregate")
     if not isinstance(aggregate, dict):

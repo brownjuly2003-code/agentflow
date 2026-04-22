@@ -4,7 +4,6 @@ import pytest
 
 from tests.chaos.conftest import install_redis_query_cache
 
-
 pytestmark = [pytest.mark.integration, pytest.mark.requires_docker]
 
 

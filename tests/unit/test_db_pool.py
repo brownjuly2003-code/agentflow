@@ -5,14 +5,14 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
-from src.serving.db_pool import DuckDBPool
 from src.quality.monitors.metrics_collector import (
     CheckSource,
     ComponentHealth,
     HealthStatus,
     PipelineHealth,
 )
+from src.serving.api.main import app
+from src.serving.db_pool import DuckDBPool
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 

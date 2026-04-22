@@ -19,7 +19,6 @@ import src.serving.api.main as main_module
 from src.processing.event_replayer import ensure_dead_letter_table
 from src.serving.cache import QueryCache
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHAOS_COMPOSE_FILE = PROJECT_ROOT / "docker-compose.chaos.yml"
 TOXIPROXY_CONFIG_FILE = PROJECT_ROOT / "config" / "toxiproxy.json"

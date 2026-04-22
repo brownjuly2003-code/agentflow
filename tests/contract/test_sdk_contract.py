@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 from agentflow import AgentFlowClient
 from agentflow.exceptions import AuthError, EntityNotFoundError
 
-
 pytestmark = pytest.mark.integration
 
 

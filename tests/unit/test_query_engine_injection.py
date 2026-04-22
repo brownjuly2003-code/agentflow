@@ -6,7 +6,6 @@ import pytest
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 
-
 ATTACK_VECTORS = [
     "'; DROP TABLE orders_v2; --",
     "' OR '1'='1",

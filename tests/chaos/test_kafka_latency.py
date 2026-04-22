@@ -9,7 +9,6 @@ from tests.chaos.conftest import (
     seed_deadletter_event,
 )
 
-
 pytestmark = [pytest.mark.integration, pytest.mark.requires_docker]
 
 

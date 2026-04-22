@@ -23,27 +23,27 @@ class FrozenClock:
 
 
 class FakePipeline:
-    def __init__(self, redis_client: "FakeRedis") -> None:
+    def __init__(self, redis_client: FakeRedis) -> None:
         self._redis = redis_client
         self._commands: list[tuple[str, tuple, dict]] = []
 
-    def zremrangebyscore(self, key: str, minimum: float, maximum: float) -> "FakePipeline":
+    def zremrangebyscore(self, key: str, minimum: float, maximum: float) -> FakePipeline:
         self._commands.append(("zremrangebyscore", (key, minimum, maximum), {}))
         return self
 
-    def zadd(self, key: str, mapping: dict[str, float]) -> "FakePipeline":
+    def zadd(self, key: str, mapping: dict[str, float]) -> FakePipeline:
         self._commands.append(("zadd", (key, mapping), {}))
         return self
 
-    def zcard(self, key: str) -> "FakePipeline":
+    def zcard(self, key: str) -> FakePipeline:
         self._commands.append(("zcard", (key,), {}))
         return self
 
-    def expire(self, key: str, ttl: int) -> "FakePipeline":
+    def expire(self, key: str, ttl: int) -> FakePipeline:
         self._commands.append(("expire", (key, ttl), {}))
         return self
 
-    def zrange(self, key: str, start: int, stop: int, *, withscores: bool = False) -> "FakePipeline":
+    def zrange(self, key: str, start: int, stop: int, *, withscores: bool = False) -> FakePipeline:
         self._commands.append(("zrange", (key, start, stop), {"withscores": withscores}))
         return self
 

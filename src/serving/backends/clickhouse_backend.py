@@ -42,7 +42,7 @@ class ClickHouseBackend(ServingBackend):
 
         request = Request(url, data=translated_sql.encode("utf-8"), method="POST")
         if self._user or self._password:
-            token = base64.b64encode(f"{self._user}:{self._password}".encode("utf-8")).decode("ascii")
+            token = base64.b64encode(f"{self._user}:{self._password}".encode()).decode("ascii")
             request.add_header("Authorization", f"Basic {token}")
 
         try:

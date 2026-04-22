@@ -1,6 +1,6 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-import uuid
 
 import pytest
 from pydantic import ValidationError

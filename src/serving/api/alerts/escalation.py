@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from src.serving.api.webhook_dispatcher import _event_body, _signature
@@ -11,7 +11,7 @@ from .evaluator import evaluate_rule
 from .history import ensure_alert_history_table, log_alert_history
 
 if TYPE_CHECKING:
-    from .dispatcher import AlertDispatcher, AlertEscalationStep, AlertRule
+    from .dispatcher import AlertDispatcher, AlertRule
 
 
 async def dispatch_alert(
@@ -20,6 +20,7 @@ async def dispatch_alert(
     now: datetime,
 ) -> tuple[AlertRule, bool, int]:
     from src.serving.api import alert_dispatcher as compat
+
     from .dispatcher import next_escalation_step
 
     evaluation = evaluate_rule(dispatcher, alert, now)

@@ -58,7 +58,7 @@ class AlertRule(BaseModel):
     last_condition_triggered: bool = False
 
     @model_validator(mode="after")
-    def _normalize_escalation(self) -> "AlertRule":
+    def _normalize_escalation(self) -> AlertRule:
         steps = sorted(self.escalation, key=lambda step: (step.after_minutes, step.level))
         if not steps or steps[0].after_minutes != 0:
             steps.insert(
@@ -188,7 +188,7 @@ def deactivate_alert(path: Path, alert_id: str, tenant: str) -> bool:
     return changed
 
 
-def ensure_alert_dispatcher(app) -> "AlertDispatcher":
+def ensure_alert_dispatcher(app) -> AlertDispatcher:
     dispatcher = getattr(app.state, "alert_dispatcher", None)
     if dispatcher is None:
         dispatcher = AlertDispatcher(app)
@@ -259,6 +259,7 @@ class AlertDispatcher:
 
     async def dispatch_alerts(self) -> int:
         from src.serving.api import alert_dispatcher as compat
+
         from .escalation import dispatch_alert
 
         path = get_alert_config_path(self.app)
@@ -279,6 +280,7 @@ class AlertDispatcher:
 
     async def send_test_alert(self, alert: AlertRule) -> dict:
         from src.serving.api import alert_dispatcher as compat
+
         from .escalation import deliver
 
         payload = {

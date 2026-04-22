@@ -14,7 +14,6 @@ from queue import Queue
 import httpx
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = PROJECT_ROOT / "docker-compose.prod.yml"
 DEFAULT_STARTUP_TIMEOUT = int(os.getenv("AGENTFLOW_E2E_TIMEOUT", "120"))

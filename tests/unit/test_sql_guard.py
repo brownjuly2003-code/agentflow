@@ -2,8 +2,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
 
 ALLOWED_TABLES = {

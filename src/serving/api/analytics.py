@@ -87,7 +87,7 @@ def build_analytics_middleware():
                 async def receive() -> Message:
                     return {"type": "http.request", "body": body, "more_body": False}
 
-                setattr(request, "_receive", receive)
+                request._receive = receive
 
         try:
             response = await call_next(request)

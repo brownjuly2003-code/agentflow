@@ -4,7 +4,6 @@ import pytest
 
 from tests.chaos import test_duckdb_timeout, test_redis_failure
 
-
 pytestmark = [pytest.mark.integration, pytest.mark.requires_docker]
 
 

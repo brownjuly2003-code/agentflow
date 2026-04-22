@@ -1,6 +1,6 @@
 import json
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 import httpx
 import pytest

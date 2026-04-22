@@ -93,7 +93,7 @@ def load_serving_backend_config(config_path: Path | str | None = None) -> dict:
 
 def create_backend(
     *,
-    duckdb_backend: "DuckDBBackend",
+    duckdb_backend: DuckDBBackend,
     config_path: Path | str | None = None,
 ) -> ServingBackend:
     config = load_serving_backend_config(config_path)

@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 from agentflow import AsyncAgentFlowClient
 from agentflow.client import AgentFlowClient
 
-
 pytestmark = pytest.mark.integration
 
 

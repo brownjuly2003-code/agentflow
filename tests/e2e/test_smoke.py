@@ -6,7 +6,6 @@ from queue import Empty
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 

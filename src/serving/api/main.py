@@ -31,8 +31,8 @@ from src.serving.api.auth import AuthManager, TenantKey, build_auth_middleware
 from src.serving.api.middleware.logging import build_correlation_middleware
 from src.serving.api.routers.admin import router as admin_router
 from src.serving.api.routers.admin_ui import router as admin_ui_router
-from src.serving.api.routers.alerts import router as alert_router
 from src.serving.api.routers.agent_query import router as agent_router
+from src.serving.api.routers.alerts import router as alert_router
 from src.serving.api.routers.batch import router as batch_router
 from src.serving.api.routers.contracts import router as contracts_router
 from src.serving.api.routers.deadletter import router as deadletter_router

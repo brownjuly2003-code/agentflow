@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest

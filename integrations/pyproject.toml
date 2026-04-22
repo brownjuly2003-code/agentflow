@@ -1,14 +1,22 @@
 [project]
 name = "agentflow-integrations"
-version = "0.1.0"
-description = "LangChain and LlamaIndex integrations for AgentFlow"
+version = "1.0.1"
+description = "LangChain, LlamaIndex, CrewAI, and MCP integrations for AgentFlow"
 requires-python = ">=3.11"
 dependencies = [
-    "agentflow-client>=0.1.0",
+    "agentflow>=1.0.1",
     "langchain>=0.3,<1",
     "llama-index-core>=0.12,<1",
     "pydantic>=2.9,<3",
 ]
+
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.0",
+]
+
+[project.scripts]
+agentflow-mcp = "agentflow_integrations.mcp.server:run"
 
 [build-system]
 requires = ["hatchling"]

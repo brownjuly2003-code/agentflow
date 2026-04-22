@@ -94,7 +94,7 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design, trade-
 | Semantic layer | `src/serving/semantic_layer/` |
 | Python SDK | `sdk/agentflow/` |
 | TypeScript SDK | `sdk-ts/src/` |
-| Agent integrations | `integrations/` |
+| Agent integrations | `integrations/agentflow_integrations/` (LangChain, LlamaIndex, CrewAI, MCP) |
 | Flink jobs | `src/processing/flink_jobs/` |
 | Test suites | `tests/` |
 | Planning trail | `docs/plans/` |

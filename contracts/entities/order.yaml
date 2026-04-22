@@ -1,0 +1,13 @@
+name: order
+description: Customer orders with status and total
+table: orders_v2
+primary_key: order_id
+fields:
+  order_id: Unique order identifier (ORD-YYYYMMDD-NNNN)
+  user_id: Customer identifier
+  status: "Current status: pending, confirmed, shipped, delivered, cancelled"
+  total_amount: Order total in USD
+  currency: Currency code (USD, EUR, GBP)
+  created_at: Order creation timestamp
+relationships:
+  user: user_id

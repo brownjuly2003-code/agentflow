@@ -1,0 +1,14 @@
+name: user
+description: Customer profile with order history summary
+table: users_enriched
+primary_key: user_id
+fields:
+  user_id: Unique user identifier
+  total_orders: Lifetime order count
+  total_spent: Lifetime spend in USD
+  first_order_at: First order timestamp
+  last_order_at: Most recent order timestamp
+  preferred_category: Most frequently ordered category
+relationships:
+  orders: user_id
+  sessions: user_id

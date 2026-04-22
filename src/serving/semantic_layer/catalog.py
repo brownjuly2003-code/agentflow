@@ -7,6 +7,7 @@ what data is available and how to query it, without knowing table schemas.
 from dataclasses import dataclass, field
 
 from src.serving.semantic_layer.contract_registry import ContractRegistry
+from src.serving.semantic_layer.entity_type_registry import load_entity_contracts
 
 
 @dataclass
@@ -40,75 +41,11 @@ class DataCatalog:
         self._register_defaults()
 
     def _register_defaults(self):
-        self.register_entity(EntityDefinition(
-            name="order",
-            description="Customer orders with status and total",
-            table="orders_v2",
-            primary_key="order_id",
-            fields={
-                "order_id": "Unique order identifier (ORD-YYYYMMDD-NNNN)",
-                "user_id": "Customer identifier",
-                "status": "Current status: pending, confirmed, shipped, delivered, cancelled",
-                "total_amount": "Order total in USD",
-                "currency": "Currency code (USD, EUR, GBP)",
-                "created_at": "Order creation timestamp",
-            },
-            relationships={"user": "user_id"},
-            contract_version=self.contract_registry.latest_contract_version("order"),
-        ))
-
-        self.register_entity(EntityDefinition(
-            name="user",
-            description="Customer profile with order history summary",
-            table="users_enriched",
-            primary_key="user_id",
-            fields={
-                "user_id": "Unique user identifier",
-                "total_orders": "Lifetime order count",
-                "total_spent": "Lifetime spend in USD",
-                "first_order_at": "First order timestamp",
-                "last_order_at": "Most recent order timestamp",
-                "preferred_category": "Most frequently ordered category",
-            },
-            relationships={"orders": "user_id", "sessions": "user_id"},
-            contract_version=self.contract_registry.latest_contract_version("user"),
-        ))
-
-        self.register_entity(EntityDefinition(
-            name="product",
-            description="Product catalog with current pricing and stock",
-            table="products_current",
-            primary_key="product_id",
-            fields={
-                "product_id": "Unique product identifier",
-                "name": "Product display name",
-                "category": "Product category",
-                "price": "Current price in USD",
-                "in_stock": "Whether the product is currently available",
-                "stock_quantity": "Current inventory count",
-            },
-            contract_version=self.contract_registry.latest_contract_version("product"),
-        ))
-
-        self.register_entity(EntityDefinition(
-            name="session",
-            description="User browsing sessions with funnel stage",
-            table="sessions_aggregated",
-            primary_key="session_id",
-            fields={
-                "session_id": "Unique session identifier",
-                "user_id": "User identifier (null for anonymous)",
-                "started_at": "Session start time",
-                "ended_at": "Session end time",
-                "duration_seconds": "Session duration",
-                "event_count": "Number of events in session",
-                "unique_pages": "Distinct pages visited",
-                "funnel_stage": "Deepest stage: bounce/browse/product_view/add_to_cart/checkout",
-                "is_conversion": "Whether the session resulted in a checkout",
-            },
-            relationships={"user": "user_id"},
-            contract_version=self.contract_registry.latest_contract_version("session"),
-        ))
+        for entity in load_entity_contracts():
+            entity.contract_version = self.contract_registry.latest_contract_version(
+                entity.name
+            )
+            self.register_entity(entity)
 
         # Metrics
         self.register_metric(MetricDefinition(

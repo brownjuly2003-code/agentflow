@@ -1,0 +1,16 @@
+name: session
+description: User browsing sessions with funnel stage
+table: sessions_aggregated
+primary_key: session_id
+fields:
+  session_id: Unique session identifier
+  user_id: User identifier (null for anonymous)
+  started_at: Session start time
+  ended_at: Session end time
+  duration_seconds: Session duration
+  event_count: Number of events in session
+  unique_pages: Distinct pages visited
+  funnel_stage: "Deepest stage: bounce/browse/product_view/add_to_cart/checkout"
+  is_conversion: Whether the session resulted in a checkout
+relationships:
+  user: user_id

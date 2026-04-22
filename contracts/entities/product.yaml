@@ -1,0 +1,12 @@
+name: product
+description: Product catalog with current pricing and stock
+table: products_current
+primary_key: product_id
+fields:
+  product_id: Unique product identifier
+  name: Product display name
+  category: Product category
+  price: Current price in USD
+  in_stock: Whether the product is currently available
+  stock_quantity: Current inventory count
+relationships: {}

@@ -22,6 +22,7 @@ dependencies = [
     "pyarrow>=17,<19",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.5,<3",
+    "pyyaml>=6,<7",
     "sqlglot>=30,<31",
     "structlog>=24.4,<26",
 ]

@@ -220,9 +220,7 @@ def test_description_changed_is_safe(checker: EvolutionChecker) -> None:
 
 def test_enum_value_added_is_safe(checker: EvolutionChecker) -> None:
     report = checker.check(
-        _schema(
-            _field("status", "enum", required=True, values=["pending", "processing"])
-        ),
+        _schema(_field("status", "enum", required=True, values=["pending", "processing"])),
         _schema(
             _field(
                 "status",
@@ -294,9 +292,7 @@ def test_validate_endpoint_reports_breaking_change_and_requires_version_bump(
         "entity": "order",
         "base_version": "1",
         "candidate_version": "1",
-        "breaking_changes": [
-            {"type": "field_removed", "field": "status", "severity": "breaking"}
-        ],
+        "breaking_changes": [{"type": "field_removed", "field": "status", "severity": "breaking"}],
         "safe_changes": [],
         "is_breaking": True,
         "requires_version_bump": True,

@@ -54,9 +54,14 @@ def _transform_payload_for_requested_version(req: Request, payload: dict) -> dic
 
 
 class NLQueryRequest(BaseModel):
-    question: str = Field(..., min_length=3, max_length=1000, examples=[
-        "What is the average order value in the last hour?",
-    ])
+    question: str = Field(
+        ...,
+        min_length=3,
+        max_length=1000,
+        examples=[
+            "What is the average order value in the last hour?",
+        ],
+    )
     context: dict | None = Field(
         default=None, description="Additional context for query generation"
     )
@@ -76,9 +81,14 @@ class QueryResponse(BaseModel):
 
 
 class ExplainRequest(BaseModel):
-    question: str = Field(..., min_length=3, max_length=1000, examples=[
-        "Top 5 products by revenue today",
-    ])
+    question: str = Field(
+        ...,
+        min_length=3,
+        max_length=1000,
+        examples=[
+            "Top 5 products by revenue today",
+        ],
+    )
 
 
 class ExplainResponse(BaseModel):
@@ -192,10 +202,7 @@ async def natural_language_query(request: NLQueryRequest, req: Request, response
     tenant = tenant_id or "default"
     catalog = getattr(req.app.state, "catalog", None)
     table_to_entity = (
-        {
-            entity.table: name
-            for name, entity in catalog.entities.items()
-        }
+        {entity.table: name for name, entity in catalog.entities.items()}
         if catalog is not None
         else {}
     )
@@ -262,9 +269,7 @@ async def get_entity(
         )
 
     if as_of is not None:
-        as_of = (
-            as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)
-        ).astimezone(UTC)
+        as_of = (as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)).astimezone(UTC)
         if as_of > datetime.now(UTC):
             raise HTTPException(
                 status_code=422,
@@ -340,9 +345,7 @@ async def get_entity(
         raise HTTPException(status_code=503, detail=str(e)) from None
 
     if result is None:
-        raise HTTPException(
-            status_code=404, detail=f"{entity_type}/{entity_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"{entity_type}/{entity_id} not found")
 
     now = datetime.now(UTC)
     payload = dict(result)
@@ -425,9 +428,7 @@ async def get_metric(
         )
 
     if as_of is not None:
-        as_of = (
-            as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)
-        ).astimezone(UTC)
+        as_of = (as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)).astimezone(UTC)
         if as_of > datetime.now(UTC):
             raise HTTPException(
                 status_code=422,

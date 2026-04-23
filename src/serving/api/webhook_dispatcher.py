@@ -23,9 +23,7 @@ except ImportError:  # pragma: no cover
 
 logger = structlog.get_logger()
 
-DEFAULT_WEBHOOKS_CONFIG_PATH = Path(
-    os.getenv("AGENTFLOW_WEBHOOKS_FILE", "config/webhooks.yaml")
-)
+DEFAULT_WEBHOOKS_CONFIG_PATH = Path(os.getenv("AGENTFLOW_WEBHOOKS_FILE", "config/webhooks.yaml"))
 
 
 class WebhookFilters(BaseModel):
@@ -98,9 +96,7 @@ def create_webhook(
 
 def list_webhooks(path: Path, tenant: str) -> list[WebhookRegistration]:
     return [
-        webhook
-        for webhook in load_webhooks(path)
-        if webhook.tenant == tenant and webhook.active
+        webhook for webhook in load_webhooks(path) if webhook.tenant == tenant and webhook.active
     ]
 
 
@@ -276,9 +272,7 @@ class WebhookDispatcher:
                     )
 
                 if attempt < 3:
-                    delay = self.backoff_seconds[
-                        min(attempt - 1, len(self.backoff_seconds) - 1)
-                    ]
+                    delay = self.backoff_seconds[min(attempt - 1, len(self.backoff_seconds) - 1)]
                     await asyncio.sleep(delay)
 
         return {
@@ -295,8 +289,7 @@ class WebhookDispatcher:
     def _fetch_pipeline_events(self) -> list[dict]:
         conn = self.app.state.query_engine._conn
         columns = [
-            row[1]
-            for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
+            row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
         ]
         if not columns:
             return []

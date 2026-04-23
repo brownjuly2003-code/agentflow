@@ -43,7 +43,7 @@ async def rotate_api_key(key_id: str, request: Request):
     try:
         item, expires_at = manager.rotate_key(key_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.")
+        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
@@ -58,7 +58,7 @@ async def get_rotation_status(key_id: str, request: Request):
     try:
         return manager.get_rotation_status(key_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.")
+        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
 
 
 @router.post("/keys/{key_id}/revoke-old")
@@ -67,7 +67,7 @@ async def revoke_old_api_key(key_id: str, request: Request):
     try:
         revoked = manager.revoke_old_key(key_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.")
+        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
     if not revoked:
         raise HTTPException(status_code=409, detail="No old key is pending revocation.")
     return {"revoked": True}

@@ -92,12 +92,15 @@ def daily_user_profiles(context: AssetExecutionContext):
     """).fetchall()
 
     for row in result:
-        conn.execute("""
+        conn.execute(
+            """
             INSERT OR REPLACE INTO users_enriched
             (user_id, total_orders, total_spent,
              first_order_at, last_order_at)
             VALUES (?, ?, ?, ?, ?)
-        """, list(row))
+        """,
+            list(row),
+        )
 
     conn.close()
     context.log.info("User profiles updated: %d", len(result))
@@ -109,9 +112,7 @@ def daily_product_metrics(context: AssetExecutionContext):
     """Pre-compute product-level metrics from pipeline events."""
     conn = _get_conn()
 
-    count = conn.execute(
-        "SELECT COUNT(*) FROM products_current"
-    ).fetchone()[0]
+    count = conn.execute("SELECT COUNT(*) FROM products_current").fetchone()[0]
     conn.close()
 
     context.log.info("Product metrics refreshed: %d", count)
@@ -134,8 +135,10 @@ def daily_quality_report(context: AssetExecutionContext):
 
     checks = {}
     for table in [
-        "orders_v2", "users_enriched",
-        "products_current", "sessions_aggregated",
+        "orders_v2",
+        "users_enriched",
+        "products_current",
+        "sessions_aggregated",
     ]:
         try:
             row = conn.execute(
@@ -147,12 +150,9 @@ def daily_quality_report(context: AssetExecutionContext):
 
     # Dead letter ratio
     try:
-        total = conn.execute(
-            "SELECT COUNT(*) FROM pipeline_events"
-        ).fetchone()[0]
+        total = conn.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0]
         dead = conn.execute(
-            "SELECT COUNT(*) FROM pipeline_events "
-            "WHERE topic = 'events.deadletter'"
+            "SELECT COUNT(*) FROM pipeline_events WHERE topic = 'events.deadletter'"
         ).fetchone()[0]
         dl_ratio = dead / total if total > 0 else 0.0
         checks["dead_letter_ratio"] = {"value": round(dl_ratio, 4)}
@@ -162,7 +162,8 @@ def daily_quality_report(context: AssetExecutionContext):
     conn.close()
 
     failed = sum(
-        1 for v in checks.values()
+        1
+        for v in checks.values()
         if isinstance(v, dict) and v.get("status", "").startswith("error")
     )
     context.log.info("Quality report: %s", checks)

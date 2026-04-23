@@ -61,15 +61,12 @@ async def _execute_entity_item(item: BatchItem, req: Request) -> dict[str, Any]:
     entity_type = item.params.get("entity_type")
     entity_id = item.params.get("entity_id")
     if not isinstance(entity_type, str) or not isinstance(entity_id, str):
-        raise ValueError(
-            "Entity batch item requires string params 'entity_type' and 'entity_id'."
-        )
+        raise ValueError("Entity batch item requires string params 'entity_type' and 'entity_id'.")
 
     catalog = req.app.state.catalog
     if entity_type not in catalog.entities:
         raise ValueError(
-            f"Unknown entity type: {entity_type}. "
-            f"Available: {list(catalog.entities.keys())}"
+            f"Unknown entity type: {entity_type}. Available: {list(catalog.entities.keys())}"
         )
 
     tenant_key = getattr(req.state, "tenant_key", None)
@@ -177,8 +174,7 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
             context=context,
         )
     table_to_entity = {
-        entity.table: name
-        for name, entity in req.app.state.catalog.entities.items()
+        entity.table: name for name, entity in req.app.state.catalog.entities.items()
     }
     answer, _ = _get_pii_masker().mask_query_results(
         result.get("sql", ""),

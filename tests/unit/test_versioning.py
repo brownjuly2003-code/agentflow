@@ -17,12 +17,12 @@ def _write_api_keys(path: Path) -> None:
     path.write_text(
         (
             "keys:\n"
-            "  - key: \"acme-key\"\n"
-            "    name: \"Acme Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "acme-key"\n'
+            '    name: "Acme Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-11\"\n"
+            '    created_at: "2026-04-11"\n'
         ),
         encoding="utf-8",
         newline="\n",
@@ -31,14 +31,14 @@ def _write_api_keys(path: Path) -> None:
 
 def _write_tenants(path: Path, *, pin: str | None = "2026-01-01") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    pin_line = f"    api_version_pin: \"{pin}\"\n" if pin is not None else ""
+    pin_line = f'    api_version_pin: "{pin}"\n' if pin is not None else ""
     path.write_text(
         (
             "tenants:\n"
             "  - id: acme\n"
-            "    display_name: \"Acme Corp\"\n"
-            "    kafka_topic_prefix: \"acme\"\n"
-            "    duckdb_schema: \"acme\"\n"
+            '    display_name: "Acme Corp"\n'
+            '    kafka_topic_prefix: "acme"\n'
+            '    duckdb_schema: "acme"\n'
             "    max_events_per_day: 1000000\n"
             "    max_api_keys: 10\n"
             "    allowed_entity_types: null\n"
@@ -56,16 +56,16 @@ def _write_api_versions(path: Path, content: str | None = None) -> None:
             content
             or (
                 "versions:\n"
-                "  - date: \"2026-01-01\"\n"
+                '  - date: "2026-01-01"\n'
                 "    status: stable\n"
                 "    changes: []\n"
-                "  - date: \"2026-04-11\"\n"
+                '  - date: "2026-04-11"\n'
                 "    status: latest\n"
                 "    changes:\n"
                 "      - type: additive\n"
-                "        description: \"Added meta.is_historical to entity responses\"\n"
+                '        description: "Added meta.is_historical to entity responses"\n'
                 "      - type: additive\n"
-                "        description: \"Added X-PII-Masked response header\"\n"
+                '        description: "Added X-PII-Masked response header"\n'
             )
         ),
         encoding="utf-8",
@@ -205,16 +205,16 @@ def test_transformer_removes_arbitrary_added_fields_for_older_versions(tmp_path:
         config_path,
         (
             "versions:\n"
-            "  - date: \"2026-01-01\"\n"
+            '  - date: "2026-01-01"\n'
             "    status: stable\n"
             "    changes: []\n"
-            "  - date: \"2026-04-11\"\n"
+            '  - date: "2026-04-11"\n'
             "    status: latest\n"
             "    changes:\n"
             "      - type: additive\n"
-            "        description: \"Added meta.as_of to entity responses\"\n"
+            '        description: "Added meta.as_of to entity responses"\n'
             "      - type: additive\n"
-            "        description: \"Added components to metric responses\"\n"
+            '        description: "Added components to metric responses"\n'
         ),
     )
     transformer = ResponseTransformer(ApiVersionRegistry(config_path))
@@ -357,14 +357,14 @@ def test_deprecated_versions_emit_warning_header(
 ) -> None:
     versions_content = (
         "versions:\n"
-        "  - date: \"2025-01-01\"\n"
+        '  - date: "2025-01-01"\n'
         "    status: stable\n"
         "    changes: []\n"
-        "  - date: \"2026-04-11\"\n"
+        '  - date: "2026-04-11"\n'
         "    status: latest\n"
         "    changes:\n"
         "      - type: additive\n"
-        "        description: \"Added meta.is_historical to entity responses\"\n"
+        '        description: "Added meta.is_historical to entity responses"\n'
     )
 
     with _build_client(

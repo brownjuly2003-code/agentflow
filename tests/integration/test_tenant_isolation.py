@@ -22,18 +22,18 @@ def _write_api_keys(path: Path) -> None:
     path.write_text(
         (
             "keys:\n"
-            "  - key: \"acme-key\"\n"
-            "    name: \"Acme Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "acme-key"\n'
+            '    name: "Acme Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-11\"\n"
-            "  - key: \"demo-key\"\n"
-            "    name: \"Demo Agent\"\n"
-            "    tenant: \"demo\"\n"
+            '    created_at: "2026-04-11"\n'
+            '  - key: "demo-key"\n'
+            '    name: "Demo Agent"\n'
+            '    tenant: "demo"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-11\"\n"
+            '    created_at: "2026-04-11"\n'
         ),
         encoding="utf-8",
         newline="\n",
@@ -46,21 +46,21 @@ def _write_tenants(path: Path) -> None:
         (
             "tenants:\n"
             "  - id: acme\n"
-            "    display_name: \"Acme Corp\"\n"
-            "    kafka_topic_prefix: \"acme\"\n"
-            "    duckdb_schema: \"acme\"\n"
+            '    display_name: "Acme Corp"\n'
+            '    kafka_topic_prefix: "acme"\n'
+            '    duckdb_schema: "acme"\n'
             "    max_events_per_day: 1000000\n"
             "    max_api_keys: 10\n"
             "    allowed_entity_types: null\n"
             "  - id: demo\n"
-            "    display_name: \"Demo Tenant\"\n"
-            "    kafka_topic_prefix: \"demo\"\n"
-            "    duckdb_schema: \"demo\"\n"
+            '    display_name: "Demo Tenant"\n'
+            '    kafka_topic_prefix: "demo"\n'
+            '    duckdb_schema: "demo"\n'
             "    max_events_per_day: 10000\n"
             "    max_api_keys: 2\n"
             "    allowed_entity_types:\n"
-            "      - \"order\"\n"
-            "      - \"product\"\n"
+            '      - "order"\n'
+            '      - "product"\n'
         ),
         encoding="utf-8",
         newline="\n",

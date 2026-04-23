@@ -61,10 +61,7 @@ def load_slos(path: Path) -> list[SLODefinition]:
 
 def _pipeline_event_columns(request: Request) -> set[str]:
     conn = request.app.state.query_engine._conn
-    return {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    return {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
 
 
 def _time_column(columns: set[str]) -> str | None:

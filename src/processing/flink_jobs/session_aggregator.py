@@ -56,9 +56,7 @@ class SessionWindowFunction(KeyedProcessFunction):
         self.session_state = runtime_context.get_state(
             ValueStateDescriptor("session_data", Types.STRING())
         )
-        self.timer_state = runtime_context.get_state(
-            ValueStateDescriptor("timer_ts", Types.LONG())
-        )
+        self.timer_state = runtime_context.get_state(ValueStateDescriptor("timer_ts", Types.LONG()))
 
     def process_element(self, value, ctx: KeyedProcessFunction.Context):
         event = json.loads(value)
@@ -135,9 +133,7 @@ class SessionWindowFunction(KeyedProcessFunction):
             "started_at": datetime.fromtimestamp(
                 session["first_event_ts"] / 1000, tz=UTC
             ).isoformat(),
-            "ended_at": datetime.fromtimestamp(
-                session["last_event_ts"] / 1000, tz=UTC
-            ).isoformat(),
+            "ended_at": datetime.fromtimestamp(session["last_event_ts"] / 1000, tz=UTC).isoformat(),
             "duration_seconds": duration_ms / 1000,
             "event_count": session["event_count"],
             "unique_pages": len(session["pages"]),
@@ -161,35 +157,37 @@ def build_pipeline():
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
-    source = KafkaSource.builder() \
-        .set_bootstrap_servers(bootstrap_servers) \
-        .set_topics("clicks.raw") \
-        .set_group_id("agentflow-session-aggregator") \
-        .set_starting_offsets(KafkaOffsetsInitializer.earliest()) \
-        .set_value_only_deserializer(SimpleStringSchema()) \
+    source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers(bootstrap_servers)
+        .set_topics("clicks.raw")
+        .set_group_id("agentflow-session-aggregator")
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema())
         .build()
+    )
 
-    watermark_strategy = WatermarkStrategy \
-        .for_bounded_out_of_orderness(
-            timedelta(seconds=WATERMARK_OUT_OF_ORDERNESS_SECONDS)
-        ) \
-        .with_timestamp_assigner(ClickTimestampAssigner())
+    watermark_strategy = WatermarkStrategy.for_bounded_out_of_orderness(
+        timedelta(seconds=WATERMARK_OUT_OF_ORDERNESS_SECONDS)
+    ).with_timestamp_assigner(ClickTimestampAssigner())
 
     stream = env.from_source(source, watermark_strategy, "clicks-source")
 
-    sessions = stream \
-        .key_by(lambda x: json.loads(x).get("session_id", "unknown")) \
-        .process(SessionWindowFunction(), output_type=Types.STRING())
+    sessions = stream.key_by(lambda x: json.loads(x).get("session_id", "unknown")).process(
+        SessionWindowFunction(), output_type=Types.STRING()
+    )
 
-    sink = KafkaSink.builder() \
-        .set_bootstrap_servers(bootstrap_servers) \
+    sink = (
+        KafkaSink.builder()
+        .set_bootstrap_servers(bootstrap_servers)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
             .set_topic("sessions.aggregated")
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
-        ) \
+        )
         .build()
+    )
 
     sessions.sink_to(sink)
 

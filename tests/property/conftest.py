@@ -4,9 +4,7 @@ from pathlib import Path
 from hypothesis import HealthCheck, settings
 from hypothesis.database import DirectoryBasedExampleDatabase
 
-_EXAMPLE_DB = DirectoryBasedExampleDatabase(
-    Path(__file__).resolve().parent / ".hypothesis"
-)
+_EXAMPLE_DB = DirectoryBasedExampleDatabase(Path(__file__).resolve().parent / ".hypothesis")
 
 settings.register_profile(
     "ci",

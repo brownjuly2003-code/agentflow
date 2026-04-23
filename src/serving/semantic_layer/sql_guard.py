@@ -44,9 +44,7 @@ def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
             raise UnsafeSQLError(f"Forbidden node: {type(node).__name__}")
 
     cte_names = {
-        cte.alias_or_name.lower()
-        for cte in statement.find_all(exp.CTE)
-        if cte.alias_or_name
+        cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE) if cte.alias_or_name
     }
     normalized_allowed_tables = {table.lower() for table in allowed_tables}
     unknown_tables = {

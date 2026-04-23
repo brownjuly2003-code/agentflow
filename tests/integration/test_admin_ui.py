@@ -14,12 +14,12 @@ def _write_api_keys(path: Path) -> None:
     path.write_text(
         (
             "keys:\n"
-            "  - key: \"admin-ui-acme-key\"\n"
-            "    name: \"Admin UI Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "admin-ui-acme-key"\n'
+            '    name: "Admin UI Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
         newline="\n",

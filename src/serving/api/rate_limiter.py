@@ -11,9 +11,9 @@ from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS
 logger = structlog.get_logger()
 
 try:
-    import redis.asyncio as redis
+    import redis.asyncio as redis  # type: ignore[import-untyped,unused-ignore]
 except ImportError:  # pragma: no cover
-    redis = None
+    redis = None  # type: ignore[assignment]
 
 
 REDIS_WINDOW_EXPIRY_MULTIPLIER = 2

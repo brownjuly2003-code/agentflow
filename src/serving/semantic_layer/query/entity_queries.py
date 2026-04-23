@@ -41,10 +41,7 @@ class EntityQueryMixin:
             if not result:
                 return None
         except BackendMissingTableError as e:
-            msg = (
-                f"Table '{table_name}' for entity '{entity_type}' "
-                f"is not materialized yet"
-            )
+            msg = f"Table '{table_name}' for entity '{entity_type}' is not materialized yet"
             raise ValueError(msg) from e
         except BackendExecutionError as e:
             raise ValueError(f"Entity lookup failed: {e}") from e
@@ -104,7 +101,9 @@ class EntityQueryMixin:
             time_column = (
                 "processed_at"
                 if "processed_at" in event_columns
-                else "created_at" if "created_at" in event_columns else None
+                else "created_at"
+                if "created_at" in event_columns
+                else None
             )
             if time_column is not None:
                 if use_query_params:
@@ -152,9 +151,7 @@ class EntityQueryMixin:
                     try:
                         entity = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
                     except json.JSONDecodeError as e:
-                        raise ValueError(
-                            f"Historical entity payload is invalid JSON: {e}"
-                        ) from e
+                        raise ValueError(f"Historical entity payload is invalid JSON: {e}") from e
 
                     if isinstance(entity, dict):
                         if isinstance(event_time, datetime):
@@ -206,10 +203,7 @@ class EntityQueryMixin:
             if not rows:
                 return None
         except BackendMissingTableError as e:
-            msg = (
-                f"Table '{table_name}' for entity '{entity_type}' "
-                f"is not materialized yet"
-            )
+            msg = f"Table '{table_name}' for entity '{entity_type}' is not materialized yet"
             raise ValueError(msg) from e
         except BackendExecutionError as e:
             raise ValueError(f"Historical entity lookup failed: {e}") from e

@@ -88,10 +88,7 @@ async def test_hot_path_endpoints_do_not_block_event_loop(
     ) as client:
         started_at = time.perf_counter()
         responses = await asyncio.gather(
-            *[
-                client.request(method, url, json=json_payload)
-                for _ in range(4)
-            ]
+            *[client.request(method, url, json=json_payload) for _ in range(4)]
         )
         elapsed = time.perf_counter() - started_at
 

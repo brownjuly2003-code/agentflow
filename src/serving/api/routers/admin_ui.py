@@ -59,16 +59,15 @@ async def _build_context(request: Request, *, partial: bool) -> dict[str, object
 
 async def _gather_health(state) -> dict[str, object]:
     payload = await run_in_threadpool(state.health_collector.collect)
-    return payload.to_dict()
+    result: dict[str, object] = payload.to_dict()
+    return result
 
 
 def _cache_stats(state) -> dict[str, object]:
     query_cache = getattr(state, "query_cache", None)
     rate_limiter = getattr(getattr(state, "auth_manager", None), "rate_limiter", None)
     cache_backend = "redis" if getattr(query_cache, "_redis", None) is not None else "none"
-    rate_limit_backend = (
-        "redis" if getattr(rate_limiter, "_redis", None) is not None else "memory"
-    )
+    rate_limit_backend = "redis" if getattr(rate_limiter, "_redis", None) is not None else "memory"
     return {
         "backend": cache_backend,
         "entity_ttl_seconds": ENTITY_TTL_SECONDS,
@@ -80,13 +79,14 @@ def _qps_last_minute(db_path: Path | str) -> float:
     ensure_analytics_table(db_path)
     conn = duckdb.connect(str(db_path))
     try:
-        requests_last_minute = conn.execute(
+        row = conn.execute(
             """
             SELECT COUNT(*)
             FROM api_sessions
             WHERE ts >= CURRENT_TIMESTAMP - INTERVAL '1 minute'
             """
-        ).fetchone()[0]
+        ).fetchone()
+        requests_last_minute = row[0] if row else 0
     except duckdb.Error:
         return 0.0
     finally:

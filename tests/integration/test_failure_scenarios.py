@@ -25,18 +25,18 @@ def auth_headers(client, tmp_path):
     api_keys_path.write_text(
         (
             "keys:\n"
-            "  - key: \"tenant-order-key\"\n"
-            "    name: \"Order Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "tenant-order-key"\n'
+            '    name: "Order Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 2\n"
-            "    allowed_entity_types: [\"order\"]\n"
-            "    created_at: \"2026-04-10\"\n"
-            "  - key: \"tenant-ops-key\"\n"
-            "    name: \"Ops Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '    allowed_entity_types: ["order"]\n'
+            '    created_at: "2026-04-10"\n'
+            '  - key: "tenant-ops-key"\n'
+            '    name: "Ops Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 10\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
     )
@@ -256,9 +256,7 @@ class TestDataQuality:
                 [
                     (
                         f"evt-{index}",
-                        "events.deadletter"
-                        if index < 2
-                        else "events.validated",
+                        "events.deadletter" if index < 2 else "events.validated",
                         recent[index],
                     )
                     for index in range(10)

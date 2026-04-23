@@ -75,9 +75,7 @@ class AuthMiddleware:
                         else "Invalid or missing API key. Pass X-API-Key header."
                     )
                 },
-                headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)}
-                if is_throttled
-                else None,
+                headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)} if is_throttled else None,
             )
 
         manager.clear_failed_auth(client_ip)
@@ -93,9 +91,7 @@ class AuthMiddleware:
             return JSONResponse(
                 status_code=429,
                 content={
-                    "detail": (
-                        f"Rate limit exceeded: {tenant_key.rate_limit_rpm} requests/minute"
-                    ),
+                    "detail": (f"Rate limit exceeded: {tenant_key.rate_limit_rpm} requests/minute"),
                 },
                 headers={
                     "Retry-After": str(DEFAULT_RATE_LIMIT_WINDOW_SECONDS),
@@ -263,11 +259,16 @@ def usage_by_tenant(manager: AuthManager) -> list[dict]:
 
 
 def _is_exempt_path(path: str) -> bool:
-    return path.startswith("/docs") or path.startswith("/openapi") or path in {
-        "/health",
-        "/v1/health",
-        "/metrics",
-    }
+    return (
+        path.startswith("/docs")
+        or path.startswith("/openapi")
+        or path
+        in {
+            "/health",
+            "/v1/health",
+            "/metrics",
+        }
+    )
 
 
 def _is_admin_path(path: str) -> bool:

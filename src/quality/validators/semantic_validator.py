@@ -61,19 +61,20 @@ def _check_order_total_consistency(event: dict) -> list[SemanticIssue]:
     stated_total = Decimal(str(event.get("total_amount", 0)))
 
     computed_total = sum(
-        Decimal(str(i.get("quantity", 0))) * Decimal(str(i.get("unit_price", 0)))
-        for i in items
+        Decimal(str(i.get("quantity", 0))) * Decimal(str(i.get("unit_price", 0))) for i in items
     )
 
     if abs(stated_total - computed_total) > Decimal("0.01"):
-        issues.append(SemanticIssue(
-            rule="order_total_consistency",
-            severity="error",
-            field="total_amount",
-            message=f"Stated total {stated_total} != computed {computed_total}",
-            actual_value=str(stated_total),
-            expected=str(computed_total),
-        ))
+        issues.append(
+            SemanticIssue(
+                rule="order_total_consistency",
+                severity="error",
+                field="total_amount",
+                message=f"Stated total {stated_total} != computed {computed_total}",
+                actual_value=str(stated_total),
+                expected=str(computed_total),
+            )
+        )
     return issues
 
 
@@ -83,21 +84,25 @@ def _check_payment_amount_bounds(event: dict) -> list[SemanticIssue]:
     amount = Decimal(str(event.get("amount", 0)))
 
     if amount < Decimal("0.50"):
-        issues.append(SemanticIssue(
-            rule="payment_min_amount",
-            severity="error",
-            field="amount",
-            message=f"Payment amount {amount} below minimum $0.50",
-            actual_value=str(amount),
-        ))
+        issues.append(
+            SemanticIssue(
+                rule="payment_min_amount",
+                severity="error",
+                field="amount",
+                message=f"Payment amount {amount} below minimum $0.50",
+                actual_value=str(amount),
+            )
+        )
     elif amount > Decimal("50000"):
-        issues.append(SemanticIssue(
-            rule="payment_max_amount",
-            severity="warning",
-            field="amount",
-            message=f"Payment amount {amount} exceeds $50,000 — needs manual review",
-            actual_value=str(amount),
-        ))
+        issues.append(
+            SemanticIssue(
+                rule="payment_max_amount",
+                severity="warning",
+                field="amount",
+                message=f"Payment amount {amount} exceeds $50,000 — needs manual review",
+                actual_value=str(amount),
+            )
+        )
     return issues
 
 
@@ -105,12 +110,14 @@ def _check_payment_failure_reason(event: dict) -> list[SemanticIssue]:
     """Failed payments must have a failure_reason."""
     issues = []
     if event.get("status") == "failed" and not event.get("failure_reason"):
-        issues.append(SemanticIssue(
-            rule="payment_failure_reason_required",
-            severity="warning",
-            field="failure_reason",
-            message="Failed payment missing failure_reason",
-        ))
+        issues.append(
+            SemanticIssue(
+                rule="payment_failure_reason_required",
+                severity="warning",
+                field="failure_reason",
+                message="Failed payment missing failure_reason",
+            )
+        )
     return issues
 
 
@@ -118,12 +125,14 @@ def _check_clickstream_session_id(event: dict) -> list[SemanticIssue]:
     """Clickstream events must have a session_id."""
     issues = []
     if not event.get("session_id"):
-        issues.append(SemanticIssue(
-            rule="clickstream_session_required",
-            severity="error",
-            field="session_id",
-            message="Clickstream event missing session_id",
-        ))
+        issues.append(
+            SemanticIssue(
+                rule="clickstream_session_required",
+                severity="error",
+                field="session_id",
+                message="Clickstream event missing session_id",
+            )
+        )
     return issues
 
 
@@ -132,13 +141,15 @@ def _check_product_price_sanity(event: dict) -> list[SemanticIssue]:
     issues = []
     price = Decimal(str(event.get("price", 0)))
     if price > Decimal("100000"):
-        issues.append(SemanticIssue(
-            rule="product_price_sanity",
-            severity="warning",
-            field="price",
-            message=f"Product price {price} seems unreasonably high",
-            actual_value=str(price),
-        ))
+        issues.append(
+            SemanticIssue(
+                rule="product_price_sanity",
+                severity="warning",
+                field="price",
+                message=f"Product price {price} seems unreasonably high",
+                actual_value=str(price),
+            )
+        )
     return issues
 
 

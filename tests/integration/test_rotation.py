@@ -23,12 +23,12 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     api_keys_path.write_text(
         (
             "keys:\n"
-            "  - key: \"rotation-acme-key\"\n"
-            "    name: \"Rotation Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "rotation-acme-key"\n'
+            '    name: "Rotation Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
         newline="\n",
@@ -58,12 +58,12 @@ def expiring_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     api_keys_path.write_text(
         (
             "keys:\n"
-            "  - key: \"rotation-acme-key\"\n"
-            "    name: \"Rotation Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "rotation-acme-key"\n'
+            '    name: "Rotation Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
         newline="\n",
@@ -236,10 +236,7 @@ def test_expired_grace_period_revokes_old_key_automatically(expiring_client: Tes
             f"/v1/admin/keys/{key_id}/rotation-status",
             headers={"X-Admin-Key": "admin-secret"},
         )
-        if (
-            status_response.status_code == 200
-            and status_response.json()["phase"] == "idle"
-        ):
+        if status_response.status_code == 200 and status_response.json()["phase"] == "idle":
             break
         time.sleep(0.1)
 

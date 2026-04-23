@@ -71,6 +71,24 @@ line-length = 100
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "PT"]
 ignore = ["S101", "S311", "S608"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S603",
+    "S607",
+    "S310",
+    "S104",
+    "N802",
+    "E402",
+    "B017",
+    "PT011",
+    "A002",
+    "E501",
+]
+"src/serving/backends/clickhouse_backend.py" = [
+    "S310",
+    "E501",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
@@ -110,3 +128,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "src.processing.flink_jobs.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "src.serving.semantic_layer.query.*"
+disable_error_code = ["attr-defined"]

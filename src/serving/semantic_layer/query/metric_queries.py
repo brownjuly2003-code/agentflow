@@ -60,7 +60,11 @@ class MetricQueryMixin:
                     sql = f"{sql} AND {time_match.group(1)} <= CAST({anchor_literal} AS TIMESTAMP)"
 
         try:
-            result = self._backend.scalar(sql, params) if params is not None else self._backend.scalar(sql)
+            result = (
+                self._backend.scalar(sql, params)
+                if params is not None
+                else self._backend.scalar(sql)
+            )
             value = float(result) if result is not None else 0.0
         except BackendMissingTableError as e:
             table_match = re.search(r"Table.*?(\w+).*?not found", str(e))

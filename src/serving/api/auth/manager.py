@@ -163,7 +163,9 @@ class AuthManager:
                 if item.key_id is not None:
                     self._keys_by_id[item.key_id] = item
                 if item.key is not None:
-                    self.keys_by_value[item.key] = item.model_copy(update={"matched_slot": "current"})
+                    self.keys_by_value[item.key] = item.model_copy(
+                        update={"matched_slot": "current"}
+                    )
                 if item.key_hash is not None:
                     self._hashed_keys.append(item)
                     runtime_key = self._runtime_plaintext_by_hash.get(item.key_hash)

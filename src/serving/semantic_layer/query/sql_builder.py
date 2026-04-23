@@ -18,13 +18,11 @@ class SQLBuilderMixin:
 
     def _get_tenant_schema(self, tenant_id: str | None) -> str | None:
         resolved_tenant_id = self._resolve_tenant_id(tenant_id)
-        schema = self._tenant_router.get_duckdb_schema(resolved_tenant_id)
+        schema: str | None = self._tenant_router.get_duckdb_schema(resolved_tenant_id)
         if schema is None:
             return None
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", schema) is None:
-            raise ValueError(
-                f"Invalid DuckDB schema '{schema}' for tenant '{resolved_tenant_id}'."
-            )
+            raise ValueError(f"Invalid DuckDB schema '{schema}' for tenant '{resolved_tenant_id}'.")
         return schema
 
     def _quote_identifier(self, value: str) -> str:
@@ -63,9 +61,7 @@ class SQLBuilderMixin:
 
         parsed = sqlglot.parse_one(sql, dialect="duckdb")
         cte_names = {
-            cte.alias_or_name.lower()
-            for cte in parsed.find_all(exp.CTE)
-            if cte.alias_or_name
+            cte.alias_or_name.lower() for cte in parsed.find_all(exp.CTE) if cte.alias_or_name
         }
         schema = self._get_tenant_schema(tenant_id)
         if schema is None:

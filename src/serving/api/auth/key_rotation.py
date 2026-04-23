@@ -88,9 +88,13 @@ class KeyRotator:
         with self._manager._config_lock:
             config = self._manager._load_config()
             self.ensure_key_ids(config)
-            removed = [item for item in config.keys if self._manager._matches_key_material(item, api_key)]
+            removed = [
+                item for item in config.keys if self._manager._matches_key_material(item, api_key)
+            ]
             remaining = [
-                item for item in config.keys if not self._manager._matches_key_material(item, api_key)
+                item
+                for item in config.keys
+                if not self._manager._matches_key_material(item, api_key)
             ]
             if len(remaining) == len(config.keys):
                 return False
@@ -146,7 +150,9 @@ class KeyRotator:
             self.write_config(config)
             self._manager._runtime_plaintext_by_hash[new_key_hash] = new_key_value
         self._manager.load()
-        return self._manager._keys_by_id[key_id].model_copy(update={"key": new_key_value}), expires_at
+        return self._manager._keys_by_id[key_id].model_copy(
+            update={"key": new_key_value}
+        ), expires_at
 
     def revoke_old_key(self, key_id: str) -> bool:
         with self._manager._config_lock:
@@ -203,7 +209,7 @@ class KeyRotator:
                     GROUP BY key_id
                     """
                 ).fetchall()
-                return {key_id: requests_last_hour for key_id, requests_last_hour in rows}
+                return dict(rows)
             except duckdb.Error:
                 if attempt == 9:
                     raise

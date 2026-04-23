@@ -44,12 +44,14 @@ class FreshnessMonitor:
     """Consumes from validated topics and measures pipeline latency."""
 
     def __init__(self, bootstrap_servers: str, topics: list[str]):
-        self.consumer = Consumer({
-            "bootstrap.servers": bootstrap_servers,
-            "group.id": "agentflow-freshness-monitor",
-            "auto.offset.reset": "latest",
-            "enable.auto.commit": True,
-        })
+        self.consumer = Consumer(
+            {
+                "bootstrap.servers": bootstrap_servers,
+                "group.id": "agentflow-freshness-monitor",
+                "auto.offset.reset": "latest",
+                "enable.auto.commit": True,
+            }
+        )
         self.topics = topics
         self._sla_window: dict[str, list[bool]] = defaultdict(list)
         self._window_size = 1000  # last N events per topic

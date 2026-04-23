@@ -1,3 +1,4 @@
+from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -30,21 +31,21 @@ def _write_tenants(path: Path) -> None:
         (
             "tenants:\n"
             "  - id: acme\n"
-            "    display_name: \"Acme Corp\"\n"
-            "    kafka_topic_prefix: \"acme\"\n"
-            "    duckdb_schema: \"acme\"\n"
+            '    display_name: "Acme Corp"\n'
+            '    kafka_topic_prefix: "acme"\n'
+            '    duckdb_schema: "acme"\n'
             "    max_events_per_day: 1000000\n"
             "    max_api_keys: 10\n"
             "    allowed_entity_types: null\n"
             "  - id: demo\n"
-            "    display_name: \"Demo Tenant\"\n"
-            "    kafka_topic_prefix: \"demo\"\n"
-            "    duckdb_schema: \"demo\"\n"
+            '    display_name: "Demo Tenant"\n'
+            '    kafka_topic_prefix: "demo"\n'
+            '    duckdb_schema: "demo"\n'
             "    max_events_per_day: 10000\n"
             "    max_api_keys: 2\n"
             "    allowed_entity_types:\n"
-            "      - \"order\"\n"
-            "      - \"product\"\n"
+            '      - "order"\n'
+            '      - "product"\n'
         ),
         encoding="utf-8",
         newline="\n",
@@ -103,11 +104,11 @@ def _build_tenant_engine(base_path: Path) -> QueryEngine:
 @given(tenant_id=_TENANT_IDS)
 def test_shared_entity_id_resolves_to_tenant_scoped_data(tenant_id: str) -> None:
     with TemporaryDirectory() as temp_dir:
-        tenant_engine = _build_tenant_engine(Path(temp_dir))
-        order = tenant_engine.get_entity("order", "ORD-SHARED", tenant_id=tenant_id)
+        with closing(_build_tenant_engine(Path(temp_dir))) as tenant_engine:
+            order = tenant_engine.get_entity("order", "ORD-SHARED", tenant_id=tenant_id)
 
-        assert order is not None
-        assert order["user_id"] == _EXPECTED_USER_IDS[tenant_id]
+            assert order is not None
+            assert order["user_id"] == _EXPECTED_USER_IDS[tenant_id]
 
 
 @given(owner_tenant=_TENANT_IDS, other_tenant=_TENANT_IDS)
@@ -118,29 +119,28 @@ def test_cross_tenant_entity_lookup_does_not_leak_data(
     assume(owner_tenant != other_tenant)
 
     with TemporaryDirectory() as temp_dir:
-        tenant_engine = _build_tenant_engine(Path(temp_dir))
-        result = tenant_engine.get_entity(
-            "order",
-            _EXCLUSIVE_ORDER_IDS[owner_tenant],
-            tenant_id=other_tenant,
-        )
+        with closing(_build_tenant_engine(Path(temp_dir))) as tenant_engine:
+            result = tenant_engine.get_entity(
+                "order",
+                _EXCLUSIVE_ORDER_IDS[owner_tenant],
+                tenant_id=other_tenant,
+            )
 
-        assert result is None
+            assert result is None
 
 
 @given(tenant_id=_TENANT_IDS)
 def test_metrics_are_scoped_to_the_requested_tenant(tenant_id: str) -> None:
     with TemporaryDirectory() as temp_dir:
-        tenant_engine = _build_tenant_engine(Path(temp_dir))
-        metric = tenant_engine.get_metric("revenue", window="24h", tenant_id=tenant_id)
+        with closing(_build_tenant_engine(Path(temp_dir))) as tenant_engine:
+            metric = tenant_engine.get_metric("revenue", window="24h", tenant_id=tenant_id)
 
-        assert metric["value"] == _EXPECTED_REVENUE[tenant_id]
+            assert metric["value"] == _EXPECTED_REVENUE[tenant_id]
 
 
 @given(order_id=st.sampled_from(["ORD-SHARED", "ORD-ACME", "ORD-DEMO"]))
 def test_missing_tenant_context_fails_closed(order_id: str) -> None:
     with TemporaryDirectory() as temp_dir:
-        tenant_engine = _build_tenant_engine(Path(temp_dir))
-
-        with pytest.raises(ValueError, match="Tenant context is required"):
-            tenant_engine.get_entity("order", order_id, tenant_id=None)
+        with closing(_build_tenant_engine(Path(temp_dir))) as tenant_engine:
+            with pytest.raises(ValueError, match="Tenant context is required"):
+                tenant_engine.get_entity("order", order_id, tenant_id=None)

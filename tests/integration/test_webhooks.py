@@ -113,10 +113,7 @@ def _register(
 
 def _prepare_pipeline_events(client: TestClient) -> None:
     conn = client.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     if "event_type" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
     if "entity_id" not in columns:
@@ -212,11 +209,14 @@ class TestWebhooksAPI:
         request = httpx_mock.requests[0]
         payload = json.loads(request["content"].decode())
         signature = request["headers"]["X-AgentFlow-Signature"]
-        expected = "sha256=" + hmac.new(
-            created["secret"].encode(),
-            request["content"],
-            hashlib.sha256,
-        ).hexdigest()
+        expected = (
+            "sha256="
+            + hmac.new(
+                created["secret"].encode(),
+                request["content"],
+                hashlib.sha256,
+            ).hexdigest()
+        )
         assert payload["test"] is True
         assert request["headers"]["X-AgentFlow-Event"] == "webhook.test"
         assert request["headers"]["X-AgentFlow-Delivery"]

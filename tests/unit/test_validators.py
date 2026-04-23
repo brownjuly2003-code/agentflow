@@ -77,9 +77,7 @@ class TestSemanticValidator:
             "status": "failed",
         }
         result = validate_semantics(event)
-        has_warning = any(
-            i.rule == "payment_failure_reason_required" for i in result.issues
-        )
+        has_warning = any(i.rule == "payment_failure_reason_required" for i in result.issues)
         assert has_warning
 
     def test_clickstream_missing_session(self):

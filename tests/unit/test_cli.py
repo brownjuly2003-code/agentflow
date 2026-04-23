@@ -84,9 +84,14 @@ def test_health_human_output_shows_components(monkeypatch, runner):
             },
         ],
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/health"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/health"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["health"])
 
@@ -102,9 +107,14 @@ def test_health_json_outputs_raw_payload(monkeypatch, runner):
         "checked_at": "2026-04-10T14:23:01Z",
         "components": [],
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/health"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/health"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["--json", "health"])
 
@@ -128,9 +138,14 @@ def test_entity_order_formats_record(monkeypatch, runner):
         "last_updated": "2026-04-10T14:23:01Z",
         "freshness_seconds": 3.1,
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/entity/order/ORD-1"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/entity/order/ORD-1"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["entity", "order", "ORD-1"])
 
@@ -150,9 +165,14 @@ def test_metric_formats_value_with_window(monkeypatch, runner):
         "computed_at": "2026-04-10T14:23:01Z",
         "components": {},
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/metrics/revenue"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/metrics/revenue"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["metric", "revenue", "--window", "24h"])
 
@@ -176,9 +196,14 @@ def test_search_human_output_shows_results_table(monkeypatch, runner):
             }
         ],
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/search"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/search"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["search", "urgent order"])
 
@@ -204,9 +229,14 @@ def test_catalog_human_output_lists_entities_and_metrics(monkeypatch, runner):
             }
         },
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/catalog"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/catalog"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["catalog"])
 
@@ -228,9 +258,14 @@ def test_slo_human_output_lists_statuses(monkeypatch, runner):
             }
         ]
     }
-    monkeypatch.setattr("agentflow.cli.get_client", lambda url, key: _DummyClient({
-        ("GET", "/v1/slo"): payload,
-    }))
+    monkeypatch.setattr(
+        "agentflow.cli.get_client",
+        lambda url, key: _DummyClient(
+            {
+                ("GET", "/v1/slo"): payload,
+            }
+        ),
+    )
 
     result = runner.invoke(cli, ["slo"])
 

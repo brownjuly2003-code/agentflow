@@ -38,12 +38,9 @@ async def dispatch_alert(
         ]
         alert_changed = alert_changed or len(alert.state_changes) != previous_count
 
-    if (
-        alert.state == "suppressed"
-        and (
-            not alert.flap_detection.enabled
-            or len(alert.state_changes) <= alert.flap_detection.max_changes
-        )
+    if alert.state == "suppressed" and (
+        not alert.flap_detection.enabled
+        or len(alert.state_changes) <= alert.flap_detection.max_changes
     ):
         alert.state = "ok"
         alert.fired_at = None

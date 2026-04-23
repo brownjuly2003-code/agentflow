@@ -23,10 +23,7 @@ def _disable_auth(client: TestClient) -> None:
 
 def _prepare_time_travel_data(client: TestClient) -> None:
     conn = client.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
 
     if "entity_id" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN entity_id VARCHAR")
@@ -154,9 +151,7 @@ class TestTimeTravelQueries:
         _disable_auth(client)
         _prepare_time_travel_data(client)
 
-        response = client.get(
-            "/v1/entity/order/ORD-TT-1?as_of=2026-04-09T11:00:00Z"
-        )
+        response = client.get("/v1/entity/order/ORD-TT-1?as_of=2026-04-09T11:00:00Z")
 
         assert response.status_code == 200
         data = response.json()
@@ -169,9 +164,7 @@ class TestTimeTravelQueries:
         _disable_auth(client)
         _prepare_time_travel_data(client)
 
-        response = client.get(
-            "/v1/entity/order/ORD-TT-1?as_of=2026-04-09T13:00:00Z"
-        )
+        response = client.get("/v1/entity/order/ORD-TT-1?as_of=2026-04-09T13:00:00Z")
 
         assert response.status_code == 200
         assert response.json()["data"]["status"] == "confirmed"
@@ -180,9 +173,7 @@ class TestTimeTravelQueries:
         _disable_auth(client)
         _prepare_time_travel_data(client)
 
-        response = client.get(
-            "/v1/entity/order/ORD-TT-1?as_of=2026-04-09T09:00:00Z"
-        )
+        response = client.get("/v1/entity/order/ORD-TT-1?as_of=2026-04-09T09:00:00Z")
 
         assert response.status_code == 404
         assert response.json()["detail"] == "order/ORD-TT-1 not found"
@@ -191,9 +182,7 @@ class TestTimeTravelQueries:
         _disable_auth(client)
         _prepare_time_travel_data(client)
 
-        response = client.get(
-            "/v1/metrics/revenue?window=1h&as_of=2026-04-09T12:00:00Z"
-        )
+        response = client.get("/v1/metrics/revenue?window=1h&as_of=2026-04-09T12:00:00Z")
 
         assert response.status_code == 200
         data = response.json()
@@ -205,9 +194,7 @@ class TestTimeTravelQueries:
         _disable_auth(client)
         _prepare_time_travel_data(client)
 
-        response = client.get(
-            "/v1/metrics/revenue?window=1h&as_of=2026-04-09T13:00:00Z"
-        )
+        response = client.get("/v1/metrics/revenue?window=1h&as_of=2026-04-09T13:00:00Z")
 
         assert response.status_code == 200
         assert response.json()["value"] == 70.0
@@ -215,9 +202,7 @@ class TestTimeTravelQueries:
     def test_entity_as_of_in_future_returns_422(self, client):
         _disable_auth(client)
         _prepare_time_travel_data(client)
-        future_as_of = (datetime.now(UTC) + timedelta(minutes=5)).isoformat().replace(
-            "+00:00", "Z"
-        )
+        future_as_of = (datetime.now(UTC) + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
 
         response = client.get(f"/v1/entity/order/ORD-TT-1?as_of={future_as_of}")
 

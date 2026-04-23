@@ -72,9 +72,7 @@ def test_nl_query_span_sets_attributes():
 
     assert response.status_code == 200
     span = next(
-        item
-        for item in exporter.get_finished_spans()
-        if item.name == "query_engine.translate"
+        item for item in exporter.get_finished_spans() if item.name == "query_engine.translate"
     )
     assert span.attributes["query.text"] == "Top 5 products by revenue today"
     assert span.attributes["query.engine"] == "rule_based"
@@ -114,14 +112,8 @@ def test_query_request_creates_http_translate_and_duckdb_spans():
     assert set(spans) == {"http.request", "query_engine.translate", "duckdb.query"}
     assert spans["query_engine.translate"].parent is not None
     assert spans["duckdb.query"].parent is not None
-    assert (
-        spans["query_engine.translate"].parent.span_id
-        == spans["http.request"].context.span_id
-    )
-    assert (
-        spans["duckdb.query"].parent.span_id
-        == spans["query_engine.translate"].context.span_id
-    )
+    assert spans["query_engine.translate"].parent.span_id == spans["http.request"].context.span_id
+    assert spans["duckdb.query"].parent.span_id == spans["query_engine.translate"].context.span_id
     assert spans["http.request"].attributes["tenant_id"] == "acme"
     assert spans["query_engine.translate"].attributes["tenant_id"] == "acme"
     assert spans["duckdb.query"].attributes["tenant_id"] == "acme"

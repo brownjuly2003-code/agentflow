@@ -129,10 +129,7 @@ class IcebergSink:
             return 0
         self.create_tables_if_not_exist()
         table = self.catalog.load_table(self._identifier(table_name))
-        normalized_records = [
-            self._normalize_record(table_name, record)
-            for record in records
-        ]
+        normalized_records = [self._normalize_record(table_name, record) for record in records]
         arrow_table = pa.Table.from_pylist(
             normalized_records,
             schema=table.schema().as_arrow(),
@@ -158,7 +155,7 @@ class IcebergSink:
         prefix = "sqlite:///"
         if not value.startswith(prefix):
             return value
-        raw_path = value[len(prefix):]
+        raw_path = value[len(prefix) :]
         catalog_path = Path(raw_path)
         if not catalog_path.is_absolute():
             catalog_path = (self.config_path.parent / catalog_path).resolve()
@@ -271,16 +268,8 @@ class IcebergSink:
             "currency": str(record.get("currency", "USD")),
             "method": str(record["method"]),
             "status": str(record["status"]),
-            "risk_score": (
-                float(derived["risk_score"])
-                if "risk_score" in derived
-                else None
-            ),
-            "risk_level": (
-                str(derived["risk_level"])
-                if "risk_level" in derived
-                else None
-            ),
+            "risk_score": (float(derived["risk_score"]) if "risk_score" in derived else None),
+            "risk_level": (str(derived["risk_level"]) if "risk_level" in derived else None),
             "created_at": self._coerce_timestamp(record.get("timestamp")),
             "payload_json": self._dump_payload(record),
         }
@@ -291,27 +280,15 @@ class IcebergSink:
             "event_id": str(record["event_id"]),
             "event_type": str(record["event_type"]),
             "session_id": str(record["session_id"]),
-            "user_id": (
-                str(record["user_id"])
-                if record.get("user_id") is not None
-                else None
-            ),
+            "user_id": (str(record["user_id"]) if record.get("user_id") is not None else None),
             "page_url": str(record["page_url"]),
-            "referrer": (
-                str(record["referrer"])
-                if record.get("referrer") is not None
-                else None
-            ),
+            "referrer": (str(record["referrer"]) if record.get("referrer") is not None else None),
             "user_agent": str(record["user_agent"]),
             "viewport_width": (
-                int(record["viewport_width"])
-                if record.get("viewport_width") is not None
-                else None
+                int(record["viewport_width"]) if record.get("viewport_width") is not None else None
             ),
             "product_id": (
-                str(record["product_id"])
-                if record.get("product_id") is not None
-                else None
+                str(record["product_id"]) if record.get("product_id") is not None else None
             ),
             "is_mobile": derived.get("is_mobile"),
             "page_category": derived.get("page_category"),
@@ -337,21 +314,13 @@ class IcebergSink:
 
     def _normalize_dead_letter(self, record: dict[str, Any]) -> dict[str, Any]:
         return {
-            "event_id": (
-                str(record["event_id"])
-                if record.get("event_id") is not None
-                else None
-            ),
+            "event_id": (str(record["event_id"]) if record.get("event_id") is not None else None),
             "event_type": (
-                str(record["event_type"])
-                if record.get("event_type") is not None
-                else None
+                str(record["event_type"]) if record.get("event_type") is not None else None
             ),
             "reason": str(record["reason"]),
             "source_topic": str(record.get("source_topic", "events.deadletter")),
-            "received_at": self._coerce_timestamp(
-                record.get("received_at", datetime.now(UTC))
-            ),
+            "received_at": self._coerce_timestamp(record.get("received_at", datetime.now(UTC))),
             "payload_json": (
                 str(record["payload_json"])
                 if "payload_json" in record

@@ -189,9 +189,7 @@ class EventReplayer:
 
         semantic_result = validate_semantics(payload)
         semantic_errors = [
-            issue.message
-            for issue in semantic_result.issues
-            if issue.severity == "error"
+            issue.message for issue in semantic_result.issues if issue.severity == "error"
         ]
         if semantic_errors:
             raise ReplayValidationError(semantic_errors[0])

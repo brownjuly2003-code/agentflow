@@ -107,10 +107,12 @@ def _wait_for_kafka(bootstrap_servers: str, timeout: float = 60.0) -> None:
     last_error: str | None = None
     while time.monotonic() < deadline:
         try:
-            admin = AdminClient({
-                "bootstrap.servers": bootstrap_servers,
-                "socket.timeout.ms": 2000,
-            })
+            admin = AdminClient(
+                {
+                    "bootstrap.servers": bootstrap_servers,
+                    "socket.timeout.ms": 2000,
+                }
+            )
             admin.list_topics(timeout=2)
             return
         except Exception as exc:  # pragma: no cover - exercised in integration
@@ -381,11 +383,13 @@ def install_deadletter_producer(
             if err is not None:
                 delivery_errors.append(str(err))
 
-        producer = Producer({
-            "bootstrap.servers": bootstrap_servers,
-            "socket.timeout.ms": socket_timeout_ms,
-            "message.timeout.ms": message_timeout_ms,
-        })
+        producer = Producer(
+            {
+                "bootstrap.servers": bootstrap_servers,
+                "socket.timeout.ms": socket_timeout_ms,
+                "message.timeout.ms": message_timeout_ms,
+            }
+        )
         producer.produce(
             topic,
             key=str(payload.get("event_id", "")),

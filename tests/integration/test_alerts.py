@@ -197,11 +197,14 @@ class TestAlertsAPI:
         assert len(httpx_mock.requests) == 1
         request = httpx_mock.requests[0]
         payload = json.loads(request["content"].decode())
-        expected = "sha256=" + hmac.new(
-            created["secret"].encode(),
-            request["content"],
-            hashlib.sha256,
-        ).hexdigest()
+        expected = (
+            "sha256="
+            + hmac.new(
+                created["secret"].encode(),
+                request["content"],
+                hashlib.sha256,
+            ).hexdigest()
+        )
         assert payload["test"] is True
         assert request["headers"]["X-AgentFlow-Event"] == "alert.test"
         assert request["headers"]["X-AgentFlow-Signature"] == expected

@@ -60,11 +60,13 @@ if TYPE_CHECKING:
 try:
     from src.serving.api.telemetry import setup_telemetry
 except ModuleNotFoundError:
+
     def setup_telemetry(
         app: FastAPI,
         span_exporter: "SpanExporter | None" = None,
     ) -> None:
         return None
+
 
 configure_logging()
 logger = structlog.get_logger()
@@ -133,9 +135,7 @@ async def lifespan(app: FastAPI):
     app.state.health_cache_payload = None
     app.state.health_cache_expires_at = 0.0
     app.state.health_cache_refresh_lock = asyncio.Lock()
-    app.state.query_cache = QueryCache(
-        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379")
-    )
+    app.state.query_cache = QueryCache(redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"))
     try:
         app.state.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", "30"))
     except ValueError:
@@ -166,7 +166,9 @@ async def lifespan(app: FastAPI):
             app.state.auth_manager.keys_by_value[demo_api_key] = demo_key
             if "demo-public" not in app.state.auth_manager._keys_by_id:
                 app.state.auth_manager._keys_by_id["demo-public"] = demo_key
-            if not any(item.key_id == "demo-public" for item in app.state.auth_manager._loaded_keys):
+            if not any(
+                item.key_id == "demo-public" for item in app.state.auth_manager._loaded_keys
+            ):
                 app.state.auth_manager._loaded_keys.append(demo_key)
             logger.info(
                 "demo_mode_enabled",
@@ -186,9 +188,7 @@ async def lifespan(app: FastAPI):
         if len(app.state.webhook_dispatcher.seen_event_ids) > seen_before:
             await app.state.query_cache.invalidate_metrics()
 
-    app.state.webhook_dispatcher.dispatch_new_events = (
-        dispatch_new_events_with_cache_invalidation
-    )
+    app.state.webhook_dispatcher.dispatch_new_events = dispatch_new_events_with_cache_invalidation
     if getattr(app.state, "webhook_dispatcher_autostart", True):
         app.state.webhook_dispatcher.start()
     app.state.alert_dispatcher = AlertDispatcher(app)
@@ -200,9 +200,7 @@ async def lifespan(app: FastAPI):
         app.state.outbox_processor = OutboxProcessor(
             duckdb_path=app.state.query_engine._db_path,
         )
-    app.state.outbox_processor_task = asyncio.create_task(
-        app.state.outbox_processor.run_forever()
-    )
+    app.state.outbox_processor_task = asyncio.create_task(app.state.outbox_processor.run_forever())
 
     auth_mode = (
         "multi_tenant_api_keys"
@@ -252,10 +250,10 @@ async def demo_mode_guard(request: Request, call_next):
         path = request.url.path
         if path.startswith("/v1/admin") or path.startswith("/admin"):
             return JSONResponse(status_code=404, content={"detail": "Not found."})
-        if (
-            request.method in {"POST", "PUT", "PATCH", "DELETE"}
-            and path not in {"/v1/query", "/v1/query/explain"}
-        ):
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and path not in {
+            "/v1/query",
+            "/v1/query/explain",
+        }:
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Demo mode is read-only for mutating routes."},
@@ -286,8 +284,7 @@ agent_router.routes[:] = [
     route
     for route in agent_router.routes
     if not (
-        getattr(route, "path", None) == "/catalog"
-        and "GET" in getattr(route, "methods", set())
+        getattr(route, "path", None) == "/catalog" and "GET" in getattr(route, "methods", set())
     )
 ]
 app.include_router(agent_router, prefix="/v1")

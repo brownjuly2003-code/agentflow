@@ -153,55 +153,67 @@ class ContractRegistry:
         additive_changes: list[dict[str, Any]] = []
 
         for field_name in sorted(from_fields.keys() - to_fields.keys()):
-            breaking_changes.append({
-                "type": "field_removed",
-                "field": field_name,
-                "severity": "breaking",
-            })
+            breaking_changes.append(
+                {
+                    "type": "field_removed",
+                    "field": field_name,
+                    "severity": "breaking",
+                }
+            )
 
         for field_name in sorted(to_fields.keys() - from_fields.keys()):
             target = breaking_changes if to_fields[field_name].required else additive_changes
-            target.append({
-                "type": "field_added",
-                "field": field_name,
-                "severity": "breaking" if to_fields[field_name].required else "non_breaking",
-            })
+            target.append(
+                {
+                    "type": "field_added",
+                    "field": field_name,
+                    "severity": "breaking" if to_fields[field_name].required else "non_breaking",
+                }
+            )
 
         for field_name in sorted(from_fields.keys() & to_fields.keys()):
             source_field = from_fields[field_name]
             target_field = to_fields[field_name]
             if source_field.type != target_field.type:
-                breaking_changes.append({
-                    "type": "field_type_changed",
-                    "field": field_name,
-                    "severity": "breaking",
-                    "from": source_field.type,
-                    "to": target_field.type,
-                })
+                breaking_changes.append(
+                    {
+                        "type": "field_type_changed",
+                        "field": field_name,
+                        "severity": "breaking",
+                        "from": source_field.type,
+                        "to": target_field.type,
+                    }
+                )
             if not source_field.required and target_field.required:
-                breaking_changes.append({
-                    "type": "field_became_required",
-                    "field": field_name,
-                    "severity": "breaking",
-                })
+                breaking_changes.append(
+                    {
+                        "type": "field_became_required",
+                        "field": field_name,
+                        "severity": "breaking",
+                    }
+                )
             source_values = set(source_field.values or ())
             target_values = set(target_field.values or ())
             removed_values = sorted(source_values - target_values)
             added_values = sorted(target_values - source_values)
             if removed_values:
-                breaking_changes.append({
-                    "type": "enum_values_removed",
-                    "field": field_name,
-                    "severity": "breaking",
-                    "values": removed_values,
-                })
+                breaking_changes.append(
+                    {
+                        "type": "enum_values_removed",
+                        "field": field_name,
+                        "severity": "breaking",
+                        "values": removed_values,
+                    }
+                )
             if added_values:
-                additive_changes.append({
-                    "type": "enum_values_added",
-                    "field": field_name,
-                    "severity": "non_breaking",
-                    "values": added_values,
-                })
+                additive_changes.append(
+                    {
+                        "type": "enum_values_added",
+                        "field": field_name,
+                        "severity": "non_breaking",
+                        "values": added_values,
+                    }
+                )
 
         return {
             "entity": entity,

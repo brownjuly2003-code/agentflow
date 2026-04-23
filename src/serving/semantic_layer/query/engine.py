@@ -38,6 +38,8 @@ class QueryEngine(
         self._db_path: str = db_path or os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
         self._tenant_router = TenantRouter(tenants_config_path)
         self._db_pool = db_pool
+        self._owns_connection = self._db_pool is None
+        self._closed = False
         self._conn = (
             self._db_pool.write_connection
             if self._db_pool is not None
@@ -64,3 +66,10 @@ class QueryEngine(
 
     def health(self) -> dict:
         return self._backend.health()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        if self._owns_connection:
+            self._conn.close()
+        self._closed = True

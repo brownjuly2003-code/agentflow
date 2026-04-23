@@ -32,9 +32,5 @@ def extract_trace_from_kafka_headers(
         return extract({})
 
     items = headers.items() if isinstance(headers, Mapping) else headers
-    carrier = {
-        str(key): value.decode("utf-8")
-        for key, value in items
-        if isinstance(value, bytes)
-    }
+    carrier = {str(key): value.decode("utf-8") for key, value in items if isinstance(value, bytes)}
     return extract(carrier)

@@ -99,15 +99,11 @@ class SessionAggregator:
         return []
 
     def snapshot(self) -> dict[str, dict[str, object]]:
-        return {
-            user_id: state.to_snapshot()
-            for user_id, state in self._state.items()
-        }
+        return {user_id: state.to_snapshot() for user_id, state in self._state.items()}
 
     def restore(self, snapshot: Mapping[str, Mapping[str, object]]) -> None:
         self._state = {
-            str(user_id): _SessionState.from_snapshot(state)
-            for user_id, state in snapshot.items()
+            str(user_id): _SessionState.from_snapshot(state) for user_id, state in snapshot.items()
         }
 
 

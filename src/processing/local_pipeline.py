@@ -18,7 +18,7 @@ from pathlib import Path
 
 import duckdb
 import structlog
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
 
 from src.ingestion.producers.event_producer import (
@@ -115,36 +115,44 @@ def _process_event(
                 [event_id, event_type, datetime.now(UTC)],
             )
             if iceberg_sink is not None:
-                iceberg_sink.write_batch("dead_letter", [{
-                    "event_id": event.get("event_id"),
-                    "event_type": event.get("event_type"),
-                    "reason": f"schema: {schema_result.errors[0]}",
-                    "source_topic": "events.deadletter",
-                    "received_at": datetime.now(UTC),
-                    "payload": event,
-                }])
+                iceberg_sink.write_batch(
+                    "dead_letter",
+                    [
+                        {
+                            "event_id": event.get("event_id"),
+                            "event_type": event.get("event_type"),
+                            "reason": f"schema: {schema_result.errors[0]}",
+                            "source_topic": "events.deadletter",
+                            "received_at": datetime.now(UTC),
+                            "payload": event,
+                        }
+                    ],
+                )
             conn.execute("COMMIT")
             return False, f"schema: {schema_result.errors[0]}"
 
         # Semantic validation
         semantic_result = validate_semantics(event)
-        error_issues = [
-            i for i in semantic_result.issues if i.severity == "error"
-        ]
+        error_issues = [i for i in semantic_result.issues if i.severity == "error"]
         if error_issues:
             conn.execute(
                 "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
                 [event_id, event_type, datetime.now(UTC)],
             )
             if iceberg_sink is not None:
-                iceberg_sink.write_batch("dead_letter", [{
-                    "event_id": event.get("event_id"),
-                    "event_type": event.get("event_type"),
-                    "reason": f"semantic: {error_issues[0].rule}",
-                    "source_topic": "events.deadletter",
-                    "received_at": datetime.now(UTC),
-                    "payload": event,
-                }])
+                iceberg_sink.write_batch(
+                    "dead_letter",
+                    [
+                        {
+                            "event_id": event.get("event_id"),
+                            "event_type": event.get("event_type"),
+                            "reason": f"semantic: {error_issues[0].rule}",
+                            "source_topic": "events.deadletter",
+                            "received_at": datetime.now(UTC),
+                            "payload": event,
+                        }
+                    ],
+                )
             conn.execute("COMMIT")
             return False, f"semantic: {error_issues[0].rule}"
 
@@ -174,9 +182,7 @@ def _process_event(
             event_ts = datetime.fromisoformat(ts)
             if event_ts.tzinfo is None:
                 event_ts = event_ts.replace(tzinfo=UTC)
-            latency_ms = int(
-                (datetime.now(UTC) - event_ts).total_seconds() * 1000
-            )
+            latency_ms = int((datetime.now(UTC) - event_ts).total_seconds() * 1000)
         except (ValueError, TypeError):
             latency_ms = 0
 
@@ -193,20 +199,24 @@ def _process_event(
 
 
 def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict):
-    conn.execute("""
+    conn.execute(
+        """
         INSERT OR REPLACE INTO orders_v2
         (order_id, user_id, status, total_amount, currency, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, [
-        event["order_id"],
-        event["user_id"],
-        event["status"],
-        float(event["total_amount"]),
-        event.get("currency", "USD"),
-        datetime.fromisoformat(event["timestamp"]),
-    ])
+    """,
+        [
+            event["order_id"],
+            event["user_id"],
+            event["status"],
+            float(event["total_amount"]),
+            event.get("currency", "USD"),
+            datetime.fromisoformat(event["timestamp"]),
+        ],
+    )
     # Update user aggregate
-    conn.execute("""
+    conn.execute(
+        """
         INSERT OR REPLACE INTO users_enriched
         (user_id, total_orders, total_spent,
          first_order_at, last_order_at, preferred_category)
@@ -220,22 +230,27 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict):
         FROM orders_v2
         WHERE user_id = ? AND status != 'cancelled'
         GROUP BY user_id
-    """, [event["user_id"]])
+    """,
+        [event["user_id"]],
+    )
 
 
 def _upsert_product(conn: duckdb.DuckDBPyConnection, event: dict):
-    conn.execute("""
+    conn.execute(
+        """
         INSERT OR REPLACE INTO products_current
         (product_id, name, category, price, in_stock, stock_quantity)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, [
-        event["product_id"],
-        event["name"],
-        event["category"],
-        float(event["price"]),
-        event["in_stock"],
-        event["stock_quantity"],
-    ])
+    """,
+        [
+            event["product_id"],
+            event["name"],
+            event["category"],
+            float(event["price"]),
+            event["in_stock"],
+            event["stock_quantity"],
+        ],
+    )
 
 
 def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict):
@@ -245,9 +260,12 @@ def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict):
 
     # Determine funnel stage from page category
     stage_order = {
-        "checkout": 4, "cart": 3,
-        "product_detail": 2, "search": 1,
-        "home": 0, "other": 0,
+        "checkout": 4,
+        "cart": 3,
+        "product_detail": 2,
+        "search": 1,
+        "home": 0,
+        "other": 0,
     }
     new_stage_val = stage_order.get(page_cat, 0)
 
@@ -261,32 +279,38 @@ def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict):
         old_count = existing[1] or 0
         old_stage_val = stage_order.get(old_stage, 0)
         funnel = page_cat if new_stage_val > old_stage_val else old_stage
-        conn.execute("""
+        conn.execute(
+            """
             UPDATE sessions_aggregated
             SET event_count = ?,
                 funnel_stage = ?,
                 is_conversion = ?
             WHERE session_id = ?
-        """, [
-            old_count + 1,
-            funnel,
-            funnel == "checkout",
-            session_id,
-        ])
+        """,
+            [
+                old_count + 1,
+                funnel,
+                funnel == "checkout",
+                session_id,
+            ],
+        )
     else:
-        conn.execute("""
+        conn.execute(
+            """
             INSERT INTO sessions_aggregated
             (session_id, user_id, started_at, ended_at,
              duration_seconds, event_count, unique_pages,
              funnel_stage, is_conversion)
             VALUES (?, ?, ?, NULL, 0, 1, 1, ?, ?)
-        """, [
-            session_id,
-            event.get("user_id"),
-            datetime.now(UTC),
-            page_cat,
-            page_cat == "checkout",
-        ])
+        """,
+            [
+                session_id,
+                event.get("user_id"),
+                datetime.now(UTC),
+                page_cat,
+                page_cat == "checkout",
+            ],
+        )
 
 
 def _generate_random_event() -> tuple[str, dict]:

@@ -25,12 +25,7 @@ def _base_contract_schema(contract: SchemaContract) -> dict[str, Any]:
 @router.get("/contracts")
 async def list_contracts(request: Request):
     registry = _get_registry(request)
-    return {
-        "contracts": [
-            contract.summary().to_dict()
-            for contract in registry.list_contracts()
-        ]
-    }
+    return {"contracts": [contract.summary().to_dict() for contract in registry.list_contracts()]}
 
 
 @router.get("/contracts/{entity}/diff/{from_version}/{to_version}")
@@ -76,9 +71,8 @@ async def validate_contract(
         "base_version": base_schema.get("version", contract.version),
         "candidate_version": target_schema["version"],
         **report.to_dict(),
-        "requires_version_bump": report.is_breaking and not has_version_bump(
-            base_schema, target_schema
-        ),
+        "requires_version_bump": report.is_breaking
+        and not has_version_bump(base_schema, target_schema),
     }
 
 

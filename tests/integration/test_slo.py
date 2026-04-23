@@ -21,10 +21,7 @@ def _seed_pipeline_events(
     include_status_code: bool = True,
 ) -> None:
     conn = client.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     if "latency_ms" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN latency_ms INTEGER")
     if include_status_code and "status_code" not in columns:
@@ -39,10 +36,7 @@ def _seed_pipeline_events(
         values_sql = f"{values_sql}, ?"
 
     conn.executemany(
-        (
-            f"INSERT INTO pipeline_events ({', '.join(insert_columns)}) "
-            f"VALUES ({values_sql})"
-        ),
+        (f"INSERT INTO pipeline_events ({', '.join(insert_columns)}) VALUES ({values_sql})"),
         rows,
     )
 
@@ -55,19 +49,19 @@ def client(tmp_path: Path):
         (
             "slos:\n"
             "  - name: api_latency_p95\n"
-            "    description: \"95th percentile API latency < 100ms for entity queries\"\n"
+            '    description: "95th percentile API latency < 100ms for entity queries"\n'
             "    target: 0.99\n"
             "    measurement: p95_latency_ms\n"
             "    threshold: 100\n"
             "    window_days: 30\n"
             "  - name: data_freshness\n"
-            "    description: \"Pipeline data freshness < 30 seconds\"\n"
+            '    description: "Pipeline data freshness < 30 seconds"\n'
             "    target: 0.999\n"
             "    measurement: freshness_seconds\n"
             "    threshold: 30\n"
             "    window_days: 7\n"
             "  - name: error_rate\n"
-            "    description: \"API error rate (5xx) < 0.1%\"\n"
+            '    description: "API error rate (5xx) < 0.1%"\n'
             "    target: 0.999\n"
             "    measurement: error_rate_percent\n"
             "    threshold: 0.1\n"
@@ -80,12 +74,12 @@ def client(tmp_path: Path):
     api_keys_path.write_text(
         (
             "keys:\n"
-            "  - key: \"slo-test-key\"\n"
-            "    name: \"SLO Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "slo-test-key"\n'
+            '    name: "SLO Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
     )
@@ -148,7 +142,7 @@ def test_slo_uses_yaml_as_single_source_of_truth(client: TestClient):
         (
             "slos:\n"
             "  - name: custom_latency_budget\n"
-            "    description: \"Custom latency budget\"\n"
+            '    description: "Custom latency budget"\n'
             "    target: 0.95\n"
             "    measurement: p95_latency_ms\n"
             "    threshold: 250\n"
@@ -186,7 +180,7 @@ def test_slo_uses_deadletter_ratio_when_status_codes_are_absent(client: TestClie
         (
             "slos:\n"
             "  - name: error_rate\n"
-            "    description: \"API error rate (5xx) < 0.1%\"\n"
+            '    description: "API error rate (5xx) < 0.1%"\n'
             "    target: 0.999\n"
             "    measurement: error_rate_percent\n"
             "    threshold: 0.1\n"

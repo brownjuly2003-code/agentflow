@@ -46,11 +46,13 @@ def _build_invalid_order_event() -> dict:
 
 def _ensure_topics(bootstrap_servers: str) -> None:
     admin = AdminClient({"bootstrap.servers": bootstrap_servers})
-    futures = admin.create_topics([
-        NewTopic(RAW_TOPIC, num_partitions=1, replication_factor=1),
-        NewTopic(VALIDATED_TOPIC, num_partitions=1, replication_factor=1),
-        NewTopic(DEADLETTER_TOPIC, num_partitions=1, replication_factor=1),
-    ])
+    futures = admin.create_topics(
+        [
+            NewTopic(RAW_TOPIC, num_partitions=1, replication_factor=1),
+            NewTopic(VALIDATED_TOPIC, num_partitions=1, replication_factor=1),
+            NewTopic(DEADLETTER_TOPIC, num_partitions=1, replication_factor=1),
+        ]
+    )
     for future in futures.values():
         try:
             future.result(10)
@@ -66,11 +68,13 @@ def _publish_event(bootstrap_servers: str, topic: str, event: dict) -> None:
 
 
 def _pump_one_event(bootstrap_servers: str, db_path: str, event_id: str) -> None:
-    consumer = Consumer({
-        "bootstrap.servers": bootstrap_servers,
-        "group.id": f"kafka-pipeline-{uuid.uuid4()}",
-        "auto.offset.reset": "earliest",
-    })
+    consumer = Consumer(
+        {
+            "bootstrap.servers": bootstrap_servers,
+            "group.id": f"kafka-pipeline-{uuid.uuid4()}",
+            "auto.offset.reset": "earliest",
+        }
+    )
     producer = Producer({"bootstrap.servers": bootstrap_servers})
     consumer.subscribe([RAW_TOPIC])
 
@@ -108,11 +112,13 @@ def _pump_one_event(bootstrap_servers: str, db_path: str, event_id: str) -> None
 
 
 def _consume_event(bootstrap_servers: str, topic: str, event_id: str) -> dict:
-    consumer = Consumer({
-        "bootstrap.servers": bootstrap_servers,
-        "group.id": f"kafka-assert-{uuid.uuid4()}",
-        "auto.offset.reset": "earliest",
-    })
+    consumer = Consumer(
+        {
+            "bootstrap.servers": bootstrap_servers,
+            "group.id": f"kafka-assert-{uuid.uuid4()}",
+            "auto.offset.reset": "earliest",
+        }
+    )
     consumer.subscribe([topic])
 
     deadline = time.monotonic() + 10

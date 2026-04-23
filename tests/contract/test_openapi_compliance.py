@@ -93,7 +93,4 @@ def test_documented_openapi_snapshot_matches_live_api(base_url: str):
 
     documented_schemas = documented.get("components", {}).get("schemas", {})
     live_schemas = live.get("components", {}).get("schemas", {})
-    assert {
-        name: live_schemas.get(name)
-        for name in documented_schemas
-    } == documented_schemas
+    assert {name: live_schemas.get(name) for name in documented_schemas} == documented_schemas

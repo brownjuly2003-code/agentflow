@@ -34,7 +34,9 @@ def evaluate_rule(
             change_pct = 0.0 if current_value == 0 else 100.0
         else:
             change_pct = ((current_value - previous_value) / abs(previous_value)) * 100.0
-        triggered = change_pct >= alert.threshold if alert.threshold >= 0 else change_pct <= alert.threshold
+        triggered = (
+            change_pct >= alert.threshold if alert.threshold >= 0 else change_pct <= alert.threshold
+        )
 
     return {
         "triggered": triggered,

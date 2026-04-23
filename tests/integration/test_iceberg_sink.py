@@ -56,9 +56,7 @@ def _write_iceberg_config(
 
 
 def _write_repo_default_iceberg_config(path: Path, *, namespace: str) -> Path:
-    repo_config = (
-        Path(__file__).resolve().parents[2] / "config" / "iceberg.yaml"
-    )
+    repo_config = Path(__file__).resolve().parents[2] / "config" / "iceberg.yaml"
     payload = yaml.safe_load(repo_config.read_text(encoding="utf-8"))
     payload["iceberg"]["namespace"] = namespace
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -227,9 +225,7 @@ def test_health_collector_reports_iceberg_row_counts(
 
     health = HealthCollector().collect().to_dict()
     iceberg = next(
-        component
-        for component in health["components"]
-        if component["name"] == "iceberg"
+        component for component in health["components"] if component["name"] == "iceberg"
     )
 
     assert iceberg["source"] == "live"

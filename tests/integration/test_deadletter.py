@@ -54,12 +54,14 @@ def _seed_dead_letter_events(conn) -> None:
             (
                 SCHEMA_EVENT_ID,
                 "unknown.type",
-                json.dumps({
-                    "event_id": SCHEMA_EVENT_ID,
-                    "event_type": "unknown.type",
-                    "timestamp": "2026-04-10T12:00:00+00:00",
-                    "source": "deadletter-test",
-                }),
+                json.dumps(
+                    {
+                        "event_id": SCHEMA_EVENT_ID,
+                        "event_type": "unknown.type",
+                        "timestamp": "2026-04-10T12:00:00+00:00",
+                        "source": "deadletter-test",
+                    }
+                ),
                 "schema_validation",
                 "No schema for: unknown.type",
                 "3 hours",
@@ -70,21 +72,23 @@ def _seed_dead_letter_events(conn) -> None:
             (
                 SEMANTIC_EVENT_ID,
                 "order.created",
-                json.dumps({
-                    "event_id": SEMANTIC_EVENT_ID,
-                    "event_type": "order.created",
-                    "timestamp": "2026-04-10T13:00:00+00:00",
-                    "source": "deadletter-test",
-                    "order_id": "ORD-20260410-9001",
-                    "user_id": "USR-42",
-                    "status": "confirmed",
-                    "items": [
-                        {"product_id": "PROD-001", "quantity": 1, "unit_price": "79.99"},
-                        {"product_id": "PROD-002", "quantity": 1, "unit_price": "20.00"},
-                    ],
-                    "total_amount": "10.00",
-                    "currency": "USD",
-                }),
+                json.dumps(
+                    {
+                        "event_id": SEMANTIC_EVENT_ID,
+                        "event_type": "order.created",
+                        "timestamp": "2026-04-10T13:00:00+00:00",
+                        "source": "deadletter-test",
+                        "order_id": "ORD-20260410-9001",
+                        "user_id": "USR-42",
+                        "status": "confirmed",
+                        "items": [
+                            {"product_id": "PROD-001", "quantity": 1, "unit_price": "79.99"},
+                            {"product_id": "PROD-002", "quantity": 1, "unit_price": "20.00"},
+                        ],
+                        "total_amount": "10.00",
+                        "currency": "USD",
+                    }
+                ),
                 "semantic_validation",
                 "Stated total 10.00 != computed 99.99",
                 "2 hours",
@@ -95,20 +99,22 @@ def _seed_dead_letter_events(conn) -> None:
             (
                 DISMISSED_EVENT_ID,
                 "order.created",
-                json.dumps({
-                    "event_id": DISMISSED_EVENT_ID,
-                    "event_type": "order.created",
-                    "timestamp": "2026-04-10T11:00:00+00:00",
-                    "source": "deadletter-test",
-                    "order_id": "ORD-20260410-9002",
-                    "user_id": "USR-77",
-                    "status": "confirmed",
-                    "items": [
-                        {"product_id": "PROD-003", "quantity": 1, "unit_price": "49.99"},
-                    ],
-                    "total_amount": "9.99",
-                    "currency": "USD",
-                }),
+                json.dumps(
+                    {
+                        "event_id": DISMISSED_EVENT_ID,
+                        "event_type": "order.created",
+                        "timestamp": "2026-04-10T11:00:00+00:00",
+                        "source": "deadletter-test",
+                        "order_id": "ORD-20260410-9002",
+                        "user_id": "USR-77",
+                        "status": "confirmed",
+                        "items": [
+                            {"product_id": "PROD-003", "quantity": 1, "unit_price": "49.99"},
+                        ],
+                        "total_amount": "9.99",
+                        "currency": "USD",
+                    }
+                ),
                 "semantic_validation",
                 "Stated total 9.99 != computed 49.99",
                 "26 hours",
@@ -130,18 +136,18 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     api_keys_path.write_text(
         (
             "keys:\n"
-            "  - key: \"deadletter-readonly-key\"\n"
-            "    name: \"Readonly Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "deadletter-readonly-key"\n'
+            '    name: "Readonly Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
-            "    allowed_entity_types: [\"order\"]\n"
-            "    created_at: \"2026-04-10\"\n"
-            "  - key: \"deadletter-ops-key\"\n"
-            "    name: \"Ops Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '    allowed_entity_types: ["order"]\n'
+            '    created_at: "2026-04-10"\n'
+            '  - key: "deadletter-ops-key"\n'
+            '    name: "Ops Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
     )
@@ -156,10 +162,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         manager.ensure_usage_table()
         c.app.state.auth_manager = manager
         c.app.state.deadletter_produced_messages = []
-        c.app.state.deadletter_producer = (
-            lambda topic, payload: c.app.state.deadletter_produced_messages.append(
-                {"topic": topic, "payload": payload}
-            )
+        c.app.state.deadletter_producer = lambda topic, payload: (
+            c.app.state.deadletter_produced_messages.append({"topic": topic, "payload": payload})
         )
         _seed_dead_letter_events(c.app.state.query_engine._conn)
         yield c
@@ -261,8 +265,7 @@ def test_deadletter_replay_resubmits_valid_corrected_payload(client: TestClient,
         SELECT status, retry_count, last_retried_at, payload
         FROM dead_letter_events
         WHERE event_id = ?
-        """
-        ,
+        """,
         [SEMANTIC_EVENT_ID],
     ).fetchone()
 
@@ -305,10 +308,13 @@ def test_deadletter_dismiss_marks_event_as_acknowledged(client: TestClient, auth
     assert row == ("dismissed",)
 
 
-@pytest.mark.parametrize("path", [
-    f"/v1/deadletter/{SEMANTIC_EVENT_ID}/replay",
-    f"/v1/deadletter/{SEMANTIC_EVENT_ID}/dismiss",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/v1/deadletter/{SEMANTIC_EVENT_ID}/replay",
+        f"/v1/deadletter/{SEMANTIC_EVENT_ID}/dismiss",
+    ],
+)
 def test_deadletter_readonly_key_cannot_mutate(client: TestClient, auth_headers, path: str):
     response = client.post(path, headers=auth_headers["readonly"])
 

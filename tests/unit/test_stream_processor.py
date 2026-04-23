@@ -201,9 +201,7 @@ def _install_processor_dependencies(
     schema_validator.validate_event = validate_event or (lambda event: _ValidationResult())
 
     semantic_validator = types.ModuleType("src.quality.validators.semantic_validator")
-    semantic_validator.validate_semantics = validate_semantics or (
-        lambda event: _SemanticResult()
-    )
+    semantic_validator.validate_semantics = validate_semantics or (lambda event: _SemanticResult())
 
     monkeypatch.setitem(
         sys.modules,
@@ -640,9 +638,7 @@ def test_process_element_uses_payment_enrichment(stream_processor, monkeypatch):
     assert emitted[0]["_partition_key"] == "evt-5"
 
 
-def test_process_element_uses_negative_latency_for_invalid_timestamp(
-    stream_processor, monkeypatch
-):
+def test_process_element_uses_negative_latency_for_invalid_timestamp(stream_processor, monkeypatch):
     _install_processor_dependencies(monkeypatch)
     processor = stream_processor.ValidateAndEnrich()
     value = json.dumps(
@@ -667,10 +663,7 @@ def test_open_initializes_ttl_state_for_deduplication(stream_processor):
     assert [descriptor.name for descriptor in runtime_context.descriptors] == ["seen"]
     assert runtime_context.descriptors[0].type_info == stream_processor.Types.BOOLEAN()
     assert runtime_context.descriptors[0].ttl_config.ttl == timedelta(minutes=10)
-    assert (
-        runtime_context.descriptors[0].ttl_config.update_type
-        == "OnCreateAndWrite"
-    )
+    assert runtime_context.descriptors[0].ttl_config.update_type == "OnCreateAndWrite"
 
 
 def test_map_returns_value_for_first_seen_event(stream_processor):

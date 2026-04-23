@@ -20,10 +20,7 @@ async def fetch_recent_events(
 ) -> list[dict]:
     """Fetch recent pipeline events from DuckDB with optional filters."""
     conn = request.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     time_column = "processed_at" if "processed_at" in columns else "created_at"
 
     select_columns = [

@@ -23,9 +23,7 @@ def _build_schema_prompt(catalog: DataCatalog) -> str:
     """Build a schema description for the LLM from the catalog."""
     lines = ["Available tables and columns:\n"]
     for name, entity in catalog.entities.items():
-        fields = ", ".join(
-            f"{f} ({desc})" for f, desc in entity.fields.items()
-        )
+        fields = ", ".join(f"{f} ({desc})" for f, desc in entity.fields.items())
         lines.append(f"- {entity.table} (entity: {name}): {fields}")
 
     lines.append("\nAvailable metrics:")

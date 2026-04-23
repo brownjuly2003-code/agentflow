@@ -75,80 +75,96 @@ class EvolutionChecker:
         safe_changes: list[dict[str, Any]] = []
 
         for field_name in sorted(old_fields.keys() - new_fields.keys()):
-            breaking_changes.append({
-                "type": "field_removed",
-                "field": field_name,
-                "severity": "breaking",
-            })
+            breaking_changes.append(
+                {
+                    "type": "field_removed",
+                    "field": field_name,
+                    "severity": "breaking",
+                }
+            )
 
         for field_name in sorted(new_fields.keys() - old_fields.keys()):
             target = breaking_changes if new_fields[field_name].get("required") else safe_changes
-            target.append({
-                "type": (
-                    "field_required_added"
-                    if new_fields[field_name].get("required")
-                    else "field_added_optional"
-                ),
-                "field": field_name,
-                "severity": "breaking" if new_fields[field_name].get("required") else "safe",
-            })
+            target.append(
+                {
+                    "type": (
+                        "field_required_added"
+                        if new_fields[field_name].get("required")
+                        else "field_added_optional"
+                    ),
+                    "field": field_name,
+                    "severity": "breaking" if new_fields[field_name].get("required") else "safe",
+                }
+            )
 
         for field_name in sorted(old_fields.keys() & new_fields.keys()):
             old_field = old_fields[field_name]
             new_field = new_fields[field_name]
 
             if old_field.get("type") != new_field.get("type"):
-                breaking_changes.append({
-                    "type": "field_type_changed",
-                    "field": field_name,
-                    "severity": "breaking",
-                    "from": old_field.get("type"),
-                    "to": new_field.get("type"),
-                })
+                breaking_changes.append(
+                    {
+                        "type": "field_type_changed",
+                        "field": field_name,
+                        "severity": "breaking",
+                        "from": old_field.get("type"),
+                        "to": new_field.get("type"),
+                    }
+                )
 
             if not old_field.get("required", False) and new_field.get("required", False):
-                breaking_changes.append({
-                    "type": "field_required_added",
-                    "field": field_name,
-                    "severity": "breaking",
-                })
+                breaking_changes.append(
+                    {
+                        "type": "field_required_added",
+                        "field": field_name,
+                        "severity": "breaking",
+                    }
+                )
 
             removed_values = sorted(
                 set(old_field.get("values") or ()) - set(new_field.get("values") or ())
             )
             if removed_values:
-                breaking_changes.append({
-                    "type": "enum_value_removed",
-                    "field": field_name,
-                    "severity": "breaking",
-                    "values": removed_values,
-                })
+                breaking_changes.append(
+                    {
+                        "type": "enum_value_removed",
+                        "field": field_name,
+                        "severity": "breaking",
+                        "values": removed_values,
+                    }
+                )
 
             added_values = sorted(
                 set(new_field.get("values") or ()) - set(old_field.get("values") or ())
             )
             if added_values:
-                safe_changes.append({
-                    "type": "enum_value_added",
-                    "field": field_name,
-                    "severity": "safe",
-                    "values": added_values,
-                })
+                safe_changes.append(
+                    {
+                        "type": "enum_value_added",
+                        "field": field_name,
+                        "severity": "safe",
+                        "values": added_values,
+                    }
+                )
 
             if old_field.get("description") != new_field.get("description"):
-                safe_changes.append({
-                    "type": "description_changed",
-                    "field": field_name,
-                    "severity": "safe",
-                })
+                safe_changes.append(
+                    {
+                        "type": "description_changed",
+                        "field": field_name,
+                        "severity": "safe",
+                    }
+                )
 
             if "default" not in old_field and "default" in new_field:
-                safe_changes.append({
-                    "type": "field_default_added",
-                    "field": field_name,
-                    "severity": "safe",
-                    "default": new_field["default"],
-                })
+                safe_changes.append(
+                    {
+                        "type": "field_default_added",
+                        "field": field_name,
+                        "severity": "safe",
+                        "default": new_field["default"],
+                    }
+                )
 
         return EvolutionReport(
             breaking_changes=breaking_changes,
@@ -156,8 +172,4 @@ class EvolutionChecker:
         )
 
     def _field_map(self, schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
-        return {
-            field["name"]: field
-            for field in schema.get("fields", [])
-            if "name" in field
-        }
+        return {field["name"]: field for field in schema.get("fields", []) if "name" in field}

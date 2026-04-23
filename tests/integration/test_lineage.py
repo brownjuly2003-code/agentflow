@@ -17,10 +17,7 @@ def client():
 
 def _prepare_lineage_events(client: TestClient) -> None:
     conn = client.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
 
     if "event_type" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")

@@ -67,10 +67,7 @@ def _quality_score(rows: list[dict], *, default: float | None = None) -> float |
 
 def _fetch_matching_events(request: Request, entity_id: str) -> list[dict]:
     conn = request.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     if "entity_id" not in columns:
         return []
 
@@ -109,8 +106,7 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request):
         raise HTTPException(
             status_code=404,
             detail=(
-                f"Unknown entity type: {entity_type}. "
-                f"Available: {list(catalog.entities.keys())}"
+                f"Unknown entity type: {entity_type}. Available: {list(catalog.entities.keys())}"
             ),
         )
 
@@ -121,10 +117,7 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request):
             detail=f"No lineage found for {entity_type}/{entity_id}",
         )
 
-    dated_rows = [
-        row | {"processed_at": _coerce_datetime(row.get("processed_at"))}
-        for row in rows
-    ]
+    dated_rows = [row | {"processed_at": _coerce_datetime(row.get("processed_at"))} for row in rows]
     timestamps = [row["processed_at"] for row in dated_rows if row["processed_at"] is not None]
     if not timestamps:
         raise HTTPException(
@@ -139,8 +132,7 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request):
             topic
             for row in dated_rows
             for topic in [row.get("topic")]
-            if isinstance(topic, str)
-            and topic not in {"events.validated", "events.deadletter"}
+            if isinstance(topic, str) and topic not in {"events.validated", "events.deadletter"}
         ),
         _source_topic_for_entity(entity_type),
     )

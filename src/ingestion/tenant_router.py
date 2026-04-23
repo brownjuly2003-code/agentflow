@@ -33,9 +33,7 @@ class TenantsConfig(BaseModel):
 class TenantRouter:
     def __init__(self, config_path: Path | str | None = None) -> None:
         self.config_path = (
-            Path(config_path)
-            if config_path is not None
-            else default_tenants_config_path()
+            Path(config_path) if config_path is not None else default_tenants_config_path()
         )
 
     def has_config(self) -> bool:

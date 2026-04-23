@@ -38,10 +38,7 @@ class _ReceiveChannel:
 
 def _prepare_stream_events(client: TestClient) -> None:
     conn = client.app.state.query_engine._conn
-    columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-    }
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
 
     if "event_type" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
@@ -99,8 +96,7 @@ def _build_stream_request(
     header_items = [(b"host", b"testserver")]
     if headers:
         header_items.extend(
-            (name.lower().encode(), value.encode())
-            for name, value in headers.items()
+            (name.lower().encode(), value.encode()) for name, value in headers.items()
         )
 
     receive = _ReceiveChannel()

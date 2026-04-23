@@ -33,9 +33,11 @@ def setup_telemetry(
 
     if _tracer_provider is None:
         _tracer_provider = TracerProvider(
-            resource=Resource.create({
-                "service.name": os.getenv("OTEL_SERVICE_NAME", "agentflow-api"),
-            })
+            resource=Resource.create(
+                {
+                    "service.name": os.getenv("OTEL_SERVICE_NAME", "agentflow-api"),
+                }
+            )
         )
         default_exporter = span_exporter
         if default_exporter is None:

@@ -34,8 +34,7 @@ def test_order_total_mismatch_raises(sample_order_event) -> None:
         OrderEvent.model_validate(payload)
 
     assert any(
-        error["loc"] == ("total_amount",)
-        and "doesn't match sum of items" in error["msg"]
+        error["loc"] == ("total_amount",) and "doesn't match sum of items" in error["msg"]
         for error in exc_info.value.errors(include_url=False)
     )
 
@@ -47,8 +46,7 @@ def test_order_rejects_negative_amount(sample_order_event) -> None:
         OrderEvent.model_validate(payload)
 
     assert any(
-        error["loc"] == ("total_amount",)
-        for error in exc_info.value.errors(include_url=False)
+        error["loc"] == ("total_amount",) for error in exc_info.value.errors(include_url=False)
     )
 
 
@@ -67,10 +65,7 @@ def test_order_rejects_unknown_currency(sample_order_event) -> None:
     with pytest.raises(ValidationError) as exc_info:
         OrderEvent.model_validate(payload)
 
-    assert any(
-        error["loc"] == ("currency",)
-        for error in exc_info.value.errors(include_url=False)
-    )
+    assert any(error["loc"] == ("currency",) for error in exc_info.value.errors(include_url=False))
 
 
 def test_order_item_rejects_zero_quantity(sample_order_event) -> None:
@@ -113,8 +108,7 @@ def test_payment_rejects_future_timestamp(sample_payment_event) -> None:
         PaymentEvent.model_validate(payload)
 
     assert any(
-        error["loc"] == ("timestamp",)
-        and "too far in the future" in error["msg"]
+        error["loc"] == ("timestamp",) and "too far in the future" in error["msg"]
         for error in exc_info.value.errors(include_url=False)
     )
 
@@ -157,7 +151,4 @@ def test_product_rejects_negative_price() -> None:
             }
         )
 
-    assert any(
-        error["loc"] == ("price",)
-        for error in exc_info.value.errors(include_url=False)
-    )
+    assert any(error["loc"] == ("price",) for error in exc_info.value.errors(include_url=False))

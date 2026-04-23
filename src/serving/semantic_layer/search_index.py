@@ -123,9 +123,7 @@ class SearchIndex:
             scored_documents.append((score, document))
             max_score = max(max_score, score)
 
-        scored_documents.sort(
-            key=lambda item: (-item[0], item[1].doc_type, item[1].doc_id)
-        )
+        scored_documents.sort(key=lambda item: (-item[0], item[1].doc_type, item[1].doc_id))
 
         results = []
         for score, document in scored_documents[:limit]:

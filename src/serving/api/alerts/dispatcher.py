@@ -16,9 +16,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
-DEFAULT_ALERTS_CONFIG_PATH = Path(
-    os.getenv("AGENTFLOW_ALERTS_FILE", "config/alerts.yaml")
-)
+DEFAULT_ALERTS_CONFIG_PATH = Path(os.getenv("AGENTFLOW_ALERTS_FILE", "config/alerts.yaml"))
 
 
 class AlertEscalationStep(BaseModel):
@@ -102,7 +100,11 @@ def load_alerts(path: Path) -> list[AlertRule]:
 def save_alerts(path: Path, alerts: list[AlertRule]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = AlertConfig(alerts=alerts).model_dump(mode="json")
-    content = yaml.safe_dump(payload, sort_keys=False) if yaml is not None else json.dumps(payload, indent=2)
+    content = (
+        yaml.safe_dump(payload, sort_keys=False)
+        if yaml is not None
+        else json.dumps(payload, indent=2)
+    )
     path.write_text(content, encoding="utf-8", newline="\n")
 
 

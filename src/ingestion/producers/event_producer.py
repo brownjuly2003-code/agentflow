@@ -172,13 +172,15 @@ def generate_product() -> tuple[str, ProductEvent]:
 
 def run_producer():
     config = ProducerConfig()
-    producer = Producer({
-        "bootstrap.servers": config.kafka_bootstrap_servers,
-        "linger.ms": 50,
-        "batch.num.messages": 500,
-        "compression.type": "lz4",
-        "acks": "all",
-    })
+    producer = Producer(
+        {
+            "bootstrap.servers": config.kafka_bootstrap_servers,
+            "linger.ms": 50,
+            "batch.num.messages": 500,
+            "compression.type": "lz4",
+            "acks": "all",
+        }
+    )
 
     generators: list[tuple] = [
         (config.order_ratio, generate_order),

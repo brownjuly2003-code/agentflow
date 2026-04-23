@@ -206,17 +206,13 @@ class HealthCollector:
         try:
             db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
             conn = duckdb.connect(db_path, read_only=True)
-            row = conn.execute(
-                "SELECT MAX(processed_at) FROM pipeline_events"
-            ).fetchone()
+            row = conn.execute("SELECT MAX(processed_at) FROM pipeline_events").fetchone()
             conn.close()
 
             if row and row[0]:
                 last_event = row[0]
                 if hasattr(last_event, "timestamp"):
-                    age_s = (
-                        datetime.now(UTC) - last_event.replace(tzinfo=UTC)
-                    ).total_seconds()
+                    age_s = (datetime.now(UTC) - last_event.replace(tzinfo=UTC)).total_seconds()
                 else:
                     age_s = -1.0
 

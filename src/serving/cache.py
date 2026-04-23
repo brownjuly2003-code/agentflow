@@ -12,9 +12,9 @@ logger = structlog.get_logger()
 ENTITY_TTL_SECONDS = 5
 
 try:
-    import redis.asyncio as redis
+    import redis.asyncio as redis  # type: ignore[import-untyped,unused-ignore]
 except ImportError:  # pragma: no cover
-    redis = None
+    redis = None  # type: ignore[assignment]
 
 
 class QueryCache:
@@ -107,10 +107,7 @@ class QueryCache:
                 error=str(exc),
             )
             return
-        normalized_keys = [
-            key.decode() if isinstance(key, bytes) else key
-            for key in keys
-        ]
+        normalized_keys = [key.decode() if isinstance(key, bytes) else key for key in keys]
         if normalized_keys:
             await self._redis.delete(*normalized_keys)
 

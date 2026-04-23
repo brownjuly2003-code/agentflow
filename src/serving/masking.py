@@ -49,9 +49,7 @@ class PiiMasker:
             )
         }
         entity_types = {
-            table_to_entity[table_name]
-            for table_name in tables
-            if table_name in table_to_entity
+            table_to_entity[table_name] for table_name in tables if table_name in table_to_entity
         }
         if len(entity_types) != 1:
             return [dict(row) for row in rows], False
@@ -111,10 +109,7 @@ class PiiMasker:
 
     def _looks_like_phone(self, value: str) -> bool:
         digits = sum(char.isdigit() for char in value)
-        return digits >= 7 and all(
-            char.isdigit() or char in "+-() ."
-            for char in value
-        )
+        return digits >= 7 and all(char.isdigit() or char in "+-() ." for char in value)
 
     def _looks_like_address(self, value: str) -> bool:
         return any(char.isdigit() for char in value) and any(char.isalpha() for char in value)

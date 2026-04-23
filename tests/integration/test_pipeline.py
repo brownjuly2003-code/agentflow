@@ -89,9 +89,12 @@ class TestAgentAPI:
         assert response.status_code == 404
 
     def test_nl_query_returns_results(self, client):
-        response = client.post("/v1/query", json={
-            "question": "What is the average order value in the last 24 hours?",
-        })
+        response = client.post(
+            "/v1/query",
+            json={
+                "question": "What is the average order value in the last 24 hours?",
+            },
+        )
         assert response.status_code == 200
         data = response.json()
         assert "answer" in data
@@ -99,15 +102,21 @@ class TestAgentAPI:
         assert data["metadata"]["rows_returned"] >= 1
 
     def test_nl_query_unrecognized(self, client):
-        response = client.post("/v1/query", json={
-            "question": "What is the meaning of life?",
-        })
+        response = client.post(
+            "/v1/query",
+            json={
+                "question": "What is the meaning of life?",
+            },
+        )
         assert response.status_code == 400
 
     def test_nl_query_top_products(self, client):
-        response = client.post("/v1/query", json={
-            "question": "Show me top 3 products",
-        })
+        response = client.post(
+            "/v1/query",
+            json={
+                "question": "Show me top 3 products",
+            },
+        )
         assert response.status_code == 200
         data = response.json()
         assert len(data["answer"]) == 3

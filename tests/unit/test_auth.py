@@ -149,9 +149,11 @@ def test_authenticated_requests_log_usage(api_keys_path: Path, db_path: Path):
     response = client.get("/v1/metrics/revenue", headers={"X-API-Key": "tenant-ops-key"})
 
     assert response.status_code == 200
-    rows = duckdb.connect(str(db_path)).execute(
-        "SELECT tenant, key_name, endpoint FROM api_usage"
-    ).fetchall()
+    rows = (
+        duckdb.connect(str(db_path))
+        .execute("SELECT tenant, key_name, endpoint FROM api_usage")
+        .fetchall()
+    )
     assert rows == [("acme", "Ops Agent", "/v1/metrics/revenue")]
 
 

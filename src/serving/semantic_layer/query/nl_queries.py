@@ -62,14 +62,10 @@ class NLQueryMixin:
             raise ValueError(msg)
 
     def _build_query_hash(self, sql: str, tenant_id: str | None) -> str:
-        return hashlib.sha256(
-            f"{tenant_id or 'default'}:{sql}".encode()
-        ).hexdigest()
+        return hashlib.sha256(f"{tenant_id or 'default'}:{sql}".encode()).hexdigest()
 
     def _encode_cursor(self, offset: int, query_hash: str) -> str:
-        return base64.urlsafe_b64encode(
-            f"{offset}:{query_hash}".encode()
-        ).decode()
+        return base64.urlsafe_b64encode(f"{offset}:{query_hash}".encode()).decode()
 
     def _decode_cursor(self, cursor: str) -> tuple[int, str]:
         try:
@@ -144,11 +140,7 @@ class NLQueryMixin:
         data = page_rows[:limit]
         bounded_total = int(bounded_total) if bounded_total is not None else 0
         total_count = bounded_total if bounded_total <= 10_000 else None
-        next_cursor = (
-            self._encode_cursor(offset + limit, query_hash)
-            if has_more
-            else None
-        )
+        next_cursor = self._encode_cursor(offset + limit, query_hash) if has_more else None
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
         return {
@@ -239,19 +231,18 @@ class NLQueryMixin:
         except BackendExecutionError as e:
             raise ValueError(f"Query explanation failed: {e}") from e
 
-        plan = "\n".join(
-            row[1] if len(row) > 1 else str(row[0])
-            for row in explain_rows
-        )
+        plan = "\n".join(row[1] if len(row) > 1 else str(row[0]) for row in explain_rows)
         normalized_plan = re.sub(r"[â”‚â”Œâ”â””â”˜â”œâ”¤â”¬â”´â”€]", " ", plan)
-        tables_accessed = list(dict.fromkeys(
-            match.split(".")[-1]
-            for match in re.findall(
-                r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
-                sql,
-                flags=re.IGNORECASE,
+        tables_accessed = list(
+            dict.fromkeys(
+                match.split(".")[-1]
+                for match in re.findall(
+                    r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
+                    sql,
+                    flags=re.IGNORECASE,
+                )
             )
-        ))
+        )
         row_estimates = [
             int(match.replace(",", ""))
             for match in re.findall(r"~\s*([0-9,]+)\s+row", normalized_plan)

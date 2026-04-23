@@ -20,18 +20,18 @@ def _write_api_keys(path: Path) -> None:
     path.write_text(
         (
             "keys:\n"
-            "  - key: \"analytics-acme-key\"\n"
-            "    name: \"Acme Agent\"\n"
-            "    tenant: \"acme\"\n"
+            '  - key: "analytics-acme-key"\n'
+            '    name: "Acme Agent"\n'
+            '    tenant: "acme"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
-            "  - key: \"analytics-globex-key\"\n"
-            "    name: \"Globex Agent\"\n"
-            "    tenant: \"globex\"\n"
+            '    created_at: "2026-04-10"\n'
+            '  - key: "analytics-globex-key"\n'
+            '    name: "Globex Agent"\n'
+            '    tenant: "globex"\n'
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
-            "    created_at: \"2026-04-10\"\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
     )
@@ -92,9 +92,11 @@ def test_analytics_usage_logs_requests_and_supports_tenant_filter(client: TestCl
     )
 
     def assert_rows_logged():
-        rows = duckdb.connect(str(client.app.state.auth_manager.db_path)).execute(
-            "SELECT tenant, endpoint FROM api_sessions ORDER BY tenant, endpoint"
-        ).fetchall()
+        rows = (
+            duckdb.connect(str(client.app.state.auth_manager.db_path))
+            .execute("SELECT tenant, endpoint FROM api_sessions ORDER BY tenant, endpoint")
+            .fetchall()
+        )
         assert rows == [
             ("acme", "/v1/entity/order"),
             ("globex", "/v1/metrics/revenue"),
@@ -138,9 +140,11 @@ def test_analytics_latency_returns_percentiles_per_endpoint(
         assert response.status_code == 200
 
     def assert_logged():
-        count = duckdb.connect(str(client.app.state.auth_manager.db_path)).execute(
-            "SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'"
-        ).fetchone()[0]
+        count = (
+            duckdb.connect(str(client.app.state.auth_manager.db_path))
+            .execute("SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'")
+            .fetchone()[0]
+        )
         assert count == 3
 
     _wait_until(assert_logged)
@@ -178,9 +182,11 @@ def test_analytics_top_queries_and_entities_return_ranked_results(client: TestCl
         assert response.status_code == 200
 
     def assert_query_logs():
-        count = duckdb.connect(str(client.app.state.auth_manager.db_path)).execute(
-            "SELECT COUNT(*) FROM api_sessions WHERE tenant = 'acme'"
-        ).fetchone()[0]
+        count = (
+            duckdb.connect(str(client.app.state.auth_manager.db_path))
+            .execute("SELECT COUNT(*) FROM api_sessions WHERE tenant = 'acme'")
+            .fetchone()[0]
+        )
         assert count >= 6
 
     _wait_until(assert_query_logs)
@@ -240,9 +246,11 @@ def test_analytics_logging_is_non_blocking(client: TestClient, monkeypatch: pyte
     assert elapsed < 0.2
 
     def assert_logged():
-        count = duckdb.connect(str(client.app.state.auth_manager.db_path)).execute(
-            "SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'"
-        ).fetchone()[0]
+        count = (
+            duckdb.connect(str(client.app.state.auth_manager.db_path))
+            .execute("SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'")
+            .fetchone()[0]
+        )
         assert count == 1
 
     _wait_until(assert_logged)
@@ -270,9 +278,11 @@ def test_analytics_background_logging_survives_forced_gc(
         time.sleep(0.05)
 
     def assert_logged():
-        count = duckdb.connect(str(client.app.state.auth_manager.db_path)).execute(
-            "SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'"
-        ).fetchone()[0]
+        count = (
+            duckdb.connect(str(client.app.state.auth_manager.db_path))
+            .execute("SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'")
+            .fetchone()[0]
+        )
         assert count == 5
 
     _wait_until(assert_logged, timeout=5.0)
@@ -280,10 +290,7 @@ def test_analytics_background_logging_survives_forced_gc(
 
 def test_analytics_anomalies_flags_tenants_with_hourly_spikes(client: TestClient):
     db_path = client.app.state.auth_manager.db_path
-    now = (
-        datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-        - timedelta(hours=1)
-    )
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
     conn = duckdb.connect(str(db_path))
     try:
         conn.execute(

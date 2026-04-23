@@ -72,11 +72,16 @@ class ValidateAndEnrich(ProcessFunction):
         try:
             event = json.loads(value)
         except json.JSONDecodeError as e:
-            ctx.output(DEAD_LETTER_TAG, json.dumps({
-                "raw": value[:1000],
-                "error": f"JSON parse error: {e}",
-                "stage": "parse",
-            }))
+            ctx.output(
+                DEAD_LETTER_TAG,
+                json.dumps(
+                    {
+                        "raw": value[:1000],
+                        "error": f"JSON parse error: {e}",
+                        "stage": "parse",
+                    }
+                ),
+            )
             return
 
         event_id = event.get("event_id", "unknown")
@@ -85,30 +90,44 @@ class ValidateAndEnrich(ProcessFunction):
         # 2. Schema validation (Pydantic models)
         schema_result = validate_event(event)
         if not schema_result.is_valid:
-            ctx.output(DEAD_LETTER_TAG, json.dumps({
-                "event_id": event_id,
-                "error": schema_result.errors,
-                "stage": "schema_validation",
-            }))
+            ctx.output(
+                DEAD_LETTER_TAG,
+                json.dumps(
+                    {
+                        "event_id": event_id,
+                        "error": schema_result.errors,
+                        "stage": "schema_validation",
+                    }
+                ),
+            )
             return
 
         # 3. Semantic validation (business rules)
         semantic_result = validate_semantics(event)
         if not semantic_result.is_clean:
             error_issues = [
-                i.to_dict() if hasattr(i, "to_dict") else {
-                    "rule": i.rule, "severity": i.severity,
-                    "field": i.field, "message": i.message,
+                i.to_dict()
+                if hasattr(i, "to_dict")
+                else {
+                    "rule": i.rule,
+                    "severity": i.severity,
+                    "field": i.field,
+                    "message": i.message,
                 }
                 for i in semantic_result.issues
                 if i.severity == "error"
             ]
             if error_issues:
-                ctx.output(DEAD_LETTER_TAG, json.dumps({
-                    "event_id": event_id,
-                    "error": error_issues,
-                    "stage": "semantic_validation",
-                }))
+                ctx.output(
+                    DEAD_LETTER_TAG,
+                    json.dumps(
+                        {
+                            "event_id": event_id,
+                            "error": error_issues,
+                            "stage": "semantic_validation",
+                        }
+                    ),
+                )
                 return
 
         # 4. Domain enrichment by event type
@@ -135,9 +154,7 @@ class ValidateAndEnrich(ProcessFunction):
             "processor_version": "1.0.0",
         }
 
-        event["_partition_key"] = (
-            event.get("user_id") or event.get("order_id") or event["event_id"]
-        )
+        event["_partition_key"] = event.get("user_id") or event.get("order_id") or event["event_id"]
 
         yield json.dumps(event)
 
@@ -152,9 +169,11 @@ class DeduplicateByEventId(MapFunction):
     def open(self, runtime_context):
         from pyflink.datastream.state import StateTtlConfig, ValueStateDescriptor
 
-        ttl_config = StateTtlConfig.new_builder(timedelta(minutes=10)) \
-            .set_update_type(StateTtlConfig.UpdateType.OnCreateAndWrite) \
+        ttl_config = (
+            StateTtlConfig.new_builder(timedelta(minutes=10))
+            .set_update_type(StateTtlConfig.UpdateType.OnCreateAndWrite)
             .build()
+        )
 
         state_desc = ValueStateDescriptor("seen", Types.BOOLEAN())
         state_desc.enable_time_to_live(ttl_config)
@@ -178,17 +197,19 @@ def build_pipeline():
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
     # Multi-topic Kafka source
-    source = KafkaSource.builder() \
-        .set_bootstrap_servers(bootstrap_servers) \
-        .set_topics("orders.raw", "payments.raw", "clicks.raw", "products.cdc") \
-        .set_group_id("agentflow-stream-processor") \
-        .set_starting_offsets(KafkaOffsetsInitializer.earliest()) \
-        .set_value_only_deserializer(SimpleStringSchema()) \
+    source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers(bootstrap_servers)
+        .set_topics("orders.raw", "payments.raw", "clicks.raw", "products.cdc")
+        .set_group_id("agentflow-stream-processor")
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema())
         .build()
+    )
 
-    watermark_strategy = WatermarkStrategy \
-        .for_bounded_out_of_orderness(timedelta(seconds=5)) \
-        .with_timestamp_assigner(EventTimestampAssigner())
+    watermark_strategy = WatermarkStrategy.for_bounded_out_of_orderness(
+        timedelta(seconds=5)
+    ).with_timestamp_assigner(EventTimestampAssigner())
 
     # Main pipeline
     stream = env.from_source(source, watermark_strategy, "kafka-source")
@@ -197,34 +218,39 @@ def build_pipeline():
     validated = stream.process(ValidateAndEnrich(), output_type=Types.STRING())
 
     # Dead letter sink
-    dead_letter_sink = KafkaSink.builder() \
-        .set_bootstrap_servers(bootstrap_servers) \
+    dead_letter_sink = (
+        KafkaSink.builder()
+        .set_bootstrap_servers(bootstrap_servers)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
             .set_topic("events.deadletter")
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
-        ) \
+        )
         .build()
+    )
 
     validated.get_side_output(DEAD_LETTER_TAG).sink_to(dead_letter_sink)
 
     # Deduplicate by event_id
-    deduped = validated \
-        .key_by(lambda x: json.loads(x).get("event_id", "")) \
-        .map(DeduplicateByEventId(), output_type=Types.STRING()) \
+    deduped = (
+        validated.key_by(lambda x: json.loads(x).get("event_id", ""))
+        .map(DeduplicateByEventId(), output_type=Types.STRING())
         .filter(lambda x: x is not None)
+    )
 
     # Validated events sink (for downstream consumers)
-    validated_sink = KafkaSink.builder() \
-        .set_bootstrap_servers(bootstrap_servers) \
+    validated_sink = (
+        KafkaSink.builder()
+        .set_bootstrap_servers(bootstrap_servers)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
             .set_topic("events.validated")
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
-        ) \
+        )
         .build()
+    )
 
     deduped.sink_to(validated_sink)
 

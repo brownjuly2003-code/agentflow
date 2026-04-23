@@ -47,17 +47,14 @@ def ensure_analytics_table(db_path: Path | str) -> None:
                 """
             )
             existing_columns = {
-                row[1]
-                for row in conn.execute("PRAGMA table_info('api_sessions')").fetchall()
+                row[1] for row in conn.execute("PRAGMA table_info('api_sessions')").fetchall()
             }
             for column_name, column_type in (
                 ("entity_id", "TEXT"),
                 ("query_text", "TEXT"),
             ):
                 if column_name not in existing_columns:
-                    conn.execute(
-                        f"ALTER TABLE api_sessions ADD COLUMN {column_name} {column_type}"
-                    )
+                    conn.execute(f"ALTER TABLE api_sessions ADD COLUMN {column_name} {column_type}")
             return
         except duckdb.Error:
             if attempt == 9:
@@ -84,6 +81,7 @@ def build_analytics_middleware():
         if request.method in {"POST", "PUT", "PATCH"}:
             body = await request.body()
             if body:
+
                 async def receive() -> Message:
                     return {"type": "http.request", "body": body, "more_body": False}
 
@@ -191,14 +189,16 @@ def get_usage_analytics(
                 """,
                 [tenant_name, interval],
             ).fetchall()
-            tenants.append({
-                "tenant": tenant_name,
-                "total_requests": total_requests,
-                "error_rate": float(error_rate or 0.0),
-                "cache_hit_rate": float(cache_hit_rate or 0.0),
-                "top_endpoints": [item[0] for item in top_endpoints],
-                "avg_duration_ms": float(avg_duration_ms or 0.0),
-            })
+            tenants.append(
+                {
+                    "tenant": tenant_name,
+                    "total_requests": total_requests,
+                    "error_rate": float(error_rate or 0.0),
+                    "cache_hit_rate": float(cache_hit_rate or 0.0),
+                    "top_endpoints": [item[0] for item in top_endpoints],
+                    "avg_duration_ms": float(avg_duration_ms or 0.0),
+                }
+            )
         return {"window": window, "tenants": tenants}
     finally:
         conn.close()
@@ -229,8 +229,7 @@ def get_top_queries(
         return {
             "window": window,
             "queries": [
-                {"query": query_text, "count": frequency}
-                for query_text, frequency in rows
+                {"query": query_text, "count": frequency} for query_text, frequency in rows
             ],
         }
     finally:

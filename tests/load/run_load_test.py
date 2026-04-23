@@ -385,8 +385,7 @@ def main() -> int:
     violations = check_thresholds(rows)
     missing = find_missing_thresholds(rows)
     violations.extend(
-        f"{endpoint}: no load-test stats collected for thresholded endpoint"
-        for endpoint in missing
+        f"{endpoint}: no load-test stats collected for thresholded endpoint" for endpoint in missing
     )
     write_results(rows, results_path, args.host, violations)
 

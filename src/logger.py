@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import MutableMapping
+from typing import Any
 
 import structlog
 from opentelemetry import trace
 
 
-def add_otel_context(_logger, _method_name: str, event_dict: dict) -> dict:
+def add_otel_context(
+    _logger: Any,
+    _method_name: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     span = trace.get_current_span()
     if not span.is_recording():
         return event_dict

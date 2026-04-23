@@ -94,6 +94,7 @@ def test_read_connection_waits_when_pool_is_exhausted(tmp_path):
     second_acquired = threading.Event()
 
     try:
+
         def first_reader() -> None:
             with pool.read_conn():
                 first_acquired.set()

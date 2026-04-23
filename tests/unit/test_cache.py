@@ -131,9 +131,7 @@ async def test_query_cache_invalidate_metrics_deletes_metric_keys():
 
     await cache.invalidate_metrics()
 
-    assert redis_client.deleted == [
-        ("metric:revenue:1h:now", "metric:error_rate:1h:now")
-    ]
+    assert redis_client.deleted == [("metric:revenue:1h:now", "metric:error_rate:1h:now")]
     assert "entity:order:1" in redis_client.data
 
 
@@ -170,9 +168,7 @@ def test_metric_endpoint_returns_cached_response_with_hit_header(monkeypatch):
     assert response.headers["X-Cache"] == "HIT"
     assert response.json()["value"] == 123.4
     assert engine.calls == []
-    assert logger.debug_calls == [
-        ("metric_cache_hit", {"key": "metric:revenue:1h:now"})
-    ]
+    assert logger.debug_calls == [("metric_cache_hit", {"key": "metric:revenue:1h:now"})]
 
 
 def test_metric_endpoint_returns_miss_header_and_populates_cache():

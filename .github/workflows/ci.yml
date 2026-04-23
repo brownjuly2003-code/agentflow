@@ -93,7 +93,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,cloud]"
       - name: Wait for Kafka
         run: |
           timeout 30 bash -c 'until nc -z localhost 9092; do sleep 1; done'

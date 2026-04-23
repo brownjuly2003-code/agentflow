@@ -13,6 +13,7 @@ from opentelemetry import trace
 from src.processing.tracing import telemetry_disabled
 from src.serving.backends import BackendExecutionError
 
+from .contracts import NLQueryHost
 from .sql_guard import UnsafeSQLError, validate_nl_sql
 
 tracer = trace.get_tracer("agentflow.query_engine")
@@ -20,7 +21,7 @@ tracer = trace.get_tracer("agentflow.query_engine")
 
 class NLQueryMixin:
     def _translate_question_to_sql(
-        self,
+        self: NLQueryHost,
         question: str,
         tenant_id: str | None = None,
     ) -> str:
@@ -79,7 +80,7 @@ class NLQueryMixin:
         return offset, query_hash
 
     def paginated_query(
-        self,
+        self: NLQueryHost,
         question: str,
         limit: int = 100,
         cursor: str | None = None,
@@ -156,7 +157,7 @@ class NLQueryMixin:
         }
 
     def execute_nl_query(
-        self,
+        self: NLQueryHost,
         question: str,
         context: dict | None = None,
         tenant_id: str | None = None,
@@ -208,7 +209,7 @@ class NLQueryMixin:
             "freshness_seconds": None,
         }
 
-    def explain(self, question: str) -> dict:
+    def explain(self: NLQueryHost, question: str) -> dict:
         """Translate a natural language question to SQL without executing it."""
         from src.serving.semantic_layer import nl_engine
 

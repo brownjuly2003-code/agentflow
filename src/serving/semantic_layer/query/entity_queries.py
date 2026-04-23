@@ -5,10 +5,12 @@ from datetime import UTC, datetime
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError
 
+from .contracts import QueryExecutionHost
+
 
 class EntityQueryMixin:
     def get_entity(
-        self,
+        self: QueryExecutionHost,
         entity_type: str,
         entity_id: str,
         tenant_id: str | None = None,
@@ -80,7 +82,7 @@ class EntityQueryMixin:
         return entity
 
     def get_entity_at(
-        self,
+        self: QueryExecutionHost,
         entity_type: str,
         entity_id: str,
         as_of: datetime,

@@ -8,15 +8,17 @@ from sqlglot import exp
 
 from src.serving.api.auth import get_current_tenant_id
 
+from .contracts import SQLBuilderHost
+
 
 class SQLBuilderMixin:
-    def _resolve_tenant_id(self, tenant_id: str | None) -> str | None:
+    def _resolve_tenant_id(self: SQLBuilderHost, tenant_id: str | None) -> str | None:
         if tenant_id is not None:
             return tenant_id
         default_tenant = "demo" if not self._tenant_router.has_config() else None
         return get_current_tenant_id(default=default_tenant)
 
-    def _get_tenant_schema(self, tenant_id: str | None) -> str | None:
+    def _get_tenant_schema(self: SQLBuilderHost, tenant_id: str | None) -> str | None:
         resolved_tenant_id = self._resolve_tenant_id(tenant_id)
         schema: str | None = self._tenant_router.get_duckdb_schema(resolved_tenant_id)
         if schema is None:
@@ -39,7 +41,7 @@ class SQLBuilderMixin:
             return f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'"
         return "'" + str(value).replace("'", "''") + "'"
 
-    def _qualify_table(self, table_name: str, tenant_id: str | None) -> str:
+    def _qualify_table(self: SQLBuilderHost, table_name: str, tenant_id: str | None) -> str:
         if self._resolve_tenant_id(tenant_id) is None and self._tenant_router.has_config():
             for tenant in self._tenant_router.load().tenants:
                 qualified = (
@@ -55,7 +57,7 @@ class SQLBuilderMixin:
             return table_name
         return f"{self._quote_identifier(schema)}.{self._quote_identifier(table_name)}"
 
-    def _scope_sql(self, sql: str, tenant_id: str | None) -> str:
+    def _scope_sql(self: SQLBuilderHost, sql: str, tenant_id: str | None) -> str:
         known_tables = {entity.table.lower() for entity in self.catalog.entities.values()}
         known_tables.add("pipeline_events")
 

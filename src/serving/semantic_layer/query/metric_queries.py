@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError
 
+from .contracts import QueryExecutionHost
+
 WINDOW_MAP = {
     "5m": "5 minutes",
     "15m": "15 minutes",
@@ -17,7 +19,7 @@ WINDOW_MAP = {
 
 class MetricQueryMixin:
     def get_metric(
-        self,
+        self: QueryExecutionHost,
         metric_name: str,
         window: str = "1h",
         as_of: datetime | None = None,

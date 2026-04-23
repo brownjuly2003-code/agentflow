@@ -37,7 +37,27 @@ jobs:
           import subprocess
           import time
 
-          compose_ps_command = "docker compose -f docker-compose.e2e.yml ps --format json"
+          def parse_compose_ps_output(stdout):
+              payload = (stdout or "").strip()
+              if not payload:
+                  return []
+
+              decoder = json.JSONDecoder()
+              entries = []
+              index = 0
+
+              while index < len(payload):
+                  entry, index = decoder.raw_decode(payload, index)
+                  if isinstance(entry, list):
+                      entries.extend(entry)
+                  else:
+                      entries.append(entry)
+                  while index < len(payload) and payload[index].isspace():
+                      index += 1
+
+              return entries
+
+          compose_ps_command = ["docker", "compose", "-f", "docker-compose.e2e.yml", "ps", "--format", "json"]
           required = {"agentflow-api", "redis", "kafka", "postgres"}
           deadline = time.monotonic() + 180
 
@@ -47,18 +67,20 @@ jobs:
                   check=False,
                   capture_output=True,
                   text=True,
-                  shell=True,
               )
               if result.returncode == 0:
                   try:
-                      entries = json.loads(result.stdout or "[]")
+                      entries = parse_compose_ps_output(result.stdout)
                   except json.JSONDecodeError:
                       entries = []
                   services = {entry["Service"]: entry for entry in entries}
                   if required.issubset(services):
                       all_healthy = all(
                           services[name].get("State") == "running"
-                          and services[name].get("Health") == "healthy"
+                          and (
+                              services[name].get("Health") == "healthy"
+                              or "(healthy)" in services[name].get("Status", "")
+                          )
                           for name in required
                       )
                       if all_healthy:

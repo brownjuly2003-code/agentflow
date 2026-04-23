@@ -20,6 +20,7 @@ python -m pytest tests/unit tests/integration tests/sdk -v
 Additional suites when your change touches those areas:
 
 ```bash
+python -m pip install -e ".[cloud,contract]"
 python -m pytest tests/contract tests/property tests/chaos tests/e2e -v
 cd sdk-ts && npm test
 ```

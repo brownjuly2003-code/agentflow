@@ -46,6 +46,27 @@ Capture notes:
 - [ ] Add topics: `data-engineering`, `real-time`, `ai-agents`, `fastapi`, `duckdb`, `kafka`, `flink`
 - [ ] Create a `v1.0.0` release using notes from `CHANGELOG.md`
 
+## SDK registry release
+
+- [ ] Keep GitHub source releases on `vX.Y.Z`; keep npm/PyPI SDK publishes on `sdk-vX.Y.Z`
+- [ ] Treat `.github/workflows/publish-npm.yml` and `.github/workflows/publish-pypi.yml` as production-only workflows: pushing `sdk-v*` publishes real artifacts
+- [ ] On a clean tree, run `python scripts/release.py patch|minor|major` to bump `sdk/` and `sdk-ts/` together and create the local `sdk-vX.Y.Z` tag
+- [ ] Before pushing the tag, rehearse the publish steps locally without uploading anything:
+
+```bash
+cd sdk-ts
+npm install --package-lock=false
+npm run build
+npm pack --dry-run
+cd ..
+python -m build sdk/
+python -m twine check sdk/dist/*
+```
+
+- [ ] If `sdk/dist/` already contains older artifacts, clear it before `python -m build sdk/` so `twine check` only validates the current release
+- [ ] Stop after the rehearsal when you only need proof; the real publish event is pushing the `sdk-vX.Y.Z` tag
+- [ ] On the approved SDK release commit, push the commit and `sdk-vX.Y.Z` tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python SDK`
+
 ## Verification after publish
 
 - [ ] Clone a fresh copy and run `make demo`

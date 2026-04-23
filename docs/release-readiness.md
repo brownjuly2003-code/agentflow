@@ -1,8 +1,9 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20  
+**Last updated**: 2026-04-23  
 **Version**: v1.0.1  
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; SDK registry publish proof is still pending the first `sdk-v*` release event; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
 
 ## Executive Summary
 
@@ -49,6 +50,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
 - GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
 - AWS OIDC role setup for GitHub Actions is still a manual setup step.
+- SDK registry publish workflows still have no historical run: repo tags to date are `v1.0.0` and `v1.0.1`, while npm/PyPI publish is intentionally gated on `sdk-v*`.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 
@@ -65,7 +67,15 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Bandit diff is green against the checked-in baseline
 - [ ] GitHub environments `staging`/`prod` configured with required reviewers
 - [ ] AWS OIDC role configured for GitHub Actions
+- [ ] First approved `sdk-v*` release produces green `Publish TypeScript SDK` and `Publish Python SDK` runs
 - [ ] Phase 1 PMF work completed
+
+## SDK Publish Proof Path
+
+- Canonical SDK release tags remain `sdk-vX.Y.Z`, matching `.github/workflows/publish-npm.yml`, `.github/workflows/publish-pypi.yml`, and `scripts/release.py`.
+- Existing repo releases `v1.0.0` and `v1.0.1` are GitHub source releases, not npm/PyPI publish events.
+- Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md`: build the TypeScript SDK, run `npm pack --dry-run`, build `sdk/`, and run `python -m twine check sdk/dist/*` without pushing a tag.
+- The first green proof for both publish workflows will be the next approved `sdk-v*` tag push after that preflight.
 
 ## Verification Snapshot
 

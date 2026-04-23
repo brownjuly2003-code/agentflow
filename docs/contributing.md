@@ -39,6 +39,7 @@ cd sdk-ts && npm install && cd ..
 |------|---------|-------|
 | Lint | `make lint` | Runs Ruff and mypy |
 | Unit | `pytest tests/unit/ -v --tb=short` | Fastest signal for Python-only changes |
+| CI unit + property coverage | `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60` | Full `src/` + `sdk/` baseline floor in CI; changed-line coverage stays at 80% via Codecov patch status |
 | Integration | `pytest tests/integration/ -v --tb=short -m integration` | Covers routers, persistence, and service integration without the full prod stack |
 | Full Python suite | `make test` | Runs `pytest tests/ -v --tb=short --ignore=tests/load` |
 | TypeScript SDK | `cd sdk-ts && npm test` | Runs the Vitest client checks |

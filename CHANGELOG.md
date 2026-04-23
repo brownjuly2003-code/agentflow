@@ -74,7 +74,7 @@ section will be renamed on release tag.
 
 ### Verification
 
-Test suite status at sprint close: **411 tests passing**, 1 skipped,
+Test suite status at sprint close: **552 tests passing**, 1 skipped,
 0 regressions.
 
 | Suite | Count | Duration |
@@ -82,6 +82,45 @@ Test suite status at sprint close: **411 tests passing**, 1 skipped,
 | unit | 360 | ~60 s |
 | property + contract + sdk | 38 | ~31 s |
 | e2e (non-dagster) | 13 | ~63 s |
+| integration (non-Docker) | 141 | ~108 s |
+
+### CI repair trail
+
+Surface-level diagnosis after push surfaced six pre-existing CI
+breakages that predate the v1.1 sprint (first observed 2026-04-20):
+
+- **Contract Tests** (`54c3c27`, `2cf7a7b`): root and SDK both declare
+  `name = "agentflow"`, so `pip install -e sdk/` uninstalled the root
+  package and left `src` unimportable. Dropped the separate SDK install
+  and switched to `pip install -e ".[dev,cloud]"` so pyiceberg is
+  present when the fixture boots the API.
+- **Load Test** (`b2f8344`, `aa470df`): same missing `[cloud]` extras
+  blocked uvicorn startup — `Connection refused` on port 8011. Added
+  the extras, then bumped `AGENTFLOW_RATE_LIMIT_RPM` to `600000` so
+  the 50-user locust workload stops saturating the limiter.
+- **Staging Deploy** (`8bedb1d`): the `.gitignore` rule `AgentFlow*`
+  swallowed `helm/agentflow/` on case-insensitive filesystems. Added
+  `!helm/agentflow/` / `!helm/agentflow/**` exceptions and committed
+  the 12-file chart that existed only on dev machines.
+- **Security Scan** (`68ca0da`): `aquasecurity/trivy-action@0.33.1`
+  was not a real release — switched to `@master` pending a pinned
+  version from the user. The resulting Trivy run now reaches the
+  scan step but the image has unresolved HIGH/CRITICAL findings that
+  still fail the gate (next-session work).
+- **CI lint** (`70a7b64`): ran `ruff --fix` against the 27 files with
+  auto-fixable debt; 38 of 98 errors cleared. 60 harder lint errors
+  (E501, S603, E402, N802, B904) remain — a dedicated cleanup pass
+  is still needed before the `lint` job can go green.
+- **E2E Tests**: pre-existing `wait_for_services` timeout on the
+  docker-compose-hosted API. Not investigated this session — the
+  stack uses `docker-compose.prod.yml` which pulls a dozen services;
+  the root cause likely overlaps with the rate-limiter / Kafka
+  readiness issue and needs hands-on debugging.
+
+Status at session close: **Contract Tests should go green after
+`2cf7a7b` lands, Load Test after `aa470df`, Staging Deploy after
+`8bedb1d`**. CI lint, Security Scan (Trivy findings), and E2E Tests
+still require follow-up.
 
 ---
 

@@ -1,69 +1,65 @@
-# T09 — CDC connectors (Postgres WAL + MySQL binlog)
+# T09 — CDC connectors and normalization (Debezium/Kafka Connect)
 
-**Priority:** P3 · **Estimate:** 2-3 дня
+**Priority:** P3 · **Estimate:** 3-5 дней
 
 ## Goal
 
-Расширить `src/ingestion/` двумя ready-to-use CDC коннекторами: Postgres logical replication и MySQL binlog. Emit events в Kafka с тем же event schema что синтетика.
+Расширить `src/ingestion/` единым CDC path для Postgres и MySQL на базе Debezium/Kafka Connect и нормализовать оба источника в единый AgentFlow CDC contract перед downstream processing.
 
 ## Context
 
 - Репо: `D:\DE_project\` (AgentFlow)
-- Текущий `src/ingestion/` содержит synthetic generator и placeholder CDC
+- Архитектурное решение зафиксировано в `docs/decisions/0005-cdc-ingestion-strategy.md`
+- Текущий `src/ingestion/` уже содержит Debezium-based placeholder для Postgres в `src/ingestion/connectors/postgres_cdc.py`
 - Архитектура: Kafka (KRaft) → Flink → Iceberg
-- Event schema определена (читать `src/ingestion/` или `contracts/` чтобы понять формат) — новые коннекторы должны emit в том же формате чтобы не ломать downstream
-- Offset persistence нужен, чтобы при рестарте не пересчитывать с начала binlog
+- Нужно одно payload contract и один ops model для Postgres/MySQL; raw Debezium envelope не должен уходить в downstream как публичный формат
+- Не делать Python-native WAL/binlog consumers и не вводить отдельный custom offset store поверх Kafka Connect
 
 ## Deliverables
 
-1. **`src/ingestion/cdc/postgres.py`** — `PostgresCDCConnector`:
-   - Использует `psycopg2` + logical replication slot (plugin `pgoutput` или `wal2json`)
-   - Конфиг: connection string, slot name, publication name, starting LSN (optional)
-   - Mapping table → event_type через YAML (см. п.3)
-   - Emit events в Kafka topic
-   - Graceful shutdown на SIGTERM с flush offset
-   - Lag metric `cdc_replication_lag_seconds{source="postgres"}` в Prometheus
+1. **`src/ingestion/connectors/postgres_cdc.py`** — привести существующий Debezium config builder к ADR-0005:
+   - явный topic naming для raw CDC stream
+   - publication/slot/schema-history config для Postgres
+   - secrets только через env/secret references
+   - readiness для регистрации через Kafka Connect REST API
 
-2. **`src/ingestion/cdc/mysql.py`** — `MySQLBinlogConnector`:
-   - Использует `python-mysql-replication` (`pip install mysql-replication`)
-   - Конфиг: host/port/user/password, server_id, starting binlog filename + position, watched tables
-   - Same mapping table → event_type через YAML
-   - Same Prometheus metric `cdc_replication_lag_seconds{source="mysql"}`
+2. **`src/ingestion/connectors/mysql_cdc.py`** — добавить symmetric Debezium MySQL config builder:
+   - watched databases/tables
+   - schema history topic
+   - same topic naming и observability labels что у Postgres
 
-3. **`config/cdc/postgres.example.yaml`**, **`config/cdc/mysql.example.yaml`** — примеры конфигов:
-   ```yaml
-   # postgres.example.yaml
-   source:
-     type: postgres
-     dsn: postgresql://user:pass@localhost:5432/app
-     slot_name: agentflow_cdc
-     publication: agentflow_pub
-   kafka:
-     bootstrap_servers: localhost:9092
-     topic: cdc.postgres.events
-   mapping:
-     orders:
-       event_type: order_changed
-       key_column: order_id
-     users:
-       event_type: user_changed
-       key_column: user_id
-   ```
+3. **Shared CDC normalizer** в `src/ingestion/cdc/`:
+   - принимает raw Debezium envelope от Postgres/MySQL
+   - применяет единый mapping `table -> entity_type/event_type/key_column`
+   - emit в canonical CDC contract:
+     - `event_id`
+     - `event_type`
+     - `operation`
+     - `timestamp`
+     - `source`
+     - `entity_type`
+     - `entity_id`
+     - `before`
+     - `after`
+     - `source_metadata`
+   - schema-change records идут как `event_type = "ddl_change"` и `operation = "ddl"`
 
-4. **Offset persistence**:
-   - Сохранять LSN (Postgres) / binlog position (MySQL) в dedicated Kafka topic `cdc-offsets` или в Redis
-   - Default — Kafka topic (консистентно с остальной инфрой проекта)
-   - При старте коннектор читает последний offset из topic, возобновляет с него
+4. **`config/cdc/postgres.connect.json`**, **`config/cdc/mysql.connect.json`**, **`config/cdc/mapping.example.yaml`**:
+   - connector examples для Kafka Connect
+   - один mapping format для Postgres и MySQL
+   - topic names и history topics документированы рядом
 
-5. **CLI** `src/ingestion/cdc/__main__.py`:
-   ```bash
-   python -m ingestion.cdc --source postgres --config config/cdc/postgres.yaml
-   python -m ingestion.cdc --source mysql --config config/cdc/mysql.yaml
-   ```
+5. **Offset/state model**:
+   - использовать Kafka Connect internal topics (`config`, `offset`, `status`)
+   - не добавлять custom Kafka topic `cdc-offsets`
+   - replay/restart semantics документировать через Connect, а не через source-specific Python state
 
 6. **`docker-compose.yml`** — optional services под profile `cdc`:
    ```yaml
    services:
+     kafka-connect:
+       image: debezium/connect:...
+       profiles: [cdc]
      postgres-source:
        image: postgres:16
        profiles: [cdc]
@@ -76,48 +72,53 @@
        command: ["--log-bin=mysql-bin", "--binlog-format=ROW", "--server-id=1"]
    ```
    + pre-populated demo данные через init scripts
+   + Kafka Connect сконфигурирован Debezium plugins и internal topics
 
 7. **Тесты**:
    - `tests/integration/ingestion/test_cdc_postgres.py`:
-     - Testcontainers Postgres с logical replication включённым
-     - Создание publication + slot через test setup
+     - Postgres source + Kafka Connect/Debezium + normalizer
      - INSERT/UPDATE/DELETE в source
-     - Assert что Kafka topic получил события с правильной семантикой (op, before, after)
-     - Restart connector mid-stream, verify resume from saved offset
-   - `tests/integration/ingestion/test_cdc_mysql.py` — аналогично для MySQL binlog
+     - Assert что normalized topic получил canonical CDC payload
+     - Restart connector/task mid-stream, verify resume через Connect offsets
+   - `tests/integration/ingestion/test_cdc_mysql.py` — аналогично для MySQL source
+   - unit tests для mapping/normalization edge cases и `ddl_change`
 
 8. **Документация** `docs/ingestion/cdc.md`:
-   - Как создать publication в Postgres (`CREATE PUBLICATION`, `wal_level=logical`)
-   - Как настроить binlog в MySQL (`log-bin`, `binlog-format=ROW`, `server-id`)
-   - Схема offset persistence
-   - Мониторинг lag (PromQL query, Grafana panel)
-   - Schema evolution: что происходит при ALTER TABLE на source
-   - Troubleshooting (slot disk full, binlog rotation, etc.)
+   - Postgres publication / logical replication prerequisites
+   - MySQL binlog prerequisites
+   - connector registration flow в Kafka Connect
+   - canonical CDC contract и mapping rules
+   - monitoring lag/error-rate/status
+   - schema evolution: как `ddl_change` и schema history проходят через систему
+   - troubleshooting (connector failed state, slot lag, history topic drift, binlog retention)
 
 9. **`Makefile`** target:
    ```makefile
    cdc-demo:
-   	docker compose --profile cdc up -d
-   	scripts/cdc_demo.sh
+      docker compose --profile cdc up -d
+      scripts/register_cdc_connectors.sh
    ```
+   + регистрирует оба коннектора и запускает demo flow до normalized topic
 
-10. Коммит: `feat(ingestion): add Postgres WAL and MySQL binlog CDC connectors`
+10. Коммит: `feat(ingestion): add Debezium-based CDC ingestion for Postgres and MySQL`
 
 ## Acceptance
 
 - `pytest tests/integration/ingestion/test_cdc_*.py` — зелёные (может требовать Docker)
-- `docker compose --profile cdc up` поднимает Postgres/MySQL + connector, demo скрипт генерит данные, они появляются в AgentFlow API через Kafka → Flink → Iceberg/DuckDB
-- `cdc_replication_lag_seconds` exportится в Prometheus на scraping endpoint `/metrics`
-- Restart connector mid-stream — resume с правильного offset, без дубликатов и без пропусков (at-least-once семантика приемлема)
+- `docker compose --profile cdc up` поднимает Postgres/MySQL + Kafka Connect, demo flow регистрирует оба коннектора, normalized CDC events доходят до Kafka
+- Postgres/MySQL используют один canonical CDC contract и один mapping format
+- `cdc_replication_lag_seconds` и connector/task health exportятся в Prometheus/Grafana path
+- Restart connector mid-stream — resume с правильного offset через Kafka Connect internal topics; at-least-once семантика приемлема
 - `docs/ingestion/cdc.md` читается и воспроизводим
+- В реализации нет Python-native WAL/binlog consumer path
 
 ## Notes
 
-- Обработка offset persistence — Kafka topic `cdc-offsets` (не Redis) для consistency с остальным проектом. Compacted topic, key = `(source, slot_or_binlog)`, value = offset JSON
-- Schema evolution — если таблица на source меняется (ALTER TABLE), connector должен emit schema-change event (тип `ddl_change`), НЕ падать. Downstream (Flink) может его игнорировать в v1
-- **НЕ использовать Debezium** — хочется Python-native для consistency с остальным проектом и упрощения ops
+- Offset/state ownership у Kafka Connect; custom offset store поверх него не нужен
+- Schema evolution — Debezium schema history + normalized `ddl_change`; downstream (Flink) может игнорировать control events в v1.1, но contract должен их сохранять
+- Raw Debezium topics — internal boundary. Downstream и docs не должны объявлять их как stable public payload
 - Replication lag meaning:
-  - Postgres: `now() - (SELECT max(timestamp) FROM replicated_events)` или difference between current WAL location и confirmed_flush_lsn slot'а
-  - MySQL: difference between master binlog position и consumer position
-- **Безопасность**: DSN/passwords — только через env или secret management, не в YAML конфигах. Конфиги могут ссылаться на env vars (`${POSTGRES_PASSWORD}`)
-- DDL events опциональны в v1, но payload schema должен оставлять место для них (union type)
+  - Postgres: difference between current WAL progress и connector-applied position
+  - MySQL: difference between source binlog progress и connector-applied position
+- **Безопасность**: DSN/passwords — только через env или secret management, не в JSON/YAML конфигах. Конфиги могут ссылаться на env vars (`${POSTGRES_PASSWORD}`)
+- DDL events опциональны для downstream handling в v1.1, но payload schema и docs должны оставлять место для них

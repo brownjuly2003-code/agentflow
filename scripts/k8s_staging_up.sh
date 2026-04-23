@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-agentflow-staging}"
@@ -21,6 +21,26 @@ for cmd in bash curl docker helm kind kubectl; do
 done
 
 cd "$ROOT_DIR"
+
+on_failure() {
+  local exit_code=$?
+
+  trap - ERR
+  echo "==> FAILURE: collecting diagnostics (exit code: $exit_code)"
+  kubectl get all --all-namespaces || true
+  kubectl describe deployment "$RELEASE_NAME" --namespace "$NAMESPACE" || true
+  kubectl describe pod --namespace "$NAMESPACE" -l "app.kubernetes.io/instance=$RELEASE_NAME" || true
+  for pod in $(kubectl get pods --namespace "$NAMESPACE" -l "app.kubernetes.io/instance=$RELEASE_NAME" -o name 2>/dev/null); do
+    echo "--- logs $pod (current) ---"
+    kubectl logs --namespace "$NAMESPACE" "$pod" --tail=200 || true
+    echo "--- logs $pod (previous) ---"
+    kubectl logs --namespace "$NAMESPACE" "$pod" --tail=200 -p || true
+  done
+  kubectl get events --namespace "$NAMESPACE" --sort-by='.lastTimestamp' | tail -50 || true
+  exit "$exit_code"
+}
+
+trap on_failure ERR
 
 resolve_host_gateway_ip() {
   if [[ -n "$HOST_LOOPBACK_PROXY_TARGET" ]]; then
@@ -57,10 +77,12 @@ COPY pyproject.toml /app/pyproject.toml
 COPY requirements.txt /app/requirements.txt
 COPY src /app/src
 COPY config /app/config
+COPY contracts /app/contracts
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt \
  && pip install --no-cache-dir bcrypt \
- && pip install --no-cache-dir -e .
+ && pip install --no-cache-dir -e . \
+ && pip install --no-cache-dir pyiceberg
 RUN cat > /app/host_loopback_proxy.py <<'PY'
 import asyncio
 import os
@@ -179,7 +201,8 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/helm/agentflow" \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --wait \
-  --timeout 3m
+  --timeout 5m \
+  --debug
 
 echo "==> Enabling host loopback relay for webhook callbacks..."
 kubectl set env "deployment/$RELEASE_NAME" \

@@ -33,7 +33,7 @@ flink = [
 ]
 cloud = [
     "boto3>=1.35,<2",
-    "pyiceberg>=0.7,<1",
+    "pyiceberg[pyiceberg-core]>=0.7,<1",
 ]
 llm = [
     "anthropic>=0.39,<1",

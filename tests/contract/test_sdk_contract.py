@@ -1,11 +1,6 @@
-import sys
-from pathlib import Path
-
 import pytest
 
 pytest_plugins = ("tests.e2e.conftest",)
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 
 from agentflow import AgentFlowClient
 from agentflow.exceptions import AuthError, EntityNotFoundError

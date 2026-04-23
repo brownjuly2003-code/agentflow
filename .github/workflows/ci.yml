@@ -58,7 +58,8 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install -e ".[dev,integrations,cloud]"
+          pip install -e ".[dev,cloud]"
+          pip install -e "./sdk"
           pip install -e "./integrations[mcp]"
       - name: Run unit and property tests with coverage
         run: |

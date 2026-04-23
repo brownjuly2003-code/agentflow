@@ -46,7 +46,7 @@ try {
 
     python -m pip install --upgrade pip
     python -m pip install -e ".[dev]"
-    python -m pip install -e sdk/
+    python -m pip install -e ./sdk
 
     if (-not (Test-Path ".env")) {
         Copy-Item ".env.example" ".env"

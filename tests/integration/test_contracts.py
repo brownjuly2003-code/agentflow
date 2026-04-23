@@ -1,14 +1,10 @@
-import sys
 from pathlib import Path
 
 import httpx
 import pytest
 import yaml
-from fastapi.testclient import TestClient
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
-
 from agentflow.client import AgentFlowClient
+from fastapi.testclient import TestClient
 
 from src.serving.api.main import app
 

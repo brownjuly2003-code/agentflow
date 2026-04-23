@@ -15,7 +15,7 @@
     "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
   },
   "postCreateCommand": "pip install -e '.[dev]'",
-  "postStartCommand": "bash -lc \"pip install -e sdk/ && cd sdk-ts && npm install && cd .. && if [ ! -f agentflow_demo.duckdb ]; then python -m src.processing.local_pipeline --burst 500; fi\"",
+  "postStartCommand": "bash -lc \"pip install -e ./sdk && cd sdk-ts && npm install && cd .. && if [ ! -f agentflow_demo.duckdb ]; then python -m src.processing.local_pipeline --burst 500; fi\"",
   "forwardPorts": [8000, 8080, 8081, 8474, 9090, 3000, 9001, 16686],
   "portsAttributes": {
     "8000": {

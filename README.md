@@ -77,7 +77,7 @@ Local demo   -> local_pipeline -> DuckDB ------/
 
 Stack:
 
-- **Ingestion**: Kafka, CDC connectors, and a local synthetic pipeline
+- **Ingestion**: Kafka producers, Debezium/Kafka Connect CDC, and a local synthetic pipeline
 - **Processing**: Flink plus validation and enrichment stages
 - **Storage**: Iceberg for production-shaped tables, DuckDB for the local serving path
 - **Serving**: FastAPI, contract registry, lineage, search, and operational endpoints
@@ -85,6 +85,8 @@ Stack:
 - **IaC**: Terraform, Helm, Docker Compose, and a Fly.io demo config
 
 See [docs/architecture.md](docs/architecture.md) for the detailed design, trade-offs, and deployment topologies.
+
+CDC source capture is standardized on Debezium/Kafka Connect; downstream consumers use the canonical AgentFlow CDC contract defined in [ADR 0005](docs/decisions/0005-cdc-ingestion-strategy.md).
 
 ## What's inside
 

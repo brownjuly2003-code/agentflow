@@ -1,12 +1,7 @@
-import sys
 from datetime import UTC, datetime
-from pathlib import Path
 
 import httpx
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
-
 from agentflow.circuit_breaker import CircuitBreaker, CircuitOpenError
 from agentflow.client import AgentFlowClient
 from agentflow.retry import RetryPolicy

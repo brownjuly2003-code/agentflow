@@ -1,13 +1,8 @@
-import sys
 from datetime import UTC, datetime
-from pathlib import Path
-
-import httpx
-import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 
 import agentflow.circuit_breaker as circuit_breaker_module
+import httpx
+import pytest
 from agentflow import AsyncAgentFlowClient
 from agentflow.circuit_breaker import (
     CircuitBreaker,

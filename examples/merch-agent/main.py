@@ -3,24 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
-from pathlib import Path
 from typing import Any
-
 
 AGENT_NAME = "merch-agent"
 DEFAULT_QUERY = "Show me top 10 products"
 DEFAULT_SEARCH_QUERY = "revenue"
-
-
-def _ensure_repo_paths() -> Path:
-    repo_root = Path(__file__).resolve().parents[2]
-    for relative in ("sdk", "integrations"):
-        candidate = repo_root / relative
-        candidate_str = str(candidate)
-        if candidate_str not in sys.path:
-            sys.path.insert(0, candidate_str)
-    return repo_root
 
 
 def _resolve_base_url(value: str | None = None) -> str:
@@ -65,8 +52,6 @@ def run_demo(
                 "A merch snapshot with revenue, ranked products, pagination, and catalog hits."
             ),
         }
-
-    _ensure_repo_paths()
 
     import httpx
     from agentflow import AgentFlowClient
@@ -121,8 +106,6 @@ def run_crewai_demo(
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_repo_paths()
-
     try:
         from crewai import Agent, Crew, Task
     except ImportError as exc:  # pragma: no cover

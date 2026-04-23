@@ -3,24 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
-from pathlib import Path
 from typing import Any
-
 
 AGENT_NAME = "support-agent"
 DEFAULT_ORDER_ID = "ORD-20260404-1001"
 DEFAULT_QUERY = "Where is order ORD-20260404-1001 right now?"
-
-
-def _ensure_repo_paths() -> Path:
-    repo_root = Path(__file__).resolve().parents[2]
-    for relative in ("sdk", "integrations"):
-        candidate = repo_root / relative
-        candidate_str = str(candidate)
-        if candidate_str not in sys.path:
-            sys.path.insert(0, candidate_str)
-    return repo_root
 
 
 def _resolve_base_url(value: str | None = None) -> str:
@@ -64,8 +51,6 @@ def run_demo(
                 "and active session context."
             ),
         }
-
-    _ensure_repo_paths()
 
     from agentflow import AgentFlowClient
 
@@ -111,8 +96,6 @@ def run_langchain_demo(
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_repo_paths()
-
     try:
         from langchain.agents import AgentType, initialize_agent
         from langchain_openai import ChatOpenAI

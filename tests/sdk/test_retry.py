@@ -1,11 +1,7 @@
 import inspect
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
-
 from agentflow.client import AgentFlowClient
 from agentflow.retry import RETRYABLE_STATUS, RetryPolicy, is_retryable_method
 

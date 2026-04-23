@@ -1,16 +1,10 @@
-import sys
-from pathlib import Path
-
 import httpx
 import pytest
+from agentflow import AsyncAgentFlowClient
+from agentflow.client import AgentFlowClient
 from fastapi.testclient import TestClient
 
 from src.serving.api.main import app
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
-
-from agentflow import AsyncAgentFlowClient
-from agentflow.client import AgentFlowClient
 
 pytestmark = pytest.mark.integration
 

@@ -1,5 +1,5 @@
 [project]
-name = "agentflow"
+name = "agentflow-runtime"
 version = "1.0.1"
 description = "Real-time data platform serving context to AI agents"
 requires-python = ">=3.11"
@@ -132,6 +132,128 @@ ignore_missing_imports = true
 module = "src.processing.flink_jobs.*"
 ignore_errors = true
 
-[[tool.mypy.overrides]]
-module = "src.serving.semantic_layer.query.*"
-disable_error_code = ["attr-defined"]
+[tool.agentflow.dependency-profiles.profiles.runtime]
+editable-installs = ["."]
+
+[tool.agentflow.dependency-profiles.profiles.dev-tools]
+editable-installs = [".[dev]"]
+
+[tool.agentflow.dependency-profiles.profiles.test]
+editable-installs = [".[dev,cloud]"]
+
+[tool.agentflow.dependency-profiles.profiles.test-integrations]
+editable-installs = [".[dev,cloud]", "./sdk", "./integrations[mcp]"]
+
+[tool.agentflow.dependency-profiles.profiles.load]
+editable-installs = [".[load,cloud]"]
+
+[tool.agentflow.dependency-profiles.profiles.perf]
+editable-installs = [".[dev,load,cloud]"]
+
+[tool.agentflow.dependency-profiles.profiles.contract]
+editable-installs = [".[dev,cloud,contract]"]
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "backup.backup"
+kind = "workflow"
+path = ".github/workflows/backup.yml"
+job = "backup"
+profile = "dev-tools"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "ci.lint"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "lint"
+profile = "dev-tools"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "ci.schema-check"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "schema-check"
+profile = "dev-tools"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "ci.test-unit"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "test-unit"
+profile = "test-integrations"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "ci.test-integration"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "test-integration"
+profile = "test"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "ci.perf-check"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "perf-check"
+profile = "perf"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "chaos.chaos-smoke"
+kind = "workflow"
+path = ".github/workflows/chaos.yml"
+job = "chaos-smoke"
+profile = "test"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "chaos.chaos-full"
+kind = "workflow"
+path = ".github/workflows/chaos.yml"
+job = "chaos-full"
+profile = "test"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "contract.contract"
+kind = "workflow"
+path = ".github/workflows/contract.yml"
+job = "contract"
+profile = "contract"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "e2e.e2e"
+kind = "workflow"
+path = ".github/workflows/e2e.yml"
+job = "e2e"
+profile = "dev-tools"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "load-test.load-test"
+kind = "workflow"
+path = ".github/workflows/load-test.yml"
+job = "load-test"
+profile = "load"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "mutation.mutation"
+kind = "workflow"
+path = ".github/workflows/mutation.yml"
+job = "mutation"
+profile = "test"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "performance.performance-regression"
+kind = "workflow"
+path = ".github/workflows/performance.yml"
+job = "performance-regression"
+profile = "perf"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "perf-regression.perf-regression"
+kind = "workflow"
+path = ".github/workflows/perf-regression.yml"
+job = "perf-regression"
+profile = "perf"
+
+[[tool.agentflow.dependency-profiles.targets]]
+name = "staging-deploy.staging"
+kind = "workflow"
+path = ".github/workflows/staging-deploy.yml"
+job = "staging"
+profile = "dev-tools"

@@ -48,6 +48,23 @@ Capture notes:
 
 ## SDK registry release
 
+- [ ] On a clean venv, verify both install orders resolve the same package identities:
+
+```bash
+python -m pip install -e . -e ./sdk -e ./integrations
+pip show agentflow
+pip show agentflow-runtime
+python -c "from agentflow import AgentFlowClient"
+agentflow --help
+python -m pip uninstall -y agentflow agentflow-runtime agentflow-integrations
+python -m pip install -e ./sdk -e . -e ./integrations
+pip show agentflow
+pip show agentflow-runtime
+python -c "from agentflow import AgentFlowClient"
+agentflow --help
+```
+
+- [ ] Confirm `pip show agentflow` points at `sdk/`, `pip show agentflow-runtime` points at the root repo, and integrations import cleanly without `sys.path` shims
 - [ ] Keep GitHub source releases on `vX.Y.Z`; keep npm/PyPI SDK publishes on `sdk-vX.Y.Z`
 - [ ] Treat `.github/workflows/publish-npm.yml` and `.github/workflows/publish-pypi.yml` as production-only workflows: pushing `sdk-v*` publishes real artifacts
 - [ ] On a clean tree, run `python scripts/release.py patch|minor|major` to bump `sdk/` and `sdk-ts/` together and create the local `sdk-vX.Y.Z` tag

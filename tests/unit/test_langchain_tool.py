@@ -1,9 +1,4 @@
-import sys
 from datetime import UTC, datetime
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "integrations"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 
 from agentflow import AgentFlowClient
 from agentflow.models import MetricResult, OrderEntity, QueryResult

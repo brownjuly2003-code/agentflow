@@ -3,21 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
-from pathlib import Path
 from typing import Any
 
-
 AGENT_NAME = "ops-agent"
-
-
-def _ensure_repo_paths() -> Path:
-    repo_root = Path(__file__).resolve().parents[2]
-    sdk_path = repo_root / "sdk"
-    sdk_path_str = str(sdk_path)
-    if sdk_path_str not in sys.path:
-        sys.path.insert(0, sdk_path_str)
-    return repo_root
 
 
 def _resolve_base_url(value: str | None = None) -> str:
@@ -59,8 +47,6 @@ def run_demo(
                 "A compact incident summary with health, SLO, dead-letter, and error-rate data."
             ),
         }
-
-    _ensure_repo_paths()
 
     import httpx
     from agentflow import AgentFlowClient

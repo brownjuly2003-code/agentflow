@@ -1,15 +1,10 @@
-import sys
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
-
 from agentflow import AgentFlowClient, AsyncAgentFlowClient
+from fastapi.testclient import TestClient
 
 from src.serving.api.auth import TenantKey
 from src.serving.api.main import app

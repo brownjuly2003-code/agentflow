@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install -e ".[dev,integrations]"
+          pip install -e ".[dev,cloud]"
           pip install bcrypt PyYAML mutmut
       - name: Run mutation testing
         run: python scripts/mutation_report.py

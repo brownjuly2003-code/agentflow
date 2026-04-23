@@ -39,11 +39,13 @@ AgentFlow is a real-time data platform designed to serve AI agents — not dashb
 
 ### Production: Kafka → Flink → Iceberg (p50 latency: ~220ms)
 
-1. **Ingestion**: Events arrive via Kafka producers (orders, payments, clicks) or CDC (product catalog)
+1. **Ingestion**: Events arrive via Kafka producers (orders, payments, clicks) or Debezium CDC connectors running on Kafka Connect
 2. **Processing**: Flink validates (schema + semantic), enriches, deduplicates, and routes events
 3. **Storage**: Valid events land in Iceberg tables; production uses AWS Glue as the catalog over object storage
 4. **Quality**: Pre-storage gates check schema + semantic rules. Failures → dead letter topic
 5. **Serving**: Agent API reads from Iceberg via Trino / Athena
+
+For CDC sources, Debezium/Kafka Connect handles source capture while a shared normalizer converts Postgres/MySQL envelopes into one canonical AgentFlow CDC contract before validation. See [ADR 0005](decisions/0005-cdc-ingestion-strategy.md).
 
 ### Local: Generate → Validate → Enrich → DuckDB + Iceberg
 
@@ -91,6 +93,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | Component | Choice | Runner-up | Key differentiator |
 |-----------|--------|-----------|-------------------|
 | Streaming | Kafka 3.7 (KRaft) | Pulsar | Ecosystem maturity, MSK managed service |
+| CDC capture | Debezium + Kafka Connect | Python-native connectors | Mature Postgres/MySQL CDC, built-in offsets/schema history, one ops model |
 | Processing | Flink 1.19 | Spark Structured Streaming | True event-time, lower latency, native watermarks |
 | Storage | Iceberg 1.5 | Delta Lake | Vendor-neutral, hidden partitioning, time-travel |
 | Local query | DuckDB | SQLite | Columnar, fast analytics, Iceberg support |

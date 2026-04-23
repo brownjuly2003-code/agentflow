@@ -1,15 +1,9 @@
 """Shared fixtures for unit and integration tests."""
 
-import sys
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "integrations"))
-sys.path.insert(0, str(ROOT / "sdk"))
 
 
 @pytest.fixture

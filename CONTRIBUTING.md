@@ -7,6 +7,18 @@ Use the Quick start in [README.md](README.md) and choose the setup script that m
 - PowerShell: `. .\scripts\setup.ps1`
 - macOS / Linux: `source ./scripts/setup.sh`
 
+Those scripts create the quick demo environment (`.[dev]` plus `./sdk`). For workflow-faithful installs, use the canonical dependency profiles declared in `pyproject.toml` under `[tool.agentflow.dependency-profiles]`:
+
+| Profile | Install contract | Used by |
+|---------|------------------|---------|
+| `runtime` | `pip install -e .` | local serving/runtime-only paths |
+| `dev-tools` | `pip install -e ".[dev]"` | `lint`, `schema-check`, host-side `e2e`, `staging`, `backup` |
+| `test` | `pip install -e ".[dev,cloud]"` | `test-integration`, `chaos`, `mutation` |
+| `test-integrations` | `pip install -e ".[dev,cloud]"` + `pip install -e "./sdk"` + `pip install -e "./integrations[mcp]"` | `test-unit`, local `make setup` |
+| `load` | `pip install -e ".[load,cloud]"` | `load-test` |
+| `perf` | `pip install -e ".[dev,load,cloud]"` | `perf-check`, `performance`, `perf-regression` |
+| `contract` | `pip install -e ".[dev,cloud,contract]"` | `contract` workflow |
+
 For the fastest local loop, use `make demo`. For a production-shaped stack with observability, use `docker compose -f docker-compose.prod.yml up -d`.
 
 ## Running tests
@@ -14,16 +26,25 @@ For the fastest local loop, use `make demo`. For a production-shaped stack with 
 Release verification slice:
 
 ```bash
+python -m pip install -e ".[dev,cloud]"
+python -m pip install -e "./sdk"
+python -m pip install -e "./integrations[mcp]"
 python -m pytest tests/unit tests/integration tests/sdk -v
 ```
 
 Additional suites when your change touches those areas:
 
 ```bash
-python -m pip install -e ".[cloud,contract]"
+python -m pip install -e ".[dev,cloud,contract]"
 python -m pytest tests/contract tests/property tests/chaos tests/e2e -v
+python -m pip install -e ".[dev,load,cloud]"
+python scripts/run_benchmark.py
 cd sdk-ts && npm test
 ```
+
+The root `integrations` extra is intentionally not the repo test profile. Use `./integrations[mcp]` when you need LangChain, LlamaIndex, and MCP coverage together.
+
+After the package-identity split, `pip show agentflow` refers to the Python SDK and `pip show agentflow-runtime` refers to the root runtime repo metadata.
 
 ## Before submitting a PR
 

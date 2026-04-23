@@ -4,7 +4,9 @@
 
 setup:
 	python -m venv .venv
-	.venv/Scripts/pip install -e ".[dev,integrations,cloud]" 2>/dev/null || .venv/bin/pip install -e ".[dev,integrations,cloud]"
+	.venv/Scripts/pip install -e ".[dev,cloud]" 2>/dev/null || .venv/bin/pip install -e ".[dev,cloud]"
+	.venv/Scripts/pip install -e "./sdk" 2>/dev/null || .venv/bin/pip install -e "./sdk"
+	.venv/Scripts/pip install -e "./integrations[mcp]" 2>/dev/null || .venv/bin/pip install -e "./integrations[mcp]"
 	@echo "Setup complete. Activate with: source .venv/Scripts/activate (Windows) or source .venv/bin/activate (Unix)"
 
 # ── Local Development ─────────────────────────────────────────────

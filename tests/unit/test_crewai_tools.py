@@ -2,14 +2,9 @@ import importlib
 import sys
 import types
 from datetime import UTC, datetime
-from pathlib import Path
-
-from pydantic import BaseModel, ConfigDict
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "integrations"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 
 from agentflow.models import MetricResult, OrderEntity, QueryResult
+from pydantic import BaseModel, ConfigDict
 
 
 def load_crewai_modules(monkeypatch):

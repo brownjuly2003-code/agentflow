@@ -1,11 +1,8 @@
 import inspect
 import re
-import sys
 import tomllib
 import warnings
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
 
 from agentflow import AgentFlowClient, AsyncAgentFlowClient, __version__
 from agentflow._compat import deprecated

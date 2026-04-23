@@ -1,12 +1,7 @@
-import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import httpx
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sdk"))
-
 from agentflow import AsyncAgentFlowClient
 from agentflow.exceptions import (
     AgentFlowError,

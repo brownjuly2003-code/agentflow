@@ -48,6 +48,11 @@ section will be renamed on release tag.
   `sdk/pyproject.toml`, `sdk/agentflow/__init__.py`, and
   `sdk-ts/package.json`. Pinned with `tests/unit/test_version.py`.
   (5d54b77)
+- **Runtime/package identity split**: the root repo now publishes as
+  `agentflow-runtime` while the Python SDK keeps the `agentflow`
+  distribution name, import path, and CLI. Local test/install flows
+  now install `./sdk` explicitly instead of relying on `sys.path`
+  shims or install order.
 - **`integrations/` package bumped to 1.0.1** with the `mcp`
   optional extra and an `agentflow-mcp` console script; the stale
   `agentflow-client>=0.1.0` dependency now points at the public

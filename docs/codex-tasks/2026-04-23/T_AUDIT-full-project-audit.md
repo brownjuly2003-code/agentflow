@@ -46,7 +46,7 @@
 
 ### 2. Test pass/fail catalog
 
-Локально с чистым venv (`python3.11 -m venv .venv-audit && source .venv-audit/bin/activate && pip install -e ".[dev,integrations,cloud,load]" && pip install -e "./integrations[mcp]"`):
+Локально с чистым venv (`python3.11 -m venv .venv-audit && source .venv-audit/bin/activate && pip install -e ".[dev,integrations,cloud,load,contract]" && pip install -e "./integrations[mcp]"`):
 
 ```bash
 python -m pytest tests/unit/ tests/property/ tests/contract/ tests/sdk/ -q --tb=line

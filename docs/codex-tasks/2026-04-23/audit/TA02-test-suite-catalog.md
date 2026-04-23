@@ -19,7 +19,7 @@
    python3.11 -m venv .venv-audit
    . .venv-audit/bin/activate  # или Scripts/activate.bat на Windows
    pip install --upgrade pip
-   pip install -e ".[dev,integrations,cloud,load,llm]"
+   pip install -e ".[dev,integrations,cloud,load,llm,contract]"
    pip install -e "./integrations[mcp]"
    pip install -e "./sdk"
    ```

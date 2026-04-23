@@ -212,6 +212,7 @@ def _start_local_api(tmp_path: Path) -> dict[str, object]:
 @pytest.fixture(scope="session")
 def e2e_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     external_base_url = os.getenv("AGENTFLOW_E2E_BASE_URL")
+    callback_port = int(os.getenv("AGENTFLOW_E2E_CALLBACK_PORT", "0"))
     if external_base_url:
         _wait_for_ready(external_base_url, DEFAULT_STARTUP_TIMEOUT)
         yield {
@@ -220,6 +221,7 @@ def e2e_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
             "ops_api_key": OPS_API_KEY,
             "rate_limit_api_key": RATE_LIMIT_API_KEY,
             "callback_host": os.getenv("AGENTFLOW_E2E_CALLBACK_HOST", "127.0.0.1"),
+            "callback_port": callback_port,
         }
         return
 
@@ -239,6 +241,7 @@ def e2e_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
             "ops_api_key": OPS_API_KEY,
             "rate_limit_api_key": RATE_LIMIT_API_KEY,
             "callback_host": started.get("callback_host", "127.0.0.1"),
+            "callback_port": callback_port,
             "api_log_path": started.get("log_path"),
         }
     finally:
@@ -290,6 +293,11 @@ def callback_host(e2e_env: dict[str, object]) -> str:
     return str(e2e_env.get("callback_host", "127.0.0.1"))
 
 
+@pytest.fixture(scope="session")
+def callback_port(e2e_env: dict[str, object]) -> int:
+    return int(e2e_env.get("callback_port", 0))
+
+
 @pytest.fixture
 def api_client(base_url: str):
     with httpx.Client(base_url=base_url, timeout=30.0) as client:
@@ -327,8 +335,8 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
 
 @pytest.fixture
-def webhook_receiver(callback_host: str):
-    server = ThreadingHTTPServer(("0.0.0.0", 0), _CallbackHandler)
+def webhook_receiver(callback_host: str, callback_port: int):
+    server = ThreadingHTTPServer(("0.0.0.0", callback_port), _CallbackHandler)
     server.events = Queue()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

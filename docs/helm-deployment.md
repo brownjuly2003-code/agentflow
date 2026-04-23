@@ -48,9 +48,10 @@ image:
 
 secrets:
   adminKey: "replace-me"
-  apiKeys: |
+  apiKeys:
     keys:
-      - key_hash: "$2b$12$..."
+      - key_id: "support-agent"
+        key_hash: "$2b$12$..."
         name: "Support Agent"
         tenant: "acme-corp"
         rate_limit_rpm: 60
@@ -58,7 +59,7 @@ secrets:
         created_at: "2026-04-11"
 
 config:
-  tenants: |
+  tenants:
     tenants:
       - id: acme-corp
         display_name: "Acme Corp"
@@ -104,12 +105,20 @@ If `ingress.enabled=true`, verify the configured host instead of using port-forw
 
 - `config.duckdbPath` and `config.usageDbPath` should point to the mounted PVC path.
 - `config.contractsDir` points at contract YAML files bundled into the image. The chart does not mount `config/contracts/` separately.
-- `secrets.apiKeys` must contain bcrypt hashes, not plaintext API keys.
+- `secrets.apiKeys.keys[*].key_id` is required for deterministic admin rotation and staging checks.
+- `secrets.apiKeys` should normally contain bcrypt hashes, not plaintext API keys.
 - `config.tenants` is the source of truth for tenant routing and API version pinning.
 - `autoscaling.enabled=true` creates an HPA from `minReplicas` to `maxReplicas`.
 - `ingress.tls` accepts the standard Helm ingress TLS structure.
 - ConfigMap and Secret checksums are injected into the pod template, so `helm upgrade` rolls the deployment when mounted config changes.
 - DuckDB is still a stateful local file. If your storage class only supports `ReadWriteOnce`, start with `replicaCount: 1` until you validate your storage and concurrency model.
+
+## Contract Maintenance
+
+- `helm/agentflow/values.schema.json` is the chart contract for runtime values consumed from Helm.
+- If you add, rename, or make required a field under `config.tenants` or `secrets.apiKeys`, update the schema, chart defaults, and environment-specific values together.
+- Keep the mounted file shape in `templates/configmap.yaml` and `templates/secret.yaml` aligned with the runtime Pydantic models in `src/ingestion/tenant_router.py` and `src/serving/api/auth/manager.py`.
+- Validate contract changes with `helm lint helm/agentflow -f k8s/staging/values-staging.yaml` before staging rehearsal.
 
 ## Upgrade
 

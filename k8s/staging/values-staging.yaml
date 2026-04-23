@@ -44,7 +44,7 @@ config:
 
 secrets:
   adminKey: af-admin-staging-local-1234567890abcdef
-  apiKeys: |
+  apiKeys:
     keys:
       - key_id: "support-agent"
         key: "af-prod-agent-support-abc123"

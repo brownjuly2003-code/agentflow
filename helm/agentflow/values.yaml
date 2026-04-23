@@ -84,7 +84,7 @@ config:
   redisUrl: ""
   otlpEndpoint: ""
   otlpServiceName: agentflow-api
-  tenants: |
+  tenants:
     tenants:
       - id: acme-corp
         display_name: "Acme Corp"
@@ -93,7 +93,6 @@ config:
         max_events_per_day: 1000000
         max_api_keys: 10
         allowed_entity_types: null
-
       - id: demo
         display_name: "Demo Tenant"
         kafka_topic_prefix: "demo"
@@ -173,9 +172,10 @@ config:
 
 secrets:
   adminKey: ""
-  apiKeys: |
+  apiKeys:
     keys:
-      - key_hash: "$2b$12$UNE9Vh.YivKR7Zt7xIZweebebjkcVaQv240rqabzG/H3dWoljplcO"
+      - key_id: "support-agent"
+        key_hash: "$2b$12$UNE9Vh.YivKR7Zt7xIZweebebjkcVaQv240rqabzG/H3dWoljplcO"
         name: "Support Agent"
         tenant: "acme-corp"
         rate_limit_rpm: 60
@@ -183,7 +183,8 @@ secrets:
           - "order"
           - "user"
         created_at: "2026-04-10"
-      - key_hash: "$2b$12$V3xTQLf35Snz15N.cNS8yOPkR/1TWIJXt4jLNZeGXlIbHXsvYC8jW"
+      - key_id: "ops-agent"
+        key_hash: "$2b$12$V3xTQLf35Snz15N.cNS8yOPkR/1TWIJXt4jLNZeGXlIbHXsvYC8jW"
         name: "Ops Agent"
         tenant: "acme-corp"
         rate_limit_rpm: 300

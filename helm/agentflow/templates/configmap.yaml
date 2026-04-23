@@ -6,7 +6,7 @@ metadata:
     {{- include "agentflow.labels" . | nindent 4 }}
 data:
   tenants.yaml: |
-    {{- .Values.config.tenants | nindent 4 }}
+    {{- toYaml .Values.config.tenants | nindent 4 }}
   slo.yaml: |
     {{- .Values.config.slo | nindent 4 }}
   pii_fields.yaml: |

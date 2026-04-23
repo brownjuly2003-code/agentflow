@@ -1,6 +1,8 @@
 # T_AUDIT — Полный аудит проекта после спринта CI repair
 
-**Priority:** P0 · **Estimate:** 4-6ч
+> **РАЗБИТО НА 10 ПОДТАСКОВ.** См. `audit/README.md` и `audit/TA01..TA10`. Этот файл — зонтичный context. Не выполнять как один таск; запускать TA01 первым (quick fix), TA02..TA09 параллельно, TA10 последним (consolidation).
+
+**Priority:** P0 · **Estimate:** 4-6ч (sequential) или ~2ч calendar time с параллелизацией
 
 ## Goal
 

@@ -27,7 +27,7 @@ Self-contained ТЗ для Codex. Каждый файл — один PR.
 | T03 | [e2e-tests-trim.md](T03-e2e-tests-trim.md)         | P1        | 2-3ч     |
 | T04 | [trivy-verify-and-fallback.md](T04-trivy-verify-and-fallback.md) | P1        | 1-2ч     |
 | T05 | [ci-green-audit.md](T05-ci-green-audit.md)         | P2        | 2-4ч     |
-| T_AUDIT | [full-project-audit.md](T_AUDIT-full-project-audit.md) | P0  | 4-6ч     |
+| T_AUDIT | [full-project-audit.md](T_AUDIT-full-project-audit.md) (зонтичный, разбит на 10 → [audit/README.md](audit/README.md)) | P0 | 4-6ч / ~2ч parallel |
 
 ## Порядок исполнения
 

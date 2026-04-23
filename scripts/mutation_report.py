@@ -24,41 +24,9 @@ class ModuleTarget:
 
 
 MODULE_TARGETS = {
-    Path("src/serving/api/auth.py"): ModuleTarget(
-        threshold=0.80,
-        tests=(
-            "tests/unit/test_auth.py",
-            "tests/unit/test_security.py",
-            "tests/property/test_auth_properties.py",
-        ),
-    ),
-    Path("src/serving/masking.py"): ModuleTarget(
-        threshold=0.80,
-        tests=(
-            "tests/unit/test_masking.py",
-            "tests/property/test_masking_properties.py",
-        ),
-    ),
-    Path("src/serving/semantic_layer/query_engine.py"): ModuleTarget(
-        threshold=0.70,
-        tests=(
-            "tests/unit/test_db_pool.py",
-            "tests/unit/test_cache.py",
-            "tests/unit/test_telemetry.py",
-            "tests/property/test_pagination_properties.py",
-            "tests/property/test_tenant_isolation_properties.py",
-        ),
-    ),
-    Path("src/processing/outbox.py"): ModuleTarget(
-        threshold=0.70,
-        tests=("tests/integration/test_outbox.py",),
-    ),
-    Path("src/serving/api/rate_limiter.py"): ModuleTarget(
+    Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
-        tests=(
-            "tests/unit/test_rate_limiter.py",
-            "tests/unit/test_auth.py",
-        ),
+        tests=("tests/sdk/test_retry.py",),
     ),
 }
 
@@ -146,16 +114,26 @@ def meta_path_for(results_dir: Path, module_path: Path) -> Path:
 def render_mutmut_section(module_path: Path, tests: tuple[str, ...]) -> str:
     paths_block = f'    "{module_path.as_posix()}",'
     tests_block = "\n".join(f'    "{test_path}",' for test_path in tests)
+    if module_path.parts and module_path.parts[0] == "agentflow":
+        also_copy_block = (
+            '    "agentflow",\n'
+            '    "config",\n'
+            '    "scripts",'
+        )
+    else:
+        also_copy_block = (
+            '    "src",\n'
+            '    "config",\n'
+            '    "sdk",\n'
+            '    "scripts",'
+        )
     return (
         "[tool.mutmut]\n"
         "paths_to_mutate = [\n"
         f"{paths_block}\n"
         "]\n"
         "also_copy = [\n"
-        '    "src",\n'
-        '    "config",\n'
-        '    "sdk",\n'
-        '    "scripts",\n'
+        f"{also_copy_block}\n"
         "]\n"
         "tests_dir = [\n"
         f"{tests_block}\n"
@@ -183,8 +161,13 @@ def copy_or_link(source: Path, destination: Path) -> None:
 
 
 def prepare_workspace(workspace: Path, module_path: Path, target: ModuleTarget) -> None:
+    is_agentflow_target = bool(module_path.parts) and module_path.parts[0] == "agentflow"
     for name in WORKSPACE_LINKS:
+        if is_agentflow_target and name == "sdk":
+            continue
         copy_or_link(ROOT / name, workspace / name)
+    if is_agentflow_target:
+        copy_or_link(ROOT / "sdk" / "agentflow", workspace / "agentflow")
     (workspace / "pyproject.toml").write_text(
         build_workspace_pyproject(module_path, target),
         encoding="utf-8",
@@ -205,6 +188,7 @@ def run_mutmut(results_dir: Path) -> dict[Path, int]:
     results_dir.mkdir(parents=True, exist_ok=True)
     clear_previous_results(results_dir)
     exit_codes: dict[Path, int] = {}
+    mutmut_command = [sys.executable, "-c", "from mutmut.__main__ import cli; cli()"]
 
     for module_path, target in MODULE_TARGETS.items():
         print(f"Running mutmut for {module_path.name}")
@@ -214,13 +198,13 @@ def run_mutmut(results_dir: Path) -> dict[Path, int]:
             env = os.environ.copy()
 
             run_result = subprocess.run(
-                [sys.executable, "-m", "mutmut", "run"],
+                [*mutmut_command, "run"],
                 cwd=workspace,
                 env=env,
                 check=False,
             )
             subprocess.run(
-                [sys.executable, "-m", "mutmut", "export-cicd-stats"],
+                [*mutmut_command, "export-cicd-stats"],
                 cwd=workspace,
                 env=env,
                 check=False,

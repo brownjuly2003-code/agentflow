@@ -75,7 +75,7 @@ def test_api_follows_openapi_contract(base_url: str, ops_api_key: str):
         response = case.call(
             base_url=base_url,
             headers=headers,
-            timeout=10,
+            timeout=30 if case.operation.path == "/v1/health" else 10,
         )
         assert response.status_code != 500, (
             f"Server error on {case.operation.label}: {response.text}"

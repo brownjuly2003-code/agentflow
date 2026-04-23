@@ -8,7 +8,7 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     env:
       AGENTFLOW_E2E_BASE_URL: http://127.0.0.1:8000
       AGENTFLOW_E2E_CALLBACK_HOST: host.docker.internal
@@ -29,24 +29,48 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install click rich pyyaml pytest-timeout
 
-      - name: Prepare E2E compose override
+      - name: Start E2E stack
         run: |
-          cat <<'EOF' > docker-compose.e2e.override.yml
-          services:
-            agentflow-api:
-              environment:
-                AGENTFLOW_API_KEYS: "af-prod-agent-support-abc123:Support Agent,af-prod-agent-ops-def456:Ops Agent,af-prod-agent-rate-e2e000:Rate Limit Agent"
-                AGENTFLOW_RATE_LIMIT_RPM: "120"
-                AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb
-                AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml
-                OTEL_SDK_DISABLED: "true"
-              extra_hosts:
-                - "host.docker.internal:host-gateway"
-          EOF
+          docker compose -f docker-compose.e2e.yml up -d --build agentflow-api
+          python - <<'PY'
+          import json
+          import subprocess
+          import time
 
-      - name: Start API
-        run: |
-          docker compose -f docker-compose.prod.yml -f docker-compose.e2e.override.yml up -d redis agentflow-api
+          compose_ps_command = "docker compose -f docker-compose.e2e.yml ps --format json"
+          required = {"agentflow-api", "redis", "kafka", "postgres"}
+          deadline = time.monotonic() + 180
+
+          while time.monotonic() < deadline:
+              result = subprocess.run(
+                  compose_ps_command,
+                  check=False,
+                  capture_output=True,
+                  text=True,
+                  shell=True,
+              )
+              if result.returncode == 0:
+                  try:
+                      entries = json.loads(result.stdout or "[]")
+                  except json.JSONDecodeError:
+                      entries = []
+                  services = {entry["Service"]: entry for entry in entries}
+                  if required.issubset(services):
+                      all_healthy = all(
+                          services[name].get("State") == "running"
+                          and services[name].get("Health") == "healthy"
+                          for name in required
+                      )
+                      if all_healthy:
+                          break
+              time.sleep(2)
+          else:
+              subprocess.run(
+                  ["docker", "compose", "-f", "docker-compose.e2e.yml", "ps"],
+                  check=False,
+              )
+              raise SystemExit("E2E compose services did not become healthy within 180 seconds.")
+          PY
           python scripts/wait_for_services.py --url "$AGENTFLOW_E2E_BASE_URL" --timeout 120
 
       - name: Run E2E tests
@@ -54,7 +78,7 @@ jobs:
 
       - name: Collect logs on failure
         if: failure()
-        run: docker compose -f docker-compose.prod.yml -f docker-compose.e2e.override.yml logs > e2e-logs.txt
+        run: docker compose -f docker-compose.e2e.yml logs --tail=500 > e2e-logs.txt
 
       - name: Upload logs
         if: failure()
@@ -66,4 +90,4 @@ jobs:
       - name: Stop API
         if: always()
         run: |
-          docker compose -f docker-compose.prod.yml -f docker-compose.e2e.override.yml down -v
+          docker compose -f docker-compose.e2e.yml down -v

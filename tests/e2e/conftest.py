@@ -15,11 +15,21 @@ import httpx
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_FILE = PROJECT_ROOT / "docker-compose.prod.yml"
+COMPOSE_FILE = PROJECT_ROOT / "docker-compose.e2e.yml"
 DEFAULT_STARTUP_TIMEOUT = int(os.getenv("AGENTFLOW_E2E_TIMEOUT", "120"))
 SUPPORT_API_KEY = os.getenv("AGENTFLOW_E2E_SUPPORT_KEY", "af-prod-agent-support-abc123")
 OPS_API_KEY = os.getenv("AGENTFLOW_E2E_OPS_KEY", "af-prod-agent-ops-def456")
 RATE_LIMIT_API_KEY = os.getenv("AGENTFLOW_E2E_RATE_LIMIT_KEY", "af-prod-agent-rate-e2e000")
+
+
+def pytest_collection_modifyitems(items):
+    if os.getenv("SKIP_DOCKER_TESTS") != "1":
+        return
+
+    skip_marker = pytest.mark.skip(reason="SKIP_DOCKER_TESTS=1")
+    for item in items:
+        if "requires_docker" in item.keywords:
+            item.add_marker(skip_marker)
 
 
 def _free_port() -> int:
@@ -55,20 +65,23 @@ def _tail(path: Path, lines: int = 40) -> str:
 
 def _write_compose_override(path: Path, host_port: int) -> None:
     path.write_text(
-        "\n".join([
-            "services:",
-            "  agentflow-api:",
-            "    environment:",
-            f"      AGENTFLOW_API_KEYS: \"{SUPPORT_API_KEY}:Support Agent,{OPS_API_KEY}:Ops Agent,{RATE_LIMIT_API_KEY}:Rate Limit Agent\"",
-            "      AGENTFLOW_RATE_LIMIT_RPM: \"120\"",
-            "      AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb",
-            "      AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml",
-            "      OTEL_SDK_DISABLED: \"true\"",
-            "    ports:",
-            f"      - \"127.0.0.1:{host_port}:8000\"",
-            "    extra_hosts:",
-            "      - \"host.docker.internal:host-gateway\"",
-        ]) + "\n",
+        "\n".join(
+            [
+                "services:",
+                "  agentflow-api:",
+                "    environment:",
+                f'      AGENTFLOW_API_KEYS: "{SUPPORT_API_KEY}:Support Agent,{OPS_API_KEY}:Ops Agent,{RATE_LIMIT_API_KEY}:Rate Limit Agent"',
+                '      AGENTFLOW_RATE_LIMIT_RPM: "120"',
+                "      AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb",
+                "      AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml",
+                '      OTEL_SDK_DISABLED: "true"',
+                "    ports:",
+                f'      - "127.0.0.1:{host_port}:8000"',
+                "    extra_hosts:",
+                '      - "host.docker.internal:host-gateway"',
+            ]
+        )
+        + "\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -104,7 +117,7 @@ def _start_compose_api(tmp_path: Path) -> dict[str, object]:
     _write_compose_override(override_path, port)
 
     up_result = subprocess.run(
-        [*compose_cmd, "up", "-d", "redis", "agentflow-api"],
+        [*compose_cmd, "up", "-d", "--wait", "agentflow-api"],
         cwd=PROJECT_ROOT,
         check=False,
         capture_output=True,
@@ -185,8 +198,7 @@ def _start_local_api(tmp_path: Path) -> dict[str, object]:
             process.wait(timeout=10)
         log_file.close()
         raise RuntimeError(
-            "AgentFlow API failed to start.\n"
-            f"Last log lines:\n{_tail(log_path)}"
+            f"AgentFlow API failed to start.\nLast log lines:\n{_tail(log_path)}"
         ) from None
 
     return {
@@ -214,7 +226,10 @@ def e2e_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     runtime_dir = tmp_path_factory.mktemp("e2e-runtime")
     mode = os.getenv("AGENTFLOW_E2E_MODE", "local")
     if mode == "compose":
-        started = _start_compose_api(runtime_dir)
+        try:
+            started = _start_compose_api(runtime_dir)
+        except RuntimeError as exc:
+            pytest.skip(str(exc))
     else:
         started = _start_local_api(runtime_dir)
     try:
@@ -295,15 +310,17 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
-        self.server.events.put({
-            "path": self.path,
-            "headers": dict(self.headers.items()),
-            "body": body,
-        })
+        self.server.events.put(
+            {
+                "path": self.path,
+                "headers": dict(self.headers.items()),
+                "body": body,
+            }
+        )
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(b"{\"ok\": true}")
+        self.wfile.write(b'{"ok": true}')
 
     def log_message(self, format: str, *args: object) -> None:
         return

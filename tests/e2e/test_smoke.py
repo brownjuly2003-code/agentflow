@@ -6,7 +6,7 @@ from queue import Empty
 
 import pytest
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.requires_docker]
 
 
 def test_health_endpoint_returns_live_status(api_client):

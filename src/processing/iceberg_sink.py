@@ -104,7 +104,10 @@ class IcebergSink:
         catalog_properties = {
             "type": catalog_type,
             "uri": self._resolve_catalog_uri(self._config["catalog_uri"]),
-            "warehouse": self._resolve_warehouse(self._config["warehouse"]),
+            "warehouse": self._resolve_warehouse(
+                self._config["warehouse"],
+                catalog_type,
+            ),
         }
         catalog_properties.update(self._config.get("catalog_properties", {}))
         self.catalog = load_catalog(
@@ -162,7 +165,9 @@ class IcebergSink:
         catalog_path.parent.mkdir(parents=True, exist_ok=True)
         return f"{prefix}{catalog_path.as_posix()}"
 
-    def _resolve_warehouse(self, value: str) -> str:
+    def _resolve_warehouse(self, value: str, catalog_type: str) -> str:
+        if catalog_type == "rest":
+            return value
         if "://" in value or value.startswith("file:"):
             return value
         warehouse_path = Path(value)

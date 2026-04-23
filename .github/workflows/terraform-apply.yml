@@ -21,7 +21,14 @@ permissions:
 
 jobs:
   plan:
-    if: inputs.confirm == 'APPLY'
+    # disabled 2026-04-23: see docs/codex-tasks/2026-04-24/T09-terraform-apply-oidc-readiness.md
+    # re-enable checklist:
+    # 1. Add repo-level vars AWS_TERRAFORM_ROLE_ARN and AWS_REGION for the plan job.
+    # 2. Provide infrastructure/terraform/environments/staging.tfvars and either prod.tfvars or remove the production option.
+    # 3. Create GitHub Actions environments staging and production.
+    # 4. Capture a green staging run that proves OIDC assume-role, terraform init, and terraform plan.
+    # 5. Restore if: inputs.confirm == 'APPLY' for both jobs.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +71,8 @@ jobs:
           path: infrastructure/terraform/tfplan
 
   apply:
-    if: inputs.confirm == 'APPLY'
+    # disabled 2026-04-23: see docs/codex-tasks/2026-04-24/T09-terraform-apply-oidc-readiness.md
+    if: false
     needs: plan
     runs-on: ubuntu-latest
     environment:

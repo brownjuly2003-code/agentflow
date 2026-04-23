@@ -57,7 +57,7 @@ resource "aws_msk_cluster" "main" {
 
         provisioned_throughput {
           enabled           = var.environment == "prod"
-          volume_throughput  = var.environment == "prod" ? 250 : null
+          volume_throughput = var.environment == "prod" ? 250 : null
         }
       }
     }

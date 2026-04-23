@@ -45,20 +45,20 @@ module "kafka" {
 module "flink" {
   source = "./modules/flink"
 
-  environment           = var.environment
-  vpc_id                = var.vpc_id
-  subnet_ids            = var.private_subnet_ids
-  kafka_bootstrap       = module.kafka.bootstrap_brokers
-  s3_bucket_arn         = module.storage.lake_bucket_arn
-  parallelism           = var.flink_parallelism
-  parallelism_per_kpu   = var.flink_parallelism_per_kpu
+  environment         = var.environment
+  vpc_id              = var.vpc_id
+  subnet_ids          = var.private_subnet_ids
+  kafka_bootstrap     = module.kafka.bootstrap_brokers
+  s3_bucket_arn       = module.storage.lake_bucket_arn
+  parallelism         = var.flink_parallelism
+  parallelism_per_kpu = var.flink_parallelism_per_kpu
 }
 
 module "storage" {
   source = "./modules/storage"
 
-  environment       = var.environment
-  lake_bucket_name  = "${var.project_name}-lake-${var.environment}"
+  environment            = var.environment
+  lake_bucket_name       = "${var.project_name}-lake-${var.environment}"
   lifecycle_glacier_days = var.storage_glacier_after_days
   lifecycle_expire_days  = var.storage_expire_after_days
 }

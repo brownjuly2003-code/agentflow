@@ -77,9 +77,9 @@ resource "aws_kinesisanalyticsv2_application" "stream_processor" {
 
     flink_application_configuration {
       checkpoint_configuration {
-        configuration_type = "CUSTOM"
-        checkpointing_enabled = true
-        checkpoint_interval   = 30000
+        configuration_type            = "CUSTOM"
+        checkpointing_enabled         = true
+        checkpoint_interval           = 30000
         min_pause_between_checkpoints = 10000
       }
 

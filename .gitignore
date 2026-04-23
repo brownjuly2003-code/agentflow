@@ -69,13 +69,14 @@ mutants/
 /more_help.md
 /About_DE_project.md
 /RELEASING.md
-/AgentFlow*.md
 sdk/agentflow/**/__pycache__/
 sdk/agentflow/**/*.py[cod]
 integrations/agentflow_integrations/**/__pycache__/
 integrations/agentflow_integrations/**/*.py[cod]
 # Local Iceberg warehouse/runtime state (intentionally untracked).
 /warehouse/agentflow/
+# Root API usage DuckDB runtime state (intentionally untracked).
+/agentflow_api.duckdb
 agentflow_bench_debug*.duckdb*
 agentflow_demo_api.duckdb*
 

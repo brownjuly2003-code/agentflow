@@ -197,6 +197,13 @@ class EventReplayer:
     def _produce_to_kafka(self, topic: str, payload: dict) -> None:
         from confluent_kafka import Producer
 
+        delivery_errors: list[str] = []
+
+        def on_delivery(err, msg) -> None:
+            del msg
+            if err is not None:
+                delivery_errors.append(str(err))
+
         producer = Producer({"bootstrap.servers": self._bootstrap_servers})
         produce_span = (
             tracer.start_as_current_span("kafka.produce")
@@ -215,10 +222,25 @@ class EventReplayer:
                 if tenant_id is not None:
                     span.set_attribute("tenant_id", str(tenant_id))
             headers = inject_trace_to_kafka_headers({})
-            producer.produce(
-                topic,
-                key=str(payload.get("event_id", "")),
-                value=json.dumps(payload).encode("utf-8"),
-                headers=list(headers.items()) or None,
-            )
-            producer.flush(10)
+            try:
+                producer.produce(
+                    topic,
+                    key=str(payload.get("event_id", "")),
+                    value=json.dumps(payload).encode("utf-8"),
+                    headers=list(headers.items()) or None,
+                    on_delivery=on_delivery,
+                )
+            except TypeError as exc:
+                if "on_delivery" not in str(exc):
+                    raise
+                producer.produce(
+                    topic,
+                    key=str(payload.get("event_id", "")),
+                    value=json.dumps(payload).encode("utf-8"),
+                    headers=list(headers.items()) or None,
+                )
+            remaining = producer.flush(10)
+            if delivery_errors:
+                raise RuntimeError(delivery_errors[0])
+            if remaining != 0:
+                raise RuntimeError(f"{remaining} Kafka message(s) were not delivered")

@@ -116,7 +116,13 @@ class OutboxProcessor:
         decoded_payload = self._decode_payload(payload)
         try:
             self._producer(topic, decoded_payload)
-        except (BufferError, ConnectionError, TimeoutError, KafkaException) as exc:
+        except (BufferError, ConnectionError, TimeoutError, KafkaException, RuntimeError) as exc:
+            error_message = str(exc)
+            if isinstance(exc, RuntimeError) and not (
+                error_message.startswith("KafkaError{")
+                or "Kafka message(s) were not delivered" in error_message
+            ):
+                raise
             next_retry_count = int(retry_count or 0) + 1
             logger.warning(
                 "outbox_delivery_retry_scheduled",
@@ -124,14 +130,14 @@ class OutboxProcessor:
                 event_id=event_id,
                 topic=topic,
                 retry_count=next_retry_count,
-                error=str(exc),
+                error=error_message,
                 exc_info=True,
             )
             self._schedule_retry(
                 outbox_id=outbox_id,
                 event_id=event_id,
                 retry_count=next_retry_count,
-                error_message=str(exc),
+                error_message=error_message,
             )
             return False
         self._mark_sent(outbox_id=outbox_id, event_id=event_id)
@@ -169,7 +175,10 @@ class OutboxProcessor:
         error_message: str,
     ) -> None:
         status = "pending"
-        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(seconds=2**retry_count)
+        retry_delay_seconds = 2**retry_count
+        if error_message.startswith("KafkaError{") or "Kafka message(s) were not delivered" in error_message:
+            retry_delay_seconds = max(retry_delay_seconds, 30)
+        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(seconds=retry_delay_seconds)
         self._conn.execute("BEGIN TRANSACTION")
         try:
             if retry_count >= self._max_retries:
@@ -209,6 +218,13 @@ class OutboxProcessor:
     def _produce_to_kafka(self, topic: str, payload: dict) -> None:
         from confluent_kafka import Producer
 
+        delivery_errors: list[str] = []
+
+        def on_delivery(err, msg) -> None:
+            del msg
+            if err is not None:
+                delivery_errors.append(str(err))
+
         producer = Producer({"bootstrap.servers": self._bootstrap_servers})
         produce_span = (
             tracer.start_as_current_span("kafka.produce")
@@ -227,10 +243,25 @@ class OutboxProcessor:
                 if tenant_id is not None:
                     span.set_attribute("tenant_id", str(tenant_id))
             headers = inject_trace_to_kafka_headers({})
-            producer.produce(
-                topic,
-                key=str(payload.get("event_id", "")),
-                value=json.dumps(payload).encode("utf-8"),
-                headers=list(headers.items()) or None,
-            )
-            producer.flush(10)
+            try:
+                producer.produce(
+                    topic,
+                    key=str(payload.get("event_id", "")),
+                    value=json.dumps(payload).encode("utf-8"),
+                    headers=list(headers.items()) or None,
+                    on_delivery=on_delivery,
+                )
+            except TypeError as exc:
+                if "on_delivery" not in str(exc):
+                    raise
+                producer.produce(
+                    topic,
+                    key=str(payload.get("event_id", "")),
+                    value=json.dumps(payload).encode("utf-8"),
+                    headers=list(headers.items()) or None,
+                )
+            remaining = producer.flush(10)
+            if delivery_errors:
+                raise RuntimeError(delivery_errors[0])
+            if remaining != 0:
+                raise RuntimeError(f"{remaining} Kafka message(s) were not delivered")

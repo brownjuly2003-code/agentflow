@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev,load]"
+        run: pip install -e ".[dev,load,cloud]"
       - name: Run benchmark
         run: python scripts/run_benchmark.py
       - name: Convert benchmark report to JSON

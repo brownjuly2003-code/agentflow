@@ -27,7 +27,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" pytest-json-report
+        run: pip install -e ".[dev,cloud]" pytest-json-report
 
       - name: Start chaos stack
         run: |
@@ -76,7 +76,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" pytest-json-report
+        run: pip install -e ".[dev,cloud]" pytest-json-report
 
       - name: Start chaos stack
         run: |

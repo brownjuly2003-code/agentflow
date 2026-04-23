@@ -58,7 +58,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install -e ".[dev,integrations]"
+          pip install -e ".[dev,integrations,cloud]"
           pip install -e "./integrations[mcp]"
       - name: Run unit and property tests with coverage
         run: python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=80

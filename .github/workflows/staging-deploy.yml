@@ -10,6 +10,9 @@ jobs:
     timeout-minutes: 30
     env:
       AGENTFLOW_E2E_BASE_URL: http://127.0.0.1:8080
+      AGENTFLOW_E2E_CALLBACK_PORT: "18080"
+      HOST_LOOPBACK_PROXY_RANGE_START: "18080"
+      HOST_LOOPBACK_PROXY_RANGE_END: "18080"
     steps:
       - uses: actions/checkout@v4
 

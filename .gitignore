@@ -60,26 +60,22 @@ node_modules/
 # Mutation testing output
 mutants/
 
-# Session notes (temp .md created during Codex/Claude sessions).
+# Session notes (root-level temp .md created during Codex/Claude sessions).
 # NOTE: BCG_audit.md was removed from this list on 2026-04-19 -
 # it was a release artifact, not a session note.
-codex_res.md
-res_co.md
-rep.md
-more_help.md
-About_DE_project.md
-RELEASING.md
-AgentFlow*
-!sdk/agentflow/
-!sdk/agentflow/**
-!integrations/agentflow_integrations/
-!integrations/agentflow_integrations/**
-!helm/agentflow/
-!helm/agentflow/**
+/codex_res.md
+/res_co.md
+/rep.md
+/more_help.md
+/About_DE_project.md
+/RELEASING.md
+/AgentFlow*.md
 sdk/agentflow/**/__pycache__/
 sdk/agentflow/**/*.py[cod]
 integrations/agentflow_integrations/**/__pycache__/
 integrations/agentflow_integrations/**/*.py[cod]
+# Local Iceberg warehouse/runtime state (intentionally untracked).
+/warehouse/agentflow/
 agentflow_bench_debug*.duckdb*
 agentflow_demo_api.duckdb*
 

@@ -1,5 +1,8 @@
 # AgentFlow Benchmark Report
 
+> **ARCHIVED -- Historical input only.**
+> This report was produced with non-canonical parameters (50 users, 60 s) and is **not comparable** to the 2026-04-24 entity baseline. See `docs/perf/entity-benchmark-contract.md` for the current reference benchmark.
+
 Generated: `2026-04-17T07:58:16+03:00`
 
 ## System Under Test

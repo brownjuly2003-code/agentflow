@@ -1,73 +1,91 @@
-# T05 — P99 entity latency optimization
+# T05 -- P99 entity latency optimization (rebased 2026-04-24)
 
-**Priority:** P2 · **Estimate:** 1-2 дня
+**Priority:** P2 -- Estimate: 2-3 days (updated after re-baseline)
 
 ## Goal
 
-Снизить p99 `/v1/entity/{type}/{id}` с 290-320мс до **<200мс** (цель в SLO).
+Reduce p99 `/v1/entity/{type}/{id}` from **~936 ms** to **< 200 ms** (SLO target).
+
+> **Historical context:** This task was originally written against stale hypotheses (sqlglot cache, DuckDB pool, orjson). The 2026-04-24 re-baseline (`A03`) proved those hypotheses do not match the measured hot path. This version replaces the old step order with an evidence-based backlog.
+
+---
 
 ## Context
 
-- Репо: `D:\DE_project\` (AgentFlow)
-- Endpoint: `src/serving/api/routers/entity.py` (или аналогичный — `grep -rn "entity" src/serving/api/routers/`)
-- Зависит от: DuckDB query, sqlglot AST validation, JSON serialization, middleware stack
-- Load-test harness: `tests/load/` (локально локаль locust или k6 — проверить)
-- Lab baseline был 170мс, production p99 деградировал до 290-320мс — где-то накопилась overhead
+- **Repo:** `D:\DE_project\` (AgentFlow)
+- **Endpoint:** `src/serving/api/routers/agent_query.py` (`get_entity`)
+- **Current measured baseline (2026-04-24):**
+  - p50: ~180 ms
+  - p99: ~936 ms
+  - throughput: ~68 RPS at concurrency 16
+- **Top bottleneck:** `_get_pii_masker()` recreates `PiiMasker` on every request due to a Windows path-separator mismatch in the singleton check (~35 % of CPU time).
+- **Secondary bottleneck:** DuckDB backend execution + `_last_updated` normalisation in `entity_queries.py` (~20-25 %).
+- **Proven no-op for entity path:** sqlglot cache (SQL is f-string built, not parsed).
+
+See full profile: [docs/perf/entity-profile-2026-04-24.md](../../perf/entity-profile-2026-04-24.md)
+
+---
 
 ## Deliverables
 
-Строить как серию отдельных коммитов, каждая гипотеза — отдельный коммит. Если гипотеза даёт <5% — не мержить, искать другую.
+Build as separate commits; each hypothesis is its own PR chunk. If a change gives < 5 % p99 improvement, drop it.
 
-### Step 1 — Профайлинг (commit: `chore: profile entity endpoint hot path`)
+### Step 1 -- Fix PII masker singleton (commit: `perf: fix PiiMasker path comparison so singleton is reused`)
 
-- `scripts/profile_entity.py`:
-  - Запуск py-spy или cProfile во время load test (50 RPS × 60s против local demo)
-  - Dump top-20 функций по cumulative time
-  - Flamegraph → `docs/perf/flamegraph-before.svg`
-- `docs/perf/entity-profile-before.md`:
-  - Top-20 таблица
-  - Гипотезы оптимизации (кэш sqlglot, pool DuckDB, orjson, etc.)
-  - Baseline метрики: p50/p95/p99/throughput с точностью до ms
+**Problem:** `str(_PII_MASKER.config_path) != config_path` is always True on Windows because `Path("config/pii_fields.yaml")` renders as `"config\\pii_fields.yaml"`.
 
-### Step 2 — Оптимизации (отдельные коммиты)
+**Fix:** Normalise the comparison, e.g.:
 
-Проверить гипотезы в порядке ожидаемого эффекта. Каждая — отдельный PR-chunk (один commit):
+```python
+from os import fspath
+# ...
+if _PII_MASKER is None or fspath(_PII_MASKER.config_path) != fspath(config_path):
+    _PII_MASKER = PiiMasker(config_path)
+```
 
-1. `perf: cache sqlglot parsed query templates via LRU` —
-   - `functools.lru_cache(maxsize=256)` на функцию парсинга
-   - Ключ — canonical query template, не конкретные values
-   - Verify: profiling до/после, p99 падает на X мс
+Or use `Path(config_path).resolve()` on both sides.
 
-2. `perf: reuse DuckDB connection pool in FastAPI app state` —
-   - Если сейчас connection создаётся per-request — перевести на pool
-   - `app.state.duckdb_pool` инициализируется на startup, инжектится через `Depends`
-   - Verify: количество open file descriptors не растёт линейно с RPS
+**Verification:**
+- Quick profile before/after on same machine within 5 minutes.
+- Expected: p99 drops by 10-15 % (90-140 ms).
+- Flamegraph after fix should show yaml composer/scanner frames disappear from top 10.
 
-3. `perf: switch to orjson for response serialization` —
-   - `orjson` добавить в `[project.dependencies]` в `pyproject.toml`
-   - Заменить default JSON encoder в FastAPI на `ORJSONResponse`
-   - Benchmark: один endpoint, микробенчмарк — orjson vs stdlib
+### Step 2 -- Re-profile and evaluate DuckDB execution layer (commit: TBD after measurement)
 
-4. _(опционально)_ `perf: eliminate pydantic round-trip in hot path` — если pydantic serialization занимает >5%, рассмотреть `model_dump_json()` или direct dict
+After Step 1 fixes the ~35 % masking overhead, re-run `profile_entity.py` + `py-spy`.
 
-### Step 3 — Верификация (commit: `perf: verify p99 entity latency under target`)
+If `backend.execute()` or row materialisation becomes the new top frame:
+- Evaluate connection pool reuse (`app.state.duckdb_pool` + `Depends`).
+- Evaluate `_last_updated` normalisation caching (many rows share the same `updated_at` value).
 
-- `docs/perf/entity-profile-after.md`:
-  - Тот же профиль после всех оптимизаций
-  - Сравнение before/after (таблица: метрика → before → after → delta %)
-  - Flamegraph `docs/perf/flamegraph-after.svg`
-- Обновить baseline в `perf-regression.yml` если применимо — но **не ослабить gate** (20% max-regress остаётся)
+If serialization (Pydantic / JSON) becomes top frame:
+- Evaluate `orjson` for response encoding.
+
+**Do not implement any of these without a post-Step-1 flamegraph proving they are now the bottleneck.**
+
+### Step 3 -- Verify target and document (commit: `perf: verify p99 entity latency under target`)
+
+- `docs/perf/entity-profile-after-<hypothesis>.md` for each merged hypothesis.
+- Comparison table: metric -> before -> after -> delta %.
+- Updated flamegraph(s).
+- If p99 < 200 ms: update release gate docs and `perf-regression.yml`.
+- If p99 > 200 ms after all proven hypotheses: document remaining bottleneck (likely DuckDB index or disk I/O) and propose next step (materialised view, read replica, etc.) as a **new architectural ticket**, not a no-op PR.
+
+---
 
 ## Acceptance
 
-- `make load-test` (или `pytest tests/load/test_entity.py --benchmark`) — **p99 <200мс** на том же железе что до изменений
-- `make test` зелёный (ничего не сломалось)
-- `perf-regression.yml` в CI проходит с новыми значениями
-- Before/after документы в `docs/perf/` присутствуют и цитируемые
+- `make load-test` (or `pytest tests/load/test_entity.py --benchmark`) -- **p99 < 200 ms** on the reference hardware.
+- `make test` green.
+- `perf-regression.yml` in CI passes with new values.
+- Before/after documents in `docs/perf/` reference the 2026-04-24 baseline.
+- **No sqlglot-cache change is merged for the entity path unless it shows >= 5 % win on this baseline.**
+
+---
 
 ## Notes
 
-- НЕ трогать sqlglot AST validation logic (только кэшировать парсинг) — это security gate против SQL injection
-- `orjson` — в `[project.dependencies]`, НЕ в dev
-- Если какая-то гипотеза даёт <5% выигрыш — дропнуть commit, не мержить, искать другую
-- Если после всех оптимизаций p99 >200мс — документировать причину (bottleneck на уровне DuckDB или сети) и предложить следующий шаг (index, read replica, materialized view) отдельным issue, НЕ мержить slow change
+- **NEVER skip the 5 % threshold rule.** The old T05 wasted planning time on sqlglot-cache-first because the rule was not enforced against the actual hot path.
+- **PII masking logic must stay functionally identical.** Only the caching / initialisation path changes.
+- `orjson` stays in `[project.dependencies]`, NOT dev, if adopted.
+- This task is now blocked only by implementation, not by measurement uncertainty.

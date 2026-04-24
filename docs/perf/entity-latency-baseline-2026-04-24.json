@@ -1,0 +1,15 @@
+{
+  "url": "http://localhost:8000/v1/entity/order/ORD-20260404-1001",
+  "iterations": 2000,
+  "concurrency": 16,
+  "warmup": 20,
+  "wall_seconds": 29.166,
+  "success_count": 2000,
+  "failure_count": 0,
+  "throughput_rps": 68.57,
+  "p50_ms": 179.29,
+  "p95_ms": 615.62,
+  "p99_ms": 936.34,
+  "max_ms": 1731.31,
+  "mean_ms": 232.83
+}

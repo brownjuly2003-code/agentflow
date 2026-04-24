@@ -1,7 +1,16 @@
 # agentflow-client
 
 ```bash
-pip install -e sdk/
+pip install agentflow
+```
+
+Published package identity stays on `agentflow`. Inside the monorepo, the root runtime package is
+tracked separately as `agentflow-runtime`, while the SDK keeps the `agentflow` import path and CLI.
+
+For a local editable install from this repository:
+
+```bash
+python -m pip install -e "./sdk"
 ```
 
 ```python

@@ -96,7 +96,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev,cloud]"
+        run: |
+          pip install -e ".[dev,cloud]"
+          pip install -e "./sdk"
       - name: Wait for Kafka
         run: |
           timeout 30 bash -c 'until nc -z localhost 9092; do sleep 1; done'

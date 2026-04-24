@@ -1,9 +1,15 @@
 # AgentFlow Integrations
 
-Install the integrations package from the repository root:
+Install the published integrations package:
 
 ```bash
-pip install -e integrations/
+pip install agentflow-integrations
+```
+
+If you are working from this monorepo, use a local editable install instead:
+
+```bash
+python -m pip install -e "./integrations"
 ```
 
 ## LangChain
@@ -45,7 +51,7 @@ query_engine.query("Which orders need attention?")
 Install CrewAI dependencies alongside the integrations package:
 
 ```bash
-pip install -e integrations/
+pip install agentflow-integrations
 pip install crewai crewai-tools
 ```
 

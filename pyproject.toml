@@ -141,6 +141,9 @@ editable-installs = [".[dev]"]
 [tool.agentflow.dependency-profiles.profiles.test]
 editable-installs = [".[dev,cloud]"]
 
+[tool.agentflow.dependency-profiles.profiles.test-sdk]
+editable-installs = [".[dev,cloud]", "./sdk"]
+
 [tool.agentflow.dependency-profiles.profiles.test-integrations]
 editable-installs = [".[dev,cloud]", "./sdk", "./integrations[mcp]"]
 
@@ -151,7 +154,10 @@ editable-installs = [".[load,cloud]"]
 editable-installs = [".[dev,load,cloud]"]
 
 [tool.agentflow.dependency-profiles.profiles.contract]
-editable-installs = [".[dev,cloud,contract]"]
+editable-installs = [".[dev,cloud,contract]", "./sdk"]
+
+[tool.agentflow.dependency-profiles.profiles.e2e]
+editable-installs = [".[dev]", "./sdk"]
 
 [[tool.agentflow.dependency-profiles.targets]]
 name = "backup.backup"
@@ -186,7 +192,7 @@ name = "ci.test-integration"
 kind = "workflow"
 path = ".github/workflows/ci.yml"
 job = "test-integration"
-profile = "test"
+profile = "test-sdk"
 
 [[tool.agentflow.dependency-profiles.targets]]
 name = "ci.perf-check"
@@ -221,7 +227,7 @@ name = "e2e.e2e"
 kind = "workflow"
 path = ".github/workflows/e2e.yml"
 job = "e2e"
-profile = "dev-tools"
+profile = "e2e"
 
 [[tool.agentflow.dependency-profiles.targets]]
 name = "load-test.load-test"
@@ -256,4 +262,4 @@ name = "staging-deploy.staging"
 kind = "workflow"
 path = ".github/workflows/staging-deploy.yml"
 job = "staging"
-profile = "dev-tools"
+profile = "e2e"

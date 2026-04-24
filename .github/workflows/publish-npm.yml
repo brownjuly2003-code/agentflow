@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "sdk-v*"
+      - "v*-rc*"
 
 permissions:
   contents: read
@@ -25,11 +26,16 @@ jobs:
           const fs = require("node:fs");
 
           const tag = process.env.GITHUB_REF_NAME;
-          if (!tag || !tag.startsWith("sdk-v")) {
+          let expectedVersion;
+          if (tag?.startsWith("sdk-v")) {
+            expectedVersion = tag.slice("sdk-v".length);
+          } else if (tag?.startsWith("v") && tag.includes("-rc")) {
+            expectedVersion = tag.slice("v".length);
+          } else {
             throw new Error(`Unexpected tag format: ${tag ?? "<missing>"}`);
           }
 
-          const expectedVersion = tag.slice("sdk-v".length);
+          const expectedPythonVersion = expectedVersion.replace("-rc", "rc");
           const pyproject = fs.readFileSync("sdk/pyproject.toml", "utf8");
           const packageJson = JSON.parse(fs.readFileSync("sdk-ts/package.json", "utf8"));
           const pythonMatch = pyproject.match(/^version = "([^"]+)"$/m);
@@ -37,9 +43,9 @@ jobs:
           if (!pythonMatch) {
             throw new Error("Could not read sdk/pyproject.toml version");
           }
-          if (pythonMatch[1] !== expectedVersion) {
+          if (pythonMatch[1] !== expectedPythonVersion) {
             throw new Error(
-              `sdk/pyproject.toml version ${pythonMatch[1]} does not match tag ${expectedVersion}`,
+              `sdk/pyproject.toml version ${pythonMatch[1]} does not match tag ${expectedPythonVersion}`,
             );
           }
           if (packageJson.version !== expectedVersion) {
@@ -47,6 +53,10 @@ jobs:
               `sdk-ts/package.json version ${packageJson.version} does not match tag ${expectedVersion}`,
             );
           }
+
+          fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_VERSION=${expectedVersion}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `PYTHON_RELEASE_VERSION=${expectedPythonVersion}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `IS_RC=${String(expectedVersion.includes("-rc"))}\n`);
           NODE
 
       - name: Install dependencies
@@ -57,11 +67,23 @@ jobs:
         working-directory: sdk-ts
         run: npm run build
 
-      - name: Preview package contents
+      - name: Dry-run npm rc publish
+        if: env.IS_RC == 'true'
         working-directory: sdk-ts
-        run: npm pack --dry-run
+        run: npm publish --dry-run --access public --tag next
+
+      - name: Dry-run npm production publish
+        if: env.IS_RC != 'true'
+        working-directory: sdk-ts
+        run: npm publish --dry-run --access public
+
+      - name: Skip npm upload for rc smoke
+        if: env.IS_RC == 'true'
+        working-directory: sdk-ts
+        run: echo "RC smoke uses npm publish --dry-run only; no npm registry upload."
 
       - name: Publish to npm
+        if: env.IS_RC != 'true'
         working-directory: sdk-ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,9 +1,10 @@
-name: Publish Python SDK
+name: Publish Python Packages
 
 on:
   push:
     tags:
       - "sdk-v*"
+      - "v*-rc*"
 
 permissions:
   contents: read
@@ -11,6 +12,8 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -18,46 +21,71 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Verify release tag matches SDK metadata
+      - name: Verify release tag matches package metadata
         run: |
           python - <<'PY'
-          import json
           import os
           import tomllib
           from pathlib import Path
 
           tag = os.environ["GITHUB_REF_NAME"]
-          if not tag.startswith("sdk-v"):
+          if tag.startswith("sdk-v"):
+              release_version = tag.removeprefix("sdk-v")
+          elif tag.startswith("v") and "-rc" in tag:
+              release_version = tag.removeprefix("v")
+          else:
               raise SystemExit(f"Unexpected tag format: {tag}")
 
-          expected_version = tag.removeprefix("sdk-v")
-          pyproject = tomllib.loads(Path("sdk/pyproject.toml").read_text(encoding="utf-8"))
-          package_json = json.loads(Path("sdk-ts/package.json").read_text(encoding="utf-8"))
+          python_version = release_version.replace("-rc", "rc", 1)
+          root_pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          sdk_pyproject = tomllib.loads(Path("sdk/pyproject.toml").read_text(encoding="utf-8"))
 
-          python_version = pyproject["project"]["version"]
-          ts_version = package_json["version"]
+          root_version = root_pyproject["project"]["version"]
+          sdk_version = sdk_pyproject["project"]["version"]
 
-          if python_version != expected_version:
+          if root_version != python_version:
               raise SystemExit(
-                  f"sdk/pyproject.toml version {python_version} does not match tag {expected_version}"
+                  f"pyproject.toml version {root_version} does not match tag {python_version}"
               )
-          if ts_version != expected_version:
+          if sdk_version != python_version:
               raise SystemExit(
-                  f"sdk-ts/package.json version {ts_version} does not match tag {expected_version}"
+                  f"sdk/pyproject.toml version {sdk_version} does not match tag {python_version}"
               )
+
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
+              env.write(f"RELEASE_VERSION={release_version}\n")
+              env.write(f"PYTHON_RELEASE_VERSION={python_version}\n")
+              env.write(f"IS_RC={str('-rc' in release_version).lower()}\n")
           PY
 
       - name: Install build tooling
         run: python -m pip install --upgrade build twine
 
-      - name: Build SDK distribution
-        run: python -m build sdk/
+      - name: Clean previous distributions
+        run: rm -rf dist sdk/dist
 
-      - name: Check distribution metadata
-        run: python -m twine check sdk/dist/*
+      - name: Build Python distributions
+        run: |
+          python -m build .
+          python -m build sdk/
 
-      - name: Publish to PyPI
+      - name: Dry-run build and twine check
+        run: python -m twine check dist/* sdk/dist/*
+
+      - name: Publish rc packages to TestPyPI
+        if: env.IS_RC == 'true' && env.TEST_PYPI_API_TOKEN != ''
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/* sdk/dist/*
+
+      - name: Skip TestPyPI upload without token
+        if: env.IS_RC == 'true' && env.TEST_PYPI_API_TOKEN == ''
+        run: echo "RC smoke completed with twine check only; TEST_PYPI_API_TOKEN is not configured."
+
+      - name: Publish production packages to PyPI
+        if: env.IS_RC != 'true'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: python -m twine upload sdk/dist/*
+        run: python -m twine upload dist/* sdk/dist/*

@@ -3,7 +3,6 @@ from pathlib import Path
 
 import yaml
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -17,12 +16,12 @@ def test_chart_declares_values_schema_for_runtime_contracts():
     assert schema_path.exists()
 
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    api_key_item = (
-        schema["properties"]["secrets"]["properties"]["apiKeys"]["properties"]["keys"]["items"]
-    )
-    tenant_item = (
-        schema["properties"]["config"]["properties"]["tenants"]["properties"]["tenants"]["items"]
-    )
+    api_key_item = schema["properties"]["secrets"]["properties"]["apiKeys"]["properties"]["keys"][
+        "items"
+    ]
+    tenant_item = schema["properties"]["config"]["properties"]["tenants"]["properties"]["tenants"][
+        "items"
+    ]
 
     assert "key_id" in api_key_item["required"]
     assert "name" in api_key_item["required"]

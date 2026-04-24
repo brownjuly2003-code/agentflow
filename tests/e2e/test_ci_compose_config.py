@@ -20,8 +20,12 @@ def _load_module(path: Path, module_name: str):
 
 
 def _extract_e2e_workflow_inline_python() -> str:
-    workflow = yaml.safe_load((PROJECT_ROOT / ".github" / "workflows" / "e2e.yml").read_text(encoding="utf-8"))
-    start_step = next(step for step in workflow["jobs"]["e2e"]["steps"] if step.get("name") == "Start E2E stack")
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "e2e.yml").read_text(encoding="utf-8")
+    )
+    start_step = next(
+        step for step in workflow["jobs"]["e2e"]["steps"] if step.get("name") == "Start E2E stack"
+    )
     run_script = start_step["run"]
     _, marker, inline_python = run_script.partition("python - <<'PY'\n")
 
@@ -44,7 +48,7 @@ def _load_compose_ps_parser():
     parser_module = ast.Module(body=[parser_function], type_ignores=[])
     namespace = {"json": json}
 
-    exec(compile(parser_module, filename="<e2e-workflow>", mode="exec"), namespace)
+    exec(compile(parser_module, filename="<e2e-workflow>", mode="exec"), namespace)  # noqa: S102  # AST-compiled local module; inputs not user-controlled
 
     return namespace["parse_compose_ps_output"]
 
@@ -75,7 +79,7 @@ def test_e2e_workflow_parses_compose_ps_ndjson_output():
     parse_compose_ps_output = _load_compose_ps_parser()
 
     entries = parse_compose_ps_output(
-        '\n'.join(
+        "\n".join(
             [
                 '{"Service":"redis","State":"running","Health":"healthy"}',
                 '{"Service":"postgres","State":"running","Health":"healthy"}',

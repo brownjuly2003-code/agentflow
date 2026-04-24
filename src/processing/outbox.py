@@ -176,9 +176,15 @@ class OutboxProcessor:
     ) -> None:
         status = "pending"
         retry_delay_seconds = 2**retry_count
-        if error_message.startswith("KafkaError{") or "Kafka message(s) were not delivered" in error_message:
+        is_kafka_error = (
+            error_message.startswith("KafkaError{")
+            or "Kafka message(s) were not delivered" in error_message
+        )
+        if is_kafka_error:
             retry_delay_seconds = max(retry_delay_seconds, 30)
-        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(seconds=retry_delay_seconds)
+        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(
+            seconds=retry_delay_seconds
+        )
         self._conn.execute("BEGIN TRANSACTION")
         try:
             if retry_count >= self._max_retries:

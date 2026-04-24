@@ -1,14 +1,11 @@
-import tomllib
 import re
+import tomllib
 from pathlib import Path
 
 import yaml
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-EDITABLE_INSTALL_PATTERN = re.compile(
-    r"""pip install -e\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))"""
-)
+EDITABLE_INSTALL_PATTERN = re.compile(r"""pip install -e\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))""")
 
 
 def _load_pyproject() -> dict:
@@ -71,9 +68,7 @@ def test_contract_extra_installs_schemathesis():
 
 
 def test_contract_workflow_uses_contract_extra():
-    workflow = (PROJECT_ROOT / ".github" / "workflows" / "contract.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "contract.yml").read_text(encoding="utf-8")
 
     assert 'pip install -e ".[dev,cloud,contract]"' in workflow
     assert "pip install schemathesis" not in workflow
@@ -137,6 +132,20 @@ def test_runtime_and_sdk_package_identities_are_split():
     ]
 
 
+def test_sdk_install_docs_match_split_package_identities():
+    sdk_readme = (PROJECT_ROOT / "sdk" / "README.md").read_text(encoding="utf-8")
+    product_doc = (PROJECT_ROOT / "docs" / "product.md").read_text(encoding="utf-8")
+    integrations_doc = (PROJECT_ROOT / "docs" / "integrations.md").read_text(encoding="utf-8")
+
+    assert "pip install agentflow" in sdk_readme
+    assert "agentflow-runtime" in sdk_readme
+    assert "pip install -e sdk/" not in sdk_readme
+    assert "pip install agentflow" in product_doc
+    assert "pip install -e sdk/" not in product_doc
+    assert "pip install agentflow-integrations" in integrations_doc
+    assert "pip install -e integrations/" not in integrations_doc
+
+
 def test_dependency_profile_targets_match_workflow_jobs():
     profiles, targets = _load_dependency_contract()
 
@@ -149,8 +158,7 @@ def test_dependency_profile_targets_match_workflow_jobs():
         )
 
         assert editable_installs == profiles[target["profile"]]["editable-installs"], (
-            f"{target['name']} drifted from profile {target['profile']!r}: "
-            f"{editable_installs!r}"
+            f"{target['name']} drifted from profile {target['profile']!r}: {editable_installs!r}"
         )
 
 
@@ -168,7 +176,8 @@ def test_make_setup_uses_test_integrations_profile():
     profiles, _ = _load_dependency_contract()
     makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
 
-    assert _dedupe(_extract_editable_installs(makefile)) == profiles["test-integrations"][
-        "editable-installs"
-    ]
-    assert '.[dev,integrations,cloud]' not in makefile
+    assert (
+        _dedupe(_extract_editable_installs(makefile))
+        == profiles["test-integrations"]["editable-installs"]
+    )
+    assert ".[dev,integrations,cloud]" not in makefile

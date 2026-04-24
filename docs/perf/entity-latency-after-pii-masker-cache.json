@@ -1,0 +1,30 @@
+{
+  "url": "http://127.0.0.1:8000/v1/entity/order/ORD-20260404-1001",
+  "iterations": 2000,
+  "concurrency": 16,
+  "warmup": 20,
+  "wall_seconds": 10.324,
+  "success_count": 2000,
+  "failure_count": 0,
+  "throughput_rps": 193.73,
+  "p50_ms": 56.65,
+  "p95_ms": 233.78,
+  "p99_ms": 360.97,
+  "max_ms": 613.62,
+  "mean_ms": 82.43,
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+    "cpu_count": 18,
+    "ram_gb": 15.5,
+    "python": "3.13.7"
+  },
+  "stack": {
+    "redis": "up (Docker, de_project-redis-1)",
+    "kafka": "down (not required for entity path)",
+    "duckdb_path": "agentflow_demo.duckdb"
+  },
+  "commit": "220f94c",
+  "label": "after-pii-masker-cache",
+  "compared_to": "entity-latency-baseline-2026-04-24.json"
+}

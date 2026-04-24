@@ -19,8 +19,8 @@ SDK_ROOT = Path(__file__).resolve().parents[2] / "sdk"
 
 
 def test_version_is_exposed_from_package():
-    assert __version__ == "1.0.1"
-    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
+    assert __version__ == "1.1.0rc1"
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:rc\d+)?", __version__)
 
 
 def test_package_exports_core_public_api():
@@ -146,7 +146,7 @@ def test_deprecated_decorator_preserves_wrapped_metadata():
 def test_sdk_pyproject_version_matches_release():
     pyproject = tomllib.loads((SDK_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert pyproject["project"]["version"] == "1.0.1"
+    assert pyproject["project"]["version"] == "1.1.0rc1"
 
 
 def test_changelog_documents_semver_and_deprecation_policy():

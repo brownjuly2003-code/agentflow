@@ -6,6 +6,7 @@ Every response includes metadata that helps agents assess data reliability.
 
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Literal
 
 import structlog
@@ -31,7 +32,7 @@ _PII_MASKER: PiiMasker | None = None
 def _get_pii_masker() -> PiiMasker:
     global _PII_MASKER
     config_path = os.getenv("AGENTFLOW_PII_CONFIG", "config/pii_fields.yaml")
-    if _PII_MASKER is None or str(_PII_MASKER.config_path) != config_path:
+    if _PII_MASKER is None or Path(_PII_MASKER.config_path) != Path(config_path):
         _PII_MASKER = PiiMasker(config_path)
     return _PII_MASKER
 

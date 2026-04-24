@@ -6,5 +6,5 @@ services:
     environment:
       CATALOG_WAREHOUSE: /warehouse
       CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
-    volumes:
-      - ./.iceberg/rest-warehouse:/warehouse
+    tmpfs:
+      - /warehouse

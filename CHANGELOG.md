@@ -2,7 +2,7 @@
 
 All notable changes to AgentFlow are documented in this file.
 
-## [1.1.0] - 2026-04-24
+## [1.1.0] - 2026-04-25
 
 See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions from v1.0.x.
 

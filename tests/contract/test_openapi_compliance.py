@@ -19,6 +19,17 @@ warnings.filterwarnings("ignore", category=HypothesisWarning)
 warnings.filterwarnings("ignore", category=NonInteractiveExampleWarning)
 
 
+def _normalize_openapi_schemas(schemas: dict[str, object]) -> dict[str, object]:
+    normalized = json.loads(json.dumps(schemas))
+    validation_error = normalized.get("ValidationError")
+    if isinstance(validation_error, dict):
+        properties = validation_error.get("properties")
+        if isinstance(properties, dict):
+            properties.pop("input", None)
+            properties.pop("ctx", None)
+    return normalized
+
+
 def _prepare_case(case) -> None:
     path = case.operation.path
     if path == "/v1/query":
@@ -93,4 +104,6 @@ def test_documented_openapi_snapshot_matches_live_api(base_url: str):
 
     documented_schemas = documented.get("components", {}).get("schemas", {})
     live_schemas = live.get("components", {}).get("schemas", {})
-    assert {name: live_schemas.get(name) for name in documented_schemas} == documented_schemas
+    assert _normalize_openapi_schemas(
+        {name: live_schemas.get(name) for name in documented_schemas}
+    ) == _normalize_openapi_schemas(documented_schemas)

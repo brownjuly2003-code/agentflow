@@ -195,6 +195,13 @@ job = "test-integration"
 profile = "test-sdk"
 
 [[tool.agentflow.dependency-profiles.targets]]
+name = "ci.helm-schema-live"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "helm-schema-live"
+profile = "dev-tools"
+
+[[tool.agentflow.dependency-profiles.targets]]
 name = "ci.perf-check"
 kind = "workflow"
 path = ".github/workflows/ci.yml"

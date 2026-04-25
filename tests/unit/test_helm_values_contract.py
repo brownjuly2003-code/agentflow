@@ -1,3 +1,9 @@
+"""Static Helm values contract checks.
+
+Live Helm CLI schema validation is covered by
+tests/integration/test_helm_values_live_validation.py.
+"""
+
 import json
 from pathlib import Path
 

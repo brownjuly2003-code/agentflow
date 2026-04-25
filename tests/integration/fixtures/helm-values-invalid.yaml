@@ -1,0 +1,6 @@
+unexpectedTopLevel: true
+
+replicaCount: "two"
+
+service:
+  port: 0

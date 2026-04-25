@@ -247,7 +247,7 @@ def test_repo_default_config_writes_to_rest_catalog(
         tmp_path / "config" / "rest.yaml",
         catalog_type="rest",
         catalog_uri="http://localhost:8181",
-        warehouse="/tmp/warehouse",
+        warehouse="/tmp/warehouse",  # noqa: S108
         namespace=namespace,
     )
 

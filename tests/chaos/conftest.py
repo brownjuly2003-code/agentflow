@@ -342,16 +342,12 @@ def reset_redis_query_cache_between_chaos_tests(request: pytest.FixtureRequest):
     toxiproxy_client = request.getfixturevalue("toxiproxy_client")
 
     toxiproxy_client.enable_proxy("redis")
-    asyncio.run(
-        _clear_redis_query_cache(chaos_stack["redis_host"], chaos_stack["redis_port"])
-    )
+    asyncio.run(_clear_redis_query_cache(chaos_stack["redis_host"], chaos_stack["redis_port"]))
     try:
         yield
     finally:
         toxiproxy_client.enable_proxy("redis")
-        asyncio.run(
-            _clear_redis_query_cache(chaos_stack["redis_host"], chaos_stack["redis_port"])
-        )
+        asyncio.run(_clear_redis_query_cache(chaos_stack["redis_host"], chaos_stack["redis_port"]))
 
 
 @pytest.fixture

@@ -1,0 +1,44 @@
+{
+  "url": "http://127.0.0.1:8000/v1/entity/order/ORD-20260404-1001",
+  "iterations": 2000,
+  "concurrency": 16,
+  "warmup": 20,
+  "wall_seconds": 28.373,
+  "success_count": 2000,
+  "failure_count": 0,
+  "throughput_rps": 70.49,
+  "p50_ms": 165.89,
+  "p95_ms": 620.51,
+  "p99_ms": 962.22,
+  "max_ms": 1717.47,
+  "mean_ms": 226.71,
+  "machine": {
+    "os": "Windows-11-10.0.26200",
+    "cpu": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+    "cpu_count": 18,
+    "ram_gb": 15.5,
+    "python": "3.13.7"
+  },
+  "stack": {
+    "redis": "up (Docker, de_project-redis-1 healthy)",
+    "kafka": "down (not required for entity path)",
+    "duckdb_path": "agentflow_demo.duckdb",
+    "api": "uvicorn src.serving.api.main:app --host 127.0.0.1 --port 8000"
+  },
+  "commit": "5b57cf4",
+  "requested_head": "a3ecd38",
+  "label": "a3ecd38-flamegraph",
+  "compared_to": "entity-latency-after-pii-masker-cache.json",
+  "flamegraph": {
+    "path": "docs/perf/flamegraph-after-pii-masker-cache.svg",
+    "py_spy_duration_seconds": 45,
+    "samples": 4390
+  },
+  "drift_vs_after_pii_masker_cache": {
+    "previous_p99_ms": 360.97,
+    "current_p99_ms": 962.22,
+    "p99_delta_percent": 166.6,
+    "note": "Not within +/-10%; final flamegraph shows tenant config qualification/YAML and DuckDB table-column checks now dominate the entity path."
+  },
+  "serving_code_delta_from_requested_head": "none under src/serving, scripts, or config between a3ecd38 and measured HEAD 5b57cf4"
+}

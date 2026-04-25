@@ -4,6 +4,7 @@
 **Environment:** Windows 11, Intel i7 (18 logical cores), 15.5 GB RAM, Python 3.13.7
 **Stack:** Redis (Docker), DuckDB `agentflow_demo.duckdb`, API on `127.0.0.1:8000`
 **Profiled by:** `scripts/profile_entity.py` + `py-spy` attached to uvicorn PID
+**Latest refresh:** requested `a3ecd38`, measured on `5b57cf4` (serving code/config/scripts unchanged from `a3ecd38`; later commits touch CI, version metadata, and Iceberg compose)
 
 ---
 
@@ -93,11 +94,13 @@ This profile is the **first entity-only, fixed-concurrency, repeatable measureme
 
 ---
 
-## 3. Root-Cause Analysis -- PII Masker Recreation
+## 3. CLOSED -- PII Masker Recreation
 
 ### Finding
 
 `_get_pii_masker()` in `agent_query.py` is responsible for **~16 %** of CPU time on the hot path, and `PiiMasker.__init__` + YAML parsing account for another **~19 %**. Combined, **~35 %** of entity latency is spent re-initialising the PII masker.
+
+**Status:** closed by `220f94c` (`perf(api): normalize PII masker cache key via pathlib.Path`). The current flamegraph no longer shows `_get_pii_masker()` or `PiiMasker.__init__` as top frames.
 
 ### Why it happens
 
@@ -124,41 +127,86 @@ The comparison `str(_PII_MASKER.config_path) != config_path` is therefore **alwa
 2. `yaml.safe_load()` (complex scanner/parser/composer walk)
 3. `PiiMasker` object construction
 
-### Expected win if fixed
+### Observed win after fix
 
-If the masker is cached correctly, the ~19 % spent in `__init__` + YAML parsing should drop to **< 1 %** (one-time load). The remaining `mask()` call itself is cheap for entity types that have no PII rules (e.g. `order`).
-
-**Conservative estimate:** p99 improvement of **10-15 %** (90-140 ms reduction) from this fix alone, bringing p99 from ~936 ms to **~800-850 ms**.
+`docs/perf/entity-latency-after-pii-masker-cache.json` recorded p99 **360.97 ms** on `220f94c`, down from **936.34 ms** baseline (-61 %). That made the old PII-cache hypothesis complete, but nightly p99 < 200 ms is still not satisfied.
 
 ---
 
-## 4. Disconfirmed Hypotheses
+## 4. Hot frames after PII masker fix
+
+**Artifacts:**
+- Flamegraph: `docs/perf/flamegraph-after-pii-masker-cache.svg`
+- Latency JSON: `docs/perf/entity-latency-a3ecd38-flamegraph.json`
+
+**Capture:** `py-spy record -o docs/perf/flamegraph-after-pii-masker-cache.svg --pid <uvicorn_pid> --duration 45` while running the canonical 2000-iteration, concurrency-16 entity profile. Duration was extended from 30 s because the measured window now takes ~28 s and needs full coverage.
+
+### Latency check
+
+| Metric | After PII cache fix | Fresh flamegraph run | Delta |
+|--------|---------------------|----------------------|-------|
+| p50_ms | 56.65 | 165.89 | +193 % |
+| p95_ms | 233.78 | 620.51 | +165 % |
+| p99_ms | 360.97 | 962.22 | +167 % |
+| throughput_rps | 193.73 | 70.49 | -64 % |
+| wall_seconds | 10.324 | 28.373 | +175 % |
+
+This is **not** within the expected +/-10 % band. Stack checks found Redis healthy, fixture row present, zero `query_cache_unavailable` warnings, and no serving-code delta from `a3ecd38`. The flamegraph explains the drift: the new dominant path is tenant table qualification and DuckDB metadata checks, not PII masking.
+
+### Top hot frames (by sample count)
+
+| Rank | Frame | Samples | % | Layer |
+|------|-------|---------|---|-------|
+| 1 | `get_entity` (`src/serving/semantic_layer/query/entity_queries.py:39`) | 1976 | 45.01 % | **Entity query / backend call** |
+| 2 | `execute` (`src/serving/backends/duckdb_backend.py:48`) | 1953 | 44.49 % | **DuckDB execution** |
+| 3 | `get_entity` (`src/serving/semantic_layer/query/entity_queries.py:27`) | 1009 | 22.98 % | **SQL/table resolution** |
+| 4 | `_qualify_table` (`src/serving/semantic_layer/query/sql_builder.py:46`) | 600 | 13.67 % | **Tenant table qualification** |
+| 5 | `load` (`src/ingestion/tenant_router.py:48`) | 442 | 10.07 % | **Tenant YAML parse** |
+
+Relevant child frames: `_table_columns` (`src/serving/semantic_layer/query/engine.py:65`) at 335 samples / 7.63 %, `table_columns` (`src/serving/backends/duckdb_backend.py:71`) at 316 / 7.20 %, and YAML composer frames under `TenantRouter.load` at ~8-10 %. Uvicorn access logging is visible (`logging.info`, 105 / 2.39 %) but not the main bottleneck.
+
+---
+
+## 5. Disconfirmed / Re-ranked Hypotheses
 
 | Hypothesis (from T05) | Evidence | Verdict |
 |-----------------------|----------|---------|
 | **sqlglot parse cache** is the main win | `entity_queries.py` builds SQL with f-strings; sqlglot is not imported or used in the entity path. | **Disconfirmed.** No-op for entity endpoint. |
-| **DuckDB connection pool** per-request overhead | Connection pool is not visible in top-5 frames; `backend.execute()` time is drowned by router/masking overhead. | **Not top priority.** May matter after masking is fixed, but not first. |
-| **orjson vs stdlib JSON** serialization | JSON encode time is scattered and < 5 % in flamegraph. | **Low expected win.** Consider only if profiling after masking fix shows serialization rising. |
-| **Pydantic round-trip** overhead | Pydantic `model_validate` appears (`__init__ <string>`), but it is part of the same post-processing block; much of this time may be waiting on `_get_pii_masker()` which runs inside the request handler before validation. | **Secondary.** Address masking first, then re-measure. |
+| **DuckDB pool / metadata contention** | `execute()` is now a top cumulative frame, and `_table_columns` / `table_columns` together account for ~7-8 % while table qualification probes schemas. | **Re-opened, but scoped to metadata/table-column checks first.** |
+| **orjson vs stdlib JSON** serialization | JSON encode is not a visible top frame; response send/logging is visible but below table qualification and DuckDB metadata. | **Low expected win.** Below the 5 % perf threshold for T24. |
+| **usage-DB single-writer contention** | Auth started in open mode (`configured_keys: 0`), and no usage-recording frame appears in the flamegraph. | **Not this run's bottleneck.** Re-test only with configured API keys. |
+| **Pydantic round-trip** overhead | Pydantic construction is no longer a top frame after the PII fix. | **Not a near-term candidate.** |
 
 ---
 
-## 5. New Evidence-Based Hypotheses (ranked)
+## 6. Updated Evidence-Based Backlog (ranked)
 
-| Rank | Hypothesis | Expected p99 win | Verification | Risk |
-|------|------------|------------------|--------------|------|
-| 1 | **Fix `_get_pii_masker()` path comparison** (`os.fspath` or normalised Path comparison) | 10-15 % (90-140 ms) | Quick profile before/after; flamegraph should show yaml frames disappear. | Low -- one-line fix. |
-| 2 | **Cache `_last_updated` normalisation** in `entity_queries.py` if datetime objects repeat | 2-5 % | Profile after hypothesis 1; check `datetime` frames. | Low; may be noise. |
-| 3 | **Pre-compile PII rules** into a flat dict instead of walking YAML per request | 3-5 % | Only if hypothesis 1 leaves `mask()` itself in top 10. | Medium; changes masking contract. |
-| 4 | **DuckDB connection pool** reuse if `backend.execute()` becomes top frame after masking fix | 5-10 % | Profile after masking fix; measure FD growth. | Medium; affects all query paths. |
-| 5 | **orjson response encoder** | < 3 % | Micro-benchmark JSON encode of a 10-field entity dict. | Low; easy to validate but likely below threshold. |
+| Rank | Hypothesis | Predicted p99 win | Rationale from flamegraph | Cost |
+|------|------------|-------------------|--------------------------|------|
+| 1 | **Cache tenant config + resolved table qualification** (`TenantRouter.load()`, `has_config()`, and no-tenant schema scan) | 20-35 % | `_qualify_table` 13.67 %, `TenantRouter.load` / `yaml.safe_load` 10.07 %, repeated `Path.exists()` / YAML parse on the request path. Removing synchronous file/YAML work should also reduce event-loop tail amplification. | Medium |
+| 2 | **Cache DuckDB table-column metadata used by tenant qualification** | 8-15 % | `_table_columns` 7.63 % and `table_columns` 7.20 % are child frames of `_qualify_table`; repeated schema probes happen before the actual entity query. | Medium |
+| 3 | **Investigate DuckDB execution pool/connection contention after qualification cache** | 5-10 % | `duckdb_backend.execute` is 44.49 % cumulative, but current child evidence points first to qualification and metadata probes rather than pool acquisition itself. | Medium |
+| 4 | **Reduce response access logging / send overhead in benchmark mode** | 3-5 % | `logging.info` is 2.39 % and send/middleware frames are visible, but this is below the tenant/DuckDB metadata path. | Low |
+| 5 | **Switch entity response JSON to orjson** | < 3 % | JSON serialization does not appear as a top frame in the fresh flamegraph. | Low |
+| 6 | **Usage-DB single-writer optimization** | 0 % for open-auth run; unknown with keys | Auth was open (`configured_keys: 0`), so usage writes were not on the measured hot path. | Medium |
 
 ---
 
-## 6. Before/After Artifact Checklist
+## 7. Next candidate
+
+**Selected for T24:** cache tenant config and resolved table qualification.
+
+Why this one: it is the highest actionable post-PII frame cluster, with direct evidence from `_qualify_table`, `TenantRouter.load`, YAML parsing, and table-column probes. It is also narrower than a general DuckDB pool rewrite: T24 can first remove per-request config/YAML/schema-resolution work, then re-profile to see whether true DuckDB execution remains top.
+
+Why not the others: orjson is not visible; usage-DB writes are absent in this open-auth benchmark; access logging is too small; a broad DuckDB pool change should wait until table qualification and metadata probes are out of the flamegraph.
+
+---
+
+## 8. Before/After Artifact Checklist
 
 - [x] Baseline JSON: `docs/perf/entity-latency-baseline-2026-04-24.json`
 - [x] Flamegraph: `docs/perf/flamegraph-baseline-2026-04-24.svg`
 - [x] Profile write-up: this file
-- [ ] After-fix JSON: `docs/perf/entity-latency-after-pii-masker.json` (pending implementation)
-- [ ] After-fix flamegraph: `docs/perf/flamegraph-after-pii-masker.svg` (pending implementation)
+- [x] After-PII JSON: `docs/perf/entity-latency-after-pii-masker-cache.json`
+- [x] Fresh latency JSON: `docs/perf/entity-latency-a3ecd38-flamegraph.json`
+- [x] Fresh flamegraph: `docs/perf/flamegraph-after-pii-masker-cache.svg` (4390 SVG samples / py-spy reported 4391)

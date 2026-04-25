@@ -137,6 +137,19 @@ def _wait_for_redis(host: str, port: int, timeout: float = 30.0) -> None:
     raise RuntimeError(f"Timed out waiting for Redis at {host}:{port}: {last_error}")
 
 
+async def _clear_redis_query_cache(host: str, port: int) -> None:
+    client = AsyncRespRedisClient(host, port)
+    try:
+        keys: list[str] = []
+        for pattern in ("metric:*", "entity:*"):
+            for key in await client.keys(pattern):
+                keys.append(key.decode("utf-8") if isinstance(key, bytes) else str(key))
+        if keys:
+            await client.delete(*keys)
+    finally:
+        await client.aclose()
+
+
 class AsyncRespRedisClient:
     def __init__(self, host: str, port: int) -> None:
         self._host = host
@@ -318,6 +331,27 @@ def toxiproxy_client(chaos_stack):
     finally:
         client.reset()
         client.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_redis_query_cache_between_chaos_tests(request: pytest.FixtureRequest):
+    if "chaos_stack" not in request.fixturenames:
+        yield
+        return
+    chaos_stack = request.getfixturevalue("chaos_stack")
+    toxiproxy_client = request.getfixturevalue("toxiproxy_client")
+
+    toxiproxy_client.enable_proxy("redis")
+    asyncio.run(
+        _clear_redis_query_cache(chaos_stack["redis_host"], chaos_stack["redis_port"])
+    )
+    try:
+        yield
+    finally:
+        toxiproxy_client.enable_proxy("redis")
+        asyncio.run(
+            _clear_redis_query_cache(chaos_stack["redis_host"], chaos_stack["redis_port"])
+        )
 
 
 @pytest.fixture

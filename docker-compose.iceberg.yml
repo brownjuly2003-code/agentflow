@@ -4,7 +4,5 @@ services:
     ports:
       - "8181:8181"
     environment:
-      CATALOG_WAREHOUSE: /warehouse
+      CATALOG_WAREHOUSE: /tmp/warehouse
       CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
-    tmpfs:
-      - /warehouse

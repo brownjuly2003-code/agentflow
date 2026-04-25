@@ -1,7 +1,7 @@
 iceberg:
   catalog_type: rest
   catalog_uri: http://localhost:8181
-  warehouse: /warehouse
+  warehouse: /tmp/warehouse
   namespace: agentflow
   tables:
     - name: orders

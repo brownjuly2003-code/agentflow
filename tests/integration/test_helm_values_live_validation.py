@@ -10,9 +10,9 @@ INVALID_VALUES_PATH = (
     PROJECT_ROOT / "tests" / "integration" / "fixtures" / "helm-values-invalid.yaml"
 )
 EXPECTED_SCHEMA_ERRORS = [
-    "(root): Additional property unexpectedTopLevel is not allowed",
-    "replicaCount: Invalid type. Expected: integer, given: string",
-    "service.port: Must be greater than or equal to 1",
+    "additional properties 'unexpectedTopLevel' not allowed",
+    "/replicaCount': got string, want integer",
+    "/service/port': minimum: got 0, want 1",
 ]
 
 pytestmark = [pytest.mark.integration, pytest.mark.kind]

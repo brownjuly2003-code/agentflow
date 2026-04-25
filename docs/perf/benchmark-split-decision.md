@@ -59,6 +59,31 @@ Split into **two distinct benchmarks** with separate thresholds.
 | p99 < 200 ms | SLO target | Long-running benchmark | Does **not** block release until formally adopted; tracks optimization backlog progress. |
 | p50 < 100 ms | Soft goal | Long-running benchmark | Advisory only; entity endpoint currently ~180 ms p50. |
 
+### 3.1 Current Thresholds
+
+**Calibrated:** 2026-04-25 from GitHub Actions `Load Test` run
+`24920594700` on `ubuntu-latest` at HEAD
+`9953faaaa2198c416ce8a004df03f67db888ea60`.
+
+The current mixed Locust CI smoke gate uses endpoint p99 thresholds from the
+CI-runner baseline, rounded up with small headroom. The stricter `p99 < 500 ms`
+entity gate remains the release target, but the measured runner baseline is
+currently `600-700 ms` p99, so enforcing 500 ms here would keep main red without
+identifying a new regression.
+
+| Endpoint | CI baseline p95 | CI baseline p99 | Current CI gate |
+|----------|----------------:|----------------:|----------------:|
+| `GET /v1/entity/order/{id}` | 610 ms | 670 ms | p99 <= 750 ms |
+| `GET /v1/entity/user/{id}` | 590 ms | 700 ms | p99 <= 750 ms |
+| `GET /v1/entity/product/{id}` | 490 ms | 600 ms | p99 <= 750 ms |
+| `GET /v1/metrics/{name}` | 490 ms | 700 ms | p99 <= 750 ms |
+| `POST /v1/query` | 690 ms | 740 ms | p99 <= 800 ms |
+| `POST /v1/batch` | 670 ms | 760 ms | p99 <= 800 ms |
+
+`GET /v1/health` is intentionally excluded from load-test thresholds. The
+10-run sample had cold-start dependency probes at p95/p99 `53000 ms`, which is
+not a stable latency signal for the API endpoints under test.
+
 ## 4. File Lifecycle
 
 | File | Purpose | Retention |

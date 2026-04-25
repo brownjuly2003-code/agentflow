@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-04-17T13:37:10+03:00",
+  "source": "scripts/run_benchmark.py",
+  "host": "http://127.0.0.1:8001",
+  "load_profile": {
+    "users": 50,
+    "spawn_rate": 10,
+    "run_time": "60s"
+  },
+  "aggregate": {
+    "request_count": 569,
+    "failure_count": 0,
+    "failure_rate_percent": 0.0,
+    "requests_per_second": 27.76031988962123,
+    "p50_ms": 56.0,
+    "p95_ms": 260.0,
+    "p99_ms": 330.0
+  },
+  "endpoints": {
+    "POST /v1/batch": {
+      "request_count": 114,
+      "failure_count": 0,
+      "failure_rate_percent": 0.0,
+      "requests_per_second": 5.561821559607768,
+      "p50_ms": 62.0,
+      "p95_ms": 310.0,
+      "p99_ms": 340.0
+    },
+    "GET /v1/entity/order/{id}": {
+      "request_count": 87,
+      "failure_count": 0,
+      "failure_rate_percent": 0.0,
+      "requests_per_second": 4.244548032332244,
+      "p50_ms": 55.0,
+      "p95_ms": 200.0,
+      "p99_ms": 300.0
+    },
+    "GET /v1/entity/product/{id}": {
+      "request_count": 49,
+      "failure_count": 0,
+      "failure_rate_percent": 0.0,
+      "requests_per_second": 2.390607512462988,
+      "p50_ms": 49.0,
+      "p95_ms": 200.0,
+      "p99_ms": 320.0
+    },
+    "GET /v1/entity/user/{id}": {
+      "request_count": 63,
+      "failure_count": 0,
+      "failure_rate_percent": 0.0,
+      "requests_per_second": 3.073638230309556,
+      "p50_ms": 38.0,
+      "p95_ms": 230.0,
+      "p99_ms": 290.0
+    },
+    "GET /v1/metrics/{name}": {
+      "request_count": 149,
+      "failure_count": 0,
+      "failure_rate_percent": 0.0,
+      "requests_per_second": 7.2693983542241885,
+      "p50_ms": 53.0,
+      "p95_ms": 180.0,
+      "p99_ms": 220.0
+    },
+    "POST /v1/query": {
+      "request_count": 107,
+      "failure_count": 0,
+      "failure_rate_percent": 0.0,
+      "requests_per_second": 5.220306200684484,
+      "p50_ms": 74.0,
+      "p95_ms": 320.0,
+      "p99_ms": 370.0
+    }
+  }
+}

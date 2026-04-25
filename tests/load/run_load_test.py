@@ -36,29 +36,31 @@ def test_load_locust_rows_parses_endpoint_metrics(tmp_path: Path):
 
 
 def test_check_thresholds_reports_latency_and_error_violations():
+    assert "GET /v1/health" not in THRESHOLDS
+
     violations = check_thresholds(
         {
             "GET /v1/entity/order/{id}": {
                 "request_count": 12,
                 "failure_count": 1,
                 "fail_ratio": 1 / 12,
-                "p95_ms": 65.0,
-                "p99_ms": 90.0,
+                "p95_ms": 40.0,
+                "p99_ms": 760.0,
                 "rps": 4.0,
             },
             "GET /v1/health": {
                 "request_count": 20,
                 "failure_count": 0,
                 "fail_ratio": 0.0,
-                "p95_ms": 5.0,
-                "p99_ms": 6.0,
+                "p95_ms": 53000.0,
+                "p99_ms": 53000.0,
                 "rps": 10.0,
             },
         }
     )
 
     assert violations == [
-        "GET /v1/entity/order/{id}: p95 65.0 ms exceeds threshold 50.0 ms",
+        "GET /v1/entity/order/{id}: p99 760.0 ms exceeds threshold 750.0 ms",
         "GET /v1/entity/order/{id}: error rate 8.33% exceeds threshold 1.00%",
     ]
 
@@ -123,11 +125,14 @@ def check_thresholds(rows: dict[str, dict[str, float | int]]) -> list[str]:
         if metrics is None:
             continue
 
-        p95_ms = float(metrics["p95_ms"])
+        latency_key = "p99_ms" if "p99_ms" in limits else "p95_ms"
+        latency_label = latency_key.removesuffix("_ms")
+        latency_ms = float(metrics[latency_key])
         fail_ratio = float(metrics["fail_ratio"])
-        if p95_ms > limits["p95_ms"]:
+        if latency_ms > limits[latency_key]:
             violations.append(
-                f"{endpoint}: p95 {p95_ms:.1f} ms exceeds threshold {limits['p95_ms']:.1f} ms"
+                f"{endpoint}: {latency_label} {latency_ms:.1f} ms exceeds threshold "
+                f"{limits[latency_key]:.1f} ms"
             )
         if fail_ratio > limits["error_rate_max"]:
             violations.append(

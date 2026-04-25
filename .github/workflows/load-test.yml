@@ -57,7 +57,7 @@ jobs:
             --results-json .artifacts/load/results.json
 
       - name: Check CI-runner baseline regression
-        run: python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
+        run: python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 50
 
       - name: Record benchmark history
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

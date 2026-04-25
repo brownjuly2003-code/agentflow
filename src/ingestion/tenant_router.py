@@ -35,20 +35,29 @@ class TenantRouter:
         self.config_path = (
             Path(config_path) if config_path is not None else default_tenants_config_path()
         )
+        self._has_config: bool | None = None
+        self._config: TenantsConfig | None = None
 
     def has_config(self) -> bool:
-        return self.config_path.exists()
+        if self._has_config is None:
+            self._has_config = self.config_path.exists()
+        return self._has_config
 
     def load(self) -> TenantsConfig:
-        if not self.config_path.exists():
-            return TenantsConfig()
+        if self._config is not None:
+            return self._config
+
+        if not self.has_config():
+            self._config = TenantsConfig()
+            return self._config
 
         raw = self.config_path.read_text(encoding="utf-8")
         if yaml is not None:
             data = yaml.safe_load(raw) or {}
         else:  # pragma: no cover
             data = json.loads(raw)
-        return TenantsConfig.model_validate(data)
+        self._config = TenantsConfig.model_validate(data)
+        return self._config
 
     def get_tenant(self, tenant_id: str | None) -> TenantDefinition | None:
         if tenant_id is None:

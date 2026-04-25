@@ -37,6 +37,8 @@ class QueryEngine(
         self.catalog = catalog
         self._db_path: str = db_path or os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
         self._tenant_router = TenantRouter(tenants_config_path)
+        self._table_columns_cache: dict[str, set[str]] = {}
+        self._qualified_table_cache: dict[tuple[str, str | None], str] = {}
         self._db_pool = db_pool
         self._owns_connection = self._db_pool is None
         self._closed = False
@@ -62,7 +64,11 @@ class QueryEngine(
             yield conn
 
     def _table_columns(self, table_name: str) -> set[str]:
-        return self._backend.table_columns(table_name)
+        columns = self._table_columns_cache.get(table_name)
+        if columns is None:
+            columns = self._backend.table_columns(table_name)
+            self._table_columns_cache[table_name] = columns
+        return columns
 
     def health(self) -> dict:
         return self._backend.health()

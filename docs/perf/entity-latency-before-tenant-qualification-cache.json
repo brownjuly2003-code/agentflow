@@ -1,0 +1,86 @@
+{
+  "url": "http://127.0.0.1:8000/v1/entity/order/ORD-20260404-1001",
+  "iterations": 2000,
+  "concurrency": 16,
+  "warmup": 20,
+  "wall_seconds": 24.662,
+  "success_count": 2000,
+  "failure_count": 0,
+  "throughput_rps": 81.1,
+  "p50_ms": 193.29,
+  "p95_ms": 242.42,
+  "p99_ms": 288.85,
+  "max_ms": 571.58,
+  "mean_ms": 196.95,
+  "run": 1,
+  "hypothesis": "tenant-qualification-cache",
+  "git_head": "5b57cf4020f8c7f0138e313d47ab644c2b33f6a4",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+    "cpu_count": 18,
+    "ram_gb": 15.5,
+    "python": "3.13.7"
+  },
+  "stack": {
+    "redis": "up (Docker)",
+    "kafka": "down (not required for entity path, not queried)",
+    "duckdb_path": "agentflow_demo.duckdb",
+    "api": "uvicorn src.serving.api.main:app on 127.0.0.1:8000",
+    "auth": "open (configured_keys=0)"
+  },
+  "reproducibility": {
+    "policy": "best_of_3_p99",
+    "spread_pct": 25.69,
+    "runs": [
+      {
+        "url": "http://127.0.0.1:8000/v1/entity/order/ORD-20260404-1001",
+        "iterations": 2000,
+        "concurrency": 16,
+        "warmup": 20,
+        "wall_seconds": 24.662,
+        "success_count": 2000,
+        "failure_count": 0,
+        "throughput_rps": 81.1,
+        "p50_ms": 193.29,
+        "p95_ms": 242.42,
+        "p99_ms": 288.85,
+        "max_ms": 571.58,
+        "mean_ms": 196.95,
+        "run": 1
+      },
+      {
+        "url": "http://127.0.0.1:8000/v1/entity/order/ORD-20260404-1001",
+        "iterations": 2000,
+        "concurrency": 16,
+        "warmup": 20,
+        "wall_seconds": 25.464,
+        "success_count": 2000,
+        "failure_count": 0,
+        "throughput_rps": 78.54,
+        "p50_ms": 197.61,
+        "p95_ms": 268.73,
+        "p99_ms": 363.05,
+        "max_ms": 420.79,
+        "mean_ms": 203.36,
+        "run": 2
+      },
+      {
+        "url": "http://127.0.0.1:8000/v1/entity/order/ORD-20260404-1001",
+        "iterations": 2000,
+        "concurrency": 16,
+        "warmup": 20,
+        "wall_seconds": 25.733,
+        "success_count": 2000,
+        "failure_count": 0,
+        "throughput_rps": 77.72,
+        "p50_ms": 203.2,
+        "p95_ms": 240.93,
+        "p99_ms": 301.23,
+        "max_ms": 428.64,
+        "mean_ms": 205.52,
+        "run": 3
+      }
+    ]
+  }
+}

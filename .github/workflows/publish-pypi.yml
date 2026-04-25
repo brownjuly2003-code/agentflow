@@ -5,6 +5,7 @@ on:
     tags:
       - "sdk-v*"
       - "v*-rc*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: read
@@ -31,7 +32,7 @@ jobs:
           tag = os.environ["GITHUB_REF_NAME"]
           if tag.startswith("sdk-v"):
               release_version = tag.removeprefix("sdk-v")
-          elif tag.startswith("v") and "-rc" in tag:
+          elif tag.startswith("v"):
               release_version = tag.removeprefix("v")
           else:
               raise SystemExit(f"Unexpected tag format: {tag}")

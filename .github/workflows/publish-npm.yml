@@ -5,6 +5,7 @@ on:
     tags:
       - "sdk-v*"
       - "v*-rc*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: read
@@ -29,7 +30,7 @@ jobs:
           let expectedVersion;
           if (tag?.startsWith("sdk-v")) {
             expectedVersion = tag.slice("sdk-v".length);
-          } else if (tag?.startsWith("v") && tag.includes("-rc")) {
+          } else if (tag?.startsWith("v")) {
             expectedVersion = tag.slice("v".length);
           } else {
             throw new Error(`Unexpected tag format: ${tag ?? "<missing>"}`);

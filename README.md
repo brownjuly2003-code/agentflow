@@ -29,6 +29,8 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Quick start
 
+> **Upgrading from v1.0.x?** See the [v1.1 migration guide](docs/migration/v1.1.md) before installing.
+
 Prerequisites:
 
 - Python `3.11+`

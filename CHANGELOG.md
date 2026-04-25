@@ -2,10 +2,9 @@
 
 All notable changes to AgentFlow are documented in this file.
 
-## [Unreleased]
+## [1.1.0] - 2026-04-24
 
-v1.1 sprint work. Commits staged on `main` but not yet pushed; this
-section will be renamed on release tag.
+See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions from v1.0.x.
 
 ### Added
 

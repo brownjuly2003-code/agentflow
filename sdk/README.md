@@ -1,11 +1,13 @@
 # agentflow-client
 
+> Installed from PyPI as **`agentflow-client`**. Python import remains `agentflow`.
+
 ```bash
-pip install agentflow
+pip install agentflow-client
 ```
 
-Published package identity stays on `agentflow`. Inside the monorepo, the root runtime package is
-tracked separately as `agentflow-runtime`, while the SDK keeps the `agentflow` import path and CLI.
+Inside the monorepo, the root runtime package is tracked separately as
+`agentflow-runtime`, while the SDK keeps the `agentflow` import path and CLI.
 
 For a local editable install from this repository:
 

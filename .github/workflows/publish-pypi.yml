@@ -93,7 +93,7 @@ jobs:
         with:
           packages-dir: dist/
 
-      - name: Publish agentflow SDK to PyPI (OIDC)
+      - name: Publish agentflow-client SDK to PyPI (OIDC)
         if: env.IS_RC != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

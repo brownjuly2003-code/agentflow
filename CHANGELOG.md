@@ -52,6 +52,11 @@ See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions fr
   distribution name, import path, and CLI. Local test/install flows
   now install `./sdk` explicitly instead of relying on `sys.path`
   shims or install order.
+- **SDK PyPI distribution renamed**: published as `agentflow-client`
+  (was planned as `agentflow` in A01, but the name was already taken
+  on PyPI by an unrelated abandoned project). Python module and API
+  unchanged - `from agentflow import ...` still works. Install with
+  `pip install agentflow-client`.
 - **`integrations/` package bumped to 1.0.1** with the `mcp`
   optional extra and an `agentflow-mcp` console script; the stale
   `agentflow-client>=0.1.0` dependency now points at the public

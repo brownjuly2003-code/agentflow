@@ -124,7 +124,7 @@ def test_runtime_and_sdk_package_identities_are_split():
     profiles, _ = _load_dependency_contract()
 
     assert root_project["name"] == "agentflow-runtime"
-    assert sdk_project["name"] == "agentflow"
+    assert sdk_project["name"] == "agentflow-client"
     assert profiles["test-integrations"]["editable-installs"] == [
         ".[dev,cloud]",
         "./sdk",
@@ -137,10 +137,10 @@ def test_sdk_install_docs_match_split_package_identities():
     product_doc = (PROJECT_ROOT / "docs" / "product.md").read_text(encoding="utf-8")
     integrations_doc = (PROJECT_ROOT / "docs" / "integrations.md").read_text(encoding="utf-8")
 
-    assert "pip install agentflow" in sdk_readme
+    assert "pip install agentflow-client" in sdk_readme
     assert "agentflow-runtime" in sdk_readme
     assert "pip install -e sdk/" not in sdk_readme
-    assert "pip install agentflow" in product_doc
+    assert "pip install agentflow-client" in product_doc
     assert "pip install -e sdk/" not in product_doc
     assert "pip install agentflow-integrations" in integrations_doc
     assert "pip install -e integrations/" not in integrations_doc

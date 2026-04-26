@@ -38,7 +38,7 @@ AgentFlow is a data serving layer for AI agents, not a BI dashboard stack. It ex
 
 **Step-by-step**:
 1. Run `make demo` to seed the local pipeline and start the API.
-2. Install the SDK with `pip install agentflow` (or `python -m pip install -e "./sdk"` when working from this repo).
+2. Install the SDK with `pip install agentflow-client` (or `python -m pip install -e "./sdk"` when working from this repo).
 3. Pass the order ID from the support ticket into the agent workflow.
 4. Read the order and the associated user profile from AgentFlow.
 

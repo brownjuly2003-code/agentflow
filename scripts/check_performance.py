@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -170,6 +169,28 @@ def load_entity_gate(report: dict[str, object]) -> EntityGate:
     )
 
 
+def load_endpoint_p99_gates(report: dict[str, object]) -> dict[str, float]:
+    gate = report.get("gate")
+    if not isinstance(gate, dict):
+        return {}
+    endpoints = gate.get("endpoints")
+    if not isinstance(endpoints, dict):
+        return {}
+
+    p99_gates: dict[str, float] = {}
+    for endpoint, payload in endpoints.items():
+        if not isinstance(endpoint, str):
+            raise SystemExit("Endpoint gate name must be a string.")
+        if not isinstance(payload, dict):
+            raise SystemExit(f"Expected object for gate endpoint {endpoint!r}.")
+        p99_gates[normalize_endpoint_name(endpoint)] = _require_number(
+            payload,
+            ("p99_ms", "p99_latency_ms", "p99"),
+            f"gate endpoint {endpoint!r}",
+        )
+    return p99_gates
+
+
 def sort_endpoint_names(names: set[str]) -> list[str]:
     ordered = sorted(name for name in names if name != "ALL")
     if "ALL" in names:
@@ -201,6 +222,7 @@ def main() -> int:
         f"current report {current_path}",
     )
     entity_gate = load_entity_gate(baseline_report)
+    endpoint_p99_gates = load_endpoint_p99_gates(baseline_report)
 
     shared_names = set(baseline_samples) & set(current_samples)
     if not shared_names:
@@ -221,29 +243,40 @@ def main() -> int:
         current = current_samples[name]
         statuses: list[str] = []
 
-        if baseline.p50_latency_ms == 0:
-            if current.p50_latency_ms > 0:
-                statuses.append("REGRESSION")
+        if endpoint_p99_gates:
+            p99_gate = endpoint_p99_gates.get(name)
+            if p99_gate is not None and current.p99_latency_ms > p99_gate:
+                statuses.append("P99_GATE")
                 regressions.append(
-                    f"{name}: p50 increased from 0.0 ms to {current.p50_latency_ms:.1f} ms"
+                    f"{name}: p99 {current.p99_latency_ms:.1f} ms exceeds gate {p99_gate:.1f} ms"
                 )
-        elif current.p50_latency_ms > baseline.p50_latency_ms * (1 + regression_limit):
-            statuses.append("REGRESSION")
-            regressions.append(
-                f"{name}: p50 regressed by {format_delta(baseline.p50_latency_ms, current.p50_latency_ms)} "
-                f"({baseline.p50_latency_ms:.1f} ms -> {current.p50_latency_ms:.1f} ms)"
-            )
+        else:
+            if baseline.p50_latency_ms == 0:
+                if current.p50_latency_ms > 0:
+                    statuses.append("REGRESSION")
+                    regressions.append(
+                        f"{name}: p50 increased from 0.0 ms to {current.p50_latency_ms:.1f} ms"
+                    )
+            elif current.p50_latency_ms > baseline.p50_latency_ms * (1 + regression_limit):
+                statuses.append("REGRESSION")
+                delta = format_delta(baseline.p50_latency_ms, current.p50_latency_ms)
+                regressions.append(
+                    f"{name}: p50 regressed by {delta} "
+                    f"({baseline.p50_latency_ms:.1f} ms -> {current.p50_latency_ms:.1f} ms)"
+                )
 
-        if is_entity_endpoint(name):
+        if not endpoint_p99_gates and is_entity_endpoint(name):
             if current.p50_latency_ms > entity_gate.p50_ms:
                 statuses.append("P50_GATE")
                 regressions.append(
-                    f"{name}: p50 {current.p50_latency_ms:.1f} ms exceeds gate {entity_gate.p50_ms:.1f} ms"
+                    f"{name}: p50 {current.p50_latency_ms:.1f} ms exceeds gate "
+                    f"{entity_gate.p50_ms:.1f} ms"
                 )
             if current.p99_latency_ms > entity_gate.p99_ms:
                 statuses.append("P99_GATE")
                 regressions.append(
-                    f"{name}: p99 {current.p99_latency_ms:.1f} ms exceeds gate {entity_gate.p99_ms:.1f} ms"
+                    f"{name}: p99 {current.p99_latency_ms:.1f} ms exceeds gate "
+                    f"{entity_gate.p99_ms:.1f} ms"
                 )
 
         rows.append(
@@ -261,7 +294,9 @@ def main() -> int:
     print(f"- Status: `{status}`")
     print(f"- Baseline: `{args.baseline}`")
     print(f"- Current: `{current_path}`")
-    print(f"- Entity gate: `p50 <= {entity_gate.p50_ms:.0f} ms`, `p99 <= {entity_gate.p99_ms:.0f} ms`")
+    print(
+        f"- Entity gate: `p50 <= {entity_gate.p50_ms:.0f} ms`, `p99 <= {entity_gate.p99_ms:.0f} ms`"
+    )
     print(f"- Regression threshold: `p50 <= +{args.max_regress:.0f}%`")
     print()
     print("| Endpoint | Base p50 | Curr p50 | Base p99 | Curr p99 | Status |")

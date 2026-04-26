@@ -133,6 +133,64 @@ def test_main_passes_when_current_results_stay_within_gate(tmp_path, monkeypatch
     assert "Status: `PASS`" in captured.out
 
 
+def test_main_uses_endpoint_p99_gates_without_p50_regression_failures(
+    tmp_path, monkeypatch, capsys
+):
+    baseline_path = tmp_path / "baseline.json"
+    current_path = tmp_path / "current.json"
+    gate = {
+        "entity": {
+            "p50_ms": 200.0,
+            "p99_ms": 750.0,
+        },
+        "endpoints": {
+            "GET /v1/entity/user/{id}": {
+                "p99_ms": 750.0,
+                "error_rate_max": 0.01,
+            },
+        },
+    }
+    _write_report(
+        baseline_path,
+        {
+            "GET /v1/entity/user/{id}": {
+                "p50_ms": 76.0,
+                "p99_ms": 700.0,
+            }
+        },
+        gate=gate,
+    )
+    _write_report(
+        current_path,
+        {
+            "GET /v1/entity/user/{id}": {
+                "p50_ms": 160.0,
+                "p99_ms": 480.0,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_performance.py",
+            "--baseline",
+            str(baseline_path),
+            "--current",
+            str(current_path),
+            "--max-regress",
+            "50",
+        ],
+    )
+
+    exit_code = check_performance.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Status: `PASS`" in captured.out
+    assert "regressed by" not in captured.out
+
+
 def test_main_allows_custom_regression_threshold(tmp_path, monkeypatch, capsys):
     baseline_path = tmp_path / "baseline.json"
     current_path = tmp_path / "current.json"

@@ -1,0 +1,129 @@
+services:
+  kafka:
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+  cdc-kafka-init:
+    image: confluentinc/cp-kafka:7.7.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic connect-agentflow-configs --partitions 1 --replication-factor 1 --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic connect-agentflow-offsets --partitions 25 --replication-factor 1 --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic connect-agentflow-status --partitions 5 --replication-factor 1 --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.postgres.public.orders_v2 --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.postgres.public.users_enriched --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql.agentflow_demo.products_current --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql.agentflow_demo.sessions_aggregated --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic schemahistory.cdc.mysql.agentflow_demo --partitions 1 --replication-factor 1 --config cleanup.policy=compact
+
+  postgres-source:
+    image: postgres:16
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=4"
+      - "-c"
+      - "max_wal_senders=4"
+    environment:
+      POSTGRES_DB: agentflow_demo
+      POSTGRES_USER: cdc_reader
+      POSTGRES_PASSWORD: agentflow
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./docker/postgres-source/init.sql:/docker-entrypoint-initdb.d/001-agentflow-cdc.sql:ro
+      - postgres-cdc-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cdc_reader -d agentflow_demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql-source:
+    image: mysql:8.4
+    command:
+      - "--server-id=223344"
+      - "--log-bin=mysql-bin"
+      - "--binlog-format=ROW"
+      - "--binlog-row-image=FULL"
+      - "--binlog-expire-logs-seconds=864000"
+    environment:
+      MYSQL_DATABASE: agentflow_demo
+      MYSQL_USER: cdc_reader
+      MYSQL_PASSWORD: agentflow
+      MYSQL_ROOT_PASSWORD: agentflow-root
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./docker/mysql-source/init.sql:/docker-entrypoint-initdb.d/001-agentflow-cdc.sql:ro
+      - mysql-cdc-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -ucdc_reader -pagentflow --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka-connect:
+    image: agentflow-kafka-connect:local
+    build:
+      context: .
+      dockerfile: docker/kafka-connect/Dockerfile
+    depends_on:
+      cdc-kafka-init:
+        condition: service_completed_successfully
+      postgres-source:
+        condition: service_healthy
+      mysql-source:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: agentflow-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: connect-agentflow-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: connect-agentflow-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: connect-agentflow-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/usr/share/java/debezium
+      CONNECT_CONFIG_PROVIDERS: file
+      CONNECT_CONFIG_PROVIDERS_FILE_CLASS: org.apache.kafka.common.config.provider.FileConfigProvider
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ./docker/kafka-connect/secrets:/opt/connect/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  cdc-register-connectors:
+    image: agentflow-kafka-connect:local
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+    environment:
+      CONNECT_URL: http://kafka-connect:8083
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ./scripts/register_cdc_connectors.sh:/usr/local/bin/register_cdc_connectors.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/register_cdc_connectors.sh"]
+
+volumes:
+  postgres-cdc-data:
+  mysql-cdc-data:

@@ -70,6 +70,35 @@ Verify the run here:
 - Valid events: `events.validated`
 - Invalid events: `events.deadletter`
 
+### Run local CDC capture
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cdc.yml build kafka-connect
+docker compose -f docker-compose.yml -f docker-compose.cdc.yml up -d kafka cdc-kafka-init postgres-source mysql-source kafka-connect
+docker compose -f docker-compose.yml -f docker-compose.cdc.yml run --rm cdc-register-connectors
+```
+
+Verify connector state:
+
+```bash
+curl -fsS http://localhost:8083/connectors/agentflow-postgres-cdc/status
+curl -fsS http://localhost:8083/connectors/agentflow-mysql-cdc/status
+```
+
+Run the optional Docker CDC integration test against the running stack:
+
+```bash
+AGENTFLOW_RUN_CDC_DOCKER=1 python -m pytest -p no:schemathesis tests/integration/test_cdc_capture.py -q
+```
+
+Stop the local CDC stack when finished:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cdc.yml down
+```
+
+Kafka auto-create is disabled locally, so `cdc-kafka-init` pre-creates raw table topics, Debezium heartbeat topics, the MySQL signal topic `cdc.mysql`, and Kafka Connect internal topics. The MySQL schema history topic must use `cleanup.policy=delete` with unlimited retention; Debezium 3.5 JSON schema-history records can be keyless, and a compacted topic rejects those records.
+
 ### Restart a Flink job
 
 ```bash

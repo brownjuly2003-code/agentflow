@@ -80,10 +80,12 @@ Do not keep the current placeholder `RegexRouter` behavior from `src/ingestion/c
 | --- | ---: | --- | --- | --- |
 | `cdc.postgres.public.orders_v2` | 3 | 7 days local/staging, 14 days prod-like | `delete` | Raw Debezium envelope; internal boundary |
 | `cdc.postgres.public.users_enriched` | 3 | 7 days local/staging, 14 days prod-like | `delete` | Raw Debezium envelope; internal boundary |
+| `__debezium-heartbeat.cdc.postgres` | 1 | 24 hours | `delete` | Heartbeat topic for liveness/lag checks |
+| `cdc.mysql` | 1 | 7 days | `delete` | MySQL Debezium signal topic used when Kafka auto-create is disabled |
 | `cdc.mysql.agentflow_demo.products_current` | 3 | 7 days local/staging, 14 days prod-like | `delete` | Raw Debezium envelope; internal boundary |
 | `cdc.mysql.agentflow_demo.sessions_aggregated` | 3 | 7 days local/staging, 14 days prod-like | `delete` | Raw Debezium envelope; internal boundary |
-| `schemahistory.cdc.mysql.agentflow_demo` | 1 | Unlimited | `compact` | MySQL connector internal schema history topic |
-| `__debezium-heartbeat.cdc.postgres`, `__debezium-heartbeat.cdc.mysql` | 1 | 24 hours | `delete` | Heartbeat topics for liveness/lag checks |
+| `__debezium-heartbeat.cdc.mysql` | 1 | 24 hours | `delete` | Heartbeat topic for liveness/lag checks |
+| `schemahistory.cdc.mysql.agentflow_demo` | 1 | Unlimited | `delete` | MySQL connector internal schema history topic; Debezium 3.5 JSON records can be keyless, so compaction is not valid in the local stack |
 | `cdc.postgres.transaction`, `cdc.mysql.transaction` | 1 | 7 days | `delete` | Enabled only if transaction metadata is required by normalizer |
 | `events.deadletter` | 3 | 14 days local/staging, 30 days prod-like | `delete` | Existing AgentFlow DLQ for malformed/unmappable normalized records |
 
@@ -177,13 +179,13 @@ MySQL connector config baseline:
 2. Start Kafka, source databases, and Kafka Connect:
 
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.cdc.yml up -d kafka kafka-init postgres-source mysql-source kafka-connect
+   docker compose -f docker-compose.yml -f docker-compose.cdc.yml up -d kafka cdc-kafka-init postgres-source mysql-source kafka-connect
    ```
 
 3. Register connectors:
 
    ```bash
-   scripts/register_cdc_connectors.sh
+   docker compose -f docker-compose.yml -f docker-compose.cdc.yml run --rm cdc-register-connectors
    ```
 
 4. Verify worker and connector state:
@@ -199,8 +201,8 @@ MySQL connector config baseline:
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.cdc.yml exec postgres-source psql -U cdc_reader -d agentflow_demo -c "insert into orders_v2(order_id,user_id,status,total_amount,currency) values ('ORD-CDC-1','USR-CDC-1','confirmed',42.50,'USD');"
    docker compose -f docker-compose.yml -f docker-compose.cdc.yml exec mysql-source mysql -ucdc_reader -pagentflow -D agentflow_demo -e "insert into products_current(product_id,name,category,price,in_stock,stock_quantity) values ('PROD-CDC-1','CDC Widget','test',9.99,true,10);"
-   docker compose -f docker-compose.yml exec kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic cdc.postgres.public.orders_v2 --from-beginning --max-messages 1
-   docker compose -f docker-compose.yml exec kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic cdc.mysql.agentflow_demo.products_current --from-beginning --max-messages 1
+   docker compose -f docker-compose.yml -f docker-compose.cdc.yml exec kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic cdc.postgres.public.orders_v2 --from-beginning --max-messages 1
+   docker compose -f docker-compose.yml -f docker-compose.cdc.yml exec kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic cdc.mysql.agentflow_demo.products_current --from-beginning --max-messages 1
    ```
 
 ### Staging/kind test
@@ -268,7 +270,7 @@ Exit criteria: Postgres connector is `RUNNING`, captures initial snapshot and st
 - Register `agentflow-mysql-cdc`.
 - Insert/update/delete a row in `products_current`.
 - Verify records arrive on `cdc.mysql.agentflow_demo.products_current`.
-- Verify `schemahistory.cdc.mysql.agentflow_demo` exists and is compacted.
+- Verify `schemahistory.cdc.mysql.agentflow_demo` exists with `cleanup.policy=delete` and `retention.ms=-1`.
 
 Exit criteria: MySQL connector is `RUNNING`, captures initial snapshot and streaming binlog changes, and resumes after a task restart.
 

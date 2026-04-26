@@ -1,0 +1,71 @@
+{{- if .Values.connectors.postgres.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.connectors.postgres.name }}-config
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+data:
+  connector.json: |
+    {
+      "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+      "tasks.max": "1",
+      "database.hostname": "${file:/opt/connect/secrets/postgres.properties:hostname}",
+      "database.port": "{{ .Values.connectors.postgres.database.port }}",
+      "database.user": "${file:/opt/connect/secrets/postgres.properties:user}",
+      "database.password": "${file:/opt/connect/secrets/postgres.properties:password}",
+      "database.dbname": {{ .Values.connectors.postgres.database.dbname | quote }},
+      "topic.prefix": {{ .Values.connectors.postgres.topicPrefix | quote }},
+      "plugin.name": "pgoutput",
+      "slot.name": {{ .Values.connectors.postgres.slotName | quote }},
+      "publication.name": {{ .Values.connectors.postgres.publicationName | quote }},
+      "publication.autocreate.mode": "filtered",
+      "table.include.list": {{ .Values.connectors.postgres.tableIncludeList | quote }},
+      "snapshot.mode": "initial",
+      "heartbeat.interval.ms": "30000",
+      "signal.data.collection": {{ .Values.connectors.postgres.signalDataCollection | quote }},
+      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "key.converter.schemas.enable": "false",
+      "value.converter.schemas.enable": "false",
+      "custom.metric.tags": "service=agentflow,source=postgres"
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.connectors.postgres.name }}-register
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: register
+          image: curlimages/curl:8.10.1
+          args:
+            - -fsS
+            - --retry
+            - "30"
+            - --retry-delay
+            - "2"
+            - -X
+            - PUT
+            - -H
+            - Content-Type: application/json
+            - --data-binary
+            - "@/connectors/connector.json"
+            - http://{{ include "kafkaConnect.fullname" . }}:{{ .Values.service.port }}/connectors/{{ .Values.connectors.postgres.name }}/config
+          volumeMounts:
+            - name: connector-config
+              mountPath: /connectors
+              readOnly: true
+      volumes:
+        - name: connector-config
+          configMap:
+            name: {{ .Values.connectors.postgres.name }}-config
+{{- end }}

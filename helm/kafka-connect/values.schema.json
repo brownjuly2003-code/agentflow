@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "nameOverride",
+    "fullnameOverride",
+    "replicaCount",
+    "image",
+    "imagePullSecrets",
+    "serviceAccount",
+    "podAnnotations",
+    "podLabels",
+    "service",
+    "kafka",
+    "connect",
+    "secrets",
+    "connectors",
+    "resources",
+    "probes",
+    "affinity",
+    "nodeSelector",
+    "tolerations",
+    "extraEnv"
+  ],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "annotations", "name"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "name": { "type": "string" }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "port", "metricsPort", "annotations"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
+        },
+        "port": { "type": "integer", "minimum": 1 },
+        "metricsPort": { "type": "integer", "minimum": 1 },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "kafka": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bootstrapServers", "internalTopicReplicationFactor"],
+      "properties": {
+        "bootstrapServers": { "type": "string", "minLength": 1 },
+        "internalTopicReplicationFactor": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "connect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "groupId",
+        "configStorageTopic",
+        "offsetStorageTopic",
+        "statusStorageTopic",
+        "pluginPath",
+        "offsetFlushIntervalMs",
+        "configProviders",
+        "configProvidersFileClass"
+      ],
+      "properties": {
+        "groupId": { "type": "string", "minLength": 1 },
+        "configStorageTopic": { "type": "string", "minLength": 1 },
+        "offsetStorageTopic": { "type": "string", "minLength": 1 },
+        "statusStorageTopic": { "type": "string", "minLength": 1 },
+        "pluginPath": { "type": "string", "minLength": 1 },
+        "offsetFlushIntervalMs": { "type": "integer", "minimum": 1 },
+        "configProviders": { "type": "string", "minLength": 1 },
+        "configProvidersFileClass": { "type": "string", "minLength": 1 }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "existingSecret", "postgres", "mysql"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "postgres": { "$ref": "#/definitions/sourceSecret" },
+        "mysql": { "$ref": "#/definitions/sourceSecret" }
+      }
+    },
+    "connectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postgres", "mysql"],
+      "properties": {
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "name",
+            "database",
+            "topicPrefix",
+            "slotName",
+            "publicationName",
+            "tableIncludeList",
+            "signalDataCollection"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "name": { "type": "string", "minLength": 1 },
+            "database": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["port", "dbname"],
+              "properties": {
+                "port": { "type": "integer", "minimum": 1 },
+                "dbname": { "type": "string", "minLength": 1 }
+              }
+            },
+            "topicPrefix": { "type": "string", "minLength": 1 },
+            "slotName": { "type": "string", "minLength": 1 },
+            "publicationName": { "type": "string", "minLength": 1 },
+            "tableIncludeList": { "type": "string", "minLength": 1 },
+            "signalDataCollection": { "type": "string", "minLength": 1 }
+          }
+        },
+        "mysql": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "name",
+            "database",
+            "topicPrefix",
+            "tableIncludeList",
+            "schemaHistoryTopic"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "name": { "type": "string", "minLength": 1 },
+            "database": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["port", "serverId", "includeList"],
+              "properties": {
+                "port": { "type": "integer", "minimum": 1 },
+                "serverId": { "type": "integer", "minimum": 1 },
+                "includeList": { "type": "string", "minLength": 1 }
+              }
+            },
+            "topicPrefix": { "type": "string", "minLength": 1 },
+            "tableIncludeList": { "type": "string", "minLength": 1 },
+            "schemaHistoryTopic": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "resources": { "type": "object" },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readiness", "liveness"],
+      "properties": {
+        "readiness": { "$ref": "#/definitions/probe" },
+        "liveness": { "$ref": "#/definitions/probe" }
+      }
+    },
+    "affinity": { "type": "object" },
+    "nodeSelector": { "type": "object" },
+    "tolerations": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "extraEnv": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  },
+  "definitions": {
+    "sourceSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "user", "password"],
+      "properties": {
+        "hostname": { "type": "string", "minLength": 1 },
+        "user": { "type": "string", "minLength": 1 },
+        "password": { "type": "string", "minLength": 1 }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initialDelaySeconds",
+        "periodSeconds",
+        "timeoutSeconds",
+        "failureThreshold"
+      ],
+      "properties": {
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

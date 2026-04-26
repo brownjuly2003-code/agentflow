@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kafkaConnect.fullname" . }}
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+data:
+  connect-distributed.properties: |
+    bootstrap.servers={{ .Values.kafka.bootstrapServers }}
+    group.id={{ .Values.connect.groupId }}
+    config.storage.topic={{ .Values.connect.configStorageTopic }}
+    offset.storage.topic={{ .Values.connect.offsetStorageTopic }}
+    status.storage.topic={{ .Values.connect.statusStorageTopic }}
+    config.storage.replication.factor={{ .Values.kafka.internalTopicReplicationFactor }}
+    offset.storage.replication.factor={{ .Values.kafka.internalTopicReplicationFactor }}
+    status.storage.replication.factor={{ .Values.kafka.internalTopicReplicationFactor }}
+    key.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable=false
+    value.converter.schemas.enable=false
+    plugin.path={{ .Values.connect.pluginPath }}
+    offset.flush.interval.ms={{ .Values.connect.offsetFlushIntervalMs }}
+    config.providers={{ .Values.connect.configProviders }}
+    config.providers.file.class={{ .Values.connect.configProvidersFileClass }}
+  jmx-exporter.yaml: |
+    startDelaySeconds: 0
+    lowercaseOutputName: true
+    lowercaseOutputLabelNames: true
+    rules:
+      - pattern: "kafka.connect<type=connect-worker-metrics>([^:]+)"

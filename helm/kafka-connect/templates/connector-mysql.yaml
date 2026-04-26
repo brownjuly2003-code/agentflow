@@ -1,0 +1,69 @@
+{{- if .Values.connectors.mysql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.connectors.mysql.name }}-config
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+data:
+  connector.json: |
+    {
+      "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+      "tasks.max": "1",
+      "database.hostname": "${file:/opt/connect/secrets/mysql.properties:hostname}",
+      "database.port": "{{ .Values.connectors.mysql.database.port }}",
+      "database.user": "${file:/opt/connect/secrets/mysql.properties:user}",
+      "database.password": "${file:/opt/connect/secrets/mysql.properties:password}",
+      "database.server.id": "{{ .Values.connectors.mysql.database.serverId }}",
+      "topic.prefix": {{ .Values.connectors.mysql.topicPrefix | quote }},
+      "database.include.list": {{ .Values.connectors.mysql.database.includeList | quote }},
+      "table.include.list": {{ .Values.connectors.mysql.tableIncludeList | quote }},
+      "snapshot.mode": "initial",
+      "heartbeat.interval.ms": "30000",
+      "schema.history.internal.kafka.bootstrap.servers": {{ .Values.kafka.bootstrapServers | quote }},
+      "schema.history.internal.kafka.topic": {{ .Values.connectors.mysql.schemaHistoryTopic | quote }},
+      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "key.converter.schemas.enable": "false",
+      "value.converter.schemas.enable": "false",
+      "custom.metric.tags": "service=agentflow,source=mysql"
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.connectors.mysql.name }}-register
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: register
+          image: curlimages/curl:8.10.1
+          args:
+            - -fsS
+            - --retry
+            - "30"
+            - --retry-delay
+            - "2"
+            - -X
+            - PUT
+            - -H
+            - Content-Type: application/json
+            - --data-binary
+            - "@/connectors/connector.json"
+            - http://{{ include "kafkaConnect.fullname" . }}:{{ .Values.service.port }}/connectors/{{ .Values.connectors.mysql.name }}/config
+          volumeMounts:
+            - name: connector-config
+              mountPath: /connectors
+              readOnly: true
+      volumes:
+        - name: connector-config
+          configMap:
+            name: {{ .Values.connectors.mysql.name }}-config
+{{- end }}

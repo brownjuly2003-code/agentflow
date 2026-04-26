@@ -1,0 +1,99 @@
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: agentflow/kafka-connect
+  tag: "local"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  port: 8083
+  metricsPort: 9101
+  annotations: {}
+
+kafka:
+  bootstrapServers: kafka:9092
+  internalTopicReplicationFactor: 1
+
+connect:
+  groupId: agentflow-connect
+  configStorageTopic: connect-agentflow-configs
+  offsetStorageTopic: connect-agentflow-offsets
+  statusStorageTopic: connect-agentflow-status
+  pluginPath: /usr/share/java,/usr/share/confluent-hub-components,/usr/share/java/debezium
+  offsetFlushIntervalMs: 10000
+  configProviders: file
+  configProvidersFileClass: org.apache.kafka.common.config.provider.FileConfigProvider
+
+secrets:
+  create: true
+  existingSecret: ""
+  postgres:
+    hostname: postgres-source
+    user: cdc_reader
+    password: agentflow
+  mysql:
+    hostname: mysql-source
+    user: cdc_reader
+    password: agentflow
+
+connectors:
+  postgres:
+    enabled: false
+    name: agentflow-postgres-cdc
+    database:
+      port: 5432
+      dbname: agentflow_demo
+    topicPrefix: cdc.postgres
+    slotName: agentflow_postgres_slot
+    publicationName: agentflow_cdc_publication
+    tableIncludeList: public.orders_v2,public.users_enriched
+    signalDataCollection: agentflow_demo.public.debezium_signal
+  mysql:
+    enabled: false
+    name: agentflow-mysql-cdc
+    database:
+      port: 3306
+      serverId: 223345
+      includeList: agentflow_demo
+    topicPrefix: cdc.mysql
+    tableIncludeList: agentflow_demo.products_current,agentflow_demo.sessions_aggregated
+    schemaHistoryTopic: schemahistory.cdc.mysql.agentflow_demo
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+probes:
+  readiness:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+affinity: {}
+nodeSelector: {}
+tolerations: []
+extraEnv: []

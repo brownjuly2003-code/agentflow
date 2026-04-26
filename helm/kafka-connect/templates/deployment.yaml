@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kafkaConnect.fullname" . }}
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "kafkaConnect.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kafkaConnect.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kafkaConnect.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: kafka-connect
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: rest
+              containerPort: 8083
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          env:
+            - name: CONNECT_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers | quote }}
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CONNECT_REST_PORT
+              value: {{ .Values.service.port | quote }}
+            - name: CONNECT_GROUP_ID
+              value: {{ .Values.connect.groupId | quote }}
+            - name: CONNECT_CONFIG_STORAGE_TOPIC
+              value: {{ .Values.connect.configStorageTopic | quote }}
+            - name: CONNECT_OFFSET_STORAGE_TOPIC
+              value: {{ .Values.connect.offsetStorageTopic | quote }}
+            - name: CONNECT_STATUS_STORAGE_TOPIC
+              value: {{ .Values.connect.statusStorageTopic | quote }}
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: {{ .Values.kafka.internalTopicReplicationFactor | quote }}
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: {{ .Values.kafka.internalTopicReplicationFactor | quote }}
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: {{ .Values.kafka.internalTopicReplicationFactor | quote }}
+            - name: CONNECT_KEY_CONVERTER
+              value: org.apache.kafka.connect.json.JsonConverter
+            - name: CONNECT_VALUE_CONVERTER
+              value: org.apache.kafka.connect.json.JsonConverter
+            - name: CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+            - name: CONNECT_PLUGIN_PATH
+              value: {{ .Values.connect.pluginPath | quote }}
+            - name: CONNECT_CONFIG_PROVIDERS
+              value: {{ .Values.connect.configProviders | quote }}
+            - name: CONNECT_CONFIG_PROVIDERS_FILE_CLASS
+              value: {{ .Values.connect.configProvidersFileClass | quote }}
+            - name: CONNECT_OFFSET_FLUSH_INTERVAL_MS
+              value: {{ .Values.connect.offsetFlushIntervalMs | quote }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /connectors
+              port: rest
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /connectors
+              port: rest
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: secrets
+              mountPath: /opt/connect/secrets
+              readOnly: true
+            - name: config
+              mountPath: /etc/kafka-connect
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ include "kafkaConnect.secretName" . }}
+        - name: config
+          configMap:
+            name: {{ include "kafkaConnect.fullname" . }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

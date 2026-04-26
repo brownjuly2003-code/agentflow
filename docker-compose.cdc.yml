@@ -17,9 +17,13 @@ services:
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic connect-agentflow-status --partitions 5 --replication-factor 1 --config cleanup.policy=compact
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.postgres.public.orders_v2 --partitions 3 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.postgres.public.users_enriched --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic __debezium-heartbeat.cdc.postgres --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic __debezium-heartbeat.cdc.mysql --partitions 1 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql.agentflow_demo.products_current --partitions 3 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql.agentflow_demo.sessions_aggregated --partitions 3 --replication-factor 1
-        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic schemahistory.cdc.mysql.agentflow_demo --partitions 1 --replication-factor 1 --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic schemahistory.cdc.mysql.agentflow_demo --partitions 1 --replication-factor 1 --config cleanup.policy=delete --config retention.ms=-1
+        kafka-configs --bootstrap-server kafka:9092 --alter --entity-type topics --entity-name schemahistory.cdc.mysql.agentflow_demo --add-config cleanup.policy=delete,retention.ms=-1
 
   postgres-source:
     image: postgres:16

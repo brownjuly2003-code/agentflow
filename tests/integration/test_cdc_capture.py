@@ -6,12 +6,35 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+import yaml
 
 from src.ingestion.connectors.mysql_cdc import AGENTFLOW_MYSQL_CDC
 from src.ingestion.connectors.postgres_cdc import AGENTFLOW_POSTGRES_CDC
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILES = ("-f", "docker-compose.yml", "-f", "docker-compose.cdc.yml")
+
+
+def test_mysql_schema_history_topic_is_not_compacted():
+    compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.cdc.yml").read_text())
+    init_command = compose["services"]["cdc-kafka-init"]["command"][0]
+    schema_history_lines = [
+        line
+        for line in init_command.splitlines()
+        if "--topic schemahistory.cdc.mysql.agentflow_demo" in line
+    ]
+
+    assert schema_history_lines
+    assert all("cleanup.policy=compact" not in line for line in schema_history_lines)
+
+
+def test_cdc_kafka_init_creates_debezium_required_topics():
+    compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.cdc.yml").read_text())
+    init_command = compose["services"]["cdc-kafka-init"]["command"][0]
+
+    assert "--topic __debezium-heartbeat.cdc.postgres" in init_command
+    assert "--topic __debezium-heartbeat.cdc.mysql" in init_command
+    assert "--topic cdc.mysql " in init_command
 
 
 def test_postgres_connector_config_matches_t25_topic_contract():
@@ -145,16 +168,16 @@ def test_cdc_compose_stack_captures_postgres_and_mysql_rows():
     mysql_records = _consume_topic("cdc.mysql.agentflow_demo.products_current")
 
     assert any(
-        record.get("payload", {}).get("after", {}).get("order_id") == order_id
-        and record.get("payload", {}).get("op") == "c"
-        and record.get("payload", {}).get("source", {}).get("db") == "agentflow_demo"
-        and record.get("payload", {}).get("source", {}).get("table") == "orders_v2"
+        record.get("after", {}).get("order_id") == order_id
+        and record.get("op") == "c"
+        and record.get("source", {}).get("db") == "agentflow_demo"
+        and record.get("source", {}).get("table") == "orders_v2"
         for record in postgres_records
     )
     assert any(
-        record.get("payload", {}).get("after", {}).get("product_id") == product_id
-        and record.get("payload", {}).get("op") == "c"
-        and record.get("payload", {}).get("source", {}).get("db") == "agentflow_demo"
-        and record.get("payload", {}).get("source", {}).get("table") == "products_current"
+        record.get("after", {}).get("product_id") == product_id
+        and record.get("op") == "c"
+        and record.get("source", {}).get("db") == "agentflow_demo"
+        and record.get("source", {}).get("table") == "products_current"
         for record in mysql_records
     )

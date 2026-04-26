@@ -432,6 +432,33 @@ def test_extract_timestamp_uses_event_timestamp(stream_processor):
     assert result == int(datetime(2026, 4, 17, 9, 30, tzinfo=UTC).timestamp() * 1000)
 
 
+def test_extract_timestamp_uses_debezium_source_timestamp(stream_processor):
+    assigner = stream_processor.EventTimestampAssigner()
+
+    result = assigner.extract_timestamp(
+        json.dumps(
+            {
+                "before": None,
+                "after": {"order_id": "ORD-CDC-1"},
+                "source": {
+                    "connector": "postgresql",
+                    "db": "agentflow_demo",
+                    "schema": "public",
+                    "table": "orders_v2",
+                    "lsn": 26721944,
+                    "txId": 753,
+                    "ts_ms": 1777245326123,
+                },
+                "op": "c",
+                "ts_ms": 1777245326609,
+            }
+        ),
+        123,
+    )
+
+    assert result == 1777245326123
+
+
 def test_extract_timestamp_assumes_utc_for_naive_values(stream_processor):
     assigner = stream_processor.EventTimestampAssigner()
 

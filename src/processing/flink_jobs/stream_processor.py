@@ -36,6 +36,10 @@ class EventTimestampAssigner(TimestampAssigner):
             event = json.loads(value)
             from datetime import UTC, datetime
 
+            from src.ingestion.cdc.normalizer import is_debezium_event, normalize_debezium_event
+
+            if is_debezium_event(event):
+                event = normalize_debezium_event(event)
             ts = datetime.fromisoformat(event["timestamp"])
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=UTC)

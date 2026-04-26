@@ -102,6 +102,7 @@ T25b should create the following files.
 | `helm/kafka-connect/values.yaml` | Defaults for worker replicas, image, Kafka bootstrap servers, internal topic names, converters, JMX, resources, and connector enable flags. Local/kind values set `replicaCount=1`; staging/prod-like values set `replicaCount=2`. |
 | `helm/kafka-connect/values.schema.json` | Helm values contract mirroring the strict schema pattern already used by `helm/agentflow/values.schema.json`. |
 | `helm/kafka-connect/templates/configmap.yaml` | Worker config: `group.id=agentflow-connect`, internal topics, JSON converters, plugin path, REST advertised host/port, offset flush settings, and JMX exporter config path. |
+| `helm/kafka-connect/templates/topic-bootstrap.yaml` | Helm hook Job that pre-creates Kafka Connect internal topics, raw CDC table topics, Debezium heartbeat/signal topics, and the MySQL schema history topic before connector registration. |
 | `helm/kafka-connect/templates/deployment.yaml` | Kafka Connect distributed workers with readiness on `GET /connectors`, liveness on the REST port, JMX port, and rolling-update settings. |
 | `helm/kafka-connect/templates/service.yaml` | ClusterIP service exposing Kafka Connect REST API on `8083` and metrics/JMX exporter on the selected port. |
 | `helm/kafka-connect/templates/secret.yaml` | Optional local/demo credentials only. Production values should reference an existing Kubernetes Secret or ExternalSecret-managed Secret and should not render passwords from chart defaults. |

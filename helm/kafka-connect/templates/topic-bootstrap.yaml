@@ -1,0 +1,42 @@
+{{- if .Values.topicBootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "kafkaConnect.fullname" . }}-topic-bootstrap
+  labels:
+    {{- include "kafkaConnect.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "kafkaConnect.serviceAccountName" . }}
+      containers:
+        - name: topic-bootstrap
+          image: {{ .Values.topicBootstrap.image.repository }}:{{ .Values.topicBootstrap.image.tag }}
+          imagePullPolicy: {{ .Values.topicBootstrap.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ .Values.connect.configStorageTopic }} --partitions 1 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }} --config cleanup.policy=compact
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ .Values.connect.offsetStorageTopic }} --partitions 25 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }} --config cleanup.policy=compact
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ .Values.connect.statusStorageTopic }} --partitions 5 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }} --config cleanup.policy=compact
+              {{- if .Values.connectors.postgres.enabled }}
+              {{- range $table := splitList "," .Values.connectors.postgres.tableIncludeList }}
+              kafka-topics --bootstrap-server {{ $.Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ printf "%s.%s" $.Values.connectors.postgres.topicPrefix ($table | trim) }} --partitions 3 --replication-factor {{ $.Values.kafka.internalTopicReplicationFactor }}
+              {{- end }}
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic __debezium-heartbeat.{{ .Values.connectors.postgres.topicPrefix }} --partitions 1 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }}
+              {{- end }}
+              {{- if .Values.connectors.mysql.enabled }}
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ .Values.connectors.mysql.topicPrefix }} --partitions 1 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }}
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic __debezium-heartbeat.{{ .Values.connectors.mysql.topicPrefix }} --partitions 1 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }}
+              {{- range $table := splitList "," .Values.connectors.mysql.tableIncludeList }}
+              kafka-topics --bootstrap-server {{ $.Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ printf "%s.%s" $.Values.connectors.mysql.topicPrefix ($table | trim) }} --partitions 3 --replication-factor {{ $.Values.kafka.internalTopicReplicationFactor }}
+              {{- end }}
+              kafka-topics --bootstrap-server {{ .Values.kafka.bootstrapServers }} --create --if-not-exists --topic {{ .Values.connectors.mysql.schemaHistoryTopic }} --partitions 1 --replication-factor {{ .Values.kafka.internalTopicReplicationFactor }} --config cleanup.policy=delete --config retention.ms=-1
+              kafka-configs --bootstrap-server {{ .Values.kafka.bootstrapServers }} --alter --entity-type topics --entity-name {{ .Values.connectors.mysql.schemaHistoryTopic }} --add-config cleanup.policy=delete,retention.ms=-1
+              {{- end }}
+{{- end }}

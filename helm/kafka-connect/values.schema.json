@@ -13,6 +13,7 @@
     "podLabels",
     "service",
     "kafka",
+    "topicBootstrap",
     "connect",
     "secrets",
     "connectors",
@@ -89,6 +90,27 @@
       "properties": {
         "bootstrapServers": { "type": "string", "minLength": 1 },
         "internalTopicReplicationFactor": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "topicBootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "image"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository", "tag", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"]
+            }
+          }
+        }
       }
     },
     "connect": {

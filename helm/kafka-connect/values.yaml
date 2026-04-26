@@ -28,6 +28,13 @@ kafka:
   bootstrapServers: kafka:9092
   internalTopicReplicationFactor: 1
 
+topicBootstrap:
+  enabled: true
+  image:
+    repository: confluentinc/cp-kafka
+    tag: "7.7.0"
+    pullPolicy: IfNotPresent
+
 connect:
   groupId: agentflow-connect
   configStorageTopic: connect-agentflow-configs

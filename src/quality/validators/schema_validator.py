@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pydantic import ValidationError
 
 from src.ingestion.schemas.events import (
+    CdcEvent,
     ClickstreamEvent,
     OrderEvent,
     PaymentEvent,
@@ -45,6 +46,8 @@ _SCHEMA_MAP: dict = {
     "product.": ProductEvent,
 }
 
+_CDC_SOURCES = {"postgres_cdc", "mysql_cdc"}
+
 
 def _get_model_for_event(event_type: str):  # -> BaseModel subclass | None
     for prefix, model in _SCHEMA_MAP.items():
@@ -66,7 +69,7 @@ def validate_event(raw_event: dict) -> ValidationResult:
     event_id = raw_event.get("event_id", "unknown")
     event_type = raw_event.get("event_type", "unknown")
 
-    model = _get_model_for_event(event_type)
+    model = CdcEvent if _is_cdc_event(raw_event) else _get_model_for_event(event_type)
     if model is None:
         return ValidationResult(
             is_valid=False,
@@ -93,6 +96,14 @@ def validate_event(raw_event: dict) -> ValidationResult:
             event_type=event_type,
             errors=errors,
         )
+
+
+def _is_cdc_event(raw_event: dict) -> bool:
+    return (
+        raw_event.get("source") in _CDC_SOURCES
+        and "operation" in raw_event
+        and "source_metadata" in raw_event
+    )
 
 
 def validate_batch(events: list[dict]) -> tuple[list[dict], list[ValidationResult]]:

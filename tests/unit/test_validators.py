@@ -23,6 +23,31 @@ class TestSchemaValidator:
         assert not result.is_valid
         assert result.errors[0]["type"] == "unknown_event_type"
 
+    def test_valid_cdc_event(self):
+        result = validate_event(
+            {
+                "event_id": "1d68d23f-f0a7-50f7-8fd3-ef6f8fd9a370",
+                "event_type": "order.created",
+                "operation": "insert",
+                "timestamp": "2026-04-26T23:15:26.123000+00:00",
+                "source": "postgres_cdc",
+                "entity_type": "order",
+                "entity_id": "ORD-CDC-1",
+                "before": None,
+                "after": {"order_id": "ORD-CDC-1"},
+                "source_metadata": {
+                    "connector": "postgresql",
+                    "database": "agentflow_demo",
+                    "schema": "public",
+                    "table": "orders_v2",
+                    "snapshot": "false",
+                    "position": {"lsn": 26721944, "tx_id": 753},
+                },
+            }
+        )
+
+        assert result.is_valid
+
     def test_missing_fields(self):
         result = validate_event({"event_id": "test"})
         assert not result.is_valid

@@ -84,8 +84,27 @@ class ValidateAndEnrich(ProcessFunction):
             )
             return
 
+        from src.ingestion.cdc.normalizer import is_debezium_event, normalize_debezium_event
+
+        try:
+            if is_debezium_event(event):
+                event = normalize_debezium_event(event)
+        except ValueError as e:
+            ctx.output(
+                DEAD_LETTER_TAG,
+                json.dumps(
+                    {
+                        "raw": value[:1000],
+                        "error": str(e),
+                        "stage": "cdc_normalization",
+                    }
+                ),
+            )
+            return
+
         event_id = event.get("event_id", "unknown")
         event_type = event.get("event_type", "unknown")
+        is_cdc_event = event.get("source") in {"postgres_cdc", "mysql_cdc"} and "operation" in event
 
         # 2. Schema validation (Pydantic models)
         schema_result = validate_event(event)
@@ -131,7 +150,9 @@ class ValidateAndEnrich(ProcessFunction):
                 return
 
         # 4. Domain enrichment by event type
-        if event_type.startswith("order."):
+        if is_cdc_event:
+            pass
+        elif event_type.startswith("order."):
             event = enrich_order(event)
         elif event_type in ("click", "page_view", "add_to_cart"):
             event = enrich_clickstream(event)
@@ -154,7 +175,12 @@ class ValidateAndEnrich(ProcessFunction):
             "processor_version": "1.0.0",
         }
 
-        event["_partition_key"] = event.get("user_id") or event.get("order_id") or event["event_id"]
+        event["_partition_key"] = (
+            event.get("user_id")
+            or event.get("order_id")
+            or event.get("entity_id")
+            or event["event_id"]
+        )
 
         yield json.dumps(event)
 
@@ -200,7 +226,16 @@ def build_pipeline():
     source = (
         KafkaSource.builder()
         .set_bootstrap_servers(bootstrap_servers)
-        .set_topics("orders.raw", "payments.raw", "clicks.raw", "products.cdc")
+        .set_topics(
+            "orders.raw",
+            "payments.raw",
+            "clicks.raw",
+            "products.cdc",
+            "cdc.postgres.public.orders_v2",
+            "cdc.postgres.public.users_enriched",
+            "cdc.mysql.agentflow_demo.products_current",
+            "cdc.mysql.agentflow_demo.sessions_aggregated",
+        )
         .set_group_id("agentflow-stream-processor")
         .set_starting_offsets(KafkaOffsetsInitializer.earliest())
         .set_value_only_deserializer(SimpleStringSchema())

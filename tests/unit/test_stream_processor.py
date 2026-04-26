@@ -496,6 +496,44 @@ def test_process_element_routes_schema_errors_to_dlq(stream_processor, monkeypat
     }
 
 
+def test_process_element_normalizes_debezium_before_validation(stream_processor, monkeypatch):
+    validated_events = []
+
+    def _validate_event(event):
+        validated_events.append(event)
+        return _ValidationResult()
+
+    _install_processor_dependencies(monkeypatch, validate_event=_validate_event)
+    processor = stream_processor.ValidateAndEnrich()
+    ctx = _FakeProcessContext()
+    value = json.dumps(
+        {
+            "before": None,
+            "after": {"order_id": "ORD-CDC-1", "status": "confirmed"},
+            "source": {
+                "connector": "postgresql",
+                "db": "agentflow_demo",
+                "schema": "public",
+                "table": "orders_v2",
+                "lsn": 26721944,
+                "txId": 753,
+                "ts_ms": 1777245326123,
+            },
+            "op": "c",
+        }
+    )
+
+    emitted = [json.loads(item) for item in processor.process_element(value, ctx)]
+
+    assert ctx.outputs == []
+    assert validated_events[0]["event_type"] == "order.created"
+    assert validated_events[0]["operation"] == "insert"
+    assert emitted[0]["source"] == "postgres_cdc"
+    assert emitted[0]["entity_id"] == "ORD-CDC-1"
+    assert emitted[0]["_partition_key"] == "ORD-CDC-1"
+    assert "enriched_by" not in emitted[0]
+
+
 def test_process_element_routes_semantic_errors_to_dlq(stream_processor, monkeypatch):
     issue = _SemanticIssue(
         rule="order_total_consistency",
@@ -707,6 +745,10 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
         "payments.raw",
         "clicks.raw",
         "products.cdc",
+        "cdc.postgres.public.orders_v2",
+        "cdc.postgres.public.users_enriched",
+        "cdc.mysql.agentflow_demo.products_current",
+        "cdc.mysql.agentflow_demo.sessions_aggregated",
     )
     assert source["group_id"] == "agentflow-stream-processor"
     assert source["starting_offsets"] == "earliest"

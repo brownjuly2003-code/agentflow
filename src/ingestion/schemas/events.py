@@ -24,6 +24,19 @@ class EventType(StrEnum):
     PRODUCT_UPDATED = "product.updated"
 
 
+class CdcOperation(StrEnum):
+    SNAPSHOT = "snapshot"
+    INSERT = "insert"
+    UPDATE = "update"
+    DELETE = "delete"
+    DDL = "ddl"
+
+
+class CdcSource(StrEnum):
+    POSTGRES = "postgres_cdc"
+    MYSQL = "mysql_cdc"
+
+
 class Currency(StrEnum):
     USD = "USD"
     EUR = "EUR"
@@ -56,6 +69,19 @@ class BaseEvent(BaseModel):
             msg = f"Event timestamp {v} is too far in the future"
             raise ValueError(msg)
         return v
+
+
+class CdcEvent(BaseModel):
+    event_id: str = Field(..., min_length=1)
+    event_type: str = Field(..., min_length=1, max_length=128)
+    operation: CdcOperation
+    timestamp: datetime
+    source: CdcSource
+    entity_type: str = Field(..., min_length=1, max_length=64)
+    entity_id: str = Field(..., min_length=1, max_length=256)
+    before: dict | None = None
+    after: dict | None = None
+    source_metadata: dict = Field(..., min_length=1)
 
 
 class OrderItem(BaseModel):

@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -107,7 +108,7 @@ def _consume_topic(topic: str) -> list[dict]:
         "--timeout-ms",
         "30000",
         "--max-messages",
-        "20",
+        "200",
         check=False,
     )
     records = []
@@ -117,6 +118,26 @@ def _consume_topic(topic: str) -> list[dict]:
         except json.JSONDecodeError:
             continue
     return records
+
+
+def test_consume_topic_reads_large_history_window(monkeypatch):
+    calls = []
+
+    def _fake_compose(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout='{"event_id":"evt-1"}\nnot-json\n',
+            stderr="",
+        )
+
+    monkeypatch.setattr(sys.modules[__name__], "_compose", _fake_compose)
+
+    records = _consume_topic("cdc.postgres.public.orders_v2")
+
+    assert records == [{"event_id": "evt-1"}]
+    assert calls[0][calls[0].index("--max-messages") + 1] == "200"
 
 
 @pytest.mark.integration

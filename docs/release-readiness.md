@@ -22,7 +22,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Recorded full-suite evidence | Green locally on 2026-04-27 on top of `8d7088d`: 668 passed, 8 skipped, 12 warnings in 523.26s with Redis running and project-local pytest temp paths. |
+| Recorded full-suite evidence | Green locally on 2026-04-27 on top of `8d7088d`: 668 passed, 8 skipped, 13 warnings in 543.28s with Redis running and project-local pytest temp paths. |
 
 ## Status by BCG Dimension
 
@@ -114,7 +114,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | API reference coverage check | ✅ PASS | `OK - all 6 endpoints documented` |
 | `python -m pytest -p no:schemathesis tests/unit/test_cdc_normalizer.py tests/unit/test_stream_processor.py tests/unit/test_validators.py tests/integration/test_cdc_capture.py tests/integration/test_kafka_connect_helm_chart.py -q` | ✅ PASS | 44 passed, 4 skipped on 2026-04-27 |
 | `python -m pytest -p no:schemathesis tests/unit/test_contract_dependencies.py tests/unit/test_version.py tests/unit/test_sdk_backwards_compat.py -q` | ✅ PASS | 21 passed on 2026-04-27 |
-| `docker compose up -d redis` + project-local `TEMP`/`TMP` + `python -m pytest -p no:schemathesis -q --tb=short --durations=30 --timeout=300 --basetemp=.tmp\pytest-doc-commit -o cache_dir=.tmp\.pytest-cache-doc-commit` | ✅ PASS | 668 passed, 8 skipped, 12 warnings in 523.26s on 2026-04-27 |
+| `docker compose up -d redis` + project-local `TEMP`/`TMP` + `python -m pytest -p no:schemathesis -q --tb=short --durations=30 --timeout=300 --basetemp D:\DE_project\.tmp\pytest-basetemp-doc-final-gate` | ✅ PASS | 668 passed, 8 skipped, 13 warnings in 543.28s on 2026-04-27 |
 | GitHub Actions on `45165b3` plus manual `Contract Tests` dispatch on `8d7088d` | ✅ PASS | `CI`, `Security Scan`, `E2E Tests`, `Load Test`, and `Staging Deploy` succeeded on `45165b3`; manually dispatched `Contract Tests` succeeded on `8d7088d` |
 | `cd sdk-ts`; `npm install --package-lock=false`; `npm run build`; `npm pack --dry-run` | ✅ PASS | TypeScript SDK tarball `agentflow-client-1.1.0.tgz`, 16 files, package size 8.2 kB, unpacked 32.9 kB |
 | Clear `dist` and `sdk/dist`; `python -m build .`; `python -m build sdk\`; `python -m twine check dist\* sdk\dist\*` | ✅ PASS | runtime and SDK artifacts passed `twine check`; runtime artifacts still warn that long description metadata is missing |

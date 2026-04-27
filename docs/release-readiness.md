@@ -22,7 +22,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Latest full-suite claim | No current full-suite green claim. The latest local full-suite attempt on 2026-04-27 timed out after 20 minutes; targeted gates are listed below. |
+| Latest full-suite claim | Green locally on 2026-04-27 at `29da4c1`: 663 passed, 7 skipped in 599.24s with Redis running and project-local pytest temp paths. |
 
 ## Status by BCG Dimension
 
@@ -87,7 +87,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions
 - [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
 - [ ] Production CDC source onboarding approved and configured
-- [ ] Current full suite green on latest HEAD
+- [x] Current full suite green on latest HEAD
 - [ ] Phase 1 PMF work completed
 
 ## SDK Publish Proof Path
@@ -113,8 +113,9 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | API reference coverage check | ✅ PASS | `OK - all 6 endpoints documented` |
 | `python -m pytest -p no:schemathesis tests/unit/test_cdc_normalizer.py tests/unit/test_stream_processor.py tests/unit/test_validators.py tests/integration/test_cdc_capture.py tests/integration/test_kafka_connect_helm_chart.py -q` | ✅ PASS | 44 passed, 4 skipped on 2026-04-27 |
 | `python -m pytest -p no:schemathesis tests/unit/test_contract_dependencies.py tests/unit/test_version.py tests/unit/test_sdk_backwards_compat.py -q` | ✅ PASS | 21 passed on 2026-04-27 |
+| `docker compose up -d redis` + `python -m pytest -p no:schemathesis -q --tb=short --durations=30 --timeout=300 --basetemp D:\DE_project\.tmp\codex-pytest-basetemp-doc-commit` | ✅ PASS | 663 passed, 7 skipped, 13 warnings in 599.24s on 2026-04-27 |
 
-Full-suite note: `python -m pytest -p no:schemathesis -q` was started locally on 2026-04-27 and timed out after 20 minutes. Treat the current evidence as targeted verification, not a full-suite green claim.
+Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process.
 
 Local note: `tests/chaos` already manage their own Docker stack via fixture. Running `docker compose -f docker-compose.chaos.yml up -d` before `pytest` creates a duplicate toxiproxy bind on port `8474`; the stable local command is the direct `pytest` invocation.
 
@@ -140,7 +141,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 **v1.1.0 release line prepared; post-v1.1 CDC follow-up checked in.**
 
-AgentFlow is publicly available and the current checked-in docs/code describe the intended release and CDC state. Do not treat registry publishing, production CDC source onboarding, or latest-HEAD full-suite status as complete until the unchecked gates above are closed. Remaining open items:
+AgentFlow is publicly available and the current checked-in docs/code describe the intended release and CDC state. Do not treat registry publishing or production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - Manual GH Actions setup: staging/prod environments with required reviewers
 - AWS OIDC role setup for real terraform apply

@@ -52,21 +52,21 @@ Capture notes:
 
 ```bash
 python -m pip install -e . -e ./sdk -e ./integrations
-pip show agentflow
+pip show agentflow-client
 pip show agentflow-runtime
 python -c "from agentflow import AgentFlowClient"
 agentflow --help
-python -m pip uninstall -y agentflow agentflow-runtime agentflow-integrations
+python -m pip uninstall -y agentflow-client agentflow-runtime agentflow-integrations
 python -m pip install -e ./sdk -e . -e ./integrations
-pip show agentflow
+pip show agentflow-client
 pip show agentflow-runtime
 python -c "from agentflow import AgentFlowClient"
 agentflow --help
 ```
 
-- [ ] Confirm `pip show agentflow` points at `sdk/`, `pip show agentflow-runtime` points at the root repo, and integrations import cleanly without `sys.path` shims
-- [ ] Keep GitHub source releases on `vX.Y.Z`; keep npm/PyPI SDK publishes on `sdk-vX.Y.Z`
-- [ ] Treat `.github/workflows/publish-npm.yml` and `.github/workflows/publish-pypi.yml` as production-only workflows: pushing `sdk-v*` publishes real artifacts
+- [ ] Confirm `pip show agentflow-client` points at `sdk/`, `pip show agentflow-runtime` points at the root repo, and integrations import cleanly without `sys.path` shims
+- [ ] Use `sdk-vX.Y.Z` for standalone SDK releases, `vX.Y.Z-rcN` for release-candidate smoke, and `vX.Y.Z` for production runtime+SDK release tags
+- [ ] Treat `.github/workflows/publish-npm.yml` and `.github/workflows/publish-pypi.yml` as production-capable workflows: approved `sdk-v*` and production `vX.Y.Z` tags publish real artifacts
 - [ ] On a clean tree, run `python scripts/release.py patch|minor|major` to bump `sdk/` and `sdk-ts/` together and create the local `sdk-vX.Y.Z` tag
 - [ ] Before pushing the tag, rehearse the publish steps locally without uploading anything:
 
@@ -81,8 +81,8 @@ python -m twine check sdk/dist/*
 ```
 
 - [ ] If `sdk/dist/` already contains older artifacts, clear it before `python -m build sdk/` so `twine check` only validates the current release
-- [ ] Stop after the rehearsal when you only need proof; the real publish event is pushing the `sdk-vX.Y.Z` tag
-- [ ] On the approved SDK release commit, push the commit and `sdk-vX.Y.Z` tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python SDK`
+- [ ] Stop after the rehearsal when you only need proof; the real publish event is pushing the approved release tag
+- [ ] On the approved release commit, push the commit and release tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python Packages`
 
 ## Verification after publish
 

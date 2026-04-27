@@ -1,13 +1,15 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20  
-**Last updated**: 2026-04-23  
-**Version**: v1.0.1  
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; SDK registry publish proof is still pending the first `sdk-v*` release event; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
+**Last updated**: 2026-04-27
+**Version**: v1.1.0 + post-v1.1 CDC follow-up
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization is checked in; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
 
 ## Executive Summary
 
 AgentFlow закрыл технические блокеры из internal audit baseline от 2026-04-12, опубликовал v1.0.0 на GitHub 2026-04-20 и выпустил v1.0.1 patch release для clean-clone установки. Поверх v13.5 security refresh работы v15-v18 закрыли GTM/documentation хвост: narrative API reference, competitive analysis, security audit, landing page, README/glossary/LICENSE/CHANGELOG, public repo, and Fly.io demo config are now part of the release evidence. `bandit_diff.py` остаётся зелёным against the checked-in baseline, а clean-clone verification для patch release зафиксирован в `CHANGELOG.md` (`pytest tests/unit -q`: 340 passed). Retrospective reconstruction of the lost audit artifact is preserved in `docs/audit-history.md`.
+
+The v1.1 line split runtime and SDK distribution identity: the runtime publishes as `agentflow-runtime`, while the Python SDK publishes as `agentflow-client` and keeps the `agentflow` import path. The current post-v1.1 follow-up operationalizes ADR 0005 with Debezium/Kafka Connect local compose, a Kubernetes-shaped Helm chart, raw CDC topic bootstrap, and canonical CDC normalization before downstream validation.
 
 ## Status by BCG Dimension
 
@@ -50,9 +52,10 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
 - GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
 - AWS OIDC role setup for GitHub Actions is still a manual setup step.
-- SDK registry publish workflows still have no historical run: repo tags to date are `v1.0.0` and `v1.0.1`, while npm/PyPI publish is intentionally gated on `sdk-v*`.
+- SDK registry publish still needs successful production evidence. Publish workflows now accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and npm token setup remain manual gates.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
+- Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership.
 
 ## Release Checklist
 
@@ -67,15 +70,15 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Bandit diff is green against the checked-in baseline
 - [ ] GitHub environments `staging`/`prod` configured with required reviewers
 - [ ] AWS OIDC role configured for GitHub Actions
-- [ ] First approved `sdk-v*` release produces green `Publish TypeScript SDK` and `Publish Python SDK` runs
+- [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
 - [ ] Phase 1 PMF work completed
 
 ## SDK Publish Proof Path
 
-- Canonical SDK release tags remain `sdk-vX.Y.Z`, matching `.github/workflows/publish-npm.yml`, `.github/workflows/publish-pypi.yml`, and `scripts/release.py`.
-- Existing repo releases `v1.0.0` and `v1.0.1` are GitHub source releases, not npm/PyPI publish events.
+- Publish workflows accept standalone SDK tags (`sdk-vX.Y.Z`), release-candidate tags (`vX.Y.Z-rcN`), and production release tags (`vX.Y.Z`). `scripts/release.py` still creates `sdk-vX.Y.Z` tags for standalone SDK releases.
+- Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag.
 - Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md`: build the TypeScript SDK, run `npm pack --dry-run`, build `sdk/`, and run `python -m twine check sdk/dist/*` without pushing a tag.
-- The first green proof for both publish workflows will be the next approved `sdk-v*` tag push after that preflight.
+- The first green proof for both publish workflows will be the next approved release tag push after that preflight and registry credential setup.
 
 ## Verification Snapshot
 
@@ -115,6 +118,8 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 ## Release Verdict
 
 **v1.0.0 published 2026-04-20, v1.0.1 patch released for clean-clone support.**
+
+The v1.1.0 release line is prepared with the SDK/runtime package split, and the checked-in post-v1.1 work now includes Debezium/Kafka Connect CDC operationalization. Production readiness is still gated by the manual environment and production-data onboarding items listed above.
 
 AgentFlow is technically release-ready and publicly available. All code-level gates remain green on fresh clone (`pytest tests/unit: 340 passed`). Remaining open items are non-code:
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)

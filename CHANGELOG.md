@@ -2,6 +2,40 @@
 
 All notable changes to AgentFlow are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Debezium/Kafka Connect CDC operationalization**: local compose now
+  brings up Postgres/MySQL source databases, Kafka Connect, Debezium
+  connector registration, and raw CDC topic bootstrap for the AgentFlow
+  demo schema.
+- **Kafka Connect Helm chart**: `helm/kafka-connect/` defines the
+  Connect worker deployment, connector registration hooks, secrets,
+  values schema, and topic bootstrap job for Kubernetes-shaped staging.
+- **Canonical CDC normalizer**: raw Debezium envelopes from Postgres
+  and MySQL now normalize into the AgentFlow CDC contract before
+  downstream validation and Flink processing.
+
+### Changed
+
+- **CDC watermarks**: the Flink CDC path now uses source timestamps
+  from normalized Debezium records, keeping event-time behavior aligned
+  with source database changes.
+- **Performance gate enforcement**: `scripts/check_performance.py`
+  now enforces endpoint-level p99 gates instead of only aggregate
+  benchmark status.
+
+### Documentation
+
+- `docs/runbook.md` now documents local CDC startup, connector status
+  checks, the optional Docker CDC integration test, and cleanup.
+- `docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md`
+  now reflects the implemented local/Helm CDC path, including topic
+  bootstrap and schema-history topic behavior.
+
+---
+
 ## [1.1.0] - 2026-04-25
 
 See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions from v1.0.x.
@@ -48,10 +82,10 @@ See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions fr
   `sdk-ts/package.json`. Pinned with `tests/unit/test_version.py`.
   (5d54b77)
 - **Runtime/package identity split**: the root repo now publishes as
-  `agentflow-runtime` while the Python SDK keeps the `agentflow`
-  distribution name, import path, and CLI. Local test/install flows
-  now install `./sdk` explicitly instead of relying on `sys.path`
-  shims or install order.
+  `agentflow-runtime` while the Python SDK publishes as
+  `agentflow-client` and keeps the `agentflow` import path and CLI.
+  Local test/install flows now install `./sdk` explicitly instead of
+  relying on `sys.path` shims or install order.
 - **SDK PyPI distribution renamed**: published as `agentflow-client`
   (was planned as `agentflow` in A01, but the name was already taken
   on PyPI by an unrelated abandoned project). Python module and API
@@ -59,8 +93,8 @@ See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions fr
   `pip install agentflow-client`.
 - **`integrations/` package bumped to 1.0.1** with the `mcp`
   optional extra and an `agentflow-mcp` console script; the stale
-  `agentflow-client>=0.1.0` dependency now points at the public
-  `agentflow>=1.0.1`. (07cb253)
+  SDK dependency now points at the public `agentflow-client>=1.0.1`
+  package. (07cb253)
 - **28 historical plan docs archived** from `docs/plans/` to
   `docs/plans/codex-archive/`. `docs/plans/` now only holds live
   work. (0e9fc00)

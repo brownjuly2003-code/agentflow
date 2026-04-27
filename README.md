@@ -24,6 +24,7 @@ AgentFlow turns that problem into one serving boundary:
 - **Sub-second entity lookups in the checked-in baseline**: entity p50 `38-55 ms`, entity p99 `290-320 ms`, aggregate p50 `56 ms` at `50` users for `60s`
 - **Historical performance remediation is documented**: the serving path moved from an original ~`26,000 ms` baseline to the current `43-55 ms` release range
 - **Dual SDK parity** for Python and TypeScript, including retry policies, circuit breakers, batching, pagination, and contract pinning
+- **Postgres/MySQL CDC path** through Debezium and Kafka Connect, with local compose, Helm manifests, and canonical CDC normalization
 - **Security hardening in the hot path**: parameterized queries, `sqlglot` AST validation for NL-to-SQL, and a Bandit baseline gate for new findings only
 - **Release workflow coverage**: chaos smoke on PRs, performance regression gate, contract drift checks, and a Terraform apply workflow with OIDC-ready auth
 
@@ -108,11 +109,13 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 ## Documentation
 
 - [Architecture](docs/architecture.md) - system context, data flow, failure modes
+- [Operational Runbook](docs/runbook.md) - local stack, CDC capture, incident response, and maintenance commands
 - [API Reference](docs/api-reference.md) - endpoint-by-endpoint examples for curl, Python, and TypeScript
 - [Security Audit](docs/security-audit.md) - threat model, controls, and evidence
 - [Competitive Analysis](docs/competitive-analysis.md) - positioning and trade-offs
+- [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) - Debezium/Kafka Connect rollout decisions and implementation trail
 - [Glossary](docs/glossary.md) - interview-ready explanations of the core technical terms
-- [Release Readiness](docs/release-readiness.md) - checked release evidence for `v1.0.0`
+- [Release Readiness](docs/release-readiness.md) - checked release evidence through `v1.1.0` and current CDC follow-up work
 - [Audit History](docs/audit-history.md) - baseline-to-release remediation trail
 - [Publication Checklist](docs/publication-checklist.md) - final GitHub publishing checklist
 - [Fly.io Demo Deploy](deploy/fly/README.md) - minimal hosted demo instructions
@@ -140,7 +143,7 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 
 ## Status
 
-**v1.0.0** is technically release-ready for the checked-in repository. Remaining open items are manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, and post-release PMF work.
+**v1.1.0** is technically release-ready for the checked-in repository. Current post-v1.1 work adds Debezium/Kafka Connect CDC operationalization for local and Kubernetes-shaped deployments. Remaining open items are manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, and post-release PMF work.
 
 ## Screenshots
 

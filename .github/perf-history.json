@@ -7,5 +7,14 @@
     "p95_ms": 580.0,
     "p99_ms": 21000.0,
     "throughput_rps": 0.0
+  },
+  {
+    "timestamp": "2026-04-27T07:49:56Z",
+    "commit_sha": "980cbea",
+    "branch": "main",
+    "p50_ms": 180.0,
+    "p95_ms": 630.0,
+    "p99_ms": 29000.0,
+    "throughput_rps": 0.0
   }
 ]

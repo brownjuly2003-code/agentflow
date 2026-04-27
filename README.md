@@ -2,7 +2,7 @@
 
 > Real-time data platform for AI agents. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery.
 
-[![Tests](https://img.shields.io/badge/tests-668_full_suite-green)](docs/release-readiness.md)
+[![Release gate](https://img.shields.io/badge/release_gate-blocked_on_chaos_smoke-yellow)](docs/release-readiness.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -20,7 +20,7 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Highlights
 
-- **668 tests passing in the latest full-suite local gate**, plus the verified unit/integration/sdk release slice retained as the fast release check
+- **Last completed local full-suite gate:** 668 passed, 8 skipped on 2026-04-27. The current fresh pre-commit release gate is blocked on a chaos smoke hang; see Release Readiness for the live status. Unit/integration/sdk release slice retained as the fast pre-flight check
 - **Sub-second entity lookups in the checked-in baseline**: entity p50 `38-55 ms`, entity p99 `290-320 ms`, aggregate p50 `56 ms` at `50` users for `60s`
 - **Historical performance remediation is documented**: the serving path moved from an original ~`26,000 ms` baseline to the current `43-55 ms` release range
 - **Dual SDK parity** for Python and TypeScript, including retry policies, circuit breakers, batching, pagination, and contract pinning
@@ -41,7 +41,7 @@ Prerequisites:
 PowerShell 7+:
 
 ```powershell
-git clone https://github.com/<your-handle>/agentflow.git
+git clone https://github.com/brownjuly2003-code/agentflow.git
 cd agentflow
 . .\scripts\setup.ps1
 make demo
@@ -50,7 +50,7 @@ make demo
 macOS / Linux:
 
 ```bash
-git clone https://github.com/<your-handle>/agentflow.git
+git clone https://github.com/brownjuly2003-code/agentflow.git
 cd agentflow
 source ./scripts/setup.sh
 make demo
@@ -143,7 +143,7 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 
 ## Status
 
-**v1.1.0** is technically release-ready for the checked-in repository. Current post-v1.1 work adds Debezium/Kafka Connect CDC operationalization for local and Kubernetes-shaped deployments. Remaining open items are manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, and post-release PMF work.
+**v1.1.0** is prepared in the checked-in repository, but the live release is not complete. Current blockers: fresh pre-commit full-suite completion, first green npm/PyPI publish workflows, and registry package availability. Current post-v1.1 work adds Debezium/Kafka Connect CDC operationalization for local and Kubernetes-shaped deployments. Remaining open items are manual environment setup (`staging`/`prod` reviewers, AWS OIDC role), public benchmark publication on production hardware, and post-release PMF work.
 
 ## Screenshots
 

@@ -3,7 +3,7 @@
 **Date**: 2026-04-20
 **Last updated**: 2026-04-27
 **Version**: v1.1.0 + post-v1.1 CDC follow-up
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization is checked in; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization is checked in; registry credentials are configured, but the live v1.1.0 publish is stopped on a pre-commit full-suite hang in chaos smoke tests
 
 ## Executive Summary
 
@@ -18,11 +18,11 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | Public repository | Published and release-ready from the checked-in evidence trail |
 | Runtime package | `agentflow-runtime` is the root distribution name |
 | Python SDK package | `agentflow-client` is the PyPI distribution; `from agentflow import ...` stays unchanged |
-| Registry publishing | Local build/pack/twine preflight is green; not complete until PyPI Trusted Publishing, npm token setup, and green publish workflows are confirmed |
+| Registry publishing | Local build/pack/twine preflight is green; PyPI pending Trusted Publishers for `agentflow-runtime` and `agentflow-client` are visible in the PyPI account; GitHub `pypi` environment exists; GitHub Actions secret `NPM_TOKEN` exists; live publish is still incomplete until the release commit/tag runs green |
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Recorded full-suite evidence | Green locally on 2026-04-27 on top of `9d8fc56`: 668 passed, 8 skipped, 13 warnings in 496.93s with Redis running and project-local pytest temp paths. |
+| Recorded full-suite evidence | Last completed local full-suite pass on 2026-04-27: 668 passed, 8 skipped with project-local pytest temp paths. Later pre-commit release attempts on the same workstation hang in `tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout`; do not push the release tag until this gate is resolved or explicitly waived. |
 
 ## Status by BCG Dimension
 
@@ -65,7 +65,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
 - GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
 - AWS OIDC role setup for GitHub Actions is still a manual setup step.
-- SDK registry publish still needs successful production evidence. Local build/pack/twine preflight is green; publish workflows accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and npm token setup remain manual gates.
+- SDK registry publish still needs successful production evidence. Local build/pack/twine preflight is green; publish workflows accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and GitHub `NPM_TOKEN` setup are complete, but the release commit/tag was not pushed because the current pre-commit full-suite gate hangs in chaos smoke.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 - Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership.
@@ -87,7 +87,8 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions
 - [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
 - [ ] Production CDC source onboarding approved and configured
-- [x] Current full suite green on latest HEAD
+- [x] Last completed local full suite green on the release line
+- [ ] Fresh pre-commit full-suite gate completes without the current chaos smoke hang
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
 - [ ] Phase 1 PMF work completed
 
@@ -96,7 +97,8 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Publish workflows accept standalone SDK tags (`sdk-vX.Y.Z`), release-candidate tags (`vX.Y.Z-rcN`), and production release tags (`vX.Y.Z`). `scripts/release.py` still creates `sdk-vX.Y.Z` tags for standalone SDK releases.
 - Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag. The existing `v1.1.0` tag points at older commit `1ee89a3`, and there is no GitHub Release for that tag.
 - Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md` and was completed locally on 2026-04-27 at `8d7088d`: build the TypeScript SDK, run `npm pack --dry-run`, build SDK wheels/sdists, and verify both editable install orders in a clean venv. The local run also built runtime wheels/sdists and passed `python -m twine check dist\* sdk\dist\*`.
-- The first green proof for both publish workflows will be the next approved release tag push after registry credential setup.
+- The first green proof for both publish workflows will be the next approved release tag push after the pre-commit test hang is resolved and the pending `publish-pypi.yml` environment change is committed.
+- Registry lookups on 2026-04-27 still returned not found for PyPI `agentflow-runtime`, PyPI `agentflow-client`, PyPI `agentflow-integrations`, and npm `@agentflow/client`; treat install commands as post-publish commands until the publish workflows are green.
 
 ## Verification Snapshot
 
@@ -119,6 +121,10 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `cd sdk-ts`; `npm install --package-lock=false`; `npm run build`; `npm pack --dry-run` | ✅ PASS | TypeScript SDK tarball `agentflow-client-1.1.0.tgz`, 16 files, package size 8.2 kB, unpacked 32.9 kB |
 | Clear `dist` and `sdk/dist`; `python -m build .`; `python -m build sdk\`; `python -m twine check dist\* sdk\dist\*` | ✅ PASS | runtime and SDK artifacts passed `twine check`; runtime artifacts still warn that long description metadata is missing |
 | Clean temp venv editable install-order check for root, SDK, and integrations | ✅ PASS | both install orders resolved `agentflow-runtime` 1.1.0 from repo root and `agentflow-client` 1.1.0 from `sdk/`; imports and `agentflow --help` worked |
+| PyPI Trusted Publisher setup | ✅ READY | PyPI account publishing page shows pending publishers for `agentflow-runtime` and `agentflow-client` with owner `brownjuly2003-code`, repo `agentflow`, workflow `publish-pypi.yml`, environment `pypi` |
+| GitHub registry secret setup | ✅ READY | `gh secret list --repo brownjuly2003-code/agentflow` shows `NPM_TOKEN` updated on 2026-04-27; npm token was validated with registry `/whoami` before storing |
+| Pending workflow environment change | ⚠️ LOCAL ONLY | `.github/workflows/publish-pypi.yml` has an uncommitted one-line change adding `environment: pypi` under the publish job |
+| Release pre-commit full-suite gate | ❌ BLOCKED | `python -m pytest -p no:schemathesis` with project-local temp paths timed out; diagnostic `--timeout=180` identified `tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout` hanging inside `starlette.testclient` during `chaos_client.get("/v1/metrics/revenue?window=1h")` |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process.
 
@@ -142,15 +148,29 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
   - v1.0.1 patch release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.0.1
 - Security triage: `.artifacts/security/bandit-triage-2026-04-17.md`
 
+## New Session Handoff
+
+Recommended next session starting point:
+
+1. Keep the current local diff limited to `.github/workflows/publish-pypi.yml`; it adds `environment: pypi` to the `publish` job so PyPI OIDC claims include the configured environment.
+2. Reproduce and fix or explicitly waive the chaos smoke hang before committing. The known command is:
+
+```bash
+python -m pytest tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout -p no:schemathesis -vv --basetemp D:\DE_project\.tmp\pytest-basetemp-chaos-single --timeout=60 --timeout-method=thread
+```
+
+3. After the gate is resolved, run the required release gates, commit only `.github/workflows/publish-pypi.yml`, push `main`, move/push `v1.1.0` to the release commit, then monitor `Publish Python Packages` and `Publish TypeScript SDK`.
+4. Do not regenerate or expose registry secrets. `NPM_TOKEN` is already stored in GitHub Actions secrets; PyPI pending publishers are already configured.
+
 ## Release Verdict
 
 **v1.1.0 release line prepared; post-v1.1 CDC follow-up checked in.**
 
 AgentFlow is publicly available and the current checked-in docs/code describe the intended release and CDC state. Do not treat registry publishing or production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
-- Manual GH Actions setup: staging/prod environments with required reviewers (`gh api .../environments` currently lists no environments)
+- Manual GH Actions setup: environments currently list `production`, `pypi`, and `staging`; required reviewer policy still needs explicit confirmation if it is part of the deployment gate
 - AWS OIDC role setup for real terraform apply
-- PyPI Trusted Publishing and npm token setup for registry release (`gh secret list` currently shows no repo secrets; npm `@agentflow/client` and PyPI `agentflow-runtime`/`agentflow-client` lookups found no published packages)
+- Registry publish: PyPI pending publishers and GitHub `NPM_TOKEN` are configured, but npm `@agentflow/client` and PyPI `agentflow-runtime`/`agentflow-client` are still unpublished because the release commit/tag was stopped on the pre-commit chaos smoke hang
 - Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

@@ -15,10 +15,10 @@
 
 ## Local Pipeline Operations
 
-### Start the end-to-end demo (no Docker)
+### Start the local demo (Docker Redis only)
 
 ```bash
-make demo          # Seeds 500 events, starts API
+make demo          # Seeds 500 events, starts Redis via Docker Compose, starts API
 ```
 
 ### Run continuous local pipeline

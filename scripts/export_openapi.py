@@ -1,9 +1,18 @@
-"""Export OpenAPI schema and agent tool definitions."""
+"""Export OpenAPI schema and agent tool definitions.
+
+By default writes to docs/openapi.json + docs/agent-tools/*.json.
+
+With ``--check``, exits non-zero if the regenerated artifacts diverge from
+what is committed (drift gate). Use this in CI to block PRs that change
+HTTP routes / schemas without regenerating the contract files.
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,17 +146,56 @@ def _write_json(path: Path, payload: object) -> None:
         handle.write("\n")
 
 
+def _read_committed(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _serialize_json(payload: object) -> str:
+    return json.dumps(payload, indent=2) + "\n"
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail if regenerated OpenAPI / agent tool files diverge from committed copies.",
+    )
+    args = parser.parse_args()
+
     from src.serving.api.main import app
 
     schema = app.openapi()
     docs_dir = ROOT / "docs"
     agent_tools_dir = docs_dir / "agent-tools"
 
-    _write_json(docs_dir / "openapi.json", schema)
-    _write_json(agent_tools_dir / "claude-tools.json", _build_claude_tools(schema))
-    _write_json(agent_tools_dir / "openai-tools.json", _build_openai_tools(schema))
+    artifacts: list[tuple[Path, object]] = [
+        (docs_dir / "openapi.json", schema),
+        (agent_tools_dir / "claude-tools.json", _build_claude_tools(schema)),
+        (agent_tools_dir / "openai-tools.json", _build_openai_tools(schema)),
+    ]
 
+    if args.check:
+        drift: list[str] = []
+        for target, payload in artifacts:
+            current = _read_committed(target) or ""
+            expected = _serialize_json(payload)
+            if current != expected:
+                drift.append(str(target.relative_to(ROOT)))
+        if drift:
+            sys.stderr.write(
+                "OpenAPI / agent tool drift detected. Regenerate with "
+                "`python scripts/export_openapi.py` and commit:\n"
+            )
+            for path in drift:
+                sys.stderr.write(f"  - {path}\n")
+            return 1
+        return 0
+
+    for target, payload in artifacts:
+        _write_json(target, payload)
     return 0
 
 

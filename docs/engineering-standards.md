@@ -17,7 +17,7 @@
 - `ruff format --check src/ tests/`
 - `mypy src/ --ignore-missing-imports`
 - `python scripts/check_schema_evolution.py`
-- `pytest tests/unit/ -v --tb=short --cov=src --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=80`
+- `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60`
 - `pytest tests/integration/ -v --tb=short`
 - `python scripts/run_benchmark.py`
 - `python scripts/check_performance.py docs/benchmark-baseline.json /tmp/current.json`
@@ -26,7 +26,7 @@
 
 ## CI/CD Enforcement
 
-- Pull requests to `main` must pass lint, mypy, unit tests with coverage `>= 80%`, integration tests, schema evolution check, performance regression check, and Terraform validation.
+- Pull requests to `main` must pass lint, mypy, unit + property tests with a full-project coverage floor of `>= 60%`, Codecov patch coverage at `>= 80%`, integration tests, schema evolution check, performance regression check, and Terraform validation.
 - Pushes to `main` append a JSONL deployment event to `.dora/deployments.jsonl` inside the workflow workspace and upload it as an artifact for auditability.
 - `scripts/dora_metrics.py` prefers GitHub Actions history when `GITHUB_TOKEN` and `GITHUB_REPOSITORY` are available; otherwise it falls back to local git history and `.dora/deployments.jsonl`.
 - Weekly DORA reporting lives in `.github/workflows/dora.yml` and publishes a markdown summary. On pull requests, the workflow also updates a pinned DORA comment.

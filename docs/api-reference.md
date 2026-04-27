@@ -4,7 +4,8 @@
 
 ## Base URL and Headers
 
-- Base URL: `http://localhost:8000`
+- Base URL: `http://localhost:8000` (local dev)
+- Public hosted URL: not provisioned in this repository snapshot. Replace `http://localhost:8000` in the examples below with your deployed base URL after deployment.
 - Auth header for most endpoints: `X-API-Key: <key>`
 - Admin header for `/v1/admin/*`: `X-Admin-Key: <admin-key>`
 - Correlation headers: send `X-Correlation-ID` or `X-Request-Id`; the API always returns `X-Correlation-ID`
@@ -150,7 +151,7 @@ First-class SDK helpers currently cover the core read/query surface:
 - Python: `health()`, `catalog()`, `get_order()`, `get_user()`, `get_product()`, `get_session()`, `get_metric()`, `query()`, `batch()`
 - TypeScript: `health()`, `catalog()`, `getOrder()`, `getUser()`, `getProduct()`, `getSession()`, `getMetric()`, `query()`, `batch()`, `streamEvents()`
 
-Operational, governance, and admin routes are present in the HTTP API but do not yet expose first-class helpers in the published Python/TypeScript clients. For those routes, the examples below use direct HTTP from Python (`httpx`) and TypeScript (`fetch`) so the documentation stays aligned with the actual SDK surface.
+Operational, governance, and admin routes are present in the HTTP API but do not yet expose first-class helpers in the current Python/TypeScript client code. For those routes, the examples below use direct HTTP from Python (`httpx`) and TypeScript (`fetch`) so the documentation stays aligned with the actual SDK surface.
 
 ## Narrative Reference
 
@@ -161,7 +162,7 @@ Operational, governance, and admin routes are present in the HTTP API but do not
 **curl**
 
 ```bash
-curl https://api.agentflow.dev/v1/health
+curl http://localhost:8000/v1/health
 ```
 
 **Python SDK**
@@ -169,7 +170,7 @@ curl https://api.agentflow.dev/v1/health
 ```python
 from agentflow import AgentFlowClient
 
-client = AgentFlowClient("https://api.agentflow.dev", api_key="demo-key")
+client = AgentFlowClient("http://localhost:8000", api_key="demo-key")
 health = client.health()
 print(health.status)
 ```
@@ -177,9 +178,9 @@ print(health.status)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const health = await client.health();
 console.log(health.status);
 ```
@@ -200,7 +201,7 @@ console.log(health.status);
 **curl**
 
 ```bash
-curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/catalog
+curl -H "X-API-Key: demo-key" http://localhost:8000/v1/catalog
 ```
 
 **Python SDK**
@@ -208,7 +209,7 @@ curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/catalog
 ```python
 from agentflow import AgentFlowClient
 
-client = AgentFlowClient("https://api.agentflow.dev", api_key="demo-key")
+client = AgentFlowClient("http://localhost:8000", api_key="demo-key")
 catalog = client.catalog()
 print(sorted(catalog.entities.keys()))
 ```
@@ -216,9 +217,9 @@ print(sorted(catalog.entities.keys()))
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const catalog = await client.catalog();
 console.log(Object.keys(catalog.entities));
 ```
@@ -240,7 +241,7 @@ console.log(Object.keys(catalog.entities));
 
 ```bash
 curl -H "X-API-Key: demo-key" \
-  https://api.agentflow.dev/v1/entity/order/ORD-20260404-1001
+  http://localhost:8000/v1/entity/order/ORD-20260404-1001
 ```
 
 **Python SDK**
@@ -248,7 +249,7 @@ curl -H "X-API-Key: demo-key" \
 ```python
 from agentflow import AgentFlowClient
 
-client = AgentFlowClient("https://api.agentflow.dev", api_key="demo-key")
+client = AgentFlowClient("http://localhost:8000", api_key="demo-key")
 order = client.get_order("ORD-20260404-1001")
 print(order.status, order.total_amount)
 ```
@@ -256,9 +257,9 @@ print(order.status, order.total_amount)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const order = await client.getOrder("ORD-20260404-1001");
 console.log(order.status, order.total_amount);
 ```
@@ -280,7 +281,7 @@ console.log(order.status, order.total_amount);
 
 ```bash
 curl -H "X-API-Key: demo-key" \
-  "https://api.agentflow.dev/v1/metrics/revenue?window=1h"
+  "http://localhost:8000/v1/metrics/revenue?window=1h"
 ```
 
 **Python SDK**
@@ -288,7 +289,7 @@ curl -H "X-API-Key: demo-key" \
 ```python
 from agentflow import AgentFlowClient
 
-client = AgentFlowClient("https://api.agentflow.dev", api_key="demo-key")
+client = AgentFlowClient("http://localhost:8000", api_key="demo-key")
 metric = client.get_metric("revenue", window="1h")
 print(metric.value, metric.unit)
 ```
@@ -296,9 +297,9 @@ print(metric.value, metric.unit)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const metric = await client.getMetric("revenue", "1h");
 console.log(metric.value, metric.unit);
 ```
@@ -319,7 +320,7 @@ console.log(metric.value, metric.unit);
 **curl**
 
 ```bash
-curl -X POST https://api.agentflow.dev/v1/query/explain \
+curl -X POST http://localhost:8000/v1/query/explain \
   -H "Content-Type: application/json" \
   -H "X-API-Key: demo-key" \
   -d '{"question":"top 5 products by revenue today"}'
@@ -331,7 +332,7 @@ curl -X POST https://api.agentflow.dev/v1/query/explain \
 import httpx
 
 response = httpx.post(
-    "https://api.agentflow.dev/v1/query/explain",
+    "http://localhost:8000/v1/query/explain",
     headers={"X-API-Key": "demo-key"},
     json={"question": "top 5 products by revenue today"},
 )
@@ -341,7 +342,7 @@ print(response.json()["sql"])
 **TypeScript (HTTP)**
 
 ```typescript
-const response = await fetch("https://api.agentflow.dev/v1/query/explain", {
+const response = await fetch("http://localhost:8000/v1/query/explain", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -369,7 +370,7 @@ console.log(plan.sql);
 **curl**
 
 ```bash
-curl -X POST https://api.agentflow.dev/v1/query \
+curl -X POST http://localhost:8000/v1/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: demo-key" \
   -d '{"question":"top products by revenue today","limit":5}'
@@ -380,7 +381,7 @@ curl -X POST https://api.agentflow.dev/v1/query \
 ```python
 from agentflow import AgentFlowClient
 
-client = AgentFlowClient("https://api.agentflow.dev", api_key="demo-key")
+client = AgentFlowClient("http://localhost:8000", api_key="demo-key")
 result = client.query("top products by revenue today", limit=5)
 print(result.metadata)
 ```
@@ -388,9 +389,9 @@ print(result.metadata)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const result = await client.query("top products by revenue today");
 console.log(result.metadata);
 ```
@@ -411,7 +412,7 @@ console.log(result.metadata);
 **curl**
 
 ```bash
-curl -X POST https://api.agentflow.dev/v1/batch \
+curl -X POST http://localhost:8000/v1/batch \
   -H "Content-Type: application/json" \
   -H "X-API-Key: demo-key" \
   -d '{"requests":[{"id":"order-1","type":"entity","params":{"entity_type":"order","entity_id":"ORD-20260404-1001"}}]}'
@@ -422,7 +423,7 @@ curl -X POST https://api.agentflow.dev/v1/batch \
 ```python
 from agentflow import AgentFlowClient
 
-client = AgentFlowClient("https://api.agentflow.dev", api_key="demo-key")
+client = AgentFlowClient("http://localhost:8000", api_key="demo-key")
 payload = [client.batch_entity("order", "ORD-20260404-1001", request_id="order-1")]
 result = client.batch(payload)
 print(result["results"][0]["status"])
@@ -431,9 +432,9 @@ print(result["results"][0]["status"])
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const payload = [client.batchEntity("order", "ORD-20260404-1001", "order-1")];
 const result = await client.batch(payload);
 console.log(result.results[0].status);
@@ -456,7 +457,7 @@ console.log(result.results[0].status);
 
 ```bash
 curl -H "X-API-Key: demo-key" \
-  "https://api.agentflow.dev/v1/search?q=revenue&limit=5"
+  "http://localhost:8000/v1/search?q=revenue&limit=5"
 ```
 
 **Python (HTTP)**
@@ -465,7 +466,7 @@ curl -H "X-API-Key: demo-key" \
 import httpx
 
 response = httpx.get(
-    "https://api.agentflow.dev/v1/search",
+    "http://localhost:8000/v1/search",
     headers={"X-API-Key": "demo-key"},
     params={"q": "revenue", "limit": 5},
 )
@@ -476,7 +477,7 @@ print(response.json()["results"])
 
 ```typescript
 const response = await fetch(
-  "https://api.agentflow.dev/v1/search?q=revenue&limit=5",
+  "http://localhost:8000/v1/search?q=revenue&limit=5",
   { headers: { "X-API-Key": "demo-key" } },
 );
 const payload = await response.json();
@@ -506,8 +507,8 @@ Use these routes when the caller is building or validating integrations, not whe
 **Representative curl**
 
 ```bash
-curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/contracts/order
-curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/lineage/order/ORD-20260404-1001
+curl -H "X-API-Key: demo-key" http://localhost:8000/v1/contracts/order
+curl -H "X-API-Key: demo-key" http://localhost:8000/v1/lineage/order/ORD-20260404-1001
 ```
 
 **Python (HTTP)**
@@ -516,7 +517,7 @@ curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/lineage/order/ORD-202
 import httpx
 
 contract = httpx.get(
-    "https://api.agentflow.dev/v1/contracts/order",
+    "http://localhost:8000/v1/contracts/order",
     headers={"X-API-Key": "demo-key"},
 ).json()
 print(contract["version"])
@@ -525,7 +526,7 @@ print(contract["version"])
 **TypeScript (HTTP)**
 
 ```typescript
-const response = await fetch("https://api.agentflow.dev/v1/contracts/order", {
+const response = await fetch("http://localhost:8000/v1/contracts/order", {
   headers: { "X-API-Key": "demo-key" },
 });
 const contract = await response.json();
@@ -549,7 +550,7 @@ console.log(contract.version);
 **curl**
 
 ```bash
-curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/changelog
+curl -H "X-API-Key: demo-key" http://localhost:8000/v1/changelog
 ```
 
 **Python (HTTP)**
@@ -558,7 +559,7 @@ curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/changelog
 import httpx
 
 payload = httpx.get(
-    "https://api.agentflow.dev/v1/changelog",
+    "http://localhost:8000/v1/changelog",
     headers={"X-API-Key": "demo-key"},
 ).json()
 print(payload["latest_version"])
@@ -567,7 +568,7 @@ print(payload["latest_version"])
 **TypeScript (HTTP)**
 
 ```typescript
-const response = await fetch("https://api.agentflow.dev/v1/changelog", {
+const response = await fetch("http://localhost:8000/v1/changelog", {
   headers: { "X-API-Key": "demo-key" },
 });
 const payload = await response.json();
@@ -591,7 +592,7 @@ console.log(payload.latest_version);
 
 ```bash
 curl -N -H "X-API-Key: demo-key" \
-  "https://api.agentflow.dev/v1/stream/events?event_type=order"
+  "http://localhost:8000/v1/stream/events?event_type=order"
 ```
 
 **Python (HTTP)**
@@ -601,7 +602,7 @@ import httpx
 
 with httpx.stream(
     "GET",
-    "https://api.agentflow.dev/v1/stream/events",
+    "http://localhost:8000/v1/stream/events",
     headers={"X-API-Key": "demo-key"},
     params={"event_type": "order"},
 ) as response:
@@ -614,9 +615,9 @@ with httpx.stream(
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "agentflow";
+import { AgentFlowClient } from "@agentflow/client";
 
-const client = new AgentFlowClient("https://api.agentflow.dev", "demo-key");
+const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 for await (const event of client.streamEvents({ eventType: "order" })) {
   console.log(event);
   break;
@@ -664,8 +665,8 @@ These routes are primarily for operators and integration owners.
 **Representative curl**
 
 ```bash
-curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/deadletter/stats
-curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/slo
+curl -H "X-API-Key: demo-key" http://localhost:8000/v1/deadletter/stats
+curl -H "X-API-Key: demo-key" http://localhost:8000/v1/slo
 ```
 
 **Representative Python (HTTP)**
@@ -674,7 +675,7 @@ curl -H "X-API-Key: demo-key" https://api.agentflow.dev/v1/slo
 import httpx
 
 slo = httpx.get(
-    "https://api.agentflow.dev/v1/slo",
+    "http://localhost:8000/v1/slo",
     headers={"X-API-Key": "demo-key"},
 ).json()
 print(slo["slos"])
@@ -683,7 +684,7 @@ print(slo["slos"])
 **Representative TypeScript (HTTP)**
 
 ```typescript
-const response = await fetch("https://api.agentflow.dev/v1/slo", {
+const response = await fetch("http://localhost:8000/v1/slo", {
   headers: { "X-API-Key": "demo-key" },
 });
 const slo = await response.json();
@@ -723,8 +724,8 @@ All admin routes require `X-Admin-Key` and are intended for platform owners, not
 **Representative curl**
 
 ```bash
-curl -H "X-Admin-Key: admin-secret" https://api.agentflow.dev/v1/admin/keys
-curl -H "X-Admin-Key: admin-secret" https://api.agentflow.dev/v1/admin/usage
+curl -H "X-Admin-Key: admin-secret" http://localhost:8000/v1/admin/keys
+curl -H "X-Admin-Key: admin-secret" http://localhost:8000/v1/admin/usage
 ```
 
 **Representative Python (HTTP)**
@@ -733,7 +734,7 @@ curl -H "X-Admin-Key: admin-secret" https://api.agentflow.dev/v1/admin/usage
 import httpx
 
 payload = httpx.get(
-    "https://api.agentflow.dev/v1/admin/analytics/usage",
+    "http://localhost:8000/v1/admin/analytics/usage",
     headers={"X-Admin-Key": "admin-secret"},
     params={"window": "24h"},
 ).json()
@@ -744,7 +745,7 @@ print(payload)
 
 ```typescript
 const response = await fetch(
-  "https://api.agentflow.dev/v1/admin/analytics/top-queries?limit=10&window=24h",
+  "http://localhost:8000/v1/admin/analytics/top-queries?limit=10&window=24h",
   { headers: { "X-Admin-Key": "admin-secret" } },
 );
 const payload = await response.json();

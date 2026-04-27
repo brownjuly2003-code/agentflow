@@ -8,6 +8,8 @@ on:
       - "src/**"
       - "sdk/**"
       - "docs/openapi.json"
+      - "docs/agent-tools/**"
+      - "scripts/export_openapi.py"
       - "tests/contract/**"
       - "tests/unit/test_contracts_in_sync.py"
       - ".github/workflows/contract.yml"
@@ -18,6 +20,8 @@ on:
       - "src/**"
       - "sdk/**"
       - "docs/openapi.json"
+      - "docs/agent-tools/**"
+      - "scripts/export_openapi.py"
       - "tests/contract/**"
       - "tests/unit/test_contracts_in_sync.py"
       - ".github/workflows/contract.yml"
@@ -36,4 +40,5 @@ jobs:
       - run: pip install -e ".[dev,cloud,contract]"
       - run: pip install -e "./sdk"
       - run: python scripts/generate_contracts.py --check
+      - run: python scripts/export_openapi.py --check
       - run: python -m pytest tests/contract -v --tb=short

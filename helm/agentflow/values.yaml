@@ -68,6 +68,51 @@ probes:
     timeoutSeconds: 5
     failureThreshold: 6
 
+# Pod-level security context — runs as non-root with a read-only root FS by
+# default. The /data volume (PVC) is the only writable mount.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop: ["ALL"]
+
+# /tmp scratch needed when readOnlyRootFilesystem=true (Python tempfile,
+# httpx caches, etc.). emptyDir backed by node memory.
+tmpVolume:
+  enabled: true
+  sizeLimit: 256Mi
+
+# PodDisruptionBudget keeps at least one replica online during voluntary
+# disruptions (cluster upgrades, node drains).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# NetworkPolicy enforces a default-deny baseline plus explicit ingress on the
+# HTTP port and egress to dependencies (DNS, Kubernetes API, Redis, Kafka,
+# ClickHouse, OTLP collector). Disabled by default so existing clusters
+# without a NetworkPolicy controller are not broken; turn on per environment.
+networkPolicy:
+  enabled: false
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: ingress-nginx
+  egressPorts:
+    redis: 6379
+    kafka: 9092
+    clickhouse: 8123
+    otlp: 4317
+
 config:
   duckdbPath: /data/agentflow.duckdb
   usageDbPath: /data/agentflow_api.duckdb

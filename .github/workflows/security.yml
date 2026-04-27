@@ -152,6 +152,20 @@ jobs:
             -r .tmp-security/requirements-sdk.txt \
             -r .tmp-security/requirements-integrations.txt
 
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install TS SDK deps from lockfile
+        working-directory: sdk-ts
+        run: npm ci
+      - name: npm audit
+        working-directory: sdk-ts
+        run: npm audit --audit-level=moderate
+
   trivy:
     runs-on: ubuntu-latest
     permissions:

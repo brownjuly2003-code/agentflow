@@ -2,13 +2,13 @@
 
 This file explains the technical terms used in the public README and release notes. It is written as interview prep for the project author: first in plain language, then with the exact place where the concept appears in AgentFlow, then with the reason it matters.
 
-## 663 full-suite tests passing
+## 668 full-suite tests passing (last completed gate)
 
 ### Что это
 Это текущий размер полного локального тестового gate: сколько автотестов прогоняется, чтобы убедиться, что проект не сломался в базовых и расширенных сценариях. Важно не само красивое число, а то, что тесты покрывают разные слои системы, а не только отдельные функции.
 
 ### Как в AgentFlow
-В AgentFlow последний полный локальный gate запускает `python -m pytest -p no:schemathesis -q --tb=short --durations=30 --timeout=300` с Redis и project-local temp paths; на 2026-04-27 он даёт `663 passed, 7 skipped`. Основные директории: [tests/unit](../tests/unit), [tests/integration](../tests/integration), [tests/sdk](../tests/sdk), [tests/contract](../tests/contract), [tests/property](../tests/property), [tests/chaos](../tests/chaos), [tests/e2e](../tests/e2e). Релизный статус и команда верификации зафиксированы в [release-readiness.md](release-readiness.md).
+В AgentFlow последний полный локальный gate запускает `python -m pytest -p no:schemathesis -q --tb=short --durations=30 --timeout=300` с Redis и project-local temp paths; последний завершённый локальный full-suite gate на 2026-04-27 дал `668 passed, 8 skipped`. Текущий fresh pre-commit gate заблокирован chaos smoke hang, см. `docs/release-readiness.md`. Основные директории: [tests/unit](../tests/unit), [tests/integration](../tests/integration), [tests/sdk](../tests/sdk), [tests/contract](../tests/contract), [tests/property](../tests/property), [tests/chaos](../tests/chaos), [tests/e2e](../tests/e2e). Релизный статус и команда верификации зафиксированы в [release-readiness.md](release-readiness.md).
 
 ### Почему это важно
 Одни тесты проверяют маленькие функции, другие проверяют весь путь запроса через API, третьи проверяют SDK как внешний контракт для пользователя. Если оставить только unit-тесты, можно пропустить ситуацию, где каждая часть по отдельности работает, но связка между ними уже нет.

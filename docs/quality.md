@@ -1,6 +1,11 @@
-# AgentFlow Quality Report
+# AgentFlow Quality Report (stale local snapshot)
 
-- Generated: `2026-04-12T18:45:16+00:00`
+> This report was generated on 2026-04-12 and does not reflect the current
+> test inventory. Collect-only on 2026-04-27 found 676 tests
+> (unit 396, integration 202, e2e 18, property 15, contract 8, chaos 8,
+> sdk 17). Regenerate with `python scripts/quality_report.py --output docs/quality.md`.
+
+- Generated: `2026-04-12T18:45:16+00:00` (STALE)
 - Generator: `python scripts/quality_report.py`
 
 ## Test Suites

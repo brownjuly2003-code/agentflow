@@ -62,15 +62,11 @@ jobs:
 
       - name: Install dependencies
         working-directory: sdk-ts
-        # Use npm ci once a lockfile lands (Codex audit p9 #1, p7); falls back
-        # to npm install while sdk-ts/package-lock.json is missing.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            echo "::warning::sdk-ts/package-lock.json missing — running npm install (non-reproducible)."
-            npm install
-          fi
+        run: npm ci
+
+      - name: npm audit (moderate)
+        working-directory: sdk-ts
+        run: npm audit --audit-level=moderate
 
       - name: Typecheck SDK
         working-directory: sdk-ts

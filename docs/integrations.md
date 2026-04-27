@@ -1,12 +1,15 @@
 # AgentFlow Integrations
 
-Install the published integrations package:
+After registry publish, install the integrations package:
 
 ```bash
 pip install agentflow-integrations
 ```
 
-If you are working from this monorepo, use a local editable install instead:
+> Registry publishing is not complete as of 2026-04-27 — registry lookups
+> still return not found.
+
+In the current checked-in repo, use a local editable install:
 
 ```bash
 python -m pip install -e "./integrations"

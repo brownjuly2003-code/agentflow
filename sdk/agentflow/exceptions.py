@@ -6,6 +6,10 @@ class AuthError(AgentFlowError):
     pass
 
 
+class PermissionDeniedError(AgentFlowError):
+    pass
+
+
 class RateLimitError(AgentFlowError):
     def __init__(self, message: str, retry_after: int = 0):
         super().__init__(message)

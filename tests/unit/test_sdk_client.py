@@ -8,9 +8,11 @@ from agentflow.exceptions import (
     AuthError,
     DataFreshnessError,
     EntityNotFoundError,
+    PermissionDeniedError,
     RateLimitError,
 )
 from agentflow.retry import RetryPolicy
+from agentflow.circuit_breaker import CircuitOpenError
 
 
 def _json_response(
@@ -63,6 +65,31 @@ def test_get_order_returns_typed_order(monkeypatch):
     assert order.order_id == "ORD-1"
     assert order.user_id == "USR-1"
     assert order.is_overdue is False
+
+
+def test_get_entity_generic_method(monkeypatch):
+    def handler(method, url, **kwargs):
+        assert method == "GET"
+        assert url == "/v1/entity/order/ORD-1"
+        return _json_response(
+            200,
+            {
+                "entity_type": "order",
+                "entity_id": "ORD-1",
+                "data": {"order_id": "ORD-1"},
+                "last_updated": None,
+                "freshness_seconds": None,
+            },
+        )
+
+    _install_request_stub(monkeypatch, handler)
+
+    client = AgentFlowClient("http://example.com", api_key="test-key")
+    entity = client.get_entity("order", "ORD-1")
+
+    assert entity.entity_type == "order"
+    assert entity.entity_id == "ORD-1"
+    assert entity.data == {"order_id": "ORD-1"}
 
 
 def test_get_order_computes_is_overdue(monkeypatch):
@@ -228,6 +255,38 @@ def test_query_returns_typed_result(monkeypatch):
     assert result.metadata["rows_returned"] == 1
 
 
+def test_post_with_idempotency_key_is_retried(monkeypatch):
+    calls = {"count": 0}
+
+    def handler(method, url, **kwargs):
+        calls["count"] += 1
+        assert method == "POST"
+        assert kwargs["headers"] == {"Idempotency-Key": "idem-1"}
+        if calls["count"] == 1:
+            return _json_response(503, {"detail": "temporarily unavailable"})
+        return _json_response(
+            200,
+            {
+                "answer": [{"product_id": "PROD-1"}],
+                "sql": "SELECT * FROM products",
+                "metadata": {},
+            },
+        )
+
+    _install_request_stub(monkeypatch, handler)
+    monkeypatch.setattr("time.sleep", lambda delay: None)
+
+    client = AgentFlowClient(
+        "http://example.com",
+        api_key="test-key",
+        retry_policy=RetryPolicy(max_attempts=2, jitter_factor=0.0),
+    )
+    result = client.query("Top products", idempotency_key="idem-1")
+
+    assert result.answer == [{"product_id": "PROD-1"}]
+    assert calls["count"] == 2
+
+
 def test_health_returns_typed_status(monkeypatch):
     checked_at = datetime.now(UTC).isoformat()
 
@@ -379,6 +438,25 @@ def test_rate_limit_raises_rate_limit_error(monkeypatch):
         client.health()
 
     assert exc_info.value.retry_after == 60
+
+
+def test_403_maps_to_permission_denied_error(monkeypatch):
+    _install_request_stub(
+        monkeypatch,
+        lambda method, url, **kwargs: _json_response(
+            403,
+            {"detail": "Forbidden"},
+        ),
+    )
+
+    client = AgentFlowClient("http://example.com", api_key="test-key")
+
+    with pytest.raises(PermissionDeniedError):
+        client.health()
+
+
+def test_circuit_open_inherits_from_agentflow_error():
+    assert issubclass(CircuitOpenError, AgentFlowError)
 
 
 def test_missing_entity_raises_entity_not_found(monkeypatch):

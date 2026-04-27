@@ -43,3 +43,9 @@ async def main() -> None:
         metric = await client.get_metric("revenue", "24h")
         print(order.status, metric.value)
 ```
+
+The SDK exposes typed methods for v1 read, query, discovery, contract,
+lineage, changelog, and batch routes. Admin and operational surfaces are
+intentionally not wrapped as public typed methods: `/v1/admin/*`,
+`/v1/webhooks`, `/v1/alerts`, `/v1/deadletter`, `/v1/slo`, and
+`/v1/stream/events`.

@@ -1,4 +1,5 @@
 import time
+from datetime import UTC, datetime
 from typing import Any, Iterator, TypeVar, cast
 from uuid import uuid4
 
@@ -9,24 +10,48 @@ from agentflow.circuit_breaker import CircuitBreaker
 from agentflow.exceptions import (
     AgentFlowError,
     AuthError,
+    PermissionDeniedError,
     DataFreshnessError,
     EntityNotFoundError,
     RateLimitError,
 )
 from agentflow.models import (
     CatalogResponse,
+    Changelog,
+    ContractDiff,
+    ContractSummary,
+    ContractValidation,
     EntityEnvelope,
+    EntityContract,
     HealthStatus,
+    Lineage,
     MetricResult,
     OrderEntity,
     ProductEntity,
+    QueryExplanation,
     QueryResult,
+    SearchResults,
     SessionEntity,
     UserEntity,
 )
 from agentflow.retry import RETRYABLE_STATUS, RetryPolicy, is_retryable_method
 
 EntityModelT = TypeVar("EntityModelT", bound=BaseModel)
+
+
+def _normalize_as_of(as_of: datetime | str | None) -> str | None:
+    if as_of is None:
+        return None
+    if isinstance(as_of, datetime):
+        value = as_of
+    else:
+        try:
+            value = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        except ValueError:
+            return as_of
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class _LegacyResilienceInitCompat(type):
@@ -49,16 +74,32 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         api_key: str,
         timeout: float = 10.0,
         contract_version: str | None = None,
+        api_version: str | None = None,
     ):
+        headers = {"X-API-Key": api_key}
+        if api_version is not None:
+            headers["X-AgentFlow-Version"] = api_version
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout,
-            headers={"X-API-Key": api_key},
+            headers=headers,
         )
         self._contract_versions = self._parse_contract_versions(contract_version)
         self._contract_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        self._last_server_version: str | None = None
+        self._last_latest_version: str | None = None
+        self._last_deprecated: str | None = None
+        self._last_deprecation_warning: str | None = None
         self.retry_policy = RetryPolicy()
         self.circuit_breaker = CircuitBreaker()
+
+    @property
+    def last_server_version(self) -> str | None:
+        return self._last_server_version
+
+    @property
+    def last_deprecation_warning(self) -> str | None:
+        return self._last_deprecation_warning
 
     def configure_resilience(
         self,
@@ -78,13 +119,20 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         *,
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         attempt = 0
-        can_retry = is_retryable_method(method)
+        can_retry = is_retryable_method(method, headers=headers)
         self.circuit_breaker.before_call()
         while True:
             try:
-                response = self._client.request(method, path, params=params, json=json)
+                response = self._client.request(
+                    method,
+                    path,
+                    params=params,
+                    json=json,
+                    headers=headers,
+                )
             except httpx.TransportError as exc:
                 if can_retry and attempt < self.retry_policy.max_attempts - 1:
                     delay = self.retry_policy.compute_delay(attempt)
@@ -111,6 +159,8 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
                 continue
             break
 
+        self._record_version_headers(response.headers)
+
         if response.status_code >= 500:
             self.circuit_breaker.record_failure()
         else:
@@ -121,6 +171,10 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         if response.status_code == 401:
             detail = payload.get("detail", "Unauthorized")
             raise AuthError(detail)
+
+        if response.status_code == 403:
+            detail = payload.get("detail", "Forbidden")
+            raise PermissionDeniedError(detail)
 
         if response.status_code == 429:
             detail = payload.get("detail", "Rate limit exceeded")
@@ -140,19 +194,25 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
 
         return payload
 
+    def _record_version_headers(self, headers: httpx.Headers) -> None:
+        self._last_server_version = headers.get("X-AgentFlow-Version")
+        self._last_latest_version = headers.get("X-AgentFlow-Latest-Version")
+        self._last_deprecated = headers.get("X-AgentFlow-Deprecated")
+        self._last_deprecation_warning = headers.get(
+            "X-AgentFlow-Deprecation-Warning"
+        )
+
     def _get_entity(
         self,
         entity_type: str,
         entity_id: str,
         model: type[EntityModelT],
+        as_of: datetime | str | None = None,
     ) -> EntityModelT:
-        payload = self._request("GET", f"/v1/entity/{entity_type}/{entity_id}")
-        envelope = EntityEnvelope.model_validate(payload)
+        envelope = self.get_entity(entity_type, entity_id, as_of=as_of)
         return cast(
             EntityModelT,
-            model.model_validate(
-                self._apply_contract_version(entity_type, envelope.data)
-            ),
+            model.model_validate(envelope.data),
         )
 
     def _parse_contract_versions(
@@ -209,20 +269,71 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         self._contract_cache[cache_key] = contract
         return contract
 
-    def get_order(self, order_id: str) -> OrderEntity:
-        return self._get_entity("order", order_id, OrderEntity)
+    def get_entity(
+        self,
+        entity_type: str,
+        entity_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> EntityEnvelope:
+        params: dict[str, Any] | None = None
+        normalized_as_of = _normalize_as_of(as_of)
+        if normalized_as_of is not None:
+            params = {"as_of": normalized_as_of}
+        payload = self._request(
+            "GET",
+            f"/v1/entity/{entity_type}/{entity_id}",
+            params=params,
+        )
+        envelope = EntityEnvelope.model_validate(payload)
+        return envelope.model_copy(
+            update={"data": self._apply_contract_version(entity_type, envelope.data)}
+        )
 
-    def get_user(self, user_id: str) -> UserEntity:
-        return self._get_entity("user", user_id, UserEntity)
+    def get_order(
+        self,
+        order_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> OrderEntity:
+        return self._get_entity("order", order_id, OrderEntity, as_of=as_of)
 
-    def get_product(self, product_id: str) -> ProductEntity:
-        return self._get_entity("product", product_id, ProductEntity)
+    def get_user(
+        self,
+        user_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> UserEntity:
+        return self._get_entity("user", user_id, UserEntity, as_of=as_of)
 
-    def get_session(self, session_id: str) -> SessionEntity:
-        return self._get_entity("session", session_id, SessionEntity)
+    def get_product(
+        self,
+        product_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> ProductEntity:
+        return self._get_entity("product", product_id, ProductEntity, as_of=as_of)
 
-    def get_metric(self, name: str, window: str = "1h") -> MetricResult:
-        payload = self._request("GET", f"/v1/metrics/{name}", params={"window": window})
+    def get_session(
+        self,
+        session_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> SessionEntity:
+        return self._get_entity("session", session_id, SessionEntity, as_of=as_of)
+
+    def get_metric(
+        self,
+        name: str,
+        window: str = "1h",
+        *,
+        as_of: datetime | str | None = None,
+    ) -> MetricResult:
+        params: dict[str, Any] = {"window": window}
+        normalized_as_of = _normalize_as_of(as_of)
+        if normalized_as_of is not None:
+            params["as_of"] = normalized_as_of
+        payload = self._request("GET", f"/v1/metrics/{name}", params=params)
         return MetricResult.model_validate(payload)
 
     def _normalize_query_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -242,22 +353,116 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         *,
         limit: int | None = None,
         cursor: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {"question": question}
         if limit is not None:
             payload["limit"] = limit
         if cursor is not None:
             payload["cursor"] = cursor
-        return self._request("POST", "/v1/query", json=payload)
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        return self._request("POST", "/v1/query", json=payload, headers=headers)
 
     def query(
         self,
         question: str,
         limit: int | None = None,
         cursor: str | None = None,
+        idempotency_key: str | None = None,
     ) -> QueryResult:
-        payload = self._query_page(question, limit=limit, cursor=cursor)
+        payload = self._query_page(
+            question,
+            limit=limit,
+            cursor=cursor,
+            idempotency_key=idempotency_key,
+        )
         return QueryResult.model_validate(self._normalize_query_payload(payload))
+
+    def explain_query(
+        self,
+        question: str,
+        contract_version: str | None = None,
+    ) -> QueryExplanation:
+        payload: dict[str, Any] = {"question": question}
+        if contract_version is not None:
+            payload["contract_version"] = contract_version
+        response = self._request("POST", "/v1/query/explain", json=payload)
+        return QueryExplanation.model_validate(response)
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        entity_types: list[str] | None = None,
+    ) -> SearchResults:
+        params: dict[str, Any] = {"q": query, "limit": limit}
+        if entity_types is not None:
+            params["entity_types"] = entity_types
+        payload = self._request("GET", "/v1/search", params=params)
+        return SearchResults.model_validate(payload)
+
+    def list_contracts(self) -> list[ContractSummary]:
+        payload = self._request("GET", "/v1/contracts")
+        return [
+            ContractSummary.model_validate(contract)
+            for contract in payload.get("contracts", [])
+        ]
+
+    def get_contract(
+        self,
+        entity: str,
+        version: str | None = None,
+    ) -> EntityContract:
+        path = f"/v1/contracts/{entity}"
+        if version is not None:
+            path = f"{path}/{version}"
+        payload = self._request("GET", path)
+        return EntityContract.model_validate(payload)
+
+    def diff_contracts(
+        self,
+        entity: str,
+        from_version: str,
+        to_version: str,
+    ) -> ContractDiff:
+        payload = self._request(
+            "GET",
+            f"/v1/contracts/{entity}/diff/{from_version}/{to_version}",
+        )
+        return ContractDiff.model_validate(payload)
+
+    def validate_contract(
+        self,
+        entity: str,
+        payload: dict[str, Any],
+        *,
+        idempotency_key: str | None = None,
+    ) -> ContractValidation:
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        response = self._request(
+            "POST",
+            f"/v1/contracts/{entity}/validate",
+            json=payload,
+            headers=headers,
+        )
+        return ContractValidation.model_validate(response)
+
+    def get_lineage(self, entity_type: str, entity_id: str) -> Lineage:
+        payload = self._request("GET", f"/v1/lineage/{entity_type}/{entity_id}")
+        return Lineage.model_validate(payload)
+
+    def get_changelog(self) -> Changelog:
+        payload = self._request("GET", "/v1/changelog")
+        return Changelog.model_validate(payload)
 
     def paginate(
         self,
@@ -293,8 +498,23 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         payload = self._request("GET", "/v1/catalog")
         return CatalogResponse.model_validate(payload)
 
-    def batch(self, requests: list[dict[str, Any]]) -> dict[str, Any]:
-        return self._request("POST", "/v1/batch", json={"requests": requests})
+    def batch(
+        self,
+        requests: list[dict[str, Any]],
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        return self._request(
+            "POST",
+            "/v1/batch",
+            json={"requests": requests},
+            headers=headers,
+        )
 
     def batch_entity(
         self,

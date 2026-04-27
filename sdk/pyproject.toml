@@ -32,3 +32,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agentflow"]
+artifacts = ["agentflow/py.typed"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/agentflow",
+    "/README.md",
+    "/pyproject.toml",
+]

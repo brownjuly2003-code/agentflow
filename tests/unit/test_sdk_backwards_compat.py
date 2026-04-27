@@ -11,6 +11,7 @@ from agentflow.exceptions import (
     AuthError,
     DataFreshnessError,
     EntityNotFoundError,
+    PermissionDeniedError,
     RateLimitError,
 )
 from agentflow.models import OrderEntity
@@ -29,6 +30,8 @@ def test_package_exports_core_public_api():
     assert agentflow.__all__ == [
         "AgentFlowClient",
         "AsyncAgentFlowClient",
+        "PermissionDeniedError",
+        "CircuitOpenError",
         "__version__",
     ]
 
@@ -42,25 +45,45 @@ def test_client_constructor_signature():
         "api_key",
         "timeout",
         "contract_version",
+        "api_version",
     )
     assert sig.parameters["timeout"].default == 10.0
     assert sig.parameters["contract_version"].default is None
+    assert sig.parameters["api_version"].default is None
 
 
 def test_async_client_constructor_signature():
     sig = inspect.signature(AsyncAgentFlowClient.__init__)
 
-    assert tuple(sig.parameters) == ("self", "base_url", "api_key", "timeout")
+    assert tuple(sig.parameters) == (
+        "self",
+        "base_url",
+        "api_key",
+        "timeout",
+        "contract_version",
+        "api_version",
+    )
     assert sig.parameters["timeout"].default == 10.0
+    assert sig.parameters["contract_version"].default is None
+    assert sig.parameters["api_version"].default is None
 
 
 def test_client_public_methods_exist():
     public_methods = {
         "get_order",
+        "get_entity",
         "get_user",
         "get_product",
         "get_session",
         "get_metric",
+        "explain_query",
+        "search",
+        "list_contracts",
+        "get_contract",
+        "diff_contracts",
+        "validate_contract",
+        "get_lineage",
+        "get_changelog",
         "query",
         "health",
         "is_fresh",
@@ -77,10 +100,19 @@ def test_client_public_methods_exist():
 def test_async_client_public_methods_exist():
     public_methods = {
         "get_order",
+        "get_entity",
         "get_user",
         "get_product",
         "get_session",
         "get_metric",
+        "explain_query",
+        "search",
+        "list_contracts",
+        "get_contract",
+        "diff_contracts",
+        "validate_contract",
+        "get_lineage",
+        "get_changelog",
         "query",
         "health",
         "is_fresh",
@@ -115,6 +147,7 @@ def test_exceptions_importable():
     assert RateLimitError
     assert DataFreshnessError
     assert EntityNotFoundError
+    assert PermissionDeniedError
 
 
 def test_deprecated_decorator_emits_warning_with_replacement_and_removal_version():

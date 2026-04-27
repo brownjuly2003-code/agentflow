@@ -133,11 +133,23 @@ class DuckDBBackend(ServingBackend):
                 event_id VARCHAR,
                 topic VARCHAR,
                 tenant_id VARCHAR DEFAULT 'default',
+                entity_id VARCHAR,
+                event_type VARCHAR,
+                latency_ms INTEGER,
                 processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         self._conn.execute(
             "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
+        )
+        self._conn.execute(
+            "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS entity_id VARCHAR"
+        )
+        self._conn.execute(
+            "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS event_type VARCHAR"
+        )
+        self._conn.execute(
+            "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS latency_ms INTEGER"
         )
 
         row = self._conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
@@ -220,18 +232,30 @@ class DuckDBBackend(ServingBackend):
              NULL, NULL, 3, 2, 'browse', FALSE)
         """)
 
+        # Seed pipeline_events with entity_id rows so /v1/lineage and SDK
+        # contract tests have deterministic lineage data for the canonical
+        # ORD-20260404-1001 order. Older 10 events kept as ambient noise.
         self._conn.execute("""
-            INSERT INTO pipeline_events (event_id, topic, tenant_id, processed_at) VALUES
-            ('evt-001', 'events.validated', 'default', NOW() - INTERVAL '10 minutes'),
-            ('evt-002', 'events.validated', 'default', NOW() - INTERVAL '9 minutes'),
-            ('evt-003', 'events.validated', 'default', NOW() - INTERVAL '8 minutes'),
-            ('evt-004', 'events.deadletter', 'default', NOW() - INTERVAL '7 minutes'),
-            ('evt-005', 'events.validated', 'default', NOW() - INTERVAL '6 minutes'),
-            ('evt-006', 'events.validated', 'default', NOW() - INTERVAL '5 minutes'),
-            ('evt-007', 'events.validated', 'default', NOW() - INTERVAL '4 minutes'),
-            ('evt-008', 'events.validated', 'default', NOW() - INTERVAL '3 minutes'),
-            ('evt-009', 'events.deadletter', 'default', NOW() - INTERVAL '2 minutes'),
-            ('evt-010', 'events.validated', 'default', NOW() - INTERVAL '1 minute')
+            INSERT INTO pipeline_events
+                (event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at)
+            VALUES
+            ('evt-001', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '10 minutes'),
+            ('evt-002', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '9 minutes'),
+            ('evt-003', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '8 minutes'),
+            ('evt-004', 'events.deadletter', 'default', NULL, NULL, NULL, NOW() - INTERVAL '7 minutes'),
+            ('evt-005', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '6 minutes'),
+            ('evt-006', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '5 minutes'),
+            ('evt-007', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '4 minutes'),
+            ('evt-008', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '3 minutes'),
+            ('evt-009', 'events.deadletter', 'default', NULL, NULL, NULL, NOW() - INTERVAL '2 minutes'),
+            ('evt-010', 'events.validated', 'default', NULL, NULL, NULL, NOW() - INTERVAL '1 minute'),
+            -- Lineage trail for ORD-20260404-1001 (ingestion -> validation -> serving)
+            ('evt-ord-1001-ingest', 'orders.raw', 'default', 'ORD-20260404-1001',
+                'order.created', 12, NOW() - INTERVAL '3 minutes'),
+            ('evt-ord-1001-validated', 'events.validated', 'default', 'ORD-20260404-1001',
+                'order.validated', 8, NOW() - INTERVAL '2 minutes'),
+            ('evt-ord-1001-served', 'events.served', 'default', 'ORD-20260404-1001',
+                'order.served', 4, NOW() - INTERVAL '1 minute')
         """)
 
     def health(self) -> dict:

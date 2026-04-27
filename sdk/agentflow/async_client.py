@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from typing import Any, AsyncIterator, TypeVar, cast
 from uuid import uuid4
 
@@ -11,22 +12,46 @@ from agentflow.exceptions import (
     AuthError,
     DataFreshnessError,
     EntityNotFoundError,
+    PermissionDeniedError,
     RateLimitError,
 )
 from agentflow.models import (
     CatalogResponse,
+    Changelog,
+    ContractDiff,
+    ContractSummary,
+    ContractValidation,
     EntityEnvelope,
+    EntityContract,
     HealthStatus,
+    Lineage,
     MetricResult,
     OrderEntity,
     ProductEntity,
+    QueryExplanation,
     QueryResult,
+    SearchResults,
     SessionEntity,
     UserEntity,
 )
 from agentflow.retry import RETRYABLE_STATUS, RetryPolicy, is_retryable_method
 
 EntityModelT = TypeVar("EntityModelT", bound=BaseModel)
+
+
+def _normalize_as_of(as_of: datetime | str | None) -> str | None:
+    if as_of is None:
+        return None
+    if isinstance(as_of, datetime):
+        value = as_of
+    else:
+        try:
+            value = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        except ValueError:
+            return as_of
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class _LegacyResilienceInitCompat(type):
@@ -48,14 +73,33 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         base_url: str,
         api_key: str,
         timeout: float = 10.0,
+        contract_version: str | None = None,
+        api_version: str | None = None,
     ):
+        headers = {"X-API-Key": api_key}
+        if api_version is not None:
+            headers["X-AgentFlow-Version"] = api_version
         self._http = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             timeout=timeout,
-            headers={"X-API-Key": api_key},
+            headers=headers,
         )
+        self._contract_versions = self._parse_contract_versions(contract_version)
+        self._contract_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        self._last_server_version: str | None = None
+        self._last_latest_version: str | None = None
+        self._last_deprecated: str | None = None
+        self._last_deprecation_warning: str | None = None
         self.retry_policy = RetryPolicy()
         self.circuit_breaker = CircuitBreaker()
+
+    @property
+    def last_server_version(self) -> str | None:
+        return self._last_server_version
+
+    @property
+    def last_deprecation_warning(self) -> str | None:
+        return self._last_deprecation_warning
 
     def configure_resilience(
         self,
@@ -75,13 +119,20 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         *,
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         attempt = 0
-        can_retry = is_retryable_method(method)
+        can_retry = is_retryable_method(method, headers=headers)
         self.circuit_breaker.before_call()
         while True:
             try:
-                response = await self._http.request(method, path, params=params, json=json)
+                response = await self._http.request(
+                    method,
+                    path,
+                    params=params,
+                    json=json,
+                    headers=headers,
+                )
             except httpx.TransportError as exc:
                 if can_retry and attempt < self.retry_policy.max_attempts - 1:
                     delay = self.retry_policy.compute_delay(attempt)
@@ -108,6 +159,8 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
                 continue
             break
 
+        self._record_version_headers(response.headers)
+
         if response.status_code >= 500:
             self.circuit_breaker.record_failure()
         else:
@@ -118,6 +171,10 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         if response.status_code == 401:
             detail = payload.get("detail", "Unauthorized")
             raise AuthError(detail)
+
+        if response.status_code == 403:
+            detail = payload.get("detail", "Forbidden")
+            raise PermissionDeniedError(detail)
 
         if response.status_code == 429:
             detail = payload.get("detail", "Rate limit exceeded")
@@ -137,30 +194,142 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
 
         return payload
 
+    def _record_version_headers(self, headers: httpx.Headers) -> None:
+        self._last_server_version = headers.get("X-AgentFlow-Version")
+        self._last_latest_version = headers.get("X-AgentFlow-Latest-Version")
+        self._last_deprecated = headers.get("X-AgentFlow-Deprecated")
+        self._last_deprecation_warning = headers.get(
+            "X-AgentFlow-Deprecation-Warning"
+        )
+
     async def _get_entity(
         self,
         entity_type: str,
         entity_id: str,
         model: type[EntityModelT],
+        as_of: datetime | str | None = None,
     ) -> EntityModelT:
-        payload = await self._request("GET", f"/v1/entity/{entity_type}/{entity_id}")
-        envelope = EntityEnvelope.model_validate(payload)
+        envelope = await self.get_entity(entity_type, entity_id, as_of=as_of)
         return cast(EntityModelT, model.model_validate(envelope.data))
 
-    async def get_order(self, order_id: str) -> OrderEntity:
-        return await self._get_entity("order", order_id, OrderEntity)
+    def _parse_contract_versions(
+        self,
+        contract_version: str | None,
+    ) -> dict[str, str]:
+        if contract_version is None:
+            return {}
+        entity, separator, version = contract_version.partition(":")
+        if not separator or not entity or not version:
+            raise ValueError(
+                "contract_version must use '<entity>:<version>' format."
+            )
+        return {entity: version[1:] if version.startswith("v") else version}
 
-    async def get_user(self, user_id: str) -> UserEntity:
-        return await self._get_entity("user", user_id, UserEntity)
+    async def _apply_contract_version(
+        self,
+        entity_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        version = self._contract_versions.get(entity_type)
+        if version is None:
+            return payload
+        contract = await self._get_contract(entity_type, version)
+        fields = contract.get("fields", [])
+        required_fields = [
+            field["name"]
+            for field in fields
+            if field.get("required")
+        ]
+        missing_fields = [
+            field_name
+            for field_name in required_fields
+            if field_name not in payload
+        ]
+        if missing_fields:
+            raise AgentFlowError(
+                "Contract validation failed. Missing required fields: "
+                + ", ".join(missing_fields)
+            )
+        allowed_fields = {field["name"] for field in fields}
+        return {
+            name: value
+            for name, value in payload.items()
+            if name in allowed_fields
+        }
 
-    async def get_product(self, product_id: str) -> ProductEntity:
-        return await self._get_entity("product", product_id, ProductEntity)
+    async def _get_contract(self, entity_type: str, version: str) -> dict[str, Any]:
+        cache_key = (entity_type, version)
+        cached = self._contract_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        contract = await self._request("GET", f"/v1/contracts/{entity_type}/{version}")
+        self._contract_cache[cache_key] = contract
+        return contract
 
-    async def get_session(self, session_id: str) -> SessionEntity:
-        return await self._get_entity("session", session_id, SessionEntity)
+    async def get_entity(
+        self,
+        entity_type: str,
+        entity_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> EntityEnvelope:
+        params: dict[str, Any] | None = None
+        normalized_as_of = _normalize_as_of(as_of)
+        if normalized_as_of is not None:
+            params = {"as_of": normalized_as_of}
+        payload = await self._request(
+            "GET",
+            f"/v1/entity/{entity_type}/{entity_id}",
+            params=params,
+        )
+        envelope = EntityEnvelope.model_validate(payload)
+        data = await self._apply_contract_version(entity_type, envelope.data)
+        return envelope.model_copy(update={"data": data})
 
-    async def get_metric(self, name: str, window: str = "1h") -> MetricResult:
-        payload = await self._request("GET", f"/v1/metrics/{name}", params={"window": window})
+    async def get_order(
+        self,
+        order_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> OrderEntity:
+        return await self._get_entity("order", order_id, OrderEntity, as_of=as_of)
+
+    async def get_user(
+        self,
+        user_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> UserEntity:
+        return await self._get_entity("user", user_id, UserEntity, as_of=as_of)
+
+    async def get_product(
+        self,
+        product_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> ProductEntity:
+        return await self._get_entity("product", product_id, ProductEntity, as_of=as_of)
+
+    async def get_session(
+        self,
+        session_id: str,
+        *,
+        as_of: datetime | str | None = None,
+    ) -> SessionEntity:
+        return await self._get_entity("session", session_id, SessionEntity, as_of=as_of)
+
+    async def get_metric(
+        self,
+        name: str,
+        window: str = "1h",
+        *,
+        as_of: datetime | str | None = None,
+    ) -> MetricResult:
+        params: dict[str, Any] = {"window": window}
+        normalized_as_of = _normalize_as_of(as_of)
+        if normalized_as_of is not None:
+            params["as_of"] = normalized_as_of
+        payload = await self._request("GET", f"/v1/metrics/{name}", params=params)
         return MetricResult.model_validate(payload)
 
     def _normalize_query_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -180,22 +349,116 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         *,
         limit: int | None = None,
         cursor: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {"question": question}
         if limit is not None:
             payload["limit"] = limit
         if cursor is not None:
             payload["cursor"] = cursor
-        return await self._request("POST", "/v1/query", json=payload)
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        return await self._request("POST", "/v1/query", json=payload, headers=headers)
 
     async def query(
         self,
         question: str,
         limit: int | None = None,
         cursor: str | None = None,
+        idempotency_key: str | None = None,
     ) -> QueryResult:
-        payload = await self._query_page(question, limit=limit, cursor=cursor)
+        payload = await self._query_page(
+            question,
+            limit=limit,
+            cursor=cursor,
+            idempotency_key=idempotency_key,
+        )
         return QueryResult.model_validate(self._normalize_query_payload(payload))
+
+    async def explain_query(
+        self,
+        question: str,
+        contract_version: str | None = None,
+    ) -> QueryExplanation:
+        payload: dict[str, Any] = {"question": question}
+        if contract_version is not None:
+            payload["contract_version"] = contract_version
+        response = await self._request("POST", "/v1/query/explain", json=payload)
+        return QueryExplanation.model_validate(response)
+
+    async def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        entity_types: list[str] | None = None,
+    ) -> SearchResults:
+        params: dict[str, Any] = {"q": query, "limit": limit}
+        if entity_types is not None:
+            params["entity_types"] = entity_types
+        payload = await self._request("GET", "/v1/search", params=params)
+        return SearchResults.model_validate(payload)
+
+    async def list_contracts(self) -> list[ContractSummary]:
+        payload = await self._request("GET", "/v1/contracts")
+        return [
+            ContractSummary.model_validate(contract)
+            for contract in payload.get("contracts", [])
+        ]
+
+    async def get_contract(
+        self,
+        entity: str,
+        version: str | None = None,
+    ) -> EntityContract:
+        path = f"/v1/contracts/{entity}"
+        if version is not None:
+            path = f"{path}/{version}"
+        payload = await self._request("GET", path)
+        return EntityContract.model_validate(payload)
+
+    async def diff_contracts(
+        self,
+        entity: str,
+        from_version: str,
+        to_version: str,
+    ) -> ContractDiff:
+        payload = await self._request(
+            "GET",
+            f"/v1/contracts/{entity}/diff/{from_version}/{to_version}",
+        )
+        return ContractDiff.model_validate(payload)
+
+    async def validate_contract(
+        self,
+        entity: str,
+        payload: dict[str, Any],
+        *,
+        idempotency_key: str | None = None,
+    ) -> ContractValidation:
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        response = await self._request(
+            "POST",
+            f"/v1/contracts/{entity}/validate",
+            json=payload,
+            headers=headers,
+        )
+        return ContractValidation.model_validate(response)
+
+    async def get_lineage(self, entity_type: str, entity_id: str) -> Lineage:
+        payload = await self._request("GET", f"/v1/lineage/{entity_type}/{entity_id}")
+        return Lineage.model_validate(payload)
+
+    async def get_changelog(self) -> Changelog:
+        payload = await self._request("GET", "/v1/changelog")
+        return Changelog.model_validate(payload)
 
     async def paginate(
         self,
@@ -231,8 +494,23 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         payload = await self._request("GET", "/v1/catalog")
         return CatalogResponse.model_validate(payload)
 
-    async def batch(self, requests: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._request("POST", "/v1/batch", json={"requests": requests})
+    async def batch(
+        self,
+        requests: list[dict[str, Any]],
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        return await self._request(
+            "POST",
+            "/v1/batch",
+            json={"requests": requests},
+            headers=headers,
+        )
 
     def batch_entity(
         self,

@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from threading import Lock
 
+from agentflow.exceptions import AgentFlowError
+
 
 class CircuitState(Enum):
     CLOSED = "closed"
@@ -10,7 +12,7 @@ class CircuitState(Enum):
     HALF_OPEN = "half_open"
 
 
-class CircuitOpenError(RuntimeError):
+class CircuitOpenError(AgentFlowError):
     pass
 
 

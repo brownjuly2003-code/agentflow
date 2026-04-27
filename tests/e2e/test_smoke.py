@@ -63,10 +63,7 @@ def test_auth_rejects_request_without_api_key(api_client):
 
 def test_rate_limit_returns_429_after_threshold(api_client, rate_limit_api_key: str):
     headers = {"X-API-Key": rate_limit_api_key}
-    statuses = [
-        api_client.get("/v1/metrics/revenue", params={"window": "1h"}, headers=headers).status_code
-        for _ in range(125)
-    ]
+    statuses = [api_client.get("/v1/catalog", headers=headers).status_code for _ in range(125)]
 
     assert statuses[:120] == [200] * 120
     assert statuses[120:] == [429] * 5

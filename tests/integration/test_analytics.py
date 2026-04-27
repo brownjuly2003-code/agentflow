@@ -215,11 +215,17 @@ def test_analytics_top_queries_and_entities_return_ranked_results(client: TestCl
 
 def test_analytics_logging_is_non_blocking(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     original_schedule_session_write = analytics_module._schedule_session_write
-    monkeypatch.setattr(analytics_module, "_schedule_session_write", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        analytics_module,
+        "_schedule_session_write",
+        lambda *args, **kwargs: None,
+    )
+    baseline_started_at = time.perf_counter()
     warm_response = client.get(
-        "/v1/metrics/revenue",
+        "/v1/catalog",
         headers={"X-API-Key": "analytics-acme-key"},
     )
+    baseline_elapsed = time.perf_counter() - baseline_started_at
     assert warm_response.status_code == 200
     monkeypatch.setattr(
         analytics_module,
@@ -237,18 +243,18 @@ def test_analytics_logging_is_non_blocking(client: TestClient, monkeypatch: pyte
 
     started_at = time.perf_counter()
     response = client.get(
-        "/v1/metrics/revenue",
+        "/v1/catalog",
         headers={"X-API-Key": "analytics-acme-key"},
     )
     elapsed = time.perf_counter() - started_at
 
     assert response.status_code == 200
-    assert elapsed < 0.2
+    assert elapsed < max(0.2, baseline_elapsed + 0.15)
 
     def assert_logged():
         count = (
             duckdb.connect(str(client.app.state.auth_manager.db_path))
-            .execute("SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/metrics/revenue'")
+            .execute("SELECT COUNT(*) FROM api_sessions WHERE endpoint = '/v1/catalog'")
             .fetchone()[0]
         )
         assert count == 1

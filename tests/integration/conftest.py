@@ -54,8 +54,14 @@ def kafka_container():
     finally:
         client.close()
 
-    with kafka_module.KafkaContainer("confluentinc/cp-kafka:7.7.0") as kafka:
+    kafka = kafka_module.KafkaContainer("confluentinc/cp-kafka:7.7.0").start()
+    try:
         yield kafka
+    finally:
+        try:
+            kafka.stop()
+        except docker_errors.NotFound:
+            pass
 
 
 @pytest.fixture

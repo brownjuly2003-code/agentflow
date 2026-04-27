@@ -4,6 +4,7 @@ import json
 import sys
 
 from scripts import check_performance
+from tests.load.thresholds import THRESHOLDS
 
 
 def _write_report(path, endpoints, *, gate=None):
@@ -189,6 +190,14 @@ def test_main_uses_endpoint_p99_gates_without_p50_regression_failures(
     assert exit_code == 0
     assert "Status: `PASS`" in captured.out
     assert "regressed by" not in captured.out
+
+
+def test_benchmark_baseline_endpoint_gates_match_load_thresholds():
+    baseline = check_performance.load_report(check_performance.DEFAULT_BASELINE_PATH)
+
+    gate = baseline["gate"]["endpoints"]
+
+    assert gate == THRESHOLDS
 
 
 def test_main_allows_custom_regression_threshold(tmp_path, monkeypatch, capsys):

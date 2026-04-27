@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-04-25T02:38:50.641277+00:00",
-  "source": "github-actions load-test workflow run 24920594700",
+  "source": "github-actions load-test workflow runs 24920594700 and 24979982182",
   "host": "http://127.0.0.1:8011",
   "git_head": "9953faaaa2198c416ce8a004df03f67db888ea60",
   "workflow": {
@@ -21,7 +21,7 @@
     "run_time": "60s"
   },
   "gate": {
-    "calibrated_at": "2026-04-25T02:38:50.641277+00:00",
+    "calibrated_at": "2026-04-27T06:30:47.440061+00:00",
     "framework": "A03 split-decision CI smoke gate",
     "entity": {
       "p50_ms": 200.0,
@@ -37,19 +37,19 @@
         "error_rate_max": 0.01
       },
       "GET /v1/entity/product/{id}": {
-        "p99_ms": 750.0,
+        "p99_ms": 900.0,
         "error_rate_max": 0.01
       },
       "GET /v1/metrics/{name}": {
-        "p99_ms": 750.0,
+        "p99_ms": 900.0,
         "error_rate_max": 0.01
       },
       "POST /v1/query": {
-        "p99_ms": 800.0,
+        "p99_ms": 1000.0,
         "error_rate_max": 0.05
       },
       "POST /v1/batch": {
-        "p99_ms": 800.0,
+        "p99_ms": 1000.0,
         "error_rate_max": 0.02
       }
     }

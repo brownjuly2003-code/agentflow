@@ -51,6 +51,7 @@ contract = [
 dev = [
     "bandit>=1.9,<2",
     "hypothesis>=6,<7",
+    "jsonschema>=4,<5",
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<1",
     "pytest-cov>=5,<6",

@@ -67,6 +67,15 @@ def test_contract_extra_installs_schemathesis():
     assert any(dependency.startswith("schemathesis") for dependency in contract)
 
 
+def test_dev_extra_installs_jsonschema_for_helm_schema_tests():
+    pyproject = _load_pyproject()
+
+    dev_dependencies = pyproject["project"]["optional-dependencies"].get("dev")
+
+    assert dev_dependencies is not None
+    assert any(dependency.startswith("jsonschema") for dependency in dev_dependencies)
+
+
 def test_contract_workflow_uses_contract_extra():
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "contract.yml").read_text(encoding="utf-8")
 

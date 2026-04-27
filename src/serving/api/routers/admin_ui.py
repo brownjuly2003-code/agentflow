@@ -47,7 +47,6 @@ async def _build_context(request: Request, *, partial: bool) -> dict[str, object
     return {
         "request": request,
         "partial": partial,
-        "admin_key": request.headers.get("X-Admin-Key", ""),
         "health": health,
         "configured_keys": manager.configured_key_count,
         "key_usage": manager.list_keys_with_usage(),

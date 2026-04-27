@@ -40,7 +40,14 @@ async def register_webhook(payload: WebhookCreateRequest, request: Request):
 @router.get("")
 async def list_my_webhooks(request: Request):
     webhooks = list_webhooks(get_webhook_config_path(request.app), _tenant(request))
-    return {"webhooks": [webhook.model_dump(mode="json") for webhook in webhooks]}
+    # Exclude `secret` from list/read responses. Plaintext signing material
+    # is returned only once on POST. Listing it again would let any tenant
+    # API key recover signing secrets after creation (Codex audit p2_2 #7).
+    return {
+        "webhooks": [
+            webhook.model_dump(mode="json", exclude={"secret"}) for webhook in webhooks
+        ]
+    }
 
 
 @router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)

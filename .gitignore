@@ -11,6 +11,10 @@ build/
 *.pem
 *.key
 
+# Local secrets — copy from .example and fill with real values
+docker/kafka-connect/secrets/postgres.properties
+docker/kafka-connect/secrets/mysql.properties
+
 .venv/
 venv/
 env/

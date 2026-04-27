@@ -1,0 +1,11 @@
+webhooks:
+- id: 00000000-0000-0000-0000-000000000000
+  url: http://127.0.0.1:8000/callback
+  secret: ${WEBHOOK_SIGNING_SECRET}
+  tenant: default
+  filters:
+    event_types: null
+    entity_ids: null
+    min_amount: null
+  created_at: '2026-01-01T00:00:00Z'
+  active: true

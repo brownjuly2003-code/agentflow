@@ -67,7 +67,11 @@ def test_chart_defaults_use_structured_api_keys_and_tenants():
 
 
 def test_staging_overrides_use_structured_api_keys_with_explicit_ids():
-    values = _load_yaml(PROJECT_ROOT / "k8s" / "staging" / "values-staging.yaml")
+    # The tracked values-staging.yaml carries placeholders (no plaintext keys —
+    # see Codex audit p2_2 #5 / p9 #4). The structured contract is enforced by
+    # values-staging.yaml.example, which represents the schema operators must
+    # populate from a secrets manager before deploying.
+    values = _load_yaml(PROJECT_ROOT / "k8s" / "staging" / "values-staging.yaml.example")
 
     api_keys = values["secrets"]["apiKeys"]
 
@@ -80,4 +84,4 @@ def test_staging_overrides_use_structured_api_keys_with_explicit_ids():
         assert item["tenant"]
         assert item["created_at"]
         assert item["rate_limit_rpm"] >= 1
-        assert item["key"]
+        assert item.get("key") or item.get("key_hash")

@@ -10,7 +10,7 @@ dependencies = [
     "confluent-kafka>=2.5,<3",
     "fastapi>=0.111,<1",
     "uvicorn[standard]>=0.30,<1",
-    "dagster>=1.7,<2",
+    "dagster>=1.13.1,<2",
     "duckdb>=1.1,<2",
     "httpx>=0.27,<1",
     "opentelemetry-exporter-otlp-proto-grpc>=1.41,<2",
@@ -42,7 +42,15 @@ load = [
     "locust>=2.29,<3",
 ]
 integrations = [
-    "langchain>=0.3,<1",
+    # langchain-core >=1.2.22 closes CVE-2026-26013 (SSRF via image_url) and
+    # CVE-2026-34070 (path traversal in legacy load_prompt). Bumping the
+    # langchain umbrella forces a transitive resolve of langchain-core that
+    # satisfies these floors. langchain-text-splitters >=1.1.2 closes
+    # GHSA-fv5p-p927-qmxr (SSRF redirect bypass). See Codex audit p9.
+    "langchain>=0.3.30,<2",
+    "langchain-core>=1.2.22,<2",
+    "langchain-text-splitters>=1.1.2,<2",
+    "langsmith>=0.7.31,<1",
     "llama-index-core>=0.12,<1",
 ]
 contract = [
@@ -66,6 +74,38 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+    "/requirements.txt",
+]
+exclude = [
+    "/config/webhooks.yaml",
+    "/config/api_keys.yaml",
+    "/config/tenants.yaml",
+    "/docker/**/secrets/**",
+    "/.github/**",
+    "/.tmp*/",
+    "/notebooks/**",
+    "/audit_*.md",
+    "/audit_codex/**",
+    "/.env*",
+    "/k8s/**",
+    "/helm/**",
+    "/examples/**",
+    "/integrations/**",
+    "/sdk/**",
+    "/sdk-ts/**",
+    "/tests/**",
+    "/docs/**",
+    "/mutants/**",
+    "/.dora/**",
+]
 
 [tool.ruff]
 target-version = "py311"

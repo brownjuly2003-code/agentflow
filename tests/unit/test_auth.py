@@ -181,13 +181,17 @@ def test_admin_can_create_list_and_revoke_keys(api_keys_path: Path, db_path: Pat
     )
     listed = client.get("/v1/admin/keys", headers=headers)
     new_key = created.json()["key"]
+    new_key_id = created.json()["key_id"]
     deleted = client.delete(f"/v1/admin/keys/{new_key}", headers=headers)
     relisted = client.get("/v1/admin/keys", headers=headers)
 
     assert created.status_code == 201
-    assert any(item["key"] == new_key for item in listed.json()["keys"])
+    # Plaintext key material is intentionally NOT returned by the list
+    # endpoint (Codex audit p2_1 #7); we identify the new entry by key_id.
+    assert all("key" not in item for item in listed.json()["keys"])
+    assert any(item["key_id"] == new_key_id for item in listed.json()["keys"])
     assert deleted.status_code == 204
-    assert all(item["key"] != new_key for item in relisted.json()["keys"])
+    assert all(item["key_id"] != new_key_id for item in relisted.json()["keys"])
 
 
 def test_admin_usage_returns_per_tenant_counts(api_keys_path: Path, db_path: Path):

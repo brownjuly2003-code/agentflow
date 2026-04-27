@@ -31,8 +31,24 @@ class AuthMiddleware:
         request.state.tenant_id = None
         if _is_admin_path(path):
             return await call_next(request)
-        if _is_exempt_path(path) or not manager.has_configured_keys():
+        if _is_exempt_path(path):
             return await call_next(request)
+        if not manager.has_configured_keys():
+            # Fail closed unless the operator explicitly opted into open mode
+            # for local development. Previous behaviour silently exposed every
+            # non-admin route when the api_keys file was missing/empty
+            # (Codex audit p2_1 #5, p2_2 #1).
+            if os.getenv("AGENTFLOW_AUTH_DISABLED", "").strip().lower() in {"1", "true", "yes"}:
+                return await call_next(request)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": (
+                        "API key configuration is missing or empty. "
+                        "Set AGENTFLOW_API_KEYS_FILE or AGENTFLOW_AUTH_DISABLED=true for local dev."
+                    )
+                },
+            )
 
         client_ip = _client_ip(request)
         api_key = request.headers.get("X-API-Key", "")
@@ -129,10 +145,19 @@ def require_admin_key(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ) -> None:
     manager = get_auth_manager(request)
+    client_ip = _client_ip(request)
+    if manager.is_failed_auth_limited(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed authentication attempts from this IP.",
+            headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)},
+        )
     if not manager.admin_key:
         raise HTTPException(status_code=503, detail="Admin key is not configured.")
     if x_admin_key is None or not secrets.compare_digest(x_admin_key, manager.admin_key):
+        manager.record_failed_auth(client_ip)
         raise HTTPException(status_code=401, detail="Invalid or missing admin key.")
+    manager.clear_failed_auth(client_ip)
 
 
 def require_auth(request: Request) -> TenantKey:
@@ -283,7 +308,20 @@ def _entity_type_from_path(path: str) -> str | None:
 
 
 def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",", 1)[0].strip()
-    return request.client.host if request.client is not None else "unknown"
+    # Honour X-Forwarded-For only when the immediate peer is a trusted proxy.
+    # Without this gate any client could rotate failed-auth windows by spoofing
+    # the header (Codex audit p2_2 #2).
+    trusted = _trusted_proxies()
+    peer_host = request.client.host if request.client is not None else None
+    if trusted and peer_host in trusted:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            return forwarded_for.split(",", 1)[0].strip()
+    return peer_host or "unknown"
+
+
+def _trusted_proxies() -> frozenset[str]:
+    raw = os.getenv("AGENTFLOW_TRUSTED_PROXIES", "").strip()
+    if not raw:
+        return frozenset()
+    return frozenset(item.strip() for item in raw.split(",") if item.strip())

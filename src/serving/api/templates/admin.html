@@ -107,10 +107,10 @@
     }
   </style>
 </head>
-<body data-admin-key="{{ admin_key }}">
+<body>
   <main>
     <h1>AgentFlow Admin</h1>
-    <p class="lede">Read-only production summary for health, traffic, cache, and tenant key usage.</p>
+    <p class="lede">Read-only production summary for health, traffic, cache, and tenant key usage. Reload the page to refresh; the previous auto-refresh exposed the admin key in the DOM (Codex audit p2_2 #6).</p>
     <div id="summary">
 {% endif %}
       <section class="grid">
@@ -209,19 +209,6 @@
 {% if not partial %}
     </div>
   </main>
-  <script>
-    const adminKey = document.body.dataset.adminKey;
-    const refreshSummary = async () => {
-      const response = await fetch("/admin/partials/summary", {
-        headers: adminKey ? { "X-Admin-Key": adminKey } : {},
-      });
-      if (!response.ok) {
-        return;
-      }
-      document.getElementById("summary").innerHTML = await response.text();
-    };
-    window.setInterval(refreshSummary, 5000);
-  </script>
 </body>
 </html>
 {% endif %}

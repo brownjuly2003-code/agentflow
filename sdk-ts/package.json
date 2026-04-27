@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root .. tests/client.test.ts"
+    "test": "vitest run --root .. --exclude=mutants/** tests/client.test.ts sdk-ts/tests/retry.test.ts sdk-ts/tests/circuitBreaker.test.ts sdk-ts/tests/resilience-integration.test.ts"
   },
   "keywords": [
     "agentflow",

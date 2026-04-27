@@ -6,4 +6,7 @@ security:
   sensitive_headers_to_redact:
     - Authorization
     - X-API-Key
+    - X-Admin-Key
+    - Cookie
+    - Set-Cookie
   request_size_limit_bytes: 1048576

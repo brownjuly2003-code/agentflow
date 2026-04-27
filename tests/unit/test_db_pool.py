@@ -224,6 +224,9 @@ def test_default_duckdb_pool_size_scales_with_cpu_count(tmp_path, monkeypatch):
 def test_health_endpoint_does_not_block_parallel_entity_lookup(tmp_path, monkeypatch):
     monkeypatch.setenv("DUCKDB_PATH", str(tmp_path / "health_parallel.duckdb"))
     monkeypatch.setenv("AGENTFLOW_USAGE_DB_PATH", str(tmp_path / "usage.duckdb"))
+    # Auth fails closed by default when no api_keys file is configured;
+    # this test focuses on pool concurrency, not auth, so opt into open mode.
+    monkeypatch.setenv("AGENTFLOW_AUTH_DISABLED", "true")
     previous_webhook_autostart = getattr(app.state, "webhook_dispatcher_autostart", True)
     previous_alert_autostart = getattr(app.state, "alert_dispatcher_autostart", True)
     app.state.webhook_dispatcher_autostart = False

@@ -32,14 +32,14 @@ class KeyRotator:
             key=lambda value: (value.tenant, value.name),
         )
         for item in sorted_keys:
-            runtime_key = item.key
-            if runtime_key is None and item.key_hash is not None:
-                runtime_key = self._manager._runtime_plaintext_by_hash.get(item.key_hash)
+            # Plaintext key material is intentionally NOT exposed here. It is
+            # returned only once at create/rotate time. Listing it would let
+            # anyone with admin access recover active tenant keys (Codex audit
+            # p2_1 #7).
             items.append(
                 {
                     "key_id": item.key_id,
-                    "key": runtime_key,
-                    "key_hash": item.key_hash,
+                    "key_hash_present": item.key_hash is not None,
                     "name": item.name,
                     "tenant": item.tenant,
                     "rate_limit_rpm": item.rate_limit_rpm,
@@ -266,8 +266,11 @@ class KeyRotator:
     def generate_key(self, tenant: str, name: str) -> str:
         tenant_slug = re.sub(r"[^a-z0-9]+", "-", tenant.lower()).strip("-") or "tenant"
         name_slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
+        # 256 bits of random material (token_urlsafe(32) -> 43 chars).
+        # token_hex(4) gave only 32 bits — feasible to brute-force when the
+        # tenant/name slug is known (Codex audit p2_2 #3).
         while True:
-            candidate = f"af-prod-{tenant_slug}-{name_slug}-{secrets.token_hex(4)}"
+            candidate = f"af-prod-{tenant_slug}-{name_slug}-{secrets.token_urlsafe(32)}"
             if candidate not in self._manager.keys_by_value:
                 return candidate
 

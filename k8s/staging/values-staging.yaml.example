@@ -1,0 +1,68 @@
+replicaCount: 1
+
+image:
+  repository: agentflow/api
+  tag: "staging"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+ingress:
+  enabled: false
+
+service:
+  type: NodePort
+  nodePort: 30080
+
+autoscaling:
+  enabled: false
+
+persistence:
+  enabled: false
+
+probes:
+  readiness:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 15
+    failureThreshold: 12
+  liveness:
+    initialDelaySeconds: 90
+    periodSeconds: 20
+    timeoutSeconds: 15
+    failureThreshold: 6
+
+config:
+  corsOrigins: http://localhost:3000,http://127.0.0.1:3000
+  redisUrl: redis://agentflow-redis:6379/0
+
+# Replace the example credentials below with secrets sourced from your
+# secrets manager (External Secrets Operator, Sealed Secrets, etc.) before
+# deploying. The repository copy is an example only; values-staging.yaml
+# (the live file) is gitignored.
+secrets:
+  adminKey: REPLACE_ME_ADMIN_KEY
+  apiKeys:
+    keys:
+      - key_id: "support-agent"
+        key_hash: "REPLACE_ME_BCRYPT_HASH"
+        name: "Support Agent"
+        tenant: "default"
+        rate_limit_rpm: 120
+        allowed_entity_types:
+          - "order"
+          - "user"
+        created_at: "2026-04-12"
+      - key_id: "ops-agent"
+        key_hash: "REPLACE_ME_BCRYPT_HASH"
+        name: "Ops Agent"
+        tenant: "default"
+        rate_limit_rpm: 300
+        allowed_entity_types: null
+        created_at: "2026-04-12"

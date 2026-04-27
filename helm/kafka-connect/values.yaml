@@ -46,16 +46,20 @@ connect:
   configProvidersFileClass: org.apache.kafka.common.config.provider.FileConfigProvider
 
 secrets:
+  # Defaults below are placeholders for local-only kind/dev clusters.
+  # Production deployments MUST set existingSecret to a Secret managed by
+  # External Secrets Operator / Sealed Secrets / Vault. Never commit real
+  # CDC credentials into chart values.
   create: true
   existingSecret: ""
   postgres:
     hostname: postgres-source
     user: cdc_reader
-    password: agentflow
+    password: REPLACE_ME_POSTGRES_CDC_PASSWORD
   mysql:
     hostname: mysql-source
     user: cdc_reader
-    password: agentflow
+    password: REPLACE_ME_MYSQL_CDC_PASSWORD
 
 connectors:
   postgres:

@@ -1,11 +1,1 @@
-webhooks:
-- id: 5439320c-4bff-4e92-b3fb-d66c1685c158
-  url: http://127.0.0.1:28622/callback
-  secret: HsMZKL2-gtXmH_SvBuwibKemoLNqKEVMnG4RECGgKLk
-  tenant: default
-  filters:
-    event_types: null
-    entity_ids: null
-    min_amount: null
-  created_at: '2026-04-12T13:35:37.643778Z'
-  active: true
+webhooks: []

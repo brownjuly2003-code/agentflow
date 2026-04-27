@@ -108,6 +108,11 @@ jobs:
               load_project_dependencies(root / "sdk" / "pyproject.toml"),
               output_dir / "requirements-sdk.txt",
           )
+          integrations_count = resolve_requirements(
+              "integrations",
+              load_project_dependencies(root / "integrations" / "pyproject.toml"),
+              output_dir / "requirements-integrations.txt",
+          )
 
           summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
           if summary_path:
@@ -119,6 +124,9 @@ jobs:
                   )
                   handle.write(
                       f"- SDK runtime: resolved install of `sdk/pyproject.toml` `[project.dependencies]` ({sdk_count} packages)\n"
+                  )
+                  handle.write(
+                      f"- Integrations runtime: resolved install of `integrations/pyproject.toml` `[project.dependencies]` ({integrations_count} packages)\n"
                   )
                   handle.write("- Exclusions: dev/CI/test extras, local tooling, and unrelated Docker image packages\n")
           PY
@@ -138,7 +146,11 @@ jobs:
             exit 1
           fi
       - name: Run Safety
-        run: safety check -r .tmp-security/requirements-main.txt -r .tmp-security/requirements-sdk.txt
+        run: |
+          safety check \
+            -r .tmp-security/requirements-main.txt \
+            -r .tmp-security/requirements-sdk.txt \
+            -r .tmp-security/requirements-integrations.txt
 
   trivy:
     runs-on: ubuntu-latest
@@ -158,7 +170,9 @@ jobs:
           docker tag agentflow-security-agentflow-api:latest agentflow-api:security-scan
         shell: pwsh
       - name: Run Trivy scan
-        uses: aquasecurity/trivy-action@master
+        # Pinned to release tag (Codex audit p9 #3); update by bumping the
+        # tag, never re-pin to @master (allows upstream to alter scanner).
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: agentflow-api:security-scan
           format: sarif

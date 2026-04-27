@@ -82,7 +82,8 @@ async def register_alert(payload: AlertCreateRequest, request: Request):
 @router.get("")
 async def list_my_alerts(request: Request):
     alerts = list_alerts(get_alert_config_path(request.app), _tenant(request))
-    return {"alerts": [alert.model_dump(mode="json") for alert in alerts]}
+    # Exclude signing `secret` from list responses (Codex audit p2_2 #7).
+    return {"alerts": [alert.model_dump(mode="json", exclude={"secret"}) for alert in alerts]}
 
 
 @router.put("/{alert_id}")
@@ -100,7 +101,8 @@ async def modify_alert(alert_id: str, payload: AlertUpdateRequest, request: Requ
     updated = update_alert(path, alert_id, _tenant(request), updates)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
-    return updated.model_dump(mode="json")
+    # Exclude signing `secret` from update responses (Codex audit p2_2 #7).
+    return updated.model_dump(mode="json", exclude={"secret"})
 
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)

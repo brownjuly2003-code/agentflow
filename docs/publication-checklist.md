@@ -1,12 +1,12 @@
-# GitHub Publication Checklist
+# GitHub Publication and Release Checklist
 
-Before pushing AgentFlow to a public repository:
+Before publishing AgentFlow changes or pushing a release tag:
 
 ## Content
 
 - [ ] `README.md` is publication-ready
 - [ ] `LICENSE` is present and set to MIT
-- [ ] `CHANGELOG.md` includes the `v1.0.0` entry
+- [ ] `CHANGELOG.md` includes the current release or `[Unreleased]` entry
 - [ ] `CONTRIBUTING.md` is present
 - [ ] `.env.example` contains placeholders only
 - [ ] `docs/glossary.md` is ready for interview prep
@@ -44,9 +44,11 @@ Capture notes:
 
 - [ ] Fill the repository description in the GitHub About section
 - [ ] Add topics: `data-engineering`, `real-time`, `ai-agents`, `fastapi`, `duckdb`, `kafka`, `flink`
-- [ ] Create a `v1.0.0` release using notes from `CHANGELOG.md`
+- [ ] Create or update the approved `vX.Y.Z` release using notes from `CHANGELOG.md`
 
 ## SDK registry release
+
+Clear state: GitHub source releases and registry publishes are separate. A `vX.Y.Z` tag can publish runtime + SDK packages, while `sdk-vX.Y.Z` remains the standalone SDK release path created by `scripts/release.py`.
 
 - [ ] On a clean venv, verify both install orders resolve the same package identities:
 

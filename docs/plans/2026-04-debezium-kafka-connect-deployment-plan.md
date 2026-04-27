@@ -1,10 +1,24 @@
 # A04 Debezium + Kafka Connect Deployment Plan
 
-**Status:** Draft for T25b implementation  
+**Status:** Implemented for local/demo and Kubernetes-shaped staging primitives; production source onboarding pending
 **Date:** 2026-04-25  
-**Scope:** Research and deploy plan only; no implementation in this task.
+**Scope:** Original research/deploy plan plus implementation state. This is not approval to attach production source databases.
 
 Kafka Connect is the runtime that hosts source and sink connectors as workers. In this plan, Debezium PostgreSQL and MySQL source connectors run inside Kafka Connect workers, read database replication logs, and publish raw CDC records to Kafka. AgentFlow then treats those raw Debezium records as an internal capture format and normalizes them before Flink validation, Iceberg writes, and serving-layer reads.
+
+## Current implementation state
+
+This file preserves the original plan language for traceability. The current checked-in state is:
+
+| Area | Status |
+|------|--------|
+| Local compose CDC stack | Done: `docker-compose.cdc.yml`, source DB init SQL, Kafka Connect image, and connector registration script are checked in |
+| Kafka topic bootstrap | Done: local compose and Helm both pre-create Connect internals, raw table topics, Debezium heartbeat topics, MySQL signal topic, and MySQL schema-history topic |
+| Kafka Connect Helm chart | Done: `helm/kafka-connect/` contains worker deployment, service, secrets, values schema, connector hooks, and topic bootstrap hook |
+| Debezium connector configs | Done: Postgres and MySQL connector config helpers match the `cdc.<source>.<schema>.<table>` topic contract |
+| CDC normalization | Done: raw Debezium envelopes normalize into the canonical AgentFlow CDC contract before downstream validation |
+| Verification | Targeted unit/integration/Helm tests pass locally; Docker CDC capture remains opt-in with `AGENTFLOW_RUN_CDC_DOCKER=1` and a running compose stack |
+| Production source onboarding | Not done: production hostnames, table scope, network path, and secret ownership still require an explicit decision |
 
 ## 1. Scope decision
 

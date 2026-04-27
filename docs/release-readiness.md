@@ -1,6 +1,6 @@
 # AgentFlow Release Readiness
 
-**Date**: 2026-04-20  
+**Date**: 2026-04-20
 **Last updated**: 2026-04-27
 **Version**: v1.1.0 + post-v1.1 CDC follow-up
 **Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization is checked in; remaining gaps are external environment setup, production benchmark publication, and PMF follow-ups
@@ -10,6 +10,19 @@
 AgentFlow закрыл технические блокеры из internal audit baseline от 2026-04-12, опубликовал v1.0.0 на GitHub 2026-04-20 и выпустил v1.0.1 patch release для clean-clone установки. Поверх v13.5 security refresh работы v15-v18 закрыли GTM/documentation хвост: narrative API reference, competitive analysis, security audit, landing page, README/glossary/LICENSE/CHANGELOG, public repo, and Fly.io demo config are now part of the release evidence. `bandit_diff.py` остаётся зелёным against the checked-in baseline, а clean-clone verification для patch release зафиксирован в `CHANGELOG.md` (`pytest tests/unit -q`: 340 passed). Retrospective reconstruction of the lost audit artifact is preserved in `docs/audit-history.md`.
 
 The v1.1 line split runtime and SDK distribution identity: the runtime publishes as `agentflow-runtime`, while the Python SDK publishes as `agentflow-client` and keeps the `agentflow` import path. The current post-v1.1 follow-up operationalizes ADR 0005 with Debezium/Kafka Connect local compose, a Kubernetes-shaped Helm chart, raw CDC topic bootstrap, and canonical CDC normalization before downstream validation.
+
+## Current Status (2026-04-27)
+
+| Area | Clear status |
+|------|--------------|
+| Public repository | Published and release-ready from the checked-in evidence trail |
+| Runtime package | `agentflow-runtime` is the root distribution name |
+| Python SDK package | `agentflow-client` is the PyPI distribution; `from agentflow import ...` stays unchanged |
+| Registry publishing | Not complete until PyPI Trusted Publishing, npm token setup, and green publish workflows are confirmed |
+| CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
+| CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
+| CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
+| Latest full-suite claim | No current full-suite green claim. The latest local full-suite attempt on 2026-04-27 timed out after 20 minutes; targeted gates are listed below. |
 
 ## Status by BCG Dimension
 
@@ -68,9 +81,13 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Benchmark baseline updated and gate definition documented
 - [x] Release readiness report created
 - [x] Bandit diff is green against the checked-in baseline
+- [x] v1.1 runtime/SDK package split documented
+- [x] Local and Kubernetes-shaped CDC operationalization checked in
 - [ ] GitHub environments `staging`/`prod` configured with required reviewers
 - [ ] AWS OIDC role configured for GitHub Actions
 - [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
+- [ ] Production CDC source onboarding approved and configured
+- [ ] Current full suite green on latest HEAD
 - [ ] Phase 1 PMF work completed
 
 ## SDK Publish Proof Path
@@ -94,6 +111,10 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `python -c "import tomllib; ... fly.toml ..."` | ✅ PASS | `OK` |
 | security doc evidence-path check | ✅ PASS | `OK - 20 evidence paths valid` |
 | API reference coverage check | ✅ PASS | `OK - all 6 endpoints documented` |
+| `python -m pytest -p no:schemathesis tests/unit/test_cdc_normalizer.py tests/unit/test_stream_processor.py tests/unit/test_validators.py tests/integration/test_cdc_capture.py tests/integration/test_kafka_connect_helm_chart.py -q` | ✅ PASS | 44 passed, 4 skipped on 2026-04-27 |
+| `python -m pytest -p no:schemathesis tests/unit/test_contract_dependencies.py tests/unit/test_version.py tests/unit/test_sdk_backwards_compat.py -q` | ✅ PASS | 21 passed on 2026-04-27 |
+
+Full-suite note: `python -m pytest -p no:schemathesis -q` was started locally on 2026-04-27 and timed out after 20 minutes. Treat the current evidence as targeted verification, not a full-suite green claim.
 
 Local note: `tests/chaos` already manage their own Docker stack via fixture. Running `docker compose -f docker-compose.chaos.yml up -d` before `pytest` creates a duplicate toxiproxy bind on port `8474`; the stable local command is the direct `pytest` invocation.
 
@@ -117,14 +138,14 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## Release Verdict
 
-**v1.0.0 published 2026-04-20, v1.0.1 patch released for clean-clone support.**
+**v1.1.0 release line prepared; post-v1.1 CDC follow-up checked in.**
 
-The v1.1.0 release line is prepared with the SDK/runtime package split, and the checked-in post-v1.1 work now includes Debezium/Kafka Connect CDC operationalization. Production readiness is still gated by the manual environment and production-data onboarding items listed above.
-
-AgentFlow is technically release-ready and publicly available. All code-level gates remain green on fresh clone (`pytest tests/unit: 340 passed`). Remaining open items are non-code:
+AgentFlow is publicly available and the current checked-in docs/code describe the intended release and CDC state. Do not treat registry publishing, production CDC source onboarding, or latest-HEAD full-suite status as complete until the unchecked gates above are closed. Remaining open items:
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - Manual GH Actions setup: staging/prod environments with required reviewers
 - AWS OIDC role setup for real terraform apply
+- PyPI Trusted Publishing and npm token setup for registry release
+- Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)
 - First paying customers (sales track)

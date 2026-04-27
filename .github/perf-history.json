@@ -25,5 +25,14 @@
     "p95_ms": 680.0,
     "p99_ms": 24000.0,
     "throughput_rps": 0.0
+  },
+  {
+    "timestamp": "2026-04-27T08:14:22Z",
+    "commit_sha": "fc50de6",
+    "branch": "main",
+    "p50_ms": 81.0,
+    "p95_ms": 500.0,
+    "p99_ms": 20000.0,
+    "throughput_rps": 0.0
   }
 ]

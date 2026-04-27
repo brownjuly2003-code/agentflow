@@ -7,6 +7,7 @@ import signal
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Mapping
 from contextvars import ContextVar
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -77,6 +78,25 @@ class KeyCreateRequest(BaseModel):
 def get_current_tenant_id(default: str | None = None) -> str | None:
     tenant_id = _CURRENT_TENANT_ID.get()
     return tenant_id if tenant_id is not None else default
+
+
+def tenant_key_allowed_tables(
+    tenant_key: TenantKey | None,
+    all_catalog_tables: Mapping[str, str] | list[str],
+) -> list[str]:
+    if isinstance(all_catalog_tables, Mapping):
+        table_items = list(all_catalog_tables.items())
+    else:
+        table_items = [(table, table) for table in all_catalog_tables]
+    allowed_entity_types = getattr(tenant_key, "allowed_entity_types", None)
+    if tenant_key is None or allowed_entity_types is None:
+        return [table for _, table in table_items]
+    allowed = set(allowed_entity_types)
+    return [
+        table
+        for entity_type, table in table_items
+        if entity_type in allowed or table in allowed
+    ]
 
 
 class AuthManager:

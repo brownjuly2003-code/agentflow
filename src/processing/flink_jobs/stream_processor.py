@@ -28,6 +28,15 @@ from pyflink.datastream.output_tag import OutputTag
 DEAD_LETTER_TAG = OutputTag("dead-letter", Types.STRING())
 
 
+def _event_tenant(event: dict) -> str:
+    source_metadata = event.get("source_metadata", {})
+    metadata_tenant = (
+        source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
+    )
+    tenant = event.get("tenant") or metadata_tenant
+    return str(tenant) if tenant else "default"
+
+
 class EventTimestampAssigner(TimestampAssigner):
     """Extracts event_time from the JSON payload for watermark generation."""
 
@@ -39,7 +48,11 @@ class EventTimestampAssigner(TimestampAssigner):
             from src.ingestion.cdc.normalizer import is_debezium_event, normalize_debezium_event
 
             if is_debezium_event(event):
-                event = normalize_debezium_event(event)
+                # Best-effort topic for tenant resolution: Debezium value-only
+                # deserializer drops the Kafka topic name (Codex review P1).
+                # Wrappers should populate `event["topic"]` before this point;
+                # without it we still fall back to source.name → 'default'.
+                event = normalize_debezium_event(event, topic=event.get("topic"))
             ts = datetime.fromisoformat(event["timestamp"])
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=UTC)
@@ -92,7 +105,10 @@ class ValidateAndEnrich(ProcessFunction):
 
         try:
             if is_debezium_event(event):
-                event = normalize_debezium_event(event)
+                # See note above on topic propagation; Flink wrappers should
+                # inject `event["topic"]` from KafkaSourceMetadata when
+                # available so tenant resolution sees the prefixed topic.
+                event = normalize_debezium_event(event, topic=event.get("topic"))
         except ValueError as e:
             ctx.output(
                 DEAD_LETTER_TAG,
@@ -108,6 +124,7 @@ class ValidateAndEnrich(ProcessFunction):
 
         event_id = event.get("event_id", "unknown")
         event_type = event.get("event_type", "unknown")
+        event["tenant"] = _event_tenant(event)
         is_cdc_event = event.get("source") in {"postgres_cdc", "mysql_cdc"} and "operation" in event
 
         # 2. Schema validation (Pydantic models)
@@ -116,10 +133,10 @@ class ValidateAndEnrich(ProcessFunction):
             ctx.output(
                 DEAD_LETTER_TAG,
                 json.dumps(
-                    {
-                        "event_id": event_id,
-                        "error": schema_result.errors,
-                        "stage": "schema_validation",
+                        {
+                            "event_id": event_id,
+                            "error": schema_result.errors,
+                            "stage": "schema_validation",
                     }
                 ),
             )

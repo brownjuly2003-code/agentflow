@@ -22,6 +22,8 @@ def _disable_auth(client: TestClient) -> None:
     manager = client.app.state.auth_manager
     manager.keys_by_value = {}
     manager._rate_windows.clear()
+    # Auth fail-closed default in middleware needs an explicit opt-out for tests.
+    client.app.state.auth_disabled = True
 
 
 def _set_auth(client: TestClient, key: str = "explain-test-key") -> str:

@@ -5,6 +5,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from src.ingestion.tenant_router import TenantRouter
+
 _SOURCE_BY_CONNECTOR: dict[str, str] = {
     "postgresql": "postgres_cdc",
     "mysql": "mysql_cdc",
@@ -65,7 +67,7 @@ def is_debezium_event(event: dict[str, Any]) -> bool:
     return all(key in event for key in ("before", "after", "source", "op"))
 
 
-def normalize_debezium_event(event: dict[str, Any]) -> dict[str, Any]:
+def normalize_debezium_event(event: dict[str, Any], topic: str | None = None) -> dict[str, Any]:
     source = event.get("source") or {}
     if not isinstance(source, dict):
         raise ValueError("Debezium record source is not an object")
@@ -94,6 +96,19 @@ def normalize_debezium_event(event: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"CDC row image missing key column: {key_column}")
 
     metadata = _source_metadata(source)
+    # Resolution order: explicit `topic` arg, then `event["topic"]` if a Kafka
+    # wrapper populated it, then `source.database`/`source.schema` (Postgres
+    # WAL exposes the database name; useful when topic is not propagated),
+    # then `source.name` (connector name — last resort, often non-tenant).
+    # See Codex review P1: Debezium value-only deserializer drops topic, so
+    # without an explicit topic argument all events fall to `default`.
+    tenant_hint = (
+        topic
+        or event.get("topic")
+        or _topic_from_source(source)
+        or source.get("name")
+    )
+    tenant = _tenant_from_topic(tenant_hint)
     stable_key = {
         "entity_id": str(entity_id),
         "operation": operation,
@@ -108,6 +123,7 @@ def normalize_debezium_event(event: dict[str, Any]) -> dict[str, Any]:
         "operation": operation,
         "timestamp": _event_timestamp(event, source),
         "source": source_name,
+        "tenant": tenant,
         "entity_type": table_mapping["entity_type"],
         "entity_id": str(entity_id),
         "before": event.get("before"),
@@ -149,3 +165,27 @@ def _source_position(source: dict[str, Any]) -> dict[str, Any]:
             "row": source.get("row"),
         }
     return {}
+
+
+def _tenant_from_topic(topic: object) -> str:
+    if not isinstance(topic, str) or not topic:
+        return "default"
+    router = TenantRouter()
+    for tenant in router.load().tenants:
+        prefix = tenant.kafka_topic_prefix
+        if topic == prefix or topic.startswith(f"{prefix}."):
+            return tenant.id
+    return "default"
+
+
+def _topic_from_source(source: dict[str, Any]) -> str | None:
+    """Reconstruct a Kafka topic prefix from Debezium source metadata.
+
+    Postgres exposes `db` + `schema` + `table`; MySQL exposes `db` + `table`.
+    Many connectors set `topic.prefix` to `cdc.<db>` so even without the live
+    Kafka topic we can match TenantRouter prefixes when tenants split per db.
+    """
+    db = source.get("db")
+    if not isinstance(db, str) or not db:
+        return None
+    return f"cdc.{db}"

@@ -19,9 +19,15 @@ def _disable_auth(client: TestClient) -> None:
     manager = client.app.state.auth_manager
     manager.keys_by_value = {}
     manager._rate_windows.clear()
+    # Auth fail-closed default in middleware needs an explicit opt-out for tests.
+    client.app.state.auth_disabled = True
 
 
-def _set_auth(client: TestClient, key: str = "search-test-key") -> None:
+def _set_auth(
+    client: TestClient,
+    key: str = "search-test-key",
+    allowed_entity_types: list[str] | None = None,
+) -> None:
     manager = client.app.state.auth_manager
     manager.keys_by_value = {
         key: TenantKey(
@@ -29,7 +35,7 @@ def _set_auth(client: TestClient, key: str = "search-test-key") -> None:
             name="search-agent",
             tenant="acme",
             rate_limit_rpm=100,
-            allowed_entity_types=None,
+            allowed_entity_types=allowed_entity_types,
             created_at=datetime.now(UTC).date(),
         )
     }
@@ -238,3 +244,17 @@ class TestSemanticSearch:
 
         assert response.status_code == 200
         assert response.json()["results"]
+
+    def test_search_intersects_entity_types_with_allowlist(self, client):
+        _prepare_search_data(client)
+        _set_auth(client, allowed_entity_types=["user"])
+
+        response = client.get(
+            "/v1/search?q=electronics&entity_types=order,user",
+            headers={"X-API-Key": "search-test-key"},
+        )
+
+        assert response.status_code == 200
+        results = response.json()["results"]
+        assert results
+        assert {item["entity_type"] for item in results} == {"user"}

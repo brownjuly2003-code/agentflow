@@ -9,12 +9,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
+import sqlglot
 import structlog
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from opentelemetry import trace
 from pydantic import BaseModel, Field
+from sqlglot import exp
 from starlette.concurrency import run_in_threadpool
 
+from src.serving.api.auth.manager import tenant_key_allowed_tables
 from src.serving.api.versioning import (
     get_response_transformer,
     get_version_registry,
@@ -49,6 +52,50 @@ def _transform_payload_for_requested_version(req: Request, payload: dict) -> dic
         from_version=registry.latest().date,
         to_version=requested_version,
     )
+
+
+def _catalog_entity_tables(req: Request) -> dict[str, str]:
+    catalog = getattr(req.app.state, "catalog", None)
+    if catalog is None:
+        catalog = getattr(getattr(req.app.state, "query_engine", None), "catalog", None)
+    if catalog is None:
+        return {}
+    return {name: entity.table for name, entity in catalog.entities.items()}
+
+
+def _allowed_tables_for_request(req: Request) -> list[str]:
+    tenant_key = getattr(req.state, "tenant_key", None)
+    tables = tenant_key_allowed_tables(tenant_key, _catalog_entity_tables(req))
+    if tenant_key is None or getattr(tenant_key, "allowed_entity_types", None) is None:
+        return [*tables, "pipeline_events"]
+    return tables
+
+
+def _metric_tables(catalog, metric_name: str) -> set[str]:
+    metric = catalog.metrics.get(metric_name)
+    if metric is None:
+        return set()
+    try:
+        parsed = sqlglot.parse_one(
+            metric.sql_template.format(window="1 hour"),
+            read="duckdb",
+        )
+    except sqlglot.errors.ParseError:
+        return set()
+    return {table.name for table in parsed.find_all(exp.Table) if table.name}
+
+
+def _ensure_metric_allowed(req: Request, metric_name: str) -> None:
+    tenant_key = getattr(req.state, "tenant_key", None)
+    if tenant_key is None or getattr(tenant_key, "allowed_entity_types", None) is None:
+        return
+    allowed_tables = set(tenant_key_allowed_tables(tenant_key, _catalog_entity_tables(req)))
+    metric_tables = _metric_tables(req.app.state.catalog, metric_name)
+    if metric_tables and not metric_tables.issubset(allowed_tables):
+        raise HTTPException(
+            status_code=403,
+            detail=f"API key '{tenant_key.name}' cannot access metric '{metric_name}'.",
+        )
 
 
 # ── Request/Response models ─────────────────────────────────────
@@ -127,9 +174,28 @@ class MetricResponse(BaseModel):
 async def explain_query(request: ExplainRequest, req: Request):
     """Return the SQL plan for a natural language query without executing it."""
     engine = req.app.state.query_engine
+    tenant_key = getattr(req.state, "tenant_key", None)
+    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+    allowed_tables = _allowed_tables_for_request(req)
 
     try:
-        result = engine.explain(request.question)
+        try:
+            result = engine.explain(
+                request.question,
+                tenant_id=tenant_id,
+                allowed_tables=allowed_tables,
+            )
+        except TypeError as exc:
+            if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
+                raise
+            try:
+                result = engine.explain(request.question, tenant_id=tenant_id)
+            except TypeError as fallback_exc:
+                if "tenant_id" not in str(fallback_exc):
+                    raise
+                result = engine.explain(request.question)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 
@@ -149,6 +215,7 @@ async def natural_language_query(request: NLQueryRequest, req: Request, response
     engine = req.app.state.query_engine
     tenant_key = getattr(req.state, "tenant_key", None)
     tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+    allowed_tables = _allowed_tables_for_request(req)
 
     with tracer.start_as_current_span("query_engine.translate") as span:
         span.set_attribute("query.text", request.question)
@@ -166,17 +233,30 @@ async def natural_language_query(request: NLQueryRequest, req: Request, response
                         cursor=request.cursor,
                         context=request.context,
                         tenant_id=tenant_id,
+                        allowed_tables=allowed_tables,
                     )
                 except TypeError as exc:
-                    if "tenant_id" not in str(exc):
+                    if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
                         raise
-                    result = await run_in_threadpool(
-                        engine.paginated_query,
-                        request.question,
-                        limit=request.limit,
-                        cursor=request.cursor,
-                        context=request.context,
-                    )
+                    try:
+                        result = await run_in_threadpool(
+                            engine.paginated_query,
+                            request.question,
+                            limit=request.limit,
+                            cursor=request.cursor,
+                            context=request.context,
+                            tenant_id=tenant_id,
+                        )
+                    except TypeError as fallback_exc:
+                        if "tenant_id" not in str(fallback_exc):
+                            raise
+                        result = await run_in_threadpool(
+                            engine.paginated_query,
+                            request.question,
+                            limit=request.limit,
+                            cursor=request.cursor,
+                            context=request.context,
+                        )
             else:
                 try:
                     result = await run_in_threadpool(
@@ -184,15 +264,28 @@ async def natural_language_query(request: NLQueryRequest, req: Request, response
                         request.question,
                         context=request.context,
                         tenant_id=tenant_id,
+                        allowed_tables=allowed_tables,
                     )
                 except TypeError as exc:
-                    if "tenant_id" not in str(exc):
+                    if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
                         raise
-                    result = await run_in_threadpool(
-                        engine.execute_nl_query,
-                        request.question,
-                        context=request.context,
-                    )
+                    try:
+                        result = await run_in_threadpool(
+                            engine.execute_nl_query,
+                            request.question,
+                            context=request.context,
+                            tenant_id=tenant_id,
+                        )
+                    except TypeError as fallback_exc:
+                        if "tenant_id" not in str(fallback_exc):
+                            raise
+                        result = await run_in_threadpool(
+                            engine.execute_nl_query,
+                            request.question,
+                            context=request.context,
+                        )
+        except HTTPException:
+            raise
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from None
         if result.get("sql") is not None:
@@ -427,6 +520,7 @@ async def get_metric(
             status_code=404,
             detail=f"Unknown metric: {metric_name}. Available: {list(catalog.metrics.keys())}",
         )
+    _ensure_metric_allowed(req, metric_name)
 
     if as_of is not None:
         as_of = (as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)).astimezone(UTC)

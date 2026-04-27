@@ -239,11 +239,15 @@ def test_query_engine_falls_back_to_unqualified_tables_without_tenant_config(tmp
 def test_open_metric_request_without_tenant_context_fails_closed_when_tenant_tables_exist(
     client: TestClient,
 ):
+    # Empty in-memory keys; we want the request to reach the per-route
+    # tenant-context check in sql_builder, so explicitly bypass the
+    # middleware fail-closed (Codex audit p2_1 #5).
     manager = client.app.state.auth_manager
     manager.keys_by_value = {}
     manager._hashed_keys = []
     manager._loaded_keys = []
     manager._rate_windows.clear()
+    client.app.state.auth_disabled = True
 
     response = client.get("/v1/metrics/revenue?window=24h")
 
@@ -298,6 +302,8 @@ def test_metric_cache_does_not_bypass_fail_closed_without_tenant_context(
     manager._hashed_keys = []
     manager._loaded_keys = []
     manager._rate_windows.clear()
+    # See sibling fail-closed test: bypass middleware to reach sql_builder.
+    client.app.state.auth_disabled = True
 
     response = client.get("/v1/metrics/revenue?window=24h")
 

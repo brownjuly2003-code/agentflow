@@ -11,8 +11,29 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 KIND_CLUSTER_NAME = "agentflow-a05-test"
 
 
+@pytest.fixture(autouse=True)
+def _default_open_auth(request, monkeypatch):
+    """Integration tests historically ran without an api_keys.yaml and relied
+    on middleware to passthrough when keys were unconfigured. After the
+    fail-closed default (Codex audit p2_1 #5 / p2_2 #1), every TestClient
+    that does not explicitly configure keys now returns 503. To keep the
+    legacy behaviour for tests that do not exercise auth, set
+    ``AGENTFLOW_AUTH_DISABLED=true`` here. Tests that intentionally probe
+    fail-closed (``test_tenant_isolation``, ``test_cors`` and a few unit
+    tests) opt out via ``@pytest.mark.requires_auth_enforcement`` or
+    ``monkeypatch.delenv`` on their own fixture.
+    """
+    if request.node.get_closest_marker("requires_auth_enforcement"):
+        return
+    monkeypatch.setenv("AGENTFLOW_AUTH_DISABLED", "true")
+
+
 def pytest_configure(config):
     config.addinivalue_line("markers", "kind: marks tests requiring a kind cluster")
+    config.addinivalue_line(
+        "markers",
+        "requires_auth_enforcement: opt out of the autouse AGENTFLOW_AUTH_DISABLED override",
+    )
 
 
 def pytest_collection_modifyitems(config, items):

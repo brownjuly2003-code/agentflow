@@ -12,6 +12,7 @@ pytestmark = pytest.mark.integration
 SCHEMA_EVENT_ID = "11111111-1111-1111-1111-111111111111"
 SEMANTIC_EVENT_ID = "22222222-2222-2222-2222-222222222222"
 DISMISSED_EVENT_ID = "33333333-3333-3333-3333-333333333333"
+BETA_EVENT_ID = "44444444-4444-4444-4444-444444444444"
 
 
 def _create_dead_letter_table(conn) -> None:
@@ -19,6 +20,7 @@ def _create_dead_letter_table(conn) -> None:
         """
         CREATE TABLE IF NOT EXISTS dead_letter_events (
             event_id TEXT PRIMARY KEY,
+            tenant_id TEXT DEFAULT 'default',
             event_type TEXT,
             payload JSON,
             failure_reason TEXT,
@@ -30,6 +32,9 @@ def _create_dead_letter_table(conn) -> None:
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('dead_letter_events')").fetchall()}
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE dead_letter_events ADD COLUMN tenant_id TEXT DEFAULT 'default'")
 
 
 def _seed_dead_letter_events(conn) -> None:
@@ -39,6 +44,7 @@ def _seed_dead_letter_events(conn) -> None:
         """
         INSERT INTO dead_letter_events (
             event_id,
+            tenant_id,
             event_type,
             payload,
             failure_reason,
@@ -48,11 +54,12 @@ def _seed_dead_letter_events(conn) -> None:
             last_retried_at,
             status
         )
-        VALUES (?, ?, ?, ?, ?, NOW() - CAST(? AS INTERVAL), ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, NOW() - CAST(? AS INTERVAL), ?, ?, ?)
         """,
         [
             (
                 SCHEMA_EVENT_ID,
+                "acme",
                 "unknown.type",
                 json.dumps(
                     {
@@ -71,6 +78,7 @@ def _seed_dead_letter_events(conn) -> None:
             ),
             (
                 SEMANTIC_EVENT_ID,
+                "acme",
                 "order.created",
                 json.dumps(
                     {
@@ -98,6 +106,7 @@ def _seed_dead_letter_events(conn) -> None:
             ),
             (
                 DISMISSED_EVENT_ID,
+                "acme",
                 "order.created",
                 json.dumps(
                     {
@@ -148,6 +157,12 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             "    rate_limit_rpm: 100\n"
             "    allowed_entity_types: null\n"
             '    created_at: "2026-04-10"\n'
+            '  - key: "deadletter-beta-ops-key"\n'
+            '    name: "Beta Ops Agent"\n'
+            '    tenant: "beta"\n'
+            "    rate_limit_rpm: 100\n"
+            "    allowed_entity_types: null\n"
+            '    created_at: "2026-04-10"\n'
         ),
         encoding="utf-8",
     )
@@ -174,6 +189,7 @@ def auth_headers():
     return {
         "readonly": {"X-API-Key": "deadletter-readonly-key"},
         "ops": {"X-API-Key": "deadletter-ops-key"},
+        "beta_ops": {"X-API-Key": "deadletter-beta-ops-key"},
     }
 
 
@@ -319,3 +335,67 @@ def test_deadletter_readonly_key_cannot_mutate(client: TestClient, auth_headers,
     response = client.post(path, headers=auth_headers["readonly"])
 
     assert response.status_code == 403
+
+
+def test_deadletter_endpoints_are_tenant_scoped(client: TestClient, auth_headers):
+    client.app.state.query_engine._conn.execute(
+        """
+        INSERT INTO dead_letter_events (
+            event_id,
+            tenant_id,
+            event_type,
+            payload,
+            failure_reason,
+            failure_detail,
+            received_at,
+            retry_count,
+            last_retried_at,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, NOW() - INTERVAL '1 hour', ?, ?, ?)
+        """,
+        [
+            BETA_EVENT_ID,
+            "beta",
+            "order.created",
+            json.dumps(
+                {
+                    "event_id": BETA_EVENT_ID,
+                    "event_type": "order.created",
+                    "timestamp": "2026-04-10T13:00:00+00:00",
+                    "source": "deadletter-test",
+                    "order_id": "ORD-BETA",
+                    "user_id": "USR-BETA",
+                    "status": "confirmed",
+                    "items": [{"product_id": "PROD-001", "quantity": 1, "unit_price": "79.99"}],
+                    "total_amount": "10.00",
+                    "currency": "USD",
+                }
+            ),
+            "semantic_validation",
+            "beta failure",
+            0,
+            None,
+            "failed",
+        ],
+    )
+
+    acme_list = client.get("/v1/deadletter", headers=auth_headers["ops"])
+    beta_list = client.get("/v1/deadletter", headers=auth_headers["beta_ops"])
+    acme_detail = client.get(f"/v1/deadletter/{BETA_EVENT_ID}", headers=auth_headers["ops"])
+    acme_replay = client.post(
+        f"/v1/deadletter/{BETA_EVENT_ID}/replay",
+        headers=auth_headers["ops"],
+    )
+    acme_dismiss = client.post(
+        f"/v1/deadletter/{BETA_EVENT_ID}/dismiss",
+        headers=auth_headers["ops"],
+    )
+
+    assert acme_list.status_code == 200
+    assert BETA_EVENT_ID not in [item["event_id"] for item in acme_list.json()["items"]]
+    assert beta_list.status_code == 200
+    assert [item["event_id"] for item in beta_list.json()["items"]] == [BETA_EVENT_ID]
+    assert acme_detail.status_code == 404
+    assert acme_replay.status_code == 404
+    assert acme_dismiss.status_code == 404

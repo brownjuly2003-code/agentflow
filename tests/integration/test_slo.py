@@ -19,9 +19,12 @@ def _seed_pipeline_events(
     *,
     rows: list[tuple[str, str, str, int | None, int | None]],
     include_status_code: bool = True,
+    tenant_id: str = "acme",
 ) -> None:
     conn = client.app.state.query_engine._conn
     columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN tenant_id VARCHAR DEFAULT 'default'")
     if "latency_ms" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN latency_ms INTEGER")
     if include_status_code and "status_code" not in columns:
@@ -29,15 +32,22 @@ def _seed_pipeline_events(
 
     conn.execute("DELETE FROM pipeline_events")
 
-    insert_columns = ["event_id", "topic", "processed_at", "latency_ms"]
-    values_sql = "?, ?, NOW() - CAST(? AS INTERVAL), ?"
+    insert_columns = ["event_id", "topic", "processed_at", "latency_ms", "tenant_id"]
+    values_sql = "?, ?, NOW() - CAST(? AS INTERVAL), ?, ?"
     if include_status_code:
         insert_columns.append("status_code")
         values_sql = f"{values_sql}, ?"
 
+    normalized_rows = []
+    for row in rows:
+        if include_status_code:
+            normalized_rows.append((*row[:4], tenant_id, row[4]))
+        else:
+            normalized_rows.append((*row[:4], tenant_id))
+
     conn.executemany(
         (f"INSERT INTO pipeline_events ({', '.join(insert_columns)}) VALUES ({values_sql})"),
-        rows,
+        normalized_rows,
     )
 
 
@@ -217,3 +227,43 @@ def test_slo_uses_deadletter_ratio_when_status_codes_are_absent(client: TestClie
             "window_days": 30,
         }
     ]
+
+
+def test_slo_only_aggregates_caller_tenant(client: TestClient):
+    _write_slo_config(
+        client.app.state.slo_config_path,
+        (
+            "slos:\n"
+            "  - name: error_rate\n"
+            '    description: "API error rate (5xx) < 0.1%"\n'
+            "    target: 0.999\n"
+            "    measurement: error_rate_percent\n"
+            "    threshold: 0.1\n"
+            "    window_days: 30\n"
+        ),
+    )
+    _seed_pipeline_events(
+        client,
+        rows=[
+            ("evt-acme-1", "events.validated", "5 seconds", 80, 200),
+            ("evt-acme-2", "events.validated", "5 seconds", 80, 200),
+        ],
+        tenant_id="acme",
+    )
+    client.app.state.query_engine._conn.executemany(
+        """
+        INSERT INTO pipeline_events (
+            event_id, topic, processed_at, latency_ms, tenant_id, status_code
+        )
+        VALUES (?, ?, NOW() - CAST(? AS INTERVAL), ?, ?, ?)
+        """,
+        [
+            ("evt-beta-1", "events.validated", "5 seconds", 80, "beta", 500),
+            ("evt-beta-2", "events.validated", "5 seconds", 80, "beta", 502),
+        ],
+    )
+
+    response = client.get("/v1/slo", headers={"X-API-Key": "slo-test-key"})
+
+    assert response.status_code == 200
+    assert response.json()["slos"][0]["current"] == 1.0

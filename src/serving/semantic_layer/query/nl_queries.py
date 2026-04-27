@@ -8,6 +8,7 @@ import re
 import time
 from contextlib import nullcontext
 
+from fastapi import HTTPException
 from opentelemetry import trace
 
 from src.processing.tracing import telemetry_disabled
@@ -17,6 +18,25 @@ from .contracts import NLQueryHost
 from .sql_guard import UnsafeSQLError, validate_nl_sql
 
 tracer = trace.get_tracer("agentflow.query_engine")
+
+
+class UnsafeNLQueryError(HTTPException, ValueError):
+    def __init__(self, detail: str) -> None:
+        HTTPException.__init__(self, status_code=403, detail=detail)
+
+
+def _default_allowed_tables(self: NLQueryHost) -> set[str]:
+    allowed_tables = {entity.table for entity in self.catalog.entities.values()}
+    allowed_tables.add("pipeline_events")
+    return allowed_tables
+
+
+def _prepare_nl_sql(translated_sql: str, allowed_tables: set[str]) -> str:
+    try:
+        validate_nl_sql(translated_sql, allowed_tables)
+    except UnsafeSQLError as e:
+        raise UnsafeNLQueryError(f"NL-to-SQL produced unsafe query: {e}") from e
+    return translated_sql
 
 
 class NLQueryMixin:
@@ -86,6 +106,7 @@ class NLQueryMixin:
         cursor: str | None = None,
         context: dict | None = None,
         tenant_id: str | None = None,
+        allowed_tables: set[str] | list[str] | None = None,
     ) -> dict:
         """Execute a natural language query with cursor-based pagination."""
         del context
@@ -94,10 +115,12 @@ class NLQueryMixin:
             raise ValueError("limit must be between 1 and 1000")
 
         start = time.monotonic()
-        sql = self._scope_sql(
-            self._translate_question_to_sql(question, tenant_id=tenant_id),
-            tenant_id,
+        translated_sql = self._translate_question_to_sql(question, tenant_id=tenant_id)
+        prepared_sql = _prepare_nl_sql(
+            translated_sql,
+            set(allowed_tables) if allowed_tables is not None else _default_allowed_tables(self),
         )
+        sql = self._scope_sql(prepared_sql, tenant_id)
         query_hash = self._build_query_hash(sql, tenant_id)
         offset = 0
         if cursor is not None:
@@ -161,6 +184,7 @@ class NLQueryMixin:
         question: str,
         context: dict | None = None,
         tenant_id: str | None = None,
+        allowed_tables: set[str] | list[str] | None = None,
     ) -> dict:
         """Translate a natural language question to SQL and execute it.
 
@@ -170,13 +194,11 @@ class NLQueryMixin:
 
         start = time.monotonic()
         translated_sql = self._translate_question_to_sql(question, tenant_id=tenant_id)
-        allowed_tables = {entity.table for entity in self.catalog.entities.values()}
-        allowed_tables.add("pipeline_events")
-        try:
-            validate_nl_sql(translated_sql, allowed_tables)
-        except UnsafeSQLError as e:
-            raise ValueError(f"NL-to-SQL produced unsafe query: {e}") from e
-        sql = self._scope_sql(translated_sql, tenant_id)
+        prepared_sql = _prepare_nl_sql(
+            translated_sql,
+            set(allowed_tables) if allowed_tables is not None else _default_allowed_tables(self),
+        )
+        sql = self._scope_sql(prepared_sql, tenant_id)
 
         try:
             query_span = (
@@ -209,14 +231,21 @@ class NLQueryMixin:
             "freshness_seconds": None,
         }
 
-    def explain(self: NLQueryHost, question: str) -> dict:
+    def explain(
+        self: NLQueryHost,
+        question: str,
+        tenant_id: str | None = None,
+        allowed_tables: set[str] | list[str] | None = None,
+    ) -> dict:
         """Translate a natural language question to SQL without executing it."""
         from src.serving.semantic_layer import nl_engine
 
-        sql = self._scope_sql(
-            self._translate_question_to_sql(question, tenant_id=None),
-            tenant_id=None,
+        translated_sql = self._translate_question_to_sql(question, tenant_id=tenant_id)
+        prepared_sql = _prepare_nl_sql(
+            translated_sql,
+            set(allowed_tables) if allowed_tables is not None else _default_allowed_tables(self),
         )
+        sql = self._scope_sql(prepared_sql, tenant_id)
 
         engine = "rule_based"
         if getattr(nl_engine, "_ANTHROPIC_KEY", ""):
@@ -234,16 +263,30 @@ class NLQueryMixin:
 
         plan = "\n".join(row[1] if len(row) > 1 else str(row[0]) for row in explain_rows)
         normalized_plan = re.sub(r"[â”‚â”Œâ”â””â”˜â”œâ”¤â”¬â”´â”€]", " ", plan)
-        tables_accessed = list(
-            dict.fromkeys(
-                match.split(".")[-1]
-                for match in re.findall(
-                    r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
-                    sql,
-                    flags=re.IGNORECASE,
+        # Use sqlglot AST so tenant-quoted SQL still resolves to the
+        # leaf table name (Codex review P2). Regex with FROM/JOIN +
+        # bare identifier returned an empty list for quoted identifiers
+        # like "acme"."orders_v2", dropping tables_accessed for tenant
+        # explain calls.
+        try:
+            import sqlglot
+            from sqlglot import exp as _exp
+
+            parsed = sqlglot.parse_one(sql, read="duckdb")
+            tables_accessed = list(
+                dict.fromkeys(table.name for table in parsed.find_all(_exp.Table))
+            )
+        except Exception:
+            tables_accessed = list(
+                dict.fromkeys(
+                    match.split(".")[-1]
+                    for match in re.findall(
+                        r"(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
+                        sql,
+                        flags=re.IGNORECASE,
+                    )
                 )
             )
-        )
         row_estimates = [
             int(match.replace(",", ""))
             for match in re.findall(r"~\s*([0-9,]+)\s+row", normalized_plan)

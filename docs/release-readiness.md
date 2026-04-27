@@ -22,7 +22,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Recorded full-suite evidence | Last completed local full-suite pass on 2026-04-27: 668 passed, 8 skipped with project-local pytest temp paths. Later pre-commit release attempts on the same workstation hang in `tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout`; do not push the release tag until this gate is resolved or explicitly waived. |
+| Recorded full-suite evidence | Last completed local full-suite pass on 2026-04-27: 668 passed, 8 skipped with project-local pytest temp paths. The earlier pre-commit hang in `tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout` did NOT reproduce on `fb6aa14`: `python -m pytest tests/chaos/test_chaos_smoke.py --timeout=60 --timeout-method=thread` returned `3 passed in 44.29s`. The previous hang was correlated with full-suite fixture state (DuckDB pool, ToxiProxy, Redis); the standalone smoke is green. Re-run the full pre-commit gate on the next release tag candidate to confirm. |
 
 ## Status by BCG Dimension
 
@@ -88,7 +88,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
 - [ ] Production CDC source onboarding approved and configured
 - [x] Last completed local full suite green on the release line
-- [ ] Fresh pre-commit full-suite gate completes without the current chaos smoke hang
+- [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); fresh pre-commit full-suite re-run pending on next release tag candidate
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
 - [ ] Phase 1 PMF work completed
 

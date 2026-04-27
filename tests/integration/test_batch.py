@@ -34,9 +34,15 @@ def _disable_auth(client: TestClient) -> None:
     manager = client.app.state.auth_manager
     manager.keys_by_value = {}
     manager._rate_windows.clear()
+    # Auth fail-closed default in middleware needs an explicit opt-out for tests.
+    client.app.state.auth_disabled = True
 
 
-def _set_auth(client: TestClient, key: str = "batch-test-key") -> str:
+def _set_auth(
+    client: TestClient,
+    key: str = "batch-test-key",
+    allowed_entity_types: list[str] | None = None,
+) -> str:
     manager = client.app.state.auth_manager
     manager.keys_by_value = {
         key: TenantKey(
@@ -44,7 +50,7 @@ def _set_auth(client: TestClient, key: str = "batch-test-key") -> str:
             name="batch-agent",
             tenant="acme",
             rate_limit_rpm=100,
-            allowed_entity_types=None,
+            allowed_entity_types=allowed_entity_types,
             created_at=datetime.now(UTC).date(),
         )
     }
@@ -179,6 +185,30 @@ def test_batch_requires_api_key_when_auth_is_configured(client):
 
     assert response.status_code == 401
     assert "X-API-Key" in response.json()["detail"]
+
+
+def test_batch_query_enforces_allowed_entity_types(client):
+    api_key = _set_auth(client, allowed_entity_types=["user"])
+
+    response = client.post(
+        "/v1/batch",
+        headers={"X-API-Key": api_key},
+        json={
+            "requests": [
+                {
+                    "id": "forbidden-query",
+                    "type": "query",
+                    "params": {"question": "What is the revenue today?"},
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["id"] == "forbidden-query"
+    assert result["status"] == "error"
+    assert "unsafe query" in result["error"] or "Unknown tables" in result["error"]
 
 
 def test_batch_executes_items_concurrently_and_reports_wall_time(client, monkeypatch):

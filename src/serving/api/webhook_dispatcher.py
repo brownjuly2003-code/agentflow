@@ -191,24 +191,29 @@ class WebhookDispatcher:
             for event in self._fetch_pipeline_events():
                 event_id = str(event.get("event_id") or "")
                 if event_id:
-                    self.seen_event_ids.add(event_id)
+                    self.seen_event_ids.add(_seen_event_key(event))
         except duckdb.Error as exc:
             logger.warning("webhook_seen_init_failed", error=str(exc))
 
     async def dispatch_new_events(self) -> None:
         path = get_webhook_config_path(self.app)
         webhooks = [webhook for webhook in load_webhooks(path) if webhook.active]
-        events = self._fetch_pipeline_events()
+        webhooks_by_tenant: dict[str, list[WebhookRegistration]] = {}
+        for webhook in webhooks:
+            webhooks_by_tenant.setdefault(webhook.tenant, []).append(webhook)
 
-        for event in events:
-            event_id = str(event.get("event_id") or "")
-            if not event_id or event_id in self.seen_event_ids:
-                continue
-            self.seen_event_ids.add(event_id)
+        for tenant in sorted(webhooks_by_tenant):
+            events = self._fetch_pipeline_events(tenant=tenant)
+            for event in events:
+                event_id = str(event.get("event_id") or "")
+                seen_key = _seen_event_key(event)
+                if not event_id or event_id in self.seen_event_ids or seen_key in self.seen_event_ids:
+                    continue
+                self.seen_event_ids.add(seen_key)
 
-            for webhook in webhooks:
-                if _matches_filters(event, webhook.filters):
-                    await self.deliver(webhook, event)
+                for webhook in webhooks_by_tenant[tenant]:
+                    if _matches_filters(event, webhook.filters):
+                        await self.deliver(webhook, event)
 
     async def deliver(self, webhook: WebhookRegistration, event: dict) -> dict:
         conn = self.app.state.query_engine._conn
@@ -286,12 +291,14 @@ class WebhookDispatcher:
             "attempts": attempts,
         }
 
-    def _fetch_pipeline_events(self) -> list[dict]:
+    def _fetch_pipeline_events(self, tenant: str | None = None) -> list[dict]:
         conn = self.app.state.query_engine._conn
         columns = [
             row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
         ]
         if not columns:
+            return []
+        if tenant is not None and "tenant_id" not in columns and tenant != "default":
             return []
         if "processed_at" in columns:
             order_by = "processed_at"
@@ -299,7 +306,13 @@ class WebhookDispatcher:
             order_by = "created_at"
         else:
             order_by = "event_id"
-        cursor = conn.execute(f"SELECT * FROM pipeline_events ORDER BY {order_by} ASC")  # nosec B608 - order_by is chosen from a fixed column allowlist
+        sql = f"SELECT * FROM pipeline_events"  # nosec B608 - order_by is chosen from a fixed column allowlist
+        params: list[str] = []
+        if tenant is not None and "tenant_id" in columns:
+            sql = f"{sql} WHERE COALESCE(tenant_id, 'default') = ?"
+            params.append(tenant)
+        sql = f"{sql} ORDER BY {order_by} ASC, event_id ASC"
+        cursor = conn.execute(sql, params)
         result_columns = [description[0] for description in cursor.description]
         return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
 
@@ -370,6 +383,12 @@ def _matches_filters(event: dict, filters: WebhookFilters) -> bool:
             return False
 
     return True
+
+
+def _seen_event_key(event: dict) -> str:
+    event_id = str(event.get("event_id") or "")
+    tenant_id = str(event.get("tenant_id") or "default")
+    return f"{tenant_id}:{event_id}"
 
 
 def _event_type_matches(event_type: str, requested: str) -> bool:

@@ -79,6 +79,11 @@ async def lifespan(app: FastAPI):
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
     app.state.demo_seed_on_boot = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+    # Reset the auth-disabled bypass flag on every lifespan startup. This is a
+    # process-wide attribute and tests may toggle it; without an explicit
+    # reset a later TestClient lifespan with no configured keys would silently
+    # bypass fail-closed (Codex review P2 on auth/middleware).
+    app.state.auth_disabled = False
 
     app.state.version_registry = ApiVersionRegistry()
     app.state.response_transformer = ResponseTransformer(app.state.version_registry)

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from pathlib import Path
+
+import sqlglot
+from sqlglot import exp
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -40,14 +42,7 @@ class PiiMasker:
         tenant: str,
         table_to_entity: dict[str, str],
     ) -> tuple[list[dict], bool]:
-        tables = {
-            match.split(".")[-1]
-            for match in re.findall(
-                r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
-                sql,
-                flags=re.IGNORECASE,
-            )
-        }
+        tables = self._extract_table_names(sql)
         entity_types = {
             table_to_entity[table_name] for table_name in tables if table_name in table_to_entity
         }
@@ -56,6 +51,17 @@ class PiiMasker:
         entity_type = next(iter(entity_types))
         masked_rows = [self.mask(entity_type, row, tenant) for row in rows]
         return masked_rows, masked_rows != rows
+
+    def _extract_table_names(self, sql: str) -> set[str]:
+        try:
+            parsed = sqlglot.parse_one(sql, read="duckdb")
+        except sqlglot.errors.ParseError:
+            return set()
+        return {
+            table.name
+            for table in parsed.find_all(exp.Table)
+            if table.name
+        }
 
     def _apply_strategy(self, value: object, strategy: str) -> object:
         if value is None:

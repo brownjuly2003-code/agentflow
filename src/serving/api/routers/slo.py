@@ -72,6 +72,21 @@ def _time_column(columns: set[str]) -> str | None:
     return None
 
 
+def _tenant_id(request: Request) -> str | None:
+    tenant_key = getattr(request.state, "tenant_key", None)
+    return getattr(request.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+
+
+def _tenant_filter(columns: set[str], tenant_id: str | None) -> tuple[str, list[object]]:
+    if tenant_id is None:
+        return "", []
+    if "tenant_id" in columns:
+        return " AND COALESCE(tenant_id, 'default') = ?", [tenant_id]
+    if tenant_id != "default":
+        return " AND 1 = 0", []
+    return "", []
+
+
 def _measurement_value(
     request: Request,
     definition: SLODefinition,
@@ -83,6 +98,7 @@ def _measurement_value(
 
     conn = request.app.state.query_engine._conn
     window = f"{definition.window_days} days"
+    tenant_sql, tenant_params = _tenant_filter(columns, _tenant_id(request))
 
     if definition.measurement == "p95_latency_ms":
         if "latency_ms" not in columns:
@@ -92,9 +108,10 @@ def _measurement_value(
                 "SELECT quantile_cont(latency_ms, 0.95) "  # nosec B608 - time_column is chosen from the fixed pipeline_events allowlist
                 "FROM pipeline_events "
                 f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL) "
+                f"{tenant_sql} "
                 "AND latency_ms IS NOT NULL"
             ),
-            [window],
+            [window, *tenant_params],
         ).fetchone()
         return float(row[0]) if row and row[0] is not None else None
 
@@ -104,8 +121,9 @@ def _measurement_value(
                 f"SELECT MAX({time_column}) "  # nosec B608 - time_column is chosen from the fixed pipeline_events allowlist
                 "FROM pipeline_events "
                 f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
+                f"{tenant_sql}"
             ),
-            [window],
+            [window, *tenant_params],
         ).fetchone()
         if not row or row[0] is None:
             return None
@@ -124,8 +142,9 @@ def _measurement_value(
                     "COUNT(*) FILTER (WHERE status_code >= 500) "
                     "FROM pipeline_events "
                     f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
+                    f"{tenant_sql}"
                 ),
-                [window],
+                [window, *tenant_params],
             ).fetchone()
             total = int(row[0]) if row and row[0] is not None else 0
             errors = int(row[1]) if row and row[1] is not None else 0
@@ -138,8 +157,9 @@ def _measurement_value(
                 "COUNT(*) FILTER (WHERE topic = 'events.deadletter') "
                 "FROM pipeline_events "
                 f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
+                f"{tenant_sql}"
             ),
-            [window],
+            [window, *tenant_params],
         ).fetchone()
         total = int(row[0]) if row and row[0] is not None else 0
         errors = int(row[1]) if row and row[1] is not None else 0

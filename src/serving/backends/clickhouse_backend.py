@@ -192,10 +192,18 @@ class ClickHouseBackend(ServingBackend):
             CREATE TABLE IF NOT EXISTS {self._database}.pipeline_events (
                 event_id String,
                 topic String,
+                tenant_id String DEFAULT 'default',
                 processed_at DateTime
             ) ENGINE = MergeTree()
-            ORDER BY (topic, processed_at, event_id)
+            ORDER BY (tenant_id, topic, processed_at, event_id)
         """,
+            expect_json=False,
+        )
+        self._request(
+            f"""
+            ALTER TABLE {self._database}.pipeline_events
+            ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT 'default'
+            """,
             expect_json=False,
         )
 
@@ -272,17 +280,17 @@ class ClickHouseBackend(ServingBackend):
         self._request(
             "\n".join(
                 [
-                    f"INSERT INTO {self._database}.pipeline_events VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
-                    f"('evt-001', 'events.validated', '{ts(timedelta(minutes=10))}'),",
-                    f"('evt-002', 'events.validated', '{ts(timedelta(minutes=9))}'),",
-                    f"('evt-003', 'events.validated', '{ts(timedelta(minutes=8))}'),",
-                    f"('evt-004', 'events.deadletter', '{ts(timedelta(minutes=7))}'),",
-                    f"('evt-005', 'events.validated', '{ts(timedelta(minutes=6))}'),",
-                    f"('evt-006', 'events.validated', '{ts(timedelta(minutes=5))}'),",
-                    f"('evt-007', 'events.validated', '{ts(timedelta(minutes=4))}'),",
-                    f"('evt-008', 'events.validated', '{ts(timedelta(minutes=3))}'),",
-                    f"('evt-009', 'events.deadletter', '{ts(timedelta(minutes=2))}'),",
-                    f"('evt-010', 'events.validated', '{ts(timedelta(minutes=1))}')",
+                    f"INSERT INTO {self._database}.pipeline_events (event_id, topic, tenant_id, processed_at) VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
+                    f"('evt-001', 'events.validated', 'default', '{ts(timedelta(minutes=10))}'),",
+                    f"('evt-002', 'events.validated', 'default', '{ts(timedelta(minutes=9))}'),",
+                    f"('evt-003', 'events.validated', 'default', '{ts(timedelta(minutes=8))}'),",
+                    f"('evt-004', 'events.deadletter', 'default', '{ts(timedelta(minutes=7))}'),",
+                    f"('evt-005', 'events.validated', 'default', '{ts(timedelta(minutes=6))}'),",
+                    f"('evt-006', 'events.validated', 'default', '{ts(timedelta(minutes=5))}'),",
+                    f"('evt-007', 'events.validated', 'default', '{ts(timedelta(minutes=4))}'),",
+                    f"('evt-008', 'events.validated', 'default', '{ts(timedelta(minutes=3))}'),",
+                    f"('evt-009', 'events.deadletter', 'default', '{ts(timedelta(minutes=2))}'),",
+                    f"('evt-010', 'events.validated', 'default', '{ts(timedelta(minutes=1))}')",
                 ]
             ),
             expect_json=False,

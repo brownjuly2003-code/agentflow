@@ -71,23 +71,32 @@ def _fetch_matching_events(request: Request, entity_id: str) -> list[dict]:
     if "entity_id" not in columns:
         return []
 
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if tenant_id is not None and "tenant_id" not in columns and tenant_id != "default":
+        return []
     time_column = "processed_at" if "processed_at" in columns else "created_at"
     select_columns = [
         "event_id",
         "topic",
         f"{time_column} AS processed_at",
+        "COALESCE(tenant_id, 'default') AS tenant_id" if "tenant_id" in columns else "'default' AS tenant_id",
         "event_type" if "event_type" in columns else "NULL AS event_type",
         "entity_id",
         "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",
     ]
+    where_clauses = ["entity_id = ?"]
+    params: list[object] = [entity_id]
+    if tenant_id is not None and "tenant_id" in columns:
+        where_clauses.append("COALESCE(tenant_id, 'default') = ?")
+        params.append(str(tenant_id))
 
     cursor = conn.execute(
         (
             f"SELECT {', '.join(select_columns)} "  # nosec B608 - selected columns come from the schema allowlist
             "FROM pipeline_events "
-            f"WHERE entity_id = ? ORDER BY {time_column} ASC"
+            f"WHERE {' AND '.join(where_clauses)} ORDER BY {time_column} ASC"
         ),
-        [entity_id],
+        params,
     )
     result_columns = [description[0] for description in cursor.description]
     return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
@@ -108,6 +117,16 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request):
             detail=(
                 f"Unknown entity type: {entity_type}. Available: {list(catalog.entities.keys())}"
             ),
+        )
+    tenant_key = getattr(request.state, "tenant_key", None)
+    if (
+        tenant_key is not None
+        and tenant_key.allowed_entity_types is not None
+        and entity_type not in tenant_key.allowed_entity_types
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=f"API key '{tenant_key.name}' cannot access entity type '{entity_type}'.",
         )
 
     rows = _fetch_matching_events(request, entity_id)

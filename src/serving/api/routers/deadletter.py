@@ -65,6 +65,11 @@ def _conn(request: Request):
     return conn
 
 
+def _tenant_id(request: Request) -> str:
+    tenant_key = getattr(request.state, "tenant_key", None)
+    return str(getattr(request.state, "tenant_id", None) or getattr(tenant_key, "tenant", "default"))
+
+
 def _decode_payload(payload) -> dict:
     if isinstance(payload, dict):
         return payload
@@ -80,7 +85,7 @@ def _replayer(request: Request) -> EventReplayer:
     return EventReplayer(_conn(request), producer=producer if callable(producer) else None)
 
 
-def _require_deadletter_write_access(request: Request) -> None:
+def _require_deadletter_write_access(request: Request, event_id: str) -> None:
     tenant_key = getattr(request.state, "tenant_key", None)
     if tenant_key is None:
         raise HTTPException(status_code=401, detail="Invalid or missing API key.")
@@ -89,37 +94,54 @@ def _require_deadletter_write_access(request: Request) -> None:
             status_code=403,
             detail="This API key has read-only access to dead-letter operations.",
         )
+    row = _conn(request).execute(
+        """
+        SELECT event_id
+        FROM dead_letter_events
+        WHERE event_id = ? AND COALESCE(tenant_id, 'default') = ?
+        """,
+        [event_id, _tenant_id(request)],
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
 
 
 @router.get("/stats", response_model=DeadLetterStatsResponse)
 async def deadletter_stats(request: Request):
     conn = _conn(request)
+    tenant_id = _tenant_id(request)
     rows = conn.execute(
         """
         SELECT failure_reason, COUNT(*)
         FROM dead_letter_events
         WHERE status = 'failed'
+          AND COALESCE(tenant_id, 'default') = ?
         GROUP BY failure_reason
         ORDER BY failure_reason
-        """
+        """,
+        [tenant_id],
     ).fetchall()
     last_24h_row = conn.execute(
         """
         SELECT COUNT(*)
         FROM dead_letter_events
         WHERE status = 'failed'
+          AND COALESCE(tenant_id, 'default') = ?
           AND received_at >= NOW() - INTERVAL '24 hours'
-        """
+        """,
+        [tenant_id],
     ).fetchone()
     trend_rows = conn.execute(
         """
         SELECT DATE_TRUNC('hour', received_at) AS hour_bucket, COUNT(*)
         FROM dead_letter_events
         WHERE status = 'failed'
+          AND COALESCE(tenant_id, 'default') = ?
           AND received_at >= NOW() - INTERVAL '24 hours'
         GROUP BY hour_bucket
         ORDER BY hour_bucket
-        """
+        """,
+        [tenant_id],
     ).fetchall()
     return DeadLetterStatsResponse(
         counts={str(reason): int(count) for reason, count in rows if reason is not None},
@@ -142,25 +164,30 @@ async def list_deadletter_events(
     reason: str | None = Query(default=None),
 ):
     conn = _conn(request)
+    tenant_id = _tenant_id(request)
     params: list[object]
     if reason is not None:
-        params = [reason]
-        total_row = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM dead_letter_events
-            WHERE status = 'failed' AND failure_reason = ?
-            """,
-            params,
-        ).fetchone()
-    else:
-        params = []
+        params = [tenant_id, reason]
         total_row = conn.execute(
             """
             SELECT COUNT(*)
             FROM dead_letter_events
             WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
+              AND failure_reason = ?
+            """,
+            params,
+        ).fetchone()
+    else:
+        params = [tenant_id]
+        total_row = conn.execute(
             """
+            SELECT COUNT(*)
+            FROM dead_letter_events
+            WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
+            """,
+            params,
         ).fetchone()
     total = int(total_row[0]) if total_row and total_row[0] is not None else 0
     offset = (page - 1) * page_size
@@ -177,11 +204,13 @@ async def list_deadletter_events(
                 last_retried_at,
                 status
             FROM dead_letter_events
-            WHERE status = 'failed' AND failure_reason = ?
+            WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
+              AND failure_reason = ?
             ORDER BY received_at DESC, event_id ASC
             LIMIT ? OFFSET ?
             """,
-            [reason, page_size, offset],
+            [tenant_id, reason, page_size, offset],
         ).fetchall()
     else:
         rows = conn.execute(
@@ -197,10 +226,11 @@ async def list_deadletter_events(
                 status
             FROM dead_letter_events
             WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
             ORDER BY received_at DESC, event_id ASC
             LIMIT ? OFFSET ?
             """,
-            [page_size, offset],
+            [tenant_id, page_size, offset],
         ).fetchall()
 
     return DeadLetterListResponse(
@@ -243,8 +273,9 @@ async def get_deadletter_event(event_id: str, request: Request):
             status
         FROM dead_letter_events
         WHERE event_id = ?
+          AND COALESCE(tenant_id, 'default') = ?
         """,
-        [event_id],
+        [event_id, _tenant_id(request)],
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
@@ -267,7 +298,7 @@ async def replay_deadletter_event(
     request: Request,
     payload: ReplayRequest | None = None,
 ):
-    _require_deadletter_write_access(request)
+    _require_deadletter_write_access(request, event_id)
     try:
         result = _replayer(request).replay(
             event_id,
@@ -290,7 +321,7 @@ async def replay_deadletter_event(
 
 @router.post("/{event_id}/dismiss", response_model=DismissResponse)
 async def dismiss_deadletter_event(event_id: str, request: Request):
-    _require_deadletter_write_access(request)
+    _require_deadletter_write_access(request, event_id)
     try:
         _replayer(request).dismiss(event_id)
     except DeadLetterEventNotFoundError:

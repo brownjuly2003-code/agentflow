@@ -7,7 +7,11 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from src.serving.api.routers.agent_query import _get_pii_masker
+from src.serving.api.routers.agent_query import (
+    _allowed_tables_for_request,
+    _ensure_metric_allowed,
+    _get_pii_masker,
+)
 
 router = APIRouter(tags=["agent"])
 
@@ -121,6 +125,7 @@ async def _execute_metric_item(item: BatchItem, req: Request) -> dict[str, Any]:
         raise ValueError(
             f"Unknown metric: {metric_name}. Available: {list(catalog.metrics.keys())}"
         )
+    _ensure_metric_allowed(req, metric_name)
 
     try:
         result = await run_in_threadpool(
@@ -154,6 +159,7 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
 
     tenant_key = getattr(req.state, "tenant_key", None)
     tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+    allowed_tables = _allowed_tables_for_request(req)
     try:
         result = await run_in_threadpool(
             _run_engine_call,
@@ -162,17 +168,30 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
             question,
             context=context,
             tenant_id=tenant_id,
+            allowed_tables=allowed_tables,
         )
     except TypeError as exc:
-        if "tenant_id" not in str(exc):
+        if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
             raise
-        result = await run_in_threadpool(
-            _run_engine_call,
-            req.app.state.query_engine,
-            "execute_nl_query",
-            question,
-            context=context,
-        )
+        try:
+            result = await run_in_threadpool(
+                _run_engine_call,
+                req.app.state.query_engine,
+                "execute_nl_query",
+                question,
+                context=context,
+                tenant_id=tenant_id,
+            )
+        except TypeError as fallback_exc:
+            if "tenant_id" not in str(fallback_exc):
+                raise
+            result = await run_in_threadpool(
+                _run_engine_call,
+                req.app.state.query_engine,
+                "execute_nl_query",
+                question,
+                context=context,
+            )
     table_to_entity = {
         entity.table: name for name, entity in req.app.state.catalog.entities.items()
     }

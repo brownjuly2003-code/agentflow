@@ -89,11 +89,24 @@ def _ensure_tables(conn: duckdb.DuckDBPyConnection):
         CREATE TABLE IF NOT EXISTS pipeline_events (
             event_id VARCHAR,
             topic VARCHAR,
+            tenant_id VARCHAR DEFAULT 'default',
             event_type VARCHAR,
             latency_ms INTEGER,
             processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute(
+        "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
+    )
+
+
+def _event_tenant(event: dict) -> str:
+    source_metadata = event.get("source_metadata", {})
+    metadata_tenant = (
+        source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
+    )
+    tenant = event.get("tenant") or metadata_tenant
+    return str(tenant) if tenant else "default"
 
 
 def _process_event(
@@ -104,6 +117,7 @@ def _process_event(
     """Validate, enrich, and store a single event. Returns (success, reason)."""
     event_type = event.get("event_type", "")
     event_id = event.get("event_id", "unknown")
+    tenant_id = _event_tenant(event)
 
     conn.execute("BEGIN")
     try:
@@ -111,8 +125,13 @@ def _process_event(
         schema_result = validate_event(event)
         if not schema_result.is_valid:
             conn.execute(
-                "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
-                [event_id, event_type, datetime.now(UTC)],
+                """
+                INSERT INTO pipeline_events (
+                    event_id, topic, tenant_id, event_type, latency_ms, processed_at
+                )
+                VALUES (?, 'events.deadletter', ?, ?, 0, ?)
+                """,
+                [event_id, tenant_id, event_type, datetime.now(UTC)],
             )
             if iceberg_sink is not None:
                 iceberg_sink.write_batch(
@@ -136,8 +155,13 @@ def _process_event(
         error_issues = [i for i in semantic_result.issues if i.severity == "error"]
         if error_issues:
             conn.execute(
-                "INSERT INTO pipeline_events VALUES (?, 'events.deadletter', ?, 0, ?)",
-                [event_id, event_type, datetime.now(UTC)],
+                """
+                INSERT INTO pipeline_events (
+                    event_id, topic, tenant_id, event_type, latency_ms, processed_at
+                )
+                VALUES (?, 'events.deadletter', ?, ?, 0, ?)
+                """,
+                [event_id, tenant_id, event_type, datetime.now(UTC)],
             )
             if iceberg_sink is not None:
                 iceberg_sink.write_batch(
@@ -187,8 +211,13 @@ def _process_event(
             latency_ms = 0
 
         conn.execute(
-            "INSERT INTO pipeline_events VALUES (?, 'events.validated', ?, ?, ?)",
-            [event_id, event_type, latency_ms, datetime.now(UTC)],
+            """
+            INSERT INTO pipeline_events (
+                event_id, topic, tenant_id, event_type, latency_ms, processed_at
+            )
+            VALUES (?, 'events.validated', ?, ?, ?, ?)
+            """,
+            [event_id, tenant_id, event_type, latency_ms, datetime.now(UTC)],
         )
         conn.execute("COMMIT")
         return True, "ok"

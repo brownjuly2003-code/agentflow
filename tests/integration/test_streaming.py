@@ -36,10 +36,12 @@ class _ReceiveChannel:
         self._disconnected.set()
 
 
-def _prepare_stream_events(client: TestClient) -> None:
+def _prepare_stream_events(client: TestClient, tenant_id: str = "default") -> None:
     conn = client.app.state.query_engine._conn
     columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
 
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN tenant_id VARCHAR DEFAULT 'default'")
     if "event_type" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
     if "entity_id" not in columns:
@@ -50,24 +52,53 @@ def _prepare_stream_events(client: TestClient) -> None:
     conn.execute("DELETE FROM pipeline_events")
     conn.execute("""
         INSERT INTO pipeline_events (
-            event_id, topic, processed_at, event_type, entity_id, latency_ms
+            event_id, topic, processed_at, event_type, entity_id, latency_ms, tenant_id
         )
         VALUES
             (
                 'evt-order-1', 'events.validated', NOW() - INTERVAL '4 seconds',
-                'order.created', 'ORD-1', 15
+                'order.created', 'ORD-1', 15, ?
             ),
             (
                 'evt-payment-1', 'events.validated', NOW() - INTERVAL '3 seconds',
-                'payment.initiated', 'ORD-1', 20
+                'payment.initiated', 'ORD-1', 20, ?
             ),
             (
                 'evt-click-1', 'events.validated', NOW() - INTERVAL '2 seconds',
-                'page_view', 'USR-1', 5
+                'page_view', 'USR-1', 5, ?
             ),
             (
                 'evt-order-2', 'events.validated', NOW() - INTERVAL '1 seconds',
-                'order.shipped', 'ORD-2', 12
+                'order.shipped', 'ORD-2', 12, ?
+            )
+    """, [tenant_id, tenant_id, tenant_id, tenant_id])
+
+
+def _prepare_cross_tenant_stream_events(client: TestClient) -> None:
+    conn = client.app.state.query_engine._conn
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN tenant_id VARCHAR DEFAULT 'default'")
+    if "event_type" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
+    if "entity_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN entity_id VARCHAR")
+    if "latency_ms" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN latency_ms INTEGER")
+
+    conn.execute("DELETE FROM pipeline_events")
+    conn.execute("""
+        INSERT INTO pipeline_events (
+            event_id, topic, processed_at, event_type, entity_id, latency_ms, tenant_id
+        )
+        VALUES
+            (
+                'evt-acme-stream', 'events.validated', NOW() - INTERVAL '2 seconds',
+                'order.created', 'ORD-ACME', 15, 'acme'
+            ),
+            (
+                'evt-beta-stream', 'events.validated', NOW() - INTERVAL '1 seconds',
+                'order.created', 'ORD-BETA', 15, 'beta'
             )
     """)
 
@@ -76,6 +107,8 @@ def _disable_auth(client: TestClient, monkeypatch) -> None:
     manager = client.app.state.auth_manager
     monkeypatch.setattr(manager, "keys_by_value", {})
     manager._rate_windows.clear()
+    # Auth fail-closed default in middleware needs an explicit opt-out for tests.
+    monkeypatch.setattr(client.app.state, "auth_disabled", True, raising=False)
 
 
 def _build_stream_request(
@@ -204,7 +237,7 @@ class TestStreamingAPI:
 
     @pytest.mark.asyncio
     async def test_stream_events_require_api_key_when_auth_enabled(self, client, monkeypatch):
-        _prepare_stream_events(client)
+        _prepare_stream_events(client, tenant_id="acme")
 
         manager = client.app.state.auth_manager
         monkeypatch.setattr(
@@ -238,6 +271,46 @@ class TestStreamingAPI:
         await authorized_response.body_iterator.aclose()
 
         assert payload["event_id"] == "evt-order-1"
+
+    @pytest.mark.asyncio
+    async def test_stream_filters_by_tenant_id(self, client, monkeypatch):
+        _prepare_cross_tenant_stream_events(client)
+
+        manager = client.app.state.auth_manager
+        monkeypatch.setattr(
+            manager,
+            "keys_by_value",
+            {
+                "acme-stream-key": TenantKey(
+                    key="acme-stream-key",
+                    name="acme-streamer",
+                    tenant="acme",
+                    rate_limit_rpm=60,
+                    allowed_entity_types=None,
+                    created_at=datetime.now(UTC).date(),
+                ),
+                "beta-stream-key": TenantKey(
+                    key="beta-stream-key",
+                    name="beta-streamer",
+                    tenant="beta",
+                    rate_limit_rpm=60,
+                    allowed_entity_types=None,
+                    created_at=datetime.now(UTC).date(),
+                ),
+            },
+        )
+        manager._rate_windows.clear()
+
+        response, receive = await _dispatch_stream_request(
+            client,
+            headers={"X-API-Key": "acme-stream-key"},
+        )
+        payload = await _first_sse_payload(response)
+
+        receive.disconnect()
+        await response.body_iterator.aclose()
+
+        assert payload["event_id"] == "evt-acme-stream"
 
     @pytest.mark.asyncio
     async def test_stream_generator_stops_after_disconnect(self, client, monkeypatch):

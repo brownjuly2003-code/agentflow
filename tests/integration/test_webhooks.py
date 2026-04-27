@@ -77,6 +77,8 @@ def _disable_auth(client: TestClient) -> None:
     manager = client.app.state.auth_manager
     manager.keys_by_value = {}
     manager._rate_windows.clear()
+    # Auth fail-closed default in middleware needs an explicit opt-out for tests.
+    client.app.state.auth_disabled = True
 
 
 def _set_auth(client: TestClient, tenants: dict[str, str]) -> None:
@@ -114,6 +116,8 @@ def _register(
 def _prepare_pipeline_events(client: TestClient) -> None:
     conn = client.app.state.query_engine._conn
     columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN tenant_id VARCHAR DEFAULT 'default'")
     if "event_type" not in columns:
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
     if "entity_id" not in columns:
@@ -128,9 +132,9 @@ def _prepare_pipeline_events(client: TestClient) -> None:
         """
         INSERT INTO pipeline_events (
             event_id, topic, processed_at, event_type, entity_id, latency_ms,
-            total_amount
+            total_amount, tenant_id
         )
-        VALUES (?, ?, NOW() - CAST(? AS INTERVAL), ?, ?, ?, ?)
+        VALUES (?, ?, NOW() - CAST(? AS INTERVAL), ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -141,6 +145,7 @@ def _prepare_pipeline_events(client: TestClient) -> None:
                 "ORD-1",
                 15,
                 209.97,
+                "default",
             ),
             (
                 "evt-payment-1",
@@ -150,6 +155,7 @@ def _prepare_pipeline_events(client: TestClient) -> None:
                 "ORD-1",
                 20,
                 209.97,
+                "default",
             ),
             (
                 "evt-order-2",
@@ -159,6 +165,55 @@ def _prepare_pipeline_events(client: TestClient) -> None:
                 "ORD-2",
                 12,
                 50.00,
+                "default",
+            ),
+        ],
+    )
+
+
+def _prepare_tenant_pipeline_events(client: TestClient) -> None:
+    conn = client.app.state.query_engine._conn
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN tenant_id VARCHAR DEFAULT 'default'")
+    if "event_type" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
+    if "entity_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN entity_id VARCHAR")
+    if "latency_ms" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN latency_ms INTEGER")
+    if "total_amount" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN total_amount DOUBLE")
+
+    conn.execute("DELETE FROM pipeline_events")
+    conn.executemany(
+        """
+        INSERT INTO pipeline_events (
+            event_id, topic, processed_at, event_type, entity_id, latency_ms,
+            total_amount, tenant_id
+        )
+        VALUES (?, ?, NOW() - CAST(? AS INTERVAL), ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                "evt-acme-order",
+                "events.validated",
+                "2 seconds",
+                "order.created",
+                "ORD-ACME",
+                12,
+                200.00,
+                "acme",
+            ),
+            (
+                "evt-beta-order",
+                "events.validated",
+                "1 seconds",
+                "order.created",
+                "ORD-BETA",
+                15,
+                300.00,
+                "beta",
             ),
         ],
     )
@@ -267,6 +322,39 @@ class TestWebhooksAPI:
         assert len(httpx_mock.requests) == 1
         payload = json.loads(httpx_mock.requests[0]["content"].decode())
         assert payload["event_id"] == "evt-order-1"
+
+    @pytest.mark.asyncio
+    async def test_dispatcher_does_not_deliver_cross_tenant_pipeline_events(
+        self,
+        client,
+        httpx_mock,
+    ):
+        _set_auth(client, {"acme-key": "acme", "beta-key": "beta"})
+        _register(
+            client,
+            headers={"X-API-Key": "acme-key"},
+            url="http://agent.test/acme",
+            filters={"event_types": ["order"]},
+        )
+        _register(
+            client,
+            headers={"X-API-Key": "beta-key"},
+            url="http://agent.test/beta",
+            filters={"event_types": ["order"]},
+        )
+        _prepare_tenant_pipeline_events(client)
+        client.app.state.webhook_dispatcher.seen_event_ids.clear()
+
+        await client.app.state.webhook_dispatcher.dispatch_new_events()
+
+        delivered = [
+            (request["url"], json.loads(request["content"].decode())["event_id"])
+            for request in httpx_mock.requests
+        ]
+        assert delivered == [
+            ("http://agent.test/acme", "evt-acme-order"),
+            ("http://agent.test/beta", "evt-beta-order"),
+        ]
 
     def test_webhook_registrations_survive_api_restart(self, tmp_path: Path):
         config_path = tmp_path / "webhooks.yaml"

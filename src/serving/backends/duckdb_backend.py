@@ -132,9 +132,13 @@ class DuckDBBackend(ServingBackend):
             CREATE TABLE IF NOT EXISTS pipeline_events (
                 event_id VARCHAR,
                 topic VARCHAR,
+                tenant_id VARCHAR DEFAULT 'default',
                 processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        self._conn.execute(
+            "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
+        )
 
         row = self._conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
         count = row[0] if row else 0
@@ -217,17 +221,17 @@ class DuckDBBackend(ServingBackend):
         """)
 
         self._conn.execute("""
-            INSERT INTO pipeline_events VALUES
-            ('evt-001', 'events.validated', NOW() - INTERVAL '10 minutes'),
-            ('evt-002', 'events.validated', NOW() - INTERVAL '9 minutes'),
-            ('evt-003', 'events.validated', NOW() - INTERVAL '8 minutes'),
-            ('evt-004', 'events.deadletter', NOW() - INTERVAL '7 minutes'),
-            ('evt-005', 'events.validated', NOW() - INTERVAL '6 minutes'),
-            ('evt-006', 'events.validated', NOW() - INTERVAL '5 minutes'),
-            ('evt-007', 'events.validated', NOW() - INTERVAL '4 minutes'),
-            ('evt-008', 'events.validated', NOW() - INTERVAL '3 minutes'),
-            ('evt-009', 'events.deadletter', NOW() - INTERVAL '2 minutes'),
-            ('evt-010', 'events.validated', NOW() - INTERVAL '1 minute')
+            INSERT INTO pipeline_events (event_id, topic, tenant_id, processed_at) VALUES
+            ('evt-001', 'events.validated', 'default', NOW() - INTERVAL '10 minutes'),
+            ('evt-002', 'events.validated', 'default', NOW() - INTERVAL '9 minutes'),
+            ('evt-003', 'events.validated', 'default', NOW() - INTERVAL '8 minutes'),
+            ('evt-004', 'events.deadletter', 'default', NOW() - INTERVAL '7 minutes'),
+            ('evt-005', 'events.validated', 'default', NOW() - INTERVAL '6 minutes'),
+            ('evt-006', 'events.validated', 'default', NOW() - INTERVAL '5 minutes'),
+            ('evt-007', 'events.validated', 'default', NOW() - INTERVAL '4 minutes'),
+            ('evt-008', 'events.validated', 'default', NOW() - INTERVAL '3 minutes'),
+            ('evt-009', 'events.deadletter', 'default', NOW() - INTERVAL '2 minutes'),
+            ('evt-010', 'events.validated', 'default', NOW() - INTERVAL '1 minute')
         """)
 
     def health(self) -> dict:

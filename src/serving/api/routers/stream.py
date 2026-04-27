@@ -22,11 +22,15 @@ async def fetch_recent_events(
     conn = request.app.state.query_engine._conn
     columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     time_column = "processed_at" if "processed_at" in columns else "created_at"
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if tenant_id is not None and "tenant_id" not in columns and tenant_id != "default":
+        return []
 
     select_columns = [
         "event_id",
         "topic",
         f"{time_column} AS processed_at",
+        "COALESCE(tenant_id, 'default') AS tenant_id" if "tenant_id" in columns else "'default' AS tenant_id",
         "event_type" if "event_type" in columns else "NULL AS event_type",
         "entity_id" if "entity_id" in columns else "NULL AS entity_id",
         "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",
@@ -35,6 +39,10 @@ async def fetch_recent_events(
     sql = f"SELECT {', '.join(select_columns)} FROM pipeline_events"  # nosec B608 - selected columns come from the schema allowlist
     where_clauses: list[str] = []
     params: list[str | int] = []
+
+    if tenant_id is not None and "tenant_id" in columns:
+        where_clauses.append("COALESCE(tenant_id, 'default') = ?")
+        params.append(str(tenant_id))
 
     if event_type:
         if "event_type" not in columns:

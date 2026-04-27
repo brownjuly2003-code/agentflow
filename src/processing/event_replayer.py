@@ -43,6 +43,7 @@ def ensure_dead_letter_table(conn) -> None:
         """
         CREATE TABLE IF NOT EXISTS dead_letter_events (
             event_id TEXT PRIMARY KEY,
+            tenant_id TEXT DEFAULT 'default',
             event_type TEXT,
             payload JSON,
             failure_reason TEXT,
@@ -53,6 +54,9 @@ def ensure_dead_letter_table(conn) -> None:
             status TEXT DEFAULT 'failed'
         )
         """
+    )
+    conn.execute(
+        "ALTER TABLE dead_letter_events ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT 'default'"
     )
 
 

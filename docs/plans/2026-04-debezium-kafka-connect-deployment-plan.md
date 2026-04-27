@@ -15,6 +15,7 @@ This file preserves the original plan language for traceability. The current che
 | Local compose CDC stack | Done: `docker-compose.cdc.yml`, source DB init SQL, Kafka Connect image, and connector registration script are checked in |
 | Kafka topic bootstrap | Done: local compose and Helm both pre-create Connect internals, raw table topics, Debezium heartbeat topics, MySQL signal topic, and MySQL schema-history topic |
 | Kafka Connect Helm chart | Done: `helm/kafka-connect/` contains worker deployment, service, secrets, values schema, connector hooks, and topic bootstrap hook |
+| Kafka Connect source credentials | Done: Helm values schema enforces exactly one source-credential mode: chart-created demo Secret or externally managed Kubernetes Secret |
 | Debezium connector configs | Done: Postgres and MySQL connector config helpers match the `cdc.<source>.<schema>.<table>` topic contract |
 | CDC normalization | Done: raw Debezium envelopes normalize into the canonical AgentFlow CDC contract before downstream validation |
 | Verification | Targeted unit/integration/Helm tests pass locally; Docker CDC capture remains opt-in with `AGENTFLOW_RUN_CDC_DOCKER=1` and a running compose stack |

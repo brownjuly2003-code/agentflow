@@ -99,6 +99,13 @@ docker compose -f docker-compose.yml -f docker-compose.cdc.yml down
 
 Kafka auto-create is disabled locally, so `cdc-kafka-init` pre-creates raw table topics, Debezium heartbeat topics, the MySQL signal topic `cdc.mysql`, and Kafka Connect internal topics. The MySQL schema history topic must use `cleanup.policy=delete` with unlimited retention; Debezium 3.5 JSON schema-history records can be keyless, and a compacted topic rejects those records.
 
+For Kubernetes installs, choose one Kafka Connect source-credential mode:
+
+- Demo/staging chart-managed credentials: keep `secrets.create=true` and leave `secrets.existingSecret` empty.
+- Externally managed credentials: set `secrets.create=false` and set `secrets.existingSecret` to a Kubernetes Secret that contains `postgres.properties` and `mysql.properties`.
+
+The chart schema rejects mixed or missing modes so a rendered deployment cannot reference a missing source-credential Secret.
+
 ### Restart a Flink job
 
 ```bash

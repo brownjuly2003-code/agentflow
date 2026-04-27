@@ -19,6 +19,11 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- **Kafka Connect Helm secret contract**: `helm/kafka-connect`
+  values now reject ambiguous source-credential settings. Use exactly
+  one mode: chart-created demo Secret (`secrets.create=true`) or an
+  existing Kubernetes Secret (`secrets.create=false` with
+  `secrets.existingSecret`).
 - **CDC watermarks**: the Flink CDC path now uses source timestamps
   from normalized Debezium records, keeping event-time behavior aligned
   with source database changes.
@@ -29,10 +34,12 @@ All notable changes to AgentFlow are documented in this file.
 ### Documentation
 
 - `docs/runbook.md` now documents local CDC startup, connector status
-  checks, the optional Docker CDC integration test, and cleanup.
+  checks, the optional Docker CDC integration test, cleanup, and the
+  Kafka Connect Helm source-credential modes.
 - `docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md`
   now reflects the implemented local/Helm CDC path, including topic
-  bootstrap and schema-history topic behavior.
+  bootstrap, schema-history topic behavior, and the explicit Helm
+  secret contract.
 
 ---
 

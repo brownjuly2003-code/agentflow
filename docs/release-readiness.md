@@ -91,7 +91,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); audit-closure HEAD also clean
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
 - [x] 2026-04-27 audit closure sprint — all P0/P1/P2 findings from Claude Opus + Codex p1–p9 closed in 6 commits ([docs/audits/2026-04-27/README.md](audits/2026-04-27/README.md))
-- [x] `main` protected with 13 required status checks (`lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `record-deployment`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`)
+- [x] `main` protected with 12 required status checks (`lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`) — `record-deployment` removed because the bot push it required is incompatible with the protection gate (chicken-and-egg: a self-push can't pre-satisfy 13 checks); DORA metrics fall back to the GitHub Actions API source already used by `scripts/dora_metrics.py`
 - [x] `publish-pypi.yml` `environment: pypi` committed (`e8b1237`)
 - [x] `sdk-ts/package-lock.json` committed; `npm audit` clean (0 vulns)
 - [x] Vulnerable runtime/integrations deps bumped (`dagster>=1.13.1`, `langchain-core>=1.2.22`, `langchain-text-splitters>=1.1.2`, `langsmith>=0.7.31`)
@@ -161,9 +161,8 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 Audit-closure HEAD is `3c887b1` on local `main`, six commits ahead of
 `origin/main`. Recommended next session starting point:
 
-1. `git push origin main`. Branch protection requires status checks to be
-   green; the last `record-deployment` event predates the audit-closure
-   commits, so a fresh CI run will populate them.
+1. `git push origin main`. Branch protection requires the 12 status checks
+   listed above to be green on the pushed commit.
 2. Once CI is green on `origin/main`, move `v1.1.0` from the stale
    `1ee89a3` to the new release commit:
 

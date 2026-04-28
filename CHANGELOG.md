@@ -93,12 +93,17 @@ and `docs/agent-tools/*.json` against committed copies. Wired into
 `contract.yml`; `docs/agent-tools/**` and `scripts/export_openapi.py`
 added to `contract.yml` path triggers.
 
-**Branch protection:** `main` now has 13 required status checks
+**Branch protection:** `main` has 12 required status checks
 (`lint`, `test-unit`, `test-integration`, `perf-check`,
 `helm-schema-live`, `schema-check`, `terraform-validate`,
-`record-deployment`, `bandit`, `safety`, `npm-audit`, `trivy`,
-`contract`), `strict=true`, force-pushes and deletions disabled,
-required conversation resolution.
+`bandit`, `safety`, `npm-audit`, `trivy`, `contract`),
+`strict=true`, force-pushes and deletions disabled, required
+conversation resolution. `record-deployment` was originally part
+of this set but its bot push couldn't pre-satisfy the gate
+(chicken-and-egg: a self-push to a branch with 13 required
+checks can't satisfy them at push time); the job was removed
+and DORA metrics fall back to the GitHub Actions API source
+already wired into `scripts/dora_metrics.py`.
 
 **Python SDK alignment with server v1 contract (Codex p8 F1–F10):**
 `api_version=` parameter and `X-AgentFlow-Version` header on sync and

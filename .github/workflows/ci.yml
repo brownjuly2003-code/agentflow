@@ -204,28 +204,3 @@ jobs:
           cd infrastructure/terraform
           terraform validate
 
-  record-deployment:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success() && github.actor != 'github-actions[bot]'
-    needs:
-      - schema-check
-      - test-unit
-      - test-integration
-      - helm-schema-live
-      - perf-check
-      - terraform-validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Record deployment
-        run: |
-          mkdir -p .dora
-          echo "{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"sha\": \"${{ github.sha }}\", \"event\": \"deploy\"}" >> .dora/deployments.jsonl
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add -f .dora/deployments.jsonl
-          git diff --cached --quiet || git commit -m "ci: record deployment ${{ github.sha }}"
-          git push origin HEAD:main

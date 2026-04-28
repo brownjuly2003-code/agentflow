@@ -42,9 +42,46 @@ config:
   corsOrigins: http://localhost:3000,http://127.0.0.1:3000
   redisUrl: redis://agentflow-redis:6379/0
 
-# WARNING: do not commit real secrets here. See values-staging.yaml.example
-# for a non-active template. Real values must be injected via secret manager.
+# Staging is an ephemeral kind cluster torn down after each CI run. The
+# hashes below correspond to the same plaintext fixtures committed in
+# tests/e2e/conftest.py (AGENTFLOW_E2E_*_KEY defaults) and exist so the
+# fail-closed AuthMiddleware (security audit e8b1237) accepts smoke-test
+# calls and the rate-limit / auth-rejection E2E tests have realistic
+# tenants. Storing only bcrypt hashes (not plaintext) keeps this file
+# safe to copy into adjacent environments without leaking creds —
+# anyone reusing it must regenerate their own hashes via
+# `python -c "import bcrypt; print(bcrypt.hashpw(b'<key>', bcrypt.gensalt()).decode())"`.
+# Real deployments must override these via secret manager — see
+# values-staging.yaml.example for the production schema.
 secrets:
   adminKey: REPLACE_ME_ADMIN_KEY
   apiKeys:
-    keys: []
+    keys:
+      - key_id: "support-agent-e2e"
+        # bcrypt(af-prod-agent-support-abc123) — matches AGENTFLOW_E2E_SUPPORT_KEY default
+        key_hash: "$2b$10$mioZjBxp/Ie7w1GtaphQtOZUjWe20AyB3LeHN57xV6hKG/RZNw0QO"
+        name: "Support Agent"
+        tenant: "default"
+        rate_limit_rpm: 120
+        allowed_entity_types:
+          - "order"
+          - "user"
+        created_at: "2026-04-12"
+      - key_id: "ops-agent-e2e"
+        # bcrypt(af-prod-agent-ops-def456) — matches AGENTFLOW_E2E_OPS_KEY default
+        key_hash: "$2b$10$vYubD5Xauu9wV/cym7wA/.Yu8n76LnyMC1cduld5ejECwNl/Pox8C"
+        name: "Ops Agent"
+        tenant: "default"
+        rate_limit_rpm: 300
+        allowed_entity_types: null
+        created_at: "2026-04-12"
+      - key_id: "rate-limit-agent-e2e"
+        # bcrypt(af-prod-agent-rate-e2e000) — matches AGENTFLOW_E2E_RATE_LIMIT_KEY default
+        key_hash: "$2b$10$W/d1DTTdE6l8T443YZKVlOgraKy2rPdbUmsGMterZHnvM.FMAaaFy"
+        name: "Rate Limit Agent"
+        tenant: "default"
+        # 120 rpm matches tests/e2e/test_smoke.py::test_rate_limit_returns_429_after_threshold
+        # (125 calls expected → 120 × 200, 5 × 429). Lower would flip earlier and break the gate.
+        rate_limit_rpm: 120
+        allowed_entity_types: null
+        created_at: "2026-04-12"

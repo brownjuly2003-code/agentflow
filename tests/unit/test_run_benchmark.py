@@ -139,7 +139,7 @@ def test_build_report_documents_warmup_step():
     assert "10s" in report
 
 
-def test_start_api_discards_server_output_to_avoid_pipe_backpressure(monkeypatch):
+def test_start_api_routes_server_output_to_log_file(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
     class DummyProcess:
@@ -151,9 +151,13 @@ def test_start_api_discards_server_output_to_avoid_pipe_backpressure(monkeypatch
         return DummyProcess()
 
     monkeypatch.setattr(run_benchmark.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(run_benchmark, "PROJECT_ROOT", tmp_path)
 
     process = run_benchmark.start_api(env={"DUCKDB_PATH": "bench.duckdb"}, port=8001)
 
     assert isinstance(process, DummyProcess)
-    assert captured["kwargs"]["stdout"] is run_benchmark.subprocess.DEVNULL
-    assert captured["kwargs"]["stderr"] is run_benchmark.subprocess.DEVNULL
+    # stdout goes to a real file handle (not a pipe — pipe backpressure can stall
+    # the server). stderr is merged into stdout via STDOUT.
+    assert hasattr(captured["kwargs"]["stdout"], "write")
+    assert captured["kwargs"]["stderr"] is run_benchmark.subprocess.STDOUT
+    assert run_benchmark._API_LOG_PATH == tmp_path / ".tmp" / "api-bench-8001.log"

@@ -306,7 +306,15 @@ def run_command(command: list[str], env: dict[str, str], label: str) -> None:
     raise RuntimeError(f"{label} failed with exit code {result.returncode}.\n{output}")
 
 
+_API_LOG_PATH: Path | None = None
+
+
 def start_api(env: dict[str, str], port: int) -> subprocess.Popen[str]:
+    global _API_LOG_PATH
+    log_path = PROJECT_ROOT / ".tmp" / f"api-bench-{port}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = open(log_path, "w", buffering=1)  # noqa: SIM115
+    _API_LOG_PATH = log_path
     return subprocess.Popen(  # noqa: S603
         [
             sys.executable,
@@ -320,8 +328,8 @@ def start_api(env: dict[str, str], port: int) -> subprocess.Popen[str]:
         ],
         cwd=PROJECT_ROOT,
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
         text=True,
     )
 
@@ -350,7 +358,16 @@ def wait_for_api(
             time.sleep(0.5)
 
     process.terminate()
-    raise RuntimeError(f"Timed out waiting for API at http://{host}:{port}.")
+    log_excerpt = ""
+    if _API_LOG_PATH and _API_LOG_PATH.exists():
+        try:
+            log_excerpt = _API_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            log_excerpt = "<unable to read API log>"
+    raise RuntimeError(
+        f"Timed out waiting for API at http://{host}:{port}.\n"
+        f"--- API log ({_API_LOG_PATH}) ---\n{log_excerpt}"
+    )
 
 
 def stop_api(process: subprocess.Popen[str]) -> None:

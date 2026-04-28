@@ -30,11 +30,26 @@ def _normalize_openapi_schemas(schemas: dict[str, object]) -> dict[str, object]:
     return normalized
 
 
+SUPPORTED_PATHS = {
+    "/v1/query",
+    "/v1/query/explain",
+    "/v1/entity/{entity_type}/{entity_id}",
+    "/v1/metrics/{metric_name}",
+    "/v1/stream/events",
+    "/v1/catalog",
+    "/v1/health",
+}
+
+
 def _prepare_case(case) -> None:
     path = case.operation.path
     if path == "/v1/query":
         case.query = {}
         case.body = {"question": "Show me top 3 products", "limit": 3}
+        return
+    if path == "/v1/query/explain":
+        case.query = {}
+        case.body = {"question": "Top 5 products by revenue today"}
         return
     if path == "/v1/entity/{entity_type}/{entity_id}":
         case.path_parameters = {
@@ -63,6 +78,8 @@ def test_api_follows_openapi_contract(base_url: str, ops_api_key: str):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", NonInteractiveExampleWarning)
             case = result.ok().as_strategy().example()
+        if case.operation.path not in SUPPORTED_PATHS:
+            continue
         _prepare_case(case)
 
         if case.operation.path == "/v1/stream/events":

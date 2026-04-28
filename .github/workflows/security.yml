@@ -193,7 +193,7 @@ jobs:
       - name: Run Trivy scan
         # Pinned to release tag (Codex audit p9 #3); update by bumping the
         # tag, never re-pin to @master (allows upstream to alter scanner).
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: agentflow-api:security-scan
           format: sarif

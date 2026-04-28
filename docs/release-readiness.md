@@ -1,9 +1,9 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20
-**Last updated**: 2026-04-27
-**Version**: v1.1.0 + post-v1.1 CDC follow-up
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization is checked in; registry credentials are configured, but the live v1.1.0 publish is stopped on a pre-commit full-suite hang in chaos smoke tests
+**Last updated**: 2026-04-28
+**Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with 13 required status checks; live v1.1.0 publish ready to run as soon as the user pushes `main` and re-tags `v1.1.0`
 
 ## Executive Summary
 
@@ -87,9 +87,14 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions
 - [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
 - [ ] Production CDC source onboarding approved and configured
-- [x] Last completed local full suite green on the release line
-- [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); fresh pre-commit full-suite re-run pending on next release tag candidate
+- [x] Last completed local full suite green on the release line — `670 passed, 4 skipped` on `pytest tests/unit tests/integration tests/sdk tests/contract` at audit-closure HEAD `3c887b1`
+- [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); audit-closure HEAD also clean
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
+- [x] 2026-04-27 audit closure sprint — all P0/P1/P2 findings from Claude Opus + Codex p1–p9 closed in 6 commits ([docs/audits/2026-04-27/README.md](audits/2026-04-27/README.md))
+- [x] `main` protected with 13 required status checks (`lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `record-deployment`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`)
+- [x] `publish-pypi.yml` `environment: pypi` committed (`e8b1237`)
+- [x] `sdk-ts/package-lock.json` committed; `npm audit` clean (0 vulns)
+- [x] Vulnerable runtime/integrations deps bumped (`dagster>=1.13.1`, `langchain-core>=1.2.22`, `langchain-text-splitters>=1.1.2`, `langsmith>=0.7.31`)
 - [ ] Phase 1 PMF work completed
 
 ## SDK Publish Proof Path
@@ -123,8 +128,11 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | Clean temp venv editable install-order check for root, SDK, and integrations | ✅ PASS | both install orders resolved `agentflow-runtime` 1.1.0 from repo root and `agentflow-client` 1.1.0 from `sdk/`; imports and `agentflow --help` worked |
 | PyPI Trusted Publisher setup | ✅ READY | PyPI account publishing page shows pending publishers for `agentflow-runtime` and `agentflow-client` with owner `brownjuly2003-code`, repo `agentflow`, workflow `publish-pypi.yml`, environment `pypi` |
 | GitHub registry secret setup | ✅ READY | `gh secret list --repo brownjuly2003-code/agentflow` shows `NPM_TOKEN` updated on 2026-04-27; npm token was validated with registry `/whoami` before storing |
-| Pending workflow environment change | ⚠️ LOCAL ONLY | `.github/workflows/publish-pypi.yml` has an uncommitted one-line change adding `environment: pypi` under the publish job |
-| Release pre-commit full-suite gate | ❌ BLOCKED | `python -m pytest -p no:schemathesis` with project-local temp paths timed out; diagnostic `--timeout=180` identified `tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout` hanging inside `starlette.testclient` during `chaos_client.get("/v1/metrics/revenue?window=1h")` |
+| Pending workflow environment change | ✅ COMMITTED | `.github/workflows/publish-pypi.yml` `environment: pypi` landed in `e8b1237` |
+| Release pre-commit full-suite gate | ✅ PASS | `670 passed, 4 skipped` in 269s on audit-closure HEAD; the earlier chaos smoke hang did not reproduce, standalone re-run gives `3 passed in 44s` |
+| Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits on local `main` ahead of `origin`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
+| Branch protection on `main` | ✅ APPLIED | 13 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
+| TypeScript SDK lockfile + audit | ✅ CLEAN | `sdk-ts/package-lock.json` committed (1500 lines); `npm audit --audit-level=moderate` reports 0 vulnerabilities |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process.
 
@@ -150,17 +158,28 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## New Session Handoff
 
-Recommended next session starting point:
+Audit-closure HEAD is `3c887b1` on local `main`, six commits ahead of
+`origin/main`. Recommended next session starting point:
 
-1. Keep the current local diff limited to `.github/workflows/publish-pypi.yml`; it adds `environment: pypi` to the `publish` job so PyPI OIDC claims include the configured environment.
-2. Reproduce and fix or explicitly waive the chaos smoke hang before committing. The known command is:
+1. `git push origin main`. Branch protection requires status checks to be
+   green; the last `record-deployment` event predates the audit-closure
+   commits, so a fresh CI run will populate them.
+2. Once CI is green on `origin/main`, move `v1.1.0` from the stale
+   `1ee89a3` to the new release commit:
 
-```bash
-python -m pytest tests/chaos/test_chaos_smoke.py::test_smoke_metric_endpoint_returns_503_on_duckdb_timeout -p no:schemathesis -vv --basetemp D:\DE_project\.tmp\pytest-basetemp-chaos-single --timeout=60 --timeout-method=thread
-```
+   ```bash
+   git push origin :refs/tags/v1.1.0
+   git tag -d v1.1.0
+   git tag -a v1.1.0 -m "AgentFlow v1.1.0 (audit-closure)"
+   git push origin v1.1.0
+   ```
 
-3. After the gate is resolved, run the required release gates, commit only `.github/workflows/publish-pypi.yml`, push `main`, move/push `v1.1.0` to the release commit, then monitor `Publish Python Packages` and `Publish TypeScript SDK`.
-4. Do not regenerate or expose registry secrets. `NPM_TOKEN` is already stored in GitHub Actions secrets; PyPI pending publishers are already configured.
+3. Monitor `Publish Python Packages` and `Publish TypeScript SDK`. PyPI
+   Trusted Publishers already exist for `agentflow-runtime` and
+   `agentflow-client`; `NPM_TOKEN` already lives in GitHub Actions
+   secrets. The `environment: pypi` claim is now committed.
+4. After both publish workflows are green, `WebFetch` the registry pages
+   to verify the artifacts are live before announcing the release.
 
 ## Release Verdict
 

@@ -4,6 +4,168 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security (audit follow-up sprint 2026-04-27/28)
+
+Two external audits delivered against `4a13d36` (Claude Opus + Codex p1–p9,
+archived under `docs/audits/2026-04-27/`). Six commits closed all
+P0/P1/P2 findings.
+
+**Tenant isolation across the control plane (Codex p1 R3/R5, p2_1 #1-3,
+p3 #4):** `pipeline_events` and `dead_letter_events` got a
+`tenant_id VARCHAR DEFAULT 'default'` column with backwards-compatible
+`ALTER TABLE ADD COLUMN IF NOT EXISTS` migration in init paths. Writers
+populate tenant from `event['tenant']` / CDC source metadata; the CDC
+normalizer accepts an explicit `topic=` argument and falls back through
+`event['topic']` → `cdc.<source.db>` → `source.name`. Readers in
+`/v1/stream/events`, `/v1/lineage`, `/v1/slo`, `/v1/deadletter`
+(stats / list / detail / replay / dismiss), and the webhook dispatcher
+now scope to `request.state.tenant_id`. Cross-tenant regression tests
+added.
+
+**SQL guard centralization (Codex p2_1 #4, p2_2 #4, p3 #1):** new
+`_prepare_nl_sql()` helper in `nl_queries.py` is the only path that
+validates translated SQL via `validate_nl_sql()`; called from
+`execute_nl_query`, `paginated_query`, and `explain` before tenant
+scoping and pagination wrapping. Closes the bypass on `/v1/query`
+(paginated) and `/v1/query/explain`. PII masking and explain
+`tables_accessed` rewritten on `sqlglot` AST so tenant-quoted SQL like
+`"acme"."users_enriched"` is correctly extracted (Codex p3 #3).
+
+**Entity allowlist enforcement (Codex p2_1 #4, p3 #2):** new
+`tenant_key_allowed_tables()` helper in `auth/manager.py`. Applied to
+NL query / explain / paginated query, batch query/metric items,
+`/v1/search` (intersection with tenant key allowlist + post-filter so
+metric documents are not silently dropped for scoped keys), and
+`/v1/metrics/{metric}`.
+
+**Auth fail-closed + entropy + scopes (Codex p2_1 #5, p2_2 #1-3):**
+auth middleware now fails closed with `503` when no API keys are
+configured; opt out with `AGENTFLOW_AUTH_DISABLED=true` for local dev
+or `app.state.auth_disabled = True` for tests. Failed-auth throttling
+extended to `/v1/admin/*`. `X-Forwarded-For` honoured only when the
+immediate peer is in `AGENTFLOW_TRUSTED_PROXIES`. Generated API keys
+now use `secrets.token_urlsafe(32)` (256-bit) instead of
+`secrets.token_hex(4)` (32-bit).
+
+**Secret hygiene (Codex p2_2 #5/8, p9 #4-5):** rotated active webhook
+signing secret in `config/webhooks.yaml`, replaced tracked plaintext
+API keys in `k8s/staging/values-staging.yaml` with placeholders +
+`.yaml.example` schema reference, env-driven
+`docker-compose.prod.yml` (`${CLICKHOUSE_*:?}`, `${GF_SECURITY_*:?}`),
+placeholder passwords with prod warnings in
+`helm/kafka-connect/values.yaml`, untracked
+`docker/kafka-connect/secrets/{postgres,mysql}.properties` + `.example`
+templates. Tight Hatch sdist `include`/`exclude` keeps secrets,
+workflows, notebooks, k8s, helm, sdk, integrations, tests, and docs
+out of the runtime distribution. `X-Admin-Key`, `Cookie`, and
+`Set-Cookie` added to redacted headers. Webhook/alert `secret` excluded
+from list/read/update responses (returned only on create). Admin UI
+no longer renders `X-Admin-Key` into the DOM (`data-admin-key` and
+auto-refresh JS removed). `/v1/admin/keys` no longer returns plaintext
+key material.
+
+**Helm hardening (Opus P1 #4-6):** `helm/agentflow/templates/` gained
+`networkpolicy.yaml` (default-deny + ingress on the http port + egress
+to DNS/Redis/Kafka/ClickHouse/OTLP) and `poddisruptionbudget.yaml`
+(`minAvailable: 1`). Pod and container `securityContext` now sets
+`runAsNonRoot=10001`, `readOnlyRootFilesystem=true`, drops all
+capabilities, and applies `RuntimeDefault` seccomp; a memory `emptyDir`
+mounts at `/tmp` for Python tempfile / httpx caches. NetworkPolicy is
+off by default (enable per cluster).
+
+**Supply chain (Codex p9):** committed `sdk-ts/package-lock.json`
+(closes ENOLOCK on `npm audit`); `publish-npm.yml` switched to
+`npm ci` + `npm test` + `npm audit` before publish. New `npm-audit` job
+added to `security.yml`. `aquasecurity/trivy-action` pinned from
+`@master` to `0.28.0`. Safety scope now includes
+`integrations/pyproject.toml` resolved requirements.
+
+**Vulnerable dep bumps:** `dagster>=1.13.1` (GHSA-mjw2-v2hm-wj34
+SQL injection via dynamic partition keys), `langchain-core>=1.2.22`
+(CVE-2026-26013 SSRF + CVE-2026-34070 path traversal),
+`langchain-text-splitters>=1.1.2` (GHSA-fv5p-p927-qmxr SSRF redirect
+bypass), `langsmith>=0.7.31`. Both `pyproject.toml` and
+`integrations/pyproject.toml`.
+
+**OpenAPI drift gate (Codex p4 #5):** `scripts/export_openapi.py`
+gained a `--check` mode that diffs the regenerated `docs/openapi.json`
+and `docs/agent-tools/*.json` against committed copies. Wired into
+`contract.yml`; `docs/agent-tools/**` and `scripts/export_openapi.py`
+added to `contract.yml` path triggers.
+
+**Branch protection:** `main` now has 13 required status checks
+(`lint`, `test-unit`, `test-integration`, `perf-check`,
+`helm-schema-live`, `schema-check`, `terraform-validate`,
+`record-deployment`, `bandit`, `safety`, `npm-audit`, `trivy`,
+`contract`), `strict=true`, force-pushes and deletions disabled,
+required conversation resolution.
+
+**Python SDK alignment with server v1 contract (Codex p8 F1–F10):**
+`api_version=` parameter and `X-AgentFlow-Version` header on sync and
+async clients; capture of server version + deprecation headers into
+`client.last_server_version` / `last_deprecation_warning`. Async
+contract pinning parity with sync (in-memory contract cache, async
+`_get_contract`). `as_of: datetime|str|None` parameter for entity
+helpers and `get_metric` (sync + async). New `EntityMeta` and
+`MetricMeta` Pydantic models exposed via `EntityEnvelope.meta` and
+`MetricResult.meta`. Full `CatalogResponse` payload:
+`streaming_sources`, `audit_sources`, plus `contract_version` on
+catalog entities and metrics. Eight new public typed methods —
+`explain_query`, `search`, `list_contracts`, `get_contract`,
+`diff_contracts`, `validate_contract`, `get_lineage`, `get_changelog`.
+New public `AgentFlowClient.get_entity()`; existing typed convenience
+methods now delegate to it. `_request` accepts a `headers=` argument;
+public POSTs accept `idempotency_key=` so retries are permitted on
+5xx / timeout. New `PermissionDeniedError(AgentFlowError)` for `403`.
+`CircuitOpenError` now inherits from `AgentFlowError`. Both
+re-exported from `agentflow.__init__.__all__`. New
+`sdk/agentflow/py.typed` marker; Hatch include rule keeps it in the
+wheel/sdist.
+
+**Test coverage gaps (Codex p5):** new unit suites covering
+previously zero-coverage modules — `tests/unit/test_clickhouse_backend.py`
+(14 tests: SQL translation, basic-auth POST, UNKNOWN_TABLE mapping,
+URLError mapping, table_columns fallbacks, EXPLAIN, scalar, https
+switch, health), `tests/unit/test_freshness_monitor.py` (8 tests:
+latency / SLA window / breach signalling / skip-reason coverage /
+EOF vs real Kafka error / consumer.close), and
+`tests/unit/test_event_producer.py` (9 tests: all four generators,
+DecimalEncoder, run_producer flush on KeyboardInterrupt,
+_delivery_report).
+
+**Test fixture posture:** new autouse
+`_default_open_auth` fixture in `tests/integration/conftest.py` keeps
+the legacy "open when no keys" behaviour for integration tests that do
+not exercise auth (sets `AGENTFLOW_AUTH_DISABLED=true`); opt out with
+the new `requires_auth_enforcement` marker.
+`app.state.auth_disabled = False` is reset on every lifespan startup
+so the test bypass flag does not leak across `TestClient` instances
+(closes Codex review P2 on auth/middleware persistence).
+
+**Documentation hygiene (Codex p6):** TypeScript SDK examples now
+import from `"@agentflow/client"` (was `"agentflow"`); placeholder
+`https://api.agentflow.dev` examples replaced with
+`http://localhost:8000`; clone URL points at
+`brownjuly2003-code/agentflow`; `docs/quality.md` marked stale;
+`docs/glossary.md` test counts and `docs/engineering-standards.md`
+coverage floor (`60%`) re-aligned with CI; runbook clarifies that
+`make demo` does start Redis via Docker; migration guide module path
+fixed (`local_pipeline.run`); registry-not-yet-published wording
+through README, integrations, migration, sdk/sdk-ts READMEs.
+
+**Operational verification:** the chaos smoke hang flagged in
+`docs/release-readiness.md` did not reproduce on the new HEAD —
+`tests/chaos/test_chaos_smoke.py` now passes `3 in 44s` standalone with
+`--timeout=60 --timeout-method=thread`. `app.state.auth_disabled` is
+reset on lifespan startup so the test bypass flag does not leak across
+`TestClient` instances. Final smoke at audit-closure HEAD:
+`670 passed, 4 skipped` on
+`pytest tests/unit tests/integration tests/sdk tests/contract`.
+
+**Audits archived:** the two source audits and the two CX task specs
+that drove the impl are kept under `docs/audits/2026-04-27/` with a
+README that maps findings to the six closing commits.
+
 ### Added
 
 - **Debezium/Kafka Connect CDC operationalization**: local compose now

@@ -241,7 +241,10 @@ class AuthManager:
             if item.key_hash is None:
                 continue
             if verify_api_key(api_key, item.key_hash):
-                return item.model_copy(update={"key": api_key, "matched_slot": "current"})
+                matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
+                self._runtime_plaintext_by_hash[item.key_hash] = api_key
+                self.keys_by_value[api_key] = matched
+                return matched
         for item in self._loaded_keys:
             if not self._key_rotator.is_previous_key_active(item) or item.previous_key_hash is None:
                 continue

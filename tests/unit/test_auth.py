@@ -105,6 +105,47 @@ def test_reload_picks_up_file_changes(api_keys_path: Path, db_path: Path):
     assert list(manager.keys_by_value) == ["replacement-key"]
 
 
+def test_hashed_key_authentication_caches_successful_plaintext(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    api_keys_path = tmp_path / "config" / "api_keys.yaml"
+    _write_api_keys(
+        api_keys_path,
+        """
+        keys:
+          - key_id: "hashed-agent"
+            key_hash: "hashed-secret"
+            name: "Hashed Agent"
+            tenant: "acme"
+            rate_limit_rpm: 120
+            allowed_entity_types: null
+            created_at: "2026-04-10"
+        """,
+    )
+    manager = AuthManager(
+        api_keys_path=api_keys_path,
+        db_path=tmp_path / "usage.duckdb",
+        admin_key="admin-secret",
+    )
+    manager.load()
+    verify_calls = []
+
+    def fake_verify_api_key(value: str, key_hash: str) -> bool:
+        verify_calls.append((value, key_hash))
+        return value == "tenant-hashed-key" and key_hash == "hashed-secret"
+
+    monkeypatch.setattr("src.serving.api.auth.manager.verify_api_key", fake_verify_api_key)
+
+    first = manager.authenticate("tenant-hashed-key")
+    second = manager.authenticate("tenant-hashed-key")
+
+    assert first is not None
+    assert second is not None
+    assert second.key_id == "hashed-agent"
+    assert verify_calls == [("tenant-hashed-key", "hashed-secret")]
+
+
 def test_missing_api_key_returns_401(api_keys_path: Path, db_path: Path):
     client = TestClient(_build_app(api_keys_path, db_path))
 

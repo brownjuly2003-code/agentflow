@@ -626,6 +626,10 @@ def main() -> int:
             env["AGENTFLOW_API_KEYS"] = ""
             env["AGENTFLOW_API_KEYS_FILE"] = ""
             env["AGENTFLOW_ADMIN_KEY"] = ""
+            # W1 audit closure switched the auth middleware to fail-closed when
+            # no key file is present. The benchmark intentionally runs without
+            # auth, so opt out explicitly.
+            env["AGENTFLOW_AUTH_DISABLED"] = "true"
             env["AGENTFLOW_USAGE_DB_PATH"] = str(temp_path / "benchmark_api_usage.duckdb")
             run_command(
                 [

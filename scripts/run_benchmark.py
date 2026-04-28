@@ -347,7 +347,7 @@ def wait_for_api(
             raise RuntimeError(f"API exited before becoming healthy.\n{logs}")
         try:
             connection = http.client.HTTPConnection(host, port, timeout=2)
-            connection.request("GET", "/v1/health")
+            connection.request("GET", "/v1/catalog")
             response = connection.getresponse()
             response.read()
             connection.close()

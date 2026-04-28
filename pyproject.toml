@@ -121,7 +121,9 @@ ignore = ["S101", "S311", "S608"]
     "S607",
     "S310",
     "S104",
+    "S106",
     "N802",
+    "N805",
     "E402",
     "B017",
     "PT011",
@@ -130,6 +132,9 @@ ignore = ["S101", "S311", "S608"]
 ]
 "src/serving/backends/clickhouse_backend.py" = [
     "S310",
+    "E501",
+]
+"src/serving/backends/duckdb_backend.py" = [
     "E501",
 ]
 

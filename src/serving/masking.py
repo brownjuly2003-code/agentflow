@@ -57,11 +57,7 @@ class PiiMasker:
             parsed = sqlglot.parse_one(sql, read="duckdb")
         except sqlglot.errors.ParseError:
             return set()
-        return {
-            table.name
-            for table in parsed.find_all(exp.Table)
-            if table.name
-        }
+        return {table.name for table in parsed.find_all(exp.Table) if table.name}
 
     def _apply_strategy(self, value: object, strategy: str) -> object:
         if value is None:

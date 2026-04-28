@@ -43,9 +43,11 @@ def test_process_message_records_latency_and_marks_sla_ok(monitor):
     ).encode()
     msg = _make_msg(payload)
 
-    with patch.object(fm_module.PIPELINE_LATENCY, "labels") as latency_labels, patch.object(
-        fm_module.EVENTS_PROCESSED, "labels"
-    ) as count_labels, patch.object(fm_module.SLA_COMPLIANCE, "labels") as sla_labels:
+    with (
+        patch.object(fm_module.PIPELINE_LATENCY, "labels") as latency_labels,
+        patch.object(fm_module.EVENTS_PROCESSED, "labels") as count_labels,
+        patch.object(fm_module.SLA_COMPLIANCE, "labels") as sla_labels,
+    ):
         latency_label = MagicMock()
         latency_labels.return_value = latency_label
         count_label = MagicMock()
@@ -81,7 +83,11 @@ def test_process_message_skips_invalid_json(monitor):
     with patch.object(fm_module, "logger") as logger:
         monitor._process_message(msg)
 
-    skip_calls = [c for c in logger.warning.call_args_list if c.args and c.args[0] == "freshness_message_skipped"]
+    skip_calls = [
+        c
+        for c in logger.warning.call_args_list
+        if c.args and c.args[0] == "freshness_message_skipped"
+    ]
     assert skip_calls, "expected freshness_message_skipped warning on invalid payload"
     assert skip_calls[0].kwargs.get("reason") == "invalid_payload"
 
@@ -94,7 +100,11 @@ def test_process_message_skips_missing_timestamp(monitor):
         monitor._process_message(msg)
 
     reason = next(
-        (c.kwargs.get("reason") for c in logger.warning.call_args_list if c.args and c.args[0] == "freshness_message_skipped"),
+        (
+            c.kwargs.get("reason")
+            for c in logger.warning.call_args_list
+            if c.args and c.args[0] == "freshness_message_skipped"
+        ),
         None,
     )
     assert reason == "missing_timestamp"
@@ -110,7 +120,11 @@ def test_process_message_skips_invalid_timestamp(monitor):
         monitor._process_message(msg)
 
     reason = next(
-        (c.kwargs.get("reason") for c in logger.warning.call_args_list if c.args and c.args[0] == "freshness_message_skipped"),
+        (
+            c.kwargs.get("reason")
+            for c in logger.warning.call_args_list
+            if c.args and c.args[0] == "freshness_message_skipped"
+        ),
         None,
     )
     assert reason == "invalid_timestamp"
@@ -156,12 +170,12 @@ def test_start_handles_partition_eof_and_real_kafka_errors(monitor):
     consumer = monitor.consumer
     consumer.poll.side_effect = [err_msg, eof_msg, KeyboardInterrupt()]
 
-    with patch.object(fm_module, "start_http_server"), patch.object(
-        fm_module, "logger"
-    ) as logger:
+    with patch.object(fm_module, "start_http_server"), patch.object(fm_module, "logger") as logger:
         monitor.start(metrics_port=18001)
 
     # Real error logged once; EOF must NOT log a kafka_error.
-    kafka_error_calls = [c for c in logger.error.call_args_list if c.args and c.args[0] == "kafka_error"]
+    kafka_error_calls = [
+        c for c in logger.error.call_args_list if c.args and c.args[0] == "kafka_error"
+    ]
     assert len(kafka_error_calls) == 1
     consumer.close.assert_called_once()

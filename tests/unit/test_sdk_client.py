@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from agentflow.circuit_breaker import CircuitOpenError
 from agentflow.client import AgentFlowClient
 from agentflow.exceptions import (
     AgentFlowError,
@@ -12,7 +13,6 @@ from agentflow.exceptions import (
     RateLimitError,
 )
 from agentflow.retry import RetryPolicy
-from agentflow.circuit_breaker import CircuitOpenError
 
 
 def _json_response(

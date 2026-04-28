@@ -102,12 +102,7 @@ def normalize_debezium_event(event: dict[str, Any], topic: str | None = None) ->
     # then `source.name` (connector name — last resort, often non-tenant).
     # See Codex review P1: Debezium value-only deserializer drops topic, so
     # without an explicit topic argument all events fall to `default`.
-    tenant_hint = (
-        topic
-        or event.get("topic")
-        or _topic_from_source(source)
-        or source.get("name")
-    )
+    tenant_hint = topic or event.get("topic") or _topic_from_source(source) or source.get("name")
     tenant = _tenant_from_topic(tenant_hint)
     stable_key = {
         "entity_id": str(entity_id),

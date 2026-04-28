@@ -38,10 +38,11 @@ class AuthMiddleware:
             # for local development. Previous behaviour silently exposed every
             # non-admin route when the api_keys file was missing/empty
             # (Codex audit p2_1 #5, p2_2 #1).
-            if (
-                os.getenv("AGENTFLOW_AUTH_DISABLED", "").strip().lower() in {"1", "true", "yes"}
-                or getattr(request.app.state, "auth_disabled", False)
-            ):
+            if os.getenv("AGENTFLOW_AUTH_DISABLED", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+            } or getattr(request.app.state, "auth_disabled", False):
                 return await call_next(request)
             return JSONResponse(
                 status_code=503,

@@ -95,10 +95,10 @@ def test_run_producer_flushes_on_keyboard_interrupt():
         if isinstance(next_value, BaseException):
             raise next_value
 
-    with patch.object(producer_module, "Producer", return_value=fake_producer), patch.object(
-        producer_module.time, "sleep", side_effect=_sleep
-    ), patch.dict(
-        "os.environ", {"PRODUCER_EVENTS_PER_SECOND": "10"}, clear=False
+    with (
+        patch.object(producer_module, "Producer", return_value=fake_producer),
+        patch.object(producer_module.time, "sleep", side_effect=_sleep),
+        patch.dict("os.environ", {"PRODUCER_EVENTS_PER_SECOND": "10"}, clear=False),
     ):
         producer_module.run_producer()
 

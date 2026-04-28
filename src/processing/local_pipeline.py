@@ -102,9 +102,7 @@ def _ensure_tables(conn: duckdb.DuckDBPyConnection):
 
 def _event_tenant(event: dict) -> str:
     source_metadata = event.get("source_metadata", {})
-    metadata_tenant = (
-        source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
-    )
+    metadata_tenant = source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
     tenant = event.get("tenant") or metadata_tenant
     return str(tenant) if tenant else "default"
 

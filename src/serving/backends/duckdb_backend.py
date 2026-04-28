@@ -142,9 +142,7 @@ class DuckDBBackend(ServingBackend):
         self._conn.execute(
             "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
         )
-        self._conn.execute(
-            "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS entity_id VARCHAR"
-        )
+        self._conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS entity_id VARCHAR")
         self._conn.execute(
             "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS event_type VARCHAR"
         )

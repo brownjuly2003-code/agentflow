@@ -1,5 +1,26 @@
 [
   {
+    "name": "explain_query_v1_query_explain_post",
+    "description": "Explain Query\n\nReturn the SQL plan for a natural language query without executing it.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 3,
+          "title": "Question",
+          "examples": [
+            "Top 5 products by revenue today"
+          ]
+        }
+      },
+      "required": [
+        "question"
+      ]
+    }
+  },
+  {
     "name": "natural_language_query_v1_query_post",
     "description": "Natural Language Query\n\nExecute a natural language query against the data platform.\n\nThe query engine translates natural language to SQL, executes it,\nand returns structured results. Designed for LLM tool-use.\n\nExample:\n    POST /v1/query {\"question\": \"Top 5 products by revenue today\"}",
     "input_schema": {
@@ -26,6 +47,24 @@
           ],
           "title": "Context",
           "description": "Additional context for query generation"
+        },
+        "limit": {
+          "type": "integer",
+          "maximum": 1000.0,
+          "minimum": 1.0,
+          "title": "Limit",
+          "default": 100
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
         }
       },
       "required": [
@@ -46,6 +85,19 @@
         "entity_id": {
           "type": "string",
           "title": "Entity Id"
+        },
+        "as_of": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Return state as of this UTC timestamp (ISO 8601)",
+          "title": "As Of"
         }
       },
       "required": [
@@ -68,11 +120,759 @@
           "type": "string",
           "default": "1h",
           "title": "Window"
+        },
+        "as_of": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Compute the metric at this UTC timestamp (ISO 8601)",
+          "title": "As Of"
         }
       },
       "required": [
         "metric_name"
       ]
+    }
+  },
+  {
+    "name": "batch_query_v1_batch_post",
+    "description": "Batch Query",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "items": {
+            "properties": {
+              "id": {
+                "type": "string",
+                "title": "Id"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "entity",
+                  "metric",
+                  "query"
+                ],
+                "title": "Type"
+              },
+              "params": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Params"
+              }
+            },
+            "type": "object",
+            "required": [
+              "id",
+              "type"
+            ],
+            "title": "BatchItem"
+          },
+          "type": "array",
+          "maxItems": 20,
+          "title": "Requests"
+        }
+      },
+      "required": [
+        "requests"
+      ]
+    }
+  },
+  {
+    "name": "create_api_key_v1_admin_keys_post",
+    "description": "Create Api Key",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "tenant": {
+          "type": "string",
+          "title": "Tenant"
+        },
+        "rate_limit_rpm": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Rate Limit Rpm",
+          "default": 120
+        },
+        "allowed_entity_types": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Entity Types"
+        }
+      },
+      "required": [
+        "name",
+        "tenant"
+      ]
+    }
+  },
+  {
+    "name": "list_api_keys_v1_admin_keys_get",
+    "description": "List Api Keys",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "rotate_api_key_v1_admin_keys__key_id__rotate_post",
+    "description": "Rotate Api Key",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key_id": {
+          "type": "string",
+          "title": "Key Id"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      },
+      "required": [
+        "key_id"
+      ]
+    }
+  },
+  {
+    "name": "get_rotation_status_v1_admin_keys__key_id__rotation_status_get",
+    "description": "Get Rotation Status",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key_id": {
+          "type": "string",
+          "title": "Key Id"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      },
+      "required": [
+        "key_id"
+      ]
+    }
+  },
+  {
+    "name": "revoke_old_api_key_v1_admin_keys__key_id__revoke_old_post",
+    "description": "Revoke Old Api Key",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "key_id": {
+          "type": "string",
+          "title": "Key Id"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      },
+      "required": [
+        "key_id"
+      ]
+    }
+  },
+  {
+    "name": "get_usage_v1_admin_usage_get",
+    "description": "Get Usage",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_analytics_usage_v1_admin_analytics_usage_get",
+    "description": "Get Analytics Usage",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "window": {
+          "type": "string",
+          "default": "24h",
+          "title": "Window"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tenant"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_analytics_top_queries_v1_admin_analytics_top_queries_get",
+    "description": "Get Analytics Top Queries",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 1,
+          "default": 10,
+          "title": "Limit"
+        },
+        "window": {
+          "type": "string",
+          "default": "24h",
+          "title": "Window"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_analytics_top_entities_v1_admin_analytics_top_entities_get",
+    "description": "Get Analytics Top Entities",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 1,
+          "default": 10,
+          "title": "Limit"
+        },
+        "window": {
+          "type": "string",
+          "default": "24h",
+          "title": "Window"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_analytics_latency_v1_admin_analytics_latency_get",
+    "description": "Get Analytics Latency",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "window": {
+          "type": "string",
+          "default": "24h",
+          "title": "Window"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_analytics_anomalies_v1_admin_analytics_anomalies_get",
+    "description": "Get Analytics Anomalies",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "window": {
+          "type": "string",
+          "default": "24h",
+          "title": "Window"
+        },
+        "X-Admin-Key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "X-Admin-Key"
+        }
+      }
+    }
+  },
+  {
+    "name": "list_my_alerts_v1_alerts_get",
+    "description": "List My Alerts",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "register_alert_v1_alerts_post",
+    "description": "Register Alert",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name"
+        },
+        "metric": {
+          "type": "string",
+          "title": "Metric"
+        },
+        "window": {
+          "type": "string",
+          "title": "Window",
+          "default": "1h"
+        },
+        "condition": {
+          "type": "string",
+          "enum": [
+            "above",
+            "below",
+            "change_pct"
+          ],
+          "title": "Condition"
+        },
+        "threshold": {
+          "type": "number",
+          "title": "Threshold"
+        },
+        "webhook_url": {
+          "type": "string",
+          "minLength": 1,
+          "format": "uri",
+          "title": "Webhook Url"
+        },
+        "cooldown_minutes": {
+          "type": "integer",
+          "maximum": 1440.0,
+          "minimum": 0.0,
+          "title": "Cooldown Minutes",
+          "default": 30
+        }
+      },
+      "required": [
+        "name",
+        "metric",
+        "condition",
+        "threshold",
+        "webhook_url"
+      ]
+    }
+  },
+  {
+    "name": "test_alert_v1_alerts__alert_id__test_post",
+    "description": "Test Alert",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "title": "Alert Id"
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    }
+  },
+  {
+    "name": "alert_history_v1_alerts__alert_id__history_get",
+    "description": "Alert History",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "title": "Alert Id"
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    }
+  },
+  {
+    "name": "list_contracts_v1_contracts_get",
+    "description": "List Contracts",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "diff_contract_versions_v1_contracts__entity__diff__from_version___to_version__get",
+    "description": "Diff Contract Versions",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "title": "Entity"
+        },
+        "from_version": {
+          "type": "string",
+          "title": "From Version"
+        },
+        "to_version": {
+          "type": "string",
+          "title": "To Version"
+        }
+      },
+      "required": [
+        "entity",
+        "from_version",
+        "to_version"
+      ]
+    }
+  },
+  {
+    "name": "validate_contract_v1_contracts__entity__validate_post",
+    "description": "Validate Contract",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "title": "Entity"
+        }
+      },
+      "required": [
+        "entity"
+      ]
+    }
+  },
+  {
+    "name": "get_contract_version_v1_contracts__entity___version__get",
+    "description": "Get Contract Version",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "title": "Entity"
+        },
+        "version": {
+          "type": "string",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "entity",
+        "version"
+      ]
+    }
+  },
+  {
+    "name": "get_latest_contract_v1_contracts__entity__get",
+    "description": "Get Latest Contract",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "title": "Entity"
+        }
+      },
+      "required": [
+        "entity"
+      ]
+    }
+  },
+  {
+    "name": "deadletter_stats_v1_deadletter_stats_get",
+    "description": "Deadletter Stats",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "list_deadletter_events_v1_deadletter_get",
+    "description": "List Deadletter Events",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "title": "Page"
+        },
+        "page_size": {
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 1,
+          "default": 50,
+          "title": "Page Size"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_deadletter_event_v1_deadletter__event_id__get",
+    "description": "Get Deadletter Event",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "title": "Event Id"
+        }
+      },
+      "required": [
+        "event_id"
+      ]
+    }
+  },
+  {
+    "name": "replay_deadletter_event_v1_deadletter__event_id__replay_post",
+    "description": "Replay Deadletter Event",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "title": "Event Id"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "properties": {
+                "corrected_payload": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Corrected Payload"
+                }
+              },
+              "type": "object",
+              "title": "ReplayRequest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Payload"
+        }
+      },
+      "required": [
+        "event_id"
+      ]
+    }
+  },
+  {
+    "name": "dismiss_deadletter_event_v1_deadletter__event_id__dismiss_post",
+    "description": "Dismiss Deadletter Event",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "title": "Event Id"
+        }
+      },
+      "required": [
+        "event_id"
+      ]
+    }
+  },
+  {
+    "name": "get_lineage_v1_lineage__entity_type___entity_id__get",
+    "description": "Get provenance chain for an entity\n\nReturn the reconstructed lineage for an entity from source to serving.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "entity_type": {
+          "type": "string",
+          "title": "Entity Type"
+        },
+        "entity_id": {
+          "type": "string",
+          "title": "Entity Id"
+        }
+      },
+      "required": [
+        "entity_type",
+        "entity_id"
+      ]
+    }
+  },
+  {
+    "name": "search_v1_search_get",
+    "description": "Search",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "type": "string",
+          "minLength": 2,
+          "description": "Natural language search query",
+          "title": "Q"
+        },
+        "limit": {
+          "type": "integer",
+          "maximum": 50,
+          "minimum": 1,
+          "default": 10,
+          "title": "Limit"
+        },
+        "entity_types": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entity Types"
+        }
+      },
+      "required": [
+        "q"
+      ]
+    }
+  },
+  {
+    "name": "get_slos_v1_slo_get",
+    "description": "Get Slos",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
     }
   },
   {
@@ -107,6 +907,117 @@
     }
   },
   {
+    "name": "list_my_webhooks_v1_webhooks_get",
+    "description": "List My Webhooks",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "register_webhook_v1_webhooks_post",
+    "description": "Register Webhook",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "format": "uri",
+          "title": "Url"
+        },
+        "filters": {
+          "properties": {
+            "event_types": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Types"
+            },
+            "entity_ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Ids"
+            },
+            "min_amount": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Amount"
+            }
+          },
+          "type": "object",
+          "title": "WebhookFilters"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  {
+    "name": "test_webhook_v1_webhooks__webhook_id__test_post",
+    "description": "Test Webhook",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "webhook_id": {
+          "type": "string",
+          "title": "Webhook Id"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ]
+    }
+  },
+  {
+    "name": "webhook_logs_v1_webhooks__webhook_id__logs_get",
+    "description": "Webhook Logs",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "webhook_id": {
+          "type": "string",
+          "title": "Webhook Id"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ]
+    }
+  },
+  {
+    "name": "changelog_v1_changelog_get",
+    "description": "Changelog\n\nReturn the configured date-based API version history.",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
     "name": "catalog_v1_catalog_get",
     "description": "Catalog\n\nList available entities, metrics, and streaming sources for agents.",
     "input_schema": {
@@ -116,7 +1027,7 @@
   },
   {
     "name": "health_v1_health_get",
-    "description": "Health\n\nPipeline health check \u2014 agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health.\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
+    "description": "Health\n\nPipeline health check - agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health.\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
     "input_schema": {
       "type": "object",
       "properties": {}

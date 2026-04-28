@@ -93,9 +93,7 @@ def tenant_key_allowed_tables(
         return [table for _, table in table_items]
     allowed = set(allowed_entity_types)
     return [
-        table
-        for entity_type, table in table_items
-        if entity_type in allowed or table in allowed
+        table for entity_type, table in table_items if entity_type in allowed or table in allowed
     ]
 
 

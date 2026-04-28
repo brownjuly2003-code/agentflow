@@ -30,9 +30,7 @@ DEAD_LETTER_TAG = OutputTag("dead-letter", Types.STRING())
 
 def _event_tenant(event: dict) -> str:
     source_metadata = event.get("source_metadata", {})
-    metadata_tenant = (
-        source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
-    )
+    metadata_tenant = source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
     tenant = event.get("tenant") or metadata_tenant
     return str(tenant) if tenant else "default"
 
@@ -133,10 +131,10 @@ class ValidateAndEnrich(ProcessFunction):
             ctx.output(
                 DEAD_LETTER_TAG,
                 json.dumps(
-                        {
-                            "event_id": event_id,
-                            "error": schema_result.errors,
-                            "stage": "schema_validation",
+                    {
+                        "event_id": event_id,
+                        "error": schema_result.errors,
+                        "stage": "schema_validation",
                     }
                 ),
             )

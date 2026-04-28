@@ -207,7 +207,11 @@ class WebhookDispatcher:
             for event in events:
                 event_id = str(event.get("event_id") or "")
                 seen_key = _seen_event_key(event)
-                if not event_id or event_id in self.seen_event_ids or seen_key in self.seen_event_ids:
+                if (
+                    not event_id
+                    or event_id in self.seen_event_ids
+                    or seen_key in self.seen_event_ids
+                ):
                     continue
                 self.seen_event_ids.add(seen_key)
 
@@ -306,7 +310,7 @@ class WebhookDispatcher:
             order_by = "created_at"
         else:
             order_by = "event_id"
-        sql = f"SELECT * FROM pipeline_events"  # nosec B608 - order_by is chosen from a fixed column allowlist
+        sql = "SELECT * FROM pipeline_events"  # nosec B608 - order_by is chosen from a fixed column allowlist
         params: list[str] = []
         if tenant is not None and "tenant_id" in columns:
             sql = f"{sql} WHERE COALESCE(tenant_id, 'default') = ?"

@@ -79,7 +79,11 @@ def _fetch_matching_events(request: Request, entity_id: str) -> list[dict]:
         "event_id",
         "topic",
         f"{time_column} AS processed_at",
-        "COALESCE(tenant_id, 'default') AS tenant_id" if "tenant_id" in columns else "'default' AS tenant_id",
+        (
+            "COALESCE(tenant_id, 'default') AS tenant_id"
+            if "tenant_id" in columns
+            else "'default' AS tenant_id"
+        ),
         "event_type" if "event_type" in columns else "NULL AS event_type",
         "entity_id",
         "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",

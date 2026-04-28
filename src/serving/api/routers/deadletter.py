@@ -67,7 +67,8 @@ def _conn(request: Request):
 
 def _tenant_id(request: Request) -> str:
     tenant_key = getattr(request.state, "tenant_key", None)
-    return str(getattr(request.state, "tenant_id", None) or getattr(tenant_key, "tenant", "default"))
+    tenant_id = getattr(request.state, "tenant_id", None)
+    return str(tenant_id or getattr(tenant_key, "tenant", "default"))
 
 
 def _decode_payload(payload) -> dict:
@@ -94,14 +95,18 @@ def _require_deadletter_write_access(request: Request, event_id: str) -> None:
             status_code=403,
             detail="This API key has read-only access to dead-letter operations.",
         )
-    row = _conn(request).execute(
-        """
+    row = (
+        _conn(request)
+        .execute(
+            """
         SELECT event_id
         FROM dead_letter_events
         WHERE event_id = ? AND COALESCE(tenant_id, 'default') = ?
         """,
-        [event_id, _tenant_id(request)],
-    ).fetchone()
+            [event_id, _tenant_id(request)],
+        )
+        .fetchone()
+    )
     if row is None:
         raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
 

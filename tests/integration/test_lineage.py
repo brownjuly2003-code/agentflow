@@ -29,7 +29,8 @@ def _prepare_lineage_events(client: TestClient, tenant_id: str = "default") -> N
         conn.execute("ALTER TABLE pipeline_events ADD COLUMN latency_ms INTEGER")
 
     conn.execute("DELETE FROM pipeline_events")
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO pipeline_events (
             event_id, topic, processed_at, event_type, entity_id, latency_ms, tenant_id
         )
@@ -50,7 +51,9 @@ def _prepare_lineage_events(client: TestClient, tenant_id: str = "default") -> N
                 'evt-other-order', 'events.validated', NOW() - INTERVAL '5 seconds',
                 'order.shipped', 'ORD-2', 35, ?
             )
-    """, [tenant_id, tenant_id, tenant_id, tenant_id])
+    """,
+        [tenant_id, tenant_id, tenant_id, tenant_id],
+    )
 
 
 def _prepare_shared_lineage_events(client: TestClient) -> None:

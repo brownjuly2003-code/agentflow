@@ -54,7 +54,8 @@ def test_translate_sql_rewrites_now_filter_count_cast_and_intervals(backend):
 
     translated = backend._translate_sql(sql)
 
-    assert "now()" in translated and "NOW()" not in translated
+    assert "now()" in translated
+    assert "NOW()" not in translated
     assert "countIf(flag = 1)" in translated
     assert "CAST(x AS Float64)" in translated
     assert "INTERVAL 5 MINUTE" in translated

@@ -54,11 +54,7 @@ def _allowed_entity_types(req: Request) -> list[str] | None:
             {name: entity.table for name, entity in catalog.entities.items()},
         )
     )
-    return [
-        name
-        for name, entity in catalog.entities.items()
-        if entity.table in allowed_tables
-    ]
+    return [name for name, entity in catalog.entities.items() if entity.table in allowed_tables]
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -96,8 +92,7 @@ async def search(
         results = [
             result
             for result in results
-            if getattr(result, "entity_type", None) is None
-            or result.entity_type in allowed
+            if getattr(result, "entity_type", None) is None or result.entity_type in allowed
         ]
     logger.info(
         "semantic_search_executed",

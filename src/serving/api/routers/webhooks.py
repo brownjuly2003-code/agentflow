@@ -44,9 +44,7 @@ async def list_my_webhooks(request: Request):
     # is returned only once on POST. Listing it again would let any tenant
     # API key recover signing secrets after creation (Codex audit p2_2 #7).
     return {
-        "webhooks": [
-            webhook.model_dump(mode="json", exclude={"secret"}) for webhook in webhooks
-        ]
+        "webhooks": [webhook.model_dump(mode="json", exclude={"secret"}) for webhook in webhooks]
     }
 
 

@@ -330,7 +330,7 @@ def wait_for_api(
     host: str,
     port: int,
     process: subprocess.Popen[str],
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = 90.0,
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:

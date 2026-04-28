@@ -99,9 +99,8 @@ added to `contract.yml` path triggers.
 `bandit`, `safety`, `npm-audit`, `trivy`, `contract`),
 `strict=true`, force-pushes and deletions disabled, required
 conversation resolution. `record-deployment` was originally part
-of this set but its bot push couldn't pre-satisfy the gate
-(chicken-and-egg: a self-push to a branch with 13 required
-checks can't satisfy them at push time); the job was removed
+of this set but its bot push couldn't pre-satisfy the protected
+branch gate; the job was removed
 and DORA metrics fall back to the GitHub Actions API source
 already wired into `scripts/dora_metrics.py`.
 

@@ -1,9 +1,9 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20
-**Last updated**: 2026-04-28
+**Last updated**: 2026-04-29
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; live v1.1.0 publish ready after the current auth-cache/docs worktree is committed, pushed, CI is green, and `v1.1.0` is re-tagged
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; live v1.1.0 publish ready after auth-cache commit `97e5d86` is pushed, CI is green, and `v1.1.0` is re-tagged
 
 ## Executive Summary
 
@@ -11,7 +11,7 @@ AgentFlow закрыл технические блокеры из internal audit
 
 The v1.1 line split runtime and SDK distribution identity: the runtime publishes as `agentflow-runtime`, while the Python SDK publishes as `agentflow-client` and keeps the `agentflow` import path. The current post-v1.1 follow-up operationalizes ADR 0005 with Debezium/Kafka Connect local compose, a Kubernetes-shaped Helm chart, raw CDC topic bootstrap, and canonical CDC normalization before downstream validation.
 
-## Current Status (2026-04-28)
+## Current Status (2026-04-29)
 
 | Area | Clear status |
 |------|--------------|
@@ -22,7 +22,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Recorded full-suite evidence | Current auth-cache worktree full-suite pass on 2026-04-28: 724 passed, 4 skipped in 498.66s with Redis running and project-local pytest temp/cache paths. Targeted auth file: 11 passed; all unit tests: 433 passed; contract/e2e subset: 35 passed. The earlier chaos-smoke pre-commit hang is no longer the active blocker. |
+| Recorded full-suite evidence | Auth-cache commit `97e5d86` full-suite pass on 2026-04-28: 724 passed, 4 skipped in 498.66s with Redis running and project-local pytest temp/cache paths. Targeted auth file: 11 passed; all unit tests: 433 passed; contract/e2e subset: 35 passed. The earlier chaos-smoke pre-commit hang is no longer the active blocker. |
 
 ## Status by BCG Dimension
 
@@ -65,7 +65,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
 - GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
 - AWS OIDC role setup for GitHub Actions is still a manual setup step.
-- SDK registry publish still needs successful production evidence. Local build/pack/twine preflight is green; publish workflows accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and GitHub `NPM_TOKEN` setup are complete. The local full-suite gate is green again; the remaining publish blocker is committing/pushing the current auth-cache/docs worktree, getting green CI, then pushing the approved release tag.
+- SDK registry publish still needs successful production evidence. Local build/pack/twine preflight is green; publish workflows accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and GitHub `NPM_TOKEN` setup are complete. The local full-suite gate is green again; the remaining publish blocker is pushing auth-cache commit `97e5d86`, getting green CI, then pushing the approved release tag.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 - Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership.
@@ -88,12 +88,12 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions
 - [ ] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs
 - [ ] Production CDC source onboarding approved and configured
-- [x] Last completed local full suite green on the release line — `724 passed, 4 skipped` in 498.66s on 2026-04-28 with the auth-cache worktree applied
+- [x] Last completed local full suite green on the release line — `724 passed, 4 skipped` in 498.66s on 2026-04-28 with auth-cache commit `97e5d86`
 - [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); audit-closure HEAD also clean
 - [x] Hashed API-key auth cache regression fixed locally and covered by `tests/unit/test_auth.py::test_hashed_key_authentication_caches_successful_plaintext`
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
 - [x] 2026-04-27 audit closure sprint — all P0/P1/P2 findings from Claude Opus + Codex p1–p9 closed in 6 commits ([docs/audits/2026-04-27/README.md](audits/2026-04-27/README.md))
-- [x] `main` protected with 12 required status checks (`lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`) — `record-deployment` removed because the bot push it required is incompatible with the protection gate (chicken-and-egg: a self-push can't pre-satisfy 13 checks); DORA metrics fall back to the GitHub Actions API source already used by `scripts/dora_metrics.py`
+- [x] `main` protected with 12 required status checks (`lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`) — `record-deployment` removed because the bot push it required is incompatible with the protection gate; DORA metrics fall back to the GitHub Actions API source already used by `scripts/dora_metrics.py`
 - [x] `publish-pypi.yml` `environment: pypi` committed (`e8b1237`)
 - [x] `sdk-ts/package-lock.json` committed; `npm audit` clean (0 vulns)
 - [x] Vulnerable runtime/integrations deps bumped (`dagster>=1.13.1`, `langchain-core>=1.2.22`, `langchain-text-splitters>=1.1.2`, `langsmith>=0.7.31`)
@@ -104,8 +104,8 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Publish workflows accept standalone SDK tags (`sdk-vX.Y.Z`), release-candidate tags (`vX.Y.Z-rcN`), and production release tags (`vX.Y.Z`). `scripts/release.py` still creates `sdk-vX.Y.Z` tags for standalone SDK releases.
 - Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag. The existing `v1.1.0` tag points at older commit `1ee89a3`, and there is no GitHub Release for that tag.
 - Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md` and was completed locally on 2026-04-27 at `8d7088d`: build the TypeScript SDK, run `npm pack --dry-run`, build SDK wheels/sdists, and verify both editable install orders in a clean venv. The local run also built runtime wheels/sdists and passed `python -m twine check dist\* sdk\dist\*`.
-- The first green proof for both publish workflows will be the next approved release tag push after the current auth-cache/docs worktree is reviewed, committed, pushed, and CI is green.
-- Registry lookups on 2026-04-27 still returned not found for PyPI `agentflow-runtime`, PyPI `agentflow-client`, PyPI `agentflow-integrations`, and npm `@agentflow/client`; treat install commands as post-publish commands until the publish workflows are green.
+- The first green proof for both publish workflows will be the next approved release tag push after auth-cache commit `97e5d86` is pushed and CI is green.
+- Registry lookups on 2026-04-29 still returned not found for PyPI `agentflow-runtime`, PyPI `agentflow-client`, PyPI `agentflow-integrations`, and npm `@agentflow/client`; treat install commands as post-publish commands until the publish workflows are green.
 
 ## Verification Snapshot
 
@@ -137,7 +137,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | Pending workflow environment change | ✅ COMMITTED | `.github/workflows/publish-pypi.yml` `environment: pypi` landed in `e8b1237` |
 | Release pre-commit full-suite gate | ✅ PASS | `670 passed, 4 skipped` in 269s on audit-closure HEAD; the earlier chaos smoke hang did not reproduce, standalone re-run gives `3 passed in 44s` |
 | Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits on local `main` ahead of `origin`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
-| Branch protection on `main` | ✅ APPLIED | 13 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
+| Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
 | TypeScript SDK lockfile + audit | ✅ CLEAN | `sdk-ts/package-lock.json` committed (1500 lines); `npm audit --audit-level=moderate` reports 0 vulnerabilities |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process. On 2026-04-28, direct pytest also hung before output when Windows WMI was reached through `platform.*`; the successful local run used a temporary project-local `sitecustomize` shim and a dummy `readline` module in the test runner. Do not commit that shim.
@@ -164,20 +164,15 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## New Session Handoff
 
-Current HEAD is `b2c0bc0` on `main`, aligned with `origin/main` before the
-auth-cache worktree is committed. Intended uncommitted files at this handoff:
-`src/serving/api/auth/manager.py`, `tests/unit/test_auth.py`,
-`docs/release-readiness.md`, and
-`docs/codex-tasks/2026-04-28/T31-hashed-api-key-auth-cache.md`.
+The auth-cache code change is committed locally as `97e5d86`
+(`fix(auth): cache hashed API key matches`). The branch has not been pushed to
+`origin/main` yet.
 Recommended next session starting point:
 
-1. Review the auth-cache diff and commit with an explicit pathspec. Do not use
-   `git add -A`; there are ignored/inaccessible pytest temp directories in the
-   worktree.
-2. Push `main` only after the commit is made and `git status --short` shows only
-   intended files before staging. Branch protection requires the status checks
-   listed above to be green on the pushed commit.
-3. Once CI is green on `origin/main`, move `v1.1.0` from the stale
+1. Push `main` only after confirming `git status --short` is clean. Branch
+   protection requires the status checks listed above to be green on the pushed
+   commit.
+2. Once CI is green on `origin/main`, move `v1.1.0` from the stale
    `1ee89a3` to the new release commit:
 
    ```bash
@@ -187,11 +182,11 @@ Recommended next session starting point:
    git push origin v1.1.0
    ```
 
-4. Monitor `Publish Python Packages` and `Publish TypeScript SDK`. PyPI
+3. Monitor `Publish Python Packages` and `Publish TypeScript SDK`. PyPI
    Trusted Publishers already exist for `agentflow-runtime` and
    `agentflow-client`; `NPM_TOKEN` already lives in GitHub Actions
    secrets. The `environment: pypi` claim is now committed.
-5. After both publish workflows are green, `WebFetch` the registry pages
+4. After both publish workflows are green, `WebFetch` the registry pages
    to verify the artifacts are live before announcing the release.
 
 ## Release Verdict
@@ -202,7 +197,7 @@ AgentFlow is publicly available and the current checked-in docs/code describe th
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - Manual GH Actions setup: environments currently list `production`, `pypi`, and `staging`; required reviewer policy still needs explicit confirmation if it is part of the deployment gate
 - AWS OIDC role setup for real terraform apply
-- Registry publish: PyPI pending publishers and GitHub `NPM_TOKEN` are configured, but npm `@agentflow/client` and PyPI `agentflow-runtime`/`agentflow-client` are still unpublished. The local full-suite gate is green again; publish still requires committing/pushing the current auth-cache worktree, green CI, an approved release tag, and green publish workflows.
+- Registry publish: PyPI pending publishers and GitHub `NPM_TOKEN` are configured, but npm `@agentflow/client` and PyPI `agentflow-runtime`/`agentflow-client` are still unpublished. The local full-suite gate is green again; publish still requires pushing auth-cache commit `97e5d86`, green CI, an approved release tag, and green publish workflows.
 - Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

@@ -1,6 +1,6 @@
 # T31 - Hashed API-key auth cache
 
-**Status:** Ready for review/commit
+**Status:** Committed locally in `97e5d86`
 **Priority:** P2
 **Track:** Auth performance / release hygiene
 
@@ -14,7 +14,8 @@ plaintext in `AuthManager`, so later requests can use the existing
 ## Context
 
 - Branch: `main`
-- Current HEAD before commit: `b2c0bc0`
+- HEAD before commit: `b2c0bc0`
+- Local commit: `97e5d86`
 - Working tree files for this task:
   - `src/serving/api/auth/manager.py`
   - `tests/unit/test_auth.py`
@@ -63,7 +64,5 @@ The shim was removed after verification. Do not commit local `.tmp` test shims.
 ## Next Session Plan
 
 1. Re-check `git status --short`.
-2. Review the four intended files.
-3. Commit with explicit pathspecs only.
-4. Push `main` if release handoff should continue on origin.
-5. After CI is green, proceed with the approved `v1.1.0` retag/publish workflow.
+2. Push `main` if release handoff should continue on origin.
+3. After CI is green, proceed with the approved `v1.1.0` retag/publish workflow.

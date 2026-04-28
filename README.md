@@ -20,7 +20,7 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Highlights
 
-- **Last completed local gate:** 670 passed, 4 skipped on 2026-04-28 across `tests/unit + tests/integration + tests/sdk + tests/contract`. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
+- **Last completed local gate:** 724 passed, 4 skipped on 2026-04-28 at auth-cache commit `97e5d86`. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
 - **Sub-second entity lookups in the checked-in baseline**: entity p50 `38-55 ms`, entity p99 `290-320 ms`, aggregate p50 `56 ms` at `50` users for `60s`
 - **Historical performance remediation is documented**: the serving path moved from an original ~`26,000 ms` baseline to the current `43-55 ms` release range
 - **Dual SDK parity** for Python and TypeScript, including retry policies, circuit breakers, batching, pagination, and contract pinning
@@ -151,9 +151,10 @@ SQL guard centralization, entity allowlist enforcement on every read
 surface, secrets scrubbed and rotated, helm `runAsNonRoot` /
 NetworkPolicy / PodDisruptionBudget, npm lockfile + `npm audit` clean,
 vulnerable dep bumps (`dagster>=1.13.1`, `langchain-core>=1.2.22`),
-trivy pinned, OpenAPI drift gate, branch protection with 13 required
+trivy pinned, OpenAPI drift gate, branch protection with 12 required
 status checks, and Python SDK alignment with the server v1 contract
-(F1–F10). Final smoke: `670 passed, 4 skipped`. The post-v1.1 CDC
+(F1–F10). Latest local release-line smoke: `724 passed, 4 skipped`
+at auth-cache commit `97e5d86`. The post-v1.1 CDC
 operationalization for Debezium / Kafka Connect remains in. Live
 release just needs `git push` + `v1.1.0` retag — see
 [docs/release-readiness.md](docs/release-readiness.md). Remaining open

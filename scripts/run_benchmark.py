@@ -320,10 +320,9 @@ def start_api(env: dict[str, str], port: int) -> subprocess.Popen[str]:
         ],
         cwd=PROJECT_ROOT,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         text=True,
-        bufsize=1,
     )
 
 
@@ -340,24 +339,18 @@ def wait_for_api(
             raise RuntimeError(f"API exited before becoming healthy.\n{logs}")
         try:
             connection = http.client.HTTPConnection(host, port, timeout=2)
-            connection.request("GET", "/v1/catalog")
+            connection.request("GET", "/v1/health")
             response = connection.getresponse()
             response.read()
             connection.close()
             if response.status == 200:
                 return
+            time.sleep(0.5)
         except OSError:
             time.sleep(0.5)
 
     process.terminate()
-    try:
-        logs = process.stdout.read() if process.stdout else ""
-    except Exception:
-        logs = "<unable to read API logs>"
-    raise RuntimeError(
-        f"Timed out waiting for API at http://{host}:{port}.\n"
-        f"--- API stdout/stderr ---\n{logs}"
-    )
+    raise RuntimeError(f"Timed out waiting for API at http://{host}:{port}.")
 
 
 def stop_api(process: subprocess.Popen[str]) -> None:

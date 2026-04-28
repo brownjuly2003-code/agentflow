@@ -22,7 +22,12 @@
     "affinity",
     "nodeSelector",
     "tolerations",
-    "extraEnv"
+    "extraEnv",
+    "podSecurityContext",
+    "containerSecurityContext",
+    "tmpVolume",
+    "podDisruptionBudget",
+    "networkPolicy"
   ],
   "properties": {
     "nameOverride": {
@@ -600,6 +605,63 @@
     },
     "extraEnv": {
       "type": "array"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "containerSecurityContext": {
+      "type": "object"
+    },
+    "tmpVolume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "sizeLimit": {
+          "type": "string"
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "minAvailable": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string" }
+          ]
+        },
+        "maxUnavailable": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string" }
+          ]
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ingressFromNamespaces": {
+          "type": "array"
+        },
+        "egressPorts": {
+          "type": "object"
+        }
+      }
     }
   },
   "definitions": {

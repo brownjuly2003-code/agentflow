@@ -108,9 +108,16 @@ jobs:
               load_project_dependencies(root / "sdk" / "pyproject.toml"),
               output_dir / "requirements-sdk.txt",
           )
+          # Drop intra-monorepo deps (agentflow-client / agentflow-runtime) — they
+          # are not on PyPI yet during the v1.1.0 publish run and are scanned via
+          # the "main" / "sdk" buckets above anyway.
+          integrations_deps = [
+              dep for dep in load_project_dependencies(root / "integrations" / "pyproject.toml")
+              if not dep.lower().startswith(("agentflow-client", "agentflow-runtime"))
+          ]
           integrations_count = resolve_requirements(
               "integrations",
-              load_project_dependencies(root / "integrations" / "pyproject.toml"),
+              integrations_deps,
               output_dir / "requirements-integrations.txt",
           )
 
@@ -186,7 +193,7 @@ jobs:
       - name: Run Trivy scan
         # Pinned to release tag (Codex audit p9 #3); update by bumping the
         # tag, never re-pin to @master (allows upstream to alter scanner).
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: agentflow-api:security-scan
           format: sarif

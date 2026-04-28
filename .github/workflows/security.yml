@@ -154,7 +154,12 @@ jobs:
           fi
       - name: Run Safety
         run: |
+          # 88512: Cross-ecosystem false positive — PyUp advisory text
+          # references @langchain/google-cloud-sql-pg (npm) but is matched
+          # against Python langchain<1.2.24, which does not exist (latest is
+          # 1.2.15). Remove this ignore when PyUp corrects the entry.
           safety check \
+            --ignore 88512 \
             -r .tmp-security/requirements-main.txt \
             -r .tmp-security/requirements-sdk.txt \
             -r .tmp-security/requirements-integrations.txt
@@ -183,6 +188,12 @@ jobs:
       - name: Build API image
         env:
           COMPOSE_PROJECT_NAME: agentflow-security
+          # docker compose validates env vars across all services even when
+          # building only one. agentflow-api itself does not consume these.
+          CLICKHOUSE_USER: scan-only
+          CLICKHOUSE_PASSWORD: scan-only
+          GF_SECURITY_ADMIN_USER: scan-only
+          GF_SECURITY_ADMIN_PASSWORD: scan-only
         run: |
           docker compose -f docker-compose.prod.yml build agentflow-api
           if (-not (docker image inspect agentflow-security-agentflow-api:latest 2>$null)) {

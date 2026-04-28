@@ -47,7 +47,7 @@ integrations = [
     # langchain umbrella forces a transitive resolve of langchain-core that
     # satisfies these floors. langchain-text-splitters >=1.1.2 closes
     # GHSA-fv5p-p927-qmxr (SSRF redirect bypass). See Codex audit p9.
-    "langchain>=1.2.24,<2",
+    "langchain>=0.3.30,<2",
     "langchain-core>=1.2.22,<2",
     "langchain-text-splitters>=1.1.2,<2",
     "langsmith>=0.7.31,<1",

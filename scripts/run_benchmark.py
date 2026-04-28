@@ -320,9 +320,10 @@ def start_api(env: dict[str, str], port: int) -> subprocess.Popen[str]:
         ],
         cwd=PROJECT_ROOT,
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        bufsize=1,
     )
 
 
@@ -330,7 +331,7 @@ def wait_for_api(
     host: str,
     port: int,
     process: subprocess.Popen[str],
-    timeout_seconds: float = 90.0,
+    timeout_seconds: float = 180.0,
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
@@ -348,7 +349,15 @@ def wait_for_api(
         except OSError:
             time.sleep(0.5)
 
-    raise RuntimeError(f"Timed out waiting for API at http://{host}:{port}.")
+    process.terminate()
+    try:
+        logs = process.stdout.read() if process.stdout else ""
+    except Exception:
+        logs = "<unable to read API logs>"
+    raise RuntimeError(
+        f"Timed out waiting for API at http://{host}:{port}.\n"
+        f"--- API stdout/stderr ---\n{logs}"
+    )
 
 
 def stop_api(process: subprocess.Popen[str]) -> None:

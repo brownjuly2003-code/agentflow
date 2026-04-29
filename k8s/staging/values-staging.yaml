@@ -42,6 +42,10 @@ config:
   corsOrigins: http://localhost:3000,http://127.0.0.1:3000
   redisUrl: redis://agentflow-redis:6379/0
 
+extraEnv:
+  - name: AGENTFLOW_WEBHOOKS_FILE
+    value: /data/e2e-webhooks.yaml
+
 # Staging is an ephemeral kind cluster torn down after each CI run. The
 # hashes below correspond to the same plaintext fixtures committed in
 # tests/e2e/conftest.py (AGENTFLOW_E2E_*_KEY defaults) and exist so the
@@ -66,6 +70,7 @@ secrets:
         allowed_entity_types:
           - "order"
           - "user"
+          - "session"
         created_at: "2026-04-12"
       - key_id: "ops-agent-e2e"
         # bcrypt(af-prod-agent-ops-def456) — matches AGENTFLOW_E2E_OPS_KEY default

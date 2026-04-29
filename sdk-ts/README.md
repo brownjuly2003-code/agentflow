@@ -1,6 +1,6 @@
-# @liovinam/agentflow-client
+# @uedomskikh/agentflow-client
 
-> npm package name: **`@liovinam/agentflow-client`**. Registry publishing is not
+> npm package name: **`@uedomskikh/agentflow-client`**. Registry publishing is not
 > complete as of 2026-04-29; until the first green `Publish TypeScript SDK`
 > run, use the local workspace build (`npm install` in `sdk-ts`, then import
 > the built `dist/` from a relative path or via npm link).
@@ -8,11 +8,11 @@
 After registry publish:
 
 ```bash
-npm install @liovinam/agentflow-client
+npm install @uedomskikh/agentflow-client
 ```
 
 ```ts
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 const client = new AgentFlowClient("http://localhost:8000", "dev-key");
 const order = await client.getOrder("ORD-20260404-1001");
 console.log(order.status, (await client.getMetric("revenue", "24h")).value);
@@ -22,7 +22,7 @@ console.log(order.status, (await client.getMetric("revenue", "24h")).value);
 import {
   AgentFlowClient,
   RetryPolicy,
-} from "@liovinam/agentflow-client";
+} from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "dev-key");
 client.configureResilience({

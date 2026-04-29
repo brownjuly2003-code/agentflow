@@ -178,7 +178,7 @@ print(health.status)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const health = await client.health();
@@ -217,7 +217,7 @@ print(sorted(catalog.entities.keys()))
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const catalog = await client.catalog();
@@ -257,7 +257,7 @@ print(order.status, order.total_amount)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const order = await client.getOrder("ORD-20260404-1001");
@@ -297,7 +297,7 @@ print(metric.value, metric.unit)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const metric = await client.getMetric("revenue", "1h");
@@ -389,7 +389,7 @@ print(result.metadata)
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const result = await client.query("top products by revenue today");
@@ -432,7 +432,7 @@ print(result["results"][0]["status"])
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 const payload = [client.batchEntity("order", "ORD-20260404-1001", "order-1")];
@@ -615,7 +615,7 @@ with httpx.stream(
 **TypeScript SDK**
 
 ```typescript
-import { AgentFlowClient } from "@liovinam/agentflow-client";
+import { AgentFlowClient } from "@uedomskikh/agentflow-client";
 
 const client = new AgentFlowClient("http://localhost:8000", "demo-key");
 for await (const event of client.streamEvents({ eventType: "order" })) {

@@ -14,7 +14,7 @@
   - `sdk/agentflow/` directory — это Python module (import path), остаётся `agentflow`.
   - `from agentflow import ...` во всех файлах — все импорты остаются нетронутыми.
   - `pyproject.toml` (root) — это `agentflow-runtime`, отдельный package.
-  - npm scope `@agentflow/client` — отдельная registry.
+  - npm scope `@agentflow/client` — отдельная registry; superseded on 2026-04-29 by `@liovinam/agentflow-client` because npm org scope `@agentflow` is already owned by another project.
   - GitHub repo name `agentflow` — отдельный namespace.
   - `[tool.agentflow.dependency-profiles]` в `pyproject.toml` — uses path `./sdk`, не distribution name, остаётся.
   - `pip install -e "./sdk"` в `.github/workflows/*.yml` — path-based, остаётся.

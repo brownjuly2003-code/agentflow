@@ -78,7 +78,9 @@ off by default (enable per cluster).
 `npm ci` + `npm test` + `npm audit` before publish. New `npm-audit` job
 added to `security.yml`. `aquasecurity/trivy-action` pinned from
 `@master` to `0.28.0`. Safety scope now includes
-`integrations/pyproject.toml` resolved requirements.
+`integrations/pyproject.toml` resolved requirements. TypeScript SDK npm
+publishing now targets `@liovinam/agentflow-client` because npm org scope
+`@agentflow` is already owned by another project.
 
 **Vulnerable dep bumps:** `dagster>=1.13.1` (GHSA-mjw2-v2hm-wj34
 SQL injection via dynamic partition keys), `langchain-core>=1.2.22`
@@ -147,7 +149,7 @@ so the test bypass flag does not leak across `TestClient` instances
 (closes Codex review P2 on auth/middleware persistence).
 
 **Documentation hygiene (Codex p6):** TypeScript SDK examples now
-import from `"@agentflow/client"` (was `"agentflow"`); placeholder
+import from `"@liovinam/agentflow-client"` (was `"agentflow"`); placeholder
 `https://api.agentflow.dev` examples replaced with
 `http://localhost:8000`; clone URL points at
 `brownjuly2003-code/agentflow`; `docs/quality.md` marked stale;

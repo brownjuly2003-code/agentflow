@@ -3,7 +3,7 @@
 **Date**: 2026-04-20
 **Last updated**: 2026-04-29
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; live v1.1.0 publish ready after auth-cache commit `97e5d86` is pushed, CI is green, and `v1.1.0` is re-tagged
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line prepared with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; live v1.1.0 publish ready after the local release handoff commits are pushed, CI is green, and `v1.1.0` is re-tagged
 
 ## Executive Summary
 
@@ -65,7 +65,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
 - GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
 - AWS OIDC role setup for GitHub Actions is still a manual setup step.
-- SDK registry publish still needs successful production evidence. Local build/pack/twine preflight is green; publish workflows accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and GitHub `NPM_TOKEN` setup are complete. The local full-suite gate is green again; the remaining publish blocker is pushing auth-cache commit `97e5d86`, getting green CI, then pushing the approved release tag.
+- SDK registry publish still needs successful production evidence. Local build/pack/twine preflight is green; publish workflows accept `sdk-v*`, release-candidate `v*-rc*`, and production `vX.Y.Z` tags; PyPI Trusted Publishing and GitHub `NPM_TOKEN` setup are complete. The local full-suite gate is green again; the remaining publish blocker is pushing local `main`, getting green CI, then pushing the approved release tag.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 - Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership.
@@ -104,7 +104,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Publish workflows accept standalone SDK tags (`sdk-vX.Y.Z`), release-candidate tags (`vX.Y.Z-rcN`), and production release tags (`vX.Y.Z`). `scripts/release.py` still creates `sdk-vX.Y.Z` tags for standalone SDK releases.
 - Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag. The existing `v1.1.0` tag points at older commit `1ee89a3`, and there is no GitHub Release for that tag.
 - Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md` and was completed locally on 2026-04-27 at `8d7088d`: build the TypeScript SDK, run `npm pack --dry-run`, build SDK wheels/sdists, and verify both editable install orders in a clean venv. The local run also built runtime wheels/sdists and passed `python -m twine check dist\* sdk\dist\*`.
-- The first green proof for both publish workflows will be the next approved release tag push after auth-cache commit `97e5d86` is pushed and CI is green.
+- The first green proof for both publish workflows will be the next approved release tag push after local `main` is pushed and CI is green.
 - Registry lookups on 2026-04-29 still returned not found for PyPI `agentflow-runtime`, PyPI `agentflow-client`, PyPI `agentflow-integrations`, and npm `@agentflow/client`; treat install commands as post-publish commands until the publish workflows are green.
 
 ## Verification Snapshot
@@ -165,8 +165,9 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 ## New Session Handoff
 
 The auth-cache code change is committed locally as `97e5d86`
-(`fix(auth): cache hashed API key matches`). The branch has not been pushed to
-`origin/main` yet.
+(`fix(auth): cache hashed API key matches`), with release handoff docs synced in
+`f1b398c` (`docs: sync release handoff status`). The branch has not been pushed
+to `origin/main` yet.
 Recommended next session starting point:
 
 1. Push `main` only after confirming `git status --short` is clean. Branch
@@ -197,7 +198,7 @@ AgentFlow is publicly available and the current checked-in docs/code describe th
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - Manual GH Actions setup: environments currently list `production`, `pypi`, and `staging`; required reviewer policy still needs explicit confirmation if it is part of the deployment gate
 - AWS OIDC role setup for real terraform apply
-- Registry publish: PyPI pending publishers and GitHub `NPM_TOKEN` are configured, but npm `@agentflow/client` and PyPI `agentflow-runtime`/`agentflow-client` are still unpublished. The local full-suite gate is green again; publish still requires pushing auth-cache commit `97e5d86`, green CI, an approved release tag, and green publish workflows.
+- Registry publish: PyPI pending publishers and GitHub `NPM_TOKEN` are configured, but npm `@agentflow/client` and PyPI `agentflow-runtime`/`agentflow-client` are still unpublished. The local full-suite gate is green again; publish still requires pushing local `main`, green CI, an approved release tag, and green publish workflows.
 - Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

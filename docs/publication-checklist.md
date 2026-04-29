@@ -2,7 +2,7 @@
 
 Before publishing AgentFlow changes or pushing a release tag:
 
-Status snapshot (2026-04-29, local `main` @ `97e5d86`): content, security,
+Status snapshot (2026-04-29, local `main` includes `f1b398c`): content, security,
 link, and local SDK publish preflight checks are complete. Live `v1.1.0`
 publish still depends on pushing the commit, getting green CI, and re-tagging.
 

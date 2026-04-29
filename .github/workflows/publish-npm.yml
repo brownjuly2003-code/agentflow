@@ -26,6 +26,11 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Verify npm identity
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami --registry=https://registry.npmjs.org/
+
       - name: Verify release tag matches SDK metadata
         env:
           MANUAL_RELEASE_VERSION: ${{ inputs.release_version }}

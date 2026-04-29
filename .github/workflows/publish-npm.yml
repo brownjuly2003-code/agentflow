@@ -27,14 +27,6 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Verify npm identity
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          npm whoami --registry=https://registry.npmjs.org/
-          npm access list packages @agentflow --registry=https://registry.npmjs.org/ || true
-          npm org ls agentflow --registry=https://registry.npmjs.org/ || true
-
       - name: Verify release tag matches SDK metadata
         env:
           MANUAL_RELEASE_VERSION: ${{ inputs.release_version }}
@@ -120,10 +112,7 @@ jobs:
         if: env.IS_RC != 'true'
         working-directory: sdk-ts
         env:
-          NPM_OTP: ${{ secrets.NPM_OTP }}
+          NODE_AUTH_TOKEN: ""
         run: |
-          if [ -n "${NPM_OTP:-}" ]; then
-            npm publish --access public --otp "$NPM_OTP"
-          else
-            npm publish --access public
-          fi
+          unset NODE_AUTH_TOKEN
+          npm publish --access public

@@ -32,6 +32,11 @@
     "api"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brownjuly2003-code/agentflow.git",
+    "directory": "sdk-ts"
+  },
   "engines": {
     "node": ">=18"
   },

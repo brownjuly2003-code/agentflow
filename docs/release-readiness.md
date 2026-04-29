@@ -18,7 +18,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | Public repository | Published and release-ready from the checked-in evidence trail |
 | Runtime package | `agentflow-runtime` is the root distribution name |
 | Python SDK package | `agentflow-client` is the PyPI distribution; `from agentflow import ...` stays unchanged |
-| Registry publishing | Local build/pack/twine preflight is green; PyPI pending Trusted Publishers for `agentflow-runtime` and `agentflow-client` are visible in the PyPI account; GitHub `pypi` environment exists; the TypeScript SDK now targets the available npm user scope `@uedomskikh/agentflow-client` because npm org scope `@agentflow` is already owned by another project |
+| Registry publishing | Local build/pack/twine preflight is green; PyPI `agentflow-runtime` and `agentflow-client` 1.1.0 are visible after the first `v1.1.0` publish attempt; GitHub `pypi` environment exists; the TypeScript SDK now targets the available npm user scope `@uedomskikh/agentflow-client` because npm org scope `@agentflow` is already owned by another project |
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
@@ -105,7 +105,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag. The existing `v1.1.0` tag points at older commit `1ee89a3`, and there is no GitHub Release for that tag.
 - Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md` and was completed locally on 2026-04-27 at `8d7088d`: build the TypeScript SDK, run `npm pack --dry-run`, build SDK wheels/sdists, and verify both editable install orders in a clean venv. The local run also built runtime wheels/sdists and passed `python -m twine check dist\* sdk\dist\*`.
 - The first green proof for both publish workflows will be the next approved release tag push after local `main` is pushed and CI is green.
-- Registry lookups on 2026-04-29 still returned not found for PyPI `agentflow-runtime`, PyPI `agentflow-client`, PyPI `agentflow-integrations`, and npm `@uedomskikh/agentflow-client`; treat install commands as post-publish commands until the publish workflows are green.
+- Registry lookups after the first `v1.1.0` publish attempt on 2026-04-29 found PyPI `agentflow-runtime` 1.1.0 and PyPI `agentflow-client` 1.1.0. npm `@uedomskikh/agentflow-client` still returned not found after the tokenless trusted-publishing attempt; the follow-up workflow uses the configured `NPM_TOKEN` for the first upload.
 
 ## Verification Snapshot
 
@@ -130,6 +130,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `docker compose up -d redis` + project-local `TEMP`/`TMP` + full `pytest` through the Windows-safe local wrapper and temporary project-local `sitecustomize` shim | ✅ PASS | 724 passed, 4 skipped in 498.66s on 2026-04-28; shim removed after the run |
 | `python -m pytest -p no:schemathesis -p no:cacheprovider -q --basetemp .tmp\pytest-full-base` with project-local `TEMP`/`TMP` and Redis already running | ✅ PASS | 726 passed, 4 skipped in 427.18s on 2026-04-29 after the TypeScript SDK npm scope update |
 | `cd sdk-ts`; `npm run typecheck`; `npm run build`; `npm run test:unit`; `npm pack --dry-run` | ✅ PASS | `@uedomskikh/agentflow-client@1.1.0`, 42 unit tests passed, tarball `uedomskikh-agentflow-client-1.1.0.tgz`, 16 files, package size 8.5 kB |
+| `v1.1.0` publish attempt on `2f96f08` | ⚠️ PARTIAL | PyPI `agentflow-runtime` 1.1.0 and `agentflow-client` 1.1.0 are visible; `Publish Python Packages` failed on an already-existing runtime sdist during a retry-shaped upload, and `Publish TypeScript SDK` failed because npm upload ran without `NPM_TOKEN`. Follow-up workflow makes PyPI upload idempotent and uses the configured npm token. |
 | GitHub Actions on `45165b3` plus manual `Contract Tests` dispatch on `8d7088d` | ✅ PASS | `CI`, `Security Scan`, `E2E Tests`, `Load Test`, and `Staging Deploy` succeeded on `45165b3`; manually dispatched `Contract Tests` succeeded on `8d7088d` |
 | `cd sdk-ts`; `npm install --package-lock=false`; `npm run build`; `npm pack --dry-run` | ✅ PASS | TypeScript SDK tarball `agentflow-client-1.1.0.tgz`, 16 files, package size 8.2 kB, unpacked 32.9 kB |
 | Clear `dist` and `sdk/dist`; `python -m build .`; `python -m build sdk\`; `python -m twine check dist\* sdk\dist\*` | ✅ PASS | runtime and SDK artifacts passed `twine check`; runtime artifacts still warn that long description metadata is missing |
@@ -188,10 +189,10 @@ Recommended next session starting point:
 3. Monitor `Publish Python Packages` and `Publish TypeScript SDK`. PyPI
    Trusted Publishers already exist for `agentflow-runtime` and
    `agentflow-client`. The TypeScript SDK uses
-   `@uedomskikh/agentflow-client`; after the first npm package upload,
-   configure npm trusted publishing for `publish-npm.yml` so future
-   uploads can use GitHub Actions OIDC. The `environment: pypi` claim is
-   now committed.
+   `@uedomskikh/agentflow-client`; the first npm package upload uses the
+   configured `NPM_TOKEN`. After that upload succeeds, configure npm trusted
+   publishing for `publish-npm.yml` so future uploads can use GitHub Actions
+   OIDC. The `environment: pypi` claim is now committed.
 4. After both publish workflows are green, `WebFetch` the registry pages
    to verify the artifacts are live before announcing the release.
 
@@ -203,7 +204,7 @@ AgentFlow is publicly available and the current checked-in docs/code describe th
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - Manual GH Actions setup: environments currently list `production`, `pypi`, and `staging`; required reviewer policy still needs explicit confirmation if it is part of the deployment gate
 - AWS OIDC role setup for real terraform apply
-- Registry publish: PyPI pending publishers are configured, but npm `@uedomskikh/agentflow-client` and PyPI `agentflow-runtime`/`agentflow-client` are still unpublished. The local full-suite gate is green again; publish still requires pushing local `main`, green CI, an approved release tag, green publish workflows, and npm trusted publishing setup after the first TypeScript SDK upload.
+- Registry publish: PyPI `agentflow-runtime` and `agentflow-client` 1.1.0 are visible after the first production tag attempt, but the green publish-workflow proof is still pending a retry with idempotent PyPI upload and token-backed npm upload. npm `@uedomskikh/agentflow-client` is still unpublished until that retry succeeds.
 - Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

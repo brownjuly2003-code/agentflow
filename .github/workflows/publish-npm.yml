@@ -112,7 +112,5 @@ jobs:
         if: env.IS_RC != 'true'
         working-directory: sdk-ts
         env:
-          NODE_AUTH_TOKEN: ""
-        run: |
-          unset NODE_AUTH_TOKEN
-          npm publish --access public
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

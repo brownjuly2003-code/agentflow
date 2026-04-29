@@ -29,7 +29,10 @@ jobs:
       - name: Verify npm identity
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm whoami --registry=https://registry.npmjs.org/
+        run: |
+          npm whoami --registry=https://registry.npmjs.org/
+          npm access ls-packages @agentflow --registry=https://registry.npmjs.org/ || true
+          npm org ls agentflow --registry=https://registry.npmjs.org/ || true
 
       - name: Verify release tag matches SDK metadata
         env:

@@ -120,7 +120,6 @@ jobs:
         if: env.IS_RC != 'true'
         working-directory: sdk-ts
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_OTP: ${{ secrets.NPM_OTP }}
         run: |
           if [ -n "${NPM_OTP:-}" ]; then

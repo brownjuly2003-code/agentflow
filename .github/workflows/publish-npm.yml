@@ -1,6 +1,11 @@
 name: Publish TypeScript SDK
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version to publish, without leading v"
+        required: true
   push:
     tags:
       - "sdk-v*"
@@ -22,18 +27,25 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Verify release tag matches SDK metadata
+        env:
+          MANUAL_RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           node - <<'NODE'
           const fs = require("node:fs");
 
           const tag = process.env.GITHUB_REF_NAME;
           let expectedVersion;
-          if (tag?.startsWith("sdk-v")) {
+          if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") {
+            expectedVersion = process.env.MANUAL_RELEASE_VERSION;
+          } else if (tag?.startsWith("sdk-v")) {
             expectedVersion = tag.slice("sdk-v".length);
           } else if (tag?.startsWith("v")) {
             expectedVersion = tag.slice("v".length);
           } else {
             throw new Error(`Unexpected tag format: ${tag ?? "<missing>"}`);
+          }
+          if (!expectedVersion) {
+            throw new Error("Missing release version");
           }
 
           const expectedPythonVersion = expectedVersion.replace("-rc", "rc");
@@ -100,4 +112,10 @@ jobs:
         working-directory: sdk-ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+          NPM_OTP: ${{ secrets.NPM_OTP }}
+        run: |
+          if [ -n "${NPM_OTP:-}" ]; then
+            npm publish --access public --otp "$NPM_OTP"
+          else
+            npm publish --access public
+          fi

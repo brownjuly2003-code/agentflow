@@ -94,6 +94,6 @@ python -m twine check sdk/dist/*
 
 ## Verification after publish
 
-- [ ] Clone a fresh copy and run `make demo`
-- [ ] Run `python -m pytest tests/unit tests/integration tests/sdk -q`
-- [ ] Re-check README links from the fresh clone
+- [x] Clone a fresh copy and run `make demo` or the same `Makefile` recipe where `make` is unavailable. Verified from fresh origin clone `0bf1181` on 2026-04-30: seed pipeline, seed benchmark fixtures, start API with `AGENTFLOW_AUTH_DISABLED=true`, then `/docs`, `/v1/entity/order/ORD-20260404-1001`, and `/v1/query` all returned `200`. This Windows host lacks `make` and reused the already-running Redis on `localhost:6379` because the port was occupied.
+- [x] Run `python -m pytest tests/unit tests/integration tests/sdk -q` from the fresh clone. Windows-safe local command with `-p no:schemathesis -p no:metadata -p no:cacheprovider` and project-local temp paths passed with `657 passed, 4 skipped in 225.71s`.
+- [x] Re-check README links from the fresh clone (`README links OK`).

@@ -74,9 +74,7 @@ DEFAULT_RESULTS_PATH = PROJECT_ROOT / "tests" / "load" / "results.json"
 def load_profile_from_env() -> dict[str, int | str]:
     return {
         "users": int(os.getenv("AGENTFLOW_LOAD_USERS", str(LOAD_PROFILE["users"]))),
-        "spawn_rate": int(
-            os.getenv("AGENTFLOW_LOAD_SPAWN_RATE", str(LOAD_PROFILE["spawn_rate"]))
-        ),
+        "spawn_rate": int(os.getenv("AGENTFLOW_LOAD_SPAWN_RATE", str(LOAD_PROFILE["spawn_rate"]))),
         "run_time": os.getenv("AGENTFLOW_LOAD_RUN_TIME", str(LOAD_PROFILE["run_time"])),
     }
 

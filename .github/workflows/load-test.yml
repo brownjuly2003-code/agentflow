@@ -40,6 +40,8 @@ jobs:
           AGENTFLOW_LOAD_API_KEY: af-prod-agent-ops-def456
           AGENTFLOW_RATE_LIMIT_RPM: "600000"
           AGENTFLOW_LOAD_HEALTH_CHECK_WEIGHT: "0"
+          AGENTFLOW_LOAD_USERS: "15"
+          AGENTFLOW_LOAD_SPAWN_RATE: "5"
           OTEL_SDK_DISABLED: "true"
           PYTHONUNBUFFERED: "1"
         run: |

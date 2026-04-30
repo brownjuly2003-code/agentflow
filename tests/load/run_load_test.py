@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -68,6 +69,16 @@ def test_check_thresholds_reports_latency_and_error_violations():
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATS_PREFIX = PROJECT_ROOT / "tests" / "load" / "results"
 DEFAULT_RESULTS_PATH = PROJECT_ROOT / "tests" / "load" / "results.json"
+
+
+def load_profile_from_env() -> dict[str, int | str]:
+    return {
+        "users": int(os.getenv("AGENTFLOW_LOAD_USERS", str(LOAD_PROFILE["users"]))),
+        "spawn_rate": int(
+            os.getenv("AGENTFLOW_LOAD_SPAWN_RATE", str(LOAD_PROFILE["spawn_rate"]))
+        ),
+        "run_time": os.getenv("AGENTFLOW_LOAD_RUN_TIME", str(LOAD_PROFILE["run_time"])),
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -315,7 +326,7 @@ def seed_benchmark_data(duckdb_path: Path) -> None:
         conn.close()
 
 
-def run_locust(host: str, stats_prefix: Path) -> Path:
+def run_locust(host: str, stats_prefix: Path, load_profile: dict[str, int | str]) -> Path:
     stats_prefix.parent.mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
@@ -326,11 +337,11 @@ def run_locust(host: str, stats_prefix: Path) -> Path:
         "--host",
         host,
         "--users",
-        str(LOAD_PROFILE["users"]),
+        str(load_profile["users"]),
         "--spawn-rate",
-        str(LOAD_PROFILE["spawn_rate"]),
+        str(load_profile["spawn_rate"]),
         "--run-time",
-        str(LOAD_PROFILE["run_time"]),
+        str(load_profile["run_time"]),
         "--headless",
         "--csv",
         str(stats_prefix),
@@ -347,12 +358,13 @@ def write_results(
     rows: dict[str, dict[str, float | int]],
     output_path: Path,
     host: str,
+    load_profile: dict[str, int | str],
     violations: list[str],
 ) -> None:
     payload = {
         "generated_at": datetime.now(UTC).isoformat(),
         "host": host,
-        "load_profile": LOAD_PROFILE,
+        "load_profile": load_profile,
         "thresholds": THRESHOLDS,
         "aggregate": rows.get("ALL"),
         "endpoints": {key: value for key, value in rows.items() if key != "ALL"},
@@ -385,14 +397,15 @@ def main() -> int:
     if not results_path.is_absolute():
         results_path = PROJECT_ROOT / results_path
 
-    stats_csv = run_locust(args.host, stats_prefix)
+    load_profile = load_profile_from_env()
+    stats_csv = run_locust(args.host, stats_prefix, load_profile)
     rows = load_locust_rows(stats_csv)
     violations = check_thresholds(rows)
     missing = find_missing_thresholds(rows)
     violations.extend(
         f"{endpoint}: no load-test stats collected for thresholded endpoint" for endpoint in missing
     )
-    write_results(rows, results_path, args.host, violations)
+    write_results(rows, results_path, args.host, load_profile, violations)
 
     if violations:
         print("\nLoad-test threshold violations:")

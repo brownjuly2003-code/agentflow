@@ -2,9 +2,9 @@
 
 Before publishing AgentFlow changes or pushing a release tag:
 
-Status snapshot (2026-04-29, local `main` includes `f1b398c`): content, security,
-link, and local SDK publish preflight checks are complete. Live `v1.1.0`
-publish still depends on pushing the commit, getting green CI, and re-tagging.
+Status snapshot (2026-04-30): content, security, link, SDK publish preflight,
+and live `v1.1.0` PyPI/npm registry publishing are complete. The GitHub Release
+record for `v1.1.0` is still pending.
 
 ## Content
 
@@ -48,7 +48,7 @@ Capture notes:
 
 - [x] Fill the repository description in the GitHub About section
 - [x] Add topics: `data-engineering`, `real-time`, `ai-agents`, `fastapi`, `duckdb`, `kafka`, `flink`
-- [ ] Create or update the approved `vX.Y.Z` release using notes from `CHANGELOG.md`
+- [ ] Create or update the approved `vX.Y.Z` GitHub Release using notes from `CHANGELOG.md`
 
 ## SDK registry release
 
@@ -88,7 +88,8 @@ python -m twine check sdk/dist/*
 
 - [x] If `sdk/dist/` already contains older artifacts, clear it before `python -m build sdk/` so `twine check` only validates the current release
 - [x] Stop after the rehearsal when you only need proof; the real publish event is pushing the approved release tag
-- [ ] On the approved release commit, push the commit and release tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python Packages`
+- [x] On the approved release commit, push the commit and release tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python Packages`
+- [x] Confirm registry visibility for `agentflow-runtime`, `agentflow-client`, and `@uedomskikh/agentflow-client` 1.1.0
 
 ## Verification after publish
 

@@ -1,11 +1,8 @@
 # @uedomskikh/agentflow-client
 
-> npm package name: **`@uedomskikh/agentflow-client`**. Registry publishing is not
-> complete as of 2026-04-29; until the first green `Publish TypeScript SDK`
-> run, use the local workspace build (`npm install` in `sdk-ts`, then import
-> the built `dist/` from a relative path or via npm link).
+> Published npm package: **`@uedomskikh/agentflow-client`**.
 
-After registry publish:
+Install:
 
 ```bash
 npm install @uedomskikh/agentflow-client

@@ -23,7 +23,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Recorded full-suite evidence | 2026-04-30 local full-suite pass: 730 passed, 4 skipped in 485.22s with project-local pytest temp/cache paths. The earlier chaos-smoke pre-commit hang is no longer the active blocker. |
+| Recorded full-suite evidence | 2026-04-30 local full-suite pass after the Docker README-copy sync: 734 passed, 4 skipped in 431.00s with project-local pytest temp/cache paths. The earlier chaos-smoke pre-commit hang is no longer the active blocker. |
 
 ## Status by BCG Dimension
 
@@ -89,7 +89,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, and real environment tfvars are still missing)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
 - [ ] Production CDC source onboarding approved and configured
-- [x] Full-suite release-line verification — `730 passed, 4 skipped` in 485.22s on 2026-04-30 after the GitHub environment docs sync
+- [x] Full-suite release-line verification — `734 passed, 4 skipped` in 431.00s on 2026-04-30 after the Docker README-copy sync
 - [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); audit-closure HEAD also clean
 - [x] Hashed API-key auth cache regression fixed locally and covered by `tests/unit/test_auth.py::test_hashed_key_authentication_caches_successful_plaintext`
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
@@ -128,7 +128,8 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `tests/unit` through the Windows-safe local wrapper | ✅ PASS | 433 passed in 81.64s on 2026-04-28 |
 | `tests/contract tests/e2e` through the Windows-safe local wrapper and temporary project-local `sitecustomize` shim | ✅ PASS | 35 passed in 150.54s on 2026-04-28 |
 | `docker compose up -d redis` + project-local `TEMP`/`TMP` + full `pytest` through the Windows-safe local wrapper and temporary project-local `sitecustomize` shim | ✅ PASS | 724 passed, 4 skipped in 498.66s on 2026-04-28; shim removed after the run |
-| `python -m pytest -p no:schemathesis -p no:cacheprovider -q --basetemp .tmp\pytest-full-base` with project-local `TEMP`/`TMP` | ✅ PASS | 730 passed, 4 skipped, 104 warnings in 485.22s on 2026-04-30 after the GitHub environment docs sync |
+| `python -m pytest -p no:schemathesis -q --basetemp=.tmp\codex-readme-copy-basetemp -o cache_dir=.tmp\codex-readme-copy-cache` | ✅ PASS | 734 passed, 4 skipped, 104 warnings in 431.00s on 2026-04-30 after the Docker README-copy sync |
+| Docker API image README-copy regression on `67c2ae5` | ✅ PASS | `Dockerfile.api`, inline `docker-compose.prod.yml` build, and `scripts/k8s_staging_up.sh` copy `README.md` before editable installs; GitHub checks for `67c2ae5` are green: `lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `e2e`, `load-test`, and `staging` |
 | `cd sdk-ts`; `npm run typecheck`; `npm run build`; `npm run test:unit`; `npm pack --dry-run` | ✅ PASS | `@uedomskikh/agentflow-client@1.1.0`, 42 unit tests passed, tarball `uedomskikh-agentflow-client-1.1.0.tgz`, 16 files, package size 8.5 kB |
 | `v1.1.0` publish attempt on `2f96f08` | ⚠️ PARTIAL | PyPI `agentflow-runtime` 1.1.0 and `agentflow-client` 1.1.0 are visible; `Publish Python Packages` failed on an already-existing runtime sdist during a retry-shaped upload, and `Publish TypeScript SDK` failed because npm upload ran without `NPM_TOKEN`. Follow-up workflow makes PyPI upload idempotent and uses the configured npm token. |
 | `v1.1.0` final registry publish on `2c72387` | ✅ PASS | `Publish Python Packages`, `Publish TypeScript SDK`, and tag `Contract Tests` succeeded. `npm view @uedomskikh/agentflow-client@1.1.0 version --registry https://registry.npmjs.org/ --prefer-online --json` returned `"1.1.0"` after registry propagation. |
@@ -142,7 +143,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | GitHub registry secret setup | ✅ READY | `NPM_TOKEN` was replaced on 2026-04-30 with a time-limited npm write token for the `uedomskikh` account and validated by the green `Publish TypeScript SDK` run; rotate or replace with Trusted Publishing before the next npm release |
 | Pending workflow environment change | ✅ COMMITTED | `.github/workflows/publish-pypi.yml` `environment: pypi` landed in `e8b1237` |
 | Release pre-commit full-suite gate | ✅ PASS | `670 passed, 4 skipped` in 269s on audit-closure HEAD; the earlier chaos smoke hang did not reproduce, standalone re-run gives `3 passed in 44s` |
-| Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits on local `main` ahead of `origin`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
+| Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits landed on `main`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
 | Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
 | GitHub Actions environments `staging` and `production` | ✅ APPLIED | `gh api repos/brownjuly2003-code/agentflow/environments` shows a `required_reviewers` protection rule on both environments with reviewer `brownjuly2003-code`; `prevent_self_review=false` |
 | AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | `gh variable list` shows `AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs are still `if: false`, real `environments/*.tfvars` are absent, and this workstation has no `aws` or `terraform` CLI |
@@ -173,8 +174,10 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## New Session Handoff
 
-`main` is pushed through `ff96887`, and the approved `v1.1.0` tag points at
-`2c72387`. Registry artifacts are live on PyPI and npm. Recommended next
+`main` is pushed through `67c2ae5`, and the approved `v1.1.0` tag points at
+`2c72387`. Registry artifacts are live on PyPI and npm. The latest post-release
+main fix keeps Docker API image builds compatible with root editable installs by
+copying `README.md` into every API build context before install. Recommended next
 session starting point:
 
 1. Before the next npm publish, migrate `@uedomskikh/agentflow-client` to npm

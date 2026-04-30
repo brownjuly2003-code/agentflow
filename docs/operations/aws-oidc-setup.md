@@ -15,16 +15,17 @@ This guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used
 
 1. Start from a trusted local machine with temporary administrator credentials in AWS.
 2. Change into `infrastructure/terraform`.
-3. Review `dev.tfvars` or `prod.tfvars` and update the placeholder VPC, subnet, and SNS values for your account.
-4. Run:
+3. Copy `environments/staging.tfvars.example` to `environments/staging.tfvars` for the first non-production proof run.
+4. Replace the placeholder VPC, subnet, and SNS values with real values for your AWS account.
+5. Run:
 
 ```bash
 terraform init
-terraform plan -var-file=prod.tfvars
-terraform apply -var-file=prod.tfvars
+terraform plan -var-file=environments/staging.tfvars
+terraform apply -var-file=environments/staging.tfvars
 ```
 
-5. Capture the resulting role ARN from `terraform state show module.github_oidc.aws_iam_role.github_actions`.
+6. Capture the resulting role ARN from `terraform state show module.github_oidc.aws_iam_role.github_actions`.
 
 The first apply must be local because the role does not exist yet. After the role exists, GitHub Actions can assume it through OIDC.
 

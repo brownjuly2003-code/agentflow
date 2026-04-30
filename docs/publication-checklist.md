@@ -3,8 +3,8 @@
 Before publishing AgentFlow changes or pushing a release tag:
 
 Status snapshot (2026-04-30): content, security, link, SDK publish preflight,
-and live `v1.1.0` PyPI/npm registry publishing are complete. The GitHub Release
-record for `v1.1.0` is still pending.
+live `v1.1.0` PyPI/npm registry publishing, and the GitHub Release record are
+complete.
 
 ## Content
 
@@ -48,7 +48,7 @@ Capture notes:
 
 - [x] Fill the repository description in the GitHub About section
 - [x] Add topics: `data-engineering`, `real-time`, `ai-agents`, `fastapi`, `duckdb`, `kafka`, `flink`
-- [ ] Create or update the approved `vX.Y.Z` GitHub Release using notes from `CHANGELOG.md`
+- [x] Create or update the approved `vX.Y.Z` GitHub Release using notes from `CHANGELOG.md`
 
 ## SDK registry release
 

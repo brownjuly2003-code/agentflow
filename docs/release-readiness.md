@@ -3,7 +3,7 @@
 **Date**: 2026-04-20
 **Last updated**: 2026-04-30
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Release creation remains the remaining release-record step
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Release record created
 
 ## Executive Summary
 
@@ -102,7 +102,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 ## SDK Publish Proof Path
 
 - Publish workflows accept standalone SDK tags (`sdk-vX.Y.Z`), release-candidate tags (`vX.Y.Z-rcN`), and production release tags (`vX.Y.Z`). `scripts/release.py` still creates `sdk-vX.Y.Z` tags for standalone SDK releases.
-- Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag. The current `v1.1.0` tag points at `2c72387`; there is no GitHub Release for that tag yet, but registry proof is green.
+- Existing repo releases/tags (`v1.0.0`, `v1.0.1`, `v1.1.0`) are not registry-proof by themselves; proof requires green npm/PyPI publish workflow runs for the approved tag. The current `v1.1.0` tag points at `2c72387`; the GitHub Release is published and registry proof is green.
 - Safe preflight for the first live SDK publish is documented in `docs/publication-checklist.md` and was completed locally on 2026-04-27 at `8d7088d`: build the TypeScript SDK, run `npm pack --dry-run`, build SDK wheels/sdists, and verify both editable install orders in a clean venv. The local run also built runtime wheels/sdists and passed `python -m twine check dist\* sdk\dist\*`.
 - The first green proof for both publish workflows is the `v1.1.0` tag retry on `2c72387`: PyPI publish succeeded, TypeScript SDK publish succeeded after replacing `NPM_TOKEN`, and registry lookups confirmed PyPI `agentflow-runtime` 1.1.0, PyPI `agentflow-client` 1.1.0, and npm `@uedomskikh/agentflow-client` 1.1.0.
 
@@ -163,6 +163,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
   - Public repo: https://github.com/brownjuly2003-code/agentflow
   - v1.0.0 release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.0.0
   - v1.0.1 patch release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.0.1
+  - v1.1.0 release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.1.0
 - Security triage: `.artifacts/security/bandit-triage-2026-04-17.md`
 
 ## New Session Handoff
@@ -171,11 +172,9 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 `2c72387`. Registry artifacts are live on PyPI and npm. Recommended next
 session starting point:
 
-1. Create the missing GitHub Release for `v1.1.0` using notes from
-   `CHANGELOG.md`.
-2. Before the npm write token expires, migrate `@uedomskikh/agentflow-client`
+1. Before the npm write token expires, migrate `@uedomskikh/agentflow-client`
    to npm Trusted Publishing or rotate the GitHub `NPM_TOKEN`.
-3. Continue production CDC source onboarding only after hostnames, table scope,
+2. Continue production CDC source onboarding only after hostnames, table scope,
    network path, and secret ownership are approved.
 
 ## Release Verdict
@@ -186,7 +185,6 @@ AgentFlow is publicly available and the current checked-in docs/code describe th
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - Manual GH Actions setup: environments currently list `production`, `pypi`, and `staging`; required reviewer policy still needs explicit confirmation if it is part of the deployment gate
 - AWS OIDC role setup for real terraform apply
-- Release record: create the GitHub Release for `v1.1.0`; registries are already live for PyPI and npm.
 - Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

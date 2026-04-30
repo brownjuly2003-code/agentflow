@@ -165,12 +165,13 @@ next npm publish, and post-release PMF work.
 
 ## Screenshots
 
-The repository is prepared for optional README screenshots under `docs/screenshots/`:
+| Admin UI | API docs |
+|----------|----------|
+| <img src="docs/screenshots/admin-ui.png" alt="AgentFlow admin UI" width="420"> | <img src="docs/screenshots/swagger-docs.png" alt="AgentFlow API docs" width="420"> |
 
-- `admin-ui.png`
-- `swagger-docs.png`
-- `landing-page.png`
-- `benchmark-terminal.png`
+| Landing page | Benchmark run |
+|--------------|---------------|
+| <img src="docs/screenshots/landing-page.png" alt="AgentFlow landing page" width="420"> | <img src="docs/screenshots/benchmark-terminal.png" alt="AgentFlow benchmark terminal" width="420"> |
 
 Capture notes and publish-time checks are listed in [docs/publication-checklist.md](docs/publication-checklist.md).
 

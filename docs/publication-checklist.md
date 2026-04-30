@@ -32,17 +32,16 @@ complete.
 
 ## Optional screenshots
 
-- [ ] `docs/screenshots/admin-ui.png`
-- [ ] `docs/screenshots/swagger-docs.png`
-- [ ] `docs/screenshots/landing-page.png`
-- [ ] `docs/screenshots/benchmark-terminal.png`
+- [x] `docs/screenshots/admin-ui.png`
+- [x] `docs/screenshots/swagger-docs.png`
+- [x] `docs/screenshots/landing-page.png`
+- [x] `docs/screenshots/benchmark-terminal.png`
 
 Capture notes:
 
-- Run `make demo`
-- Open Swagger at `http://localhost:8000/docs`
-- Open the landing page from `site/index.html`
-- Capture the benchmark terminal after running `python scripts/run_benchmark.py`
+- Captured on 2026-04-30 from the local demo API on `http://127.0.0.1:8000` and static landing server on `http://127.0.0.1:8002`.
+- Swagger UI loaded from `/docs`; Playwright used `bypassCSP` so the FastAPI CDN assets render in the screenshot.
+- Benchmark terminal screenshot uses a short local screenshot run: `python scripts/run_benchmark.py --host http://localhost:8000 --users 5 --spawn-rate 2 --run-time 10s --report-path .tmp\benchmark-screenshot.md --results-json .tmp\benchmark-screenshot.json`.
 
 ## Repo settings after push
 

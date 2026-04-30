@@ -142,6 +142,22 @@ def test_runtime_and_sdk_package_identities_are_split():
     ]
 
 
+def test_docker_build_contexts_copy_root_readme_for_editable_installs():
+    docker_contexts = [
+        PROJECT_ROOT / "Dockerfile.api",
+        PROJECT_ROOT / "docker-compose.prod.yml",
+        PROJECT_ROOT / "scripts" / "k8s_staging_up.sh",
+    ]
+
+    for docker_context in docker_contexts:
+        text = docker_context.read_text(encoding="utf-8")
+        relative_path = docker_context.relative_to(PROJECT_ROOT).as_posix()
+
+        assert "COPY README.md /app/README.md" in text, (
+            f"{relative_path} must copy README.md before installing the root package"
+        )
+
+
 def test_sdk_install_docs_match_split_package_identities():
     sdk_readme = (PROJECT_ROOT / "sdk" / "README.md").read_text(encoding="utf-8")
     product_doc = (PROJECT_ROOT / "docs" / "product.md").read_text(encoding="utf-8")

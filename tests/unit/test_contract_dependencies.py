@@ -190,3 +190,9 @@ def test_make_setup_uses_test_integrations_profile():
         == profiles["test-integrations"]["editable-installs"]
     )
     assert ".[dev,integrations,cloud]" not in makefile
+
+
+def test_make_demo_explicitly_uses_local_open_auth_mode():
+    makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "AGENTFLOW_AUTH_DISABLED=true DUCKDB_PATH=agentflow_demo.duckdb uvicorn" in makefile

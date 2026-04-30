@@ -57,7 +57,7 @@ demo:
 	@echo "  Try:  curl http://localhost:8000/v1/metrics/revenue?window=24h"
 	@echo "  Try:  curl http://localhost:8000/v1/entity/user/USR-10001"
 	@echo "  Try:  curl http://localhost:8000/v1/health"
-	DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+	AGENTFLOW_AUTH_DISABLED=true DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
 
 pipeline:
 	python -m src.processing.local_pipeline --eps 10

@@ -3,7 +3,7 @@
 **Date**: 2026-04-20
 **Last updated**: 2026-04-30
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint
-**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Release record created
+**Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Actions environments `staging` and `production` configured with required reviewers; GitHub Release record created
 
 ## Executive Summary
 
@@ -11,7 +11,7 @@ AgentFlow закрыл технические блокеры из internal audit
 
 The v1.1 line split runtime and SDK distribution identity: the runtime publishes as `agentflow-runtime`, while the Python SDK publishes as `agentflow-client` and keeps the `agentflow` import path. The current post-v1.1 follow-up operationalizes ADR 0005 with Debezium/Kafka Connect local compose, a Kubernetes-shaped Helm chart, raw CDC topic bootstrap, and canonical CDC normalization before downstream validation.
 
-## Current Status (2026-04-29)
+## Current Status (2026-04-30)
 
 | Area | Clear status |
 |------|--------------|
@@ -19,10 +19,11 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | Runtime package | `agentflow-runtime` is the root distribution name |
 | Python SDK package | `agentflow-client` is the PyPI distribution; `from agentflow import ...` stays unchanged |
 | Registry publishing | PyPI `agentflow-runtime` 1.1.0, PyPI `agentflow-client` 1.1.0, and npm `@uedomskikh/agentflow-client` 1.1.0 are live; `Publish Python Packages`, `Publish TypeScript SDK`, and tag `Contract Tests` are green for the approved `v1.1.0` tag target `2c72387`; the TypeScript SDK targets the available npm user scope because npm org scope `@agentflow` is already owned by another project |
+| GitHub deployment gates | Environments `staging` and `production` exist with required reviewer `brownjuly2003-code`; the workflow environment name is `production`, not `prod` |
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision |
-| Recorded full-suite evidence | Latest local full-suite pass on 2026-04-30: 729 passed, 4 skipped in 454.82s with project-local pytest temp/cache paths. The earlier chaos-smoke pre-commit hang is no longer the active blocker. |
+| Recorded full-suite evidence | 2026-04-30 local full-suite pass: 730 passed, 4 skipped in 485.22s with project-local pytest temp/cache paths. The earlier chaos-smoke pre-commit hang is no longer the active blocker. |
 
 ## Status by BCG Dimension
 
@@ -63,8 +64,8 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Entity p99 remains 290-320 ms in `docs/benchmark-baseline.json` generated on 2026-04-17T13:37:10+03:00: above the earlier ~170 ms pre-regression lab result, but still inside the <500 ms gate.
 - v14 changes only SDK resilience and SDK tests/docs, so this release records the entity p99 tail as a serving-path known limitation rather than claiming a new performance fix.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
-- GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
-- AWS OIDC role setup for GitHub Actions is still a manual setup step.
+- GitHub Actions environments `staging` and `production` are configured with required reviewer `brownjuly2003-code`; `prevent_self_review=false` because the repo currently has one admin collaborator.
+- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-04-30, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, and real `infrastructure/terraform/environments/*.tfvars` files are not committed.
 - SDK registry publish evidence is complete for v1.1.0. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29. This is not a durable release credential: migrate npm publishing to Trusted Publishing or rotate the token before the next publish.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
@@ -84,11 +85,11 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Bandit diff is green against the checked-in baseline
 - [x] v1.1 runtime/SDK package split documented
 - [x] Local and Kubernetes-shaped CDC operationalization checked in
-- [ ] GitHub environments `staging`/`prod` configured with required reviewers
-- [ ] AWS OIDC role configured for GitHub Actions
+- [x] GitHub environments `staging` and `production` configured with required reviewer `brownjuly2003-code` (verified via `gh api` on 2026-04-30; `prevent_self_review=false` because the repo currently has one admin collaborator)
+- [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, and real environment tfvars are still missing)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
 - [ ] Production CDC source onboarding approved and configured
-- [x] Last completed local full suite green on the release line — `729 passed, 4 skipped` in 454.82s on 2026-04-30 after the registry docs sync
+- [x] Full-suite release-line verification — `730 passed, 4 skipped` in 485.22s on 2026-04-30 after the GitHub environment docs sync
 - [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); audit-closure HEAD also clean
 - [x] Hashed API-key auth cache regression fixed locally and covered by `tests/unit/test_auth.py::test_hashed_key_authentication_caches_successful_plaintext`
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
@@ -127,7 +128,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `tests/unit` through the Windows-safe local wrapper | ✅ PASS | 433 passed in 81.64s on 2026-04-28 |
 | `tests/contract tests/e2e` through the Windows-safe local wrapper and temporary project-local `sitecustomize` shim | ✅ PASS | 35 passed in 150.54s on 2026-04-28 |
 | `docker compose up -d redis` + project-local `TEMP`/`TMP` + full `pytest` through the Windows-safe local wrapper and temporary project-local `sitecustomize` shim | ✅ PASS | 724 passed, 4 skipped in 498.66s on 2026-04-28; shim removed after the run |
-| `python -m pytest -p no:schemathesis -p no:cacheprovider -q --basetemp .tmp\pytest-full-base` with project-local `TEMP`/`TMP` | ✅ PASS | 729 passed, 4 skipped, 104 warnings in 454.82s on 2026-04-30 after the registry docs sync |
+| `python -m pytest -p no:schemathesis -p no:cacheprovider -q --basetemp .tmp\pytest-full-base` with project-local `TEMP`/`TMP` | ✅ PASS | 730 passed, 4 skipped, 104 warnings in 485.22s on 2026-04-30 after the GitHub environment docs sync |
 | `cd sdk-ts`; `npm run typecheck`; `npm run build`; `npm run test:unit`; `npm pack --dry-run` | ✅ PASS | `@uedomskikh/agentflow-client@1.1.0`, 42 unit tests passed, tarball `uedomskikh-agentflow-client-1.1.0.tgz`, 16 files, package size 8.5 kB |
 | `v1.1.0` publish attempt on `2f96f08` | ⚠️ PARTIAL | PyPI `agentflow-runtime` 1.1.0 and `agentflow-client` 1.1.0 are visible; `Publish Python Packages` failed on an already-existing runtime sdist during a retry-shaped upload, and `Publish TypeScript SDK` failed because npm upload ran without `NPM_TOKEN`. Follow-up workflow makes PyPI upload idempotent and uses the configured npm token. |
 | `v1.1.0` final registry publish on `2c72387` | ✅ PASS | `Publish Python Packages`, `Publish TypeScript SDK`, and tag `Contract Tests` succeeded. `npm view @uedomskikh/agentflow-client@1.1.0 version --registry https://registry.npmjs.org/ --prefer-online --json` returned `"1.1.0"` after registry propagation. |
@@ -141,6 +142,8 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | Release pre-commit full-suite gate | ✅ PASS | `670 passed, 4 skipped` in 269s on audit-closure HEAD; the earlier chaos smoke hang did not reproduce, standalone re-run gives `3 passed in 44s` |
 | Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits on local `main` ahead of `origin`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
 | Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
+| GitHub Actions environments `staging` and `production` | ✅ APPLIED | `gh api repos/brownjuly2003-code/agentflow/environments` shows a `required_reviewers` protection rule on both environments with reviewer `brownjuly2003-code`; `prevent_self_review=false` |
+| AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | `gh variable list` shows `AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs are still `if: false`, real `environments/*.tfvars` are absent, and this workstation has no `aws` or `terraform` CLI |
 | TypeScript SDK lockfile + audit | ✅ CLEAN | `sdk-ts/package-lock.json` committed (1500 lines); `npm audit --audit-level=moderate` reports 0 vulnerabilities |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process. On 2026-04-28, direct pytest also hung before output when Windows WMI was reached through `platform.*`; the successful local run used a temporary project-local `sitecustomize` shim and a dummy `readline` module in the test runner. Do not commit that shim.
@@ -168,7 +171,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## New Session Handoff
 
-`main` is pushed through `4d7f515`, and the approved `v1.1.0` tag points at
+`main` is pushed through `ff96887`, and the approved `v1.1.0` tag points at
 `2c72387`. Registry artifacts are live on PyPI and npm. Recommended next
 session starting point:
 
@@ -185,8 +188,7 @@ session starting point:
 
 AgentFlow is publicly available and the current checked-in docs/code describe the intended release and CDC state. Do not treat production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
-- Manual GH Actions setup: environments currently list `production`, `pypi`, and `staging`; required reviewer policy still needs explicit confirmation if it is part of the deployment gate
-- AWS OIDC role setup for real terraform apply
+- AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml`
 - Production CDC source onboarding decision and secrets/network setup
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

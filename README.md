@@ -2,7 +2,7 @@
 
 > Real-time data platform for AI agents. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery.
 
-[![Release gate](https://img.shields.io/badge/release_gate-audit_closed_ready_to_push-brightgreen)](docs/release-readiness.md)
+[![Release gate](https://img.shields.io/badge/release_gate-v1.1_published-brightgreen)](docs/release-readiness.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -20,7 +20,7 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Highlights
 
-- **Last completed local gate:** 724 passed, 4 skipped on 2026-04-28 at auth-cache commit `97e5d86`. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
+- **Release-line gate:** 730 passed, 4 skipped on 2026-04-30; GitHub environments `staging` and `production` have required reviewers. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
 - **Sub-second entity lookups in the checked-in baseline**: entity p50 `38-55 ms`, entity p99 `290-320 ms`, aggregate p50 `56 ms` at `50` users for `60s`
 - **Historical performance remediation is documented**: the serving path moved from an original ~`26,000 ms` baseline to the current `43-55 ms` release range
 - **Dual SDK parity** for Python and TypeScript, including retry policies, circuit breakers, batching, pagination, and contract pinning
@@ -152,15 +152,16 @@ surface, secrets scrubbed and rotated, helm `runAsNonRoot` /
 NetworkPolicy / PodDisruptionBudget, npm lockfile + `npm audit` clean,
 vulnerable dep bumps (`dagster>=1.13.1`, `langchain-core>=1.2.22`),
 trivy pinned, OpenAPI drift gate, branch protection with 12 required
-status checks, and Python SDK alignment with the server v1 contract
-(F1–F10). Latest local release-line smoke: `724 passed, 4 skipped`
-at auth-cache commit `97e5d86`. The post-v1.1 CDC
-operationalization for Debezium / Kafka Connect remains in. Live
-release just needs `git push` + `v1.1.0` retag — see
-[docs/release-readiness.md](docs/release-readiness.md). Remaining open
-items are manual environment setup (`staging`/`prod` reviewers, AWS
-OIDC role), public benchmark publication on production hardware, and
-post-release PMF work.
+status checks, GitHub Actions environment reviewers, and Python SDK
+alignment with the server v1 contract (F1–F10). Recent local full-suite
+verification: `730 passed, 4 skipped` on 2026-04-30 after the GitHub
+environment docs sync. The post-v1.1 CDC operationalization
+for Debezium / Kafka Connect remains in. v1.1.0 is published to PyPI,
+npm, and GitHub — see [docs/release-readiness.md](docs/release-readiness.md).
+Remaining open items are AWS OIDC role setup for real Terraform apply,
+production CDC source onboarding, public benchmark publication on
+production hardware, npm Trusted Publishing or token rotation before the
+next npm publish, and post-release PMF work.
 
 ## Screenshots
 

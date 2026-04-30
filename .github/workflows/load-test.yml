@@ -39,6 +39,7 @@ jobs:
           AGENTFLOW_WEBHOOKS_FILE: .artifacts/load/webhooks.yaml
           AGENTFLOW_LOAD_API_KEY: af-prod-agent-ops-def456
           AGENTFLOW_RATE_LIMIT_RPM: "600000"
+          AGENTFLOW_LOAD_HEALTH_CHECK_WEIGHT: "0"
           OTEL_SDK_DISABLED: "true"
           PYTHONUNBUFFERED: "1"
         run: |

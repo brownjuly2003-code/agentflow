@@ -4,7 +4,7 @@ Simulates realistic AI agent traffic patterns:
 - 40% entity lookups (order, user, product)
 - 30% metric queries
 - 20% natural language queries
-- 10% health checks
+- 10% health checks by default; CI can disable them for the p99 smoke gate
 
 Usage:
     pip install locust
@@ -34,6 +34,8 @@ NL_QUESTIONS = [
     "How many active sessions right now?",
     "Which products are out of stock?",
 ]
+
+HEALTH_CHECK_WEIGHT = int(os.getenv("AGENTFLOW_LOAD_HEALTH_CHECK_WEIGHT", "1"))
 
 
 class AgentUser(HttpUser):
@@ -129,7 +131,7 @@ class AgentUser(HttpUser):
             name="/v1/batch",
         )
 
-    @task(1)
+    @task(HEALTH_CHECK_WEIGHT)
     def health_check(self):
         """Check pipeline health."""
         self.client.get("/v1/health", headers=self.request_headers, name="/v1/health")

@@ -65,7 +65,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
 - GitHub environments `staging`/`prod` with required reviewers are still a manual setup step.
 - AWS OIDC role setup for GitHub Actions is still a manual setup step.
-- SDK registry publish evidence is complete for v1.1.0. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30; migrate npm publishing to Trusted Publishing or rotate the token before expiry.
+- SDK registry publish evidence is complete for v1.1.0. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29. This is not a durable release credential: migrate npm publishing to Trusted Publishing or rotate the token before the next publish.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 - Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership.
@@ -136,7 +136,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | Clear `dist` and `sdk/dist`; `python -m build .`; `python -m build sdk\`; `python -m twine check dist\* sdk\dist\*` | ✅ PASS | runtime and SDK artifacts passed `twine check`; runtime artifacts still warn that long description metadata is missing |
 | Clean temp venv editable install-order check for root, SDK, and integrations | ✅ PASS | both install orders resolved `agentflow-runtime` 1.1.0 from repo root and `agentflow-client` 1.1.0 from `sdk/`; imports and `agentflow --help` worked |
 | PyPI Trusted Publisher setup | ✅ READY | PyPI account publishing page shows pending publishers for `agentflow-runtime` and `agentflow-client` with owner `brownjuly2003-code`, repo `agentflow`, workflow `publish-pypi.yml`, environment `pypi` |
-| GitHub registry secret setup | ✅ READY | `NPM_TOKEN` was replaced on 2026-04-30 with an npm write token for the `uedomskikh` account and validated by the green `Publish TypeScript SDK` run |
+| GitHub registry secret setup | ✅ READY | `NPM_TOKEN` was replaced on 2026-04-30 with a time-limited npm write token for the `uedomskikh` account and validated by the green `Publish TypeScript SDK` run; rotate or replace with Trusted Publishing before the next npm release |
 | Pending workflow environment change | ✅ COMMITTED | `.github/workflows/publish-pypi.yml` `environment: pypi` landed in `e8b1237` |
 | Release pre-commit full-suite gate | ✅ PASS | `670 passed, 4 skipped` in 269s on audit-closure HEAD; the earlier chaos smoke hang did not reproduce, standalone re-run gives `3 passed in 44s` |
 | Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits on local `main` ahead of `origin`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
@@ -172,8 +172,10 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 `2c72387`. Registry artifacts are live on PyPI and npm. Recommended next
 session starting point:
 
-1. Before the npm write token expires, migrate `@uedomskikh/agentflow-client`
-   to npm Trusted Publishing or rotate the GitHub `NPM_TOKEN`.
+1. Before the next npm publish, migrate `@uedomskikh/agentflow-client` to npm
+   Trusted Publishing or rotate the GitHub `NPM_TOKEN`. The current token was
+   created on 2026-04-30 with a 90-day expiry selected, so assume it expires by
+   2026-07-29.
 2. Continue production CDC source onboarding only after hostnames, table scope,
    network path, and secret ownership are approved.
 

@@ -90,6 +90,7 @@ python -m twine check sdk/dist/*
 - [x] Stop after the rehearsal when you only need proof; the real publish event is pushing the approved release tag
 - [x] On the approved release commit, push the commit and release tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python Packages`
 - [x] Confirm registry visibility for `agentflow-runtime`, `agentflow-client`, and `@uedomskikh/agentflow-client` 1.1.0
+- [ ] Before the next npm publish, migrate `@uedomskikh/agentflow-client` to npm Trusted Publishing or rotate GitHub `NPM_TOKEN`; the current npm write token was created on 2026-04-30 with a 90-day expiry selected, so assume expiry by 2026-07-29
 
 ## Verification after publish
 

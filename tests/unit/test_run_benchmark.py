@@ -139,6 +139,38 @@ def test_build_report_documents_warmup_step():
     assert "10s" in report
 
 
+def test_build_report_documents_overwrite_scope():
+    report = run_benchmark.build_report(
+        generated_at="2026-04-17T13:00:00+03:00",
+        base_url="http://127.0.0.1:8001",
+        burst=500,
+        users=50,
+        spawn_rate=10,
+        run_time="60s",
+        system_info={
+            "os": "Windows",
+            "cpu": "cpu",
+            "cpu_count": "8",
+            "ram": "16 GB",
+            "python": "3.13.0",
+        },
+        claims=None,
+        aggregate={
+            "request_count": 1,
+            "failure_count": 0,
+            "failure_rate": 0.0,
+            "rps": 1.0,
+            "p50": 20.0,
+            "p95": 40.0,
+            "p99": 50.0,
+        },
+        endpoint_rows=[],
+    )
+
+    assert "overwritten by the latest long-running benchmark" in report
+    assert "docs/perf/entity-benchmark-contract.md" in report
+
+
 def test_start_api_routes_server_output_to_log_file(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 

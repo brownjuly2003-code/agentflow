@@ -300,17 +300,17 @@ job = "mutation"
 profile = "test"
 
 [[tool.agentflow.dependency-profiles.targets]]
-name = "performance.performance-regression"
+name = "performance.perf-baseline"
 kind = "workflow"
 path = ".github/workflows/performance.yml"
-job = "performance-regression"
+job = "perf-baseline"
 profile = "perf"
 
 [[tool.agentflow.dependency-profiles.targets]]
-name = "perf-regression.perf-regression"
+name = "perf-regression.perf-smoke"
 kind = "workflow"
 path = ".github/workflows/perf-regression.yml"
-job = "perf-regression"
+job = "perf-smoke"
 profile = "perf"
 
 [[tool.agentflow.dependency-profiles.targets]]

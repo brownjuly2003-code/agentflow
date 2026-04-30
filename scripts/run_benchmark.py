@@ -516,6 +516,12 @@ def build_report(
     lines = [
         "# AgentFlow Benchmark Report",
         "",
+        (
+            "> This file is overwritten by the latest long-running benchmark. "
+            "For entity-specific optimization evidence, see "
+            "`docs/perf/entity-benchmark-contract.md`."
+        ),
+        "",
         f"Generated: `{generated_at}`",
         "",
         "## System Under Test",

@@ -16,7 +16,7 @@ Those scripts create the quick demo environment (`.[dev]` plus `./sdk`). For wor
 | `test` | `pip install -e ".[dev,cloud]"` | `test-integration`, `chaos`, `mutation` |
 | `test-integrations` | `pip install -e ".[dev,cloud]"` + `pip install -e "./sdk"` + `pip install -e "./integrations[mcp]"` | `test-unit`, local `make setup` |
 | `load` | `pip install -e ".[load,cloud]"` | `load-test` |
-| `perf` | `pip install -e ".[dev,load,cloud]"` | `perf-check`, `performance`, `perf-regression` |
+| `perf` | `pip install -e ".[dev,load,cloud]"` | `perf-check`, `perf-baseline`, `perf-smoke` |
 | `contract` | `pip install -e ".[dev,cloud,contract]"` | `contract` workflow |
 
 For the fastest local loop, use `make demo`. For a production-shaped stack with observability, use `docker compose -f docker-compose.prod.yml up -d`.

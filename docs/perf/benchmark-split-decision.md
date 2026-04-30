@@ -116,7 +116,7 @@ not a stable latency signal for the API endpoints under test.
 
 ## 6. Acceptance
 
-- [ ] `perf-smoke` CI job exists and fails if p99 > 500 ms.
-- [ ] `perf-baseline` nightly job exists and archives JSON artifacts.
-- [ ] Old `benchmark_pool*.md` files have an `ARCHIVED` header explaining they are historical input only.
+- [x] `perf-smoke` CI job exists and fails if p99 > 500 ms.
+- [x] `perf-baseline` nightly job exists and archives JSON artifacts.
+- [x] Old `benchmark_pool*.md` files have an `ARCHIVED` header explaining they are historical input only.
 - [ ] Team agrees that `< 200 ms` is the optimization target, not the merge gate.

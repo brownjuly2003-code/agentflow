@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  perf-regression:
+  perf-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -21,22 +21,50 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev,load,cloud]"
 
-      - name: Run benchmark
-        run: |
-          python scripts/run_benchmark.py \
-            --report-path .artifacts/load/benchmark.md \
-            --results-json .artifacts/load/results.json
-
-      - name: Enforce release gate
+      - name: Run entity perf smoke gate
         shell: bash
+        env:
+          DUCKDB_PATH: .artifacts/perf-smoke/agentflow-perf.duckdb
+          AGENTFLOW_USAGE_DB_PATH: .artifacts/perf-smoke/agentflow-api-usage.duckdb
+          AGENTFLOW_AUTH_DISABLED: "true"
+          AGENTFLOW_API_KEYS: ""
+          AGENTFLOW_API_KEYS_FILE: ""
+          AGENTFLOW_ADMIN_KEY: ""
+          REDIS_URL: redis://localhost:6379
+          OTEL_SDK_DISABLED: "true"
+          PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
-          mkdir -p .artifacts/load
-          python scripts/check_performance.py docs/benchmark-baseline.json .artifacts/load/results.json | tee .artifacts/load/perf-regression-report.md
+          mkdir -p .artifacts/perf-smoke docs/perf
+          docker compose up -d --wait redis
+          python tests/load/run_load_test.py --duckdb-path "$DUCKDB_PATH" --seed-data --seed-only
+          python -m uvicorn src.serving.api.main:app --host 127.0.0.1 --port 8012 > .artifacts/perf-smoke/api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; docker compose stop redis >/dev/null 2>&1 || true' EXIT
+          python scripts/wait_for_services.py --url http://127.0.0.1:8012 --timeout 120
+          python scripts/profile_entity.py \
+            --host http://127.0.0.1:8012 \
+            --entity-type order \
+            --entity-id ORD-20260404-1001 \
+            --iterations 2000 \
+            --concurrency 16 \
+            --output docs/perf/ci-smoke-latest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("docs/perf/ci-smoke-latest.json").read_text(encoding="utf-8"))
+          p99_ms = float(payload["p99_ms"])
+          if p99_ms > 500:
+              raise SystemExit(f"p99_ms {p99_ms:.1f} exceeds perf-smoke gate 500 ms")
+          print(f"p99_ms {p99_ms:.1f} is within perf-smoke gate 500 ms")
+          PY
 
       - name: Upload performance artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: perf-regression-results
-          path: .artifacts/load/
+          name: perf-smoke-results
+          path: |
+            .artifacts/perf-smoke/
+            docs/perf/ci-smoke-latest.json

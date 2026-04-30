@@ -1,5 +1,7 @@
 # AgentFlow Benchmark Report
 
+> This file is overwritten by the latest long-running benchmark. For entity-specific optimization evidence, see `docs/perf/entity-benchmark-contract.md`.
+
 Generated: `2026-04-17T12:55:58+03:00`
 
 ## System Under Test

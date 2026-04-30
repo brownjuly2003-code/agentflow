@@ -133,6 +133,7 @@ def test_runtime_and_sdk_package_identities_are_split():
     profiles, _ = _load_dependency_contract()
 
     assert root_project["name"] == "agentflow-runtime"
+    assert root_project.get("readme") == "README.md"
     assert sdk_project["name"] == "agentflow-client"
     assert profiles["test-integrations"]["editable-installs"] == [
         ".[dev,cloud]",
@@ -153,6 +154,14 @@ def test_sdk_install_docs_match_split_package_identities():
     assert "pip install -e sdk/" not in product_doc
     assert "pip install agentflow-integrations" in integrations_doc
     assert "pip install -e integrations/" not in integrations_doc
+
+
+def test_publication_checklist_uses_reproducible_npm_release_install():
+    checklist = (PROJECT_ROOT / "docs" / "publication-checklist.md").read_text(encoding="utf-8")
+
+    assert "npm ci" in checklist
+    assert "python scripts/check_release_artifacts.py dist/* sdk/dist/*" in checklist
+    assert "npm install --package-lock=false" not in checklist
 
 
 def test_dependency_profile_targets_match_workflow_jobs():

@@ -77,12 +77,15 @@ agentflow --help
 
 ```bash
 cd sdk-ts
-npm install --package-lock=false
+npm ci
+npm audit --audit-level=moderate
 npm run build
 npm pack --dry-run
 cd ..
+python -m build .
 python -m build sdk/
-python -m twine check sdk/dist/*
+python -m twine check dist/* sdk/dist/*
+python scripts/check_release_artifacts.py dist/* sdk/dist/*
 ```
 
 - [x] If `sdk/dist/` already contains older artifacts, clear it before `python -m build sdk/` so `twine check` only validates the current release

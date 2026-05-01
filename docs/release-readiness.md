@@ -18,13 +18,13 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | Public repository | Published and release-ready from the checked-in evidence trail |
 | Runtime package | `agentflow-runtime` is the root distribution name |
 | Python SDK package | `agentflow-client` is the PyPI distribution; `from agentflow import ...` stays unchanged |
-| Registry publishing | PyPI `agentflow-runtime` 1.1.0, PyPI `agentflow-client` 1.1.0, legacy npm `@uedomskikh/agentflow-client` 1.1.0, and new npm `@yuliaedomskikh/agentflow-client` 1.1.0 are live; PyPI uploads used Trusted Publishing attestations; the new npm package is owned by `yuliaedomskikh <yulia.edomskikh@gmail.com>`; npm Trusted Publishing was created for `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment, and verified in the npm package settings UI; CLI `npm trust list` readback currently returns `EOTP`, and the remaining two saved recovery codes are reserve only |
+| Registry publishing | PyPI `agentflow-runtime` 1.1.0, PyPI `agentflow-client` 1.1.0, legacy npm `@uedomskikh/agentflow-client` 1.1.0, and new npm `@yuliaedomskikh/agentflow-client` 1.1.0 are live; PyPI uploads used Trusted Publishing attestations; the new npm package is owned by `yuliaedomskikh <yulia.edomskikh@gmail.com>`; npm Trusted Publishing was created for `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment, verified in the npm package settings UI, and confirmed by CLI `npm trust list` readback on 2026-05-01; usable saved recovery-code reserve is 4 |
 | GitHub deployment gates | Environments `staging` and `production` exist with required reviewer `brownjuly2003-code`; the workflow environment name is `production`, not `prod` |
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision; the required decision record and no-go gates are documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) |
-| Recorded full-suite evidence | 2026-04-30 local full-suite pass after the npm Trusted Publishing account-handoff docs: 743 passed, 4 skipped in 845.60s with project-local pytest temp/cache paths. Earlier Docker README-copy, documentation-refresh, npm-prep, and CDC-runbook evidence remain recorded below. |
-| Current post-release main | Local `main` is at `fe94823` and is one commit ahead of `origin/main` (`56f8998`). The latest local commit splits performance smoke and nightly benchmark workflows; the working tree now also contains verified documentation and npm Trusted Publishing workflow prep. |
+| Recorded full-suite evidence | 2026-05-01 Docker-backed local full-suite pass after Docker Desktop recovery: 741 passed, 4 skipped in 393.84s with project-local temp/cache paths. Earlier 2026-04-30 full-suite, Docker README-copy, documentation-refresh, npm-prep, and CDC-runbook evidence remain recorded below. |
+| Current post-release main | Local `main` contains the post-release npm Trusted Publishing handoff plus refreshed external-gate evidence. Push remains separate; do not assume origin has these local commits until `git push` is explicitly run. |
 
 ## Status by BCG Dimension
 
@@ -64,10 +64,10 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Scope cut was intentionally not applied; v1.0.0 keeps the current 15-endpoint surface.
 - Entity p99 remains 290-320 ms in `docs/benchmark-baseline.json` generated on 2026-04-17T13:37:10+03:00: above the earlier ~170 ms pre-regression lab result, but still inside the <500 ms gate.
 - v14 changes only SDK resilience and SDK tests/docs, so this release records the entity p99 tail as a serving-path known limitation rather than claiming a new performance fix.
-- Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `validate` plus workflow wiring.
+- Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `terraform init -backend=false` and `terraform validate` through the Terraform container plus workflow wiring.
 - GitHub Actions environments `staging` and `production` are configured with required reviewer `brownjuly2003-code`; `prevent_self_review=false` because the repo currently has one admin collaborator.
-- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-04-30, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, and real `infrastructure/terraform/environments/*.tfvars` files are not committed.
-- SDK registry publish evidence is complete for v1.1.0. The legacy npm package `@uedomskikh/agentflow-client` remains live but is not the future publish target. Future TypeScript SDK publishing now targets `@yuliaedomskikh/agentflow-client`, which is public, owned by `yuliaedomskikh`, and has npm Trusted Publishing configured for GitHub Actions OIDC (`brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment). The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29 until revoked. Revoke it after the first successful trusted-publish workflow run on the new package. A new account still cannot control the old `@uedomskikh/agentflow-client` package unless old owner auth adds it as a maintainer or npm support intervenes; scoped packages cannot be transferred to a different user scope.
+- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-05-01, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, real `infrastructure/terraform/environments/*.tfvars` files are not committed, and no AWS credentials are configured on the verification workstation.
+- SDK registry publish evidence is complete for v1.1.0. The legacy npm package `@uedomskikh/agentflow-client` remains live but is not the future publish target. Future TypeScript SDK publishing now targets `@yuliaedomskikh/agentflow-client`, which is public, owned by `yuliaedomskikh`, and has npm Trusted Publishing configured for GitHub Actions OIDC (`brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment). CLI readback confirmed the same Trusted Publisher on 2026-05-01. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29 until revoked. Revoke it after the first successful trusted-publish workflow run on the new package. A new account still cannot control the old `@uedomskikh/agentflow-client` package unless old owner auth adds it as a maintainer or npm support intervenes; scoped packages cannot be transferred to a different user scope.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 - Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership. The approval checklist is documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md).
@@ -90,8 +90,9 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, and real environment tfvars are still missing)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
 - [ ] Production CDC source onboarding approved and configured
-- [x] Full-suite release-line verification — `743 passed, 4 skipped` in 845.60s on 2026-04-30 after documenting the npm Trusted Publishing account handoff
-- [x] Standalone chaos smoke green on `fb6aa14` (`3 passed in 44.29s` with `--timeout=60 --timeout-method=thread`); audit-closure HEAD also clean
+- [x] Full-suite release-line verification — `741 passed, 4 skipped` in 393.84s on 2026-05-01 after Docker Desktop recovery; prior `743 passed, 4 skipped` in 845.60s on 2026-04-30 remains in the evidence table
+- [x] Standalone chaos smoke green on 2026-05-01 (`3 passed in 16.71s` through the CI compose path); audit-closure HEAD also clean
+- [x] npm Trusted Publishing CLI readback verified on 2026-05-01 for `@yuliaedomskikh/agentflow-client`
 - [x] Hashed API-key auth cache regression fixed locally and covered by `tests/unit/test_auth.py::test_hashed_key_authentication_caches_successful_plaintext`
 - [x] SDK/runtime publish preflight completed locally without pushing a tag
 - [x] 2026-04-27 audit closure sprint — all P0/P1/P2 findings from Claude Opus + Codex p1–p9 closed in 6 commits ([docs/audits/2026-04-27/README.md](audits/2026-04-27/README.md))
@@ -134,7 +135,13 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `python -m pytest -p no:schemathesis -q --basetemp=.tmp\codex-npm-trusted-basetemp -o cache_dir=.tmp\codex-npm-trusted-cache` | ✅ PASS | 742 passed, 4 skipped, 104 warnings in 823.06s on 2026-04-30 after npm Trusted Publishing workflow prep |
 | `python -m pytest -p no:schemathesis -q --basetemp=.tmp\codex-cdc-onboarding-basetemp -o cache_dir=.tmp\codex-cdc-onboarding-cache` | ✅ PASS | 742 passed, 4 skipped, 104 warnings in 819.42s on 2026-04-30 after the CDC onboarding runbook |
 | `python -m pytest -p no:schemathesis -q --basetemp=.tmp\codex-npm-final-basetemp -o cache_dir=.tmp\codex-npm-final-cache` | ✅ PASS | 743 passed, 4 skipped, 104 warnings in 845.60s on 2026-04-30 after documenting the npm Trusted Publishing account handoff |
-| `python -m pytest -p no:schemathesis -q tests/unit`; `tests/property`; `.venv\Scripts\python.exe -m pytest ... tests/integration -m "not requires_docker"`; `.venv\Scripts\python.exe -m pytest ... tests/e2e` | ✅ PASS | 2026-05-01 local no-Docker slice: 448 unit passed, 15 property passed, 200 integration passed / 3 skipped / 5 deselected, and 18 e2e passed. Docker-dependent full suite was not rerun because Docker Desktop returned daemon 500/timeout. |
+| `python -m pytest -p no:schemathesis -q tests/unit`; `tests/property`; `.venv\Scripts\python.exe -m pytest ... tests/integration -m "not requires_docker"`; `.venv\Scripts\python.exe -m pytest ... tests/e2e` | ✅ PASS | 2026-05-01 local no-Docker slice: 448 unit passed, 15 property passed, 200 integration passed / 3 skipped / 5 deselected, and 18 e2e passed. This was superseded by the Docker-backed full-suite rerun below after Docker Desktop recovery. |
+| Docker Desktop recovery + `docker compose up -d redis` | ✅ PASS | Docker Desktop recovered on 2026-05-01 by stopping Desktop, terminating the `docker-desktop` WSL distribution, and restarting Desktop. `docker desktop status` returned `running`; Redis is healthy. |
+| `.venv\Scripts\python.exe -m pytest -p no:schemathesis -q --basetemp .tmp\pytest-basetemp-t32-full` with project-local `TMP`/`TEMP` | ✅ PASS | 741 passed, 4 skipped in 393.84s on 2026-05-01 after Docker Desktop recovery |
+| `docker compose -p agentflow-chaos -f docker-compose.chaos.yml up -d --wait --wait-timeout 120`; `tests/chaos/test_chaos_smoke.py`; `scripts/chaos_report.py` | ✅ PASS | 3 passed in 16.71s on 2026-05-01 through the CI compose path; stack was torn down with `down -v` |
+| `docker compose -f docker-compose.prod.yml build agentflow-api`; Trivy `aquasec/trivy:0.68.1 image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 agentflow-api:security-scan` | ✅ PASS | Production API image built successfully and the Trivy image scan reported 0 HIGH/CRITICAL findings |
+| `docker compose -f docker-compose.yml -f docker-compose.cdc.yml ...`; `tests/integration/test_cdc_capture.py::test_cdc_compose_stack_captures_postgres_and_mysql_rows` with `AGENTFLOW_RUN_CDC_DOCKER=1` | ✅ PASS | CDC connectors reached `RUNNING`, and the gated Postgres/MySQL CDC capture test passed in 103.60s on 2026-05-01 |
+| Terraform container `init -backend=false` + `validate`; Helm production CDC secret-mode render | ✅ PASS | `hashicorp/terraform:1.13.5` validated `infrastructure/terraform`; Helm rendered production CDC secret mode with only `secretName: agentflow-prod-cdc-secret` and no credential values |
 | `.venv\Scripts\python.exe scripts\export_openapi.py --check`; `python scripts\generate_contracts.py --check`; `python scripts\check_schema_evolution.py` | ✅ PASS | OpenAPI drift check passes in the project `.venv`; the global Python install still reproduces the known FastAPI-version `ValidationError.input/ctx` drift documented in `docs/perf/test_openapi_compliance-divergence-2026-04-25.md`. |
 | Docker API image README-copy regression on `67c2ae5` | ✅ PASS | `Dockerfile.api`, inline `docker-compose.prod.yml` build, and `scripts/k8s_staging_up.sh` copy `README.md` before editable installs; GitHub checks for `67c2ae5` are green: `lint`, `test-unit`, `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`, `terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `e2e`, `load-test`, and `staging` |
 | `cd sdk-ts`; `npm ci`; `npm run typecheck`; `npm run test:unit`; `npm run build`; `npm pack --dry-run` | ✅ PASS | `@yuliaedomskikh/agentflow-client@1.1.0`, 42 unit tests passed, tarball `yuliaedomskikh-agentflow-client-1.1.0.tgz`, 16 files, package size 8.3 kB |
@@ -149,13 +156,13 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `python scripts\check_release_artifacts.py .tmp\build-root-readme\*` | ✅ PASS | root runtime wheel and sdist contain no forbidden release members such as `.env`, API key configs, webhook configs, or `docker/**/secrets/**` |
 | Clean temp venv editable install-order check for root, SDK, and integrations | ✅ PASS | both install orders resolved `agentflow-runtime` 1.1.0 from repo root and `agentflow-client` 1.1.0 from `sdk/`; imports and `agentflow --help` worked |
 | PyPI Trusted Publishing | ✅ ACTIVE | PyPI file metadata for both `agentflow-runtime` 1.1.0 and `agentflow-client` 1.1.0 shows `Uploaded using Trusted Publishing? Yes` with provenance tied to `publish-pypi.yml` on tag `v1.1.0` |
-| npm Trusted Publishing | ✅ CREATED / WEB UI VERIFIED | `publish-npm.yml` uses GitHub Actions OIDC (`id-token: write`), Node 24, npm `^11.5.1`, and no `NODE_AUTH_TOKEN` on the production publish step. New npm account `yuliaedomskikh` is email-verified, has 2FA mode `auth-and-writes`, owns public package `@yuliaedomskikh/agentflow-client@1.1.0`, and has Trusted Publisher `brownjuly2003-code/agentflow` with workflow `publish-npm.yml` and no environment. `npm trust github` created trust id `693e8f2f-c592-4fd0-8942-232356bb5e9a`; the npm package settings UI shows the same repository/workflow. CLI `npm trust list` readback currently returns `EOTP`; because only two usable saved recovery codes remain, planned use `1` fails the reserve gate and no further recovery code may be consumed until a fresh set or another valid second factor exists. |
+| npm Trusted Publishing | ✅ ACTIVE / CLI VERIFIED | `publish-npm.yml` uses GitHub Actions OIDC (`id-token: write`), Node 24, npm `^11.5.1`, and no `NODE_AUTH_TOKEN` on the production publish step. New npm account `yuliaedomskikh` is email-verified, has 2FA mode `auth-and-writes`, owns public package `@yuliaedomskikh/agentflow-client@1.1.0`, and has Trusted Publisher `brownjuly2003-code/agentflow` with workflow `publish-npm.yml` and no environment. `npm trust github` created trust id `693e8f2f-c592-4fd0-8942-232356bb5e9a`; the npm package settings UI shows the same repository/workflow. CLI `npm trust list` readback on 2026-05-01 returned provider `github`, repository `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, and no environment. Usable saved recovery-code reserve is 4. |
 | Pending workflow environment change | ✅ COMMITTED | `.github/workflows/publish-pypi.yml` `environment: pypi` landed in `e8b1237` |
 | Release pre-commit full-suite gate | ✅ PASS | `670 passed, 4 skipped` in 269s on audit-closure HEAD; the earlier chaos smoke hang did not reproduce, standalone re-run gives `3 passed in 44s` |
 | Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits landed on `main`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
 | Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
 | GitHub Actions environments `staging` and `production` | ✅ APPLIED | `gh api repos/brownjuly2003-code/agentflow/environments` shows a `required_reviewers` protection rule on both environments with reviewer `brownjuly2003-code`; `prevent_self_review=false` |
-| AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | `gh variable list` shows `AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs are still `if: false`, real `environments/*.tfvars` are absent, and this workstation has no `aws` or `terraform` CLI |
+| AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | `gh variable list` shows `AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs are still `if: false`, real `environments/*.tfvars` are absent, and this workstation has no AWS credentials. Terraform CLI is not installed locally, but `hashicorp/terraform:1.13.5` `init -backend=false` and `validate` pass for the checked-in config. |
 | TypeScript SDK lockfile + audit | ✅ CLEAN | `sdk-ts/package-lock.json` committed (1500 lines); `npm audit --audit-level=moderate` reports 0 vulnerabilities |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process. On 2026-04-28, direct pytest also hung before output when Windows WMI was reached through `platform.*`; the successful local run used a temporary project-local `sitecustomize` shim and a dummy `readline` module in the test runner. Do not commit that shim.
@@ -183,10 +190,12 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## New Session Handoff
 
-Local `main` is at `fe94823`, one commit ahead of `origin/main` (`56f8998`),
-and the approved `v1.1.0` tag points at `2c72387`. Registry artifacts are live
-on PyPI and npm. Future TypeScript SDK publishing now uses the new npm account
-and package `@yuliaedomskikh/agentflow-client`.
+Local `main` contains the post-release npm Trusted Publishing handoff and refreshed
+external-gate evidence. Push remains separate; do not assume origin has these
+local commits until `git push` is explicitly run. The approved `v1.1.0` tag
+points at `2c72387`. Registry artifacts are live on PyPI and npm. Future
+TypeScript SDK publishing now uses the new npm account and package
+`@yuliaedomskikh/agentflow-client`.
 
 Current npm handoff state:
 
@@ -199,71 +208,36 @@ Current npm handoff state:
    created trust id `693e8f2f-c592-4fd0-8942-232356bb5e9a`.
 4. The npm package settings UI shows Trusted Publisher
    `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment.
-5. `npm trust list @yuliaedomskikh/agentflow-client --json` currently returns
-   `EOTP`. Do not spend another recovery code for readback: the local secret
-   note has two usable recovery codes left, so planned use `1` fails the
-   two-code reserve gate.
+5. `npm trust list @yuliaedomskikh/agentflow-client --json --registry
+   https://registry.npmjs.org/` now confirms provider `github`, repository
+   `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, and no
+   environment.
 6. Obsolete standalone 16-character recovery-code candidates were removed from
    the local untracked secret notes; the active note now has zero legacy
-   candidates and two usable 64-character npm recovery codes.
+   candidates and four usable 64-character npm recovery codes.
 7. A new account cannot control legacy `@uedomskikh/agentflow-client` unless old
    owner auth adds it as a maintainer or npm support intervenes. Treat the old
    package as legacy and publish future SDK releases under the new scope.
 8. Continue production CDC source onboarding only after hostnames, table scope,
    network path, and secret ownership are approved.
 
-Kimi/new-agent prompt for any npm follow-up:
+npm follow-up note:
 
-```text
-You are working in the local AgentFlow repo checkout. Respond in Russian.
-Do not print, commit, or expose secrets, recovery codes, tokens, cookies, OTPs,
-passkey PINs, or npm auth URLs.
-
-Goal: finish post-setup npm verification for the new package
-@yuliaedomskikh/agentflow-client without consuming the two-code recovery reserve.
-
-Current known state:
-- npm user yuliaedomskikh / yulia.edomskikh@gmail.com is email-verified and has
-  2FA mode auth-and-writes.
-- npm package @yuliaedomskikh/agentflow-client@1.1.0 is public and owned by
-  yuliaedomskikh <yulia.edomskikh@gmail.com>.
-- .github/workflows/publish-npm.yml is prepared for Trusted Publishing:
-  GitHub OIDC id-token: write, Node 24, npm ^11.5.1, and no NODE_AUTH_TOKEN on
-  the production npm publish step.
-- npm trust github succeeded for @yuliaedomskikh/agentflow-client with trust id
-  693e8f2f-c592-4fd0-8942-232356bb5e9a, repository
-  brownjuly2003-code/agentflow, workflow publish-npm.yml, no environment.
-- The npm package settings UI shows that Trusted Publisher entry.
-- npm trust list @yuliaedomskikh/agentflow-client --json currently returns EOTP.
-- The local untracked secret note has exactly two usable 64-character npm
-  recovery codes. planned-use 0 passes the npm-recovery-codes reserve gate;
-  planned-use 1 fails. Do not consume another recovery code until a fresh full
-  recovery-code set or another valid second factor exists.
-- Obsolete standalone 16-character recovery-code candidates were removed from
-  the live secret notes.
-- Legacy @uedomskikh/agentflow-client remains live but is not controllable by the
-  new account without old owner access or npm support.
-
-Recommended path:
-1. Refill/regenerate the recovery-code set through a valid authenticated npm
-   flow, or use another valid 2FA factor, before any more recovery-code-gated
-   npm operation.
-2. Then run:
-   npm trust list @yuliaedomskikh/agentflow-client --json --registry https://registry.npmjs.org/
-3. Confirm provider GitHub Actions, repository brownjuly2003-code/agentflow,
-   workflow publish-npm.yml, and no environment.
-4. After one successful trusted-publish workflow run, revoke the old NPM_TOKEN.
-5. Do not commit or push unless explicitly asked.
-```
+- No npm Trusted Publishing setup/readback work remains for
+  `@yuliaedomskikh/agentflow-client`; the CLI readback is complete.
+- Use the `npm-recovery-codes` skill before any future OTP-gated npm operation.
+  The current usable saved recovery-code reserve is 4, and at least 2 must
+  remain unused after any planned operation.
+- After one successful trusted-publish workflow run, revoke the old `NPM_TOKEN`.
 
 ## Release Verdict
 
-**v1.1.0 release line prepared; post-v1.1 CDC follow-up checked in.**
+**v1.1.0 release line prepared; post-release local gates recorded.**
 
-AgentFlow is publicly available and the current checked-in docs/code describe the intended release and CDC state. Do not treat production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
+AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. Do not treat AWS Terraform apply or production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
 - Phase 1 PMF: customer discovery - needs founder outreach (script ready in `docs/customer-discovery-questions.md`)
 - AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml`
-- npm Trusted Publishing follow-up for `@yuliaedomskikh/agentflow-client`: Trusted Publisher creation is complete and web-UI verified; use the `npm-recovery-codes` skill, refill recovery codes or use another valid second factor before completing CLI `npm trust list`, then revoke `NPM_TOKEN` after the first successful trusted-publish run
+- Revoke the legacy npm `NPM_TOKEN` after the first successful trusted-publish run for `@yuliaedomskikh/agentflow-client`
 - Production CDC source onboarding decision and secrets/network setup; use [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) as the approval checklist
 - External pen-test attestation
 - Public benchmark on production hardware (`c8g.4xlarge+`)

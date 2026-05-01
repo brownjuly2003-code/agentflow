@@ -1,6 +1,6 @@
 # T31 - Hashed API-key auth cache
 
-**Status:** Committed locally in `97e5d86`
+**Status:** Closed in `97e5d86`; release line later published as `v1.1.0`
 **Priority:** P2
 **Track:** Auth performance / release hygiene
 
@@ -61,8 +61,8 @@ reaches Windows WMI through `pyreadline3`, `pytest-metadata`, or
 
 The shim was removed after verification. Do not commit local `.tmp` test shims.
 
-## Next Session Plan
+## Follow-up Status
 
-1. Re-check `git status --short`.
-2. Push `main` if release handoff should continue on origin.
-3. After CI is green, proceed with the approved `v1.1.0` retag/publish workflow.
+No T31-specific work remains. The follow-up release path completed after this
+task: `v1.1.0` is published to PyPI, npm, and GitHub, and the active handoff is
+now tracked in `docs/release-readiness.md`.

@@ -2,9 +2,9 @@
 
 Before publishing AgentFlow changes or pushing a release tag:
 
-Status snapshot (2026-04-30): content, security, link, SDK publish preflight,
-live `v1.1.0` PyPI/npm registry publishing, and the GitHub Release record are
-complete.
+Status snapshot (2026-05-01): content, security, link, SDK publish preflight,
+live `v1.1.0` PyPI/npm registry publishing, npm Trusted Publishing setup, and
+the GitHub Release record are complete.
 
 ## Content
 
@@ -27,7 +27,7 @@ complete.
 
 - [x] Relative links in `README.md` resolve
 - [x] No markdown links point to `localhost`
-- [x] No absolute `D:\...` paths appear in publishable docs
+- [x] No absolute local drive-letter paths appear in publishable docs
 - [x] `docs/` links point only to files that exist in the repo
 
 ## Optional screenshots
@@ -91,8 +91,56 @@ python scripts/check_release_artifacts.py dist/* sdk/dist/*
 - [x] If `sdk/dist/` already contains older artifacts, clear it before `python -m build sdk/` so `twine check` only validates the current release
 - [x] Stop after the rehearsal when you only need proof; the real publish event is pushing the approved release tag
 - [x] On the approved release commit, push the commit and release tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python Packages`
-- [x] Confirm registry visibility for `agentflow-runtime`, `agentflow-client`, and `@uedomskikh/agentflow-client` 1.1.0
-- [ ] Before the next npm publish, migrate `@uedomskikh/agentflow-client` to npm Trusted Publishing or rotate GitHub `NPM_TOKEN`; the current npm write token was created on 2026-04-30 with a 90-day expiry selected, so assume expiry by 2026-07-29
+- [x] Confirm registry visibility for `agentflow-runtime`, `agentflow-client`,
+  and the legacy npm package `@uedomskikh/agentflow-client` 1.1.0
+- [x] Switch future TypeScript SDK publishing to the new npm account scope:
+  `@yuliaedomskikh/agentflow-client`. `sdk-ts/package.json`,
+  `sdk-ts/package-lock.json`, the Vercel AI template, SDK README, and current
+  TypeScript import examples use the new package name.
+- [x] First-publish the new npm package under the new account:
+  `@yuliaedomskikh/agentflow-client@1.1.0` is public and owned by
+  `yuliaedomskikh <yulia.edomskikh@gmail.com>`.
+- [x] Create and secure the new npm account for email
+  `yulia.edomskikh@gmail.com`. Completed on 2026-05-01 for npm user
+  `yuliaedomskikh`: signup email verification succeeded, 2FA was configured, and
+  the new recovery-code set was saved in the local untracked secret note without
+  printing values.
+- [x] Clean the local secret notes of obsolete standalone 16-character npm
+  recovery-code candidates. The local untracked secret notes now contain zero
+  such legacy candidates.
+- [x] Before any further npm OTP-gated operation, apply the active
+  `npm-recovery-codes` skill. Run its reserve check without printing secrets and
+  do not consume a recovery code if fewer than two usable codes would remain
+  after the operation. Recovery codes can be the normal npm second factor at
+  login, but each accepted code is single-use. The new-account local note
+  currently has 2 usable 64-character npm recovery codes after the accepted
+  publish and Trusted Publisher setup codes were removed. Reserve check with
+  planned use `0` and minimum reserve `2` returns PASS; planned use `1` returns
+  FAIL, so do not consume another recovery code until a fresh set or another
+  valid second factor is available.
+- [x] Create and verify npm Trusted Publishing for the new package
+  `@yuliaedomskikh/agentflow-client`: GitHub owner `brownjuly2003-code`,
+  repository `agentflow`, workflow filename `publish-npm.yml`, no environment
+  name. `npm trust github` created trust id
+  `693e8f2f-c592-4fd0-8942-232356bb5e9a`, and the npm package settings UI shows
+  Trusted Publisher `brownjuly2003-code/agentflow` with workflow
+  `publish-npm.yml` and no environment. The workflow already publishes through
+  GitHub Actions OIDC and no longer passes `NPM_TOKEN`; revoke the old token
+  after a successful trusted-publish run.
+- [ ] After refreshing recovery codes or using another valid second factor,
+  verify the Trusted Publisher from a `yuliaedomskikh` owner-auth CLI session:
+
+```bash
+npm trust list @yuliaedomskikh/agentflow-client \
+  --json \
+  --registry https://registry.npmjs.org/
+```
+
+Current CLI readback attempt returns `EOTP`. Do not spend a recovery code for
+this readback while only two usable recovery codes remain.
+
+Do not open the literal masked URL `https://www.npmjs.com/auth/cli/***`. npm
+11 redacts the real web-auth URL in terminal output and debug logs.
 
 ## Verification after publish
 

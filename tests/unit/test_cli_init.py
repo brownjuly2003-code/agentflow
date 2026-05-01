@@ -165,7 +165,7 @@ def test_init_non_interactive_generates_vercel_ai_project(monkeypatch, runner, t
     assert (project_dir / "package.json").exists()
     assert (project_dir / "app" / "page.tsx").exists()
     assert (project_dir / "app" / "api" / "chat" / "route.ts").exists()
-    assert "@uedomskikh/agentflow-client" in (project_dir / "package.json").read_text()
+    assert "@yuliaedomskikh/agentflow-client" in (project_dir / "package.json").read_text()
     assert "streamText" in (project_dir / "app" / "api" / "chat" / "route.ts").read_text()
 
 

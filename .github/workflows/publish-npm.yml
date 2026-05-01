@@ -27,6 +27,11 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Ensure npm supports trusted publishing
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+
       - name: Verify release tag matches SDK metadata
         env:
           MANUAL_RELEASE_VERSION: ${{ inputs.release_version }}
@@ -111,6 +116,4 @@ jobs:
       - name: Publish to npm
         if: env.IS_RC != 'true'
         working-directory: sdk-ts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public

@@ -106,6 +106,10 @@ For Kubernetes installs, choose one Kafka Connect source-credential mode:
 
 The chart schema rejects mixed or missing modes so a rendered deployment cannot reference a missing source-credential Secret.
 
+Production source attachment has a separate gate. Before creating any connector
+for a real Postgres or MySQL database, complete
+[Production CDC Source Onboarding](operations/cdc-production-onboarding.md).
+
 ### Restart a Flink job
 
 ```bash

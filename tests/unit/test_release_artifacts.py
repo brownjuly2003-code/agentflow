@@ -37,6 +37,19 @@ def test_release_artifact_checker_accepts_runtime_sdist_allowlist(tmp_path):
     assert find_forbidden_members(artifact) == []
 
 
+def test_release_artifact_checker_accepts_sdk_env_example_templates(tmp_path):
+    artifact = tmp_path / "agentflow_client-1.1.0.tar.gz"
+    _write_targz(
+        artifact,
+        [
+            "agentflow_client-1.1.0/agentflow/templates/basic/.env.example.tmpl",
+            "agentflow_client-1.1.0/agentflow/templates/vercel-ai/.env.example.tmpl",
+        ],
+    )
+
+    assert find_forbidden_members(artifact) == []
+
+
 def _write_targz(path, names):
     with tarfile.open(path, "w:gz") as archive:
         for name in names:

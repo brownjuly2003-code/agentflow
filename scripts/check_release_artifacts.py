@@ -23,6 +23,11 @@ FORBIDDEN_MEMBER_PATTERNS = (
     "**/*secret*",
 )
 
+ALLOWED_MEMBER_PATTERNS = (
+    "agentflow/templates/*/.env.example.tmpl",
+    "*/agentflow/templates/*/.env.example.tmpl",
+)
+
 
 def find_forbidden_members(artifact_path: Path) -> list[str]:
     violations: list[str] = []
@@ -55,6 +60,13 @@ def _is_forbidden_member(member: str) -> bool:
     parts = member.split("/", 1)
     if len(parts) == 2:
         candidates.append(parts[1])
+
+    if any(
+        fnmatch.fnmatchcase(candidate, pattern)
+        for candidate in candidates
+        for pattern in ALLOWED_MEMBER_PATTERNS
+    ):
+        return False
 
     return any(
         fnmatch.fnmatchcase(candidate, pattern)

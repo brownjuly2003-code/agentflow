@@ -1,18 +1,21 @@
 # AgentFlow Integrations
 
-After registry publish, install the integrations package:
-
-```bash
-pip install agentflow-integrations
-```
-
-> Registry publishing is not complete as of 2026-04-27 — registry lookups
-> still return not found.
-
-In the current checked-in repo, use a local editable install:
+The integrations package is tracked in this repository as
+`agentflow-integrations`, but it was not part of the v1.1.0 registry
+publish. Install it from source in the checked-out repository:
 
 ```bash
 python -m pip install -e "./integrations"
+```
+
+The published runtime and SDK packages are separate:
+`agentflow-runtime` and `agentflow-client`.
+
+When the integrations package gets a registry release, the install command
+will be:
+
+```bash
+pip install agentflow-integrations
 ```
 
 ## LangChain
@@ -51,10 +54,10 @@ query_engine.query("Which orders need attention?")
 
 ## CrewAI
 
-Install CrewAI dependencies alongside the integrations package:
+Install CrewAI dependencies alongside the local integrations package:
 
 ```bash
-pip install agentflow-integrations
+python -m pip install -e "./integrations"
 pip install crewai crewai-tools
 ```
 

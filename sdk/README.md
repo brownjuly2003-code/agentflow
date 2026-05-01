@@ -1,10 +1,9 @@
 # agentflow-client
 
-> PyPI distribution name: **`agentflow-client`**. Registry publishing is not
-> complete as of 2026-04-27; until the first green `Publish Python Packages`
-> run, use the local editable install below. Python import remains `agentflow`.
+> PyPI distribution name: **`agentflow-client`**. The package is published as
+> `agentflow-client` 1.1.0 on PyPI. Python import remains `agentflow`.
 
-After registry publish:
+Install from PyPI:
 
 ```bash
 pip install agentflow-client
@@ -13,7 +12,7 @@ pip install agentflow-client
 Inside the monorepo, the root runtime package is tracked separately as
 `agentflow-runtime`, while the SDK keeps the `agentflow` import path and CLI.
 
-For a local editable install from this repository (the supported path today):
+For a local editable install while developing from this repository:
 
 ```bash
 python -m pip install -e "./sdk"

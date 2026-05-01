@@ -4,6 +4,35 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Refreshed release, SDK, and integrations docs after the live v1.1.0
+  registry publish: README status, release-readiness handoff, SDK README,
+  integrations local-install note, and the T31 task closeout now match the
+  current post-release state.
+- Prepared npm publishing for Trusted Publishing through GitHub Actions OIDC:
+  the TypeScript SDK publish workflow now requires npm CLI 11.5.1+ and no
+  longer passes `NPM_TOKEN` to the production `npm publish` step.
+- Recorded the npm Trusted Publishing handoff: the new package was first
+  published as `@yuliaedomskikh/agentflow-client@1.1.0`, Trusted Publisher
+  setup succeeded for `brownjuly2003-code/agentflow` with workflow
+  `publish-npm.yml`, CLI `npm trust list` readback still needs a valid second
+  factor or refilled recovery-code set, and future recovery-code use must keep a
+  two-code reserve through the `npm-recovery-codes` skill.
+- Documented the completed replacement npm account bootstrap for
+  `yulia.edomskikh@gmail.com`, the saved 2FA recovery-code reserve, and the
+  switch of future TypeScript SDK publishing to
+  `@yuliaedomskikh/agentflow-client`.
+- Added a production CDC onboarding runbook that blocks real source attachment
+  until source ownership, table scope, network path, credential ownership,
+  monitoring, and rollback decisions are recorded.
+
+### Fixed
+
+- Allowed packaged SDK starter templates to include placeholder
+  `.env.example.tmpl` files while keeping the release artifact checker strict
+  for real `.env` files, API-key configs, webhook configs, and secret paths.
+
 ### Security (audit follow-up sprint 2026-04-27/28)
 
 Two external audits delivered against `4a13d36` (Claude Opus + Codex p1–p9,
@@ -79,8 +108,9 @@ off by default (enable per cluster).
 added to `security.yml`. `aquasecurity/trivy-action` pinned from
 `@master` to `0.28.0`. Safety scope now includes
 `integrations/pyproject.toml` resolved requirements. TypeScript SDK npm
-publishing now targets `@uedomskikh/agentflow-client` because npm org scope
-`@agentflow` is already owned by another project.
+publishing now targets `@yuliaedomskikh/agentflow-client` because npm org scope
+`@agentflow` is already owned by another project and the previous user scope is
+legacy.
 
 **Vulnerable dep bumps:** `dagster>=1.13.1` (GHSA-mjw2-v2hm-wj34
 SQL injection via dynamic partition keys), `langchain-core>=1.2.22`
@@ -149,7 +179,7 @@ so the test bypass flag does not leak across `TestClient` instances
 (closes Codex review P2 on auth/middleware persistence).
 
 **Documentation hygiene (Codex p6):** TypeScript SDK examples now
-import from `"@uedomskikh/agentflow-client"` (was `"agentflow"`); placeholder
+import from `"@yuliaedomskikh/agentflow-client"` (was `"agentflow"`); placeholder
 `https://api.agentflow.dev` examples replaced with
 `http://localhost:8000`; clone URL points at
 `brownjuly2003-code/agentflow`; `docs/quality.md` marked stale;

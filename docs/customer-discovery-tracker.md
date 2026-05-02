@@ -359,6 +359,70 @@ pilot.
 - Record the reason each candidate qualified before marking outreach sent.
 - Treat non-replies as source-quality signal, not product validation.
 
+## Outreach Execution Plan
+
+Send Batch A first so the first five notes cover all target profiles before any
+single segment gets overrepresented. Send Batch B only after the first five
+notes are sent, or after wording is adjusted from early replies.
+
+| Send batch | Candidate/team | Target slot | Draft section | Send channel | Send date | Follow-up due | Reply triage |
+|------------|----------------|-------------|---------------|--------------|-----------|---------------|--------------|
+| A | Markus Haverinen, Frends | 1 | Markus Haverinen, Frends | TBD | TBD | TBD | Not sent |
+| A | Erik Munson, Day AI | 2 | Erik Munson, Day AI | TBD | TBD | TBD | Not sent |
+| A | Lucrezia Keane, GWI | 3 | Lucrezia Keane, GWI | TBD | TBD | TBD | Not sent |
+| A | Jesse Zhang, Decagon | 4 | Jesse Zhang, Decagon | TBD | TBD | TBD | Not sent |
+| A | Talha Tariq, Vercel | 5 | Talha Tariq, Vercel | TBD | TBD | TBD | Not sent |
+| B | Darren Hockley, Dotdigital | 1 | Darren Hockley, Dotdigital | TBD | TBD | TBD | Not sent |
+| B | James Luo, BGL | 2 | James Luo, BGL | TBD | TBD | TBD | Not sent |
+| B | Nicole Looker, Rebuy Engine | 3 | Nicole Looker, Rebuy Engine | TBD | TBD | TBD | Not sent |
+| B | Marty Kausas, Pylon | 4 | Marty Kausas, Pylon | TBD | TBD | TBD | Not sent |
+| B | Haider Pasha, Palo Alto Networks | 5 | Haider Pasha, Palo Alto Networks | TBD | TBD | TBD | Not sent |
+
+### Pre-Send Checklist
+
+Complete this checklist for each note before updating `Outreach sent`.
+
+- Confirm the channel is appropriate for research outreach, not a public support
+  or sales channel.
+- Prefer a warm intro when one is available within 1 business day; otherwise
+  send the direct research note.
+- Keep the first note to one ask: a short research conversation or a referral to
+  the operator who owns the workflow.
+- Remove any product name or feature claim that makes the note read like a
+  pitch.
+- Confirm the note names a concrete workflow risk: stale context, split state,
+  unsafe access, brittle glue, escalation boundaries, or governance review.
+- Set `Follow-up due` to 3 business days after the send date.
+- Update only the matching queue row after sending; do not update funnel metrics
+  until the batch count is reconciled.
+
+### Reply Triage Rules
+
+- Positive reply: schedule the call, update the sample plan slot, and keep the
+  first question anchored on a concrete recent failure or near-miss.
+- Delegated reply: ask for the specific operator who owns the workflow, then
+  add that person as the active candidate only after a real intro or contact
+  path exists.
+- Decline: mark the outcome as declined and record the reason if they give one.
+- No reply after 3 business days: send the follow-up angle from the draft.
+- No reply after follow-up: mark as no reply and do not count it as product
+  signal.
+- Abstract interest without a workflow: do not count it as a scheduled
+  interview until the person can discuss a concrete operational agent workflow.
+
+### Scheduling Intake
+
+Capture these fields before a call is counted as scheduled.
+
+| Field | Required value before scheduling |
+|-------|----------------------------------|
+| Participant role | The person owns, operates, approves, or debugs the workflow |
+| Workflow anchor | A specific agent or AI-assisted workflow is named |
+| Systems touched | At least one live operational system, support platform, CRM, data warehouse, or API boundary is named |
+| Risk to probe | Stale answer, split source, unsafe access, schema drift, brittle glue, or unclear escalation |
+| Segment slot | One of slots 1-5; keep no more than 2 scheduled from one slot before all slots have a credible candidate |
+| Research framing | Participant understands this is not a sales call |
+
 ## Batch Funnel Metrics
 
 Update this after each outreach batch. The goal is to identify where the PMF
@@ -474,9 +538,18 @@ Security/governance concern:
 Mentioned alternatives:
 Strongest buying signal:
 Strongest rejection signal:
+Budget owner:
+Replaceable cost:
+Natural value metric reaction:
+Pilot shape:
+Pricing risk:
 Exact quote worth keeping:
 Follow-up needed:
 ```
+
+Pricing evidence fields are for internal validation only. Do not turn them into
+price points, tiers, or pricing-page copy until the 5-interview evidence gates
+in [Pricing Validation Plan](pricing-validation-plan.md#evidence-gates) are met.
 
 ## Scorecard
 

@@ -6,6 +6,9 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Documentation
 
+- Documented the demo-key requirement, current DuckDB/ClickHouse serving
+  story, Docker Redis dependency for the local demo, example-agent dry-run
+  flow, and local compose environment placeholders.
 - Refreshed release, SDK, and integrations docs after the live v1.1.0
   registry publish: README status, release-readiness handoff, SDK README,
   integrations local-install note, and the T31 task closeout now match the
@@ -29,6 +32,12 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Fixed
 
+- Treated corrupt Redis cache payloads as cache misses instead of surfacing
+  JSON decode failures to API requests.
+- Fixed TypeScript SDK SSE parsing so a final frame with `id:` or `event:`
+  metadata before `data:` is still emitted.
+- Made the TypeScript SDK unit-test script include all `sdk-ts/tests` files and
+  included `CHANGELOG.md` in the npm dry-run package contents.
 - Allowed packaged SDK starter templates to include placeholder
   `.env.example.tmpl` files while keeping the release artifact checker strict
   for real `.env` files, API-key configs, webhook configs, and secret paths.

@@ -51,7 +51,7 @@ After the package-identity split, `pip show agentflow` refers to the Python SDK 
 1. Tests pass:
 
 ```bash
-pytest tests/
+make test
 ```
 
 2. Security diff is clean:

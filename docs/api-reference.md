@@ -11,6 +11,8 @@
 - Correlation headers: send `X-Correlation-ID` or `X-Request-Id`; the API always returns `X-Correlation-ID`
 - Version pinning header: `X-AgentFlow-Version: YYYY-MM-DD`
 
+The narrative examples use `demo-key` for readability. That key is accepted only when `AGENTFLOW_DEMO_MODE=true` injects the public demo key, or when you explicitly configure the same key in `AGENTFLOW_API_KEYS_FILE`; otherwise use your own API key.
+
 Common response headers:
 - `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
 - `X-AgentFlow-Version`, `X-AgentFlow-Latest-Version`, `X-AgentFlow-Deprecated`

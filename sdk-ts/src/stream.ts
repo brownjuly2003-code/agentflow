@@ -48,8 +48,9 @@ export async function* streamSseJson<T>(
     }
 
     buffer += decoder.decode().replace(/\r\n/g, "\n");
-    if (buffer.trim().startsWith("data:")) {
-      const data = buffer
+    const finalFrame = buffer.trim();
+    if (finalFrame) {
+      const data = finalFrame
         .split("\n")
         .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).trimStart())

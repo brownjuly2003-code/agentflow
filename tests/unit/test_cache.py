@@ -107,6 +107,30 @@ async def test_query_cache_get_deserializes_payload():
 
 
 @pytest.mark.asyncio
+async def test_query_cache_get_treats_corrupt_json_as_miss(monkeypatch):
+    logger = LoggerSpy()
+    monkeypatch.setattr(cache_module, "logger", logger)
+    redis_client = FakeRedis()
+    key = QueryCache.metric_key("revenue", "1h")
+    redis_client.data[key] = "{not-json"
+    cache = QueryCache(redis_client=redis_client)
+
+    result = await cache.get(key)
+
+    assert result is None
+    assert logger.warning_calls == [
+        (
+            "query_cache_corrupt",
+            {
+                "operation": "get",
+                "key": key,
+                "error": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_query_cache_set_serializes_payload_with_ttl():
     redis_client = FakeRedis()
     cache = QueryCache(redis_client=redis_client)

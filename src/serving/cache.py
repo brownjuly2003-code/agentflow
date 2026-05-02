@@ -48,7 +48,16 @@ class QueryCache:
             return None
         if isinstance(data, bytes):
             data = data.decode()
-        return cast(dict[Any, Any], json.loads(data))
+        try:
+            return cast(dict[Any, Any], json.loads(data))
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "query_cache_corrupt",
+                operation="get",
+                key=key,
+                error=str(exc),
+            )
+            return None
 
     async def set(self, key: str, value: dict, ttl: int = 30) -> None:
         if self._redis is None:

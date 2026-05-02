@@ -6,7 +6,7 @@ Operations workflow for health, SLO, and dead-letter monitoring. This example st
 
 - Python 3.11+
 - Running AgentFlow API at `http://localhost:8000` or `AGENTFLOW_BASE_URL`
-- `AGENTFLOW_OPS_API_KEY` or `AGENTFLOW_API_KEY`
+- `AGENTFLOW_OPS_API_KEY` or `AGENTFLOW_API_KEY` for auth-enabled APIs; local `make demo` uses open auth defaults
 
 ## Setup
 
@@ -20,8 +20,8 @@ python -m pip install -e sdk
 
 ```bash
 cd examples/ops-agent
-python main.py
 python main.py --dry-run
+python main.py
 ```
 
 ## Expected Output

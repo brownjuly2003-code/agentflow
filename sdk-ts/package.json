@@ -16,14 +16,15 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "test:unit": "vitest run --root .. --exclude=mutants/** tests/client.test.ts sdk-ts/tests/retry.test.ts sdk-ts/tests/circuitBreaker.test.ts sdk-ts/tests/resilience-integration.test.ts",
-    "test": "vitest run --root .. --exclude=mutants/** tests/client.test.ts sdk-ts/tests/retry.test.ts sdk-ts/tests/circuitBreaker.test.ts sdk-ts/tests/resilience-integration.test.ts"
+    "test:unit": "vitest run --root .. --exclude=mutants/** tests/client.test.ts sdk-ts/tests",
+    "test": "vitest run --root .. --exclude=mutants/** tests/client.test.ts sdk-ts/tests"
   },
   "keywords": [
     "agentflow",

@@ -6,7 +6,7 @@ Support workflow for order-status questions. The default mode uses the local SDK
 
 - Python 3.11+
 - Running AgentFlow API at `http://localhost:8000` or `AGENTFLOW_BASE_URL`
-- `AGENTFLOW_SUPPORT_API_KEY` or `AGENTFLOW_API_KEY`
+- `AGENTFLOW_SUPPORT_API_KEY` or `AGENTFLOW_API_KEY` for auth-enabled APIs; local `make demo` uses open auth defaults
 - Optional for `--framework langchain`: `langchain`, `langchain-openai`, and `OPENAI_API_KEY`
 
 ## Setup
@@ -28,8 +28,8 @@ python -m pip install langchain langchain-openai
 
 ```bash
 cd examples/support-agent
-python main.py
 python main.py --dry-run
+python main.py
 python main.py --framework langchain --question "Where is order ORD-20260404-1001 right now?"
 ```
 

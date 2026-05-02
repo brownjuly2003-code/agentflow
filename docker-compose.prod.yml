@@ -3,7 +3,7 @@ services:
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka-1
     ports:
-      - "19092:19092"
+      - "127.0.0.1:19092:19092"
     environment:
       CLUSTER_ID: "AgentFlowKafkaProdCluster01"
       KAFKA_NODE_ID: 1
@@ -35,7 +35,7 @@ services:
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka-2
     ports:
-      - "29092:19092"
+      - "127.0.0.1:29092:19092"
     environment:
       CLUSTER_ID: "AgentFlowKafkaProdCluster01"
       KAFKA_NODE_ID: 2
@@ -67,7 +67,7 @@ services:
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka-3
     ports:
-      - "39092:19092"
+      - "127.0.0.1:39092:19092"
     environment:
       CLUSTER_ID: "AgentFlowKafkaProdCluster01"
       KAFKA_NODE_ID: 3
@@ -105,7 +105,7 @@ services:
       kafka-3:
         condition: service_healthy
     ports:
-      - "8085:8081"
+      - "127.0.0.1:8085:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
@@ -122,7 +122,7 @@ services:
       schema-registry:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       DYNAMIC_CONFIG_ENABLED: "true"
       KAFKA_CLUSTERS_0_NAME: agentflow-prod
@@ -132,7 +132,7 @@ services:
   redis:
     image: redis:7.4-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -145,8 +145,8 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.55
     ports:
-      - "16686:16686"
-      - "4317:4317"
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4317:4317"
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
@@ -154,12 +154,12 @@ services:
     image: clickhouse/clickhouse-server:24.8
     profiles: ["clickhouse"]
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
     environment:
       CLICKHOUSE_DB: agentflow
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?CLICKHOUSE_USER is required}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
@@ -197,8 +197,8 @@ services:
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 8123
       CLICKHOUSE_DATABASE: agentflow
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?CLICKHOUSE_USER is required}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_SERVICE_NAME: agentflow-api
       REDIS_URL: redis://redis:6379/0
@@ -222,7 +222,7 @@ services:
       agentflow-api:
         condition: service_healthy
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     entrypoint:
       - /bin/sh
       - -ec
@@ -248,7 +248,7 @@ services:
       prometheus:
         condition: service_started
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:?GF_SECURITY_ADMIN_USER is required}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?GF_SECURITY_ADMIN_PASSWORD is required}

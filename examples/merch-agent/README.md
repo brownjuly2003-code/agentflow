@@ -6,7 +6,7 @@ Merchandising workflow for KPI snapshots, ranked product answers, and catalog di
 
 - Python 3.11+
 - Running AgentFlow API at `http://localhost:8000` or `AGENTFLOW_BASE_URL`
-- `AGENTFLOW_OPS_API_KEY` or `AGENTFLOW_API_KEY`
+- `AGENTFLOW_OPS_API_KEY` or `AGENTFLOW_API_KEY` for auth-enabled APIs; local `make demo` uses open auth defaults
 - Optional for `--framework crewai`: `crewai` and `crewai-tools`
 
 ## Setup
@@ -28,8 +28,8 @@ python -m pip install crewai crewai-tools
 
 ```bash
 cd examples/merch-agent
-python main.py
 python main.py --dry-run
+python main.py
 python main.py --framework crewai --question "Summarize revenue and the top products for today."
 ```
 

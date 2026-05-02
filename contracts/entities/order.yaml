@@ -6,7 +6,7 @@ fields:
   order_id: Unique order identifier (ORD-YYYYMMDD-NNNN)
   user_id: Customer identifier
   status: "Current status: pending, confirmed, shipped, delivered, cancelled"
-  total_amount: Order total in USD
+  total_amount: Order total in the order currency
   currency: Currency code (USD, EUR, GBP)
   created_at: Order creation timestamp
 relationships:

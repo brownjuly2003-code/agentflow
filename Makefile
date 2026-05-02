@@ -41,7 +41,7 @@ api:
 tools:
 	python scripts/export_openapi.py
 
-# ── End-to-End Demo (no Docker needed) ───────────────────────────
+# ── End-to-End Demo (Docker Redis only) ──────────────────────────
 
 demo:
 	@echo "=== AgentFlow Demo ==="
@@ -103,6 +103,7 @@ perf-plot:
 
 lint:
 	ruff check src/ tests/
+	ruff format --check src/ tests/
 	mypy src/
 
 format:

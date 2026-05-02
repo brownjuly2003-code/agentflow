@@ -43,7 +43,7 @@ AgentFlow is a real-time data platform designed to serve AI agents — not dashb
 2. **Processing**: Flink validates (schema + semantic), enriches, deduplicates, and routes events
 3. **Storage**: Valid events land in Iceberg tables; production uses AWS Glue as the catalog over object storage
 4. **Quality**: Pre-storage gates check schema + semantic rules. Failures → dead letter topic
-5. **Serving**: Agent API reads from Iceberg via Trino / Athena
+5. **Serving**: Agent API reads from the configured serving backend; the checked-in paths are DuckDB by default and optional ClickHouse for higher read concurrency, while Iceberg remains the lakehouse storage layer
 
 For CDC sources, Debezium/Kafka Connect handles source capture while a shared normalizer converts Postgres/MySQL envelopes into one canonical AgentFlow CDC contract before validation. See [ADR 0005](decisions/0005-cdc-ingestion-strategy.md).
 
@@ -139,7 +139,8 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | Environment | Primary components | Purpose |
 |-------------|--------------------|---------|
 | Local demo | `src.processing.local_pipeline` + DuckDB + FastAPI | Fastest path for developers and SDK examples |
-| Prod-like Docker | `docker-compose.prod.yml` with Kafka, Redis, Jaeger, Prometheus, Grafana, API | Observability, E2E, and smoke coverage against a realistic stack |
+| Prod-like Docker | `docker-compose.prod.yml` with Kafka, Redis, Jaeger, Prometheus, Grafana, API, and optional ClickHouse | Observability and production-shaped debugging against a realistic local stack |
+| Lite E2E Docker | `docker-compose.e2e.yml` with the narrowed CI service set | Faster E2E and smoke coverage without the full observability stack |
 | Chaos harness | `docker-compose.chaos.yml` + Toxiproxy + pytest chaos suite | Validate graceful degradation under Kafka/Redis failures |
 | kind staging | `helm/agentflow`, `k8s/`, `scripts/k8s_staging_up.sh` | Production-shaped staging on a local Kubernetes cluster |
 | Production | Managed Kafka/Flink/Iceberg/object storage + Helm/Terraform | Durable, autoscaled multi-service deployment |

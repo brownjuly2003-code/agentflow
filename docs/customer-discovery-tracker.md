@@ -11,11 +11,12 @@ and decide whether the v1.1 roadmap still fits real customer pain.
 
 ## Current Operating Step
 
-Run the first discovery batch as a sourcing and scheduling sprint, not as a
-roadmap exercise.
+Batch 1 sourcing is complete. The next operating step is sending the first
+research notes and tracking replies, not changing roadmap, pricing, or
+positioning.
 
-- Source at least 15 named candidates before declaring the outreach queue weak.
-- Send the first 10 research notes across at least 3 target profiles.
+- Keep the 15 named candidates below as the first sourcing baseline.
+- Send the first 10 research notes across all 5 target profiles.
 - Schedule no more than 2 interviews from the same profile until all 5 slots have
   at least one credible candidate.
 - Do not change v1.1 scope, pricing, or positioning until the first 5 interviews
@@ -48,6 +49,30 @@ AI workflows.
 | 4 | 3 | AI-native B2B founder peers | Builder communities | Must have built or evaluated product-facing agents |
 | 5 | 3 | Security/platform leader referrals | Enterprise buyer intros | Must know what blocks agent access approval |
 
+## Candidate Research Batch 1
+
+These candidates are sourced from public customer stories, company profiles, or
+reported interviews. Public sources are evidence of relevance only; do not add
+private contact details here.
+
+| Target slot | Candidate/team | Public source | Qualification reason | Outreach priority |
+|-------------|----------------|---------------|----------------------|-------------------|
+| 1 | Markus Haverinen, Head of Support Operations, Frends | [Fin customer story](https://fin.ai/customers/frends) | Operates a human+AI support workflow where Fin handles most support requests; likely to know what live support context and escalation controls require. | Batch 1 |
+| 1 | Darren Hockley, Support and Technology Operations Director, Dotdigital | [Fin AI Agent Blueprint](https://fin.ai/blueprint/service/scaling-ai-agents/org-and-system-design) | Publicly described rollout proof for 2,800 AI resolutions per month; likely to discuss support ownership, workflow confidence, and quality loops. | Batch 1 |
+| 1 | Natalie Onions, VP of Customer Service, Customer.io | [My AskAI customer proof](https://myaskai.com/ai-agent-integration/intercom) | B2B SaaS support leader replacing Zendesk AI and saving team time; strong fit for account/subscription support automation questions. | Batch 2 |
+| 2 | Erik Munson, Founding Engineer, Day AI | [Materialize case study](https://materialize.com/customer-stories/day-ai/) | Built live CRM context for agents from multiple upstream sources, permissions, and human/AI writes; direct fit for freshness and canonical entity questions. | Batch 1 |
+| 2 | James Luo, Head of Data and AI, BGL | [ZenML LLMOps case study](https://www.zenml.io/llmops-database/ai-agent-for-self-service-business-intelligence-with-text-to-sql) | Owns a regulated self-service analytics agent backed by Athena/dbt and identity-based controls; strong fit for data foundation and governance questions. | Batch 1 |
+| 2 | Vikram Chauhan, Head of Data Engineering, Koheisan | [Streamkap customer proof](https://streamkap.com/) | Led near-real-time pipeline migration where limited freshness and support burden were explicit pain points; useful for CDC/freshness validation. | Batch 2 |
+| 3 | Lucrezia Keane, Global SVP of Customer Success, GWI | [Hook customer proof](https://hook.co/) | Uses AI agents over product, revenue, meeting, and support context for scaled CS; fits stale customer-state and renewal-risk workflow validation. | Batch 1 |
+| 3 | Nicole Looker, Director of Revenue Operations, Rebuy Engine | [Sweep customer page](https://www.sweep.io/customers) | RevOps owner using AI-powered Salesforce documentation to reduce configuration discovery time; fits CRM workflow and operational-data ownership questions. | Batch 1 |
+| 3 | Jay Mahoney, Principal Revenue Operations Manager, Deputy | [Sweep customer page](https://www.sweep.io/customers) | Publicly cites asking an AI agent what is happening in Salesforce Flow; fit for brittle workflow, data lineage, and admin burden questions. | Batch 2 |
+| 4 | Jesse Zhang, Co-founder and CEO, Decagon | [OpenAI customer story](https://openai.com/index/decagon/) | Builds production customer-support agents that capture customer business logic and act across client workflows; strong concept-test target. | Batch 1 |
+| 4 | Marty Kausas, Co-founder and CEO, Pylon | [Y Combinator company profile](https://www.ycombinator.com/companies/pylon-2) | Builds B2B customer support platform across Slack, Teams, email, portals, and workflows; likely to know customer-context and post-sales agent constraints. | Batch 1 |
+| 4 | Bret Taylor or Clay Bavor, Co-founders, Sierra | [TechCrunch launch coverage](https://techcrunch.com/2024/02/13/bret-taylors-new-company-aims-to-connect-conversational-ai-to-enterprise-workflows/) | Building AI customer-service agents that connect to enterprise systems and take actions such as subscription or order changes. | Batch 2 |
+| 5 | Talha Tariq, CISO, Vercel | [ITPro 1Password coverage](https://www.itpro.com/security/1password-unified-access-agent-identity-security) | Publicly frames agentic coding and credentials as a developer-workflow security problem; strong fit for scoped credential and audit questions. | Batch 1 |
+| 5 | Haider Pasha, EMEA CISO, Palo Alto Networks | [ITPro agentic AI security interview](https://www.itpro.com/security/agentic-ai-poses-major-challenge-for-security-professionals-says-palo-alto-networks-emea-ciso) | Discusses runtime controls, API/MCP/SDK dependencies, privileges, and prompt/tool misuse for agents at scale. | Batch 1 |
+| 5 | Stephen McDermid, EMEA CISO, Okta | [TechRadar Okta interview](https://www.techradar.com/pro/security/everybodys-under-pressure-to-do-more-with-less-why-okta-says-you-need-an-ai-agent-governance-strategy-and-sooner-rather-than-later) | Focuses on non-human identity, least privilege, agent permissions, and audit trails; strong fit for enterprise approval blockers. | Batch 2 |
+
 ## Outreach Queue
 
 Use this as a working list before calls are scheduled. Keep the request framed as
@@ -55,11 +80,16 @@ research, not a product pitch.
 
 | Candidate/team | Target slot | Source | Outreach sent | Follow-up due | Outcome |
 |----------------|-------------|--------|---------------|---------------|---------|
-| TBD | 1 | TBD | No | TBD | Not contacted |
-| TBD | 2 | TBD | No | TBD | Not contacted |
-| TBD | 3 | TBD | No | TBD | Not contacted |
-| TBD | 4 | TBD | No | TBD | Not contacted |
-| TBD | 5 | TBD | No | TBD | Not contacted |
+| Markus Haverinen, Frends | 1 | Fin customer story | No | TBD after first note | Not contacted |
+| Darren Hockley, Dotdigital | 1 | Fin AI Agent Blueprint | No | TBD after first note | Not contacted |
+| Erik Munson, Day AI | 2 | Materialize case study | No | TBD after first note | Not contacted |
+| James Luo, BGL | 2 | ZenML LLMOps case study | No | TBD after first note | Not contacted |
+| Lucrezia Keane, GWI | 3 | Hook customer proof | No | TBD after first note | Not contacted |
+| Nicole Looker, Rebuy Engine | 3 | Sweep customer page | No | TBD after first note | Not contacted |
+| Jesse Zhang, Decagon | 4 | OpenAI customer story | No | TBD after first note | Not contacted |
+| Marty Kausas, Pylon | 4 | Y Combinator company profile | No | TBD after first note | Not contacted |
+| Talha Tariq, Vercel | 5 | ITPro 1Password coverage | No | TBD after first note | Not contacted |
+| Haider Pasha, Palo Alto Networks | 5 | ITPro agentic AI security interview | No | TBD after first note | Not contacted |
 
 ## Outreach Operating Rules
 
@@ -77,8 +107,8 @@ process is blocked before interpreting the interviews.
 
 | Metric | Target before batch review | Current | Interpretation |
 |--------|----------------------------|---------|----------------|
-| Named candidates sourced | 15 | 0 | Below target means sourcing is not deep enough |
-| Qualified candidates | 10 | 0 | Below target means the ICP definition is too broad or channels are weak |
+| Named candidates sourced | 15 | 15 | Initial sourcing target met; next constraint is outreach execution and reply quality |
+| Qualified candidates | 10 | 15 | All 15 have a public signal tied to agent data access, support automation, data contracts, operational AI, or security review |
 | Research notes sent | 10 | 0 | Below target means execution is blocked before market signal |
 | Replies received | 3 | 0 | Low replies suggest weak source quality, framing, or timing |
 | Interviews scheduled | 5 | 0 | Low scheduling after replies suggests weak pain relevance |

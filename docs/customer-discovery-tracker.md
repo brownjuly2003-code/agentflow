@@ -670,6 +670,20 @@ to score the segment.
 If a call misses two or more requirements, keep the notes but replace the slot
 with a stronger candidate before synthesizing the batch.
 
+### Batch A Modeled Interview Records
+
+These rows rehearse how the interview evidence would be captured if the modeled
+Batch A conversations happened. They are synthetic records only; keep the real
+per-interview log empty until a real call is completed.
+
+| Candidate/team | Modeled workflow discussed | Modeled failure or near-miss | Modeled current workaround | Modeled owner | Modeled next-step signal | Quality-bar rehearsal |
+|----------------|----------------------------|------------------------------|----------------------------|---------------|--------------------------|-----------------------|
+| Markus Haverinen, Frends | AI-assisted support escalation after automated answer confidence drops | Customer-specific entitlement context was stale enough that the AI answer needed human correction before the customer saw it | Human support lead checks account state and escalation rules before closing the loop | Support operations | Would compare whether fresher account context reduces repeat handling | Passes as a support workflow hypothesis, not evidence |
+| Erik Munson, Day AI | Agent reads and writes live CRM context from multiple upstream systems | Agent-visible CRM state lagged behind a recent human edit, making a write action unsafe | Platform layer reconciles source priority, permissions, and write ownership before agent action | Platform engineering | Would test time-to-confident-action as the value metric | Passes as a data/platform hypothesis, not evidence |
+| Lucrezia Keane, GWI | Scaled CS account intelligence produces next-best actions | A recommendation lacked enough signal provenance for a CSM to trust it on renewal risk | CS operations reviews product, revenue, meeting, and support signals before actioning | CS operations | Delegated operator would validate which signals change action | Partial because the modeled reply is delegated |
+| Jesse Zhang, Decagon | Production support agent implements customer-specific business logic | A customer exception required a custom workflow branch because state and policy were not represented generically | Product/solutions team encodes custom policy and escalation behavior | AI product/operator | Would clarify whether typed contracts reduce custom implementation burden | Partial because buying signal is ambiguous |
+| Talha Tariq, Vercel | Security review for agent API and credential access | Proposed agent access lacked enough credential scoping, audit detail, and revocation path for approval | Security/platform reviewer narrows permissions and requires auditability before pilot | Security/platform | Would define the minimum control set for a limited pilot | Partial because governance may block before a lightweight pilot |
+
 ## Per-Interview Record
 
 Copy this block after each call.
@@ -717,6 +731,19 @@ Score each interview from `0` to `3` using the rubric in
 | 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | 5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 
+### Batch A Modeled Scorecard Rehearsal
+
+Do not copy these scores into the real scorecard. They only show how the rubric
+would behave if the modeled interview records were real.
+
+| Slot | Pain severity | Freshness criticality | Glue burden | Ownership clarity | Pilot readiness | Budget/WTP signal | Governance pressure | Modeled total | Rehearsal read |
+|------|---------------|-----------------------|-------------|-------------------|-----------------|-------------------|---------------------|---------------|----------------|
+| 1 | 2 | 2 | 1 | 2 | 1 | 0 | 1 | 9 | Support pain is concrete, but modeled value still depends on repeat handling reduction |
+| 2 | 2 | 3 | 2 | 3 | 2 | 1 | 2 | 15 | Data/platform is strongest in the model because read/write action makes freshness operational |
+| 3 | 1 | 2 | 1 | 2 | 1 | 0 | 1 | 8 | CS signal is plausible, but delegated ownership must become concrete before counting |
+| 4 | 2 | 1 | 3 | 2 | 1 | 1 | 1 | 11 | AI-native product pain may be real but could collapse into bespoke services work |
+| 5 | 2 | 1 | 1 | 2 | 1 | 0 | 3 | 10 | Security pressure is high, but pilot readiness is the key modeled risk |
+
 ## Segment Evidence Matrix
 
 Use this after each completed interview to keep segment-level evidence separate.
@@ -729,6 +756,19 @@ Do not average all interviews together if one segment is clearly stronger.
 | Ops/revops | 0 | TBD | TBD | TBD |
 | AI-native product | 0 | TBD | TBD | TBD |
 | Security/governance | 0 | TBD | TBD | TBD |
+
+### Batch A Modeled Segment Read
+
+This is a rehearsal read only. Real segment evidence remains zero until real
+interviews are completed.
+
+| Segment | Modeled read | Real evidence implication |
+|---------|--------------|---------------------------|
+| Support/CS engineering | Concrete support-risk language is easy to elicit, but modeled buying pressure is weaker than workflow pain | Real calls must quantify repeat handling, escalation cost, or answer-quality ownership |
+| Data/platform engineering | Strongest modeled wedge because stale state blocks safe agent action, not just reporting | Real calls should test read/write context, source priority, and permission provenance first |
+| Ops/revops | Account intelligence needs provenance before action, but the modeled path depends on delegated access | Real calls must identify the operator who owns the actual CS or RevOps workflow |
+| AI-native product | Custom workflow logic is painful, but may be expected implementation work inside the product category | Real calls must separate platformizable context contracts from normal services delivery |
+| Security/governance | Governance is intense but can become a hard no unless a narrow pilot control exists | Real calls should ask for the minimum approved control set before discussing autonomy |
 
 ## Post-Call Follow-up
 

@@ -97,6 +97,19 @@ market evidence.
 - If pricing anxiety centers on usage unpredictability, avoid request-volume
   pricing in the next test.
 
+## Post-Batch Pricing Actions
+
+Choose the pricing action only after the discovery batch has a valid segment
+read. Do not average weak interviews into a pricing decision.
+
+| Evidence pattern | Pricing action | Do not do |
+|------------------|----------------|-----------|
+| Clear buyer, pilot scope, and replaceable cost | Draft a paid pilot package for one workflow | Publish self-serve tiers |
+| Strong platform/security owner, multi-team pain | Explore environment or workspace packaging | Price by individual end users |
+| Strong setup/onboarding pain, weak governance pain | Test implementation package language | Over-index on compliance packaging |
+| Strong governance blocker, weak urgency | Define enterprise evaluation gates | Promise fast self-serve adoption |
+| No budget owner or replaceable cost | Keep pricing uncommitted | Invent price points from competitor pages |
+
 ## Packaging Hypotheses
 
 | Hypothesis | Evidence needed | Failure signal |

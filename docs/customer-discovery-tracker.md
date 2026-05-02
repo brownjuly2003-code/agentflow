@@ -148,6 +148,22 @@ Before each call:
 - Capture one exact quote about trust, workflow risk, maintenance burden, or governance.
 - Fill the scorecard within one hour while the details are still fresh.
 
+## Interview Quality Bar
+
+Count an interview toward the 5-call batch only if it produces enough evidence
+to score the segment.
+
+| Requirement | Counts as valid | Does not count |
+|-------------|-----------------|----------------|
+| Concrete workflow | A named agent or AI workflow with operational data dependency | Generic AI interest or document retrieval only |
+| Current workaround | Specific data path, glue code, internal tool, manual process, or vendor | "We would probably connect an API" |
+| Failure or near-miss | Wrong, stale, incomplete, unsafe, blocked, or distrusted answer | Abstract concern with no incident or workflow |
+| Owner | Role or team that owns the workaround or approval path | No clear owner after probing |
+| Next-step signal | Pilot condition, rejection reason, budget path, or strong "not now" | Polite interest with no concrete consequence |
+
+If a call misses two or more requirements, keep the notes but replace the slot
+with a stronger candidate before synthesizing the batch.
+
 ## Per-Interview Record
 
 Copy this block after each call.
@@ -261,6 +277,17 @@ Change the roadmap before implementation if:
   provenance, or safe serving boundaries.
 - Governance dominates every promising conversation before a lightweight pilot
   can be defined.
+
+## Batch Review Outcomes
+
+Pick exactly one outcome after the first valid 5-interview batch.
+
+| Outcome | When to choose it | Next action |
+|---------|-------------------|-------------|
+| Continue v1.1 direction | Decision gates pass and one segment is clearly strongest | Write a narrow v1.1 PRD for that segment |
+| Narrow the wedge | Pain is real but only one workflow or buyer cares | Rewrite scope around that workflow before building |
+| Run another discovery batch | Evidence is mixed but at least two interviews are promising | Source 10 more candidates in the strongest segment |
+| Pause product work | Interviews stay abstract, low-pain, or ownerless | Do not build v1.1 features until a stronger pain is found |
 
 ## Synthesis Template
 

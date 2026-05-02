@@ -9,6 +9,18 @@ This tracker keeps the PMF work operational without marking the PMF gate complet
 Use it after every founder-led interview to record evidence, score the segment,
 and decide whether the v1.1 roadmap still fits real customer pain.
 
+## Current Operating Step
+
+Run the first discovery batch as a sourcing and scheduling sprint, not as a
+roadmap exercise.
+
+- Source at least 15 named candidates before declaring the outreach queue weak.
+- Send the first 10 research notes across at least 3 target profiles.
+- Schedule no more than 2 interviews from the same profile until all 5 slots have
+  at least one credible candidate.
+- Do not change v1.1 scope, pricing, or positioning until the first 5 interviews
+  are scored.
+
 ## Interview Sample Plan
 
 Target at least 5 independent interviews before changing v1.1 scope.
@@ -20,6 +32,21 @@ Target at least 5 independent interviews before changing v1.1 scope.
 | 3 | Ops/revenue operations owner using internal AI workflows | Agent monitors fulfillment, pipeline, or customer state | RevOps/operator community or founder network | Not scheduled | TBD | Validate whether freshness is a buying driver or only a trust symptom |
 | 4 | Founder/CTO of an AI-native B2B product | Product agent needs customer or business context from live systems | AI founder network, Product Hunt, or direct peer intro | Not scheduled | TBD | Test startup willingness to pay versus build-it-yourself |
 | 5 | Security-conscious engineering buyer | Agent access is blocked by governance, permissions, or auditability | Security/platform leader referral or enterprise buyer intro | Not scheduled | TBD | Check whether governance is first wedge or later enterprise requirement |
+
+## Sourcing Worklist
+
+Fill this before sending outreach. A candidate is credible only if there is a
+specific reason to believe they have touched agent data access, support
+automation, platform data contracts, internal AI tools, or security review for
+AI workflows.
+
+| Target slot | Minimum candidate count | Best first source | Backup source | Qualification note |
+|-------------|-------------------------|-------------------|---------------|--------------------|
+| 1 | 3 | Warm support/CS engineering intros | Support tooling communities | Must have live account/order/subscription context |
+| 2 | 3 | Data/platform engineering intros | Data engineering communities | Must own schema drift, data contracts, or internal APIs |
+| 3 | 3 | RevOps/operator referrals | Founder/customer network | Must own a workflow where stale state affects operations |
+| 4 | 3 | AI-native B2B founder peers | Builder communities | Must have built or evaluated product-facing agents |
+| 5 | 3 | Security/platform leader referrals | Enterprise buyer intros | Must know what blocks agent access approval |
 
 ## Outreach Queue
 
@@ -33,6 +60,15 @@ research, not a product pitch.
 | TBD | 3 | TBD | No | TBD | Not contacted |
 | TBD | 4 | TBD | No | TBD | Not contacted |
 | TBD | 5 | TBD | No | TBD | Not contacted |
+
+## Outreach Operating Rules
+
+- Send notes in small batches of 5 so the wording can be adjusted after early
+  replies.
+- Follow up once after 3 business days unless the person already declined.
+- Prefer a warm intro over a cold note when both are available.
+- Record the reason each candidate qualified before marking outreach sent.
+- Treat non-replies as source-quality signal, not product validation.
 
 ## Candidate Qualification
 

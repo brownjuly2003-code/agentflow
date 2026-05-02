@@ -42,6 +42,20 @@ workaround. Do not lead with pricing.
 6. What would make the product feel too cheap to trust for this workflow?
 7. What would make it feel expensive but still worth evaluating?
 
+## Pricing Signals To Capture
+
+Pricing work should reuse the discovery tracker instead of creating a separate
+survey too early. Add these signals to each interview note when the conversation
+reaches budget, buying motion, or pilot shape.
+
+| Signal | Tracker field | Useful evidence | Weak evidence |
+|--------|---------------|-----------------|---------------|
+| Budget owner | Strongest buying signal | Names a team, budget, or approval path | "Engineering would probably care" |
+| Replaceable cost | Current workaround | Specific engineering time, vendor spend, or delay cost | Generic frustration |
+| Natural value metric | Follow-up needed | Interviewee volunteers a pricing unit or rejects one clearly | Nods through every option |
+| Pilot shape | Strongest buying signal | 30-60 day scope, success criteria, and buyer | "Maybe worth trying someday" |
+| Pricing risk | Strongest rejection signal | Predictability, procurement, compliance, or usage anxiety | No concrete objection |
+
 ## Evidence Gates
 
 Do not choose a public pricing model until the first 5-interview batch shows:
@@ -54,6 +68,19 @@ Do not choose a public pricing model until the first 5-interview batch shows:
 
 If those gates are not met, keep pricing as founder-led pilot scoping rather than
 self-serve tiers.
+
+## First Pilot Offer Shape To Test
+
+Do not test dollar amounts yet. Test whether buyers can describe a pilot that is
+narrow enough to approve and valuable enough to pay for.
+
+| Component | Default hypothesis | Reject if interviews show |
+|-----------|--------------------|---------------------------|
+| Scope | One workflow, two to three live operational sources, typed entities and metrics | Buyers only need generic document retrieval or analytics |
+| Duration | 30-60 days | Evaluation requires a long platform migration first |
+| Success criteria | Correctness, freshness visibility, lower glue maintenance, safer access | Buyers cannot name a measurable workflow outcome |
+| Buyer | Platform, CS engineering, ops, or AI product owner | No one owns the pain or budget |
+| Pricing posture | Founder-led paid pilot before self-serve tiers | Buyers expect a free open-source library, not a paid workflow outcome |
 
 ## Packaging Hypotheses
 
@@ -78,4 +105,3 @@ pricing copy.
 | Pricing model to test next | TBD |
 | Pricing model to avoid | TBD |
 | Confidence | Low / Medium / High |
-

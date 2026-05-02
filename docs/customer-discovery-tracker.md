@@ -534,6 +534,33 @@ and source-quality assumptions, but they cannot satisfy PMF gates.
 | Jesse Zhang, Decagon | Brief reply; notes that customer-specific business logic drives many edge cases | Fresh state matters less as a generic feature and more as a per-customer workflow contract | Ask for one custom workaround forced by stale state, incomplete permissions, or exception handling |
 | Talha Tariq, Vercel | Delegates to a security/platform reviewer for implementation detail | Approval blocks first on scoped credentials, audit trail, and revocation before runtime autonomy is discussed | Ask which control turns a hard no into a limited pilot |
 
+### Batch A Modeled Scheduling Intake
+
+These rows simulate what a scheduling screen should capture before a real call
+can count. Every row remains `Modeled only`; do not copy these values into the
+real sample plan.
+
+| Candidate/team | Participant role | Workflow anchor | Systems touched | Risk to probe | Segment slot | Research framing | Modeled intake status |
+|----------------|------------------|-----------------|-----------------|---------------|--------------|-------------------|-----------------------|
+| Markus Haverinen, Frends | Support operations owner | AI-assisted support escalation and handoff | Support platform, customer account context, escalation rules | Almost-right answer, stale entitlement, unclear handoff boundary | 1 | Research only; no product pitch | Modeled complete |
+| Erik Munson, Day AI | Founding engineer / platform owner | Agent reads and writes live CRM context | CRM store, upstream sources, permissions layer, agent write path | Read/write consistency, freshness, canonical entity conflicts | 2 | Research only; no product pitch | Modeled complete |
+| Lucrezia Keane, GWI | Delegated CS operations owner | Scaled CS account-intelligence workflow | CRM, product usage, revenue signals, meetings, support history | Missing provenance, stale account state, overridden recommendation | 3 | Research only; no product pitch | Modeled delegated |
+| Jesse Zhang, Decagon | AI-native product founder/operator | Production support agent with customer-specific workflow logic | Customer business systems, policy/config layer, support escalation path | Custom workaround, stale state, incomplete permissions | 4 | Research only; no product pitch | Modeled partial |
+| Talha Tariq, Vercel | Delegated security/platform reviewer | Approval path for agent API or credential access | Secrets manager, API gateway, audit logs, revocation controls | Credential scope, auditability, runtime autonomy, revocation | 5 | Research only; no product pitch | Modeled delegated |
+
+### Batch A Modeled Interview Stress Test
+
+Use this to rehearse whether the interview script can separate real workflow
+pain from generic AI interest. These are hypotheses to invalidate, not evidence.
+
+| Segment slot | Modeled strongest signal | Modeled weak signal | Kill question for a real call | What would change after real evidence |
+|--------------|--------------------------|---------------------|-------------------------------|----------------------------------------|
+| 1 | Human handoff quality depends on fresher account and entitlement context | Support team says the existing AI vendor already owns the whole context path | When did an almost-right answer create extra support work, and what data would have prevented it? | If repeated in real calls, prioritize support escalation context before generic data freshness |
+| 2 | Agent write paths make freshness and permissions more painful than read-only analytics | Team treats the problem as ordinary ETL latency with no agent-specific owner | What is the first action an agent cannot safely take unless the source of truth is fresh? | If repeated in real calls, narrow v1.1 around read/write operational context and provenance |
+| 3 | CS teams need signal provenance before acting on AI account recommendations | The workflow is only dashboard summarization with no operational consequence | Which recommendation was trusted, ignored, or overridden because the account state looked wrong? | If repeated in real calls, validate CS actionability instead of broad RevOps automation |
+| 4 | Customer-specific business logic forces custom context workarounds | Founder frames it as implementation detail that customers expect the platform to absorb | Which customer exception broke the generic workflow, and who owned the workaround? | If repeated in real calls, test whether product teams buy typed workflow contracts or just services |
+| 5 | Security approval blocks on scoped credentials, audit, and revocation before autonomy | Security concern stays abstract with no live workflow request or approval path | What exact control would move this from rejected to a limited pilot? | If repeated in real calls, keep governance as a wedge only if a lightweight pilot path exists |
+
 ### Scheduling Intake
 
 Capture these fields before a call is counted as scheduled.

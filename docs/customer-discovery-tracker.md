@@ -91,6 +91,265 @@ research, not a product pitch.
 | Talha Tariq, Vercel | 5 | ITPro 1Password coverage | No | TBD after first note | Not contacted |
 | Haider Pasha, Palo Alto Networks | 5 | ITPro agentic AI security interview | No | TBD after first note | Not contacted |
 
+## First 10 Outreach Drafts
+
+Use these as first-touch research notes only. Do not mark `Outreach sent` as
+`Yes` until a note is actually sent through an approved channel.
+
+### Markus Haverinen, Frends
+
+- Target slot: 1
+- Qualification hook: operates a human+AI support workflow where Fin handles
+  most support requests.
+- Subject: `support coverage`
+
+```text
+Hi Markus - I read the Frends story about Fin being involved in nearly every
+support conversation while still keeping customer satisfaction strong.
+
+I'm researching how support leaders decide which customer questions are safe for
+AI to answer, and where live account, product, or escalation context still needs
+human control.
+
+The part I'm trying to understand is what happens after the first rollout works:
+stale context, handoff boundaries, and quality loops.
+
+Would you be open to a 25-30 minute research call about one recent case where
+context or escalation quality mattered?
+```
+
+Follow-up angle: ask how "plug-and-play" changed once support workflows,
+customer questions, or escalation rules evolved.
+
+### Darren Hockley, Dotdigital
+
+- Target slot: 1
+- Qualification hook: built internal confidence using real customer
+  conversations and AI resolution numbers.
+- Subject: `ai ownership`
+
+```text
+Hi Darren - I saw your comments in the Fin Blueprint about building internal
+confidence with real customer conversations and then backing it up with
+resolution numbers.
+
+I'm researching what changes after that confidence moment: who owns AI
+performance, QA, escalation criteria, and fixes when answers drift.
+
+I'm especially interested in the operating model behind trust, not the business
+case for AI.
+
+Would you be open to a short research conversation about one case where a
+support AI answer was almost right, but needed better context or review?
+```
+
+Follow-up angle: ask what evidence now catches failure modes after the original
+stakeholder proof worked.
+
+### Erik Munson, Day AI
+
+- Target slot: 2
+- Qualification hook: built live CRM context from upstream sources,
+  permissions, and human/AI writes.
+- Subject: `live context`
+
+```text
+Hi Erik - I read the Materialize write-up on Day AI and the distinction between
+fast queries and data that actually feels live and mutable in the product.
+
+I'm researching what breaks first when agents become both readers and writers:
+freshness, permissions, canonicalization, explainability, or load.
+
+I'm not looking for a vendor evaluation; I'm trying to understand the
+architectural tradeoffs that show up after a prototype becomes a production
+workflow.
+
+Would you be open to 30 minutes to unpack one hard case where raw operational
+truth had to become trustworthy agent context?
+```
+
+Follow-up angle: ask about "time to confident action" and the worst
+pre-production tradeoff.
+
+### James Luo, BGL
+
+- Target slot: 2
+- Qualification hook: owns a regulated self-service analytics agent backed by a
+  deterministic data foundation and identity controls.
+- Subject: `data foundation`
+
+```text
+Hi James - I read the BGL case study on the self-service BI agent and your point
+that teams can't skip the data platform and expect the agent to solve all
+complexity.
+
+I'm researching where production analytics agents need deterministic data
+foundations, permissions, and validation before business users can trust the
+answer.
+
+The Athena/dbt foundation, identity controls, and SQL validation are exactly the
+boundary I'm trying to understand from teams that have shipped this in a
+regulated environment.
+
+Would you be open to a short research call about one example where accuracy,
+governance, or query safety shaped the agent design?
+```
+
+Follow-up angle: ask how BGL decides what belongs in dbt/analytic tables versus
+agent-side domain context.
+
+### Lucrezia Keane, GWI
+
+- Target slot: 3
+- Qualification hook: uses AI agents over product, revenue, meeting, and
+  support context for scaled customer success.
+- Subject: `scaled cs`
+
+```text
+Hi Lucrezia - I saw the Hook/GWI case study on scaling CS without compromising
+customer experience or burning out the team.
+
+I'm researching how CS leaders decide when AI account intelligence is reliable
+enough to influence prioritization, renewal risk, and next-best actions.
+
+The part I'm most interested in is the data path behind the workflow, because
+product usage, meetings, support, and revenue context can all disagree or go
+stale.
+
+Would you be open to 25-30 minutes to discuss one moment where customer-state
+quality affected a CS action or renewal-risk call?
+```
+
+Follow-up angle: ask which account signals CSMs trusted, ignored, or overrode in
+the scaled segment.
+
+### Nicole Looker, Rebuy Engine
+
+- Target slot: 3
+- Qualification hook: RevOps owner using AI-powered Salesforce documentation to
+  reduce configuration discovery time.
+- Subject: `salesforce context`
+
+```text
+Hi Nicole - I saw Rebuy's Sweep story around using AI-powered Salesforce
+documentation to reduce time spent understanding configuration.
+
+I'm researching how RevOps teams keep AI-assisted workflows grounded in the
+actual current state of Salesforce, especially when Flows, fields, ownership,
+and pipeline logic change.
+
+I'd value hearing where documentation stops being enough and someone needs
+fresher operational context or lineage.
+
+Would you be open to a 30-minute research conversation? Not pitching anything;
+just trying to understand what breaks in practice.
+```
+
+Follow-up angle: ask for one recent Salesforce config or Flow change where
+documentation, lineage, or AI-assisted discovery lagged behind reality.
+
+### Jesse Zhang, Decagon
+
+- Target slot: 4
+- Qualification hook: builds production customer-support agents that capture
+  customer business logic and act across client workflows.
+- Subject: `workflow context`
+
+```text
+Hi Jesse - I read OpenAI's Decagon customer story and was struck by the focus on
+capturing each customer's business logic, not just answering support questions.
+
+I'm researching what makes production support agents trusted enough to act
+across customer workflows when the relevant context lives in client systems.
+
+The thing I'm trying to understand is where teams still hit limits around fresh
+state, permissions, escalation boundaries, or workflow-specific exceptions.
+
+Would you be open to a 30-minute research conversation? This is not a sales
+call; I'm trying to learn from teams already operating at the hard end of this
+problem.
+```
+
+Follow-up angle: ask about one case where customer-specific business logic,
+stale state, or incomplete permissions forced a custom workaround.
+
+### Marty Kausas, Pylon
+
+- Target slot: 4
+- Qualification hook: builds B2B customer support workflows across Slack,
+  Teams, email, portals, and post-sales channels.
+- Subject: `post-sales context`
+
+```text
+Hi Marty - I saw Pylon's work across Slack, Teams, email, portals, and post-sales
+workflows.
+
+I'm researching how B2B support teams get AI workflows enough customer context to
+answer or act without creating support risk.
+
+In B2B support, the hard part seems less like retrieval and more like knowing
+account state, entitlement, ownership, and the right escalation path in the
+moment.
+
+Would you be open to a 30-minute research conversation about what breaks when
+that context is stale or split? Not pitching anything; I'm trying to understand
+the operational edges from people building in this category.
+```
+
+Follow-up angle: ask which support channel creates the hardest context problem
+and what data must be live before an agent can act.
+
+### Talha Tariq, Vercel
+
+- Target slot: 5
+- Qualification hook: frames agentic coding and credentials as a
+  developer-workflow security problem.
+- Subject: `agent credentials`
+
+```text
+Hi Talha - I read your comments in ITPro around agentic coding changing how
+credentials and developer workflows need to be secured.
+
+I'm researching where security teams draw the line between useful agent access
+and unacceptable credential, privilege, or audit risk.
+
+The specific question is what needs to be true before an agent can touch live
+engineering or business systems without creating a new approval bottleneck.
+
+Would you be open to a 30-minute research conversation? This is not a product
+pitch; I'm trying to understand how CISOs are evaluating these workflows in
+practice.
+```
+
+Follow-up angle: ask what blocks approval first when an engineering team wants
+an agent to use API credentials or secrets.
+
+### Haider Pasha, Palo Alto Networks
+
+- Target slot: 5
+- Qualification hook: discusses runtime controls, API/MCP/SDK dependencies,
+  privileges, and prompt/tool misuse for agents at scale.
+- Subject: `agent controls`
+
+```text
+Hi Haider - I read your ITPro interview on agentic AI and the security challenge
+around runtime controls, dependencies, privileges, and prompt/tool misuse.
+
+I'm researching how security leaders decide whether an AI agent should be
+allowed to call tools or APIs in a live business workflow.
+
+The area I'm trying to understand is what blocks approval first: identity,
+privilege scope, auditability, runtime monitoring, or the inability to predict
+tool behavior.
+
+Would you be open to a 30-minute research conversation? Not pitching anything;
+I'm trying to learn what practical controls matter before agent workflows can
+scale.
+```
+
+Follow-up angle: ask which single control would turn a hard no into a limited
+pilot.
+
 ## Outreach Operating Rules
 
 - Send notes in small batches of 5 so the wording can be adjusted after early

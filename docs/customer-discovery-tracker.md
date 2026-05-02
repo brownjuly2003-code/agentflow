@@ -69,7 +69,7 @@ private contact details here.
 | 4 | Jesse Zhang, Co-founder and CEO, Decagon | [OpenAI customer story](https://openai.com/index/decagon/) | Builds production customer-support agents that capture customer business logic and act across client workflows; strong concept-test target. | Batch 1 |
 | 4 | Marty Kausas, Co-founder and CEO, Pylon | [Y Combinator company profile](https://www.ycombinator.com/companies/pylon-2) | Builds B2B customer support platform across Slack, Teams, email, portals, and workflows; likely to know customer-context and post-sales agent constraints. | Batch 1 |
 | 4 | Bret Taylor or Clay Bavor, Co-founders, Sierra | [TechCrunch launch coverage](https://techcrunch.com/2024/02/13/bret-taylors-new-company-aims-to-connect-conversational-ai-to-enterprise-workflows/) | Building AI customer-service agents that connect to enterprise systems and take actions such as subscription or order changes. | Batch 2 |
-| 5 | Talha Tariq, CISO, Vercel | [ITPro 1Password coverage](https://www.itpro.com/security/1password-unified-access-agent-identity-security) | Publicly frames agentic coding and credentials as a developer-workflow security problem; strong fit for scoped credential and audit questions. | Batch 1 |
+| 5 | Talha Tariq, CTO of Security, Vercel | [Vercel announcement](https://vercel.com/blog/talha-tariq-joins-vercel-as-cto-security) and [ITPro 1Password coverage](https://www.itpro.com/security/1password-unified-access-agent-identity-security) | Publicly frames AI security, agentic coding, and credentials as developer-workflow security problems; strong fit for scoped credential and audit questions. | Batch 1 |
 | 5 | Haider Pasha, EMEA CISO, Palo Alto Networks | [ITPro agentic AI security interview](https://www.itpro.com/security/agentic-ai-poses-major-challenge-for-security-professionals-says-palo-alto-networks-emea-ciso) | Discusses runtime controls, API/MCP/SDK dependencies, privileges, and prompt/tool misuse for agents at scale. | Batch 1 |
 | 5 | Stephen McDermid, EMEA CISO, Okta | [TechRadar Okta interview](https://www.techradar.com/pro/security/everybodys-under-pressure-to-do-more-with-less-why-okta-says-you-need-an-ai-agent-governance-strategy-and-sooner-rather-than-later) | Focuses on non-human identity, least privilege, agent permissions, and audit trails; strong fit for enterprise approval blockers. | Batch 2 |
 
@@ -105,17 +105,13 @@ Use these as first-touch research notes only. Do not mark `Outreach sent` as
 
 ```text
 Hi Markus - I read the Frends story about Fin being involved in nearly every
-support conversation while still keeping customer satisfaction strong.
+support conversation while keeping human control available.
 
-I'm researching how support leaders decide which customer questions are safe for
-AI to answer, and where live account, product, or escalation context still needs
-human control.
+I'm researching what changes after the first rollout works: stale context,
+handoff boundaries, and quality loops.
 
-The part I'm trying to understand is what happens after the first rollout works:
-stale context, handoff boundaries, and quality loops.
-
-Would you be open to a 25-30 minute research call about one recent case where
-context or escalation quality mattered?
+Would you be open to a short research exchange on one recent case where context
+or escalation quality mattered? Even a one-line pointer would help.
 ```
 
 Follow-up angle: ask how "plug-and-play" changed once support workflows,
@@ -154,18 +150,14 @@ stakeholder proof worked.
 - Subject: `live context`
 
 ```text
-Hi Erik - I read the Materialize write-up on Day AI and the distinction between
-fast queries and data that actually feels live and mutable in the product.
+Hi Erik - I read the Materialize write-up on Day AI's live CRM context and the
+distinction between fast queries and data that feels live and mutable.
 
 I'm researching what breaks first when agents become both readers and writers:
 freshness, permissions, canonicalization, explainability, or load.
 
-I'm not looking for a vendor evaluation; I'm trying to understand the
-architectural tradeoffs that show up after a prototype becomes a production
-workflow.
-
-Would you be open to 30 minutes to unpack one hard case where raw operational
-truth had to become trustworthy agent context?
+Would you be open to a short research exchange on one hard case where raw
+operational truth had to become trustworthy agent context?
 ```
 
 Follow-up angle: ask about "time to confident action" and the worst
@@ -206,18 +198,14 @@ agent-side domain context.
 - Subject: `scaled cs`
 
 ```text
-Hi Lucrezia - I saw the Hook/GWI case study on scaling CS without compromising
-customer experience or burning out the team.
+Hi Lucrezia - I saw the Hook/GWI story about scaling CS while improving
+engagement and GRR in a scaled segment.
 
 I'm researching how CS leaders decide when AI account intelligence is reliable
 enough to influence prioritization, renewal risk, and next-best actions.
 
-The part I'm most interested in is the data path behind the workflow, because
-product usage, meetings, support, and revenue context can all disagree or go
-stale.
-
-Would you be open to 25-30 minutes to discuss one moment where customer-state
-quality affected a CS action or renewal-risk call?
+Would you be open to a short research exchange on one moment where
+customer-state quality affected a CS action or renewal-risk call?
 ```
 
 Follow-up angle: ask which account signals CSMs trusted, ignored, or overrode in
@@ -256,18 +244,14 @@ documentation, lineage, or AI-assisted discovery lagged behind reality.
 - Subject: `workflow context`
 
 ```text
-Hi Jesse - I read OpenAI's Decagon customer story and was struck by the focus on
+Hi Jesse - I read OpenAI's Decagon story. What stood out was the focus on
 capturing each customer's business logic, not just answering support questions.
 
-I'm researching what makes production support agents trusted enough to act
-across customer workflows when the relevant context lives in client systems.
+I'm researching where production support agents still hit limits around fresh
+state, permissions, escalation boundaries, or customer-specific exceptions.
 
-The thing I'm trying to understand is where teams still hit limits around fresh
-state, permissions, escalation boundaries, or workflow-specific exceptions.
-
-Would you be open to a 30-minute research conversation? This is not a sales
-call; I'm trying to learn from teams already operating at the hard end of this
-problem.
+Would you be open to a short research exchange on one case where workflow
+context forced a custom workaround?
 ```
 
 Follow-up angle: ask about one case where customer-specific business logic,
@@ -307,18 +291,15 @@ and what data must be live before an agent can act.
 - Subject: `agent credentials`
 
 ```text
-Hi Talha - I read your comments in ITPro around agentic coding changing how
-credentials and developer workflows need to be secured.
+Hi Talha - I read Vercel's CTO of Security announcement and your comments in
+ITPro around agentic coding changing how credentials and developer workflows
+need to be secured.
 
 I'm researching where security teams draw the line between useful agent access
 and unacceptable credential, privilege, or audit risk.
 
-The specific question is what needs to be true before an agent can touch live
-engineering or business systems without creating a new approval bottleneck.
-
-Would you be open to a 30-minute research conversation? This is not a product
-pitch; I'm trying to understand how CISOs are evaluating these workflows in
-practice.
+Would you be open to a short research exchange on what blocks approval when an
+engineering team wants an agent to use live credentials or APIs?
 ```
 
 Follow-up angle: ask what blocks approval first when an engineering team wants
@@ -378,6 +359,101 @@ notes are sent, or after wording is adjusted from early replies.
 | B | Marty Kausas, Pylon | 4 | Marty Kausas, Pylon | TBD | TBD | TBD | Not sent |
 | B | Haider Pasha, Palo Alto Networks | 5 | Haider Pasha, Palo Alto Networks | TBD | TBD | TBD | Not sent |
 
+### Batch A Send-Readiness Notes
+
+Use this before choosing a real send channel. Keep `Send channel` as `TBD` until
+the note actually leaves an approved account or intro thread.
+
+| Candidate/team | Route to verify before send | Anchor to preserve | First reply goal |
+|----------------|-----------------------------|--------------------|------------------|
+| Markus Haverinen, Frends | Warm support/CS intro; otherwise direct professional profile route | Fin involvement across support conversations and human control | One concrete escalation or context-quality case |
+| Erik Munson, Day AI | Warm data/platform intro; otherwise direct professional profile route | Live CRM context, permissions, and human/AI writes | One production read/write context tradeoff |
+| Lucrezia Keane, GWI | Warm CS/revenue intro; otherwise direct professional profile route | Scaled CS, GRR lift, and account-state intelligence | One case where customer-state quality changed a CS action |
+| Jesse Zhang, Decagon | Founder/operator intro; otherwise direct professional profile route | Customer business logic inside production support agents | One workflow-specific context workaround |
+| Talha Tariq, Vercel | Security/platform intro; otherwise direct professional profile route | AI security, credentials, and developer workflow controls | One approval blocker for agent credential/API access |
+
+### Batch A Route Decisions
+
+Decision date: 2026-05-03. Keep `Send channel` as `TBD` until the note actually
+leaves an approved account or intro thread. If no warm intro is confirmed by
+noon on 2026-05-04, use the chosen direct route below.
+
+| Candidate/team | Chosen route for 2026-05-04 | Public source checked | Avoid |
+|----------------|-----------------------------|-----------------------|-------|
+| Markus Haverinen, Frends | Direct professional profile route; warm support/CS intro only if confirmed before noon | [Fin customer story](https://fin.ai/customers/frends), public org/profile result | Public support channel |
+| Erik Munson, Day AI | Direct professional profile route; warm data/platform intro only if confirmed before noon | [Materialize case study](https://materialize.com/customer-stories/day-ai/), public professional profile result | Generic Day AI company form |
+| Lucrezia Keane, GWI | Direct professional profile route; warm CS/revenue intro only if confirmed before noon | [The Org profile](https://theorg.com/org/globalwebindex/org-chart/lucrezia-keane), public GWI profile result | Generic customer support route |
+| Jesse Zhang, Decagon | Direct founder/operator profile route; warm founder intro only if confirmed before noon | [LinkedIn profile](https://www.linkedin.com/in/thejessezhang), Decagon public profile result | Sales or demo request route |
+| Talha Tariq, Vercel | Direct security/platform profile route; warm security intro only if confirmed before noon | [LinkedIn profile](https://www.linkedin.com/in/talhatariq), [Vercel announcement](https://vercel.com/blog/talha-tariq-joins-vercel-as-cto-security) | Vercel support/security disclosure route |
+
+### Batch A Send-Day Ledger
+
+Use this on 2026-05-04. Do not copy planned values into the execution tables
+until the note has actually left an approved account or intro thread.
+
+| Candidate/team | Pre-noon route check | Final send channel | Sent timestamp | Tracker rows updated | Next action |
+|----------------|----------------------|--------------------|----------------|----------------------|-------------|
+| Markus Haverinen, Frends | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
+| Erik Munson, Day AI | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
+| Lucrezia Keane, GWI | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
+| Jesse Zhang, Decagon | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
+| Talha Tariq, Vercel | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
+
+### Batch A Follow-Up Drafts
+
+Use these only after 3 business days with no reply. If Batch A is sent on
+2026-05-04, send the relevant follow-up on 2026-05-07.
+
+#### Markus Haverinen, Frends
+
+```text
+Quick follow-up on this. The most useful input would be one example of where the
+"plug-and-play" support AI setup needed a human escalation rule, fresher context,
+or a quality loop after rollout.
+
+If there is a case like that at Frends, I would value the pointer.
+```
+
+#### Erik Munson, Day AI
+
+```text
+Quick follow-up on this. The specific angle I'm trying to understand is where
+"live" data became the difference between a fast query and an agent or user
+taking a confident action.
+
+If a tradeoff like that came up at Day AI, I would value the pointer.
+```
+
+#### Lucrezia Keane, GWI
+
+```text
+Quick follow-up on this. The example I'm looking for is a CS action where
+product, revenue, support, or meeting context changed the account read.
+
+If there is a case where the signal was trusted, ignored, or overridden, I would
+value the pointer.
+```
+
+#### Jesse Zhang, Decagon
+
+```text
+Quick follow-up on this. The case I'm trying to understand is where
+customer-specific business logic, stale state, or incomplete permissions forced
+a custom workaround in a production support workflow.
+
+If one example comes to mind, I would value the pointer.
+```
+
+#### Talha Tariq, Vercel
+
+```text
+Quick follow-up on this. The approval blocker I'm trying to understand is the
+first thing that turns agent access from "useful" into too much credential,
+privilege, or audit risk.
+
+If one control or failure mode decides that line, I would value the pointer.
+```
+
 ### Pre-Send Checklist
 
 Complete this checklist for each note before updating `Outreach sent`.
@@ -409,6 +485,19 @@ Complete this checklist for each note before updating `Outreach sent`.
   signal.
 - Abstract interest without a workflow: do not count it as a scheduled
   interview until the person can discuss a concrete operational agent workflow.
+
+### Batch A Reply Ledger
+
+Use this from 2026-05-05 through 2026-05-08 after Batch A is sent. Keep
+non-replies and abstract interest out of PMF signal counts.
+
+| Candidate/team | First reply date | Triage | Scheduling intake complete | Follow-up status | Evidence count |
+|----------------|------------------|--------|----------------------------|------------------|----------------|
+| Markus Haverinen, Frends | TBD | Not sent | No | Not due | 0 |
+| Erik Munson, Day AI | TBD | Not sent | No | Not due | 0 |
+| Lucrezia Keane, GWI | TBD | Not sent | No | Not due | 0 |
+| Jesse Zhang, Decagon | TBD | Not sent | No | Not due | 0 |
+| Talha Tariq, Vercel | TBD | Not sent | No | Not due | 0 |
 
 ### Scheduling Intake
 

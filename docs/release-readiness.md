@@ -1,7 +1,7 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20
-**Last updated**: 2026-05-02
+**Last updated**: 2026-05-03
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint + post-release benchmark workflow split
 **Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Actions environments `staging` and `production` configured with required reviewers; GitHub Release record created
 
@@ -100,7 +100,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] `publish-pypi.yml` `environment: pypi` committed (`e8b1237`)
 - [x] `sdk-ts/package-lock.json` committed; `npm audit` clean (0 vulns)
 - [x] Vulnerable runtime/integrations deps bumped (`dagster>=1.13.1`, `langchain-core>=1.2.22`, `langchain-text-splitters>=1.1.2`, `langsmith>=0.7.31`)
-- [ ] Phase 1 PMF work completed (`docs/customer-discovery-tracker.md` now contains 15 public first-batch candidates and a 10-person outreach queue across all 5 target profiles; outreach, replies, scheduled calls, completed interviews, and PMF scoring are still pending; `docs/pricing-validation-plan.md` defines the pricing/WTP evidence gates, pilot-offer signals to capture during interviews, post-batch pricing review rules, and post-batch pricing actions)
+- [ ] Phase 1 PMF work completed (`docs/customer-discovery-tracker.md` now contains 15 public first-batch candidates, a 10-person outreach queue across all 5 target profiles, Batch A route decisions, first-touch and follow-up copy, and send/reply ledgers; actual outreach, replies, scheduled calls, completed interviews, and PMF scoring are still pending; `docs/pricing-validation-plan.md` defines the pricing/WTP evidence gates, pilot-offer signals to capture during interviews, post-batch pricing review rules, and post-batch pricing actions)
 
 ## SDK Publish Proof Path
 

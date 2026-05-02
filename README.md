@@ -116,6 +116,8 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 - [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) - Debezium/Kafka Connect rollout decisions and implementation trail
 - [Glossary](docs/glossary.md) - interview-ready explanations of the core technical terms
 - [Release Readiness](docs/release-readiness.md) - checked release evidence through `v1.1.0` and current CDC follow-up work
+- [Customer Discovery Tracker](docs/customer-discovery-tracker.md) - PMF outreach queue, Batch A send plan, and interview evidence ledger
+- [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions and evidence gates for discovery calls
 - [Audit History](docs/audit-history.md) - baseline-to-release remediation trail
 - [Publication Checklist](docs/publication-checklist.md) - final GitHub publishing checklist
 - [Fly.io Demo Deploy](deploy/fly/README.md) - minimal hosted demo instructions

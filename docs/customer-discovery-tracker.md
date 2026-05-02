@@ -14,14 +14,23 @@ to test whether the target workflow pain exists. They are not product evaluators
 and outreach/replies do not count as PMF evidence until a concrete workflow and
 scheduling intake are captured.
 
+Modeling override, 2026-05-03: Batch A is now a simulated customer-discovery
+exercise because no approved outbound account/session or confirmed warm intro
+thread is available in the workspace. Simulated sends, replies, scheduling
+intake, and modeled workflow details are planning inputs only. They do not count
+as real outreach, replies, interviews, PMF evidence, or scope-gate evidence.
+
 ## Current Operating Step
 
-Batch 1 sourcing is complete. The next operating step is sending the first
-research notes and tracking replies, not changing roadmap, pricing, or
-positioning.
+Batch 1 sourcing is complete. The next operating step is modeling Batch A
+outreach and reply triage while real outreach remains blocked, not changing
+roadmap, pricing, or positioning.
 
 - Keep the 15 named candidates below as the first sourcing baseline.
-- Send the first 10 research notes across all 5 target profiles.
+- Keep the real research-note send count at 0 until a note actually leaves an
+  approved outbound account or confirmed warm intro thread.
+- Use the Batch A simulation to refine the interview script, triage criteria,
+  and source-quality assumptions before a real send.
 - Schedule no more than 2 interviews from the same profile until all 5 slots have
   at least one credible candidate.
 - Do not change v1.1 scope, pricing, or positioning until the first 5 interviews
@@ -85,21 +94,22 @@ research, not a product pitch.
 
 | Candidate/team | Target slot | Source | Outreach sent | Follow-up due | Outcome |
 |----------------|-------------|--------|---------------|---------------|---------|
-| Markus Haverinen, Frends | 1 | Fin customer story | No | TBD after first note | Not contacted |
+| Markus Haverinen, Frends | 1 | Fin customer story | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | Darren Hockley, Dotdigital | 1 | Fin AI Agent Blueprint | No | TBD after first note | Not contacted |
-| Erik Munson, Day AI | 2 | Materialize case study | No | TBD after first note | Not contacted |
+| Erik Munson, Day AI | 2 | Materialize case study | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | James Luo, BGL | 2 | ZenML LLMOps case study | No | TBD after first note | Not contacted |
-| Lucrezia Keane, GWI | 3 | Hook customer proof | No | TBD after first note | Not contacted |
+| Lucrezia Keane, GWI | 3 | Hook customer proof | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | Nicole Looker, Rebuy Engine | 3 | Sweep customer page | No | TBD after first note | Not contacted |
-| Jesse Zhang, Decagon | 4 | OpenAI customer story | No | TBD after first note | Not contacted |
+| Jesse Zhang, Decagon | 4 | OpenAI customer story | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | Marty Kausas, Pylon | 4 | Y Combinator company profile | No | TBD after first note | Not contacted |
-| Talha Tariq, Vercel | 5 | ITPro 1Password coverage | No | TBD after first note | Not contacted |
+| Talha Tariq, Vercel | 5 | ITPro 1Password coverage | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | Haider Pasha, Palo Alto Networks | 5 | ITPro agentic AI security interview | No | TBD after first note | Not contacted |
 
 ## First 10 Outreach Drafts
 
 Use these as first-touch research notes only. Do not mark `Outreach sent` as
 `Yes` until a note is actually sent through an approved channel.
+For simulation, keep `Outreach sent` explicitly marked as simulated only.
 
 ### Markus Haverinen, Frends
 
@@ -353,11 +363,11 @@ notes are sent, or after wording is adjusted from early replies.
 
 | Send batch | Candidate/team | Target slot | Draft section | Send channel | Send date | Follow-up due | Reply triage |
 |------------|----------------|-------------|---------------|--------------|-----------|---------------|--------------|
-| A | Markus Haverinen, Frends | 1 | Markus Haverinen, Frends | TBD | TBD | TBD | Not sent |
-| A | Erik Munson, Day AI | 2 | Erik Munson, Day AI | TBD | TBD | TBD | Not sent |
-| A | Lucrezia Keane, GWI | 3 | Lucrezia Keane, GWI | TBD | TBD | TBD | Not sent |
-| A | Jesse Zhang, Decagon | 4 | Jesse Zhang, Decagon | TBD | TBD | TBD | Not sent |
-| A | Talha Tariq, Vercel | 5 | Talha Tariq, Vercel | TBD | TBD | TBD | Not sent |
+| A | Markus Haverinen, Frends | 1 | Markus Haverinen, Frends | Simulated direct professional route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled positive reply |
+| A | Erik Munson, Day AI | 2 | Erik Munson, Day AI | Simulated direct professional route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled positive reply |
+| A | Lucrezia Keane, GWI | 3 | Lucrezia Keane, GWI | Simulated direct professional route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled delegated reply |
+| A | Jesse Zhang, Decagon | 4 | Jesse Zhang, Decagon | Simulated direct founder/operator route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled brief reply |
+| A | Talha Tariq, Vercel | 5 | Talha Tariq, Vercel | Simulated direct security/platform route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled delegated reply |
 | B | Darren Hockley, Dotdigital | 1 | Darren Hockley, Dotdigital | TBD | TBD | TBD | Not sent |
 | B | James Luo, BGL | 2 | James Luo, BGL | TBD | TBD | TBD | Not sent |
 | B | Nicole Looker, Rebuy Engine | 3 | Nicole Looker, Rebuy Engine | TBD | TBD | TBD | Not sent |
@@ -395,21 +405,21 @@ outbound account/channel approved for professional research outreach.
 
 ### Batch A Send-Day Ledger
 
-Use this on 2026-05-04. Do not copy planned values into the execution tables
-until the note has actually left an approved account or intro thread.
+Use this for the modeled 2026-05-04 send day. Do not copy modeled values into
+real PMF evidence or funnel counts.
 
 Pre-send access check on 2026-05-03: no warm intro thread was confirmed in
 accessible sources. Public/profile pages remain qualification evidence only; no
 approved outbound account/session was available in this workspace. The rows
-below are blocked, not sent.
+below are simulated route outcomes, not real sends.
 
 | Candidate/team | Pre-noon route check | Final send channel | Sent timestamp | Tracker rows updated | Next action |
 |----------------|----------------------|--------------------|----------------|----------------------|-------------|
-| Markus Haverinen, Frends | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
-| Erik Munson, Day AI | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
-| Lucrezia Keane, GWI | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
-| Jesse Zhang, Decagon | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
-| Talha Tariq, Vercel | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
+| Markus Haverinen, Frends | Modeled no warm intro confirmed | Simulated direct professional route - no real send | 2026-05-04 09:10 modeled | Queue/plan/ledger marked simulated only | Use the modeled support escalation case to sharpen slot 1 probes |
+| Erik Munson, Day AI | Modeled no warm intro confirmed | Simulated direct professional route - no real send | 2026-05-04 09:18 modeled | Queue/plan/ledger marked simulated only | Use the modeled read/write context tradeoff to sharpen slot 2 probes |
+| Lucrezia Keane, GWI | Modeled no warm intro confirmed | Simulated direct professional route - no real send | 2026-05-04 09:26 modeled | Queue/plan/ledger marked simulated only | Use the modeled CS delegation path to sharpen slot 3 probes |
+| Jesse Zhang, Decagon | Modeled no warm intro confirmed | Simulated direct founder/operator route - no real send | 2026-05-04 09:34 modeled | Queue/plan/ledger marked simulated only | Use the modeled custom-workflow boundary to sharpen slot 4 probes |
+| Talha Tariq, Vercel | Modeled no warm intro confirmed | Simulated direct security/platform route - no real send | 2026-05-04 09:42 modeled | Queue/plan/ledger marked simulated only | Use the modeled approval blocker to sharpen slot 5 probes |
 
 ### Batch A Follow-Up Drafts
 
@@ -505,11 +515,24 @@ non-replies and abstract interest out of PMF signal counts.
 
 | Candidate/team | First reply date | Triage | Scheduling intake complete | Follow-up status | Evidence count |
 |----------------|------------------|--------|----------------------------|------------------|----------------|
-| Markus Haverinen, Frends | TBD | Not sent | No | Not due | 0 |
-| Erik Munson, Day AI | TBD | Not sent | No | Not due | 0 |
-| Lucrezia Keane, GWI | TBD | Not sent | No | Not due | 0 |
-| Jesse Zhang, Decagon | TBD | Not sent | No | Not due | 0 |
-| Talha Tariq, Vercel | TBD | Not sent | No | Not due | 0 |
+| Markus Haverinen, Frends | N/A - modeled | Simulated positive reply | Modeled only | N/A - modeled | 0 |
+| Erik Munson, Day AI | N/A - modeled | Simulated positive reply | Modeled only | N/A - modeled | 0 |
+| Lucrezia Keane, GWI | N/A - modeled | Simulated delegated reply | Modeled only | N/A - modeled | 0 |
+| Jesse Zhang, Decagon | N/A - modeled | Simulated brief reply | Modeled only | N/A - modeled | 0 |
+| Talha Tariq, Vercel | N/A - modeled | Simulated delegated reply | Modeled only | N/A - modeled | 0 |
+
+### Batch A Modeled Reply Scenarios
+
+These are synthetic planning scenarios. They can improve the interview script
+and source-quality assumptions, but they cannot satisfy PMF gates.
+
+| Candidate/team | Modeled response | Workflow detail to probe in a real call | Script adjustment |
+|----------------|------------------|------------------------------------------|-------------------|
+| Markus Haverinen, Frends | Positive but time-limited; willing to describe one escalation case | A support AI answer was close but needed fresher entitlement or escalation context before a human took over | Ask for the last case where "almost right" increased handling time |
+| Erik Munson, Day AI | Positive technical exchange; interested in reader/writer consistency | Live CRM context had to reconcile upstream truth, user edits, agent writes, and permissions before action | Ask what "fresh enough" means when an agent can write state |
+| Lucrezia Keane, GWI | Delegates to a CS operations owner who owns scaled-account signals | Account intelligence was useful only when CSMs could see which product, revenue, meeting, or support signal drove the recommendation | Ask what signal provenance a CSM needs before trusting a next action |
+| Jesse Zhang, Decagon | Brief reply; notes that customer-specific business logic drives many edge cases | Fresh state matters less as a generic feature and more as a per-customer workflow contract | Ask for one custom workaround forced by stale state, incomplete permissions, or exception handling |
+| Talha Tariq, Vercel | Delegates to a security/platform reviewer for implementation detail | Approval blocks first on scoped credentials, audit trail, and revocation before runtime autonomy is discussed | Ask which control turns a hard no into a limited pilot |
 
 ### Scheduling Intake
 
@@ -528,6 +551,8 @@ Capture these fields before a call is counted as scheduled.
 
 Update this after each outreach batch. The goal is to identify where the PMF
 process is blocked before interpreting the interviews.
+This table tracks real external activity only. Do not include the Batch A
+simulation in these counts.
 
 | Metric | Target before batch review | Current | Interpretation |
 |--------|----------------------------|---------|----------------|

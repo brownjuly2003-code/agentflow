@@ -70,6 +70,20 @@ research, not a product pitch.
 - Record the reason each candidate qualified before marking outreach sent.
 - Treat non-replies as source-quality signal, not product validation.
 
+## Batch Funnel Metrics
+
+Update this after each outreach batch. The goal is to identify where the PMF
+process is blocked before interpreting the interviews.
+
+| Metric | Target before batch review | Current | Interpretation |
+|--------|----------------------------|---------|----------------|
+| Named candidates sourced | 15 | 0 | Below target means sourcing is not deep enough |
+| Qualified candidates | 10 | 0 | Below target means the ICP definition is too broad or channels are weak |
+| Research notes sent | 10 | 0 | Below target means execution is blocked before market signal |
+| Replies received | 3 | 0 | Low replies suggest weak source quality, framing, or timing |
+| Interviews scheduled | 5 | 0 | Low scheduling after replies suggests weak pain relevance |
+| Interviews completed | 5 | 0 | Do not synthesize the batch before this reaches 5 |
+
 ## Candidate Qualification
 
 Prioritize candidates who meet at least two of these signals:
@@ -171,6 +185,19 @@ Score each interview from `0` to `3` using the rubric in
 | 3 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | 5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+
+## Segment Evidence Matrix
+
+Use this after each completed interview to keep segment-level evidence separate.
+Do not average all interviews together if one segment is clearly stronger.
+
+| Segment | Concrete failure count | Strong buying signals | Strong rejection signals | Segment read |
+|---------|------------------------|-----------------------|--------------------------|--------------|
+| Support/CS engineering | 0 | TBD | TBD | TBD |
+| Data/platform engineering | 0 | TBD | TBD | TBD |
+| Ops/revops | 0 | TBD | TBD | TBD |
+| AI-native product | 0 | TBD | TBD | TBD |
+| Security/governance | 0 | TBD | TBD | TBD |
 
 ## Post-Call Follow-up
 

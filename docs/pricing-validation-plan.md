@@ -82,6 +82,21 @@ narrow enough to approve and valuable enough to pay for.
 | Buyer | Platform, CS engineering, ops, or AI product owner | No one owns the pain or budget |
 | Pricing posture | Founder-led paid pilot before self-serve tiers | Buyers expect a free open-source library, not a paid workflow outcome |
 
+## Pricing Review Rules
+
+Use these rules after the first 5 interviews so pricing does not get ahead of
+market evidence.
+
+- If fewer than 2 interviews identify a budget owner, do not test price points.
+- If fewer than 2 interviews name a replaceable cost, keep the offer framed as
+  discovery-led pilot scoping.
+- If the strongest reaction is to setup speed, test a connector/onboarding
+  package before platform pricing.
+- If the strongest reaction is to governance, test an enterprise evaluation
+  path before self-serve tiers.
+- If pricing anxiety centers on usage unpredictability, avoid request-volume
+  pricing in the next test.
+
 ## Packaging Hypotheses
 
 | Hypothesis | Evidence needed | Failure signal |

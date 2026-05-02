@@ -100,7 +100,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] `publish-pypi.yml` `environment: pypi` committed (`e8b1237`)
 - [x] `sdk-ts/package-lock.json` committed; `npm audit` clean (0 vulns)
 - [x] Vulnerable runtime/integrations deps bumped (`dagster>=1.13.1`, `langchain-core>=1.2.22`, `langchain-text-splitters>=1.1.2`, `langsmith>=0.7.31`)
-- [ ] Phase 1 PMF work completed (`docs/customer-discovery-tracker.md` now defines the 15-candidate sourcing worklist, outreach queue, qualification rules, outreach templates, 5-interview operating tracker, and batch synthesis workflow; `docs/pricing-validation-plan.md` defines the pricing/WTP evidence gates and pilot-offer signals to capture during interviews; real interviews are still pending)
+- [ ] Phase 1 PMF work completed (`docs/customer-discovery-tracker.md` now defines the 15-candidate sourcing worklist, outreach funnel metrics, segment evidence matrix, qualification rules, outreach templates, 5-interview operating tracker, and batch synthesis workflow; `docs/pricing-validation-plan.md` defines the pricing/WTP evidence gates, pilot-offer signals to capture during interviews, and post-batch pricing review rules; real interviews are still pending)
 
 ## SDK Publish Proof Path
 
@@ -235,7 +235,7 @@ npm follow-up note:
 **v1.1.0 release line prepared; post-release local gates recorded.**
 
 AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. Do not treat AWS Terraform apply or production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
-- Phase 1 PMF: customer discovery and pricing validation - needs founder outreach (script ready in `docs/customer-discovery-questions.md`; first-batch sourcing worklist, outreach queue, candidate qualification, templates, operating tracker, and synthesis workflow ready in `docs/customer-discovery-tracker.md`; pricing/WTP evidence gates and pilot-offer signal capture ready in `docs/pricing-validation-plan.md`)
+- Phase 1 PMF: customer discovery and pricing validation - needs founder outreach (script ready in `docs/customer-discovery-questions.md`; first-batch sourcing worklist, outreach funnel metrics, segment evidence matrix, candidate qualification, templates, operating tracker, and synthesis workflow ready in `docs/customer-discovery-tracker.md`; pricing/WTP evidence gates, pilot-offer signal capture, and pricing review rules ready in `docs/pricing-validation-plan.md`)
 - AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml`
 - Revoke the legacy npm `NPM_TOKEN` after the first successful trusted-publish run for `@yuliaedomskikh/agentflow-client`
 - Production CDC source onboarding decision and secrets/network setup; use [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) as the approval checklist

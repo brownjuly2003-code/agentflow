@@ -136,6 +136,49 @@ Score each interview from `0` to `3` using the rubric in
 | 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | 5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 
+## Post-Call Follow-up
+
+Send this only after the call is complete. Do not use it as a sales sequence.
+
+```text
+Thanks again for taking the time. The most useful thing I heard was [specific
+workflow/pain in their words].
+
+If I understood correctly, the open question is whether [current workaround or
+risk] is painful enough to justify a focused pilot. I'll compare this with the
+other research calls before making any roadmap decisions.
+
+If I missed or misread anything, please correct me.
+```
+
+## Batch Synthesis Workflow
+
+After all 5 interviews are recorded:
+
+1. Copy the strongest exact quote from each interview into the synthesis template.
+2. Count how many calls included a concrete recent failure or near-miss.
+3. Count how many calls scored `2` or higher for glue burden, ownership clarity,
+   pilot readiness, budget/WTP signal, or governance pressure.
+4. Group the calls by workflow type: support/CS, data/platform, ops/revops,
+   AI-native product, security/governance.
+5. Compare the strongest segment against the decision gates below.
+6. Decide whether v1.1 scope stays intact, narrows, or pauses for more discovery.
+
+## Scope Decision Log
+
+Fill this only after the 5-interview batch is complete.
+
+| Decision | Result |
+|----------|--------|
+| Batch date range | TBD |
+| Interviews completed | 0 / 5 |
+| Concrete failures or near-misses | TBD |
+| Strongest segment | TBD |
+| Weakest assumption | TBD |
+| Scope decision | TBD |
+| Next product action | TBD |
+| Evidence link | TBD |
+
 ## Decision Gates After 5 Interviews
 
 Proceed with the current v1.1 direction only if the interview batch shows:

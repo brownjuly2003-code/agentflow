@@ -163,7 +163,10 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request):
     validated = bool(validated_rows)
     enriched = validated
     validation_at = (
-        max(row["processed_at"] for row in validated_rows if row["processed_at"] is not None)
+        max(
+            (row["processed_at"] for row in validated_rows if row["processed_at"] is not None),
+            default=latest_at,
+        )
         if validated_rows
         else latest_at
     )

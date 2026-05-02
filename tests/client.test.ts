@@ -9,6 +9,7 @@ import {
   CircuitState,
   DataFreshnessError,
   EntityNotFoundError,
+  PermissionDeniedError,
   RateLimitError,
   RetryPolicy,
 } from "../sdk-ts/index.ts";
@@ -260,6 +261,14 @@ describe("AgentFlowClient", () => {
     });
 
     await expect(client.health()).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it("raises PermissionDeniedError for 403 responses", async () => {
+    const client = new AgentFlowClient("https://api.example.test", "test-key", {
+      fetch: vi.fn(async () => jsonResponse(403, { detail: "Forbidden" })),
+    });
+
+    await expect(client.health()).rejects.toBeInstanceOf(PermissionDeniedError);
   });
 
   it("raises RateLimitError with retryAfter for 429 responses", async () => {

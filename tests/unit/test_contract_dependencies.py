@@ -83,6 +83,18 @@ def test_contract_workflow_uses_contract_extra():
     assert "pip install schemathesis" not in workflow
 
 
+def test_pytest_uses_stable_local_test_environment():
+    pyproject = _load_pyproject()
+    pytest_options = pyproject["tool"]["pytest"]["ini_options"]
+
+    addopts = pytest_options.get("addopts", [])
+
+    assert "-p" in addopts
+    assert "no:schemathesis" in addopts
+    assert "--basetemp=.tmp/pytest-basetemp" in addopts
+    assert pytest_options.get("cache_dir") == ".tmp/pytest-cache"
+
+
 def test_dependency_profiles_reference_declared_extras():
     pyproject = _load_pyproject()
     root_extras = pyproject["project"]["optional-dependencies"]

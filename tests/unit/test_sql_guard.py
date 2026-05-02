@@ -28,6 +28,8 @@ UNSAFE_SQL = [
     ("UPDATE orders_v2 SET status = 'cancelled'", "Statement type"),
     ("SELECT * FROM api_keys", "Unknown tables"),
     ("ATTACH 'evil.db' AS evil", "Statement type"),
+    ("SELECT * FROM read_csv_auto('/tmp/orders.csv')", "Table-valued functions"),
+    ("SELECT read_file('/tmp/secret')", "Forbidden function"),
 ]
 
 

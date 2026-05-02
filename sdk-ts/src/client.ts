@@ -3,6 +3,7 @@ import {
   AuthError,
   DataFreshnessError,
   EntityNotFoundError,
+  PermissionDeniedError,
   RateLimitError,
 } from "./exceptions.js";
 import type {
@@ -395,6 +396,7 @@ export class AgentFlowClient {
           || error instanceof AuthError
           || error instanceof RateLimitError
           || error instanceof EntityNotFoundError
+          || error instanceof PermissionDeniedError
         ) {
           throw error;
         }
@@ -434,6 +436,10 @@ export class AgentFlowClient {
 
     if (response.status === 401) {
       throw new AuthError(detail ?? "Unauthorized");
+    }
+
+    if (response.status === 403) {
+      throw new PermissionDeniedError(detail ?? "Forbidden");
     }
 
     if (response.status === 429) {

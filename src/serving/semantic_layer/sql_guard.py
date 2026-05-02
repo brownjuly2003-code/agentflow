@@ -25,6 +25,27 @@ _FORBIDDEN_NODE_TYPES = (
     exp.Use,
 )
 
+_FORBIDDEN_FUNCTION_NAMES = {
+    "delta_scan",
+    "glob",
+    "iceberg_scan",
+    "mysql_scan",
+    "parquet_scan",
+    "postgres_scan",
+    "read_blob",
+    "read_csv",
+    "read_csv_auto",
+    "read_file",
+    "read_json",
+    "read_json_auto",
+    "read_ndjson",
+    "read_ndjson_auto",
+    "read_parquet",
+    "read_text",
+    "sqlite_scan",
+    "st_read",
+}
+
 
 def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
     try:
@@ -42,6 +63,10 @@ def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
     for node in statement.walk():
         if isinstance(node, _FORBIDDEN_NODE_TYPES):
             raise UnsafeSQLError(f"Forbidden node: {type(node).__name__}")
+        if isinstance(node, exp.Table) and not node.name:
+            raise UnsafeSQLError("Table-valued functions not allowed")
+        if isinstance(node, exp.Anonymous) and node.name.lower() in _FORBIDDEN_FUNCTION_NAMES:
+            raise UnsafeSQLError(f"Forbidden function: {node.name.lower()}")
 
     cte_names = {
         cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE) if cte.alias_or_name

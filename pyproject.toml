@@ -143,6 +143,8 @@ ignore = ["S101", "S311", "S608"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-p", "no:schemathesis", "--basetemp=.tmp/pytest-basetemp"]
+cache_dir = ".tmp/pytest-cache"
 markers = [
     "integration: marks tests requiring Docker services",
     "requires_docker: marks tests that require local Docker",

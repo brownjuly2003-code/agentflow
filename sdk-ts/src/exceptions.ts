@@ -15,6 +15,13 @@ export class AuthError extends AgentFlowError {
   }
 }
 
+export class PermissionDeniedError extends AgentFlowError {
+  constructor(message = "Forbidden") {
+    super(message, 403);
+    this.name = "PermissionDeniedError";
+  }
+}
+
 export class RateLimitError extends AgentFlowError {
   readonly retryAfter: number;
 

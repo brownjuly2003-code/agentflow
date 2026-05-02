@@ -9,6 +9,7 @@ export {
   AuthError,
   DataFreshnessError,
   EntityNotFoundError,
+  PermissionDeniedError,
   RateLimitError,
 } from "./src/exceptions.js";
 export { RetryPolicy } from "./src/retry.js";

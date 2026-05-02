@@ -129,6 +129,22 @@ class TestLineageAPI:
         assert response.status_code == 404
         assert response.json()["detail"] == "No lineage found for order/ORD-404"
 
+    def test_lineage_handles_validated_event_without_processed_at(self, client, monkeypatch):
+        _prepare_lineage_events(client)
+        conn = client.app.state.query_engine._conn
+        conn.execute(
+            "UPDATE pipeline_events SET processed_at = NULL WHERE event_id = 'evt-order-validated'"
+        )
+        conn.execute(
+            "UPDATE pipeline_events SET processed_at = NULL WHERE event_id = 'evt-order-enriched'"
+        )
+        _disable_auth(client, monkeypatch)
+
+        response = client.get("/v1/lineage/order/ORD-1")
+
+        assert response.status_code == 200
+        assert response.json()["validated"] is True
+
     def test_lineage_requires_api_key_when_auth_enabled(self, client, monkeypatch):
         _prepare_lineage_events(client, tenant_id="acme")
 

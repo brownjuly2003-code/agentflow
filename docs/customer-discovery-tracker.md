@@ -9,6 +9,11 @@ This tracker keeps the PMF work operational without marking the PMF gate complet
 Use it after every founder-led interview to record evidence, score the segment,
 and decide whether the v1.1 roadmap still fits real customer pain.
 
+The named people below are real external customer-discovery candidates selected
+to test whether the target workflow pain exists. They are not product evaluators,
+and outreach/replies do not count as PMF evidence until a concrete workflow and
+scheduling intake are captured.
+
 ## Current Operating Step
 
 Batch 1 sourcing is complete. The next operating step is sending the first
@@ -366,38 +371,45 @@ the note actually leaves an approved account or intro thread.
 
 | Candidate/team | Route to verify before send | Anchor to preserve | First reply goal |
 |----------------|-----------------------------|--------------------|------------------|
-| Markus Haverinen, Frends | Warm support/CS intro; otherwise direct professional profile route | Fin involvement across support conversations and human control | One concrete escalation or context-quality case |
-| Erik Munson, Day AI | Warm data/platform intro; otherwise direct professional profile route | Live CRM context, permissions, and human/AI writes | One production read/write context tradeoff |
-| Lucrezia Keane, GWI | Warm CS/revenue intro; otherwise direct professional profile route | Scaled CS, GRR lift, and account-state intelligence | One case where customer-state quality changed a CS action |
-| Jesse Zhang, Decagon | Founder/operator intro; otherwise direct professional profile route | Customer business logic inside production support agents | One workflow-specific context workaround |
-| Talha Tariq, Vercel | Security/platform intro; otherwise direct professional profile route | AI security, credentials, and developer workflow controls | One approval blocker for agent credential/API access |
+| Markus Haverinen, Frends | Warm support/CS intro; otherwise approved direct professional route | Fin involvement across support conversations and human control | One concrete escalation or context-quality case |
+| Erik Munson, Day AI | Warm data/platform intro; otherwise approved direct professional route | Live CRM context, permissions, and human/AI writes | One production read/write context tradeoff |
+| Lucrezia Keane, GWI | Warm CS/revenue intro; otherwise approved direct professional route | Scaled CS, GRR lift, and account-state intelligence | One case where customer-state quality changed a CS action |
+| Jesse Zhang, Decagon | Founder/operator intro; otherwise approved direct professional route | Customer business logic inside production support agents | One workflow-specific context workaround |
+| Talha Tariq, Vercel | Security/platform intro; otherwise approved direct professional route | AI security, credentials, and developer workflow controls | One approval blocker for agent credential/API access |
 
 ### Batch A Route Decisions
 
 Decision date: 2026-05-03. Keep `Send channel` as `TBD` until the note actually
 leaves an approved account or intro thread. If no warm intro is confirmed by
-noon on 2026-05-04, use the chosen direct route below.
+noon on 2026-05-04, use the chosen direct route below. A public profile or
+source page is not a send channel by itself; direct route means a controlled
+outbound account/channel approved for professional research outreach.
 
 | Candidate/team | Chosen route for 2026-05-04 | Public source checked | Avoid |
 |----------------|-----------------------------|-----------------------|-------|
-| Markus Haverinen, Frends | Direct professional profile route; warm support/CS intro only if confirmed before noon | [Fin customer story](https://fin.ai/customers/frends), public org/profile result | Public support channel |
-| Erik Munson, Day AI | Direct professional profile route; warm data/platform intro only if confirmed before noon | [Materialize case study](https://materialize.com/customer-stories/day-ai/), public professional profile result | Generic Day AI company form |
-| Lucrezia Keane, GWI | Direct professional profile route; warm CS/revenue intro only if confirmed before noon | [The Org profile](https://theorg.com/org/globalwebindex/org-chart/lucrezia-keane), public GWI profile result | Generic customer support route |
-| Jesse Zhang, Decagon | Direct founder/operator profile route; warm founder intro only if confirmed before noon | [LinkedIn profile](https://www.linkedin.com/in/thejessezhang), Decagon public profile result | Sales or demo request route |
-| Talha Tariq, Vercel | Direct security/platform profile route; warm security intro only if confirmed before noon | [LinkedIn profile](https://www.linkedin.com/in/talhatariq), [Vercel announcement](https://vercel.com/blog/talha-tariq-joins-vercel-as-cto-security) | Vercel support/security disclosure route |
+| Markus Haverinen, Frends | Approved direct professional route; warm support/CS intro only if confirmed before noon | [Fin customer story](https://fin.ai/customers/frends), public org/profile result | Public support channel |
+| Erik Munson, Day AI | Approved direct professional route; warm data/platform intro only if confirmed before noon | [Materialize case study](https://materialize.com/customer-stories/day-ai/), public professional profile result | Generic Day AI company form |
+| Lucrezia Keane, GWI | Approved direct professional route; warm CS/revenue intro only if confirmed before noon | [The Org profile](https://theorg.com/org/globalwebindex/org-chart/lucrezia-keane), public GWI profile result | Generic customer support route |
+| Jesse Zhang, Decagon | Approved direct founder/operator route; warm founder intro only if confirmed before noon | [OpenAI customer story](https://openai.com/index/decagon/), Decagon public profile result | Sales or demo request route |
+| Talha Tariq, Vercel | Approved direct security/platform route; warm security intro only if confirmed before noon | [Vercel announcement](https://vercel.com/blog/talha-tariq-joins-vercel-as-cto-security), [ITPro 1Password coverage](https://www.itpro.com/security/1password-unified-access-agent-identity-security) | Vercel support/security disclosure route |
 
 ### Batch A Send-Day Ledger
 
 Use this on 2026-05-04. Do not copy planned values into the execution tables
 until the note has actually left an approved account or intro thread.
 
+Pre-send access check on 2026-05-03: no warm intro thread was confirmed in
+accessible sources. Public/profile pages remain qualification evidence only; no
+approved outbound account/session was available in this workspace. The rows
+below are blocked, not sent.
+
 | Candidate/team | Pre-noon route check | Final send channel | Sent timestamp | Tracker rows updated | Next action |
 |----------------|----------------------|--------------------|----------------|----------------------|-------------|
-| Markus Haverinen, Frends | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
-| Erik Munson, Day AI | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
-| Lucrezia Keane, GWI | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
-| Jesse Zhang, Decagon | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
-| Talha Tariq, Vercel | Pending | TBD after route check | TBD after send | No | Send or record blocked reason |
+| Markus Haverinen, Frends | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
+| Erik Munson, Day AI | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
+| Lucrezia Keane, GWI | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
+| Jesse Zhang, Decagon | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
+| Talha Tariq, Vercel | No warm intro confirmed in accessible sources | Blocked - no approved outbound account/session | Not sent | Ledger only; queue/plan unchanged | Send from an approved professional account on 2026-05-04, then update queue/plan |
 
 ### Batch A Follow-Up Drafts
 

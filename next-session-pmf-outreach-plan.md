@@ -8,6 +8,11 @@ Date: 2026-05-03
 - Source of truth: `docs/customer-discovery-tracker.md`.
 - Local prep exists: Batch A route decisions, first-touch copy, follow-up
   drafts, send-day ledger, and reply ledger are ready.
+- Batch A names are real external customer-discovery candidates for validating
+  target workflow pain, not product evaluators or PMF evidence by themselves.
+- 2026-05-03 access check: no warm intro thread or approved outbound
+  account/session was available in this workspace, so Batch A remains blocked
+  and unsent until the founder sends from an approved route.
 - Baseline: 15 named candidates, 0 research notes sent, 0 replies, 0 scheduled
   interviews, 0 / 5 completed interviews.
 - Do not touch `ttt.txt` or local secret notes.
@@ -25,7 +30,10 @@ release decisions blocked until 5 valid interviews are completed and scored.
   Zhang, and Talha Tariq.
 - Do not send on the weekend. Target send date is Monday, 2026-05-04.
 - Prefer a warm intro only if it can be verified by noon on 2026-05-04;
-  otherwise use the direct professional profile route.
+  otherwise use the approved direct professional route.
+- Treat public profile/source pages as qualification evidence only. They are not
+  approved send channels unless the founder is authenticated in and allowed to
+  send from that professional account.
 - For Batch A sent on 2026-05-04, set follow-up due to 2026-05-07.
 - Do not start Batch B until either all five Batch A notes are sent, or at least
   two early replies show the wording needs adjustment.
@@ -39,7 +47,8 @@ counts until a real send/reply/schedule event occurs.
 
 - Before noon: check whether any warm intro route is actually available.
 - If no warm intro is confirmed for a candidate, use the chosen direct
-  professional route from `Batch A Route Decisions`.
+  professional route from `Batch A Route Decisions`, but only from an approved
+  outbound account/channel.
 - After each note is sent, update both the `Outreach Queue` row and the
   `Outreach Execution Plan` row with the real send channel, send date, and
   follow-up due date.

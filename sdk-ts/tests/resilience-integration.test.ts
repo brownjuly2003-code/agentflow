@@ -43,6 +43,25 @@ describe("AgentFlowClient configureResilience", () => {
     expect(client.circuitBreaker).toBeInstanceOf(CircuitBreaker);
   });
 
+  it("accepts constructor resilience policies", () => {
+    const retryPolicy = new RetryPolicy({ maxAttempts: 2, jitterFactor: 0 });
+    const circuitBreaker = new CircuitBreaker({ failureThreshold: 2 });
+    const options = {
+      fetch: async () => jsonResponse(200, {}),
+      retryPolicy,
+      circuitBreaker,
+    } satisfies NonNullable<ConstructorParameters<typeof AgentFlowClient>[2]>;
+
+    const client = new AgentFlowClient(
+      "https://api.example.test",
+      "test-key",
+      options,
+    );
+
+    expect(client.retryPolicy).toBe(retryPolicy);
+    expect(client.circuitBreaker).toBe(circuitBreaker);
+  });
+
   it("blocks requests once the circuit is open", async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse(503, { detail: "temporarily unavailable" }),

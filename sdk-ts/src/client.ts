@@ -10,6 +10,7 @@ import type {
   BatchItem,
   BatchResponse,
   CatalogResponse,
+  ClientOptions,
   ContractResponse,
   EntityEnvelope,
   EventFilters,
@@ -54,25 +55,16 @@ export class AgentFlowClient {
   constructor(
     baseUrl: string,
     apiKey: string,
-    options: {
-      fetch?: FetchLike;
-      timeoutMs?: number;
-      headers?: HeadersInit;
-      contractVersion?: string;
-    } = {},
+    options: ClientOptions = {},
   ) {
-    const legacyOptions = options as typeof options & {
-      retryPolicy?: RetryPolicy;
-      circuitBreaker?: CircuitBreaker;
-    };
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey;
     this.fetchImpl = options.fetch ?? this.resolveFetch();
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.headers = options.headers;
     this.contractVersions = this.parseContractVersions(options.contractVersion);
-    this.retryPolicy = legacyOptions.retryPolicy ?? new RetryPolicy();
-    this.circuitBreaker = legacyOptions.circuitBreaker ?? new CircuitBreaker();
+    this.retryPolicy = options.retryPolicy ?? new RetryPolicy();
+    this.circuitBreaker = options.circuitBreaker ?? new CircuitBreaker();
   }
 
   configureResilience(options: {

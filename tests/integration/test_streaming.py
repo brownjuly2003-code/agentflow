@@ -239,6 +239,49 @@ class TestStreamingAPI:
         assert payload["event_id"] == "evt-order-2"
 
     @pytest.mark.asyncio
+    async def test_stream_events_only_emits_validated_topics(self, client, monkeypatch):
+        _prepare_stream_events(client)
+        _disable_auth(client, monkeypatch)
+        conn = client.app.state.query_engine._conn
+        conn.execute("DELETE FROM pipeline_events")
+        conn.execute(
+            """
+            INSERT INTO pipeline_events (
+                event_id, topic, processed_at, event_type, entity_id, latency_ms, tenant_id
+            )
+            VALUES
+                (
+                    'evt-validated-old', 'events.validated', NOW() - INTERVAL '4 seconds',
+                    'order.created', 'ORD-1', 15, 'default'
+                ),
+                (
+                    'evt-raw', 'events.raw', NOW() - INTERVAL '3 seconds',
+                    'order.created', 'ORD-RAW', 15, 'default'
+                ),
+                (
+                    'evt-deadletter', 'events.deadletter', NOW() - INTERVAL '2 seconds',
+                    'order.created', 'ORD-DLQ', 15, 'default'
+                ),
+                (
+                    'evt-validated-new', 'events.validated', NOW() - INTERVAL '1 seconds',
+                    'order.shipped', 'ORD-2', 12, 'default'
+                )
+            """
+        )
+
+        response, receive = await _dispatch_stream_request(client)
+        payloads = [await _first_sse_payload(response), await _first_sse_payload(response)]
+
+        receive.disconnect()
+        await response.body_iterator.aclose()
+
+        assert [payload["event_id"] for payload in payloads] == [
+            "evt-validated-old",
+            "evt-validated-new",
+        ]
+        assert {payload["topic"] for payload in payloads} == {"events.validated"}
+
+    @pytest.mark.asyncio
     async def test_stream_events_require_api_key_when_auth_enabled(self, client, monkeypatch):
         _prepare_stream_events(client, tenant_id="acme")
 

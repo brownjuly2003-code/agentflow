@@ -93,6 +93,54 @@ def _prepare_shared_lineage_events(client: TestClient) -> None:
     """)
 
 
+def _prepare_entity_type_lineage_events(client: TestClient) -> None:
+    conn = client.app.state.query_engine._conn
+    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    if "tenant_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN tenant_id VARCHAR DEFAULT 'default'")
+    if "event_type" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN event_type VARCHAR")
+    if "entity_type" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN entity_type VARCHAR")
+    if "entity_id" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN entity_id VARCHAR")
+    if "latency_ms" not in columns:
+        conn.execute("ALTER TABLE pipeline_events ADD COLUMN latency_ms INTEGER")
+
+    conn.execute("DELETE FROM pipeline_events")
+    conn.execute("""
+        INSERT INTO pipeline_events (
+            event_id, topic, processed_at, event_type, entity_type, entity_id, latency_ms, tenant_id
+        )
+        VALUES
+            (
+                'evt-shared-product-source', 'products.cdc',
+                TIMESTAMP '2026-01-01 00:00:00',
+                'product.updated', 'product', 'ENTITY-42', 10, 'default'
+            ),
+            (
+                'evt-shared-user-source', 'users.raw',
+                TIMESTAMP '2026-01-01 00:00:01',
+                'user.updated', 'user', 'ENTITY-42', 10, 'default'
+            ),
+            (
+                'evt-shared-session-source', 'clicks.raw',
+                TIMESTAMP '2026-01-01 00:00:02',
+                'session.started', 'session', 'ENTITY-42', 10, 'default'
+            ),
+            (
+                'evt-shared-order-source', 'orders.raw',
+                TIMESTAMP '2026-01-01 00:00:10',
+                'order.created', 'order', 'ENTITY-42', 10, 'default'
+            ),
+            (
+                'evt-shared-order-validated', 'events.validated',
+                TIMESTAMP '2026-01-01 00:00:20',
+                'order.created', 'order', 'ENTITY-42', 10, 'default'
+            )
+    """)
+
+
 def _disable_auth(client: TestClient, monkeypatch) -> None:
     manager = client.app.state.auth_manager
     monkeypatch.setattr(manager, "keys_by_value", {})
@@ -215,6 +263,19 @@ class TestLineageAPI:
         lineage_topics = [item["table_or_topic"] for item in response.json()["lineage"]]
         assert "acme.orders.raw" in lineage_topics
         assert "beta.orders.raw" not in lineage_topics
+
+    def test_lineage_filters_events_by_entity_type_when_column_exists(self, client, monkeypatch):
+        _prepare_entity_type_lineage_events(client)
+        _disable_auth(client, monkeypatch)
+
+        response = client.get("/v1/lineage/order/ENTITY-42")
+
+        assert response.status_code == 200
+        lineage_topics = [item["table_or_topic"] for item in response.json()["lineage"]]
+        assert lineage_topics[0] == "orders.raw"
+        assert "products.cdc" not in lineage_topics
+        assert "users.raw" not in lineage_topics
+        assert "clicks.raw" not in lineage_topics
 
     def test_catalog_documents_lineage_endpoint(self, client, monkeypatch):
         _disable_auth(client, monkeypatch)

@@ -28,7 +28,7 @@ async def fetch_recent_events(
 
     select_columns = [
         "event_id",
-        "topic",
+        "topic" if "topic" in columns else "'events.validated' AS topic",
         f"{time_column} AS processed_at",
         (
             "COALESCE(tenant_id, 'default') AS tenant_id"
@@ -47,6 +47,9 @@ async def fetch_recent_events(
     if tenant_id is not None and "tenant_id" in columns:
         where_clauses.append("COALESCE(tenant_id, 'default') = ?")
         params.append(str(tenant_id))
+
+    if "topic" in columns:
+        where_clauses.append("topic = 'events.validated'")
 
     if event_type:
         if "event_type" not in columns:

@@ -170,6 +170,16 @@ def test_docker_build_contexts_copy_root_readme_for_editable_installs():
         )
 
 
+def test_prod_compose_default_duckdb_config_has_no_required_secret_interpolation():
+    compose_text = (PROJECT_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+
+    assert "GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-}" in compose_text
+    assert "GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-}" in compose_text
+    assert "agentflow-local" not in compose_text
+    assert "${GF_SECURITY_ADMIN_USER:?" not in compose_text
+    assert "${GF_SECURITY_ADMIN_PASSWORD:?" not in compose_text
+
+
 def test_sdk_install_docs_match_split_package_identities():
     sdk_readme = (PROJECT_ROOT / "sdk" / "README.md").read_text(encoding="utf-8")
     product_doc = (PROJECT_ROOT / "docs" / "product.md").read_text(encoding="utf-8")

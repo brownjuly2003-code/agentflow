@@ -150,7 +150,7 @@ These are the product gates for market readiness, not assumptions that every loc
 | Agent-facing API | Entity lookup, metrics, NL query, health, catalog, lineage, SSE stream | Richer query guardrails and async-first serving patterns |
 | Agent integration | Python SDK v1 and exported OpenAPI tool definitions for Claude/OpenAI | SDK v2 with async streaming consumption, retries, and pagination helpers |
 | Access control | Named API keys, per-key rate limits, and entity allow-lists | Full tenant isolation, RBAC, SSO, and audit export |
-| Data plane | Local DuckDB-backed demo that proves the end-to-end path from ingestion to serving | Production Iceberg serving path, Trino/Athena federation, and autoscaled serving tier |
+| Data plane | Local DuckDB-backed demo that proves the end-to-end path from ingestion to serving | DuckDB as the default serving path, optional ClickHouse serving for production scale, and Iceberg as the storage/lakehouse context |
 | Reliability | Health endpoint, benchmark report, and failure/integration tests | SLO dashboards, alert routing, and latency tuning to consistently hit target p95 |
 | Governance | Schema and semantic quality gates before serving | PII masking, policy controls, retention, and compliance workflows |
 

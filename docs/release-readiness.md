@@ -1,7 +1,7 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20
-**Last updated**: 2026-05-01
+**Last updated**: 2026-05-02
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint + post-release benchmark workflow split
 **Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Actions environments `staging` and `production` configured with required reviewers; GitHub Release record created
 
@@ -23,7 +23,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision; the required decision record and no-go gates are documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) |
-| Recorded full-suite evidence | 2026-05-01 Docker-backed local full-suite pass after Docker Desktop recovery: 741 passed, 4 skipped in 393.84s with project-local temp/cache paths. Earlier 2026-04-30 full-suite, Docker README-copy, documentation-refresh, npm-prep, and CDC-runbook evidence remain recorded below. |
+| Recorded full-suite evidence | 2026-05-02 Docker-backed local full-suite pass on the current audit-follow-up worktree: 749 passed, 4 skipped in 362.47s with project-local temp/cache paths. Earlier 2026-05-01 and 2026-04-30 full-suite evidence remains recorded below. |
 | Current post-release main | Local `main` contains the post-release npm Trusted Publishing handoff plus refreshed external-gate evidence. Push remains separate; do not assume origin has these local commits until `git push` is explicitly run. |
 
 ## Status by BCG Dimension
@@ -90,7 +90,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, and real environment tfvars are still missing)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
 - [ ] Production CDC source onboarding approved and configured
-- [x] Full-suite release-line verification — `741 passed, 4 skipped` in 393.84s on 2026-05-01 after Docker Desktop recovery; prior `743 passed, 4 skipped` in 845.60s on 2026-04-30 remains in the evidence table
+- [x] Full-suite release-line verification — `749 passed, 4 skipped` in 362.47s on 2026-05-02 after closing the low-risk audit follow-ups; prior `741 passed, 4 skipped` and `743 passed, 4 skipped` runs remain in the evidence table as dated history
 - [x] Standalone chaos smoke green on 2026-05-01 (`3 passed in 16.71s` through the CI compose path); audit-closure HEAD also clean
 - [x] npm Trusted Publishing CLI readback verified on 2026-05-01 for `@yuliaedomskikh/agentflow-client`
 - [x] Hashed API-key auth cache regression fixed locally and covered by `tests/unit/test_auth.py::test_hashed_key_authentication_caches_successful_plaintext`
@@ -138,6 +138,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | `python -m pytest -p no:schemathesis -q tests/unit`; `tests/property`; `.venv\Scripts\python.exe -m pytest ... tests/integration -m "not requires_docker"`; `.venv\Scripts\python.exe -m pytest ... tests/e2e` | ✅ PASS | 2026-05-01 local no-Docker slice: 448 unit passed, 15 property passed, 200 integration passed / 3 skipped / 5 deselected, and 18 e2e passed. This was superseded by the Docker-backed full-suite rerun below after Docker Desktop recovery. |
 | Docker Desktop recovery + `docker compose up -d redis` | ✅ PASS | Docker Desktop recovered on 2026-05-01 by stopping Desktop, terminating the `docker-desktop` WSL distribution, and restarting Desktop. `docker desktop status` returned `running`; Redis is healthy. |
 | `.venv\Scripts\python.exe -m pytest -p no:schemathesis -q --basetemp .tmp\pytest-basetemp-t32-full` with project-local `TMP`/`TEMP` | ✅ PASS | 741 passed, 4 skipped in 393.84s on 2026-05-01 after Docker Desktop recovery |
+| `.venv\Scripts\python.exe -m pytest -p no:schemathesis -q --basetemp .tmp\pytest-basetemp-codex-continue -o cache_dir=.tmp\pytest-cache-codex-continue` with project-local `TMP`/`TEMP` | ✅ PASS | 749 passed, 4 skipped in 362.47s on 2026-05-02 after closing the low-risk audit follow-ups |
 | `docker compose -p agentflow-chaos -f docker-compose.chaos.yml up -d --wait --wait-timeout 120`; `tests/chaos/test_chaos_smoke.py`; `scripts/chaos_report.py` | ✅ PASS | 3 passed in 16.71s on 2026-05-01 through the CI compose path; stack was torn down with `down -v` |
 | `docker compose -f docker-compose.prod.yml build agentflow-api`; Trivy `aquasec/trivy:0.68.1 image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 agentflow-api:security-scan` | ✅ PASS | Production API image built successfully and the Trivy image scan reported 0 HIGH/CRITICAL findings |
 | `docker compose -f docker-compose.yml -f docker-compose.cdc.yml ...`; `tests/integration/test_cdc_capture.py::test_cdc_compose_stack_captures_postgres_and_mysql_rows` with `AGENTFLOW_RUN_CDC_DOCKER=1` | ✅ PASS | CDC connectors reached `RUNNING`, and the gated Postgres/MySQL CDC capture test passed in 103.60s on 2026-05-01 |

@@ -65,7 +65,7 @@ def _quality_score(rows: list[dict], *, default: float | None = None) -> float |
     return round(score, 3)
 
 
-def _fetch_matching_events(request: Request, entity_id: str) -> list[dict]:
+def _fetch_matching_events(request: Request, entity_type: str, entity_id: str) -> list[dict]:
     conn = request.app.state.query_engine._conn
     columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     if "entity_id" not in columns:
@@ -90,6 +90,9 @@ def _fetch_matching_events(request: Request, entity_id: str) -> list[dict]:
     ]
     where_clauses = ["entity_id = ?"]
     params: list[object] = [entity_id]
+    if "entity_type" in columns:
+        where_clauses.append("entity_type = ?")
+        params.append(entity_type)
     if tenant_id is not None and "tenant_id" in columns:
         where_clauses.append("COALESCE(tenant_id, 'default') = ?")
         params.append(str(tenant_id))
@@ -133,7 +136,7 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request):
             detail=f"API key '{tenant_key.name}' cannot access entity type '{entity_type}'.",
         )
 
-    rows = _fetch_matching_events(request, entity_id)
+    rows = _fetch_matching_events(request, entity_type, entity_id)
     if not rows:
         raise HTTPException(
             status_code=404,

@@ -4,8 +4,8 @@ Date: 2026-05-03
 
 ## Current State
 
-- Branch: `main`; local PMF docs work is ahead of `origin/main`. Do not push
-  unless explicitly asked.
+- Branch: `main`; previous pushed PMF route-recheck commit was `b60fcc0`. Do
+  not push again unless explicitly asked.
 - Source of truth: `docs/customer-discovery-tracker.md`.
 - Local prep exists: Batch A route decisions, first-touch copy, follow-up
   drafts, send-day ledger, and reply ledger are ready.

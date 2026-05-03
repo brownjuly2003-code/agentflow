@@ -5,8 +5,8 @@ Date: 2026-05-03
 ## Current State
 
 - Branch: `main`; this PMF handoff continuation started from latest pushed
-  commit `4d67b7f` (`docs: add modeled product risk implications`). Do not push
-  again unless explicitly asked.
+  commit `b62b092` (`docs: add modeled action safety deepening pass`). Do not
+  push again unless explicitly asked.
 - Source of truth: `docs/customer-discovery-tracker.md`.
 - Local prep exists: Batch A route decisions, first-touch copy, follow-up
   drafts, send-day ledger, and reply ledger are ready.
@@ -38,6 +38,10 @@ Date: 2026-05-03
   did not create a specific modeled gap that justifies Batch B.
 - The selected modeled deepening pass is complete: one blocked data/platform
   action-safety scenario around an unsafe CRM account-state write. It is
+  `Synthetic / Modeled only`, hypothesis only, evidence count `0`, and it does
+  not create a specific modeled gap that justifies Batch B.
+- The action-safety pass creates one specific modeled need for a minimum
+  security-control scenario: a limited CRM account-state write control. It is
   `Synthetic / Modeled only`, hypothesis only, evidence count `0`, and it does
   not create a specific modeled gap that justifies Batch B.
 - Baseline: 15 named candidates, 0 research notes sent, 0 replies, 0 scheduled
@@ -84,8 +88,8 @@ PMF evidence.
   rows.
 - Do not start Batch B unless a future pass names a specific modeled uncovered
   workflow or segment gap.
-- If another deepening pass is needed, choose exactly one minimum-control
-  scenario and keep it `Synthetic / Modeled only`.
+- Do not add another deepening pass unless a future handoff names a specific
+  modeled gap; keep any future modeled scenario `Synthetic / Modeled only`.
 - Do not update pricing, roadmap, release-readiness, real scorecard, real segment
   evidence, or real scope decision logs from modeled material.
 
@@ -130,9 +134,11 @@ PMF evidence.
   needed.
   Verify: one data/platform action-safety row was added as `Synthetic / Modeled
   only`, evidence count stayed `0`, and no real evidence surface was updated.
-- [ ] Next handoff: decide whether one minimum-control scenario is needed.
-  Verify: only proceed if it names a specific modeled gap; otherwise keep Batch
-  B at `0` and leave all real evidence surfaces unchanged.
+- [x] Decide whether one minimum-control scenario is needed.
+  Verify: the action-safety pass named one specific modeled need, so exactly one
+  limited CRM account-state write control row was added as `Synthetic / Modeled
+  only`; Batch B remains at `0` and all real evidence surfaces remain
+  unchanged.
 - [x] Run `git diff --check` for the current docs-only pass.
   Verify: whitespace check passes after the tracker and handoff edits.
 - [ ] Run verification before any future commit or push.
@@ -155,9 +161,9 @@ PMF evidence.
 Start from `docs/customer-discovery-tracker.md`. Permanent synthetic mode remains
 active: real outreach, real replies, scheduled interviews, and completed
 interviews will not be available. The latest completed work is one Batch A
-modeled data/platform action-safety deepening pass, labeled `Synthetic /
-Modeled only`. Treat it as a hypothesis only. Batch B stays at `0` because the
-pass found no specific modeled coverage gap. The next useful modeled pass, if
-any, is to decide whether one minimum security-control scenario is needed
-without changing evidence count, PMF evidence, pricing evidence, roadmap, scope,
-or release-readiness.
+modeled minimum security-control scenario for a limited CRM account-state write,
+labeled `Synthetic / Modeled only`. Treat it as a hypothesis only. Batch B stays
+at `0` because the pass found no specific modeled coverage gap. The next useful
+modeled pass, if any, must name a specific uncovered workflow or segment gap
+before adding anything else, and must not change evidence count, PMF evidence,
+pricing evidence, roadmap, scope, or release-readiness.

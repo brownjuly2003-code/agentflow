@@ -30,9 +30,9 @@ planning surface.
 ## Current Operating Step
 
 Batch 1 sourcing is complete. The current operating step is using the modeled
-Batch A action-safety deepening pass as a hypothesis only. Batch B remains
-unmodeled unless a specific modeled gap appears. Do not wait for real access or
-convert synthetic outputs into real evidence.
+Batch A action-safety and minimum security-control passes as hypotheses only.
+Batch B remains unmodeled unless a specific modeled gap appears. Do not wait
+for real access or convert synthetic outputs into real evidence.
 
 - Keep the 15 named candidates below as the first sourcing baseline.
 - Keep all real funnel metrics at 0 because no real sends or interviews will
@@ -640,7 +640,8 @@ does not change evidence count.
 | Batch A modeled synthesis checkpoint | 1 | 1 | Use for planning only; evidence count remains 0 |
 | Batch A modeled product-risk implication pass | 1 | 1 | Synthetic / Modeled only; product-risk hypotheses are planning constraints only; evidence count remains 0 |
 | Batch A modeled action-safety deepening pass | 1 | 1 | Synthetic / Modeled only; blocked data/platform action-safety scenario is a hypothesis only; evidence count remains 0 |
-| Batch B modeled candidates | 5 | 0 | Synthetic / Modeled only; do not model Batch B now; the product-risk and action-safety deepening passes create no specific modeled gap |
+| Batch A modeled minimum security-control scenario | 1 | 1 | Synthetic / Modeled only; limited CRM account-state write control is a hypothesis only; evidence count remains 0 |
+| Batch B modeled candidates | 5 | 0 | Synthetic / Modeled only; do not model Batch B now; the product-risk, action-safety, and security-control passes create no specific modeled coverage gap |
 
 ## Candidate Qualification
 
@@ -859,6 +860,18 @@ real funnel metrics and evidence count remain `0`.
 | Deepening pass | Modeled blocked action | Modeled source-of-truth conflict | Modeled safety failure | Modeled current control/workaround | Hypothesis-only planning implication | Batch B decision impact | Mode | Evidence count |
 |----------------|------------------------|----------------------------------|------------------------|------------------------------------|--------------------------------------|-------------------------|------|----------------|
 | Data/platform action-safety: CRM account-state write blocked | Agent attempts to update account health and renewal-risk state after a support escalation and billing-plan change | CRM has a recent human edit, billing entitlement state lags, and the support note records an exception without a canonical priority rule | The modeled agent cannot safely write because it cannot prove which system owns the current account state or why one value should override another | Platform owner requires read-only mode until source priority, permission provenance, and human review path are explicit | Hypothesis only: the wedge may be an action-safety contract that names source priority, freshness, permission provenance, and review fallback before write access | No Batch B gap; this deepens the existing data/platform slot and does not expose an uncovered segment or workflow | Synthetic / Modeled only | 0 |
+
+### Batch A Modeled Minimum Security-Control Scenario
+
+This pass is `Synthetic / Modeled only`. It records exactly one minimum
+security-control scenario for the blocked CRM account-state write as a
+hypothesis only. It is not PMF, pricing, segment, roadmap, release-readiness,
+scope, or evidence-gate evidence; real funnel metrics and evidence count remain
+`0`.
+
+| Security-control scenario | Modeled trigger | Minimum modeled controls | Modeled approval boundary | Hypothesis-only planning implication | Batch B decision impact | Mode | Evidence count |
+|---------------------------|-----------------|--------------------------|---------------------------|--------------------------------------|-------------------------|------|----------------|
+| Limited CRM account-state write control | Agent remains blocked from updating account health and renewal-risk state after a support escalation and billing-plan change | Field-scoped service credential for account-health and renewal-risk writes, source-priority proof, permission provenance, audit log, and human review before commit | Security/platform permits only read-only rehearsal or reviewed write; no autonomous production write and no real pilot approval | Hypothesis only: a limited pilot may require field scope, source-priority proof, auditability, and review fallback before testing action safety | No Batch B gap; this deepens the existing data/platform and security/governance slots without exposing an uncovered segment or workflow | Synthetic / Modeled only | 0 |
 
 ## Post-Call Follow-up
 

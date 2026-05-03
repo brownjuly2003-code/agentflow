@@ -18,6 +18,9 @@ Date: 2026-05-03
   Batch A now has simulated-only route outcomes, reply scenarios, scheduling
   intake, interview stress test, modeled interview records, modeled scorecard
   rehearsal, modeled segment read, and a modeled synthesis checkpoint.
+- The Batch A real-outreach readiness checklist is recorded in
+  `docs/customer-discovery-tracker.md`; it keeps Batch A modeled-only until a
+  confirmed warm intro thread or approved outbound account/session exists.
 - Baseline: 15 named candidates, 0 research notes sent, 0 replies, 0 scheduled
   interviews, 0 / 5 completed interviews.
 - Do not touch `ttt.txt` or local secret notes.
@@ -84,7 +87,7 @@ without marking any synthetic activity as PMF evidence.
   Verify: modeled route outcomes, replies, intake, stress test, interview
   records, scorecard rehearsal, segment read, and synthesis checkpoint exist in
   `docs/customer-discovery-tracker.md`; real counts remain 0.
-- [ ] Produce a real-outreach readiness checklist from the modeled rehearsal.
+- [x] Produce a real-outreach readiness checklist from the modeled rehearsal.
   Verify: checklist names the required outbound account/session or intro thread,
   the candidate-specific route, the exact first probe, and the tracker rows to
   update after a real send.

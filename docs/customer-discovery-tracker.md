@@ -421,6 +421,27 @@ below are simulated route outcomes, not real sends.
 | Jesse Zhang, Decagon | Modeled no warm intro confirmed | Simulated direct founder/operator route - no real send | 2026-05-04 09:34 modeled | Queue/plan/ledger marked simulated only | Use the modeled custom-workflow boundary to sharpen slot 4 probes |
 | Talha Tariq, Vercel | Modeled no warm intro confirmed | Simulated direct security/platform route - no real send | 2026-05-04 09:42 modeled | Queue/plan/ledger marked simulated only | Use the modeled approval blocker to sharpen slot 5 probes |
 
+### Batch A Real-Outreach Readiness Checklist
+
+Current disposition: no approved outbound account/session or confirmed warm
+intro thread is available in this workspace, so Batch A remains modeled-only.
+Use this checklist only to prepare the first real send; do not convert any row
+below into PMF, pricing, scorecard, segment, funnel, or scope-gate evidence.
+
+| Candidate/team | Candidate-specific route | Required real route before send | First probe from modeled stress test | Tracker rows to update after a real send |
+|----------------|--------------------------|---------------------------------|--------------------------------------|------------------------------------------|
+| Markus Haverinen, Frends | Warm support/CS intro; otherwise approved direct professional route | Confirmed warm intro thread to Markus or an approved outbound professional account/session that can send the research note; avoid public support channels | When did an almost-right answer create extra support work, and what data would have prevented it? | `Outreach Queue` Markus row; `Outreach Execution Plan` Markus row; `Batch A Send-Day Ledger` Markus row; `Batch A Reply Ledger` Markus row initialized to awaiting real reply with evidence count `0` |
+| Erik Munson, Day AI | Warm data/platform intro; otherwise approved direct professional route | Confirmed warm data/platform intro thread to Erik or an approved outbound professional account/session; avoid the generic Day AI company form | What is the first action an agent cannot safely take unless the source of truth is fresh? | `Outreach Queue` Erik row; `Outreach Execution Plan` Erik row; `Batch A Send-Day Ledger` Erik row; `Batch A Reply Ledger` Erik row initialized to awaiting real reply with evidence count `0` |
+| Lucrezia Keane, GWI | Warm CS/revenue intro; otherwise approved direct professional route | Confirmed warm CS/revenue intro thread to Lucrezia or the delegated CS operations owner, or an approved outbound professional account/session; avoid generic customer support routes | Which recommendation was trusted, ignored, or overridden because the account state looked wrong? | `Outreach Queue` Lucrezia row; `Outreach Execution Plan` Lucrezia row; `Batch A Send-Day Ledger` Lucrezia row; `Batch A Reply Ledger` Lucrezia row initialized to awaiting real reply with evidence count `0` |
+| Jesse Zhang, Decagon | Founder/operator intro; otherwise approved direct founder/operator route | Confirmed founder/operator intro thread to Jesse or an approved outbound professional account/session; avoid sales or demo-request routes | Which customer exception broke the generic workflow, and who owned the workaround? | `Outreach Queue` Jesse row; `Outreach Execution Plan` Jesse row; `Batch A Send-Day Ledger` Jesse row; `Batch A Reply Ledger` Jesse row initialized to awaiting real reply with evidence count `0` |
+| Talha Tariq, Vercel | Security/platform intro; otherwise approved direct security/platform route | Confirmed security/platform intro thread to Talha or an approved outbound professional account/session; avoid support, security disclosure, or vendor escalation routes | What exact control would move this from rejected to a limited pilot? | `Outreach Queue` Talha row; `Outreach Execution Plan` Talha row; `Batch A Send-Day Ledger` Talha row; `Batch A Reply Ledger` Talha row initialized to awaiting real reply with evidence count `0` |
+
+After a real send, update only the candidate's operational rows named above:
+set the real send channel, real send date or timestamp, follow-up due date,
+and reply state. Leave `Batch Funnel Metrics`, the real `Scorecard`,
+`Segment Evidence Matrix`, and `Scope Decision Log` unchanged until real
+completed interviews exist.
+
 ### Batch A Follow-Up Drafts
 
 Use these only after 3 business days with no reply. If Batch A is sent on

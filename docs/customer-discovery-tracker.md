@@ -770,6 +770,18 @@ interviews are completed.
 | AI-native product | Custom workflow logic is painful, but may be expected implementation work inside the product category | Real calls must separate platformizable context contracts from normal services delivery |
 | Security/governance | Governance is intense but can become a hard no unless a narrow pilot control exists | Real calls should ask for the minimum approved control set before discussing autonomy |
 
+### Batch A Modeled Synthesis Checkpoint
+
+This checkpoint summarizes the rehearsal only. It is not a scope decision and
+does not unlock v1.1 product work.
+
+| Modeled question | Rehearsal read | Next real proof needed |
+|------------------|----------------|------------------------|
+| Which segment has the clearest operational consequence? | Data/platform engineering, because read/write agent context turns freshness into a safety and actionability problem | A real operator names one agent action blocked by stale or untrusted source-of-truth state |
+| Which segment may be easiest to access first? | Support/CS, because escalation and answer-quality examples are easy to explain without product framing | A real support owner quantifies repeat handling, escalation cost, or QA ownership pressure |
+| Which segment is most likely to stall? | Security/governance, because approval can become abstract unless tied to a specific live workflow request | A real security reviewer names the minimum control set that permits a limited pilot |
+| Which question should lead the next real call? | Ask for the last concrete moment when an AI workflow could not safely act because live business context was stale, missing, split, or unsafe | Capture workflow, systems touched, owner, workaround, and pilot condition before any concept test |
+
 ## Post-Call Follow-up
 
 Send this only after the call is complete. Do not use it as a sales sequence.

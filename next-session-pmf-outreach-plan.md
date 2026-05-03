@@ -4,8 +4,9 @@ Date: 2026-05-03
 
 ## Current State
 
-- Branch: `main`; previous pushed PMF route-recheck commit was `b60fcc0`. Do
-  not push again unless explicitly asked.
+- Branch: `main`; this PMF handoff continuation started from pushed commit
+  `3f3cabd` (`docs: clarify pmf handoff push state`). Do not push again unless
+  explicitly asked.
 - Source of truth: `docs/customer-discovery-tracker.md`.
 - Local prep exists: Batch A route decisions, first-touch copy, follow-up
   drafts, send-day ledger, and reply ledger are ready.

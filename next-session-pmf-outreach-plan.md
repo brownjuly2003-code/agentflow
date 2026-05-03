@@ -14,6 +14,9 @@ Date: 2026-05-03
 - 2026-05-03 access check: no warm intro thread or approved outbound
   account/session was available in this workspace, so Batch A remains blocked
   and unsent until the founder sends from an approved route.
+- 2026-05-03 route recheck: workspace markdown still contains no confirmed
+  warm intro thread or approved outbound professional account/session for Batch
+  A; keep Batch A modeled-only.
 - User approved replacing real outreach execution with modeled PMF rehearsal.
   Batch A now has simulated-only route outcomes, reply scenarios, scheduling
   intake, interview stress test, modeled interview records, modeled scorecard

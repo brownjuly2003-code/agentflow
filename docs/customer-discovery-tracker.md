@@ -29,10 +29,10 @@ planning surface.
 
 ## Current Operating Step
 
-Batch 1 sourcing is complete. The next operating step is using the modeled Batch
-A product-risk implications as hypotheses only. Batch B remains unmodeled unless
-a specific modeled gap appears. Do not wait for real access or convert synthetic
-outputs into real evidence.
+Batch 1 sourcing is complete. The current operating step is using the modeled
+Batch A action-safety deepening pass as a hypothesis only. Batch B remains
+unmodeled unless a specific modeled gap appears. Do not wait for real access or
+convert synthetic outputs into real evidence.
 
 - Keep the 15 named candidates below as the first sourcing baseline.
 - Keep all real funnel metrics at 0 because no real sends or interviews will
@@ -639,7 +639,8 @@ does not change evidence count.
 | Batch A modeled interview records | 5 | 5 | Enough modeled records exist for a synthetic Batch A read |
 | Batch A modeled synthesis checkpoint | 1 | 1 | Use for planning only; evidence count remains 0 |
 | Batch A modeled product-risk implication pass | 1 | 1 | Synthetic / Modeled only; product-risk hypotheses are planning constraints only; evidence count remains 0 |
-| Batch B modeled candidates | 5 | 0 | Synthetic / Modeled only; do not model Batch B now; the product-risk pass creates no specific modeled gap |
+| Batch A modeled action-safety deepening pass | 1 | 1 | Synthetic / Modeled only; blocked data/platform action-safety scenario is a hypothesis only; evidence count remains 0 |
+| Batch B modeled candidates | 5 | 0 | Synthetic / Modeled only; do not model Batch B now; the product-risk and action-safety deepening passes create no specific modeled gap |
 
 ## Candidate Qualification
 
@@ -847,6 +848,17 @@ release-readiness, or scope evidence, and evidence count remains `0`.
 | AI-native product pain may collapse into bespoke services work | Customer-specific workflow contracts and exceptions look painful, but may be expected implementation work | Hypothesis only: separate platformizable context contracts from normal customer-specific glue before any scope assumption | No Batch B gap; the unresolved question is platformizability inside the modeled slot | Synthetic / Modeled only | 0 |
 | Governance may block value testing before release readiness is knowable | Security/governance pressure is high, but approval depends on scoped credentials, auditability, and revocation | Hypothesis only: model the minimum control set for a limited pilot; do not treat governance pressure as release-readiness evidence | No Batch B gap; the current gap is a control-set question, not missing segment coverage | Synthetic / Modeled only | 0 |
 | Batch B is not justified as a coverage pass now | Expanded Batch A has modeled profiles, replies, intake, interview records, scorecard rehearsal, segment read, and synthesis for all five target profiles | Hypothesis only: deepen one blocked action or one minimum-control scenario before adding more modeled candidates | Leave Batch B at 0 until a specific uncovered workflow or segment gap is named | Synthetic / Modeled only | 0 |
+
+### Batch A Modeled Action-Safety Deepening Pass
+
+This pass is `Synthetic / Modeled only`. It deepens exactly one blocked
+data/platform action-safety scenario as a hypothesis only. It is not PMF,
+pricing, segment, roadmap, release-readiness, scope, or evidence-gate evidence;
+real funnel metrics and evidence count remain `0`.
+
+| Deepening pass | Modeled blocked action | Modeled source-of-truth conflict | Modeled safety failure | Modeled current control/workaround | Hypothesis-only planning implication | Batch B decision impact | Mode | Evidence count |
+|----------------|------------------------|----------------------------------|------------------------|------------------------------------|--------------------------------------|-------------------------|------|----------------|
+| Data/platform action-safety: CRM account-state write blocked | Agent attempts to update account health and renewal-risk state after a support escalation and billing-plan change | CRM has a recent human edit, billing entitlement state lags, and the support note records an exception without a canonical priority rule | The modeled agent cannot safely write because it cannot prove which system owns the current account state or why one value should override another | Platform owner requires read-only mode until source priority, permission provenance, and human review path are explicit | Hypothesis only: the wedge may be an action-safety contract that names source priority, freshness, permission provenance, and review fallback before write access | No Batch B gap; this deepens the existing data/platform slot and does not expose an uncovered segment or workflow | Synthetic / Modeled only | 0 |
 
 ## Post-Call Follow-up
 

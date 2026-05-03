@@ -4,9 +4,9 @@ Date: 2026-05-03
 
 ## Current State
 
-- Branch: `main`; this PMF handoff continuation started from pushed commit
-  `3f3cabd` (`docs: clarify pmf handoff push state`). Do not push again unless
-  explicitly asked.
+- Branch: `main`; this PMF handoff continuation started from latest pushed
+  commit `4d67b7f` (`docs: add modeled product risk implications`). Do not push
+  again unless explicitly asked.
 - Source of truth: `docs/customer-discovery-tracker.md`.
 - Local prep exists: Batch A route decisions, first-touch copy, follow-up
   drafts, send-day ledger, and reply ledger are ready.
@@ -31,11 +31,15 @@ Date: 2026-05-03
   `docs/customer-discovery-tracker.md`; it keeps Batch A and future batches
   explicitly `Synthetic / Modeled only`.
 - Batch B remains unmodeled because expanded Batch A covers all five target
-  profiles; model Batch B only if a specific modeled gap appears after the
-  product-risk implication pass.
+  profiles; model Batch B only if a specific modeled gap appears after a future
+  modeled pass.
 - The modeled product-risk implication pass is complete. It produced hypotheses
   only, did not update PMF/pricing/roadmap/release-readiness/scope evidence, and
   did not create a specific modeled gap that justifies Batch B.
+- The selected modeled deepening pass is complete: one blocked data/platform
+  action-safety scenario around an unsafe CRM account-state write. It is
+  `Synthetic / Modeled only`, hypothesis only, evidence count `0`, and it does
+  not create a specific modeled gap that justifies Batch B.
 - Baseline: 15 named candidates, 0 research notes sent, 0 replies, 0 scheduled
   interviews, 0 / 5 completed interviews.
 - Do not touch `ttt.txt` or local secret notes.
@@ -67,19 +71,21 @@ evidence.
 
 ## Next Session Task
 
-Convert the PMF process into a modeled-only operating handoff, without marking
-any synthetic activity as PMF evidence.
+Continue the modeled-only PMF handoff without marking any synthetic activity as
+PMF evidence.
 
 - First, keep the permanent synthetic-mode decision visible in
   `docs/customer-discovery-tracker.md`.
+- Treat the completed Batch A modeled action-safety deepening pass as hypothesis
+  only.
 - Use modeled Batch A as the active planning surface and keep real funnel
   metrics frozen at `0`.
 - Do not send first-touch notes, set real follow-up dates, or create real reply
   rows.
-- Use the modeled stress test to prioritize modeled interview probes:
-  read/write context for data/platform, repeat handling for support/CS,
-  provenance for CS, custom workaround ownership for AI-native product, and
-  minimum pilot controls for security/governance.
+- Do not start Batch B unless a future pass names a specific modeled uncovered
+  workflow or segment gap.
+- If another deepening pass is needed, choose exactly one minimum-control
+  scenario and keep it `Synthetic / Modeled only`.
 - Do not update pricing, roadmap, release-readiness, real scorecard, real segment
   evidence, or real scope decision logs from modeled material.
 
@@ -120,10 +126,15 @@ any synthetic activity as PMF evidence.
 - [x] Keep real metrics and evidence ledgers frozen.
   Verify: research notes sent, replies, scheduled interviews, completed
   interviews, and evidence count remain `0`.
-- [ ] Next handoff: deepen one modeled action-safety or minimum-control scenario
-  only if needed.
-  Verify: any next modeled row stays `Synthetic / Modeled only`, keeps evidence
-  count `0`, and does not update real evidence surfaces.
+- [x] Deepen one modeled action-safety or minimum-control scenario only if
+  needed.
+  Verify: one data/platform action-safety row was added as `Synthetic / Modeled
+  only`, evidence count stayed `0`, and no real evidence surface was updated.
+- [ ] Next handoff: decide whether one minimum-control scenario is needed.
+  Verify: only proceed if it names a specific modeled gap; otherwise keep Batch
+  B at `0` and leave all real evidence surfaces unchanged.
+- [x] Run `git diff --check` for the current docs-only pass.
+  Verify: whitespace check passes after the tracker and handoff edits.
 - [ ] Run verification before any future commit or push.
   Verify: `git diff --check`, `git status --short --untracked-files=no`, backend
   pytest, TS unit tests, and TS typecheck pass; use explicit pathspecs only.
@@ -143,10 +154,10 @@ any synthetic activity as PMF evidence.
 
 Start from `docs/customer-discovery-tracker.md`. Permanent synthetic mode remains
 active: real outreach, real replies, scheduled interviews, and completed
-interviews will not be available. The latest completed work is the Batch A
-modeled product-risk implication pass, labeled `Synthetic / Modeled only`.
-Treat it as hypotheses only. Batch B stays at `0` because the pass found no
-specific modeled coverage gap. The next useful modeled pass, if any, is to
-deepen one blocked data/platform action or one minimum security-control scenario
+interviews will not be available. The latest completed work is one Batch A
+modeled data/platform action-safety deepening pass, labeled `Synthetic /
+Modeled only`. Treat it as a hypothesis only. Batch B stays at `0` because the
+pass found no specific modeled coverage gap. The next useful modeled pass, if
+any, is to decide whether one minimum security-control scenario is needed
 without changing evidence count, PMF evidence, pricing evidence, roadmap, scope,
 or release-readiness.

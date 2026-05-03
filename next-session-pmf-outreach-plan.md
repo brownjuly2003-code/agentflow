@@ -4,9 +4,9 @@ Date: 2026-05-03
 
 ## Current State
 
-- Branch: `main`; this PMF handoff continuation started from latest pushed
-  commit `b62b092` (`docs: add modeled action safety deepening pass`). Do not
-  push again unless explicitly asked.
+- Branch: `main`; this PMF handoff continuation is based on latest pushed
+  commit `9ed9a1f` (`docs: add modeled security control scenario`). Do not push
+  again unless explicitly asked.
 - Source of truth: `docs/customer-discovery-tracker.md`.
 - Local prep exists: Batch A route decisions, first-touch copy, follow-up
   drafts, send-day ledger, and reply ledger are ready.
@@ -44,6 +44,9 @@ Date: 2026-05-03
   security-control scenario: a limited CRM account-state write control. It is
   `Synthetic / Modeled only`, hypothesis only, evidence count `0`, and it does
   not create a specific modeled gap that justifies Batch B.
+- 2026-05-03 review of the latest minimum security-control scenario found no
+  specific uncovered workflow or segment gap. Do not add a new modeled row from
+  that review; keep Batch B at `0`.
 - Baseline: 15 named candidates, 0 research notes sent, 0 replies, 0 scheduled
   interviews, 0 / 5 completed interviews.
 - Do not touch `ttt.txt` or local secret notes.
@@ -90,6 +93,8 @@ PMF evidence.
   workflow or segment gap.
 - Do not add another deepening pass unless a future handoff names a specific
   modeled gap; keep any future modeled scenario `Synthetic / Modeled only`.
+- Do not add a modeled row for the limited CRM account-state write control
+  review; it found no specific uncovered workflow or segment gap.
 - Do not update pricing, roadmap, release-readiness, real scorecard, real segment
   evidence, or real scope decision logs from modeled material.
 
@@ -139,6 +144,10 @@ PMF evidence.
   limited CRM account-state write control row was added as `Synthetic / Modeled
   only`; Batch B remains at `0` and all real evidence surfaces remain
   unchanged.
+- [x] Review whether the latest minimum security-control scenario creates a
+  specific uncovered workflow or segment gap.
+  Verify: no specific modeled gap was found; no new modeled row was added, and
+  Batch B remains at `0`.
 - [x] Run `git diff --check` for the current docs-only pass.
   Verify: whitespace check passes after the tracker and handoff edits.
 - [ ] Run verification before any future commit or push.
@@ -160,10 +169,11 @@ PMF evidence.
 
 Start from `docs/customer-discovery-tracker.md`. Permanent synthetic mode remains
 active: real outreach, real replies, scheduled interviews, and completed
-interviews will not be available. The latest completed work is one Batch A
-modeled minimum security-control scenario for a limited CRM account-state write,
-labeled `Synthetic / Modeled only`. Treat it as a hypothesis only. Batch B stays
-at `0` because the pass found no specific modeled coverage gap. The next useful
+interviews will not be available. The latest completed work is review of the
+Batch A modeled minimum security-control scenario for a limited CRM
+account-state write, labeled `Synthetic / Modeled only`. Treat it as a
+hypothesis only. The review found no specific uncovered workflow or segment gap,
+so no new modeled row was added and Batch B stays at `0`. The next useful
 modeled pass, if any, must name a specific uncovered workflow or segment gap
 before adding anything else, and must not change evidence count, PMF evidence,
 pricing evidence, roadmap, scope, or release-readiness.

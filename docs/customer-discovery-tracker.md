@@ -1,18 +1,18 @@
 # AgentFlow Customer Discovery Tracker
 
 **Date:** 2026-05-01
-**Goal:** run 5 real discovery interviews before committing v1.1 product scope
+**Goal:** run a synthetic/modelled discovery batch before committing v1.1 product scope
 **Script:** [Customer Discovery Questions](customer-discovery-questions.md)
 **Research baseline:** [v1.1 Interview Preparation Report](v1-1-interview-prep.md)
 
-This tracker keeps the PMF work operational without marking the PMF gate complete.
-Use it after every founder-led interview to record evidence, score the segment,
-and decide whether the v1.1 roadmap still fits real customer pain.
+This tracker keeps the PMF work operational in permanent `Synthetic / Modeled
+only` mode. Use it to record modelled assumptions, score synthetic segment
+rehearsals, and decide which v1.1 risks need product judgment. It does not mark
+the PMF gate complete.
 
-The named people below are real external customer-discovery candidates selected
-to test whether the target workflow pain exists. They are not product evaluators,
-and outreach/replies do not count as PMF evidence until a concrete workflow and
-scheduling intake are captured.
+The named people below are real-world research anchors used to model plausible
+customer-discovery scenarios from public context. They are not contacted
+participants, product evaluators, or PMF evidence sources.
 
 Modeling override, 2026-05-03: Batch A is now a simulated customer-discovery
 exercise because no approved outbound account/session or confirmed warm intro
@@ -20,40 +20,49 @@ thread is available in the workspace. Simulated sends, replies, scheduling
 intake, and modeled workflow details are planning inputs only. They do not count
 as real outreach, replies, interviews, PMF evidence, or scope-gate evidence.
 
+Permanent synthetic-mode decision, 2026-05-03: real outreach, real replies,
+scheduled interviews, completed interviews, and other real customer-discovery
+data will not be available for this project. All customer-discovery work in this
+tracker is therefore `Synthetic / Modeled only`. Keep real funnel metrics frozen
+at `0`, keep evidence counts at `0`, and use the modeled sections as the active
+planning surface.
+
 ## Current Operating Step
 
-Batch 1 sourcing is complete. The next operating step is modeling Batch A
-outreach and reply triage while real outreach remains blocked, not changing
-roadmap, pricing, or positioning.
+Batch 1 sourcing is complete. The next operating step is using the modeled Batch
+A product-risk implications as hypotheses only. Batch B remains unmodeled unless
+a specific modeled gap appears. Do not wait for real access or convert synthetic
+outputs into real evidence.
 
 - Keep the 15 named candidates below as the first sourcing baseline.
-- Keep the real research-note send count at 0 until a note actually leaves an
-  approved outbound account or confirmed warm intro thread.
-- Use the Batch A simulation to refine the interview script, triage criteria,
-  and source-quality assumptions before a real send.
-- Schedule no more than 2 interviews from the same profile until all 5 slots have
-  at least one credible candidate.
-- Do not change v1.1 scope, pricing, or positioning until the first 5 interviews
-  are scored.
+- Keep all real funnel metrics at 0 because no real sends or interviews will
+  occur.
+- Use Batch A and Batch B simulations to refine the interview script, triage
+  criteria, source-quality assumptions, and product-risk questions.
+- Model no more than 2 interview records from the same profile until all 5 slots
+  have at least one modeled candidate.
+- Do not describe modeled outputs as PMF evidence, pricing evidence, or customer
+  validation.
 
 ## Interview Sample Plan
 
-Target at least 5 independent interviews before changing v1.1 scope.
+Target at least 5 independent modeled interview records before using this
+tracker for v1.1 scope judgment.
 
-| Slot | Target profile | Workflow to validate | Source/intro path | Status | Date | Next action |
+| Slot | Target profile | Workflow to model | Source context | Status | Date | Next action |
 |------|----------------|----------------------|-------------------|--------|------|-------------|
-| 1 | Support/CS engineering lead at a mid-market SaaS company | Agent answers account, order, subscription, or entitlement questions | Warm intro, LinkedIn, or support-agent community | Not scheduled | TBD | Identify 3 teams already piloting support agents |
-| 2 | Data/platform engineering lead at a company with multiple operational systems | Internal agent needs fresh entities or metrics across systems | Warm intro, data engineering community, or former colleague path | Not scheduled | TBD | Find teams with schema drift, glue code, or safe serving pain |
-| 3 | Ops/revenue operations owner using internal AI workflows | Agent monitors fulfillment, pipeline, or customer state | RevOps/operator community or founder network | Not scheduled | TBD | Validate whether freshness is a buying driver or only a trust symptom |
-| 4 | Founder/CTO of an AI-native B2B product | Product agent needs customer or business context from live systems | AI founder network, Product Hunt, or direct peer intro | Not scheduled | TBD | Test startup willingness to pay versus build-it-yourself |
-| 5 | Security-conscious engineering buyer | Agent access is blocked by governance, permissions, or auditability | Security/platform leader referral or enterprise buyer intro | Not scheduled | TBD | Check whether governance is first wedge or later enterprise requirement |
+| 1 | Support/CS engineering lead at a mid-market SaaS company | Agent answers account, order, subscription, or entitlement questions | Public support-agent proof | Modeled only | TBD - modeled | Model 3 teams already piloting support agents |
+| 2 | Data/platform engineering lead at a company with multiple operational systems | Internal agent needs fresh entities or metrics across systems | Public data/platform proof | Modeled only | TBD - modeled | Model teams with schema drift, glue code, or safe serving pain |
+| 3 | Ops/revenue operations owner using internal AI workflows | Agent monitors fulfillment, pipeline, or customer state | Public RevOps/operator proof | Modeled only | TBD - modeled | Model whether freshness is a buying driver or only a trust symptom |
+| 4 | Founder/CTO of an AI-native B2B product | Product agent needs customer or business context from live systems | Public AI founder/product proof | Modeled only | TBD - modeled | Model startup willingness to pay versus build-it-yourself |
+| 5 | Security-conscious engineering buyer | Agent access is blocked by governance, permissions, or auditability | Public security/platform proof | Modeled only | TBD - modeled | Model whether governance is first wedge or later enterprise requirement |
 
 ## Sourcing Worklist
 
-Fill this before sending outreach. A candidate is credible only if there is a
-specific reason to believe they have touched agent data access, support
-automation, platform data contracts, internal AI tools, or security review for
-AI workflows.
+Fill this before modeling a candidate. A candidate is a credible modeling anchor
+only if there is a specific public reason to believe they have touched agent
+data access, support automation, platform data contracts, internal AI tools, or
+security review for AI workflows.
 
 | Target slot | Minimum candidate count | Best first source | Backup source | Qualification note |
 |-------------|-------------------------|-------------------|---------------|--------------------|
@@ -95,20 +104,20 @@ research, not a product pitch.
 | Candidate/team | Target slot | Source | Outreach sent | Follow-up due | Outcome |
 |----------------|-------------|--------|---------------|---------------|---------|
 | Markus Haverinen, Frends | 1 | Fin customer story | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
-| Darren Hockley, Dotdigital | 1 | Fin AI Agent Blueprint | No | TBD after first note | Not contacted |
+| Darren Hockley, Dotdigital | 1 | Fin AI Agent Blueprint | No - not modeled yet | N/A - modeled | Not modeled |
 | Erik Munson, Day AI | 2 | Materialize case study | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
-| James Luo, BGL | 2 | ZenML LLMOps case study | No | TBD after first note | Not contacted |
+| James Luo, BGL | 2 | ZenML LLMOps case study | No - not modeled yet | N/A - modeled | Not modeled |
 | Lucrezia Keane, GWI | 3 | Hook customer proof | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
-| Nicole Looker, Rebuy Engine | 3 | Sweep customer page | No | TBD after first note | Not contacted |
+| Nicole Looker, Rebuy Engine | 3 | Sweep customer page | No - not modeled yet | N/A - modeled | Not modeled |
 | Jesse Zhang, Decagon | 4 | OpenAI customer story | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
-| Marty Kausas, Pylon | 4 | Y Combinator company profile | No | TBD after first note | Not contacted |
+| Marty Kausas, Pylon | 4 | Y Combinator company profile | No - not modeled yet | N/A - modeled | Not modeled |
 | Talha Tariq, Vercel | 5 | ITPro 1Password coverage | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
-| Haider Pasha, Palo Alto Networks | 5 | ITPro agentic AI security interview | No | TBD after first note | Not contacted |
+| Haider Pasha, Palo Alto Networks | 5 | ITPro agentic AI security interview | No - not modeled yet | N/A - modeled | Not modeled |
 
 ## First 10 Outreach Drafts
 
-Use these as first-touch research notes only. Do not mark `Outreach sent` as
-`Yes` until a note is actually sent through an approved channel.
+Use these as first-touch research note drafts for modeled reply generation only.
+Do not mark `Outreach sent` as `Yes`; real sends will not occur.
 For simulation, keep `Outreach sent` explicitly marked as simulated only.
 
 ### Markus Haverinen, Frends
@@ -346,20 +355,24 @@ scale.
 Follow-up angle: ask which single control would turn a hard no into a limited
 pilot.
 
-## Outreach Operating Rules
+## Modeled Outreach Operating Rules
 
-- Send notes in small batches of 5 so the wording can be adjusted after early
+- Model notes in small batches of 5 so the wording can be stress-tested after
+  modeled replies.
+- Model one follow-up scenario, but do not set real follow-up due dates.
+- Preserve the warm-intro/direct-route distinction only as a synthetic route
+  assumption.
+- Record the public reason each candidate qualifies before generating modeled
   replies.
-- Follow up once after 3 business days unless the person already declined.
-- Prefer a warm intro over a cold note when both are available.
-- Record the reason each candidate qualified before marking outreach sent.
-- Treat non-replies as source-quality signal, not product validation.
+- Treat modeled non-replies as source-quality rehearsal only, not product
+  validation.
 
 ## Outreach Execution Plan
 
-Send Batch A first so the first five notes cover all target profiles before any
-single segment gets overrepresented. Send Batch B only after the first five
-notes are sent, or after wording is adjusted from early replies.
+Model Batch A first so the first five synthetic records cover all target
+profiles before any single segment gets overrepresented. Model Batch B only
+after Batch A has a modeled profile, reply simulation, interview record,
+scorecard rehearsal, and synthesis checkpoint.
 
 | Send batch | Candidate/team | Target slot | Draft section | Send channel | Send date | Follow-up due | Reply triage |
 |------------|----------------|-------------|---------------|--------------|-----------|---------------|--------------|
@@ -368,18 +381,18 @@ notes are sent, or after wording is adjusted from early replies.
 | A | Lucrezia Keane, GWI | 3 | Lucrezia Keane, GWI | Simulated direct professional route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled delegated reply |
 | A | Jesse Zhang, Decagon | 4 | Jesse Zhang, Decagon | Simulated direct founder/operator route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled brief reply |
 | A | Talha Tariq, Vercel | 5 | Talha Tariq, Vercel | Simulated direct security/platform route - no real send | 2026-05-04 modeled | N/A - modeled | Modeled delegated reply |
-| B | Darren Hockley, Dotdigital | 1 | Darren Hockley, Dotdigital | TBD | TBD | TBD | Not sent |
-| B | James Luo, BGL | 2 | James Luo, BGL | TBD | TBD | TBD | Not sent |
-| B | Nicole Looker, Rebuy Engine | 3 | Nicole Looker, Rebuy Engine | TBD | TBD | TBD | Not sent |
-| B | Marty Kausas, Pylon | 4 | Marty Kausas, Pylon | TBD | TBD | TBD | Not sent |
-| B | Haider Pasha, Palo Alto Networks | 5 | Haider Pasha, Palo Alto Networks | TBD | TBD | TBD | Not sent |
+| B | Darren Hockley, Dotdigital | 1 | Darren Hockley, Dotdigital | TBD - modeled only | TBD - modeled | N/A - modeled | Not modeled |
+| B | James Luo, BGL | 2 | James Luo, BGL | TBD - modeled only | TBD - modeled | N/A - modeled | Not modeled |
+| B | Nicole Looker, Rebuy Engine | 3 | Nicole Looker, Rebuy Engine | TBD - modeled only | TBD - modeled | N/A - modeled | Not modeled |
+| B | Marty Kausas, Pylon | 4 | Marty Kausas, Pylon | TBD - modeled only | TBD - modeled | N/A - modeled | Not modeled |
+| B | Haider Pasha, Palo Alto Networks | 5 | Haider Pasha, Palo Alto Networks | TBD - modeled only | TBD - modeled | N/A - modeled | Not modeled |
 
-### Batch A Send-Readiness Notes
+### Batch A Synthetic Readiness Notes
 
-Use this before choosing a real send channel. Keep `Send channel` as `TBD` until
-the note actually leaves an approved account or intro thread.
+Use this before generating synthetic replies or interview records. No real send
+channel is expected.
 
-| Candidate/team | Route to verify before send | Anchor to preserve | First reply goal |
+| Candidate/team | Modeled route stance | Anchor to preserve | First modeled reply goal |
 |----------------|-----------------------------|--------------------|------------------|
 | Markus Haverinen, Frends | Warm support/CS intro; otherwise approved direct professional route | Fin involvement across support conversations and human control | One concrete escalation or context-quality case |
 | Erik Munson, Day AI | Warm data/platform intro; otherwise approved direct professional route | Live CRM context, permissions, and human/AI writes | One production read/write context tradeoff |
@@ -387,13 +400,10 @@ the note actually leaves an approved account or intro thread.
 | Jesse Zhang, Decagon | Founder/operator intro; otherwise approved direct professional route | Customer business logic inside production support agents | One workflow-specific context workaround |
 | Talha Tariq, Vercel | Security/platform intro; otherwise approved direct professional route | AI security, credentials, and developer workflow controls | One approval blocker for agent credential/API access |
 
-### Batch A Route Decisions
+### Batch A Modeled Route Decisions
 
-Decision date: 2026-05-03. Keep `Send channel` as `TBD` until the note actually
-leaves an approved account or intro thread. If no warm intro is confirmed by
-noon on 2026-05-04, use the chosen direct route below. A public profile or
-source page is not a send channel by itself; direct route means a controlled
-outbound account/channel approved for professional research outreach.
+Decision date: 2026-05-03. These are synthetic route assumptions for rehearsal,
+not send channels. Public/profile pages are qualification context only.
 
 | Candidate/team | Chosen route for 2026-05-04 | Public source checked | Avoid |
 |----------------|-----------------------------|-----------------------|-------|
@@ -421,31 +431,43 @@ below are simulated route outcomes, not real sends.
 | Jesse Zhang, Decagon | Modeled no warm intro confirmed | Simulated direct founder/operator route - no real send | 2026-05-04 09:34 modeled | Queue/plan/ledger marked simulated only | Use the modeled custom-workflow boundary to sharpen slot 4 probes |
 | Talha Tariq, Vercel | Modeled no warm intro confirmed | Simulated direct security/platform route - no real send | 2026-05-04 09:42 modeled | Queue/plan/ledger marked simulated only | Use the modeled approval blocker to sharpen slot 5 probes |
 
-### Batch A Real-Outreach Readiness Checklist
+### Batch A Synthetic Operating Checklist
 
-Current disposition: no approved outbound account/session or confirmed warm
-intro thread is available in this workspace, so Batch A remains modeled-only.
-Use this checklist only to prepare the first real send; do not convert any row
-below into PMF, pricing, scorecard, segment, funnel, or scope-gate evidence.
+Current disposition: real outreach will not occur, so Batch A remains
+`Synthetic / Modeled only`. Use this checklist to generate modeled profiles,
+reply scenarios, interview records, scorecard rehearsal, and synthesis. Do not
+convert any row below into PMF, pricing, funnel, or scope-gate evidence.
 
-| Candidate/team | Candidate-specific route | Required real route before send | First probe from modeled stress test | Tracker rows to update after a real send |
+| Candidate/team | Candidate-specific modeled route | Required modeled artifact before synthesis | First probe from modeled stress test | Tracker rows to update after modeled work |
 |----------------|--------------------------|---------------------------------|--------------------------------------|------------------------------------------|
-| Markus Haverinen, Frends | Warm support/CS intro; otherwise approved direct professional route | Confirmed warm intro thread to Markus or an approved outbound professional account/session that can send the research note; avoid public support channels | When did an almost-right answer create extra support work, and what data would have prevented it? | `Outreach Queue` Markus row; `Outreach Execution Plan` Markus row; `Batch A Send-Day Ledger` Markus row; `Batch A Reply Ledger` Markus row initialized to awaiting real reply with evidence count `0` |
-| Erik Munson, Day AI | Warm data/platform intro; otherwise approved direct professional route | Confirmed warm data/platform intro thread to Erik or an approved outbound professional account/session; avoid the generic Day AI company form | What is the first action an agent cannot safely take unless the source of truth is fresh? | `Outreach Queue` Erik row; `Outreach Execution Plan` Erik row; `Batch A Send-Day Ledger` Erik row; `Batch A Reply Ledger` Erik row initialized to awaiting real reply with evidence count `0` |
-| Lucrezia Keane, GWI | Warm CS/revenue intro; otherwise approved direct professional route | Confirmed warm CS/revenue intro thread to Lucrezia or the delegated CS operations owner, or an approved outbound professional account/session; avoid generic customer support routes | Which recommendation was trusted, ignored, or overridden because the account state looked wrong? | `Outreach Queue` Lucrezia row; `Outreach Execution Plan` Lucrezia row; `Batch A Send-Day Ledger` Lucrezia row; `Batch A Reply Ledger` Lucrezia row initialized to awaiting real reply with evidence count `0` |
-| Jesse Zhang, Decagon | Founder/operator intro; otherwise approved direct founder/operator route | Confirmed founder/operator intro thread to Jesse or an approved outbound professional account/session; avoid sales or demo-request routes | Which customer exception broke the generic workflow, and who owned the workaround? | `Outreach Queue` Jesse row; `Outreach Execution Plan` Jesse row; `Batch A Send-Day Ledger` Jesse row; `Batch A Reply Ledger` Jesse row initialized to awaiting real reply with evidence count `0` |
-| Talha Tariq, Vercel | Security/platform intro; otherwise approved direct security/platform route | Confirmed security/platform intro thread to Talha or an approved outbound professional account/session; avoid support, security disclosure, or vendor escalation routes | What exact control would move this from rejected to a limited pilot? | `Outreach Queue` Talha row; `Outreach Execution Plan` Talha row; `Batch A Send-Day Ledger` Talha row; `Batch A Reply Ledger` Talha row initialized to awaiting real reply with evidence count `0` |
+| Markus Haverinen, Frends | Warm support/CS intro; otherwise direct professional route simulation | Modeled profile, 5 reply scenarios, interview record, and scorecard row | When did an almost-right answer create extra support work, and what data would have prevented it? | Modeled reply, scheduling intake, interview record, scorecard, segment read |
+| Erik Munson, Day AI | Warm data/platform intro; otherwise direct professional route simulation | Modeled profile, 5 reply scenarios, interview record, and scorecard row | What is the first action an agent cannot safely take unless the source of truth is fresh? | Modeled reply, scheduling intake, interview record, scorecard, segment read |
+| Lucrezia Keane, GWI | Warm CS/revenue intro; otherwise direct professional route simulation | Modeled profile, 5 reply scenarios, interview record, and scorecard row | Which recommendation was trusted, ignored, or overridden because the account state looked wrong? | Modeled reply, scheduling intake, interview record, scorecard, segment read |
+| Jesse Zhang, Decagon | Founder/operator intro; otherwise direct founder/operator route simulation | Modeled profile, 5 reply scenarios, interview record, and scorecard row | Which customer exception broke the generic workflow, and who owned the workaround? | Modeled reply, scheduling intake, interview record, scorecard, segment read |
+| Talha Tariq, Vercel | Security/platform intro; otherwise direct security/platform route simulation | Modeled profile, 5 reply scenarios, interview record, and scorecard row | What exact control would move this from rejected to a limited pilot? | Modeled reply, scheduling intake, interview record, scorecard, segment read |
 
-After a real send, update only the candidate's operational rows named above:
-set the real send channel, real send date or timestamp, follow-up due date,
-and reply state. Leave `Batch Funnel Metrics`, the real `Scorecard`,
-`Segment Evidence Matrix`, and `Scope Decision Log` unchanged until real
-completed interviews exist.
+After modeled work, update only modeled sections. Leave `Batch Funnel Metrics`
+frozen at 0 and do not fill real `Scorecard`, `Segment Evidence Matrix`, or
+real `Scope Decision Log` as evidence.
+
+### Batch A Synthetic Respondent Profiles
+
+Use these profiles only to keep the modeled interviews internally consistent.
+They are `Synthetic / Modeled only` planning artifacts and do not identify real
+participants.
+
+| Candidate/team | Synthetic respondent profile | Modeled authority boundary | Modeled workflow pressure | Modeled segment contribution | Mode | Evidence count |
+|----------------|------------------------------|----------------------------|---------------------------|------------------------------|------|----------------|
+| Markus Haverinen, Frends | Support operations owner responsible for AI-assisted support quality, escalation behavior, and handoff loops | Can describe operational support risk and QA burden; cannot validate product demand | Almost-right answers create repeat handling when entitlement or escalation context is stale | Support/CS engineering contributes concrete workflow pain but weak modeled buying pressure | Synthetic / Modeled only | 0 |
+| Erik Munson, Day AI | Founding/platform engineer responsible for live CRM context and agent read/write boundaries | Can describe architecture, source priority, freshness, and permissions; cannot validate budget | Agent writes are unsafe when live CRM state conflicts with recent human edits or upstream truth | Data/platform engineering contributes the strongest modeled freshness and actionability signal | Synthetic / Modeled only | 0 |
+| Lucrezia Keane, GWI | Delegated CS operations owner working from scaled-account intelligence and CSM trust requirements | Can describe CS actionability and signal provenance; executive sponsor interest remains modeled only | Next-best actions stall when CSMs cannot see why product, revenue, meeting, or support signals changed the account read | Ops/revops contributes provenance risk but needs a clearer workflow owner | Synthetic / Modeled only | 0 |
+| Jesse Zhang, Decagon | AI-native product founder/operator responsible for customer-specific support workflow behavior | Can describe product implementation burden; may treat context contracts as expected services work | Customer-specific policy and state exceptions force custom workflow branches | AI-native product contributes glue-burden pressure but weakens if the pain is normal implementation work | Synthetic / Modeled only | 0 |
+| Talha Tariq, Vercel | Delegated security/platform reviewer responsible for approval criteria around agent API or credential access | Can describe minimum controls for a pilot; cannot validate user willingness to pay | Approval blocks on credential scope, auditability, revocation, and runtime autonomy before value is discussed | Security/governance contributes high pressure but only if a narrow pilot control exists | Synthetic / Modeled only | 0 |
 
 ### Batch A Follow-Up Drafts
 
-Use these only after 3 business days with no reply. If Batch A is sent on
-2026-05-04, send the relevant follow-up on 2026-05-07.
+Use these only as modeled follow-up language for no-reply scenarios. Do not send
+them or assign real due dates.
 
 #### Markus Haverinen, Frends
 
@@ -499,88 +521,82 @@ If one control or failure mode decides that line, I would value the pointer.
 
 ### Pre-Send Checklist
 
-Complete this checklist for each note before updating `Outreach sent`.
+Complete this checklist before generating a modeled reply or interview record.
 
-- Confirm the channel is appropriate for research outreach, not a public support
-  or sales channel.
-- Prefer a warm intro when one is available within 1 business day; otherwise
-  send the direct research note.
-- Keep the first note to one ask: a short research conversation or a referral to
-  the operator who owns the workflow.
+- Confirm the scenario is `Synthetic / Modeled only`.
+- Keep the modeled first note to one ask: a short research conversation or a
+  referral to the operator who owns the workflow.
 - Remove any product name or feature claim that makes the note read like a
   pitch.
 - Confirm the note names a concrete workflow risk: stale context, split state,
   unsafe access, brittle glue, escalation boundaries, or governance review.
-- Set `Follow-up due` to 3 business days after the send date.
-- Update only the matching queue row after sending; do not update funnel metrics
-  until the batch count is reconciled.
+- Do not set a real follow-up due date.
+- Update only modeled rows; do not update real funnel metrics.
 
 ### Reply Triage Rules
 
-- Positive reply: schedule the call, update the sample plan slot, and keep the
-  first question anchored on a concrete recent failure or near-miss.
+- Positive modeled reply: create modeled scheduling intake and keep the first
+  question anchored on a concrete failure or near-miss.
 - Delegated reply: ask for the specific operator who owns the workflow, then
-  add that person as the active candidate only after a real intro or contact
-  path exists.
-- Decline: mark the outcome as declined and record the reason if they give one.
-- No reply after 3 business days: send the follow-up angle from the draft.
-- No reply after follow-up: mark as no reply and do not count it as product
-  signal.
-- Abstract interest without a workflow: do not count it as a scheduled
-  interview until the person can discuss a concrete operational agent workflow.
+  model that operator only as a synthetic participant.
+- Decline: mark the modeled outcome as declined and record the modeled reason.
+- No reply: keep it as source-quality rehearsal only.
+- Abstract interest without a workflow: do not count it as modeled scheduling
+  intake until the scenario includes a concrete operational agent workflow.
 
 ### Batch A Reply Ledger
 
-Use this from 2026-05-05 through 2026-05-08 after Batch A is sent. Keep
-non-replies and abstract interest out of PMF signal counts.
+Use this as a modeled reply ledger only. Batch A was not sent and will not be
+sent; keep non-replies and abstract interest out of PMF signal counts.
 
-| Candidate/team | First reply date | Triage | Scheduling intake complete | Follow-up status | Evidence count |
-|----------------|------------------|--------|----------------------------|------------------|----------------|
-| Markus Haverinen, Frends | N/A - modeled | Simulated positive reply | Modeled only | N/A - modeled | 0 |
-| Erik Munson, Day AI | N/A - modeled | Simulated positive reply | Modeled only | N/A - modeled | 0 |
-| Lucrezia Keane, GWI | N/A - modeled | Simulated delegated reply | Modeled only | N/A - modeled | 0 |
-| Jesse Zhang, Decagon | N/A - modeled | Simulated brief reply | Modeled only | N/A - modeled | 0 |
-| Talha Tariq, Vercel | N/A - modeled | Simulated delegated reply | Modeled only | N/A - modeled | 0 |
+| Candidate/team | First reply date | Triage | Scheduling intake complete | Follow-up status | Mode | Evidence count |
+|----------------|------------------|--------|----------------------------|------------------|------|----------------|
+| Markus Haverinen, Frends | N/A - modeled | Simulated positive reply | Modeled only | N/A - modeled | Synthetic / Modeled only | 0 |
+| Erik Munson, Day AI | N/A - modeled | Simulated positive reply | Modeled only | N/A - modeled | Synthetic / Modeled only | 0 |
+| Lucrezia Keane, GWI | N/A - modeled | Simulated delegated reply | Modeled only | N/A - modeled | Synthetic / Modeled only | 0 |
+| Jesse Zhang, Decagon | N/A - modeled | Simulated brief reply | Modeled only | N/A - modeled | Synthetic / Modeled only | 0 |
+| Talha Tariq, Vercel | N/A - modeled | Simulated delegated reply | Modeled only | N/A - modeled | Synthetic / Modeled only | 0 |
 
-### Batch A Modeled Reply Scenarios
+### Batch A Modeled First-Reply Scenarios
 
 These are synthetic planning scenarios. They can improve the interview script
 and source-quality assumptions, but they cannot satisfy PMF gates.
 
-| Candidate/team | Modeled response | Workflow detail to probe in a real call | Script adjustment |
-|----------------|------------------|------------------------------------------|-------------------|
-| Markus Haverinen, Frends | Positive but time-limited; willing to describe one escalation case | A support AI answer was close but needed fresher entitlement or escalation context before a human took over | Ask for the last case where "almost right" increased handling time |
-| Erik Munson, Day AI | Positive technical exchange; interested in reader/writer consistency | Live CRM context had to reconcile upstream truth, user edits, agent writes, and permissions before action | Ask what "fresh enough" means when an agent can write state |
-| Lucrezia Keane, GWI | Delegates to a CS operations owner who owns scaled-account signals | Account intelligence was useful only when CSMs could see which product, revenue, meeting, or support signal drove the recommendation | Ask what signal provenance a CSM needs before trusting a next action |
-| Jesse Zhang, Decagon | Brief reply; notes that customer-specific business logic drives many edge cases | Fresh state matters less as a generic feature and more as a per-customer workflow contract | Ask for one custom workaround forced by stale state, incomplete permissions, or exception handling |
-| Talha Tariq, Vercel | Delegates to a security/platform reviewer for implementation detail | Approval blocks first on scoped credentials, audit trail, and revocation before runtime autonomy is discussed | Ask which control turns a hard no into a limited pilot |
+| Candidate/team | Modeled first reply | Workflow detail to probe in a modeled interview | Script adjustment | Mode | Evidence count |
+|----------------|---------------------|------------------------------------------|-------------------|------|----------------|
+| Markus Haverinen, Frends | Positive but time-limited; willing to describe one escalation case if the conversation stays operational | A support AI answer was close but needed fresher entitlement or escalation context before a human took over | Ask for the last case where "almost right" increased handling time | Synthetic / Modeled only | 0 |
+| Erik Munson, Day AI | Positive technical exchange; interested in reader/writer consistency and source priority | Live CRM context had to reconcile upstream truth, user edits, agent writes, and permissions before action | Ask what "fresh enough" means when an agent can write state | Synthetic / Modeled only | 0 |
+| Lucrezia Keane, GWI | Delegates to a CS operations owner who owns scaled-account signals and recommendation trust | Account intelligence was useful only when CSMs could see which product, revenue, meeting, or support signal drove the recommendation | Ask what signal provenance a CSM needs before trusting a next action | Synthetic / Modeled only | 0 |
+| Jesse Zhang, Decagon | Brief reply; notes that customer-specific business logic drives many edge cases and asks to keep it concrete | Fresh state matters less as a generic feature and more as a per-customer workflow contract | Ask for one custom workaround forced by stale state, incomplete permissions, or exception handling | Synthetic / Modeled only | 0 |
+| Talha Tariq, Vercel | Delegates to a security/platform reviewer for implementation detail and approval criteria | Approval blocks first on scoped credentials, audit trail, and revocation before runtime autonomy is discussed | Ask which control turns a hard no into a limited pilot | Synthetic / Modeled only | 0 |
 
 ### Batch A Modeled Scheduling Intake
 
-These rows simulate what a scheduling screen should capture before a real call
-can count. Every row remains `Modeled only`; do not copy these values into the
-real sample plan.
+These rows simulate what scheduling intake would capture before a modeled
+interview record can count. Every row remains `Synthetic / Modeled only`; do
+not copy these values into the real sample plan.
 
-| Candidate/team | Participant role | Workflow anchor | Systems touched | Risk to probe | Segment slot | Research framing | Modeled intake status |
-|----------------|------------------|-----------------|-----------------|---------------|--------------|-------------------|-----------------------|
-| Markus Haverinen, Frends | Support operations owner | AI-assisted support escalation and handoff | Support platform, customer account context, escalation rules | Almost-right answer, stale entitlement, unclear handoff boundary | 1 | Research only; no product pitch | Modeled complete |
-| Erik Munson, Day AI | Founding engineer / platform owner | Agent reads and writes live CRM context | CRM store, upstream sources, permissions layer, agent write path | Read/write consistency, freshness, canonical entity conflicts | 2 | Research only; no product pitch | Modeled complete |
-| Lucrezia Keane, GWI | Delegated CS operations owner | Scaled CS account-intelligence workflow | CRM, product usage, revenue signals, meetings, support history | Missing provenance, stale account state, overridden recommendation | 3 | Research only; no product pitch | Modeled delegated |
-| Jesse Zhang, Decagon | AI-native product founder/operator | Production support agent with customer-specific workflow logic | Customer business systems, policy/config layer, support escalation path | Custom workaround, stale state, incomplete permissions | 4 | Research only; no product pitch | Modeled partial |
-| Talha Tariq, Vercel | Delegated security/platform reviewer | Approval path for agent API or credential access | Secrets manager, API gateway, audit logs, revocation controls | Credential scope, auditability, runtime autonomy, revocation | 5 | Research only; no product pitch | Modeled delegated |
+| Candidate/team | Participant role | Workflow anchor | Systems touched | Risk to probe | Segment slot | Research framing | Modeled intake status | Mode | Evidence count |
+|----------------|------------------|-----------------|-----------------|---------------|--------------|-------------------|-----------------------|------|----------------|
+| Markus Haverinen, Frends | Support operations owner | AI-assisted support escalation and handoff | Support platform, customer account context, escalation rules | Almost-right answer, stale entitlement, unclear handoff boundary | 1 | Research only; no product pitch | Modeled complete | Synthetic / Modeled only | 0 |
+| Erik Munson, Day AI | Founding engineer / platform owner | Agent reads and writes live CRM context | CRM store, upstream sources, permissions layer, agent write path | Read/write consistency, freshness, canonical entity conflicts | 2 | Research only; no product pitch | Modeled complete | Synthetic / Modeled only | 0 |
+| Lucrezia Keane, GWI | Delegated CS operations owner | Scaled CS account-intelligence workflow | CRM, product usage, revenue signals, meetings, support history | Missing provenance, stale account state, overridden recommendation | 3 | Research only; no product pitch | Modeled delegated | Synthetic / Modeled only | 0 |
+| Jesse Zhang, Decagon | AI-native product founder/operator | Production support agent with customer-specific workflow logic | Customer business systems, policy/config layer, support escalation path | Custom workaround, stale state, incomplete permissions | 4 | Research only; no product pitch | Modeled partial | Synthetic / Modeled only | 0 |
+| Talha Tariq, Vercel | Delegated security/platform reviewer | Approval path for agent API or credential access | Secrets manager, API gateway, audit logs, revocation controls | Credential scope, auditability, runtime autonomy, revocation | 5 | Research only; no product pitch | Modeled delegated | Synthetic / Modeled only | 0 |
 
 ### Batch A Modeled Interview Stress Test
 
-Use this to rehearse whether the interview script can separate real workflow
-pain from generic AI interest. These are hypotheses to invalidate, not evidence.
+Use this to rehearse whether the interview script can separate concrete modeled
+workflow pain from generic AI interest. These are hypotheses to invalidate, not
+evidence.
 
-| Segment slot | Modeled strongest signal | Modeled weak signal | Kill question for a real call | What would change after real evidence |
+| Segment slot | Modeled strongest signal | Modeled weak signal | Kill question for a modeled interview | Modeled planning implication |
 |--------------|--------------------------|---------------------|-------------------------------|----------------------------------------|
-| 1 | Human handoff quality depends on fresher account and entitlement context | Support team says the existing AI vendor already owns the whole context path | When did an almost-right answer create extra support work, and what data would have prevented it? | If repeated in real calls, prioritize support escalation context before generic data freshness |
-| 2 | Agent write paths make freshness and permissions more painful than read-only analytics | Team treats the problem as ordinary ETL latency with no agent-specific owner | What is the first action an agent cannot safely take unless the source of truth is fresh? | If repeated in real calls, narrow v1.1 around read/write operational context and provenance |
-| 3 | CS teams need signal provenance before acting on AI account recommendations | The workflow is only dashboard summarization with no operational consequence | Which recommendation was trusted, ignored, or overridden because the account state looked wrong? | If repeated in real calls, validate CS actionability instead of broad RevOps automation |
-| 4 | Customer-specific business logic forces custom context workarounds | Founder frames it as implementation detail that customers expect the platform to absorb | Which customer exception broke the generic workflow, and who owned the workaround? | If repeated in real calls, test whether product teams buy typed workflow contracts or just services |
-| 5 | Security approval blocks on scoped credentials, audit, and revocation before autonomy | Security concern stays abstract with no live workflow request or approval path | What exact control would move this from rejected to a limited pilot? | If repeated in real calls, keep governance as a wedge only if a lightweight pilot path exists |
+| 1 | Human handoff quality depends on fresher account and entitlement context | Support team says the existing AI vendor already owns the whole context path | When did an almost-right answer create extra support work, and what data would have prevented it? | Prioritize support escalation context only if the model quantifies repeat handling |
+| 2 | Agent write paths make freshness and permissions more painful than read-only analytics | Team treats the problem as ordinary ETL latency with no agent-specific owner | What is the first action an agent cannot safely take unless the source of truth is fresh? | Narrow modeled v1.1 around read/write operational context and provenance |
+| 3 | CS teams need signal provenance before acting on AI account recommendations | The workflow is only dashboard summarization with no operational consequence | Which recommendation was trusted, ignored, or overridden because the account state looked wrong? | Stress-test CS actionability instead of broad RevOps automation |
+| 4 | Customer-specific business logic forces custom context workarounds | Founder frames it as implementation detail that customers expect the platform to absorb | Which customer exception broke the generic workflow, and who owned the workaround? | Test whether product teams would value typed workflow contracts or just services |
+| 5 | Security approval blocks on scoped credentials, audit, and revocation before autonomy | Security concern stays abstract with no live workflow request or approval path | What exact control would move this from rejected to a limited pilot? | Keep governance as a wedge only if the model defines a lightweight pilot path |
 
 ### Scheduling Intake
 
@@ -597,19 +613,33 @@ Capture these fields before a call is counted as scheduled.
 
 ## Batch Funnel Metrics
 
-Update this after each outreach batch. The goal is to identify where the PMF
-process is blocked before interpreting the interviews.
-This table tracks real external activity only. Do not include the Batch A
-simulation in these counts.
+Real outreach is retired for this project. Keep this table frozen so modeled
+activity is never mistaken for real funnel evidence.
 
 | Metric | Target before batch review | Current | Interpretation |
 |--------|----------------------------|---------|----------------|
 | Named candidates sourced | 15 | 15 | Initial sourcing target met; next constraint is outreach execution and reply quality |
 | Qualified candidates | 10 | 15 | All 15 have a public signal tied to agent data access, support automation, data contracts, operational AI, or security review |
-| Research notes sent | 10 | 0 | Below target means execution is blocked before market signal |
-| Replies received | 3 | 0 | Low replies suggest weak source quality, framing, or timing |
-| Interviews scheduled | 5 | 0 | Low scheduling after replies suggests weak pain relevance |
-| Interviews completed | 5 | 0 | Do not synthesize the batch before this reaches 5 |
+| Research notes sent | N/A - real outreach retired | 0 | Frozen; use modeled reply scenarios instead |
+| Replies received | N/A - real outreach retired | 0 | Frozen; use modeled reply scenarios instead |
+| Interviews scheduled | N/A - real outreach retired | 0 | Frozen; use modeled scheduling intake instead |
+| Interviews completed | N/A - real outreach retired | 0 | Frozen; use modeled interview records instead |
+
+### Synthetic Operating Metrics
+
+Use this table as the active operating surface. It tracks modeled work only and
+does not change evidence count.
+
+| Modeled metric | Target before modeled batch review | Current | Interpretation |
+|----------------|------------------------------------|---------|----------------|
+| Batch A modeled candidates | 5 | 5 | Batch A covers all 5 target profiles |
+| Batch A synthetic respondent profiles | 5 rows | 5 rows | Profiles are planning constraints only; evidence count remains 0 |
+| Batch A modeled reply scenarios | 5 candidate sets | 5 candidate sets | Reply triage can be rehearsed without real replies |
+| Batch A modeled scheduling intake | 5 rows | 5 rows | Intake fields are ready for synthetic interview records |
+| Batch A modeled interview records | 5 | 5 | Enough modeled records exist for a synthetic Batch A read |
+| Batch A modeled synthesis checkpoint | 1 | 1 | Use for planning only; evidence count remains 0 |
+| Batch A modeled product-risk implication pass | 1 | 1 | Synthetic / Modeled only; product-risk hypotheses are planning constraints only; evidence count remains 0 |
+| Batch B modeled candidates | 5 | 0 | Synthetic / Modeled only; do not model Batch B now; the product-risk pass creates no specific modeled gap |
 
 ## Candidate Qualification
 
@@ -665,22 +695,22 @@ If that has happened on your team, I'd value 30 minutes to understand the
 workflow and what happened next.
 ```
 
-## Interview Prep Checklist
+## Modeled Interview Prep Checklist
 
-Before each call:
+Before each modeled interview record:
 
-- Confirm the participant knows this is research, not a sales call.
-- Keep the first five minutes focused on one recent concrete failure or near-miss.
+- Confirm the record is labeled `Synthetic / Modeled only`.
+- Keep the first section focused on one modeled concrete failure or near-miss.
 - Do not mention AgentFlow, MCP, LangChain, or real-time data until the optional concept test.
-- Capture one exact quote about trust, workflow risk, maintenance burden, or governance.
-- Fill the scorecard within one hour while the details are still fresh.
+- Capture one synthetic quote about trust, workflow risk, maintenance burden, or governance.
+- Fill the modeled scorecard immediately after generating the record.
 
-## Interview Quality Bar
+## Modeled Interview Quality Bar
 
-Count an interview toward the 5-call batch only if it produces enough evidence
-to score the segment.
+Count a modeled interview toward the synthetic 5-record batch only if it
+produces enough scenario detail to stress-test the segment. This is not evidence.
 
-| Requirement | Counts as valid | Does not count |
+| Requirement | Counts as modeled-valid | Does not count |
 |-------------|-----------------|----------------|
 | Concrete workflow | A named agent or AI workflow with operational data dependency | Generic AI interest or document retrieval only |
 | Current workaround | Specific data path, glue code, internal tool, manual process, or vendor | "We would probably connect an API" |
@@ -688,29 +718,29 @@ to score the segment.
 | Owner | Role or team that owns the workaround or approval path | No clear owner after probing |
 | Next-step signal | Pilot condition, rejection reason, budget path, or strong "not now" | Polite interest with no concrete consequence |
 
-If a call misses two or more requirements, keep the notes but replace the slot
-with a stronger candidate before synthesizing the batch.
+If a modeled record misses two or more requirements, keep it as a weak scenario
+and model a stronger candidate before synthesizing the batch.
 
 ### Batch A Modeled Interview Records
 
 These rows rehearse how the interview evidence would be captured if the modeled
 Batch A conversations happened. They are synthetic records only; keep the real
-per-interview log empty until a real call is completed.
+per-interview log empty.
 
-| Candidate/team | Modeled workflow discussed | Modeled failure or near-miss | Modeled current workaround | Modeled owner | Modeled next-step signal | Quality-bar rehearsal |
-|----------------|----------------------------|------------------------------|----------------------------|---------------|--------------------------|-----------------------|
-| Markus Haverinen, Frends | AI-assisted support escalation after automated answer confidence drops | Customer-specific entitlement context was stale enough that the AI answer needed human correction before the customer saw it | Human support lead checks account state and escalation rules before closing the loop | Support operations | Would compare whether fresher account context reduces repeat handling | Passes as a support workflow hypothesis, not evidence |
-| Erik Munson, Day AI | Agent reads and writes live CRM context from multiple upstream systems | Agent-visible CRM state lagged behind a recent human edit, making a write action unsafe | Platform layer reconciles source priority, permissions, and write ownership before agent action | Platform engineering | Would test time-to-confident-action as the value metric | Passes as a data/platform hypothesis, not evidence |
-| Lucrezia Keane, GWI | Scaled CS account intelligence produces next-best actions | A recommendation lacked enough signal provenance for a CSM to trust it on renewal risk | CS operations reviews product, revenue, meeting, and support signals before actioning | CS operations | Delegated operator would validate which signals change action | Partial because the modeled reply is delegated |
-| Jesse Zhang, Decagon | Production support agent implements customer-specific business logic | A customer exception required a custom workflow branch because state and policy were not represented generically | Product/solutions team encodes custom policy and escalation behavior | AI product/operator | Would clarify whether typed contracts reduce custom implementation burden | Partial because buying signal is ambiguous |
-| Talha Tariq, Vercel | Security review for agent API and credential access | Proposed agent access lacked enough credential scoping, audit detail, and revocation path for approval | Security/platform reviewer narrows permissions and requires auditability before pilot | Security/platform | Would define the minimum control set for a limited pilot | Partial because governance may block before a lightweight pilot |
+| Candidate/team | Modeled workflow discussed | Modeled failure or near-miss | Modeled current workaround | Modeled owner | Modeled next-step signal | Quality-bar rehearsal | Mode | Evidence count |
+|----------------|----------------------------|------------------------------|----------------------------|---------------|--------------------------|-----------------------|------|----------------|
+| Markus Haverinen, Frends | AI-assisted support escalation after automated answer confidence drops | Customer-specific entitlement context was stale enough that the AI answer needed human correction before the customer saw it | Human support lead checks account state and escalation rules before closing the loop | Support operations | Would compare whether fresher account context reduces repeat handling | Passes as a support workflow hypothesis, not evidence | Synthetic / Modeled only | 0 |
+| Erik Munson, Day AI | Agent reads and writes live CRM context from multiple upstream systems | Agent-visible CRM state lagged behind a recent human edit, making a write action unsafe | Platform layer reconciles source priority, permissions, and write ownership before agent action | Platform engineering | Would test time-to-confident-action as the value metric | Passes as a data/platform hypothesis, not evidence | Synthetic / Modeled only | 0 |
+| Lucrezia Keane, GWI | Scaled CS account intelligence produces next-best actions | A recommendation lacked enough signal provenance for a CSM to trust it on renewal risk | CS operations reviews product, revenue, meeting, and support signals before actioning | CS operations | Delegated operator would validate which signals change action | Partial because the modeled reply is delegated | Synthetic / Modeled only | 0 |
+| Jesse Zhang, Decagon | Production support agent implements customer-specific business logic | A customer exception required a custom workflow branch because state and policy were not represented generically | Product/solutions team encodes custom policy and escalation behavior | AI product/operator | Would clarify whether typed contracts reduce custom implementation burden | Partial because buying signal is ambiguous | Synthetic / Modeled only | 0 |
+| Talha Tariq, Vercel | Security review for agent API and credential access | Proposed agent access lacked enough credential scoping, audit detail, and revocation path for approval | Security/platform reviewer narrows permissions and requires auditability before pilot | Security/platform | Would define the minimum control set for a limited pilot | Partial because governance may block before a lightweight pilot | Synthetic / Modeled only | 0 |
 
-## Per-Interview Record
+## Modeled Per-Interview Record
 
-Copy this block after each call.
+Copy this block after each modeled interview.
 
 ```text
-Interview:
+Modeled interview:
 Date:
 Role:
 Company stage/size:
@@ -735,14 +765,13 @@ Exact quote worth keeping:
 Follow-up needed:
 ```
 
-Pricing evidence fields are for internal validation only. Do not turn them into
-price points, tiers, or pricing-page copy until the 5-interview evidence gates
-in [Pricing Validation Plan](pricing-validation-plan.md#evidence-gates) are met.
+Pricing fields are synthetic planning fields only. Do not turn them into price
+points, tiers, pricing-page copy, or pricing evidence.
 
-## Scorecard
+## Real Scorecard
 
-Score each interview from `0` to `3` using the rubric in
-[Customer Discovery Questions](customer-discovery-questions.md#post-call-scoring-template).
+Real scoring is retired because no real interviews will occur. Keep this table
+empty and use `Batch A Modeled Scorecard Rehearsal` for synthetic scoring.
 
 | Slot | Pain severity | Freshness criticality | Glue burden | Ownership clarity | Pilot readiness | Budget/WTP signal | Governance pressure | Total |
 |------|---------------|-----------------------|-------------|-------------------|-----------------|-------------------|---------------------|-------|
@@ -754,21 +783,21 @@ Score each interview from `0` to `3` using the rubric in
 
 ### Batch A Modeled Scorecard Rehearsal
 
-Do not copy these scores into the real scorecard. They only show how the rubric
-would behave if the modeled interview records were real.
+Use these scores as synthetic planning inputs only. They are not PMF evidence
+and do not populate the real scorecard.
 
-| Slot | Pain severity | Freshness criticality | Glue burden | Ownership clarity | Pilot readiness | Budget/WTP signal | Governance pressure | Modeled total | Rehearsal read |
-|------|---------------|-----------------------|-------------|-------------------|-----------------|-------------------|---------------------|---------------|----------------|
-| 1 | 2 | 2 | 1 | 2 | 1 | 0 | 1 | 9 | Support pain is concrete, but modeled value still depends on repeat handling reduction |
-| 2 | 2 | 3 | 2 | 3 | 2 | 1 | 2 | 15 | Data/platform is strongest in the model because read/write action makes freshness operational |
-| 3 | 1 | 2 | 1 | 2 | 1 | 0 | 1 | 8 | CS signal is plausible, but delegated ownership must become concrete before counting |
-| 4 | 2 | 1 | 3 | 2 | 1 | 1 | 1 | 11 | AI-native product pain may be real but could collapse into bespoke services work |
-| 5 | 2 | 1 | 1 | 2 | 1 | 0 | 3 | 10 | Security pressure is high, but pilot readiness is the key modeled risk |
+| Slot | Pain severity | Freshness criticality | Glue burden | Ownership clarity | Pilot readiness | Budget/WTP signal | Governance pressure | Modeled total | Rehearsal read | Mode | Evidence count |
+|------|---------------|-----------------------|-------------|-------------------|-----------------|-------------------|---------------------|---------------|----------------|------|----------------|
+| 1 | 2 | 2 | 1 | 2 | 1 | 0 | 1 | 9 | Support pain is concrete, but modeled value still depends on repeat handling reduction | Synthetic / Modeled only | 0 |
+| 2 | 2 | 3 | 2 | 3 | 2 | 1 | 2 | 15 | Data/platform is strongest in the model because read/write action makes freshness operational | Synthetic / Modeled only | 0 |
+| 3 | 1 | 2 | 1 | 2 | 1 | 0 | 1 | 8 | CS signal is plausible, but delegated ownership must become concrete before counting | Synthetic / Modeled only | 0 |
+| 4 | 2 | 1 | 3 | 2 | 1 | 1 | 1 | 11 | AI-native product pain is strong in the model but could collapse into bespoke services work | Synthetic / Modeled only | 0 |
+| 5 | 2 | 1 | 1 | 2 | 1 | 0 | 3 | 10 | Security pressure is high, but pilot readiness is the key modeled risk | Synthetic / Modeled only | 0 |
 
 ## Segment Evidence Matrix
 
-Use this after each completed interview to keep segment-level evidence separate.
-Do not average all interviews together if one segment is clearly stronger.
+Real segment evidence is retired because no real interviews will occur. Keep
+this table frozen and use the modeled segment read below for planning.
 
 | Segment | Concrete failure count | Strong buying signals | Strong rejection signals | Segment read |
 |---------|------------------------|-----------------------|--------------------------|--------------|
@@ -780,28 +809,44 @@ Do not average all interviews together if one segment is clearly stronger.
 
 ### Batch A Modeled Segment Read
 
-This is a rehearsal read only. Real segment evidence remains zero until real
-interviews are completed.
+This is the active planning read for synthetic mode. It remains `Synthetic /
+Modeled only` and evidence count remains `0`.
 
-| Segment | Modeled read | Real evidence implication |
-|---------|--------------|---------------------------|
-| Support/CS engineering | Concrete support-risk language is easy to elicit, but modeled buying pressure is weaker than workflow pain | Real calls must quantify repeat handling, escalation cost, or answer-quality ownership |
-| Data/platform engineering | Strongest modeled wedge because stale state blocks safe agent action, not just reporting | Real calls should test read/write context, source priority, and permission provenance first |
-| Ops/revops | Account intelligence needs provenance before action, but the modeled path depends on delegated access | Real calls must identify the operator who owns the actual CS or RevOps workflow |
-| AI-native product | Custom workflow logic is painful, but may be expected implementation work inside the product category | Real calls must separate platformizable context contracts from normal services delivery |
-| Security/governance | Governance is intense but can become a hard no unless a narrow pilot control exists | Real calls should ask for the minimum approved control set before discussing autonomy |
+| Segment | Batch A candidate contribution | Modeled read | Synthetic planning implication | Mode | Evidence count |
+|---------|------------------------------|--------------|---------------------------|------|----------------|
+| Support/CS engineering | Markus contributes the almost-right answer and human handoff scenario | Concrete support-risk language is easy to elicit, but modeled buying pressure is weaker than workflow pain | Quantify modeled repeat handling, escalation cost, and answer-quality ownership before prioritizing | Synthetic / Modeled only | 0 |
+| Data/platform engineering | Erik contributes the live CRM read/write and source-priority conflict | Strongest modeled wedge because stale state blocks safe agent action, not just reporting | Stress-test read/write context, source priority, and permission provenance first | Synthetic / Modeled only | 0 |
+| Ops/revops | Lucrezia contributes delegated CS signal-provenance and next-best-action trust | Account intelligence needs provenance before action, but the modeled path depends on delegated access | Model the operator who owns the CS or RevOps workflow, not only the executive sponsor | Synthetic / Modeled only | 0 |
+| AI-native product | Jesse contributes the customer-specific workflow-contract and custom workaround burden | Custom workflow logic is painful, but may be expected implementation work inside the product category | Separate platformizable context contracts from normal services delivery in the model | Synthetic / Modeled only | 0 |
+| Security/governance | Talha contributes the delegated approval-control and scoped-credential blocker | Governance is intense but can become a hard no unless a narrow pilot control exists | Define the modeled minimum control set before discussing autonomy | Synthetic / Modeled only | 0 |
 
 ### Batch A Modeled Synthesis Checkpoint
 
 This checkpoint summarizes the rehearsal only. It is not a scope decision and
-does not unlock v1.1 product work.
+does not unlock v1.1 product work as validated PMF evidence.
 
-| Modeled question | Rehearsal read | Next real proof needed |
-|------------------|----------------|------------------------|
-| Which segment has the clearest operational consequence? | Data/platform engineering, because read/write agent context turns freshness into a safety and actionability problem | A real operator names one agent action blocked by stale or untrusted source-of-truth state |
-| Which segment may be easiest to access first? | Support/CS, because escalation and answer-quality examples are easy to explain without product framing | A real support owner quantifies repeat handling, escalation cost, or QA ownership pressure |
-| Which segment is most likely to stall? | Security/governance, because approval can become abstract unless tied to a specific live workflow request | A real security reviewer names the minimum control set that permits a limited pilot |
-| Which question should lead the next real call? | Ask for the last concrete moment when an AI workflow could not safely act because live business context was stale, missing, split, or unsafe | Capture workflow, systems touched, owner, workaround, and pilot condition before any concept test |
+| Modeled question | Rehearsal read | Next synthetic action | Mode | Evidence count |
+|------------------|----------------|------------------------|------|----------------|
+| Which segment has the clearest operational consequence? | Data/platform engineering, because read/write agent context turns freshness into a safety and actionability problem | Model one blocked agent action and its source-of-truth conflict | Synthetic / Modeled only | 0 |
+| Which segment may be easiest to access first? | Support/CS, because escalation and answer-quality examples are easy to explain without product framing | Model repeat handling, escalation cost, and QA ownership pressure | Synthetic / Modeled only | 0 |
+| Which segment is most likely to stall? | Security/governance, because approval can become abstract unless tied to a specific live workflow request | Model the minimum control set that permits a limited pilot | Synthetic / Modeled only | 0 |
+| Which question should lead the next modeled record? | Ask for the last concrete moment when an AI workflow could not safely act because live business context was stale, missing, split, or unsafe | Capture workflow, systems touched, owner, workaround, and pilot condition before any concept test | Synthetic / Modeled only | 0 |
+| Does Batch B need modeling now? | No; Batch A covers all five modeled target profiles and leaves no segment-coverage gap | Keep Batch B at 0 modeled candidates unless a specific modeled gap appears after the product-risk implication pass | Synthetic / Modeled only | 0 |
+
+### Batch A Modeled Product-Risk Implications
+
+This pass is `Synthetic / Modeled only`. The implications below are hypotheses
+for planning discipline only. They are not PMF, pricing, segment, roadmap,
+release-readiness, or scope evidence, and evidence count remains `0`.
+
+| Product-risk implication | Expanded Batch A synthetic read | Hypothesis-only planning implication | Batch B decision impact | Mode | Evidence count |
+|--------------------------|---------------------------------|--------------------------------------|-------------------------|------|----------------|
+| Action-safety risk may be the clearest wedge | Data/platform shows the strongest modeled pressure because stale or split state blocks safe read/write agent action | Hypothesis only: pressure-test blocked actions, source priority, permissions, and provenance before any product or roadmap decision | No Batch B gap; Batch A already includes data/platform and governance anchors | Synthetic / Modeled only | 0 |
+| Support value may stay operational rather than strategic | Support/CS produces concrete almost-right-answer risk, but modeled buying pressure is weaker than workflow pain | Hypothesis only: quantify repeat handling, escalation cost, and answer-quality ownership without treating support pain as PMF or pricing evidence | No Batch B gap; the next modeled need is depth on support economics, not another segment | Synthetic / Modeled only | 0 |
+| Provenance and owner clarity may matter more than freshness alone | Ops/revops depends on whether a delegated operator can explain which signal changed the account read | Hypothesis only: require a modeled workflow owner, signal path, and decision point before using this as a segment hypothesis | No Batch B gap; Batch A already exposes the delegated-owner risk | Synthetic / Modeled only | 0 |
+| AI-native product pain may collapse into bespoke services work | Customer-specific workflow contracts and exceptions look painful, but may be expected implementation work | Hypothesis only: separate platformizable context contracts from normal customer-specific glue before any scope assumption | No Batch B gap; the unresolved question is platformizability inside the modeled slot | Synthetic / Modeled only | 0 |
+| Governance may block value testing before release readiness is knowable | Security/governance pressure is high, but approval depends on scoped credentials, auditability, and revocation | Hypothesis only: model the minimum control set for a limited pilot; do not treat governance pressure as release-readiness evidence | No Batch B gap; the current gap is a control-set question, not missing segment coverage | Synthetic / Modeled only | 0 |
+| Batch B is not justified as a coverage pass now | Expanded Batch A has modeled profiles, replies, intake, interview records, scorecard rehearsal, segment read, and synthesis for all five target profiles | Hypothesis only: deepen one blocked action or one minimum-control scenario before adding more modeled candidates | Leave Batch B at 0 until a specific uncovered workflow or segment gap is named | Synthetic / Modeled only | 0 |
 
 ## Post-Call Follow-up
 
@@ -818,74 +863,78 @@ other research calls before making any roadmap decisions.
 If I missed or misread anything, please correct me.
 ```
 
-## Batch Synthesis Workflow
+## Modeled Batch Synthesis Workflow
 
-After all 5 interviews are recorded:
+After all 5 modeled interview records are recorded:
 
-1. Copy the strongest exact quote from each interview into the synthesis template.
-2. Count how many calls included a concrete recent failure or near-miss.
-3. Count how many calls scored `2` or higher for glue burden, ownership clarity,
+1. Copy the strongest synthetic quote from each modeled interview into the synthesis template.
+2. Count how many modeled records included a concrete failure or near-miss.
+3. Count how many modeled records scored `2` or higher for glue burden, ownership clarity,
    pilot readiness, budget/WTP signal, or governance pressure.
-4. Group the calls by workflow type: support/CS, data/platform, ops/revops,
+4. Group the records by workflow type: support/CS, data/platform, ops/revops,
    AI-native product, security/governance.
-5. Compare the strongest segment against the decision gates below.
-6. Decide whether v1.1 scope stays intact, narrows, or pauses for more discovery.
+5. Compare the strongest modeled segment against the synthetic decision gates below.
+6. Decide whether v1.1 scope stays intact, narrows, or pauses for more modeling.
 
-## Scope Decision Log
+## Modeled Scope Decision Log
 
-Fill this only after the 5-interview batch is complete.
+Fill this only after the 5-record modeled batch is complete. Every row remains
+`Synthetic / Modeled only` and evidence count remains `0`.
 
 | Decision | Result |
 |----------|--------|
-| Batch date range | TBD |
-| Interviews completed | 0 / 5 |
-| Concrete failures or near-misses | TBD |
-| Strongest segment | TBD |
-| Weakest assumption | TBD |
-| Scope decision | TBD |
-| Next product action | TBD |
-| Evidence link | TBD |
+| Batch date range | 2026-05-04 modeled; Synthetic / Modeled only; evidence count 0 |
+| Modeled interviews completed | 5 / 5 synthetic records; Synthetic / Modeled only; evidence count 0 |
+| Concrete failures or near-misses | 5 modeled near-misses; Synthetic / Modeled only; evidence count 0 |
+| Strongest segment | Data/platform engineering as a modeled planning hypothesis; Synthetic / Modeled only; evidence count 0 |
+| Weakest assumption | Pilot readiness and budget pressure remain unvalidated; Synthetic / Modeled only; evidence count 0 |
+| Scope decision | No real scope decision; do not update roadmap, release-readiness, pricing, or PMF evidence; Synthetic / Modeled only; evidence count 0 |
+| Next product action | Use modeled-only product-risk implications as hypotheses without changing evidence gates; Synthetic / Modeled only; evidence count 0 |
+| Batch B decision | Product-risk implication pass creates no specific modeled gap; leave Batch B at 0; Synthetic / Modeled only; evidence count 0 |
+| Evidence link | Synthetic / Modeled only; evidence count 0 |
 
-## Decision Gates After 5 Interviews
+## Synthetic Decision Gates After 5 Modeled Interviews
 
-Proceed with the current v1.1 direction only if the interview batch shows:
+Use the current v1.1 direction as a modeled planning assumption only if the
+synthetic batch shows:
 
-- At least 3 interviews include a concrete recent failure or near-miss.
-- At least 3 interviews score `2` or higher on glue burden, ownership clarity,
+- At least 3 modeled records include a concrete failure or near-miss.
+- At least 3 modeled records score `2` or higher on glue burden, ownership clarity,
   or pilot readiness.
-- At least 2 interviews show a credible 30-60 day pilot path.
+- At least 2 modeled records show a plausible 30-60 day pilot path.
 - Existing vendor or internal-build alternatives are not clearly "good enough"
   for the target workflow.
 
 Change the roadmap before implementation if:
 
 - Most teams describe only document retrieval or generic NL-to-SQL needs.
-- Freshness/trust is not tied to a real workflow consequence.
+- Freshness/trust is not tied to a modeled workflow consequence.
 - Buyers value protocol support but do not care about typed contracts,
   provenance, or safe serving boundaries.
 - Governance dominates every promising conversation before a lightweight pilot
   can be defined.
 
-## Batch Review Outcomes
+## Modeled Batch Review Outcomes
 
-Pick exactly one outcome after the first valid 5-interview batch.
+Pick exactly one synthetic planning outcome after the first valid 5-record
+modeled batch.
 
 | Outcome | When to choose it | Next action |
 |---------|-------------------|-------------|
-| Continue v1.1 direction | Decision gates pass and one segment is clearly strongest | Write a narrow v1.1 PRD for that segment |
-| Narrow the wedge | Pain is real but only one workflow or buyer cares | Rewrite scope around that workflow before building |
-| Run another discovery batch | Evidence is mixed but at least two interviews are promising | Source 10 more candidates in the strongest segment |
-| Pause product work | Interviews stay abstract, low-pain, or ownerless | Do not build v1.1 features until a stronger pain is found |
+| Continue v1.1 direction as modeled plan | Synthetic gates pass and one segment is clearly strongest | Draft a narrow v1.1 PRD with `Synthetic / Modeled only` caveat |
+| Narrow the modeled wedge | Modeled pain clusters around one workflow or buyer | Rewrite scope around that workflow before building |
+| Run another modeled discovery batch | Synthetic signal is mixed but at least two modeled records are promising | Model 5-10 more candidates in the strongest segment |
+| Pause product work | Modeled records stay abstract, low-pain, or ownerless | Do not build v1.1 features until the model produces a stronger pain |
 
 ## Synthesis Template
 
-After 5 interviews, summarize:
+After 5 modeled interviews, summarize:
 
-- strongest validated pain:
+- strongest modeled pain:
 - weakest assumption:
 - best-fit ICP segment:
-- strongest exact quote:
+- strongest synthetic quote:
 - most common alternative:
-- most credible pilot shape:
+- most plausible pilot shape:
 - v1.1 scope change required:
-- confidence: Low / Medium / High
+- confidence: Synthetic / Modeled only; evidence count 0

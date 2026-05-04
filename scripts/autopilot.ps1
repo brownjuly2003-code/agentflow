@@ -266,7 +266,7 @@ function Invoke-Planner {
         $previousErrorActionPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = "Continue"
-            Get-Content -Raw $PlannerPromptPath | codex exec --cd $RepoRoot --sandbox workspace-write --ask-for-approval never - 2>&1 | Tee-Object -FilePath $LogPath -Append
+            Get-Content -Raw $PlannerPromptPath | codex exec -c 'approval_policy="never"' --cd $RepoRoot --sandbox workspace-write - 2>&1 | Tee-Object -FilePath $LogPath -Append
             $plannerExitCode = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousErrorActionPreference
@@ -293,7 +293,7 @@ function Invoke-Executor {
     Write-Log "RUN: codex executor"
     Push-Location $RepoRoot
     try {
-        Get-Content -Raw $ExecutorPromptPath | codex exec --cd $RepoRoot --sandbox workspace-write --ask-for-approval never -
+        Get-Content -Raw $ExecutorPromptPath | codex exec -c 'approval_policy="never"' --cd $RepoRoot --sandbox workspace-write -
         if ($LASTEXITCODE -ne 0) {
             Stop-Blocked "codex executor failed with exit code $LASTEXITCODE"
         }

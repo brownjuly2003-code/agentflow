@@ -50,7 +50,17 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
         ),
         encoding="utf-8",
     )
-    (shim_dir / "codex.cmd").write_text("@echo off\nexit /b 0\n", encoding="utf-8")
+    (shim_dir / "codex.cmd").write_text(
+        "@echo off\n"
+        ":check_args\n"
+        'if "%~1"=="" goto done\n'
+        'if "%~1"=="--ask-for-approval" exit /b 2\n'
+        "shift\n"
+        "goto check_args\n"
+        ":done\n"
+        "exit /b 0\n",
+        encoding="utf-8",
+    )
 
     env = os.environ.copy()
     env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
@@ -109,6 +119,12 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
         "\n".join(
             [
                 "@echo off",
+                ":check_args",
+                'if "%~1"=="" goto plan',
+                'if "%~1"=="--ask-for-approval" exit /b 2',
+                "shift",
+                "goto check_args",
+                ":plan",
                 "if not exist .autopilot mkdir .autopilot",
                 "echo task title> .autopilot\\NEXT_TASK.md",
                 "echo commit allowed: no>> .autopilot\\NEXT_TASK.md",

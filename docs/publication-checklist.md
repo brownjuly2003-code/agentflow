@@ -112,23 +112,19 @@ python scripts/check_release_artifacts.py dist/* sdk/dist/*
   `npm-recovery-codes` skill. Run its reserve check without printing secrets and
   do not consume a recovery code if fewer than two usable codes would remain
   after the operation. Recovery codes can be the normal npm second factor at
-  login, but each accepted code is single-use. The new-account local note
-  currently has 2 usable 64-character npm recovery codes after the accepted
-  publish and Trusted Publisher setup codes were removed. Reserve check with
-  planned use `0` and minimum reserve `2` returns PASS; planned use `1` returns
-  FAIL, so do not consume another recovery code until a fresh set or another
-  valid second factor is available.
+  login, but each accepted code is single-use. The current handoff records 4
+  usable 64-character npm recovery codes after the accepted setup/readback codes
+  were removed; at least 2 must remain unused after any planned operation.
 - [x] Create and verify npm Trusted Publishing for the new package
   `@yuliaedomskikh/agentflow-client`: GitHub owner `brownjuly2003-code`,
   repository `agentflow`, workflow filename `publish-npm.yml`, no environment
   name. `npm trust github` created trust id
   `693e8f2f-c592-4fd0-8942-232356bb5e9a`, and the npm package settings UI shows
   Trusted Publisher `brownjuly2003-code/agentflow` with workflow
-  `publish-npm.yml` and no environment. The workflow already publishes through
-  GitHub Actions OIDC and no longer passes `NPM_TOKEN`; revoke the old token
-  after a successful trusted-publish run.
-- [ ] After refreshing recovery codes or using another valid second factor,
-  verify the Trusted Publisher from a `yuliaedomskikh` owner-auth CLI session:
+  `publish-npm.yml` and no environment. CLI readback from a `yuliaedomskikh`
+  owner-auth session on 2026-05-01 returned provider `github`, repository
+  `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, and no
+  environment:
 
 ```bash
 npm trust list @yuliaedomskikh/agentflow-client \
@@ -136,8 +132,14 @@ npm trust list @yuliaedomskikh/agentflow-client \
   --registry https://registry.npmjs.org/
 ```
 
-Current CLI readback attempt returns `EOTP`. Do not spend a recovery code for
-this readback while only two usable recovery codes remain.
+- [ ] Revoke the legacy `NPM_TOKEN` only after a successful trusted-publish
+  workflow run for `@yuliaedomskikh/agentflow-client` and accepted evidence
+  intake. The green `publish-npm.yml` run on `2c72387` is not sufficient proof:
+  it published the legacy `@uedomskikh/agentflow-client` package and still used
+  `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`. Required revocation evidence is
+  defined in `docs/operations/external-gate-evidence-intake.md`: trusted-publish
+  run URL, repository secret audit, npm token audit, recovery-code reserve
+  confirmation, and review owner.
 
 Do not open the literal masked URL `https://www.npmjs.com/auth/cli/***`. npm
 11 redacts the real web-auth URL in terminal output and debug logs.

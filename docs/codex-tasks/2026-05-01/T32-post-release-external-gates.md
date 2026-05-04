@@ -1,6 +1,6 @@
 # T32 - Post-release external gates
 
-**Status:** Local gates closed; AWS/prod CDC blocked on external inputs
+**Status:** Local gates closed; AWS/prod CDC/npm-token revocation blocked on external inputs
 **Priority:** P2
 **Track:** Post-release operations / release evidence
 
@@ -9,7 +9,8 @@
 Close the remaining post-v1.1 external gates that could not be completed from
 the local code-only session: Docker-backed verification, AWS OIDC Terraform
 apply readiness, npm Trusted Publishing CLI readback, and production CDC source
-onboarding approval.
+onboarding approval. Legacy npm `NPM_TOKEN` revocation is a follow-up after a
+successful trusted-publish run for the new package.
 
 ## Current State
 
@@ -47,6 +48,17 @@ onboarding approval.
   `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, and no
   environment. One recovery code was accepted; usable saved recovery-code reserve
   is now 4.
+- 2026-05-04 follow-up clarified that the green `publish-npm.yml` run on
+  `2c72387` is not legacy `NPM_TOKEN` revocation proof because it published the
+  legacy `@uedomskikh/agentflow-client` package with `NODE_AUTH_TOKEN`. The old
+  token stays blocked until a successful new-package trusted-publish run and
+  accepted external-gate intake evidence exist.
+- A project-local Pi skill now exists at
+  `.pi/skills/external-gate-evidence-intake` for future external-gate intake
+  sessions.
+- Recorded local full-suite evidence after the npm handoff clarifications includes
+  `752 passed, 4 skipped in 398.35s` on 2026-05-04 with project-local
+  temp/cache paths after final release-evidence sync.
 - Terraform config sanity passed through `hashicorp/terraform:1.13.5`:
   `terraform init -backend=false` and `terraform validate`.
 - AWS apply readiness remains blocked on missing external inputs: no AWS
@@ -71,13 +83,17 @@ onboarding approval.
    - use the active `npm-recovery-codes` skill
    - do not print tokens, OTPs, cookies, recovery codes, or auth URLs
    - run `npm trust list @yuliaedomskikh/agentflow-client --json --registry https://registry.npmjs.org/`
-4. Complete AWS OIDC Terraform apply readiness. Blocked on external AWS account
+4. Revoke the legacy npm `NPM_TOKEN` only after the successful trusted-publish
+   workflow run targets `@yuliaedomskikh/agentflow-client` without
+   `NODE_AUTH_TOKEN` and the external-gate intake record is accepted.
+   Blocked.
+5. Complete AWS OIDC Terraform apply readiness. Blocked on external AWS account
    inputs:
    - create/apply the IAM role
    - add `AWS_TERRAFORM_ROLE_ARN`
    - provide real environment tfvars
    - re-enable `.github/workflows/terraform-apply.yml`
-5. Start production CDC source onboarding only after the required decision record
+6. Start production CDC source onboarding only after the required decision record
    in `docs/operations/cdc-production-onboarding.md` is filled and approved.
    Not started; the approval record is still empty by design.
 
@@ -85,10 +101,15 @@ onboarding approval.
 
 - Docker daemon responds normally for the selected context. Done.
 - Redis-backed full suite passes locally or any remaining failure is captured as
-  a new specific task with reproduction evidence. Done: 741 passed, 4 skipped.
+  a new specific task with reproduction evidence. Done: latest 752 passed,
+  4 skipped.
 - npm Trusted Publishing readback confirms GitHub Actions provider, repository
   `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, and no
   environment. Done.
+- Legacy `NPM_TOKEN` revocation is not marked complete until a new-package
+  trusted-publish run, repository secret audit, npm token audit, recovery-code
+  reserve confirmation, and review owner are recorded. Preserved: revocation
+  remains blocked.
 - AWS Terraform apply workflow is enabled only after role, variables, and tfvars
   exist. Preserved: workflow remains disabled because the role ARN and real
   tfvars do not exist yet.

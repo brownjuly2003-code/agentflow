@@ -20,7 +20,7 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Highlights
 
-- **Release-line gate:** 749 passed, 4 skipped on 2026-05-02; GitHub environments `staging` and `production` have required reviewers. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
+- **Release-line gate:** 752 passed, 4 skipped on 2026-05-04; GitHub environments `staging` and `production` have required reviewers. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
 - **Sub-second entity lookups in the checked-in baseline**: entity p50 `38-55 ms`, entity p99 `290-320 ms`, aggregate p50 `56 ms` at `50` users for `60s`
 - **Historical performance remediation is documented**: the serving path moved from an original ~`26,000 ms` baseline to the current `43-55 ms` release range
 - **Dual SDK parity** for Python and TypeScript, including retry policies, circuit breakers, batching, pagination, and contract pinning
@@ -161,14 +161,16 @@ vulnerable dep bumps (`dagster>=1.13.1`, `langchain-core>=1.2.22`),
 trivy pinned, OpenAPI drift gate, branch protection with 12 required
 status checks, GitHub Actions environment reviewers, and Python SDK
 alignment with the server v1 contract (F1–F10). Recent local full-suite
-verification: `749 passed, 4 skipped` on 2026-05-02 after closing the
-low-risk audit follow-ups. The post-v1.1 CDC operationalization
+verification: `752 passed, 4 skipped` on 2026-05-04 after clarifying the
+external-gate handoff. The post-v1.1 CDC operationalization
 for Debezium / Kafka Connect is checked in, while production source
 onboarding remains pending; see [docs/release-readiness.md](docs/release-readiness.md).
 Remaining external gates are AWS OIDC role setup for real Terraform apply,
 production CDC source onboarding, real PMF/pricing evidence, public benchmark
-publication on production hardware, and external pen-test attestation. npm
-Trusted Publishing readback for the new package is complete.
+publication on production hardware, external pen-test attestation, and legacy
+npm `NPM_TOKEN` revocation after a successful new-package trusted-publish run.
+npm Trusted Publishing readback for the new package is complete. A project-local
+Pi skill for evidence intake lives at `.pi/skills/external-gate-evidence-intake`.
 
 ## Screenshots
 

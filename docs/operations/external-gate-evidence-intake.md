@@ -26,6 +26,13 @@ benchmark publication, security testing, deploys, or external account changes.
 - Do not replace the existing handoff docs. Link this intake record beside the
   item-specific handoff after evidence is accepted.
 
+## Project-Local Pi Skill
+
+The project-local Pi skill at `.pi/skills/external-gate-evidence-intake` wraps
+this checklist for operator sessions. It is a workflow aid only: using the skill
+does not authorize external account changes and does not make local analysis,
+modeled evidence, or historical CI runs sufficient to close a gate.
+
 ## Coverage
 
 | Item | Source handoff |
@@ -308,6 +315,8 @@ Source handoff: [Publication Checklist](../publication-checklist.md).
 ### Explicit No-Go Conditions
 
 - No successful trusted-publish workflow run exists for the new package.
+- The successful publish run targets the legacy package scope instead of the
+  new package scope being approved for future publishing.
 - `NPM_TOKEN` still exists as an active repository secret after revocation is
   claimed.
 - The package publish path still depends on `NODE_AUTH_TOKEN` or `NPM_TOKEN`.
@@ -320,6 +329,8 @@ Source handoff: [Publication Checklist](../publication-checklist.md).
 
 - `.github/workflows/publish-npm.yml` using OIDC by itself.
 - `npm trust list` output without a later successful trusted-publish run.
+- A green `publish-npm.yml` run that predates the no-token workflow path or
+  publishes a different package scope.
 - The package being visible on npm before the token is revoked.
 - Verbal confirmation that the token was deleted.
 - A screenshot that hides the token value but does not show revocation state,

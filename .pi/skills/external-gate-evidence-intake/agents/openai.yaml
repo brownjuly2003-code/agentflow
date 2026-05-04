@@ -1,0 +1,4 @@
+interface:
+  display_name: "External Gate Evidence Intake"
+  short_description: "Review external gate evidence safely"
+  default_prompt: "Use $external-gate-evidence-intake to collect and review AgentFlow external gate evidence without closing gates prematurely."

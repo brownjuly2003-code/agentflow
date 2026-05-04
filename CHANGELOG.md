@@ -19,13 +19,18 @@ All notable changes to AgentFlow are documented in this file.
 - Recorded the npm Trusted Publishing handoff: the new package was first
   published as `@yuliaedomskikh/agentflow-client@1.1.0`, Trusted Publisher
   setup succeeded for `brownjuly2003-code/agentflow` with workflow
-  `publish-npm.yml`, CLI `npm trust list` readback still needs a valid second
-  factor or refilled recovery-code set, and future recovery-code use must keep a
-  two-code reserve through the `npm-recovery-codes` skill.
+  `publish-npm.yml`, CLI `npm trust list` readback is complete, and future
+  recovery-code use must keep a two-code reserve through the
+  `npm-recovery-codes` skill.
 - Documented the completed replacement npm account bootstrap for
   `yulia.edomskikh@gmail.com`, the saved 2FA recovery-code reserve, and the
   switch of future TypeScript SDK publishing to
   `@yuliaedomskikh/agentflow-client`.
+- Clarified that legacy `NPM_TOKEN` revocation remains blocked until a
+  successful trusted-publish workflow run for `@yuliaedomskikh/agentflow-client`
+  and accepted external-gate intake evidence exist.
+- Added a project-local Pi skill at `.pi/skills/external-gate-evidence-intake`
+  for external release-gate evidence intake without adding runtime dependencies.
 - Added a production CDC onboarding runbook that blocks real source attachment
   until source ownership, table scope, network path, credential ownership,
   monitoring, and rollback decisions are recorded.

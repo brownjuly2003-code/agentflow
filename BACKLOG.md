@@ -96,3 +96,164 @@ Required verification:
 Forbidden scope:
 - No `npm publish`, `npm login`, `npm token`, or package ownership changes.
 - No root backend source changes unless a later task explicitly allows them.
+
+## 4. Document Guarded Autopilot Allowed-Paths Bootstrap
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for creating `.autopilot/allowed-paths.txt` for one bounded backlog item.
+- Explain that `.autopilot/` is ignored local runtime state and should not be committed.
+- Include exact preflight commands for `git status`, `git diff --check`, and `scripts/autopilot.ps1 -DryRun`.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 5. Document Guarded Autopilot Pause And Blocked Recovery
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for handling `.autopilot/PAUSE` and `.autopilot/BLOCKED.md`.
+- Include exact commands to inspect state, resume after PAUSE, and remove BLOCKED only after the blocker is resolved.
+- Explain that `.autopilot/` is ignored runtime state and should not be committed.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 6. Document Guarded Autopilot Explicit Commit Gate
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for when `scripts/autopilot.ps1 -Commit` is allowed.
+- Document that commits must use explicit pathspecs through the runner and must never push.
+- Include the pre-commit gates from `AUTOPILOT.md` and `docs/operations/local-verification-matrix.md`.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No actual commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 7. Document Guarded Autopilot Dirty-Worktree Preflight
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for handling a dirty worktree before a guarded non-dry autopilot run.
+- Include exact commands to inspect tracked and untracked changes without deleting or reverting user work.
+- Explain when to stop because another session appears to be editing shared files.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 8. Document Guarded Autopilot Log And Lock Inspection
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for inspecting `.autopilot/logs/` and `.autopilot/autopilot.lock`.
+- Include exact read-only commands to view recent logs and determine whether a lock appears stale.
+- Explain that lock removal is a manual operator decision and must not be automated by routine autopilot documentation tasks.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No lock deletion, cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 9. Document Guarded Autopilot Dry-Run Output Triage
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for interpreting `scripts/autopilot.ps1 -DryRun` output before a guarded non-dry run.
+- Include exact read-only follow-up commands for PAUSE, BLOCKED, missing `allowed-paths.txt`, dirty worktree, and missing local command reports.
+- Explain that dry-run output is advisory preflight evidence and does not authorize deploy, publish, Terraform, secret, scheduler, external account, cleanup, revert, commit, or push operations.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 10. Document Guarded Autopilot Runtime Artifact Inventory
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note that inventories the `.autopilot/` runtime artifacts used by the guarded runner.
+- Distinguish local-only runtime files from project artifacts and explain which files are operator inputs versus generated evidence.
+- Include exact read-only commands to inspect artifact presence and timestamps without deleting, regenerating, committing, or publishing anything.
+- Keep deploy, publish, Terraform, secret, scheduler install, and external account operations out of the flow.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.

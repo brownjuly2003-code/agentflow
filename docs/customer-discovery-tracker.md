@@ -27,6 +27,17 @@ tracker is therefore `Synthetic / Modeled only`. Keep real funnel metrics frozen
 at `0`, keep evidence counts at `0`, and use the modeled sections as the active
 planning surface.
 
+## Current PMF Evidence Handoff
+
+Status as of 2026-05-04: blocked on external founder/customer evidence for any
+real PMF claim.
+
+No real outreach sends, replies, scheduled calls, completed interviews,
+first-paying-customer signals, or PMF score evidence are present in the repo or
+the task prompt. The modeled sections below remain useful planning inputs, but
+they do not count as customer validation, pricing evidence, PMF evidence, or a
+release-readiness gate.
+
 ## Current Operating Step
 
 Batch 1 sourcing is complete. The current operating step is using the modeled

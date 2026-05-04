@@ -8,6 +8,15 @@
 This plan keeps pricing work tied to real customer evidence. Do not publish
 price points, tiers, or sales collateral from this document alone.
 
+## Current Pricing Evidence Handoff
+
+Status as of 2026-05-04: blocked on external founder/customer evidence.
+
+The current tracker has no real interview evidence for budget owner,
+replaceable cost, natural value metric, paid pilot shape, pricing risk, or first
+paying customer intent. Keep pricing uncommitted until real founder/customer
+evidence is supplied outside the repo and recorded in the discovery tracker.
+
 ## Research Goal
 
 Validate whether AgentFlow should be packaged around agent-safe operational

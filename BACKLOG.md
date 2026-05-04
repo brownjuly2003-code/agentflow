@@ -422,7 +422,10 @@ Forbidden scope:
 
 ## 18. Prepare AWS OIDC Terraform Apply Readiness Handoff
 
-Status: Ready.
+Status: Blocked.
+
+Blocked reason:
+- External AWS inputs are still absent: `AWS_TERRAFORM_ROLE_ARN`, real staging/prod tfvars, AWS account bootstrap approval, and explicit workflow-enable approval. Handoff recorded in `docs/operations/aws-oidc-setup.md`.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -446,7 +449,10 @@ Forbidden scope:
 
 ## 19. Record Production CDC Source Onboarding Decision Handoff
 
-Status: Pending.
+Status: Blocked.
+
+Blocked reason:
+- External production CDC decisions are still absent: source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, and rollback owner. Handoff recorded in `docs/operations/cdc-production-onboarding.md`.
 
 Allowed files/directories:
 - `docs/operations/cdc-production-onboarding.md`
@@ -470,7 +476,10 @@ Forbidden scope:
 
 ## 20. Prepare Phase 1 PMF Outreach And Pricing Evidence Handoff
 
-Status: Pending.
+Status: Blocked.
+
+Blocked reason:
+- Real Phase 1 PMF evidence is still absent: no real outreach sends, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, or first-paying-customer signals. Handoff recorded in `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`.
 
 Allowed files/directories:
 - `docs/customer-discovery-tracker.md`
@@ -496,7 +505,10 @@ Forbidden scope:
 
 ## 21. Define Public Benchmark Production-Hardware Plan
 
-Status: Pending.
+Status: Blocked.
+
+Blocked reason:
+- Production-hardware benchmark plan is documented, but approved `c8g.4xlarge+` access, budget, operator-run results, and publication approval are still absent. Handoff recorded in `docs/perf/public-production-hardware-benchmark-plan.md`.
 
 Allowed files/directories:
 - `docs/perf/`
@@ -521,7 +533,10 @@ Forbidden scope:
 
 ## 22. Prepare External Pen-Test Attestation Handoff
 
-Status: Pending.
+Status: Blocked.
+
+Blocked reason:
+- No external pen-test report or attestation is present. Handoff checklist recorded in `docs/operations/external-pen-test-attestation-handoff.md`; `docs/security-audit.md` now keeps internal audit evidence distinct from third-party attestation.
 
 Allowed files/directories:
 - `docs/security-audit.md`

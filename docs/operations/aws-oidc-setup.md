@@ -4,6 +4,32 @@
 
 This guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml`.
 
+## Current readiness handoff
+
+Status as of 2026-05-04: blocked on external AWS account inputs.
+
+Confirmed local/repository evidence:
+
+- Repository variable `AWS_REGION` exists and is set to `us-east-1`.
+- Repository variable `AWS_TERRAFORM_ROLE_ARN` is not configured.
+- `.github/workflows/terraform-apply.yml` remains disabled with `if: false`.
+- Real `infrastructure/terraform/environments/staging.tfvars` and `prod.tfvars` files are absent.
+- No AWS credentials are configured on the verification workstation.
+- Terraform config sanity has passed through `hashicorp/terraform:1.13.5` with `init -backend=false` and `validate`; this is not evidence of a real apply.
+
+Do not enable the workflow or run a real Terraform apply until an operator
+provides all external inputs:
+
+- AWS account owner and bootstrap operator.
+- Approved IAM role creation path for GitHub Actions OIDC.
+- Resulting `AWS_TERRAFORM_ROLE_ARN`.
+- Real staging and production tfvars supplied through the approved secure process.
+- Explicit approval to remove the workflow-level `if: false` guard.
+- First apply environment, reviewer, rollback owner, and evidence location.
+
+If any item above is missing, keep the release readiness state blocked and hand
+the missing input list back to the operator.
+
 ## Prerequisites
 
 - AWS account with administrator credentials available for the initial bootstrap only.

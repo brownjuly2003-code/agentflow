@@ -11,6 +11,10 @@ AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integr
 
 The codebase is strongest at application-layer controls that can be validated directly in source: auth, authorization, request filtering, security headers, contract evolution, replay safety, and auditability of API usage. The weakest areas are the controls that typically require external infrastructure or third-party attestation. In this repository snapshot there is no evidence of an external penetration test, no demonstrated generalized secrets manager integration, and no evidence that the local DuckDB deployment encrypts data at rest by default.
 
+External pen-test attestation status as of 2026-05-04: not present. Use
+`docs/operations/external-pen-test-attestation-handoff.md` for the checklist
+required before any third-party pen-test claim.
+
 Threat model assumed by the current implementation:
 - untrusted external callers using `X-API-Key`
 - tenant isolation requirements across shared serving infrastructure

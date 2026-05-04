@@ -9,6 +9,24 @@ MySQL sources to AgentFlow.
 Do not create production connectors until every required input below is filled
 and approved by the source-system owner, platform owner, and security owner.
 
+## Current decision handoff
+
+Status as of 2026-05-04: blocked on external production-source decisions.
+
+The checked-in CDC path covers local/demo and Kubernetes-shaped staging
+primitives only. The production decision record is still missing:
+
+- Source owner and escalation contact.
+- Secret owner for CDC user creation, rotation, and revocation.
+- Source engine, hostname, port, database name, and approved table scope.
+- Private network path from Kafka Connect to the source database.
+- Existing Kubernetes Secret name and owner.
+- Monitoring owner for connector lag, failures, and dead letters.
+- Rollback owner authorized to pause or delete the connector.
+
+Until those values are supplied and approved outside the repo, keep production
+CDC disabled and treat this runbook as an operator handoff only.
+
 ## Required Decision Record
 
 | Field | Required value |

@@ -8,7 +8,7 @@ Updated: 2026-05-04
 - Branch: `main`
 - Post-release backlog seeding base HEAD: `99ec9c4`
 - Git status at backlog seeding start: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes for this backlog-seeding task: `AGENT_STATE.md` and `BACKLOG.md` only.
+- Current expected worktree changes for backlog tasks 18 through 22: `docs/operations/aws-oidc-setup.md`, `docs/operations/cdc-production-onboarding.md`, `docs/customer-discovery-tracker.md`, `docs/pricing-validation-plan.md`, `docs/perf/public-production-hardware-benchmark-plan.md`, `docs/operations/external-pen-test-attestation-handoff.md`, `docs/security-audit.md`, `AGENT_STATE.md`, and `BACKLOG.md` only.
 - File count: `git ls-files` reports 667 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
 
 ## Available Runtime
@@ -66,6 +66,6 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Next Step
 
-Backlog tasks 0 through 17 are complete. Tasks 18 through 22 now seed the remaining project-level post-release external gates. The next bounded safe backlog item is task 18, "Prepare AWS OIDC Terraform Apply Readiness Handoff."
+Backlog tasks 0 through 17 are complete. Task 18 is blocked on external AWS account inputs after recording the AWS OIDC Terraform apply readiness handoff in `docs/operations/aws-oidc-setup.md`. Task 19 is blocked on external production CDC source decisions after recording the decision handoff in `docs/operations/cdc-production-onboarding.md`. Task 20 is blocked on absent real PMF outreach, interview, pricing/WTP, and first-paying-customer evidence after updating `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. Task 21 is blocked on absent approved production-hardware access, budget, operator-run results, and publication approval after adding `docs/perf/public-production-hardware-benchmark-plan.md`. Task 22 is blocked on absent external pen-test report or attestation after adding `docs/operations/external-pen-test-attestation-handoff.md` and updating `docs/security-audit.md`.
 
-For task 18, guarded autopilot may only prepare documentation/backlog/state handoff updates under the task's allowed paths. If the external AWS role ARN, real environment tfvars, and explicit operator approval are still absent, mark task 18 blocked instead of enabling or running Terraform. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.
+No next bounded safe backlog item is currently queued. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run. Do not convert blocked external gates into completed work without real operator-provided evidence.

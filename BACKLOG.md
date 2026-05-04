@@ -283,7 +283,7 @@ Forbidden scope:
 
 ## 12. Document Guarded Autopilot Handoff Refresh Checklist
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -294,6 +294,29 @@ Acceptance criteria:
 - Add a concise local-operations note for refreshing guarded autopilot handoff state after a completed run.
 - Include exact local commands to compare `.autopilot/NEXT_TASK.md`, `.autopilot/allowed-paths.txt`, current git status, and the next backlog item without deleting, regenerating, committing, pushing, publishing, deploying, or reading secrets.
 - Explain what belongs in project state files versus ignored `.autopilot/` runtime files.
+- Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, and product-code work out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, or paid service changes.
+
+## 13. Document Guarded Autopilot Stop Conditions
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for deciding when a guarded autopilot run must stop before edits, state updates, or non-dry execution.
+- Include exact read-only commands to detect PAUSE, BLOCKED, dirty worktree state, allowed-path mismatches, and unexpected changes without deleting, regenerating, committing, pushing, publishing, deploying, or reading secrets.
+- Explain how to report a blocker without cleanup, revert, product-code work, live accounts, paid APIs, Terraform, scheduler install, deploy, or publish operations.
 - Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, and product-code work out of scope.
 
 Required verification:

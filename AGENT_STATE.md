@@ -6,9 +6,9 @@ Updated: 2026-05-04
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
-- Manual release-readiness sync base HEAD: `3f88d74`
-- Git status at manual sync start: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes for this manual sync: `README.md`, `docs/release-readiness.md`, `docs/audit-history.md`, `docs/glossary.md`, `docs/decisions/0004-v1-publication.md`, `BACKLOG.md`, and `AGENT_STATE.md` only.
+- Backlog correction base HEAD: `3080275`
+- Git status at backlog correction start: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
+- Current expected worktree changes for the backlog correction: `BACKLOG.md` and `AGENT_STATE.md` only.
 - File count: `git ls-files` reports 669 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
 
 ## Available Runtime
@@ -74,4 +74,4 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 Backlog tasks 0 through 17 are complete. Task 18 is blocked on external AWS account inputs after recording the AWS OIDC Terraform apply readiness handoff in `docs/operations/aws-oidc-setup.md`. Task 19 is blocked on external production CDC source decisions after recording the decision handoff in `docs/operations/cdc-production-onboarding.md`. Task 20 is blocked on absent real PMF outreach, interview, pricing/WTP, and first-paying-customer evidence after updating `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. Task 21 is blocked on absent approved production-hardware access, budget, operator-run results, and publication approval after adding `docs/perf/public-production-hardware-benchmark-plan.md`. Task 22 is blocked on absent external pen-test report or attestation after adding `docs/operations/external-pen-test-attestation-handoff.md` and updating `docs/security-audit.md`.
 
-Next bounded safe backlog item for the next session: task 23, create an external gate evidence intake checklist. Keep the work documentation-only, do not access external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.
+No next bounded safe backlog item is currently queued. Manual next-session note, only if explicitly asked to continue without autopilot: create an external gate evidence intake checklist as a documentation-only task, without adding `Status: Ready` backlog entries. Keep the work outside external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.

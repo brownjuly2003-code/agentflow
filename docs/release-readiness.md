@@ -1,7 +1,7 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20
-**Last updated**: 2026-05-03
+**Last updated**: 2026-05-04
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint + post-release benchmark workflow split
 **Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Actions environments `staging` and `production` configured with required reviewers; GitHub Release record created
 
@@ -11,7 +11,7 @@ AgentFlow закрыл технические блокеры из internal audit
 
 The v1.1 line split runtime and SDK distribution identity: the runtime publishes as `agentflow-runtime`, while the Python SDK publishes as `agentflow-client` and keeps the `agentflow` import path. The current post-v1.1 follow-up operationalizes ADR 0005 with Debezium/Kafka Connect local compose, a Kubernetes-shaped Helm chart, raw CDC topic bootstrap, and canonical CDC normalization before downstream validation.
 
-## Current Status (2026-05-01)
+## Current Status (2026-05-04)
 
 | Area | Clear status |
 |------|--------------|
@@ -22,7 +22,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | GitHub deployment gates | Environments `staging` and `production` exist with required reviewer `brownjuly2003-code`; the workflow environment name is `production`, not `prod` |
 | CDC local path | Checked in: compose source DBs, Kafka Connect image, connector registration, topic bootstrap, and integration tests |
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
-| CDC production onboarding | Not done: real hostnames, table scope, network path, and secret owner still need an explicit decision; the required decision record and no-go gates are documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) |
+| CDC production onboarding | Blocked on external decisions: real hostnames, table scope, network path, secret owner, monitoring owner, and rollback owner are absent; the required decision record and no-go gates are documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) |
 | Recorded full-suite evidence | 2026-05-02 Docker-backed local full-suite pass on the current audit-follow-up worktree: 749 passed, 4 skipped in 362.47s with project-local temp/cache paths. Earlier 2026-05-01 and 2026-04-30 full-suite evidence remains recorded below. |
 | Current post-release main | Local `main` contains the post-release npm Trusted Publishing handoff plus refreshed external-gate evidence. Push remains separate; do not assume origin has these local commits until `git push` is explicitly run. |
 
@@ -60,17 +60,18 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 
 ## Known Limitations
 
-- Phase 1 PMF work remains open: customer discovery, pricing validation, and first paying customers are post-release items, not technical blockers.
+- Phase 1 PMF work remains blocked on real founder/customer evidence: customer discovery, pricing validation, and first paying customers are post-release items, not technical blockers. Current handoffs are in [Customer Discovery Tracker](customer-discovery-tracker.md) and [Pricing Validation Plan](pricing-validation-plan.md).
 - Scope cut was intentionally not applied; v1.0.0 keeps the current 15-endpoint surface.
 - Entity p99 remains 290-320 ms in `docs/benchmark-baseline.json` generated on 2026-04-17T13:37:10+03:00: above the earlier ~170 ms pre-regression lab result, but still inside the <500 ms gate.
 - v14 changes only SDK resilience and SDK tests/docs, so this release records the entity p99 tail as a serving-path known limitation rather than claiming a new performance fix.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `terraform init -backend=false` and `terraform validate` through the Terraform container plus workflow wiring.
 - GitHub Actions environments `staging` and `production` are configured with required reviewer `brownjuly2003-code`; `prevent_self_review=false` because the repo currently has one admin collaborator.
-- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-05-01, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, real `infrastructure/terraform/environments/*.tfvars` files are not committed, and no AWS credentials are configured on the verification workstation.
+- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-05-04, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, real `infrastructure/terraform/environments/*.tfvars` files are not committed, and no AWS credentials are configured on the verification workstation. Current handoff: [AWS OIDC Setup For Terraform Apply](operations/aws-oidc-setup.md).
 - SDK registry publish evidence is complete for v1.1.0. The legacy npm package `@uedomskikh/agentflow-client` remains live but is not the future publish target. Future TypeScript SDK publishing now targets `@yuliaedomskikh/agentflow-client`, which is public, owned by `yuliaedomskikh`, and has npm Trusted Publishing configured for GitHub Actions OIDC (`brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment). CLI readback confirmed the same Trusted Publisher on 2026-05-01. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29 until revoked. Revoke it after the first successful trusted-publish workflow run on the new package. A new account still cannot control the old `@uedomskikh/agentflow-client` package unless old owner auth adds it as a maintainer or npm support intervenes; scoped packages cannot be transferred to a different user scope.
-- Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline.
+- Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline. Current plan: [Public Production-Hardware Benchmark Plan](perf/public-production-hardware-benchmark-plan.md).
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
-- Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, and secret ownership. The approval checklist is documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md).
+- Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, secret ownership, monitoring ownership, and rollback ownership. The approval checklist is documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md).
+- External pen-test attestation is not present. Internal security audit evidence remains separate from third-party attestation; current handoff: [External Pen-Test Attestation Handoff](operations/external-pen-test-attestation-handoff.md).
 - This Windows workstation has a local pytest startup issue unrelated to release code: `pyreadline3`, `pytest-metadata`, and `prometheus_client` can call `platform.*` and hang in Windows WMI before test output appears. The 2026-04-28 full-suite pass used a temporary project-local `sitecustomize` shim for that workstation only; the shim was removed after verification. Keep publishable docs free of absolute local paths.
 
 ## Release Checklist
@@ -87,9 +88,9 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] v1.1 runtime/SDK package split documented
 - [x] Local and Kubernetes-shaped CDC operationalization checked in
 - [x] GitHub environments `staging` and `production` configured with required reviewer `brownjuly2003-code` (verified via `gh api` on 2026-04-30; `prevent_self_review=false` because the repo currently has one admin collaborator)
-- [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, and real environment tfvars are still missing)
+- [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, real environment tfvars, and operator approval are still missing; handoff in `docs/operations/aws-oidc-setup.md`)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
-- [ ] Production CDC source onboarding approved and configured
+- [ ] Production CDC source onboarding approved and configured (source owner, secret owner, source connection details, table scope, private network path, monitoring owner, and rollback owner are still missing)
 - [x] Full-suite release-line verification — `749 passed, 4 skipped` in 362.47s on 2026-05-02 after closing the low-risk audit follow-ups; prior `741 passed, 4 skipped` and `743 passed, 4 skipped` runs remain in the evidence table as dated history
 - [x] Standalone chaos smoke green on 2026-05-01 (`3 passed in 16.71s` through the CI compose path); audit-closure HEAD also clean
 - [x] npm Trusted Publishing CLI readback verified on 2026-05-01 for `@yuliaedomskikh/agentflow-client`
@@ -100,7 +101,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] `publish-pypi.yml` `environment: pypi` committed (`e8b1237`)
 - [x] `sdk-ts/package-lock.json` committed; `npm audit` clean (0 vulns)
 - [x] Vulnerable runtime/integrations deps bumped (`dagster>=1.13.1`, `langchain-core>=1.2.22`, `langchain-text-splitters>=1.1.2`, `langsmith>=0.7.31`)
-- [ ] Phase 1 PMF work completed (`docs/customer-discovery-tracker.md` now contains 15 public first-batch candidates, a 10-person outreach queue across all 5 target profiles, Batch A route decisions, first-touch and follow-up copy, and send/reply ledgers; actual outreach, replies, scheduled calls, completed interviews, and PMF scoring are still pending; `docs/pricing-validation-plan.md` defines the pricing/WTP evidence gates, pilot-offer signals to capture during interviews, post-batch pricing review rules, and post-batch pricing actions)
+- [ ] Phase 1 PMF work completed (`docs/customer-discovery-tracker.md` now contains synthetic/modelled planning inputs only; real outreach, replies, scheduled calls, completed interviews, PMF scoring, pricing/WTP evidence, and first-paying-customer signals are still absent; `docs/pricing-validation-plan.md` defines the pricing/WTP evidence gates, pilot-offer signals to capture during interviews, post-batch pricing review rules, and post-batch pricing actions)
 
 ## SDK Publish Proof Path
 
@@ -164,6 +165,10 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
 | GitHub Actions environments `staging` and `production` | ✅ APPLIED | `gh api repos/brownjuly2003-code/agentflow/environments` shows a `required_reviewers` protection rule on both environments with reviewer `brownjuly2003-code`; `prevent_self_review=false` |
 | AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | `gh variable list` shows `AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs are still `if: false`, real `environments/*.tfvars` are absent, and this workstation has no AWS credentials. Terraform CLI is not installed locally, but `hashicorp/terraform:1.13.5` `init -backend=false` and `validate` pass for the checked-in config. |
+| Production CDC source onboarding | ⚠️ BLOCKED | External production-source decisions are absent: source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, and rollback owner. Handoff: `docs/operations/cdc-production-onboarding.md`. |
+| Phase 1 PMF and pricing evidence | ⚠️ BLOCKED | Real outreach, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, and first-paying-customer signals are absent. Handoffs: `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. |
+| Public production-hardware benchmark | ⚠️ BLOCKED | Approved `c8g.4xlarge+` access, budget, operator-run results, and publication approval are absent. Plan: `docs/perf/public-production-hardware-benchmark-plan.md`. |
+| External pen-test attestation | ⚠️ BLOCKED | No external pen-test report or attestation is present. Handoff: `docs/operations/external-pen-test-attestation-handoff.md`. |
 | TypeScript SDK lockfile + audit | ✅ CLEAN | `sdk-ts/package-lock.json` committed (1500 lines); `npm audit --audit-level=moderate` reports 0 vulnerabilities |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process. On 2026-04-28, direct pytest also hung before output when Windows WMI was reached through `platform.*`; the successful local run used a temporary project-local `sitecustomize` shim and a dummy `readline` module in the test runner. Do not commit that shim.
@@ -188,6 +193,13 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
   - v1.0.1 patch release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.0.1
   - v1.1.0 release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.1.0
 - Security triage: `.artifacts/security/bandit-triage-2026-04-17.md`
+- Post-release external-gate handoffs:
+  - AWS OIDC Terraform apply readiness: `docs/operations/aws-oidc-setup.md`
+  - Production CDC source onboarding: `docs/operations/cdc-production-onboarding.md`
+  - Phase 1 PMF evidence: `docs/customer-discovery-tracker.md`
+  - Pricing evidence: `docs/pricing-validation-plan.md`
+  - Public production-hardware benchmark: `docs/perf/public-production-hardware-benchmark-plan.md`
+  - External pen-test attestation: `docs/operations/external-pen-test-attestation-handoff.md`
 
 ## New Session Handoff
 
@@ -235,13 +247,13 @@ npm follow-up note:
 
 **v1.1.0 release line prepared; post-release local gates recorded.**
 
-AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. Do not treat AWS Terraform apply or production CDC source onboarding as complete until the unchecked gates above are closed. Remaining open items:
-- Phase 1 PMF: customer discovery and pricing validation - needs founder outreach (script ready in `docs/customer-discovery-questions.md`; first-batch sourcing now has 15 public candidates and a 10-person outreach queue across all 5 target profiles in `docs/customer-discovery-tracker.md`; no notes, replies, scheduled calls, completed interviews, or pricing evidence yet; pricing/WTP evidence gates, pilot-offer signal capture, review rules, and post-batch pricing actions ready in `docs/pricing-validation-plan.md`)
-- AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml`
+AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. Do not treat AWS Terraform apply, production CDC source onboarding, Phase 1 PMF evidence, public production-hardware benchmarks, or external pen-test attestation as complete until the unchecked gates above are closed. Remaining open items:
+- Phase 1 PMF: real customer discovery and pricing validation evidence; current tracker content is synthetic/modelled only, with real evidence count still `0`
+- AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml` only after explicit operator approval
 - Revoke the legacy npm `NPM_TOKEN` after the first successful trusted-publish run for `@yuliaedomskikh/agentflow-client`
 - Production CDC source onboarding decision and secrets/network setup; use [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) as the approval checklist
-- External pen-test attestation
-- Public benchmark on production hardware (`c8g.4xlarge+`)
+- External pen-test attestation; use [External Pen-Test Attestation Handoff](operations/external-pen-test-attestation-handoff.md)
+- Public benchmark on production hardware (`c8g.4xlarge+`); use [Public Production-Hardware Benchmark Plan](perf/public-production-hardware-benchmark-plan.md)
 - First paying customers (sales track)
 
 v1.1 direction informed by research sprint (`docs/v1-1-research.md`): read-first MCP surface, thin LangChain adapter, freshness primitives as differentiation. Confidence is medium - real interviews required before implementation.

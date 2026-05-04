@@ -102,11 +102,11 @@ Referenced from the v8 plan trail:
 
 Same as listed in `docs/release-readiness.md`:
 
-- Phase 1 PMF: customer discovery interviews, pricing model
-- Real Terraform apply: AWS creds + OIDC in GitHub environments
-- External pen-test
+- AWS OIDC role setup for real Terraform apply
+- Production CDC source onboarding decisions and secrets/network setup
+- Phase 1 PMF/pricing real evidence and first paying customers
+- External pen-test attestation
 - Public benchmark on production hardware
-- First 3 paying customers
 
 ## References
 

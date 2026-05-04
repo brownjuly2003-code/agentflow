@@ -210,7 +210,7 @@ Terraform описывает инфраструктуру как код. `plan` 
 
 ### Что спросит интервьюер
 - "Почему `apply` не автоматический?" -> Потому что инфраструктурные изменения дороже ошибки; ручное подтверждение здесь осознанно.
-- "Что ещё осталось ручным?" -> GitHub environments и AWS OIDC role wiring всё ещё требуют настройки со стороны владельца репозитория.
+- "Что ещё осталось ручным?" -> GitHub environments уже настроены с required reviewers; AWS OIDC role wiring, `AWS_TERRAFORM_ROLE_ARN`, real tfvars и explicit workflow enablement всё ещё требуют operator setup перед real apply.
 
 ## DuckDB + Iceberg architecture
 

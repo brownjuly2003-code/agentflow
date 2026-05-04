@@ -115,9 +115,13 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 - [Competitive Analysis](docs/competitive-analysis.md) - positioning and trade-offs
 - [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) - Debezium/Kafka Connect rollout decisions and implementation trail
 - [Glossary](docs/glossary.md) - interview-ready explanations of the core technical terms
-- [Release Readiness](docs/release-readiness.md) - checked release evidence through `v1.1.0` and current CDC follow-up work
-- [Customer Discovery Tracker](docs/customer-discovery-tracker.md) - PMF outreach queue, Batch A send plan, and interview evidence ledger
-- [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions and evidence gates for discovery calls
+- [Release Readiness](docs/release-readiness.md) - checked release evidence through `v1.1.0` and current external-gate handoffs
+- [Customer Discovery Tracker](docs/customer-discovery-tracker.md) - synthetic/modelled PMF planning surface and real-evidence gap
+- [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions, evidence gates, and current real-evidence gap
+- [AWS OIDC Setup](docs/operations/aws-oidc-setup.md) - Terraform apply readiness handoff
+- [Production CDC Source Onboarding](docs/operations/cdc-production-onboarding.md) - production CDC decision record and no-go gates
+- [Public Production-Hardware Benchmark Plan](docs/perf/public-production-hardware-benchmark-plan.md) - benchmark evidence plan for `c8g.4xlarge+`
+- [External Pen-Test Attestation Handoff](docs/operations/external-pen-test-attestation-handoff.md) - third-party pen-test evidence checklist
 - [Audit History](docs/audit-history.md) - baseline-to-release remediation trail
 - [Publication Checklist](docs/publication-checklist.md) - final GitHub publishing checklist
 - [Fly.io Demo Deploy](deploy/fly/README.md) - minimal hosted demo instructions
@@ -160,10 +164,10 @@ verification: `749 passed, 4 skipped` on 2026-05-02 after closing the
 low-risk audit follow-ups. The post-v1.1 CDC operationalization
 for Debezium / Kafka Connect is checked in, while production source
 onboarding remains pending; see [docs/release-readiness.md](docs/release-readiness.md).
-Remaining open items are AWS OIDC role setup for real Terraform apply,
-production CDC source onboarding, public benchmark publication on
-production hardware, final owner-auth `npm trust list` verification for npm
-Trusted Publishing, and post-release PMF work.
+Remaining external gates are AWS OIDC role setup for real Terraform apply,
+production CDC source onboarding, real PMF/pricing evidence, public benchmark
+publication on production hardware, and external pen-test attestation. npm
+Trusted Publishing readback for the new package is complete.
 
 ## Screenshots
 

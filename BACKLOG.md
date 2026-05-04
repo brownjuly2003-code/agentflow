@@ -558,3 +558,28 @@ Required verification:
 
 Forbidden scope:
 - No external scanning, penetration testing, vulnerability exploitation, credential access, paid service use, external account work, deploy, publish, Terraform, scheduler install, push, production data, or product-code changes.
+
+## 23. Create External Gate Evidence Intake Checklist
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/external-gate-evidence-intake.md`
+- `docs/release-readiness.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise operator-facing checklist that defines the evidence bundle required before any blocked external gate can move from blocked to complete.
+- Cover AWS OIDC Terraform apply readiness, production CDC source onboarding, Phase 1 PMF/pricing evidence, public production-hardware benchmark evidence, and external pen-test attestation.
+- For each gate, list the minimum owner-provided fields, acceptable artifact links or paths, and explicit no-go conditions.
+- State that synthetic/modelled evidence, internal-only audit notes, and local dry-run output cannot close external gates.
+- Update `AGENT_STATE.md` and `BACKLOG.md` with the next safe state after the checklist is added.
+
+Required verification:
+- `git status --short --branch`
+- `git diff --check`
+- `python -m pytest tests/unit -p no:schemathesis`
+
+Forbidden scope:
+- No AWS, Terraform apply, production CDC enablement, customer outreach, email sending, scraping, CRM changes, paid hardware use, benchmark publication, external scanning, penetration testing, credential access, secret access, external account work, deploy, publish, scheduler install, push, production data, or product-code changes.

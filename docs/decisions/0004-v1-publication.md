@@ -41,10 +41,10 @@ This means:
 ### Negative
 
 - Some manual setup remains outside the repository and must still be completed by the maintainer.
-- Public readers will see an honest but incomplete production story around cloud credentials and GitHub environment setup.
+- Public readers will see an honest but incomplete production story around AWS OIDC role/tfvars setup and production-source onboarding.
 
 ### Follow-up
 
-- Complete GitHub environment protection and AWS OIDC wiring.
+- GitHub environment protection is complete as of 2026-04-30; complete AWS OIDC wiring before real Terraform apply.
 - Publish benchmark evidence from production-like hardware.
 - Use customer discovery work to decide the `v1.1` roadmap.

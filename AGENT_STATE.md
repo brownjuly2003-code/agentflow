@@ -6,10 +6,10 @@ Updated: 2026-05-04
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
-- Post-release backlog seeding base HEAD: `99ec9c4`
-- Git status at backlog seeding start: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes for backlog tasks 18 through 22: `docs/operations/aws-oidc-setup.md`, `docs/operations/cdc-production-onboarding.md`, `docs/customer-discovery-tracker.md`, `docs/pricing-validation-plan.md`, `docs/perf/public-production-hardware-benchmark-plan.md`, `docs/operations/external-pen-test-attestation-handoff.md`, `docs/security-audit.md`, `AGENT_STATE.md`, and `BACKLOG.md` only.
-- File count: `git ls-files` reports 667 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
+- Manual release-readiness sync base HEAD: `3f88d74`
+- Git status at manual sync start: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
+- Current expected worktree changes for this manual sync: `README.md`, `docs/release-readiness.md`, `docs/audit-history.md`, `docs/glossary.md`, `docs/decisions/0004-v1-publication.md`, `BACKLOG.md`, and `AGENT_STATE.md` only.
+- File count: `git ls-files` reports 669 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
 
 ## Available Runtime
 
@@ -26,6 +26,12 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Last Verified Gates
 
+- Manual release-readiness sync verification on 2026-05-04:
+  - `git rev-parse --short HEAD`: `3f88d74` at sync start.
+  - `git diff --check`: passed.
+  - `python -m pytest tests/unit -p no:schemathesis`: passed with 456 tests in 101.39s after the live-doc consistency updates.
+  - Stale live-doc search excluding `docs/plans/codex-archive/**` and dated audit snapshots: only the guarded-autopilot example pattern remains.
+  - `scripts/autopilot.ps1`: intentionally not run for the manual no-autopilot continuation.
 - `git status --short --branch -- docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md AGENT_STATE.md BACKLOG.md`: during task 17 final check, expected changes are `AGENT_STATE.md`, `BACKLOG.md`, and `docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md`.
 - `git rev-parse --short HEAD`: `7900754`.
 - `Get-Command pi`: available.
@@ -68,4 +74,4 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 Backlog tasks 0 through 17 are complete. Task 18 is blocked on external AWS account inputs after recording the AWS OIDC Terraform apply readiness handoff in `docs/operations/aws-oidc-setup.md`. Task 19 is blocked on external production CDC source decisions after recording the decision handoff in `docs/operations/cdc-production-onboarding.md`. Task 20 is blocked on absent real PMF outreach, interview, pricing/WTP, and first-paying-customer evidence after updating `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. Task 21 is blocked on absent approved production-hardware access, budget, operator-run results, and publication approval after adding `docs/perf/public-production-hardware-benchmark-plan.md`. Task 22 is blocked on absent external pen-test report or attestation after adding `docs/operations/external-pen-test-attestation-handoff.md` and updating `docs/security-audit.md`.
 
-No next bounded safe backlog item is currently queued. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run. Do not convert blocked external gates into completed work without real operator-provided evidence.
+Next bounded safe backlog item for the next session: task 23, create an external gate evidence intake checklist. Keep the work documentation-only, do not access external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.

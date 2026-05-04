@@ -260,7 +260,7 @@ Forbidden scope:
 
 ## 11. Document Guarded Autopilot Verification Evidence Capture
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -271,6 +271,29 @@ Acceptance criteria:
 - Add a concise local-operations note for capturing verification evidence from guarded autopilot runs.
 - Distinguish required gate output, advisory dry-run output, generated logs, and state updates.
 - Include exact local commands for collecting evidence without deleting, regenerating, committing, pushing, publishing, deploying, or reading secrets.
+- Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, and product-code work out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, or paid service changes.
+
+## 12. Document Guarded Autopilot Handoff Refresh Checklist
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for refreshing guarded autopilot handoff state after a completed run.
+- Include exact local commands to compare `.autopilot/NEXT_TASK.md`, `.autopilot/allowed-paths.txt`, current git status, and the next backlog item without deleting, regenerating, committing, pushing, publishing, deploying, or reading secrets.
+- Explain what belongs in project state files versus ignored `.autopilot/` runtime files.
 - Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, and product-code work out of scope.
 
 Required verification:

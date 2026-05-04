@@ -419,3 +419,127 @@ Required verification:
 Forbidden scope:
 - No source code changes.
 - No cleanup, revert, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
+
+## 18. Prepare AWS OIDC Terraform Apply Readiness Handoff
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `docs/release-readiness.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Summarize the current AWS OIDC Terraform apply blockers from `docs/release-readiness.md` and `docs/codex-tasks/2026-05-01/T32-post-release-external-gates.md`: `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs remain disabled, real environment tfvars are absent, and this workstation has no AWS credentials.
+- Create or update a bounded operator handoff that lists the external inputs required before a real Terraform apply can be enabled.
+- If the external AWS role ARN, tfvars, and operator approval are still absent, mark this item blocked in `BACKLOG.md` and `AGENT_STATE.md` instead of enabling apply.
+- Keep the handoff limited to documentation and backlog/state updates.
+
+Required verification:
+- `git status --short --branch`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No Terraform init, plan, apply, workflow enablement, AWS CLI, AWS account, secret, credential, deploy, publish, scheduler install, push, paid service, production data, or product-code changes.
+
+## 19. Record Production CDC Source Onboarding Decision Handoff
+
+Status: Pending.
+
+Allowed files/directories:
+- `docs/operations/cdc-production-onboarding.md`
+- `docs/release-readiness.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Check the production CDC onboarding decision record for source owner, secret owner, table scope, private network path, monitoring owner, and rollback owner.
+- If those external decisions are not provided in the task prompt, record the missing inputs and mark this item blocked in `BACKLOG.md` and `AGENT_STATE.md`.
+- If the decisions are provided, capture them in the existing onboarding handoff format without enabling production CDC.
+- Preserve the current local/demo and Kubernetes-shaped CDC state as documentation only.
+
+Required verification:
+- `git status --short --branch`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No production CDC enablement, connector registration, network changes, secret creation, credential access, external account work, deploy, publish, Terraform, scheduler install, push, paid service, production data, or product-code changes.
+
+## 20. Prepare Phase 1 PMF Outreach And Pricing Evidence Handoff
+
+Status: Pending.
+
+Allowed files/directories:
+- `docs/customer-discovery-tracker.md`
+- `docs/pricing-validation-plan.md`
+- `docs/customer-discovery-questions.md`
+- `docs/release-readiness.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Summarize the open Phase 1 PMF evidence gaps: actual outreach sends, replies, scheduled calls, completed interviews, PMF scoring, pricing/WTP evidence, and first paying-customer signals.
+- If no founder-provided outreach or interview evidence is present in the task prompt, mark this item blocked on external founder/customer input rather than inventing evidence.
+- If evidence is provided, append it to the existing tracker/pricing evidence format and update the next review step.
+- Keep the handoff focused on evidence capture and state updates.
+
+Required verification:
+- `git status --short --branch`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No customer outreach, email sending, scraping, CRM changes, external account access, paid API usage, payment collection, deploy, publish, Terraform, scheduler install, push, production data, or product-code changes.
+
+## 21. Define Public Benchmark Production-Hardware Plan
+
+Status: Pending.
+
+Allowed files/directories:
+- `docs/perf/`
+- `docs/operations/`
+- `docs/release-readiness.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Define the public benchmark plan for production hardware, including the target `c8g.4xlarge+` class, prerequisites, benchmark commands, result artifacts, and publication evidence expected after an operator-run benchmark.
+- State that the checked-in single-node baseline remains the only release evidence until production hardware results are provided.
+- If no approved production-hardware access, budget, and operator-run evidence are provided, mark this item blocked in `BACKLOG.md` and `AGENT_STATE.md`.
+- Keep the plan reproducible from local documentation without provisioning infrastructure.
+
+Required verification:
+- `git status --short --branch`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No cloud provisioning, paid hardware use, live load testing, benchmark publication, external account access, deploy, publish, Terraform, scheduler install, push, production data, or product-code changes.
+
+## 22. Prepare External Pen-Test Attestation Handoff
+
+Status: Pending.
+
+Allowed files/directories:
+- `docs/security-audit.md`
+- `docs/operations/`
+- `docs/release-readiness.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Summarize the external pen-test attestation gap from `docs/release-readiness.md` and `docs/audit-history.md`.
+- Create or update a handoff checklist for tester identity, test scope, report date, severity summary, remediation mapping, retest status, and attestation artifact location.
+- If no external pen-test report or attestation is provided, mark this item blocked in `BACKLOG.md` and `AGENT_STATE.md` rather than claiming completion.
+- Preserve the existing internal security audit evidence as distinct from third-party attestation.
+
+Required verification:
+- `git status --short --branch`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No external scanning, penetration testing, vulnerability exploitation, credential access, paid service use, external account work, deploy, publish, Terraform, scheduler install, push, production data, or product-code changes.

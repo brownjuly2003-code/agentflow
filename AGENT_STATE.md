@@ -6,10 +6,10 @@ Updated: 2026-05-04
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
-- Task 17 base HEAD: `7900754`
-- Git status at task 17 start: clean for the allowed task paths on `main`; targeted status still reports access-denied warnings for `C:\Users\uedom\.config\git\ignore`.
-- Current expected worktree changes: `docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md`, `AGENT_STATE.md`, and `BACKLOG.md` only, to complete backlog task 17.
-- File count: `git ls-files` reports 666 tracked files. Existing build artifacts are 279053 bytes. Frontend bundle size and i18n key count are not applicable to this docs-only task.
+- Post-release backlog seeding base HEAD: `99ec9c4`
+- Git status at backlog seeding start: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
+- Current expected worktree changes for this backlog-seeding task: `AGENT_STATE.md` and `BACKLOG.md` only.
+- File count: `git ls-files` reports 667 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
 
 ## Available Runtime
 
@@ -66,4 +66,6 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Next Step
 
-Backlog tasks 0 through 17 are complete. No next bounded safe backlog item is currently queued. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.
+Backlog tasks 0 through 17 are complete. Tasks 18 through 22 now seed the remaining project-level post-release external gates. The next bounded safe backlog item is task 18, "Prepare AWS OIDC Terraform Apply Readiness Handoff."
+
+For task 18, guarded autopilot may only prepare documentation/backlog/state handoff updates under the task's allowed paths. If the external AWS role ARN, real environment tfvars, and explicit operator approval are still absent, mark task 18 blocked instead of enabling or running Terraform. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.

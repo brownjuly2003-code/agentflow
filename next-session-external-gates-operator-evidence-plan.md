@@ -7,9 +7,9 @@ Advance backlog tasks 18-22 only when real owner-provided evidence is available,
 ## Starting State
 
 - Branch: `main`
-- Baseline HEAD: `001694b`
+- Baseline HEAD: `95d387e`
 - Tracked files at handoff: `672`
-- Current manual work already added access-triage notes and next operator packets for tasks 18-22.
+- Current manual work is committed in `95d387e`: access-triage notes and next operator packets for tasks 18-22 are checked in.
 - Do not use autopilot. Do not push unless explicitly asked.
 
 ## Tasks

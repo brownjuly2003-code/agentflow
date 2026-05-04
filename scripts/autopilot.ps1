@@ -250,13 +250,31 @@ function Invoke-Planner {
     Write-PlannerPrompt
     Write-Log "RUN: pi planner"
     Push-Location $RepoRoot
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
+        $ErrorActionPreference = "Continue"
         & pi --mode text --print --no-session --tools read,grep,find,ls,bash,write,edit "@$PlannerPromptPath" 2>&1 | Tee-Object -FilePath $LogPath -Append
-        if ($LASTEXITCODE -ne 0) {
-            Stop-Blocked "pi planner failed with exit code $LASTEXITCODE"
-        }
+        $plannerExitCode = $LASTEXITCODE
     } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
         Pop-Location
+    }
+    if ($plannerExitCode -ne 0) {
+        Write-Log "pi planner failed with exit code $plannerExitCode; falling back to codex planner."
+        Write-Log "RUN: codex planner"
+        Push-Location $RepoRoot
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            Get-Content -Raw $PlannerPromptPath | codex exec --cd $RepoRoot --sandbox workspace-write --ask-for-approval never - 2>&1 | Tee-Object -FilePath $LogPath -Append
+            $plannerExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+            Pop-Location
+        }
+        if ($plannerExitCode -ne 0) {
+            Stop-Blocked "codex planner failed with exit code $plannerExitCode"
+        }
     }
     if (Test-Path $BlockedPath) {
         Write-Log "Planner wrote BLOCKED.md."

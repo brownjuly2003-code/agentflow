@@ -326,3 +326,95 @@ Required verification:
 Forbidden scope:
 - No source code changes.
 - No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, or paid service changes.
+
+## 14. Document Guarded Autopilot Self-Commit Loop
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for running `scripts/autopilot.ps1 -Commit` as the default guarded backlog loop.
+- Explain the clean-worktree precondition, explicit `commit allowed: yes` gate, allowed-path validation, and why `git push` remains outside the loop.
+- Include exact local commands for dry-run, non-dry commit mode, status inspection, and post-run verification without deploy, publish, Terraform, scheduler install, external account, paid API, cleanup, revert, or secret operations.
+- Keep product-code work out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
+
+## 15. Document Guarded Autopilot Planner Fallback Handling
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for interpreting planner fallback from `pi` to `codex`.
+- Document that a `pi` authentication failure is a local tooling issue, not permission to inspect or print API keys.
+- Include exact read-only commands to inspect `.autopilot/logs/`, `NEXT_TASK.md`, `allowed-paths.txt`, and `BLOCKED.md` after a fallback or planner failure.
+- Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, push, and product-code work out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
+
+## 16. Document Guarded Autopilot Push Boundary
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note that separates local autopilot commits from any remote push operation.
+- Include exact read-only commands to inspect ahead/behind state, recent local commits, and changed files without pushing, force-pushing, fetching secrets, deploying, publishing, or changing remotes.
+- Explain when to stop and ask for an explicit operator decision before `git push`.
+- Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, and product-code work out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
+
+## 17. Document Guarded Autopilot Scheduler Opt-In Boundary
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note explaining that continuous unattended autopilot requires an explicit scheduler opt-in.
+- Include exact read-only commands to inspect whether the scheduled task exists and how to preview `scripts/install-autopilot-task.ps1` without installing it.
+- Explain that scheduler install, credentials, secrets, external accounts, deploy, publish, Terraform, cleanup, revert, push, and product-code work require a separate explicit operator task.
+- Keep scheduler installation itself out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.

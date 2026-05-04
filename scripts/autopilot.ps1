@@ -82,7 +82,7 @@ function Invoke-RepoCommand {
 function Get-ChangedFiles {
     Push-Location $RepoRoot
     try {
-        $lines = git status --porcelain=v1
+        $lines = @(git status --porcelain=v1)
     } finally {
         Pop-Location
     }
@@ -137,7 +137,7 @@ function Test-PathAllowed {
 
 function Assert-AllowedChanges {
     $allowed = Read-AllowedPaths
-    $changed = Get-ChangedFiles
+    $changed = @(Get-ChangedFiles)
     foreach ($file in $changed) {
         if (-not (Test-PathAllowed -ChangedPath $file -AllowedPaths $allowed)) {
             Stop-Blocked "Changed file is outside allowed paths: $file"
@@ -367,19 +367,19 @@ try {
         exit 1
     }
 
-    $initialChanges = Get-ChangedFiles
+    $initialChanges = @(Get-ChangedFiles)
     if ($initialChanges.Count -gt 0) {
         Stop-Blocked "Working tree is not clean before autopilot: $($initialChanges -join ', ')"
     }
 
     Invoke-Planner
-    $plannerChanges = Get-ChangedFiles
+    $plannerChanges = @(Get-ChangedFiles)
     if ($plannerChanges.Count -gt 0) {
         Stop-Blocked "Planner changed tracked files before execution: $($plannerChanges -join ', ')"
     }
 
     Invoke-Executor
-    $changed = Assert-AllowedChanges
+    $changed = @(Assert-AllowedChanges)
     Run-Gates -ChangedFiles $changed
     Invoke-ExplicitCommit -ChangedFiles $changed
     Write-Log "Autopilot run finished."

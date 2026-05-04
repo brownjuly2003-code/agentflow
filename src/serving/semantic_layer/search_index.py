@@ -330,6 +330,8 @@ class SearchIndex:
         return tokens
 
     def _normalize_token(self, token: str) -> str:
+        if token in ("status", "statuses"):
+            return "status"
         if len(token) > 4 and token.endswith("ies"):
             token = f"{token[:-3]}y"
         elif len(token) > 3 and token.endswith("s") and not token.endswith("ss"):

@@ -237,7 +237,7 @@ Forbidden scope:
 
 ## 10. Document Guarded Autopilot Runtime Artifact Inventory
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -257,3 +257,26 @@ Required verification:
 Forbidden scope:
 - No source code changes.
 - No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, or external account changes.
+
+## 11. Document Guarded Autopilot Verification Evidence Capture
+
+Status: Ready.
+
+Allowed files/directories:
+- `docs/operations/`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Add a concise local-operations note for capturing verification evidence from guarded autopilot runs.
+- Distinguish required gate output, advisory dry-run output, generated logs, and state updates.
+- Include exact local commands for collecting evidence without deleting, regenerating, committing, pushing, publishing, deploying, or reading secrets.
+- Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, and product-code work out of scope.
+
+Required verification:
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No source code changes.
+- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, or paid service changes.

@@ -375,7 +375,7 @@ Forbidden scope:
 
 ## 16. Document Guarded Autopilot Push Boundary
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`

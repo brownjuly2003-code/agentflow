@@ -6,17 +6,17 @@ Updated: 2026-05-04
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
-- Task 16 base HEAD: `3d6b298`
-- Git status at task 16 start: clean for the allowed task paths on `main`; targeted status still reports access-denied warnings for `C:\Users\uedom\.config\git\ignore`.
-- Current expected worktree changes: `docs/operations/guarded-autopilot-push-boundary.md`, `AGENT_STATE.md`, and `BACKLOG.md` only, to complete backlog task 16 and keep task 17 as the next safe item.
-- File count: recursive file count reported 46529 visible files with access-denied warnings for old pytest/temp directories. Frontend bundle size and i18n key count are not applicable to this repo.
+- Task 17 base HEAD: `7900754`
+- Git status at task 17 start: clean for the allowed task paths on `main`; targeted status still reports access-denied warnings for `C:\Users\uedom\.config\git\ignore`.
+- Current expected worktree changes: `docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md`, `AGENT_STATE.md`, and `BACKLOG.md` only, to complete backlog task 17.
+- File count: `git ls-files` reports 666 tracked files. Existing build artifacts are 279053 bytes. Frontend bundle size and i18n key count are not applicable to this docs-only task.
 
 ## Available Runtime
 
 - pi CLI: available at `C:\Users\uedom\AppData\Roaming\npm\pi.ps1`
 - codex CLI: available at `C:\Users\uedom\AppData\Roaming\npm\codex.ps1`
 - Runner: `scripts/autopilot.ps1`
-- Scheduler: not installed; opt-in only through `scripts/install-autopilot-task.ps1`
+- Scheduler: opt-in only through `scripts/install-autopilot-task.ps1`; preview without `-Install` must not modify scheduler state.
 
 ## Operating Mode
 
@@ -26,13 +26,13 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Last Verified Gates
 
-- `git status --short --branch -- docs/operations/guarded-autopilot-push-boundary.md AGENT_STATE.md BACKLOG.md`: during task 16 final check, expected changes are `AGENT_STATE.md`, `BACKLOG.md`, and `docs/operations/guarded-autopilot-push-boundary.md`.
-- `git rev-parse --short HEAD`: `3d6b298`.
+- `git status --short --branch -- docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md AGENT_STATE.md BACKLOG.md`: during task 17 final check, expected changes are `AGENT_STATE.md`, `BACKLOG.md`, and `docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md`.
+- `git rev-parse --short HEAD`: `7900754`.
 - `Get-Command pi`: available.
 - `Get-Command codex`: available.
-- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`: passed during task 16 verification; dry-run reported the PAUSE and BLOCKED protocols OK, noted `.autopilot/allowed-paths.txt` is required before execution, confirmed `pi` and `codex` are available, and ran `git status --short -uno` plus `git diff --check`.
-- `powershell -ExecutionPolicy Bypass -File scripts/install-autopilot-task.ps1`: preview passed; scheduler was not installed.
-- `git diff --check`: passed during task 16 verification.
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`: passed during task 17 verification; dry-run reported the PAUSE and BLOCKED protocols OK, noted `.autopilot/allowed-paths.txt` is required before execution, confirmed `pi` and `codex` are available, and ran `git status --short -uno` plus `git diff --check`.
+- `powershell -ExecutionPolicy Bypass -File scripts/install-autopilot-task.ps1`: preview passed during task 16; scheduler was not installed.
+- `git diff --check`: passed during task 17 verification.
 - `python -m pytest tests/unit -p no:schemathesis`: passed with 454 tests.
 - `python -m ruff check src/ tests/`: passed.
 - `python -m ruff format --check src/ tests/`: passed.
@@ -66,4 +66,4 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Next Step
 
-Backlog tasks 0 through 16 are complete. Task 17 is the next bounded safe item: document guarded autopilot scheduler opt-in boundary. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.
+Backlog tasks 0 through 17 are complete. No next bounded safe backlog item is currently queued. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.

@@ -398,7 +398,7 @@ Forbidden scope:
 
 ## 17. Document Guarded Autopilot Scheduler Opt-In Boundary
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`

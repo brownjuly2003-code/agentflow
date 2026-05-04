@@ -352,7 +352,7 @@ Forbidden scope:
 
 ## 15. Document Guarded Autopilot Planner Fallback Handling
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`

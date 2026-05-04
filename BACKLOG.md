@@ -329,7 +329,7 @@ Forbidden scope:
 
 ## 14. Document Guarded Autopilot Self-Commit Loop
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`

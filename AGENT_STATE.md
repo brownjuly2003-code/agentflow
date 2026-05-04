@@ -6,10 +6,10 @@ Updated: 2026-05-04
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
-- Task 13 base HEAD: `cc898c3`
-- Git status at task 13 start: clean for the allowed task paths on `main`; full-repo status still reports access-denied warnings for old pytest/temp directories and `C:\Users\uedom\.config\git\ignore`.
-- Current expected worktree changes: `docs/operations/guarded-autopilot-stop-conditions.md`, `AGENT_STATE.md`, and `BACKLOG.md` only, to complete backlog task 13, keep task 14 as the next item, and keep remaining docs-only Ready tasks compatible with the explicit local self-commit gate.
-- File count: `git ls-files` reported 662 tracked files at task 13 start; `rg --files` reported 635 visible files with access-denied warnings for old pytest/temp directories; `docs/operations/` contained 14 files before adding the stop-conditions note. Frontend bundle size and i18n key count are not applicable to this repo.
+- Task 14 base HEAD: `41d3063`
+- Git status at task 14 start: clean for the allowed task paths on `main`; full-repo status still reports access-denied warnings for old pytest/temp directories and `C:\Users\uedom\.config\git\ignore`.
+- Current expected worktree changes: `docs/operations/guarded-autopilot-self-commit-loop.md`, `AGENT_STATE.md`, and `BACKLOG.md` only, to complete backlog task 14, keep task 15 as the next item, and keep remaining docs-only Ready tasks compatible with the explicit local self-commit gate.
+- File count: `git ls-files` reported 663 tracked files at task 14 start; `rg --files` reported 636 visible files with access-denied warnings for old pytest/temp directories; `docs/operations/` contained 14 tracked files before adding the self-commit loop note. Frontend bundle size and i18n key count are not applicable to this repo.
 
 ## Available Runtime
 
@@ -26,13 +26,13 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Last Verified Gates
 
-- `git status --short --branch -- docs/operations AGENT_STATE.md BACKLOG.md`: during task 13 final check, expected changes are `AGENT_STATE.md`, `BACKLOG.md`, and `docs/operations/guarded-autopilot-stop-conditions.md`.
-- `git rev-parse --short HEAD`: `cc898c3`.
+- `git status --short --branch -- docs/operations/guarded-autopilot-self-commit-loop.md AGENT_STATE.md BACKLOG.md`: during task 14 final check, expected changes are `AGENT_STATE.md`, `BACKLOG.md`, and `docs/operations/guarded-autopilot-self-commit-loop.md`.
+- `git rev-parse --short HEAD`: `41d3063`.
 - `Get-Command pi`: available.
 - `Get-Command codex`: available.
-- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`: passed during task 13 verification; dry-run reported the PAUSE and BLOCKED protocols OK, noted `.autopilot/allowed-paths.txt` is required before execution, confirmed `pi` and `codex` are available, and ran `git diff --check`.
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`: passed during task 14 verification; dry-run reported the PAUSE and BLOCKED protocols OK, noted `.autopilot/allowed-paths.txt` is required before execution, confirmed `pi` and `codex` are available, and ran `git diff --check`.
 - `powershell -ExecutionPolicy Bypass -File scripts/install-autopilot-task.ps1`: preview passed; scheduler was not installed.
-- `git diff --check`: passed during task 13 verification.
+- `git diff --check`: passed during task 14 verification.
 - `python -m pytest tests/unit -p no:schemathesis`: passed with 454 tests.
 - `python -m ruff check src/ tests/`: passed.
 - `python -m ruff format --check src/ tests/`: passed.
@@ -66,4 +66,4 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 ## Next Step
 
-Backlog tasks 0 through 13 are complete. Task 14 is the next bounded safe item: document the guarded autopilot self-commit loop. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.
+Backlog tasks 0 through 14 are complete. Task 15 is the next bounded safe item: document guarded autopilot planner fallback handling. Keep `.autopilot/` as local runtime state, and run `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun` before any guarded non-dry run.

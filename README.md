@@ -120,6 +120,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 - [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions, evidence gates, and current real-evidence gap
 - [AWS OIDC Setup](docs/operations/aws-oidc-setup.md) - Terraform apply readiness handoff
 - [Production CDC Source Onboarding](docs/operations/cdc-production-onboarding.md) - production CDC decision record and no-go gates
+- [External Gate Evidence Intake Checklist](docs/operations/external-gate-evidence-intake.md) - required owner evidence before blocked external gates can close
 - [Public Production-Hardware Benchmark Plan](docs/perf/public-production-hardware-benchmark-plan.md) - benchmark evidence plan for `c8g.4xlarge+`
 - [External Pen-Test Attestation Handoff](docs/operations/external-pen-test-attestation-handoff.md) - third-party pen-test evidence checklist
 - [Audit History](docs/audit-history.md) - baseline-to-release remediation trail

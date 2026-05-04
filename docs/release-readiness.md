@@ -194,6 +194,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
   - v1.1.0 release: https://github.com/brownjuly2003-code/agentflow/releases/tag/v1.1.0
 - Security triage: `.artifacts/security/bandit-triage-2026-04-17.md`
 - Post-release external-gate handoffs:
+  - External gate evidence intake checklist: `docs/operations/external-gate-evidence-intake.md`
   - AWS OIDC Terraform apply readiness: `docs/operations/aws-oidc-setup.md`
   - Production CDC source onboarding: `docs/operations/cdc-production-onboarding.md`
   - Phase 1 PMF evidence: `docs/customer-discovery-tracker.md`
@@ -248,6 +249,7 @@ npm follow-up note:
 **v1.1.0 release line prepared; post-release local gates recorded.**
 
 AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. Do not treat AWS Terraform apply, production CDC source onboarding, Phase 1 PMF evidence, public production-hardware benchmarks, or external pen-test attestation as complete until the unchecked gates above are closed. Remaining open items:
+- External gate evidence intake: use [External Gate Evidence Intake Checklist](operations/external-gate-evidence-intake.md) before marking any blocked external gate complete
 - Phase 1 PMF: real customer discovery and pricing validation evidence; current tracker content is synthetic/modelled only, with real evidence count still `0`
 - AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml` only after explicit operator approval
 - Revoke the legacy npm `NPM_TOKEN` after the first successful trusted-publish run for `@yuliaedomskikh/agentflow-client`

@@ -306,7 +306,7 @@ Forbidden scope:
 
 ## 13. Document Guarded Autopilot Stop Conditions
 
-Status: Ready.
+Status: Done.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -363,7 +363,7 @@ Acceptance criteria:
 - Add a concise local-operations note for interpreting planner fallback from `pi` to `codex`.
 - Document that a `pi` authentication failure is a local tooling issue, not permission to inspect or print API keys.
 - Include exact read-only commands to inspect `.autopilot/logs/`, `NEXT_TASK.md`, `allowed-paths.txt`, and `BLOCKED.md` after a fallback or planner failure.
-- Keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, push, and product-code work out of scope.
+- Allow local `scripts/autopilot.ps1 -Commit` self-commit only through the explicit `commit allowed: yes` gate; keep deploy, publish, Terraform, secret, scheduler install, external account, paid API, cleanup, revert, push, and product-code work out of scope.
 
 Required verification:
 - `git diff --check`
@@ -371,7 +371,7 @@ Required verification:
 
 Forbidden scope:
 - No source code changes.
-- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
+- No cleanup, revert, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
 
 ## 16. Document Guarded Autopilot Push Boundary
 
@@ -409,6 +409,7 @@ Acceptance criteria:
 - Add a concise local-operations note explaining that continuous unattended autopilot requires an explicit scheduler opt-in.
 - Include exact read-only commands to inspect whether the scheduled task exists and how to preview `scripts/install-autopilot-task.ps1` without installing it.
 - Explain that scheduler install, credentials, secrets, external accounts, deploy, publish, Terraform, cleanup, revert, push, and product-code work require a separate explicit operator task.
+- Allow local `scripts/autopilot.ps1 -Commit` self-commit only through the explicit `commit allowed: yes` gate.
 - Keep scheduler installation itself out of scope.
 
 Required verification:
@@ -417,4 +418,4 @@ Required verification:
 
 Forbidden scope:
 - No source code changes.
-- No cleanup, revert, commit, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
+- No cleanup, revert, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.

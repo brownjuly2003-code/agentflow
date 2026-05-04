@@ -150,9 +150,11 @@ PMF evidence.
   Batch B remains at `0`.
 - [x] Run `git diff --check` for the current docs-only pass.
   Verify: whitespace check passes after the tracker and handoff edits.
-- [ ] Run verification before any future commit or push.
-  Verify: `git diff --check`, `git status --short --untracked-files=no`, backend
-  pytest, TS unit tests, and TS typecheck pass; use explicit pathspecs only.
+- [x] Run verification before any future commit or push.
+  Verify: `git diff --check`, `git status --short --untracked-files=no`,
+  backend pytest, TS unit tests, and TS typecheck pass; use explicit pathspecs
+  only. Completed in the 2026-05-04 no-autopilot pass; no commit or push was
+  performed.
 
 ## Done When
 

@@ -24,6 +24,23 @@ primitives only. The production decision record is still missing:
 - Monitoring owner for connector lag, failures, and dead letters.
 - Rollback owner authorized to pause or delete the connector.
 
+Access triage on 2026-05-04 found no approved production-source inputs in the
+repo or task prompt. `kubectl` is present through Docker Desktop tooling, but
+there is no approved production context, source hostname, private network path,
+existing Kubernetes Secret, monitoring owner, or rollback owner to inspect.
+No production connector was created, paused, deleted, or queried.
+
+Next operator packet to unblock review:
+
+- Completed source-owner, secret-owner, platform-owner, and security-owner
+  approval record.
+- Source engine/version, hostname/port, database name, explicit table allowlist,
+  data classification, and snapshot policy.
+- Private network path proof and existing Kubernetes Secret name/namespace; do
+  not include credential values.
+- Monitoring owner, rollback owner, first-run connector status, topic list,
+  redacted normalized event, and lag/dead-letter evidence.
+
 Until those values are supplied and approved outside the repo, keep production
 CDC disabled and treat this runbook as an operator handoff only.
 

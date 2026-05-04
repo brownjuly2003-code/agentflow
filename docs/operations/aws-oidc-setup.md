@@ -17,6 +17,24 @@ Confirmed local/repository evidence:
 - No AWS credentials are configured on the verification workstation.
 - Terraform config sanity has passed through `hashicorp/terraform:1.13.5` with `init -backend=false` and `validate`; this is not evidence of a real apply.
 
+Access triage on 2026-05-04 confirmed the blocker is still external: GitHub CLI
+is authenticated for repository inspection, but AWS CLI and Terraform CLI are
+not available in `PATH`; `gh variable list` still reports only `AWS_REGION`;
+the workflow still has both Terraform jobs guarded with `if: false`; and only
+example tfvars files exist locally. No AWS account bootstrap, role ARN, real
+tfvars, CloudTrail OIDC proof, first apply run, reviewer, or rollback owner was
+available to record.
+
+Next operator packet to unblock review:
+
+- Secure ticket or evidence folder with AWS account owner and bootstrap
+  operator.
+- Non-secret `AWS_TERRAFORM_ROLE_ARN` value and repo-variable proof.
+- Secure staging/prod tfvars ownership record; do not commit tfvars.
+- Explicit approval to remove the workflow-level `if: false` guard.
+- First apply environment, reviewer, rollback owner, run URL or transcript, and
+  redacted CloudTrail `AssumeRoleWithWebIdentity` proof.
+
 Do not enable the workflow or run a real Terraform apply until an operator
 provides all external inputs:
 

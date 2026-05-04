@@ -9,6 +9,20 @@ The repository contains internal security audit evidence, CI security scan
 evidence, and audit-closure history. Those artifacts are not a substitute for a
 third-party penetration test attestation.
 
+Access triage on 2026-05-04 found no external testing firm, named independent
+tester, report artifact, signed attestation, scope, test window, severity
+summary, remediation mapping, retest status, or attestation owner in the repo or
+task prompt. No external scan, exploitation, or paid security service was run.
+
+Next operator packet to unblock review:
+
+- External tester identity, non-secret contact/procurement reference, and
+  attestation owner.
+- Test scope, test window, method, exclusions, and customer-facing claim scope.
+- Redacted report or signed attestation with severity summary.
+- Remediation mapping for critical/high findings, retest status, and any
+  accepted residual-risk owner.
+
 ## Required Attestation Record
 
 Do not claim external pen-test completion until every field below is supplied by

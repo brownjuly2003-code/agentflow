@@ -17,6 +17,21 @@ replaceable cost, natural value metric, paid pilot shape, pricing risk, or first
 paying customer intent. Keep pricing uncommitted until real founder/customer
 evidence is supplied outside the repo and recorded in the discovery tracker.
 
+Access triage on 2026-05-04 found no budget-owner notes, WTP record, pilot
+proposal, LOI, invoice, procurement artifact, or first-paying-customer evidence
+to review. Do not add public pricing, tiers, or sales collateral from modeled
+material.
+
+Next operator packet to unblock review:
+
+- Pricing evidence owner and review owner.
+- Redacted interview notes that name budget owner, replaceable cost, natural
+  value metric reaction, pilot shape, and pricing risk.
+- Artifact link for paid-pilot intent, procurement path, LOI, invoice, contract,
+  or explicit buyer rejection.
+- Mapping back to the customer-discovery tracker row that produced the pricing
+  signal.
+
 ## Research Goal
 
 Validate whether AgentFlow should be packaged around agent-safe operational

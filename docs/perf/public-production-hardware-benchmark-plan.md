@@ -9,6 +9,23 @@ The checked-in single-node baseline remains the only release evidence until an
 operator runs the benchmark on approved production-class hardware and records
 the artifacts listed below.
 
+Access triage on 2026-05-04 found only historical local benchmark artifacts
+under `.artifacts/benchmark/`; no approved `c8g.4xlarge+` or equivalent host,
+budget owner, operator-run transcript, production-hardware JSON/report, host
+metadata, fixture-safety confirmation, or publication approval was available.
+No cloud instance was provisioned and no paid benchmark was run.
+
+Next operator packet to unblock review:
+
+- Benchmark owner, budget approval, instance class, region, OS image, lifecycle
+  owner, and commit SHA.
+- Fixture-safety confirmation that no production data, customer records, or
+  credentials were used.
+- Command transcript with exit codes plus JSON results, human-readable report,
+  logs, and host metadata.
+- Caveats for topology, warmup, noisy-neighbor risk, excluded endpoints, and
+  publication approval.
+
 ## Target Hardware
 
 Minimum target class: `c8g.4xlarge+` or an equivalent dedicated ARM64 or x86_64

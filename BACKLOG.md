@@ -425,7 +425,7 @@ Forbidden scope:
 Status: Blocked.
 
 Blocked reason:
-- External AWS inputs are still absent: `AWS_TERRAFORM_ROLE_ARN`, real staging/prod tfvars, AWS account bootstrap approval, and explicit workflow-enable approval. Handoff recorded in `docs/operations/aws-oidc-setup.md`.
+- External AWS inputs are still absent after 2026-05-04 access triage: `AWS_TERRAFORM_ROLE_ARN`, real staging/prod tfvars, AWS account bootstrap approval, OIDC proof, first apply evidence, and explicit workflow-enable approval. Handoff recorded in `docs/operations/aws-oidc-setup.md`.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -452,7 +452,7 @@ Forbidden scope:
 Status: Blocked.
 
 Blocked reason:
-- External production CDC decisions are still absent: source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, and rollback owner. Handoff recorded in `docs/operations/cdc-production-onboarding.md`.
+- External production CDC decisions are still absent after 2026-05-04 access triage: source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, and rollback owner. Handoff recorded in `docs/operations/cdc-production-onboarding.md`.
 
 Allowed files/directories:
 - `docs/operations/cdc-production-onboarding.md`
@@ -479,7 +479,7 @@ Forbidden scope:
 Status: Blocked.
 
 Blocked reason:
-- Real Phase 1 PMF evidence is still absent: no real outreach sends, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, or first-paying-customer signals. Handoff recorded in `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`.
+- Real Phase 1 PMF evidence is still absent after 2026-05-04 access triage: no approved outbound account/session, warm intro thread, CRM/calendar artifact, real outreach sends, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, or first-paying-customer signals. Handoff recorded in `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`.
 
 Allowed files/directories:
 - `docs/customer-discovery-tracker.md`
@@ -508,7 +508,7 @@ Forbidden scope:
 Status: Blocked.
 
 Blocked reason:
-- Production-hardware benchmark plan is documented, but approved `c8g.4xlarge+` access, budget, operator-run results, and publication approval are still absent. Handoff recorded in `docs/perf/public-production-hardware-benchmark-plan.md`.
+- Production-hardware benchmark plan is documented, but after 2026-05-04 access triage approved `c8g.4xlarge+` access, budget, operator-run results, fixture-safety confirmation, and publication approval are still absent. Handoff recorded in `docs/perf/public-production-hardware-benchmark-plan.md`.
 
 Allowed files/directories:
 - `docs/perf/`
@@ -536,7 +536,7 @@ Forbidden scope:
 Status: Blocked.
 
 Blocked reason:
-- No external pen-test report or attestation is present. Handoff checklist recorded in `docs/operations/external-pen-test-attestation-handoff.md`; `docs/security-audit.md` now keeps internal audit evidence distinct from third-party attestation.
+- No external pen-test report or attestation is present after 2026-05-04 access triage. Handoff checklist recorded in `docs/operations/external-pen-test-attestation-handoff.md`; `docs/security-audit.md` keeps internal audit evidence distinct from third-party attestation.
 
 Allowed files/directories:
 - `docs/security-audit.md`

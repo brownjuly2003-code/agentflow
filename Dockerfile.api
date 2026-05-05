@@ -1,3 +1,20 @@
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY pyproject.toml /build/pyproject.toml
+COPY README.md /build/README.md
+COPY LICENSE /build/LICENSE
+COPY CHANGELOG.md /build/CHANGELOG.md
+COPY requirements.txt /build/requirements.txt
+COPY src /build/src
+
+RUN pip install --no-cache-dir --upgrade pip build hatchling \
+    && python -m build --wheel --outdir /tmp/dist
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -5,17 +22,19 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-COPY pyproject.toml /app/pyproject.toml
-COPY README.md /app/README.md
 COPY requirements.txt /app/requirements.txt
-COPY src /app/src
 COPY config /app/config
+COPY --from=builder /tmp/dist /tmp/dist
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -e .[cloud] \
-    && pip install --no-cache-dir bcrypt PyYAML sqlglot
+    && wheel="$(find /tmp/dist -name '*.whl' -print -quit)" \
+    && pip install --no-cache-dir "${wheel}[cloud]" \
+    && pip install --no-cache-dir bcrypt PyYAML sqlglot \
+    && rm -rf /tmp/dist
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=3).read()" || exit 1
 
 CMD ["uvicorn", "src.serving.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

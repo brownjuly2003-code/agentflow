@@ -1,16 +1,16 @@
 # Agent State
 
-Updated: 2026-05-04
+Updated: 2026-05-05
 
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
 - Backlog correction base HEAD: `3080275`
-- Current resume HEAD: `001694b`
+- Current resume HEAD: `10bc3c7`
 - Git status at resume: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes for this manual plan/gate triage: `AGENT_STATE.md`, `BACKLOG.md`, `next-session-pmf-outreach-plan.md`, `next-session-external-gates-operator-evidence-plan.md`, and the task 18-22 handoff docs only.
-- File count: `git ls-files` reports 672 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
+- Current expected worktree changes for this manual no-autopilot audit remediation: `AGENT_STATE.md`, `next-session-external-gates-operator-evidence-plan.md`, `.dockerignore`, `Dockerfile.api`, `docker-compose.yml`, `helm/agentflow/values.yaml`, `src/serving/api/security.py`, `tests/unit/test_contract_dependencies.py`, `tests/unit/test_security.py`, `.bandit`, `pyproject.toml`, `tests/unit/test_security_tooling_policy.py`, `.github/workflows/security.yml`, `tests/unit/test_security_workflow.py`, `scripts/k8s_staging_up.sh`, `tests/unit/test_staging_rollback.py`, `src/quality/validators/schema_validator.py`, `tests/unit/test_typing_policy.py`, and `res/codex/`.
+- File count: `git ls-files` reports 673 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs-only task.
 
 ## Available Runtime
 
@@ -24,6 +24,8 @@ Updated: 2026-05-04
 Status: READY_WITH_GUARDRAILS
 
 The autopilot handoff files are project artifacts. `.autopilot/` is local runtime state and remains ignored. Do not run deploys, Terraform apply, production scripts, secret rotation, package publishing, paid external API calls, or live account operations.
+
+The 2026-05-05 closeout was interrupted by an explicit audit-remediation request. Current local work covers the first five locally verifiable Kimi audit fixes, Codex+Kimi synthesis saved under `res/codex/`, M1/M2 SQL static-analysis gate narrowing, L6 SBOM artifact generation in the security workflow, M7 staging rollback safety, and the first narrow M3 mypy strict slice for `src.quality.validators.*`. Tasks 18-22 stay blocked until real owner-provided evidence is supplied.
 
 ## Last Verified Gates
 
@@ -53,6 +55,105 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
   - Task 22 external pen-test: no third-party report, signed attestation, scope, severity summary, remediation map, retest status, or attestation owner was available; no external scanning or paid security service was run.
   - Each task handoff now includes a concise next operator packet describing the exact redacted owner-provided artifacts needed to unblock review.
   - Next-session task file written at `next-session-external-gates-operator-evidence-plan.md`.
+- Manual no-autopilot evidence recheck on 2026-05-05:
+  - `git rev-parse --short HEAD`: `10bc3c7`.
+  - `git ls-files`: 673 tracked files.
+  - `git status --short --branch`: clean tracked tree, `main...origin/main [ahead 21]`, with the known local access-denied warnings from old temp directories.
+  - Task 18 AWS OIDC remains blocked: `gh variable list` reports only `AWS_REGION`; AWS CLI and Terraform CLI are not available; real staging/prod tfvars are absent.
+  - Task 19 production CDC remains blocked: no approved production source owner packet or first-run evidence was available.
+  - Task 20 PMF/pricing remains blocked: no real CRM/email/calendar/interview/pricing/LOI/invoice/procurement evidence was available.
+  - Task 21 production benchmark remains blocked: no production-hardware artifacts or publication approval were available.
+  - Task 22 external pen-test remains blocked: no third-party report or attestation packet was available.
+  - Follow-up verification:
+    - `git diff --check`: passed.
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-continue-basetemp -o cache_dir=.tmp\codex-continue-cache`: passed with 755 passed, 4 skipped, and 104 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
+- Kimi audit five-point local remediation on 2026-05-05:
+  - Closed local audit items: Docker production install no longer uses editable root install; `.dockerignore` exists; MinIO images are pinned; Helm API image tag is `1.1.0`; request body size limit is enforced from the security policy.
+  - Red/green verification: `tests/unit/test_security.py::test_request_size_limit_blocks_oversized_bodies` failed before the middleware change with `404`, then passed after implementation with `1 passed`.
+  - Targeted verification:
+    - `python -m pytest tests/unit/test_security.py tests/unit/test_helm_values_contract.py -p no:schemathesis --basetemp .tmp\codex-audit-targeted-basetemp -o cache_dir=.tmp\codex-audit-targeted-cache`: passed with 19 tests.
+    - `docker compose config --quiet`: passed.
+    - `docker build -f Dockerfile.api -t agentflow-api:audit-check .`: passed after preserving the built wheel filename for extras install.
+    - `python -m ruff check src/ tests/`: passed.
+    - `python -m ruff format --check src/ tests/`: passed.
+    - `git diff --check`: passed.
+  - Full verification:
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-audit-five-full-basetemp -o cache_dir=.tmp\codex-audit-five-full-cache`: passed with 756 passed, 4 skipped, and 104 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
+- Codex+Kimi research synthesis and M1/M2 local remediation on 2026-05-05:
+  - Integrated Codex artifacts under `res/codex/` with Kimi artifacts under `res/kimi/`; synthesis saved at `res/codex/codex_kimi_audit_synthesis_05_05_26.md`.
+  - Closed local audit items: Ruff `S608` is no longer globally ignored, Bandit `B608` is no longer globally skipped, existing reviewed SQL construction is scoped through per-file Ruff ignores and inline Bandit `nosec B608` comments.
+  - Red/green verification: `python -m pytest tests/unit/test_security_tooling_policy.py -p no:schemathesis --basetemp .tmp\codex-m1m2-policy-red-basetemp -o cache_dir=.tmp\codex-m1m2-policy-red-cache` failed before the config change, then passed after removing the global suppressions.
+  - Focused verification:
+    - `python -m ruff check src sdk integrations --select S608 --output-format concise`: passed.
+    - `python -m ruff check src/ tests/`: passed.
+    - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-current.json`: passed with no new findings.
+    - `python -m pytest tests/unit/test_bandit_diff.py tests/unit/test_security_tooling_policy.py -p no:schemathesis --basetemp .tmp\codex-m1m2-bandit-basetemp -o cache_dir=.tmp\codex-m1m2-bandit-cache`: passed with 6 tests.
+  - Final verification:
+    - `python -m ruff check src/ tests/`: passed.
+    - `python -m ruff format --check src/ tests/`: passed with 213 files already formatted.
+    - `git diff --check`: passed.
+    - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-final.json`: passed with no new findings.
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-m1m2-final-full-basetemp -o cache_dir=.tmp\codex-m1m2-final-full-cache`: passed with 757 passed, 4 skipped, and 104 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
+- L6 SBOM artifact generation on 2026-05-05:
+  - Closed local audit item: `.github/workflows/security.yml` now generates `agentflow-api.cdx.json` in CycloneDX format from `agentflow-api:security-scan` and uploads it as `agentflow-api-sbom-cyclonedx`.
+  - Red/green verification: `python -m pytest tests/unit/test_security_workflow.py -p no:schemathesis --basetemp .tmp\codex-l6-sbom-red-basetemp -o cache_dir=.tmp\codex-l6-sbom-red-cache` failed before the workflow change, then the targeted test passed after implementation.
+  - Targeted verification:
+    - `python -m pytest tests/unit/test_security_workflow.py -p no:schemathesis --basetemp .tmp\codex-l6-sbom-targeted-basetemp -o cache_dir=.tmp\codex-l6-sbom-targeted-cache`: passed with 1 test.
+    - `python -m ruff check tests/unit/test_security_workflow.py`: passed.
+    - `python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/security.yml').read_text(encoding='utf-8')); print('security workflow yaml ok')"`: passed.
+  - Final verification:
+    - `python -m ruff check src/ tests/`: passed.
+    - `python -m ruff format --check src/ tests/`: passed with 214 files already formatted.
+    - `python -m pytest tests/unit/test_security_workflow.py tests/unit/test_security_tooling_policy.py tests/unit/test_bandit_diff.py -p no:schemathesis --basetemp .tmp\codex-l6-final-targeted-basetemp -o cache_dir=.tmp\codex-l6-final-targeted-cache`: passed with 7 tests.
+    - `python -c "import pathlib, yaml; [yaml.safe_load(path.read_text(encoding='utf-8')) for path in pathlib.Path('.github/workflows').glob('*.yml')]; print('workflow yaml ok')"`: passed.
+    - `git diff --check`: passed.
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-l6-final-full-basetemp -o cache_dir=.tmp\codex-l6-final-full-cache`: passed with 758 passed, 4 skipped, and 104 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
+    - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-final.json`: passed with no new findings.
+- M3 first strict mypy slice on 2026-05-05:
+  - Closed local audit item partially: `src.quality.validators.*` now has scoped `disallow_untyped_defs = true`; global mypy `disallow_untyped_defs` remains `false`.
+  - Red/green verification: `python -m pytest tests/unit/test_typing_policy.py -p no:schemathesis --basetemp .tmp\codex-m3-typing-red-basetemp -o cache_dir=.tmp\codex-m3-typing-red-cache` failed before the scoped override, then passed after implementation.
+  - Mypy verification:
+    - `python -m mypy src\quality\validators\schema_validator.py --config-file pyproject.toml --disallow-untyped-defs --follow-imports=skip --no-incremental --show-error-codes`: failed before implementation with one missing return type annotation.
+    - `python -m mypy src\quality\validators --config-file pyproject.toml --follow-imports=skip --no-incremental --show-error-codes`: passed after adding the scoped override and annotations. The targeted run still prints the existing unused `src.processing.flink_jobs.*` override warning because that module is outside the checked slice.
+  - Targeted verification:
+    - `python -m pytest tests/unit/test_typing_policy.py tests/unit/test_validators.py -p no:schemathesis --basetemp .tmp\codex-m3-final-targeted-basetemp -o cache_dir=.tmp\codex-m3-final-targeted-cache`: passed with 13 tests.
+    - `python -m ruff check src\quality\validators\schema_validator.py tests\unit\test_typing_policy.py`: passed.
+  - Final verification:
+    - `python -m ruff check src/ tests/`: passed.
+    - `python -m ruff format --check src/ tests/`: passed with 216 files already formatted.
+    - `python -m mypy src\quality\validators --config-file pyproject.toml --follow-imports=skip --no-incremental --show-error-codes`: passed. The targeted run still prints the existing unused `src.processing.flink_jobs.*` override warning because that module is outside the checked slice.
+    - `python -m pytest tests/unit/test_typing_policy.py tests/unit/test_validators.py tests/unit/test_staging_rollback.py tests/unit/test_security_workflow.py tests/unit/test_security_tooling_policy.py tests/unit/test_bandit_diff.py -p no:schemathesis --basetemp .tmp\codex-m3-final-combined-basetemp -o cache_dir=.tmp\codex-m3-final-combined-cache`: passed with 21 tests.
+    - `git diff --check`: passed.
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-m3-final-full-basetemp -o cache_dir=.tmp\codex-m3-final-full-cache`: passed with 760 passed, 4 skipped, and 104 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
+    - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-final.json`: passed with no new findings.
+- M7 staging rollback safety on 2026-05-05:
+  - Closed local audit item: `scripts/k8s_staging_up.sh` now runs `helm upgrade --install` with `--atomic` and includes `helm history "$RELEASE_NAME" --namespace "$NAMESPACE"` in failure diagnostics.
+  - Red/green verification: `python -m pytest tests/unit/test_staging_rollback.py -p no:schemathesis --basetemp .tmp\codex-m7-rollback-red-basetemp -o cache_dir=.tmp\codex-m7-rollback-red-cache` failed before the script change, then the targeted test passed after implementation.
+  - Targeted verification:
+    - `python -m pytest tests/unit/test_staging_rollback.py -p no:schemathesis --basetemp .tmp\codex-m7-rollback-targeted-basetemp -o cache_dir=.tmp\codex-m7-rollback-targeted-cache`: passed with 1 test.
+    - `python -m ruff check tests/unit/test_staging_rollback.py`: passed.
+    - `bash -n scripts/k8s_staging_up.sh`: passed.
+  - Final verification:
+    - `python -m ruff check src/ tests/`: passed.
+    - `python -m ruff format --check src/ tests/`: passed with 215 files already formatted.
+    - `python -m pytest tests/unit/test_staging_rollback.py tests/unit/test_security_workflow.py tests/unit/test_security_tooling_policy.py tests/unit/test_bandit_diff.py -p no:schemathesis --basetemp .tmp\codex-m7-final-targeted-basetemp -o cache_dir=.tmp\codex-m7-final-targeted-cache`: passed with 8 tests.
+    - `bash -n scripts/k8s_staging_up.sh`: passed.
+    - `python -c "import pathlib, yaml; [yaml.safe_load(path.read_text(encoding='utf-8')) for path in pathlib.Path('.github/workflows').glob('*.yml')]; print('workflow yaml ok')"`: passed.
+    - `git diff --check`: passed.
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-m7-final-full-basetemp -o cache_dir=.tmp\codex-m7-final-full-cache`: passed with 759 passed, 4 skipped, and 105 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
+    - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-final.json`: passed with no new findings.
 - `git status --short --branch -- docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md AGENT_STATE.md BACKLOG.md`: during task 17 final check, expected changes are `AGENT_STATE.md`, `BACKLOG.md`, and `docs/operations/guarded-autopilot-scheduler-opt-in-boundary.md`.
 - `git rev-parse --short HEAD`: `7900754`.
 - `Get-Command pi`: available.

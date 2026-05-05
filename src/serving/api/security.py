@@ -6,6 +6,7 @@ from pathlib import Path
 
 import bcrypt
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 try:
@@ -70,12 +71,21 @@ def redact_sensitive_headers(
     return redacted
 
 
-def build_security_headers_middleware():
+def build_security_headers_middleware(config_path: Path | str | None = None):
+    policy = load_security_policy(config_path)
+
     async def security_headers(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        response = await call_next(request)
+        content_length = request.headers.get("content-length")
+        if content_length is not None and int(content_length) > policy.request_size_limit_bytes:
+            response = JSONResponse(
+                status_code=413,
+                content={"detail": "Request body too large."},
+            )
+        else:
+            response = await call_next(request)
         for header_name, header_value in SECURITY_HEADERS.items():
             response.headers.setdefault(header_name, header_value)
         return response

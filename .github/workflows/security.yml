@@ -201,9 +201,21 @@ jobs:
           }
           docker tag agentflow-security-agentflow-api:latest agentflow-api:security-scan
         shell: pwsh
-      - name: Run Trivy scan
+      - name: Generate CycloneDX SBOM
         # Pinned to release tag (Codex audit p9 #3); update by bumping the
         # tag, never re-pin to @master (allows upstream to alter scanner).
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: agentflow-api:security-scan
+          format: cyclonedx
+          output: agentflow-api.cdx.json
+      - name: Upload CycloneDX SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentflow-api-sbom-cyclonedx
+          path: agentflow-api.cdx.json
+          if-no-files-found: error
+      - name: Run Trivy scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: agentflow-api:security-scan

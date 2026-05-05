@@ -7,7 +7,7 @@ Returns structured validation results with error details for observability.
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from src.ingestion.schemas.events import (
     CdcEvent,
@@ -37,7 +37,7 @@ class ValidationResult:
 
 
 # Map event type prefixes to their Pydantic models
-_SCHEMA_MAP: dict = {
+_SCHEMA_MAP: dict[str, type[BaseModel]] = {
     "order.": OrderEvent,
     "payment.": PaymentEvent,
     "click": ClickstreamEvent,
@@ -49,7 +49,7 @@ _SCHEMA_MAP: dict = {
 _CDC_SOURCES = {"postgres_cdc", "mysql_cdc"}
 
 
-def _get_model_for_event(event_type: str):  # -> BaseModel subclass | None
+def _get_model_for_event(event_type: str) -> type[BaseModel] | None:
     for prefix, model in _SCHEMA_MAP.items():
         if event_type.startswith(prefix) or event_type == prefix:
             return model

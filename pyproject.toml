@@ -116,12 +116,13 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "PT"]
-ignore = ["S101", "S311", "S608"]
+ignore = ["S101", "S311"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S603",
     "S607",
+    "S608",
     "S310",
     "S104",
     "S106",
@@ -133,12 +134,38 @@ ignore = ["S101", "S311", "S608"]
     "A002",
     "E501",
 ]
+"src/orchestration/dags/daily_batch.py" = [
+    "S608",
+]
+"src/serving/api/routers/lineage.py" = [
+    "S608",
+]
+"src/serving/api/routers/slo.py" = [
+    "S608",
+]
+"src/serving/api/routers/stream.py" = [
+    "S608",
+]
 "src/serving/backends/clickhouse_backend.py" = [
     "S310",
+    "S608",
     "E501",
 ]
 "src/serving/backends/duckdb_backend.py" = [
+    "S608",
     "E501",
+]
+"src/serving/semantic_layer/nl_engine.py" = [
+    "S608",
+]
+"src/serving/semantic_layer/query/entity_queries.py" = [
+    "S608",
+]
+"src/serving/semantic_layer/query/nl_queries.py" = [
+    "S608",
+]
+"src/serving/semantic_layer/search_index.py" = [
+    "S608",
 ]
 
 [tool.pytest.ini_options]
@@ -182,6 +209,10 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "src.processing.flink_jobs.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "src.quality.validators.*"
+disallow_untyped_defs = true
 
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]

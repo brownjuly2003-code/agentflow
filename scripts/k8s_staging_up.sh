@@ -27,6 +27,7 @@ on_failure() {
 
   trap - ERR
   echo "==> FAILURE: collecting diagnostics (exit code: $exit_code)"
+  helm history "$RELEASE_NAME" --namespace "$NAMESPACE" || true
   kubectl get all --all-namespaces || true
   kubectl describe deployment "$RELEASE_NAME" --namespace "$NAMESPACE" || true
   kubectl describe pod --namespace "$NAMESPACE" -l "app.kubernetes.io/instance=$RELEASE_NAME" || true
@@ -201,6 +202,7 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/helm/agentflow" \
   -f "$ROOT_DIR/k8s/staging/values-staging.yaml" \
   --namespace "$NAMESPACE" \
   --create-namespace \
+  --atomic \
   --wait \
   --timeout 5m \
   --debug

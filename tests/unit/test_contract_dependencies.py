@@ -154,7 +154,7 @@ def test_runtime_and_sdk_package_identities_are_split():
     ]
 
 
-def test_docker_build_contexts_copy_root_readme_for_editable_installs():
+def test_docker_build_contexts_prepare_root_package_metadata():
     docker_contexts = [
         PROJECT_ROOT / "Dockerfile.api",
         PROJECT_ROOT / "docker-compose.prod.yml",
@@ -165,9 +165,14 @@ def test_docker_build_contexts_copy_root_readme_for_editable_installs():
         text = docker_context.read_text(encoding="utf-8")
         relative_path = docker_context.relative_to(PROJECT_ROOT).as_posix()
 
-        assert "COPY README.md /app/README.md" in text, (
-            f"{relative_path} must copy README.md before installing the root package"
-        )
+        if relative_path == "Dockerfile.api":
+            assert "COPY README.md /build/README.md" in text
+            assert "python -m build --wheel" in text
+            assert "pip install --no-cache-dir -e" not in text
+        else:
+            assert "COPY README.md /app/README.md" in text, (
+                f"{relative_path} must copy README.md before installing the root package"
+            )
 
 
 def test_prod_compose_default_duckdb_config_has_no_required_secret_interpolation():

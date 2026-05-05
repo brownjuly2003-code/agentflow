@@ -1,0 +1,12 @@
+  Исследуй оставшиеся открытые пункты audit_kimi_04_05_26.md для AgentFlow после локального remediation пакета 2026-05-05.
+
+  Контекст: уже закрыты Docker editable install/.dockerignore/healthcheck, pinned MinIO tags, Helm image tag 1.1.0, request body size middleware. Не
+  предлагай deploy/apply/push/paid actions.
+
+  Для H3/H4/H5/H6, M1/M2/M3/M4/M7/M8/M9, L6/L7:
+  task 1. Проверь current best practice по первичным источникам: Kubernetes/DuckDB/ClickHouse docs, GitHub Actions OIDC/Terraform docs, OWASP/ASVS, SLSA/
+  Sigstore, Syft/Trivy, Bandit/Ruff/mypy docs.
+  task 2. Раздели каждый пункт на: can fix locally now, needs external owner/evidence, needs architecture decision, should stay documented risk.
+  task 3. Дай minimal safe implementation plan: likely files touched, verification commands, rollback.
+  task 4. Не считай external gates complete без owner-provided evidence.
+  task 5. Укажи, какие изменения стоит делать отдельными commits/PRs.

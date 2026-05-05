@@ -345,6 +345,25 @@ def test_security_headers_are_added_to_unauthorized_responses(
         assert response.headers[header_name] == header_value
 
 
+def test_request_size_limit_blocks_oversized_bodies(
+    api_keys_path: Path,
+    db_path: Path,
+    tmp_path: Path,
+) -> None:
+    security_config_path = tmp_path / "config" / "security.yaml"
+    _write_security_config(security_config_path)
+    client = TestClient(_build_app(api_keys_path, security_config_path, db_path))
+
+    response = client.post(
+        "/v1/query",
+        headers={"X-API-Key": "tenant-order-key"},
+        content=b"x" * (1_048_576 + 1),
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Request body too large."
+
+
 def test_failed_auth_is_throttled_by_ip_after_limit(
     api_keys_path: Path,
     db_path: Path,

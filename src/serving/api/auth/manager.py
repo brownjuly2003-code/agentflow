@@ -33,6 +33,7 @@ from src.serving.api.security import (
     load_security_policy,
     verify_api_key,
 )
+from src.serving.audit_publisher import AuditPublisher, build_audit_publisher_from_env
 
 if TYPE_CHECKING:
     from .key_rotation import KeyRotator
@@ -107,6 +108,7 @@ class AuthManager:
         time_source=time.monotonic,
         rate_limiter: RateLimiter | None = None,
         redis_url: str | None = None,
+        audit_publisher: AuditPublisher | None = None,
     ) -> None:
         self.api_keys_path = Path(api_keys_path) if api_keys_path else None
         resolved_db_path = Path(db_path)
@@ -158,6 +160,7 @@ class AuthManager:
             if rate_limiter is not None
             else RateLimiter(redis_url=resolved_redis_url or "redis://localhost:6379")
         )
+        self.audit_publisher = audit_publisher or build_audit_publisher_from_env()
         if rate_limiter is None and resolved_redis_url is None:
             self.rate_limiter._redis = None
         from .key_rotation import KeyRotator

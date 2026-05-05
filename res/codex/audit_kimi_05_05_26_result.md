@@ -166,17 +166,53 @@ Baseline: HEAD `10bc3c7`, branch `main` ahead of `origin/main` by 21 commits.
   - `python -m pytest tests/unit/test_coverage_policy.py tests/unit/test_validators.py -p no:schemathesis --basetemp .tmp\codex-m8-final-targeted-basetemp -o cache_dir=.tmp\codex-m8-final-targeted-cache`
   - Passed with 19 tests.
 
-## Still not locally closed
+## 2026-05-06 local gate addendum
+
+Local code-only remediation after the original 2026-05-05 result:
+
+- H3/M4 are closed locally for Helm render safety: default persistent DuckDB is
+  single-replica, persistent multi-replica renders fail, `secrets.existingSecret`
+  is supported, and default chart values no longer carry production-shaped
+  API-key verifier hashes.
+- H6 is closed locally as optional encryption readiness: DuckDB serving
+  connections use encrypted `ATTACH` only when an operator supplies
+  `AGENTFLOW_DUCKDB_ENCRYPTION_KEY` or `AGENTFLOW_DUCKDB_ENCRYPTION_KEY_FILE`.
+  Defaults remain backward-compatible and unencrypted; this is not NIST,
+  GDPR, HIPAA, SOC 2, or external compliance evidence.
+- M9 is closed locally as append-only audit readiness: API usage can publish a
+  hash-chained JSONL audit path via `AGENTFLOW_AUDIT_LOG_PATH` in addition to
+  mutation-prone DuckDB analytics. External immutable retention remains
+  evidence-pending.
+- L7 is ready for evidence only: `.github/workflows/container-attestation.yml`
+  signs and attests only an operator-supplied image digest through keyless
+  GitHub/Sigstore tooling. It is not complete until a real CI run signs a
+  published digest.
+- H4 is improved only: `.github/workflows/terraform-apply.yml` has a manual
+  `PREFLIGHT` path that checks OIDC variables, real tfvars presence, and
+  `terraform init -backend=false` / `terraform validate` without apply.
+- H5 is improved only: `docs/operations/security-evidence-template.md` captures
+  free local scanner evidence but does not replace a third-party pen-test
+  report or attestation.
+
+Targeted red/green evidence:
+
+- Helm H3/M4 tests failed before the chart change, then passed.
+- DuckDB encryption tests failed on missing `src.serving.duckdb_connection`,
+  then passed.
+- Audit publisher tests failed on missing `src.serving.audit_publisher`, then
+  passed.
+- Container attestation and Terraform preflight workflow tests failed before
+  the workflow changes, then passed.
+
+## Still not externally closed
 
 The remaining audit items need separate decisions or external evidence:
 
-- H3: DuckDB plus Kubernetes multi-replica/PVC architecture.
 - H4: Terraform apply/AWS OIDC owner evidence.
 - H5: external penetration test attestation.
-- H6: DuckDB encryption decision and implementation.
 - M8 broader global coverage raise remains intentionally deferred until more modules have enough evidence; the local validators gate is closed.
-- M4: secret-source owner/evidence.
-- M9/L7: signing and lower-priority hardening/docs follow-up.
+- L7: real signed published-image digest evidence.
+- M9: external immutable retention evidence, if that claim is needed.
 
 ## Research prompt for the rest
 

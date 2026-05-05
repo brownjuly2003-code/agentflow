@@ -7,10 +7,10 @@ Updated: 2026-05-06
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
 - Backlog correction base HEAD: `3080275`
-- Current resume HEAD: `afbe643`
-- Git status at resume: clean for tracked files on `main`, `main...origin/main [ahead 23]`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes after commit `afbe643`: none.
-- File count: `git ls-files` reports 701 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/coverage task.
+- Current resume HEAD: `8f5eadd`
+- Git status at resume: clean for tracked files on `main`, `main...origin/main [ahead 1]`; full status still reports expected access-denied warnings for old local temp directories.
+- Current expected worktree changes before the local audit-gates commit: bounded H3/M4/H6/M9/L7/H4/H5 code, workflow, test, and documentation files only.
+- File count: `git ls-files` reports 702 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/audit task.
 
 ## Available Runtime
 
@@ -26,6 +26,16 @@ Status: READY_WITH_GUARDRAILS
 The autopilot handoff files are project artifacts. `.autopilot/` is local runtime state and remains ignored. Do not run deploys, Terraform apply, production scripts, secret rotation, package publishing, paid external API calls, or live account operations.
 
 The 2026-05-05 closeout was interrupted by an explicit audit-remediation request. Commit `adb9c8e` records the first five locally verifiable Kimi audit fixes, Codex+Kimi synthesis under `res/codex/`, M1/M2 SQL static-analysis gate narrowing, L6 SBOM artifact generation, M7 staging rollback safety, and the first narrow M3 mypy strict slice for `src.quality.validators.*`. Commit `afbe643` records the M8 scoped validators coverage gate. Tasks 18-22 stay blocked until real owner-provided evidence is supplied.
+
+The 2026-05-06 local audit-gates session started at HEAD `8f5eadd`, branch
+`main...origin/main [ahead 1]`, with `git ls-files` count `702`. The handoff
+count in `next-session-free-local-audit-gates-plan.md` was stale by more than
+10%, so targets were treated as advisory. Local remediation added H3/M4 Helm
+single-writer and existing-secret support, H6 optional DuckDB encrypted attach,
+M9 hash-chained audit JSONL export, L7 digest-only GitHub/Sigstore workflow
+skeleton, H4 no-apply Terraform preflight, and H5 internal security evidence
+template. H4, H5, L7 real signing, and external immutable retention stay
+evidence-pending until owner-supplied artifacts exist.
 
 ## Last Verified Gates
 

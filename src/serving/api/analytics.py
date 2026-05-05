@@ -14,13 +14,15 @@ from starlette.background import BackgroundTasks
 from starlette.responses import Response
 from starlette.types import Message
 
+from src.serving.duckdb_connection import connect_duckdb
+
 logger = structlog.get_logger()
 
 
 def ensure_analytics_table(db_path: Path | str) -> None:
     for attempt in range(10):
         try:
-            conn = duckdb.connect(str(db_path))
+            conn = connect_duckdb(db_path)
         except duckdb.Error:
             if attempt == 9:
                 raise
@@ -138,7 +140,7 @@ def get_usage_analytics(
 ) -> dict:
     interval = _window_to_interval(window)
     ensure_analytics_table(db_path)
-    conn = duckdb.connect(str(db_path))
+    conn = connect_duckdb(db_path)
     try:
         if tenant:
             rows = conn.execute(
@@ -212,7 +214,7 @@ def get_top_queries(
 ) -> dict:
     interval = _window_to_interval(window)
     ensure_analytics_table(db_path)
-    conn = duckdb.connect(str(db_path))
+    conn = connect_duckdb(db_path)
     try:
         rows = conn.execute(
             """
@@ -244,7 +246,7 @@ def get_top_entities(
 ) -> dict:
     interval = _window_to_interval(window)
     ensure_analytics_table(db_path)
-    conn = duckdb.connect(str(db_path))
+    conn = connect_duckdb(db_path)
     try:
         rows = conn.execute(
             """
@@ -280,7 +282,7 @@ def get_latency_analytics(
 ) -> dict:
     interval = _window_to_interval(window)
     ensure_analytics_table(db_path)
-    conn = duckdb.connect(str(db_path))
+    conn = connect_duckdb(db_path)
     try:
         rows = conn.execute(
             """
@@ -317,7 +319,7 @@ def get_latency_analytics(
 def get_anomalies(db_path: Path | str, *, window: str = "24h") -> dict:
     interval = _window_to_interval(window)
     ensure_analytics_table(db_path)
-    conn = duckdb.connect(str(db_path))
+    conn = connect_duckdb(db_path)
     try:
         rows = conn.execute(
             """
@@ -404,7 +406,7 @@ def _schedule_session_write(db_path: Path | str, request_id: str, record: dict) 
 def _insert_session(db_path: Path | str, request_id: str, record: dict) -> None:
     for attempt in range(10):
         try:
-            conn = duckdb.connect(str(db_path))
+            conn = connect_duckdb(db_path)
         except duckdb.Error as exc:
             if attempt == 9:
                 logger.warning(

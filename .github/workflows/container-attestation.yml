@@ -1,0 +1,56 @@
+name: Container Attestation
+
+"on":
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: Container image repository/name without a digest
+        required: true
+        type: string
+      image_digest:
+        description: Immutable image digest, for example sha256:...
+        required: true
+        type: string
+      confirm:
+        description: Type SIGN to sign and attest the supplied digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  attest-and-sign:
+    if: ${{ inputs.confirm == 'SIGN' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate digest inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.image_digest }}" in
+            sha256:*) ;;
+            *) echo "image_digest must be sha256:<digest>" >&2; exit 1 ;;
+          esac
+          case "${{ inputs.image_ref }}" in
+            *@*) echo "image_ref must not include a digest; provide image_digest separately" >&2; exit 1 ;;
+            *:latest) echo "image_ref must not be a mutable :latest tag" >&2; exit 1 ;;
+          esac
+          echo "IMAGE_REF=${{ inputs.image_ref }}" >> "$GITHUB_ENV"
+          echo "IMAGE_DIGEST=${{ inputs.image_digest }}" >> "$GITHUB_ENV"
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign image digest with cosign keyless
+        env:
+          IMAGE_REF: ${{ env.IMAGE_REF }}
+          IMAGE_DIGEST: ${{ env.IMAGE_DIGEST }}
+        run: cosign sign --yes ${IMAGE_REF}@${IMAGE_DIGEST}
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ inputs.image_ref }}
+          subject-digest: ${{ inputs.image_digest }}
+          push-to-registry: false

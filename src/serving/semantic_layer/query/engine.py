@@ -11,6 +11,7 @@ from src.ingestion.tenant_router import TenantRouter
 from src.serving.backends import create_backend
 from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.db_pool import DuckDBPool
+from src.serving.duckdb_connection import connect_duckdb
 from src.serving.semantic_layer.catalog import DataCatalog
 
 from .entity_queries import EntityQueryMixin
@@ -45,7 +46,7 @@ class QueryEngine(
         self._conn = (
             self._db_pool.write_connection
             if self._db_pool is not None
-            else duckdb.connect(self._db_path)
+            else connect_duckdb(self._db_path)
         )
         self._duckdb_backend = DuckDBBackend(
             db_path=self._db_path,

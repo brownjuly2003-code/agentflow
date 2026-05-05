@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 from src.serving.api.security import hash_api_key
+from src.serving.duckdb_connection import connect_duckdb
 
 from .manager import ApiKeysConfig, AuthManager, KeyCreateRequest, TenantKey
 
@@ -191,7 +192,7 @@ class KeyRotator:
     def old_key_usage_by_key_id(self) -> dict[str, int]:
         for attempt in range(10):
             try:
-                conn = duckdb.connect(str(self._manager.db_path))
+                conn = connect_duckdb(self._manager.db_path)
             except duckdb.Error:
                 if attempt == 9:
                     raise
@@ -224,7 +225,7 @@ class KeyRotator:
     def _usage_by_key(self) -> dict[tuple[str, str], int]:
         for attempt in range(10):
             try:
-                conn = duckdb.connect(str(self._manager.db_path))
+                conn = connect_duckdb(self._manager.db_path)
             except duckdb.Error:
                 if attempt == 9:
                     raise

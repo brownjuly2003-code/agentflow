@@ -10,7 +10,8 @@ The AgentFlow Helm chart deploys the FastAPI API to Kubernetes with:
 - a `HorizontalPodAutoscaler` driven by CPU
 - optional `Ingress` with TLS
 - mounted config files for tenants, SLOs, PII masking, API versioning, and security policy
-- mounted secrets for the admin key and bcrypt-hashed API keys
+- mounted secrets for the admin key and API-key config, either rendered by the
+  chart or supplied through an existing Kubernetes Secret
 
 The chart lives in `helm/agentflow`.
 
@@ -26,12 +27,12 @@ The chart deploys the API only. Redis, Kafka, Prometheus, Grafana, Jaeger, and o
 
 ## Prepare an image
 
-The default chart values expect an image named `agentflow/api:1.0.0`.
+The default chart values expect an image named `agentflow/api:1.1.0`.
 
 If you are using Minikube, build or load an image before the install:
 
 ```bash
-minikube image load agentflow/api:1.0.0
+minikube image load agentflow/api:1.1.0
 ```
 
 If your CI publishes a different image, override `image.repository` and `image.tag`.
@@ -44,19 +45,11 @@ Use a dedicated values file for production secrets and tenant configuration:
 # values-prod.yaml
 image:
   repository: registry.example.com/agentflow/api
-  tag: "1.0.0"
+  tag: "1.1.0"
 
 secrets:
-  adminKey: "replace-me"
-  apiKeys:
-    keys:
-      - key_id: "support-agent"
-        key_hash: "$2b$12$..."
-        name: "Support Agent"
-        tenant: "acme-corp"
-        rate_limit_rpm: 60
-        allowed_entity_types: null
-        created_at: "2026-04-11"
+  create: false
+  existingSecret: agentflow-api-runtime-secret
 
 config:
   tenants:
@@ -70,13 +63,17 @@ config:
         allowed_entity_types: null
 ```
 
+The existing Secret must contain `admin-key` and `api_keys.yaml`.
+`api_keys.yaml` must use the same structured shape as `config/api_keys.yaml`.
+
 Install the release:
 
 ```bash
 helm install agentflow ./helm/agentflow -f values-prod.yaml
 ```
 
-Quick dev install with only the admin key overridden:
+Quick dev install with only the admin key overridden, intentionally leaving API
+keys empty until you mount or render `api_keys.yaml`:
 
 ```bash
 helm install agentflow ./helm/agentflow --set secrets.adminKey=local-admin-key
@@ -106,12 +103,16 @@ If `ingress.enabled=true`, verify the configured host instead of using port-forw
 - `config.duckdbPath` and `config.usageDbPath` should point to the mounted PVC path.
 - `config.contractsDir` points at contract YAML files bundled into the image. The chart does not mount `config/contracts/` separately.
 - `secrets.apiKeys.keys[*].key_id` is required for deterministic admin rotation and staging checks.
-- `secrets.apiKeys` should normally contain bcrypt hashes, not plaintext API keys.
+- Default `secrets.apiKeys.keys` is empty. Supply API-key config through `secrets.existingSecret` or through an environment-specific values file; do not reuse repository defaults as runtime credentials.
+- If `secrets.create=false`, `secrets.existingSecret` must name a Kubernetes Secret with `admin-key` and `api_keys.yaml`.
 - `config.tenants` is the source of truth for tenant routing and API version pinning.
-- `autoscaling.enabled=true` creates an HPA from `minReplicas` to `maxReplicas`.
+- `autoscaling.enabled=true` creates an HPA from `minReplicas` to `maxReplicas`, but persistent DuckDB storage is guarded to one writer replica. Rendering fails when `persistence.enabled=true` and the chart is configured for more than one API writer replica.
 - `ingress.tls` accepts the standard Helm ingress TLS structure.
 - ConfigMap and Secret checksums are injected into the pod template, so `helm upgrade` rolls the deployment when mounted config changes.
 - DuckDB is still a stateful local file. If your storage class only supports `ReadWriteOnce`, start with `replicaCount: 1` until you validate your storage and concurrency model.
+- Optional DuckDB file encryption is runtime-configured with `AGENTFLOW_DUCKDB_ENCRYPTION_KEY` or `AGENTFLOW_DUCKDB_ENCRYPTION_KEY_FILE`; use `extraEnv` with a `secretKeyRef` to supply the key. The default remains unencrypted for backward compatibility.
+- DuckDB encryption is a local at-rest hardening option only. It is not a NIST, GDPR, HIPAA, SOC 2, or external-compliance attestation by itself.
+- Optional append-only audit export is runtime-configured with `AGENTFLOW_AUDIT_LOG_PATH`, which writes a hash-chained JSONL file in addition to DuckDB usage analytics. For externally immutable retention, operators still need object-lock or SIEM evidence outside this chart.
 
 ## Contract Maintenance
 

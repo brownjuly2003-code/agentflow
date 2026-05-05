@@ -9,9 +9,9 @@
 
 AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integrations. The current repository shows a security posture centered on typed request validation, tenant-scoped access control, API-key authentication, rate limiting, PII masking on responses, SQL safety guards for NL-to-SQL, and CI-based dependency and image scanning.
 
-The codebase is strongest at application-layer controls that can be validated directly in source: auth, authorization, request filtering, security headers, contract evolution, replay safety, and auditability of API usage. The weakest areas are the controls that typically require external infrastructure or third-party attestation. In this repository snapshot there is no evidence of an external penetration test, no demonstrated generalized secrets manager integration, and no evidence that the local DuckDB deployment encrypts data at rest by default.
+The codebase is strongest at application-layer controls that can be validated directly in source: auth, authorization, request filtering, security headers, contract evolution, replay safety, and auditability of API usage. The weakest areas are the controls that typically require external infrastructure or third-party attestation. In this repository snapshot there is no evidence of an external penetration test or demonstrated generalized secrets manager integration. Local DuckDB files can be opened through an optional encrypted attach path when an operator supplies encryption key material, but the default remains backward-compatible and unencrypted.
 
-External pen-test attestation status as of 2026-05-04: not present. Use
+External pen-test attestation status as of 2026-05-06: not present. Use
 `docs/operations/external-pen-test-attestation-handoff.md` for the checklist
 required before any third-party pen-test claim.
 
@@ -99,11 +99,11 @@ Evidence: `src/serving/masking.py`, `src/serving/api/routers/agent_query.py`, `s
 The repository includes a dedicated security workflow in GitHub Actions:
 - Bandit for Python static analysis with a tracked baseline diff
 - Safety for dependency vulnerability scanning
-- Trivy for container image scanning
+- Trivy for container image scanning and CycloneDX SBOM generation
 
-The Bandit baseline currently records a historical `B310` finding in `src/serving/backends/clickhouse_backend.py`. The local Bandit config skips `B608`, which means SQL construction findings are intentionally triaged separately and rely on explicit documented suppressions plus tests. That is acceptable only because the guarded paths are narrow and test-backed; it should stay under review as the query surface grows.
+The Bandit baseline currently records a historical `B310` finding in `src/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
 
-Helm deployment docs also require bcrypt-hashed API keys rather than plaintext secrets in chart values, which is a meaningful operational control for cluster deployments.
+Helm defaults no longer embed production-shaped API-key verifier hashes. Operators can render a chart-managed Secret for local use or mount an existing Kubernetes Secret, which is friendlier to External Secrets Operator, Sealed Secrets, or equivalent workflows.
 
 Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`, `docs/helm-deployment.md`
 
@@ -119,9 +119,11 @@ This provides a credible audit and incident-response starting point for a small 
 What is not evidenced in this repository snapshot:
 - generalized secrets management through AWS Secrets Manager or another external vault
 - automated rotation for non-API-key secrets
-- immutable external audit logging or SIEM export
+- externally immutable audit retention or SIEM export
 
-Because those controls are not provable from the checked-in code, they should not be claimed in customer-facing security questionnaires without additional infrastructure evidence.
+The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository.
+
+Because the external controls are not provable from the checked-in code, they should not be claimed in customer-facing security questionnaires without additional infrastructure evidence.
 
 Evidence: `src/serving/api/auth/middleware.py`, `src/serving/api/analytics.py`, `docs/runbook.md`
 
@@ -130,11 +132,11 @@ Evidence: `src/serving/api/auth/middleware.py`, `src/serving/api/analytics.py`, 
 The current implementation has several material limitations:
 
 1. No external penetration test evidence is present in the repository.
-2. No built-in guarantee of encryption at rest for local DuckDB files is evidenced here.
+2. DuckDB encryption is optional and operator-configured; the default file path remains unencrypted for backward compatibility, and DuckDB encryption is not a compliance attestation by itself.
 3. Secrets management appears environment- and chart-driven in this snapshot; a managed secret store is not demonstrated.
-4. The security pipeline is strong at code scanning, but attestation, SBOM publication, and signed-release provenance are not evidenced here.
+4. The security pipeline is strong at code scanning and SBOM generation, but a real signed container-release run is still evidence-pending until CI signs a published image digest.
 5. The demo-data initialization path is convenient for development, but it increases the importance of strict environment separation between demo and production deployments.
-6. Browser-oriented security headers exist, but request body size enforcement from `SecurityPolicy.request_size_limit_bytes` is defined in config and not enforced by a dedicated middleware in the reviewed files.
+6. Browser-oriented security headers exist, and request body size enforcement is applied from `SecurityPolicy.request_size_limit_bytes`.
 
 ## 11. Compliance Readiness
 
@@ -148,7 +150,7 @@ Partial readiness. Access control, audit logging, CI security scans, and operati
 
 ### HIPAA
 
-Not ready based on the reviewed repository. The local DuckDB deployment does not show at-rest encryption or the broader administrative and contractual controls HIPAA would require.
+Not ready based on the reviewed repository. Optional DuckDB at-rest encryption does not supply the broader administrative, contractual, audit-retention, or external-assessment controls HIPAA would require.
 
 ## 12. Overall Assessment
 

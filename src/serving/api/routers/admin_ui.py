@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from src.serving.api.analytics import ensure_analytics_table
 from src.serving.api.auth import require_admin_key
 from src.serving.cache import ENTITY_TTL_SECONDS
+from src.serving.duckdb_connection import connect_duckdb
 
 router = APIRouter(
     prefix="/admin",
@@ -76,7 +77,7 @@ def _cache_stats(state) -> dict[str, object]:
 
 def _qps_last_minute(db_path: Path | str) -> float:
     ensure_analytics_table(db_path)
-    conn = duckdb.connect(str(db_path))
+    conn = connect_duckdb(db_path)
     try:
         row = conn.execute(
             """

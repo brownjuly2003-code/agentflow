@@ -1,7 +1,7 @@
 nameOverride: ""
 fullnameOverride: ""
 
-replicaCount: 2
+replicaCount: 1
 
 image:
   repository: agentflow/api
@@ -35,9 +35,9 @@ ingress:
   tls: []
 
 autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
   targetCPUUtilizationPercentage: 70
 
 persistence:
@@ -216,25 +216,11 @@ config:
             description: "Added X-PII-Masked response header"
 
 secrets:
+  create: true
+  existingSecret: ""
   adminKey: ""
   apiKeys:
-    keys:
-      - key_id: "support-agent"
-        key_hash: "$2b$12$UNE9Vh.YivKR7Zt7xIZweebebjkcVaQv240rqabzG/H3dWoljplcO"
-        name: "Support Agent"
-        tenant: "acme-corp"
-        rate_limit_rpm: 60
-        allowed_entity_types:
-          - "order"
-          - "user"
-        created_at: "2026-04-10"
-      - key_id: "ops-agent"
-        key_hash: "$2b$12$V3xTQLf35Snz15N.cNS8yOPkR/1TWIJXt4jLNZeGXlIbHXsvYC8jW"
-        name: "Ops Agent"
-        tenant: "acme-corp"
-        rate_limit_rpm: 300
-        allowed_entity_types: null
-        created_at: "2026-04-10"
+    keys: []
 
 affinity:
   podAntiAffinity:

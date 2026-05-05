@@ -1,3 +1,7 @@
+{{- if and .Values.persistence.enabled (or (gt (int .Values.replicaCount) 1) (and .Values.autoscaling.enabled (gt (int .Values.autoscaling.maxReplicas) 1))) }}
+{{- fail "DuckDB persistence requires a single writer replica: set replicaCount=1 and autoscaling.maxReplicas=1, or disable persistence and use ephemeral storage." }}
+{{- end }}
+{{- $secretName := .Values.secrets.existingSecret | default (include "agentflow.fullname" .) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,7 +27,9 @@ spec:
         {{- end }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.secrets.create }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -84,7 +90,7 @@ spec:
             - name: AGENTFLOW_ADMIN_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "agentflow.fullname" . }}
+                  name: {{ $secretName }}
                   key: admin-key
             {{- if .Values.config.redisUrl }}
             - name: REDIS_URL
@@ -136,7 +142,7 @@ spec:
             name: {{ include "agentflow.fullname" . }}
         - name: secrets
           secret:
-            secretName: {{ include "agentflow.fullname" . }}
+            secretName: {{ $secretName }}
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:

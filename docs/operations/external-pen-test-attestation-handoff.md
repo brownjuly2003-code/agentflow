@@ -2,7 +2,7 @@
 
 ## Status
 
-Status as of 2026-05-04: blocked on an external pen-test report or
+Status as of 2026-05-06: blocked on an external pen-test report or
 attestation.
 
 The repository contains internal security audit evidence, CI security scan
@@ -13,6 +13,10 @@ Access triage on 2026-05-04 found no external testing firm, named independent
 tester, report artifact, signed attestation, scope, test window, severity
 summary, remediation mapping, retest status, or attestation owner in the repo or
 task prompt. No external scan, exploitation, or paid security service was run.
+
+Local evidence update on 2026-05-06 added
+`docs/operations/security-evidence-template.md` for free internal scan evidence.
+That template is not an external pen-test substitute and does not close H5.
 
 Next operator packet to unblock review:
 
@@ -50,6 +54,7 @@ Internal evidence currently includes:
 - `.github/workflows/security.yml`
 - `.bandit-baseline.json`
 - release-readiness scan and full-suite records
+- `docs/operations/security-evidence-template.md`
 
 Use those files for internal posture only. Customer-facing security
 questionnaires must not describe a completed third-party pen test until an

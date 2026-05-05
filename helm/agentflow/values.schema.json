@@ -29,6 +29,54 @@
     "podDisruptionBudget",
     "networkPolicy"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "secrets": {
+            "properties": {
+              "create": { "const": false }
+            },
+            "required": ["create"]
+          }
+        },
+        "required": ["secrets"]
+      },
+      "then": {
+        "properties": {
+          "secrets": {
+            "properties": {
+              "existingSecret": { "type": "string", "minLength": 1 }
+            },
+            "required": ["existingSecret"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "secrets": {
+            "properties": {
+              "create": { "const": true }
+            },
+            "required": ["create"]
+          }
+        },
+        "required": ["secrets"]
+      },
+      "then": {
+        "properties": {
+          "secrets": {
+            "properties": {
+              "existingSecret": { "type": "string", "maxLength": 0 }
+            },
+            "required": ["existingSecret"]
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "nameOverride": {
       "type": "string"
@@ -506,10 +554,18 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "create",
+        "existingSecret",
         "adminKey",
         "apiKeys"
       ],
       "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
         "adminKey": {
           "type": "string"
         },

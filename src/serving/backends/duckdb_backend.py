@@ -7,6 +7,7 @@ import duckdb
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError, ServingBackend
 from src.serving.db_pool import DuckDBPool
+from src.serving.duckdb_connection import connect_duckdb
 
 
 class DuckDBBackend(ServingBackend):
@@ -26,7 +27,7 @@ class DuckDBBackend(ServingBackend):
             else (
                 self._db_pool.write_connection
                 if self._db_pool is not None
-                else duckdb.connect(self.db_path)
+                else connect_duckdb(self.db_path)
             )
         )
 

@@ -50,3 +50,30 @@ Medium confidence: L6 and M7 are the next lowest-risk local changes after M1/M2.
 6. H3/M4: Helm guardrails and existingSecret support only after choosing the exact render contract.
 7. H6/M9: architecture decision first, implementation second.
 8. H4/H5/L7: remain blocked on owner evidence or release-scope decisions.
+
+## 2026-05-06 local gate update
+
+Baseline at start: HEAD `8f5eadd`, branch `main...origin/main [ahead 1]`,
+`git ls-files` count `702`. Handoff counts in this file are stale by more than
+10%, so the local target was maximum safe repository remediation rather than
+matching the old tracked-file count.
+
+Local code remediation added:
+
+- H3/M4 local Helm hardening: chart defaults now render a single persistent
+  DuckDB writer replica, reject persistent multi-replica renders, support
+  `secrets.existingSecret`, and no longer embed production-shaped API-key
+  verifier hashes in default values.
+- H6 local encryption readiness: serving DuckDB connections can use optional
+  operator-supplied `AGENTFLOW_DUCKDB_ENCRYPTION_KEY` or
+  `AGENTFLOW_DUCKDB_ENCRYPTION_KEY_FILE`. The default remains unencrypted and
+  backward-compatible. This is not NIST or compliance evidence.
+- M9 local immutable-audit readiness: API usage can publish a hash-chained JSONL
+  audit path via `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics.
+  Object-lock, SIEM, or external immutable retention evidence is still external.
+- L7 local signing setup: a manual GitHub/Sigstore workflow skeleton signs and
+  attests only an operator-supplied image digest. A real signed release image
+  remains evidence-pending until CI signs a published digest.
+- H4/H5 local readiness only: Terraform has a no-apply `PREFLIGHT` path and H5
+  has an internal security-evidence template. Both remain open without external
+  owner evidence.

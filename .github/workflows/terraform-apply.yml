@@ -11,7 +11,7 @@ on:
           - staging
           - production
       confirm:
-        description: Type APPLY to confirm
+        description: Type PREFLIGHT for local readiness checks; APPLY remains disabled until external approval
         required: true
         type: string
 
@@ -20,6 +20,50 @@ permissions:
   id-token: write
 
 jobs:
+  preflight:
+    if: ${{ inputs.confirm == 'PREFLIGHT' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Resolve Terraform tfvars file
+        id: tfvars
+        run: |
+          case "${{ inputs.environment }}" in
+            staging) echo "file=environments/staging.tfvars" >> "$GITHUB_OUTPUT" ;;
+            production) echo "file=environments/prod.tfvars" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Unsupported environment: ${{ inputs.environment }}" >&2; exit 1 ;;
+          esac
+
+      - name: Validate OIDC and plan readiness without apply
+        working-directory: infrastructure/terraform
+        env:
+          AWS_TERRAFORM_ROLE_ARN: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          missing=0
+          if [ -z "$AWS_TERRAFORM_ROLE_ARN" ]; then
+            echo "Missing AWS_TERRAFORM_ROLE_ARN repository variable"
+            missing=1
+          fi
+          if [ -z "$AWS_REGION" ]; then
+            echo "Missing AWS_REGION repository variable"
+            missing=1
+          fi
+          if [ ! -f "${{ steps.tfvars.outputs.file }}" ]; then
+            echo "Missing ${{ steps.tfvars.outputs.file }}"
+            echo "Provide real tfvars through the approved secure operator path; do not commit them."
+            missing=1
+          fi
+          echo "H4 remains evidence-pending until CloudTrail proves AssumeRoleWithWebIdentity and an owner-approved apply run exists."
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          terraform init -backend=false
+          terraform validate
+
   plan:
     # disabled 2026-04-23: see docs/codex-tasks/2026-04-24/T09-terraform-apply-oidc-readiness.md
     # re-enable checklist:

@@ -6,7 +6,7 @@ This guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used
 
 ## Current readiness handoff
 
-Status as of 2026-05-04: blocked on external AWS account inputs.
+Status as of 2026-05-06: blocked on external AWS account inputs.
 
 Confirmed local/repository evidence:
 
@@ -16,6 +16,10 @@ Confirmed local/repository evidence:
 - Real `infrastructure/terraform/environments/staging.tfvars` and `prod.tfvars` files are absent.
 - No AWS credentials are configured on the verification workstation.
 - Terraform config sanity has passed through `hashicorp/terraform:1.13.5` with `init -backend=false` and `validate`; this is not evidence of a real apply.
+- `.github/workflows/terraform-apply.yml` includes a manual `PREFLIGHT`
+  path that validates required variables, real tfvars presence, and
+  `terraform init -backend=false` / `terraform validate` without running
+  `apply`.
 
 Access triage on 2026-05-04 confirmed the blocker is still external: GitHub CLI
 is authenticated for repository inspection, but AWS CLI and Terraform CLI are
@@ -24,6 +28,11 @@ the workflow still has both Terraform jobs guarded with `if: false`; and only
 example tfvars files exist locally. No AWS account bootstrap, role ARN, real
 tfvars, CloudTrail OIDC proof, first apply run, reviewer, or rollback owner was
 available to record.
+
+Local readiness update on 2026-05-06 added a no-apply preflight. It improves
+evidence intake but does not close H4 because no AWS role ARN, real tfvars,
+CloudTrail `AssumeRoleWithWebIdentity` proof, owner approval, or successful
+apply evidence was supplied.
 
 Next operator packet to unblock review:
 
@@ -85,6 +94,11 @@ The first apply must be local because the role does not exist yet. After the rol
 The workflow maps the GitHub `production` environment to `environments/prod.tfvars` and the `staging` environment to `environments/staging.tfvars`.
 
 ## Verify OIDC is active
+
+Before enabling the disabled plan/apply jobs, an operator can run the manual
+workflow with `confirm=PREFLIGHT`. That path does not call `terraform apply`;
+it only checks repository variables, real tfvars presence, and Terraform local
+validation.
 
 1. Open the `Terraform Apply` workflow and confirm the run includes `aws-actions/configure-aws-credentials@v4`.
 2. Confirm the workflow uses repository variables `AWS_TERRAFORM_ROLE_ARN` and `AWS_REGION`, not AWS access key secrets.

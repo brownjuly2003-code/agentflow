@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS, FAILED_AUTH_WINDOW_SECONDS
 from src.serving.api.security import redact_sensitive_headers
+from src.serving.duckdb_connection import connect_duckdb
 
 from .manager import _CURRENT_TENANT_ID, AuthManager, TenantKey, get_auth_manager
 
@@ -178,7 +179,7 @@ def build_auth_middleware() -> AuthMiddleware:
 def ensure_usage_table(manager: AuthManager) -> None:
     for attempt in range(10):
         try:
-            conn = duckdb.connect(str(manager.db_path))
+            conn = connect_duckdb(manager.db_path)
         except duckdb.IOException as exc:
             if (
                 os.getenv("AGENTFLOW_USAGE_DB_PATH") is None
@@ -197,7 +198,7 @@ def ensure_usage_table(manager: AuthManager) -> None:
                     error=str(exc),
                 )
                 manager.db_path = fallback_path
-                conn = duckdb.connect(str(manager.db_path))
+                conn = connect_duckdb(manager.db_path)
             else:
                 if attempt == 9:
                     raise
@@ -235,9 +236,17 @@ def ensure_usage_table(manager: AuthManager) -> None:
 
 
 def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> None:
+    payload = {
+        "event_type": "api_usage",
+        "tenant": tenant_key.tenant,
+        "key_name": tenant_key.name,
+        "endpoint": endpoint,
+        "key_id": tenant_key.key_id,
+        "key_slot": tenant_key.matched_slot,
+    }
     for attempt in range(10):
         try:
-            conn = duckdb.connect(str(manager.db_path))
+            conn = connect_duckdb(manager.db_path)
         except duckdb.Error:
             if attempt == 9:
                 raise
@@ -258,6 +267,7 @@ def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> 
                     tenant_key.matched_slot,
                 ],
             )
+            manager.audit_publisher.publish(payload)
             return
         except duckdb.Error:
             if attempt == 9:
@@ -268,7 +278,7 @@ def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> 
 
 
 def usage_by_tenant(manager: AuthManager) -> list[dict]:
-    conn = duckdb.connect(str(manager.db_path))
+    conn = connect_duckdb(manager.db_path)
     try:
         rows = conn.execute(
             """

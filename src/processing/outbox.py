@@ -13,6 +13,7 @@ from confluent_kafka import KafkaException
 from opentelemetry import trace
 
 from src.processing.tracing import inject_trace_to_kafka_headers, telemetry_disabled
+from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.outbox")
@@ -51,7 +52,7 @@ class OutboxProcessor:
         if conn is None and duckdb_path is None:
             raise ValueError("duckdb_path or conn is required")
         self._owns_conn = conn is None
-        self._conn = conn if conn is not None else duckdb.connect(str(duckdb_path))
+        self._conn = conn if conn is not None else connect_duckdb(str(duckdb_path))
         self._producer = producer or self._produce_to_kafka
         self._bootstrap_servers = bootstrap_servers or DEFAULT_KAFKA_BOOTSTRAP
         self._max_retries = max_retries

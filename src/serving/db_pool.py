@@ -10,6 +10,8 @@ from queue import Queue
 
 import duckdb
 
+from src.serving.duckdb_connection import connect_duckdb
+
 
 class DuckDBPool:
     def __init__(self, db_path: str, pool_size: int = 5):
@@ -40,7 +42,7 @@ class DuckDBPool:
         if self._db_path != ":memory:":
             Path(self._db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
-        self._write_conn = duckdb.connect(self._db_path)
+        self._write_conn = connect_duckdb(self._db_path)
         for _ in range(self._pool_size):
             conn = self._write_conn.cursor()
             self._read_connections.append(conn)

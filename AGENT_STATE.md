@@ -1,16 +1,16 @@
 # Agent State
 
-Updated: 2026-05-05
+Updated: 2026-05-06
 
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
 - Backlog correction base HEAD: `3080275`
-- Current resume HEAD: `adb9c8e`
-- Git status at resume: clean for tracked files on `main`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes after commit `adb9c8e`: `.github/workflows/ci.yml`, `tests/unit/test_validators.py`, `tests/unit/test_coverage_policy.py`, `AGENT_STATE.md`, and `res/codex/`.
-- File count: `git ls-files` reports 700 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/coverage task.
+- Current resume HEAD: `afbe643`
+- Git status at resume: clean for tracked files on `main`, `main...origin/main [ahead 23]`; full status still reports expected access-denied warnings for old local temp directories.
+- Current expected worktree changes after commit `afbe643`: none.
+- File count: `git ls-files` reports 701 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/coverage task.
 
 ## Available Runtime
 
@@ -25,7 +25,7 @@ Status: READY_WITH_GUARDRAILS
 
 The autopilot handoff files are project artifacts. `.autopilot/` is local runtime state and remains ignored. Do not run deploys, Terraform apply, production scripts, secret rotation, package publishing, paid external API calls, or live account operations.
 
-The 2026-05-05 closeout was interrupted by an explicit audit-remediation request. Commit `adb9c8e` records the first five locally verifiable Kimi audit fixes, Codex+Kimi synthesis under `res/codex/`, M1/M2 SQL static-analysis gate narrowing, L6 SBOM artifact generation, M7 staging rollback safety, and the first narrow M3 mypy strict slice for `src.quality.validators.*`. Current post-commit work adds the M8 scoped validators coverage gate. Tasks 18-22 stay blocked until real owner-provided evidence is supplied.
+The 2026-05-05 closeout was interrupted by an explicit audit-remediation request. Commit `adb9c8e` records the first five locally verifiable Kimi audit fixes, Codex+Kimi synthesis under `res/codex/`, M1/M2 SQL static-analysis gate narrowing, L6 SBOM artifact generation, M7 staging rollback safety, and the first narrow M3 mypy strict slice for `src.quality.validators.*`. Commit `afbe643` records the M8 scoped validators coverage gate. Tasks 18-22 stay blocked until real owner-provided evidence is supplied.
 
 ## Last Verified Gates
 
@@ -129,6 +129,14 @@ The 2026-05-05 closeout was interrupted by an explicit audit-remediation request
     - `python -m ruff check tests\unit\test_coverage_policy.py tests\unit\test_validators.py`: passed.
     - `python -m pytest tests/unit/test_coverage_policy.py tests/unit/test_validators.py -p no:schemathesis --basetemp .tmp\codex-m8-final-targeted-basetemp -o cache_dir=.tmp\codex-m8-final-targeted-cache`: passed with 19 tests.
     - `python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90 --basetemp .tmp\codex-m8-final-cov-basetemp -o cache_dir=.tmp\codex-m8-final-cov-cache`: passed with total coverage 100.00%.
+  - Final verification:
+    - `python -m ruff check src/ tests/`: passed.
+    - `python -m ruff format --check src/ tests/`: passed with 217 files already formatted.
+    - `python -m pytest tests/unit/test_coverage_policy.py tests/unit/test_validators.py tests/unit/test_typing_policy.py -p no:schemathesis --basetemp .tmp\codex-m8-final-combined-basetemp -o cache_dir=.tmp\codex-m8-final-combined-cache`: passed with 20 tests.
+    - `python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90 --basetemp .tmp\codex-m8-final-cov2-basetemp -o cache_dir=.tmp\codex-m8-final-cov2-cache`: passed with total coverage 100.00%.
+    - `python -m pytest -p no:schemathesis --basetemp .tmp\codex-m8-final-full-basetemp -o cache_dir=.tmp\codex-m8-final-full-cache`: passed with 767 passed, 4 skipped, and 104 warnings.
+    - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
+    - `cd sdk-ts; npm run typecheck`: passed.
 - M3 first strict mypy slice on 2026-05-05:
   - Closed local audit item partially: `src.quality.validators.*` now has scoped `disallow_untyped_defs = true`; global mypy `disallow_untyped_defs` remains `false`.
   - Red/green verification: `python -m pytest tests/unit/test_typing_policy.py -p no:schemathesis --basetemp .tmp\codex-m3-typing-red-basetemp -o cache_dir=.tmp\codex-m3-typing-red-cache` failed before the scoped override, then passed after implementation.

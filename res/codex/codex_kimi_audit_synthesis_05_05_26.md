@@ -46,7 +46,7 @@ Medium confidence: L6 and M7 are the next lowest-risk local changes after M1/M2.
 2. L6: done in the current local package.
 3. M7: done in the current local package.
 4. M3: done for the first narrow `src.quality.validators.*` strict slice.
-5. M8: add tests first, then raise a scoped coverage gate.
+5. M8: done for the first scoped `src.quality.validators` coverage gate.
 6. H3/M4: Helm guardrails and existingSecret support only after choosing the exact render contract.
 7. H6/M9: architecture decision first, implementation second.
 8. H4/H5/L7: remain blocked on owner evidence or release-scope decisions.

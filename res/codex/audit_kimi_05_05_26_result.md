@@ -36,6 +36,10 @@ Baseline: HEAD `10bc3c7`, branch `main` ahead of `origin/main` by 21 commits.
    - `src.quality.validators.*` now has `disallow_untyped_defs = true` in `pyproject.toml`.
    - `src/quality/validators/schema_validator.py` has the missing model-map and return annotations required by the strict slice.
    - `tests/unit/test_typing_policy.py` prevents removing the strict validators slice while keeping the global mypy gate narrow.
+10. M8 scoped coverage gate is added:
+   - `tests/unit/test_validators.py` now covers all `src.quality.validators` lines.
+   - `.github/workflows/ci.yml` adds a scoped `src.quality.validators` coverage gate at `--cov-fail-under=90`.
+   - `tests/unit/test_coverage_policy.py` prevents removing the scoped validators coverage gate.
 
 ## Updated files
 
@@ -55,6 +59,9 @@ Baseline: HEAD `10bc3c7`, branch `main` ahead of `origin/main` by 21 commits.
 - `tests/unit/test_staging_rollback.py`
 - `src/quality/validators/schema_validator.py`
 - `tests/unit/test_typing_policy.py`
+- `.github/workflows/ci.yml`
+- `tests/unit/test_validators.py`
+- `tests/unit/test_coverage_policy.py`
 - `AGENT_STATE.md`
 - `next-session-external-gates-operator-evidence-plan.md`
 - `res/codex/codex_kimi_audit_synthesis_05_05_26.md`
@@ -146,6 +153,18 @@ Baseline: HEAD `10bc3c7`, branch `main` ahead of `origin/main` by 21 commits.
   - `cd sdk-ts; npm run test:unit` -> `46 passed`.
   - `cd sdk-ts; npm run typecheck`.
   - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-final.json`
+- M8 tests-first red/green:
+  - `python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90 --basetemp .tmp\codex-m8-validators-cov-basetemp -o cache_dir=.tmp\codex-m8-validators-cov-cache`
+  - Failed before adding tests with total coverage `84.35%`.
+  - `python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90 --basetemp .tmp\codex-m8-validators-cov-green-basetemp -o cache_dir=.tmp\codex-m8-validators-cov-green-cache`
+  - Passed after adding tests with total coverage `100.00%`.
+- M8 CI-gate red/green:
+  - `python -m pytest tests/unit/test_coverage_policy.py -p no:schemathesis --basetemp .tmp\codex-m8-ci-gate-red-basetemp -o cache_dir=.tmp\codex-m8-ci-gate-red-cache`
+  - Failed before `.github/workflows/ci.yml` had the scoped validators coverage gate.
+  - `python -m pytest tests/unit/test_coverage_policy.py -p no:schemathesis --basetemp .tmp\codex-m8-ci-gate-green-basetemp -o cache_dir=.tmp\codex-m8-ci-gate-green-cache`
+  - Passed after adding the workflow gate.
+  - `python -m pytest tests/unit/test_coverage_policy.py tests/unit/test_validators.py -p no:schemathesis --basetemp .tmp\codex-m8-final-targeted-basetemp -o cache_dir=.tmp\codex-m8-final-targeted-cache`
+  - Passed with 19 tests.
 
 ## Still not locally closed
 
@@ -155,7 +174,7 @@ The remaining audit items need separate decisions or external evidence:
 - H4: Terraform apply/AWS OIDC owner evidence.
 - H5: external penetration test attestation.
 - H6: DuckDB encryption decision and implementation.
-- M8: coverage gate tightening.
+- M8 broader global coverage raise remains intentionally deferred until more modules have enough evidence; the local validators gate is closed.
 - M4: secret-source owner/evidence.
 - M9/L7: signing and lower-priority hardening/docs follow-up.
 

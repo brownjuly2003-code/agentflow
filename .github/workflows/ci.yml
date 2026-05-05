@@ -65,6 +65,9 @@ jobs:
         run: |
           # Full src/sdk baseline floor; changed-code coverage stays at 80% via Codecov patch status.
           python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+      - name: Run quality validators coverage gate
+        run: |
+          python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
@@ -203,4 +206,3 @@ jobs:
         run: |
           cd infrastructure/terraform
           terraform validate
-

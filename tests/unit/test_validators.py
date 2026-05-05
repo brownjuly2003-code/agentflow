@@ -1,7 +1,13 @@
 """Tests for schema and semantic validators."""
 
+import runpy
+import sys
+from pathlib import Path
+
 from src.quality.validators.schema_validator import validate_batch, validate_event
 from src.quality.validators.semantic_validator import validate_semantics
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestSchemaValidator:
@@ -56,6 +62,25 @@ class TestSchemaValidator:
         valid, failed = validate_batch([sample_order_event, sample_invalid_event])
         assert len(valid) == 1
         assert len(failed) == 1
+
+    def test_validation_result_to_dict(self, sample_order_event):
+        result = validate_event(sample_order_event)
+
+        payload = result.to_dict()
+
+        assert payload["is_valid"] is True
+        assert payload["event_id"] == sample_order_event["event_id"]
+        assert payload["event_type"] == sample_order_event["event_type"]
+        assert payload["errors"] == []
+        assert "T" in payload["validated_at"]
+
+    def test_known_event_schema_errors_include_locations(self):
+        result = validate_event({"event_id": "bad-order", "event_type": "order.created"})
+
+        assert not result.is_valid
+        assert result.event_id == "bad-order"
+        assert result.errors
+        assert all(isinstance(error["loc"], list) for error in result.errors)
 
 
 class TestSemanticValidator:
@@ -112,3 +137,56 @@ class TestSemanticValidator:
         }
         result = validate_semantics(event)
         assert not result.is_clean
+
+    def test_payment_above_maximum_is_warning_only(self):
+        event = {
+            "event_id": "test-006",
+            "event_type": "payment.captured",
+            "amount": "50000.01",
+        }
+
+        result = validate_semantics(event)
+
+        assert result.is_clean
+        assert result.issues[0].rule == "payment_max_amount"
+        assert result.issues[0].severity == "warning"
+
+    def test_product_price_sanity_warning(self):
+        event = {
+            "event_id": "test-007",
+            "event_type": "product.updated",
+            "price": "100001",
+        }
+
+        result = validate_semantics(event)
+
+        assert result.is_clean
+        assert result.issues[0].rule == "product_price_sanity"
+        assert result.issues[0].severity == "warning"
+
+    def test_semantic_result_to_dict(self):
+        result = validate_semantics(
+            {
+                "event_id": "test-008",
+                "event_type": "click",
+            }
+        )
+
+        payload = result.to_dict()
+
+        assert payload["event_id"] == "test-008"
+        assert payload["event_type"] == "click"
+        assert payload["is_clean"] is False
+        assert payload["issues"][0]["rule"] == "clickstream_session_required"
+        assert "T" in payload["checked_at"]
+
+    def test_semantic_validator_check_all_cli_outputs_summary(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["semantic_validator.py", "--check-all"])
+
+        runpy.run_path(
+            str(PROJECT_ROOT / "src" / "quality" / "validators" / "semantic_validator.py"),
+            run_name="__main__",
+        )
+
+        captured = capsys.readouterr()
+        assert "Order check: is_clean=True, issues=0" in captured.out

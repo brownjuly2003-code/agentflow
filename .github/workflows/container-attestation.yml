@@ -3,27 +3,78 @@ name: Container Attestation
 "on":
   workflow_dispatch:
     inputs:
+      mode:
+        description: Build a fresh GHCR image or sign an existing digest
+        required: true
+        default: build-and-sign
+        type: choice
+        options:
+          - build-and-sign
+          - sign-existing-digest
       image_ref:
         description: Container image repository/name without a digest
-        required: true
+        required: false
         type: string
       image_digest:
         description: Immutable image digest, for example sha256:...
-        required: true
+        required: false
         type: string
       confirm:
-        description: Type SIGN to sign and attest the supplied digest
+        description: Type SIGN to build/sign or sign an existing digest
         required: true
         type: string
 
 permissions:
   contents: read
+  packages: write
   id-token: write
   attestations: write
 
+env:
+  IMAGE_REF: ghcr.io/${{ github.repository_owner }}/agentflow-api
+
 jobs:
+  build-push-sign-attest:
+    if: ${{ inputs.confirm == 'SIGN' && inputs.mode == 'build-and-sign' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            ${{ env.IMAGE_REF }}:${{ github.sha }}
+            ${{ env.IMAGE_REF }}:audit-${{ github.run_id }}
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign pushed image digest with cosign keyless
+        env:
+          IMAGE_REF: ${{ env.IMAGE_REF }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes ${IMAGE_REF}@${IMAGE_DIGEST}
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE_REF }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
   attest-and-sign:
-    if: ${{ inputs.confirm == 'SIGN' }}
+    if: ${{ inputs.confirm == 'SIGN' && inputs.mode == 'sign-existing-digest' }}
     runs-on: ubuntu-latest
     steps:
       - name: Validate digest inputs
@@ -34,6 +85,10 @@ jobs:
             sha256:*) ;;
             *) echo "image_digest must be sha256:<digest>" >&2; exit 1 ;;
           esac
+          if [ -z "${{ inputs.image_ref }}" ]; then
+            echo "image_ref is required for sign-existing-digest mode" >&2
+            exit 1
+          fi
           case "${{ inputs.image_ref }}" in
             *@*) echo "image_ref must not include a digest; provide image_digest separately" >&2; exit 1 ;;
             *:latest) echo "image_ref must not be a mutable :latest tag" >&2; exit 1 ;;

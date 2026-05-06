@@ -8,9 +8,33 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
-    powershell = shutil.which("powershell")
+def _powershell() -> str:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
     assert powershell is not None
+    return powershell
+
+
+def _write_shim(shim_dir: Path, name: str, cmd_script: str, sh_script: str) -> None:
+    if os.name == "nt":
+        (shim_dir / f"{name}.cmd").write_text(cmd_script, encoding="utf-8")
+        return
+
+    target = shim_dir / name
+    target.write_text("#!/usr/bin/env sh\n" + sh_script, encoding="utf-8")
+    target.chmod(0o755)
+
+
+def _ensure_windows_powershell_command(shim_dir: Path, powershell: str) -> None:
+    if os.name == "nt" or shutil.which("powershell"):
+        return
+
+    target = shim_dir / "powershell"
+    target.write_text(f'#!/usr/bin/env sh\nexec "{powershell}" "$@"\n', encoding="utf-8")
+    target.chmod(0o755)
+
+
+def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
+    powershell = _powershell()
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -36,7 +60,10 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
 
     shim_dir = tmp_path / "bin"
     shim_dir.mkdir()
-    (shim_dir / "pi.cmd").write_text(
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(
+        shim_dir,
+        "pi",
         "\n".join(
             [
                 "@echo off",
@@ -48,9 +75,20 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
                 "exit /b 0",
             ]
         ),
-        encoding="utf-8",
+        "\n".join(
+            [
+                "mkdir -p .autopilot",
+                "echo task title> .autopilot/NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot/NEXT_TASK.md",
+                "echo docs/operations/> .autopilot/allowed-paths.txt",
+                "echo test commit> .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
     )
-    (shim_dir / "codex.cmd").write_text(
+    _write_shim(
+        shim_dir,
+        "codex",
         "@echo off\n"
         ":check_args\n"
         'if "%~1"=="" goto done\n'
@@ -59,7 +97,14 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
         "goto check_args\n"
         ":done\n"
         "exit /b 0\n",
-        encoding="utf-8",
+        "\n".join(
+            [
+                'for arg in "$@"; do',
+                '  if [ "$arg" = "--ask-for-approval" ]; then exit 2; fi',
+                "done",
+                "exit 0",
+            ]
+        ),
     )
 
     env = os.environ.copy()
@@ -84,8 +129,7 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
 
 
 def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
-    powershell = shutil.which("powershell")
-    assert powershell is not None
+    powershell = _powershell()
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -111,11 +155,16 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
 
     shim_dir = tmp_path / "bin"
     shim_dir.mkdir()
-    (shim_dir / "pi.cmd").write_text(
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(
+        shim_dir,
+        "pi",
         "@echo off\necho 401 Incorrect API key provided 1>&2\nexit /b 1\n",
-        encoding="utf-8",
+        'echo "401 Incorrect API key provided" >&2\nexit 1\n',
     )
-    (shim_dir / "codex.cmd").write_text(
+    _write_shim(
+        shim_dir,
+        "codex",
         "\n".join(
             [
                 "@echo off",
@@ -133,7 +182,19 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
                 "exit /b 0",
             ]
         ),
-        encoding="utf-8",
+        "\n".join(
+            [
+                'for arg in "$@"; do',
+                '  if [ "$arg" = "--ask-for-approval" ]; then exit 2; fi',
+                "done",
+                "mkdir -p .autopilot",
+                "echo task title> .autopilot/NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot/NEXT_TASK.md",
+                "echo docs/operations/> .autopilot/allowed-paths.txt",
+                "echo test commit> .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
     )
 
     env = os.environ.copy()

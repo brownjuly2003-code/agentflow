@@ -1,0 +1,55 @@
+site_name: AgentFlow Technical Walkthrough
+site_description: Interactive technical documentation for AgentFlow.
+repo_url: https://github.com/brownjuly2003-code/agentflow
+repo_name: brownjuly2003-code/agentflow
+site_dir: .tmp/mkdocs-site
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+
+plugins:
+  - search
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10.9.3/dist/mermaid.min.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+validation:
+  nav:
+    omitted_files: ignore
+  links:
+    not_found: ignore
+    unrecognized_links: ignore
+
+nav:
+  - Overview: index.md
+  - Quickstart: quickstart.md
+  - Architecture: architecture/index.md
+  - Concepts: concepts.md
+  - Components: components.md
+  - API: api/index.md
+  - SDKs: sdk.md
+  - Deployment: deployment.md
+  - Observability: observability.md
+  - Troubleshooting: troubleshooting.md

@@ -108,6 +108,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 
 ## Documentation
 
+- [Interactive Technical Walkthrough](docs/index.md) - MkDocs Material guide with Mermaid architecture, API, SDK, deployment, observability, and troubleshooting pages
 - [Architecture](docs/architecture.md) - system context, data flow, failure modes
 - [Operational Runbook](docs/runbook.md) - local stack, CDC capture, incident response, and maintenance commands
 - [API Reference](docs/api-reference.md) - endpoint-by-endpoint examples for curl, Python, and TypeScript

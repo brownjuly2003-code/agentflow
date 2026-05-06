@@ -1,7 +1,7 @@
 # AgentFlow Release Readiness
 
 **Date**: 2026-04-20
-**Last updated**: 2026-05-04
+**Last updated**: 2026-05-06
 **Version**: v1.1.0 + post-v1.1 CDC follow-up + 2026-04-27 audit closure sprint + post-release benchmark workflow split
 **Status**: v1.0.0 published; v1.0.1 patch released for clean-clone support; v1.1.0 release line published to PyPI and npm with SDK/runtime split; post-v1.1 CDC operationalization checked in; the 2026-04-27 audit closure sprint landed six commits closing all P0/P1/P2 findings (see [docs/audits/2026-04-27/](audits/2026-04-27/README.md)); registry credentials configured; main protected with required status checks; GitHub Actions environments `staging` and `production` configured with required reviewers; GitHub Release record created
 
@@ -11,7 +11,7 @@ AgentFlow закрыл технические блокеры из internal audit
 
 The v1.1 line split runtime and SDK distribution identity: the runtime publishes as `agentflow-runtime`, while the Python SDK publishes as `agentflow-client` and keeps the `agentflow` import path. The current post-v1.1 follow-up operationalizes ADR 0005 with Debezium/Kafka Connect local compose, a Kubernetes-shaped Helm chart, raw CDC topic bootstrap, and canonical CDC normalization before downstream validation.
 
-## Current Status (2026-05-04)
+## Current Status (2026-05-06)
 
 | Area | Clear status |
 |------|--------------|
@@ -24,7 +24,7 @@ The v1.1 line split runtime and SDK distribution identity: the runtime publishes
 | CDC Kubernetes path | Checked in: `helm/kafka-connect` chart, values schema, connector hooks, and topic bootstrap hook |
 | CDC production onboarding | Blocked on external decisions: real hostnames, table scope, network path, secret owner, monitoring owner, and rollback owner are absent; the required decision record and no-go gates are documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) |
 | Recorded full-suite evidence | 2026-05-04 Docker-backed local full-suite pass after final release-evidence sync: 752 passed, 4 skipped in 398.35s with project-local temp/cache paths. Earlier 2026-05-04, 2026-05-02, 2026-05-01, and 2026-04-30 full-suite evidence remains recorded below. |
-| Current post-release main | Local `main` contains the post-release npm Trusted Publishing handoff plus refreshed external-gate evidence. Push remains separate; do not assume origin has these local commits until `git push` is explicitly run. |
+| Current post-release main | `origin/main` is pushed through `1683d5dcf7051ad7da4a8a87145b94f93320d348`. Local worktree is clean before the 2026-05-06 external-evidence recheck. |
 
 ## Status by BCG Dimension
 
@@ -66,12 +66,13 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - v14 changes only SDK resilience and SDK tests/docs, so this release records the entity p99 tail as a serving-path known limitation rather than claiming a new performance fix.
 - Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `terraform init -backend=false` and `terraform validate` through the Terraform container plus workflow wiring.
 - GitHub Actions environments `staging` and `production` are configured with required reviewer `brownjuly2003-code`; `prevent_self_review=false` because the repo currently has one admin collaborator.
-- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-05-04, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, real `infrastructure/terraform/environments/*.tfvars` files are not committed, and no AWS credentials are configured on the verification workstation. Current handoff: [AWS OIDC Setup For Terraform Apply](operations/aws-oidc-setup.md).
+- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-05-06, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, real `infrastructure/terraform/environments/*.tfvars` files are not committed, no `Terraform Apply` workflow runs exist, and no AWS credentials are configured on the verification workstation. Current handoff: [AWS OIDC Setup For Terraform Apply](operations/aws-oidc-setup.md).
 - SDK registry publish evidence is complete for v1.1.0. The legacy npm package `@uedomskikh/agentflow-client` remains live but is not the future publish target. Future TypeScript SDK publishing now targets `@yuliaedomskikh/agentflow-client`, which is public, owned by `yuliaedomskikh`, and has npm Trusted Publishing configured for GitHub Actions OIDC (`brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment). CLI readback confirmed the same Trusted Publisher on 2026-05-01. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29 until revoked. Revoke it only after the first successful trusted-publish workflow run on the new package. The green `publish-npm.yml` run on `2c72387` is not sufficient revocation proof because it published legacy `@uedomskikh/agentflow-client` with `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`. A new account still cannot control the old `@uedomskikh/agentflow-client` package unless old owner auth adds it as a maintainer or npm support intervenes; scoped packages cannot be transferred to a different user scope.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline. Current plan: [Public Production-Hardware Benchmark Plan](perf/public-production-hardware-benchmark-plan.md).
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
 - Production CDC source onboarding is not yet enabled. The checked-in CDC path covers local/demo and Kubernetes-shaped staging primitives; real production Postgres/MySQL attachment still needs hostnames, table scope, network access, secret ownership, monitoring ownership, and rollback ownership. The approval checklist is documented in [Production CDC Source Onboarding](operations/cdc-production-onboarding.md).
 - External pen-test attestation is not present. Internal security audit evidence remains separate from third-party attestation; current handoff: [External Pen-Test Attestation Handoff](operations/external-pen-test-attestation-handoff.md).
+- External immutable audit retention is not present if claims need to go beyond the local hash-chained JSONL export. No WORM/Object Lock/SIEM retention policy evidence, write proof, or readback evidence has been supplied; current handoff: [Immutable Retention Evidence Handoff](operations/immutable-retention-evidence-handoff.md).
 - This Windows workstation has a local pytest startup issue unrelated to release code: `pyreadline3`, `pytest-metadata`, and `prometheus_client` can call `platform.*` and hang in Windows WMI before test output appears. The 2026-04-28 full-suite pass used a temporary project-local `sitecustomize` shim for that workstation only; the shim was removed after verification. Keep publishable docs free of absolute local paths.
 
 ## Release Checklist
@@ -89,6 +90,7 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - [x] Local and Kubernetes-shaped CDC operationalization checked in
 - [x] GitHub environments `staging` and `production` configured with required reviewer `brownjuly2003-code` (verified via `gh api` on 2026-04-30; `prevent_self_review=false` because the repo currently has one admin collaborator)
 - [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, real environment tfvars, and operator approval are still missing; handoff in `docs/operations/aws-oidc-setup.md`)
+- [ ] External immutable audit retention accepted if claimed beyond local hash-chain evidence (WORM/Object Lock/SIEM target, retention policy, write proof, and readback evidence are still missing; handoff in `docs/operations/immutable-retention-evidence-handoff.md`)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
 - [ ] Production CDC source onboarding approved and configured (source owner, secret owner, source connection details, table scope, private network path, monitoring owner, and rollback owner are still missing)
 - [x] Full-suite release-line verification — latest `752 passed, 4 skipped` on 2026-05-04 after clarifying the npm revocation handoff; prior `749 passed, 4 skipped`, `741 passed, 4 skipped`, and `743 passed, 4 skipped` runs remain in the evidence table as dated history
@@ -167,11 +169,12 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 | Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits landed on `main`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
 | Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
 | GitHub Actions environments `staging` and `production` | ✅ APPLIED | `gh api repos/brownjuly2003-code/agentflow/environments` shows a `required_reviewers` protection rule on both environments with reviewer `brownjuly2003-code`; `prevent_self_review=false` |
-| AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | 2026-05-04 access triage reconfirmed: GitHub CLI can inspect repo state, but `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs are still `if: false`, real `environments/*.tfvars` are absent, AWS CLI and Terraform CLI are not available in `PATH`, and no AWS account bootstrap/OIDC proof/first apply evidence was available. |
+| AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | 2026-05-06 access triage reconfirmed: GitHub CLI can inspect `brownjuly2003-code/agentflow`; repository variables contain only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is missing; terraform apply jobs are still `if: false`; real `environments/*.tfvars` are absent; AWS CLI and Terraform CLI are not available in `PATH`; and no AWS account bootstrap/OIDC proof/first apply evidence was available. |
+| External immutable audit retention | ⚠️ BLOCKED | 2026-05-06 evidence triage found local hash-chained JSONL support only. No WORM/Object Lock/SIEM retention target, retention-policy artifact, storage owner, write proof, readback proof, or review owner was available. Handoff: `docs/operations/immutable-retention-evidence-handoff.md`. |
 | Production CDC source onboarding | ⚠️ BLOCKED | 2026-05-04 access triage found no source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, rollback owner, or approved production context to inspect. Handoff: `docs/operations/cdc-production-onboarding.md`. |
 | Phase 1 PMF and pricing evidence | ⚠️ BLOCKED | 2026-05-04 access triage found no approved outbound account/session, warm intro thread, CRM/calendar artifact, real outreach, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP artifact, LOI, invoice, procurement artifact, or first-paying-customer signal. Handoffs: `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. |
 | Public production-hardware benchmark | ⚠️ BLOCKED | 2026-05-04 access triage found only historical local `.artifacts/benchmark/` files; approved `c8g.4xlarge+` access, budget, operator-run results, fixture-safety confirmation, host metadata, and publication approval are absent. Plan: `docs/perf/public-production-hardware-benchmark-plan.md`. |
-| External pen-test attestation | ⚠️ BLOCKED | 2026-05-04 access triage found no third-party tester, report artifact, signed attestation, scope, severity summary, remediation map, retest status, or attestation owner. Handoff: `docs/operations/external-pen-test-attestation-handoff.md`. |
+| External pen-test attestation | ⚠️ BLOCKED | 2026-05-06 access triage found no third-party tester, report artifact, signed attestation, scope, test window, severity summary, remediation map, retest status, or attestation owner. Handoff: `docs/operations/external-pen-test-attestation-handoff.md`. |
 | TypeScript SDK lockfile + audit | ✅ CLEAN | `sdk-ts/package-lock.json` committed (1500 lines); `npm audit --audit-level=moderate` reports 0 vulnerabilities |
 
 Full-suite note: local verification requires Redis to be running for cache-backed API tests. This Windows workstation also needs project-local `TEMP`/`TMP` and `--basetemp` paths because the default `%TEMP%\pytest-of-uedom` path is not readable by the test process. On 2026-04-28, direct pytest also hung before output when Windows WMI was reached through `platform.*`; the successful local run used a temporary project-local `sitecustomize` shim and a dummy `readline` module in the test runner. Do not commit that shim.
@@ -199,6 +202,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 - Post-release external-gate handoffs:
   - External gate evidence intake checklist: `docs/operations/external-gate-evidence-intake.md`
   - AWS OIDC Terraform apply readiness: `docs/operations/aws-oidc-setup.md`
+  - External immutable audit retention: `docs/operations/immutable-retention-evidence-handoff.md`
   - Production CDC source onboarding: `docs/operations/cdc-production-onboarding.md`
   - Phase 1 PMF evidence: `docs/customer-discovery-tracker.md`
   - Pricing evidence: `docs/pricing-validation-plan.md`
@@ -207,11 +211,10 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 
 ## New Session Handoff
 
-Local `main` contains the post-release npm Trusted Publishing handoff and refreshed
-external-gate evidence. Push remains separate; do not assume origin has these
-local commits until `git push` is explicitly run. The approved `v1.1.0` tag
-points at `2c72387`. Registry artifacts are live on PyPI and npm. Future
-TypeScript SDK publishing now uses the new npm account and package
+`main` is pushed to `origin/main` through
+`1683d5dcf7051ad7da4a8a87145b94f93320d348`. The approved `v1.1.0` tag points
+at `2c72387`. Registry artifacts are live on PyPI and npm. Future TypeScript
+SDK publishing now uses the new npm account and package
 `@yuliaedomskikh/agentflow-client`.
 
 Current npm handoff state:
@@ -258,6 +261,7 @@ AgentFlow is publicly available and the current checked-in docs/code describe th
 - External gate evidence intake: use [External Gate Evidence Intake Checklist](operations/external-gate-evidence-intake.md) and the project-local Pi skill `.pi/skills/external-gate-evidence-intake` before marking any blocked external gate complete
 - Phase 1 PMF: real customer discovery and pricing validation evidence; current tracker content is synthetic/modelled only, with real evidence count still `0`
 - AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml` only after explicit operator approval
+- External immutable audit retention: provide WORM/Object Lock/SIEM retention evidence before claiming anything beyond local hash-chain support
 - Revoke the legacy npm `NPM_TOKEN` after the first successful trusted-publish run for `@yuliaedomskikh/agentflow-client`
 - Production CDC source onboarding decision and secrets/network setup; use [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) as the approval checklist
 - External pen-test attestation; use [External Pen-Test Attestation Handoff](operations/external-pen-test-attestation-handoff.md)

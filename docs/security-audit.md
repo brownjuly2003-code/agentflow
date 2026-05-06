@@ -121,7 +121,7 @@ What is not evidenced in this repository snapshot:
 - automated rotation for non-API-key secrets
 - externally immutable audit retention or SIEM export
 
-The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository.
+The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository. Use `docs/operations/immutable-retention-evidence-handoff.md` before making any external immutable-retention claim.
 
 Because the external controls are not provable from the checked-in code, they should not be claimed in customer-facing security questionnaires without additional infrastructure evidence.
 

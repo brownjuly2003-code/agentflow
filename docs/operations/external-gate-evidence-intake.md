@@ -39,6 +39,7 @@ modeled evidence, or historical CI runs sufficient to close a gate.
 |------|----------------|
 | AWS OIDC Terraform apply readiness | [AWS OIDC Setup For Terraform Apply](aws-oidc-setup.md) |
 | Production CDC source onboarding | [Production CDC Source Onboarding](cdc-production-onboarding.md) |
+| External immutable audit retention | [Immutable Retention Evidence Handoff](immutable-retention-evidence-handoff.md) |
 | Phase 1 PMF and pricing evidence | [Customer Discovery Tracker](../customer-discovery-tracker.md) and [Pricing Validation Plan](../pricing-validation-plan.md) |
 | Public production-hardware benchmark | [Public Production-Hardware Benchmark Plan](../perf/public-production-hardware-benchmark-plan.md) |
 | External pen-test attestation | [External Pen-Test Attestation Handoff](external-pen-test-attestation-handoff.md) |
@@ -137,6 +138,58 @@ Source handoff: [Production CDC Source Onboarding](cdc-production-onboarding.md)
 - A connector config without source-owner, secret-owner, and rollback-owner
   signoff.
 - A topic list without proof of normalized events and monitored lag.
+
+## External Immutable Audit Retention
+
+Source handoff:
+[Immutable Retention Evidence Handoff](immutable-retention-evidence-handoff.md).
+
+### Required Owner-Provided Fields
+
+| Field | Required value |
+|-------|----------------|
+| Storage owner | Team/person accountable for the immutable store |
+| Retention target | S3 Object Lock, immutable backup vault, SIEM, or equivalent |
+| Retention mode | Governance/compliance mode or equivalent immutability control |
+| Retention period | Duration and policy name/version |
+| Audit source | Source stream/file/table and export mechanism |
+| Access controls | Owner-approved writer, reader, and delete/retention administrators |
+| Policy evidence | Redacted policy export, CLI output, console export, or ticket |
+| Write evidence | Dated sample export path, object version, or sink delivery proof |
+| Readback evidence | Query, object metadata, restore, or retrieval proof |
+| Review owner | Person approving customer-facing retention claims |
+
+### Acceptable Artifact Links Or Paths
+
+- Redacted S3 Object Lock bucket policy or retention-rule export.
+- SIEM or log-archive retention-policy export with policy name and date.
+- Kafka Connect, Firehose, or equivalent sink evidence showing audit records
+  delivered to the immutable target.
+- Object metadata or retention readback proving the retention mode and retain
+  until date.
+- Secure evidence-folder or ticket link that keeps account IDs, private
+  hostnames, and customer data out of the repository.
+
+### Explicit No-Go Conditions
+
+- The only evidence is local hash-chained JSONL, DuckDB analytics, tests, or
+  documentation.
+- Retention policy is described verbally without a dated artifact.
+- The storage target allows the application writer to delete or shorten
+  retention.
+- Evidence exposes secrets, account material, private hostnames, or customer
+  data in the repository.
+- The retention claim exceeds the configured target, source, or retention
+  period.
+
+### Insufficient Evidence
+
+- `AGENTFLOW_AUDIT_LOG_PATH` support by itself.
+- A local hash-chain verification pass.
+- Kafka topic retention settings without a separate immutable target or ACL
+  evidence.
+- Backup lifecycle rules that allow normal delete or retention shortening.
+- Verbal confirmation that logs are archived.
 
 ## Phase 1 PMF And Pricing Evidence
 

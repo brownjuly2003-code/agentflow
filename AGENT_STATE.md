@@ -7,10 +7,10 @@ Updated: 2026-05-06
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main`
 - Backlog correction base HEAD: `3080275`
-- Current resume HEAD: `8f5eadd`
-- Git status at resume: clean for tracked files on `main`, `main...origin/main [ahead 1]`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes before the local audit-gates commit: bounded H3/M4/H6/M9/L7/H4/H5 code, workflow, test, and documentation files only.
-- File count: `git ls-files` reports 702 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/audit task.
+- Current resume HEAD: `1683d5dcf7051ad7da4a8a87145b94f93320d348`
+- Git status at resume: clean for tracked files on `main`, `main...origin/main`; full status still reports expected access-denied warnings for old local temp directories.
+- Current expected worktree changes before the external-evidence-gates commit: documentation-only H4/H5/M9 evidence status files.
+- File count: `git ls-files` reports 710 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/audit task.
 
 ## Available Runtime
 
@@ -36,6 +36,15 @@ M9 hash-chained audit JSONL export, L7 digest-only GitHub/Sigstore workflow
 skeleton, H4 no-apply Terraform preflight, and H5 internal security evidence
 template. H4, H5, L7 real signing, and external immutable retention stay
 evidence-pending until owner-supplied artifacts exist.
+
+The 2026-05-06 external evidence-gates continuation started from pushed HEAD
+`1683d5d`, branch `main...origin/main`, with `git ls-files` count `710`.
+Recheck found H4 still blocked (`AWS_REGION` only, no
+`AWS_TERRAFORM_ROLE_ARN`, no local AWS credential hints, no `aws`/`terraform`
+CLI, no real tfvars, no Terraform Apply runs), H5 still blocked (no external
+tester/report/attestation packet), and M9 external immutable retention still
+blocked if claimed beyond local hash-chain support (no WORM/Object Lock/SIEM
+policy, write proof, or readback evidence).
 
 ## Last Verified Gates
 

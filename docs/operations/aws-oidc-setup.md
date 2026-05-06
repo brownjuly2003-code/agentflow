@@ -29,6 +29,14 @@ example tfvars files exist locally. No AWS account bootstrap, role ARN, real
 tfvars, CloudTrail OIDC proof, first apply run, reviewer, or rollback owner was
 available to record.
 
+Evidence recheck on 2026-05-06 confirmed the same blocker on the pushed `main`
+HEAD `1683d5dcf7051ad7da4a8a87145b94f93320d348`: repository variables contain
+`AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is absent; this
+workstation has no AWS credential environment hints; `aws` and `terraform` are
+not installed in `PATH`; real `staging.tfvars` and `prod.tfvars` remain absent;
+and there are no `Terraform Apply` workflow runs to use as apply or CloudTrail
+evidence.
+
 Local readiness update on 2026-05-06 added a no-apply preflight. It improves
 evidence intake but does not close H4 because no AWS role ARN, real tfvars,
 CloudTrail `AssumeRoleWithWebIdentity` proof, owner approval, or successful

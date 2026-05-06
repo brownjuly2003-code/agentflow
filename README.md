@@ -119,6 +119,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 - [Customer Discovery Tracker](docs/customer-discovery-tracker.md) - synthetic/modelled PMF planning surface and real-evidence gap
 - [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions, evidence gates, and current real-evidence gap
 - [AWS OIDC Setup](docs/operations/aws-oidc-setup.md) - Terraform apply readiness handoff
+- [Immutable Retention Evidence Handoff](docs/operations/immutable-retention-evidence-handoff.md) - external audit-retention evidence checklist
 - [Production CDC Source Onboarding](docs/operations/cdc-production-onboarding.md) - production CDC decision record and no-go gates
 - [External Gate Evidence Intake Checklist](docs/operations/external-gate-evidence-intake.md) - required owner evidence before blocked external gates can close
 - [Public Production-Hardware Benchmark Plan](docs/perf/public-production-hardware-benchmark-plan.md) - benchmark evidence plan for `c8g.4xlarge+`
@@ -166,6 +167,7 @@ external-gate handoff. The post-v1.1 CDC operationalization
 for Debezium / Kafka Connect is checked in, while production source
 onboarding remains pending; see [docs/release-readiness.md](docs/release-readiness.md).
 Remaining external gates are AWS OIDC role setup for real Terraform apply,
+external immutable audit retention if claimed beyond local hash-chain evidence,
 production CDC source onboarding, real PMF/pricing evidence, public benchmark
 publication on production hardware, external pen-test attestation, and legacy
 npm `NPM_TOKEN` revocation after a successful new-package trusted-publish run.

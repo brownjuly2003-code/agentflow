@@ -30,12 +30,23 @@ tfvars, CloudTrail OIDC proof, first apply run, reviewer, or rollback owner was
 available to record.
 
 Evidence recheck on 2026-05-06 confirmed the same blocker on the pushed `main`
-HEAD `1683d5dcf7051ad7da4a8a87145b94f93320d348`: repository variables contain
-`AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is absent; this
-workstation has no AWS credential environment hints; `aws` and `terraform` are
-not installed in `PATH`; real `staging.tfvars` and `prod.tfvars` remain absent;
-and there are no `Terraform Apply` workflow runs to use as apply or CloudTrail
-evidence.
+HEAD `ca5ba1d44c35bc27bc561b64f5e0c5c706415756`: repository variables contain
+`AWS_REGION=us-east-1` only; `AWS_TERRAFORM_ROLE_ARN` is absent; GitHub
+environments `staging` and `production` have required reviewers but no
+environment-level variables or secrets; this workstation has no AWS credential
+environment hints, AWS config, or AWS credentials file; `aws`, `terraform`, and
+`tofu` are not installed in `PATH`; real
+`infrastructure/terraform/environments/staging.tfvars` and
+`infrastructure/terraform/environments/prod.tfvars` remain absent; and the
+GitHub Actions API reports `total_count: 0` for `Terraform Apply` workflow runs,
+so there is no apply/preflight run or CloudTrail evidence to cite.
+
+The tracked root-level `infrastructure/terraform/dev.tfvars` and
+`infrastructure/terraform/prod.tfvars` are not proof of H4 readiness. The
+current workflow resolves only `environments/staging.tfvars` and
+`environments/prod.tfvars`, and the root files still contain placeholder-shaped
+VPC, subnet, and SNS values. Treat them as local scaffold inputs, not as an
+owner-approved apply packet.
 
 Local readiness update on 2026-05-06 added a no-apply preflight. It improves
 evidence intake but does not close H4 because no AWS role ARN, real tfvars,

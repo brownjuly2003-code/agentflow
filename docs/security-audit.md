@@ -162,8 +162,9 @@ For an engineering-led v1 product, AgentFlow shows an above-average application 
 - response-time privacy masking
 - usable audit trail and CI scanning
 
-The main gap is not the app layer. It is the absence of externally verifiable infrastructure and governance controls. Before a broad enterprise launch, the highest-value next steps are:
-- external penetration testing
+The main gap is not the app layer. It is the absence of externally verifiable infrastructure and governance controls. These gaps do not block continued development, package publication, or demos, but they do block enterprise-facing security claims:
+- external penetration testing, including report scope, dates, severity summary, remediation map, retest status, and owner
 - documented secrets-management architecture
 - explicit encryption-at-rest posture for deployment targets
+- external immutable retention evidence before claiming WORM/Object Lock/SIEM-backed audit logs
 - a short customer-facing security overview aligned to the facts above

@@ -25,6 +25,27 @@ def test_shipped_contracts_cover_four_legacy_types() -> None:
     assert loaded == {"order", "user", "product", "session"}
 
 
+def test_loader_uses_entity_contracts_dir_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write(
+        tmp_path,
+        "widget",
+        {
+            "name": "widget",
+            "description": "env supplied contract",
+            "table": "widgets",
+            "primary_key": "widget_id",
+            "fields": {"widget_id": "pk"},
+        },
+    )
+    monkeypatch.setenv("AGENTFLOW_ENTITY_CONTRACTS_DIR", str(tmp_path))
+
+    loaded = load_entity_contracts()
+
+    assert [entity.name for entity in loaded] == ["widget"]
+
+
 def test_legacy_shapes_preserved_after_refactor() -> None:
     catalog = DataCatalog()
     expected = {

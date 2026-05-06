@@ -31,6 +31,7 @@ jobs:
 
       - name: Start chaos stack
         run: |
+          mkdir -p .tmp
           mkdir -p .artifacts/chaos
           docker compose -p agentflow-chaos -f docker-compose.chaos.yml up -d --wait --wait-timeout 120
 
@@ -80,6 +81,7 @@ jobs:
 
       - name: Start chaos stack
         run: |
+          mkdir -p .tmp
           mkdir -p .artifacts/chaos
           docker compose -p agentflow-chaos -f docker-compose.chaos.yml up -d --wait --wait-timeout 120
 

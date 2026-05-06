@@ -61,6 +61,8 @@ jobs:
           pip install -e ".[dev,cloud]"
           pip install -e "./sdk"
           pip install -e "./integrations[mcp]"
+      - name: Prepare pytest temp directory
+        run: mkdir -p .tmp
       - name: Run unit and property tests with coverage
         run: |
           # Full src/sdk baseline floor; changed-code coverage stays at 80% via Codecov patch status.
@@ -102,6 +104,8 @@ jobs:
         run: |
           pip install -e ".[dev,cloud]"
           pip install -e "./sdk"
+      - name: Prepare pytest temp directory
+        run: mkdir -p .tmp
       - name: Wait for Kafka
         run: |
           timeout 30 bash -c 'until nc -z localhost 9092; do sleep 1; done'
@@ -123,6 +127,8 @@ jobs:
       - uses: helm/kind-action@v1.14.0
         with:
           install_only: true
+      - name: Prepare pytest temp directory
+        run: mkdir -p .tmp
       - name: Run Helm schema live validation
         run: python -m pytest tests/integration/test_helm_values_live_validation.py -v -m integration --tb=short
 

@@ -30,6 +30,9 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install click rich pyyaml pytest-timeout
 
+      - name: Prepare pytest temp directory
+        run: mkdir -p .tmp
+
       - name: Start E2E stack
         run: |
           docker compose -f docker-compose.e2e.yml up -d --build agentflow-api

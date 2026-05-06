@@ -79,6 +79,7 @@ def build_security_headers_middleware(config_path: Path | str | None = None):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         content_length = request.headers.get("content-length")
+        response: Response
         if content_length is not None and int(content_length) > policy.request_size_limit_bytes:
             response = JSONResponse(
                 status_code=413,

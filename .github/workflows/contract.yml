@@ -41,4 +41,5 @@ jobs:
       - run: pip install -e "./sdk"
       - run: python scripts/generate_contracts.py --check
       - run: python scripts/export_openapi.py --check
+      - run: mkdir -p .tmp
       - run: python -m pytest tests/contract -v --tb=short

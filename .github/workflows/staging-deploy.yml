@@ -28,6 +28,9 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install click rich pyyaml pytest-timeout
 
+      - name: Prepare pytest temp directory
+        run: mkdir -p .tmp
+
       - uses: azure/setup-helm@v4.3.0
 
       - uses: helm/kind-action@v1.14.0

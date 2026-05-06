@@ -169,6 +169,8 @@ def test_docker_build_contexts_prepare_root_package_metadata():
             assert "COPY README.md /build/README.md" in text
             assert "python -m build --wheel" in text
             assert "pip install --no-cache-dir -e" not in text
+            assert "COPY contracts /app/contracts" in text
+            assert "AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities" in text
         else:
             assert "COPY README.md /app/README.md" in text, (
                 f"{relative_path} must copy README.md before installing the root package"
@@ -248,3 +250,20 @@ def test_make_demo_explicitly_uses_local_open_auth_mode():
     makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "AGENTFLOW_AUTH_DISABLED=true DUCKDB_PATH=agentflow_demo.duckdb uvicorn" in makefile
+
+
+def test_pytest_workflows_prepare_tmp_parent_directory():
+    workflow_paths = sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.yml"))
+
+    pytest_workflows = [
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for path in workflow_paths
+        if "pytest" in path.read_text(encoding="utf-8")
+    ]
+
+    assert pytest_workflows
+    for relative_path in pytest_workflows:
+        workflow_text = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
+        assert "mkdir -p .tmp" in workflow_text, (
+            f"{relative_path} must create .tmp before pytest uses --basetemp=.tmp/..."
+        )

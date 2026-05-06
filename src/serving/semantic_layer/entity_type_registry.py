@@ -15,6 +15,7 @@ deliberate so this refactor stays behaviour-preserving.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -67,7 +68,8 @@ def load_entity_contracts(
     """
     from src.serving.semantic_layer.catalog import EntityDefinition
 
-    directory = contracts_dir or DEFAULT_CONTRACTS_DIR
+    configured_dir = os.getenv("AGENTFLOW_ENTITY_CONTRACTS_DIR")
+    directory = contracts_dir or (Path(configured_dir) if configured_dir else DEFAULT_CONTRACTS_DIR)
     if not directory.is_dir():
         raise ContractValidationError(f"Entity contracts directory not found: {directory}")
 

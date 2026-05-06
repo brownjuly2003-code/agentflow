@@ -16,6 +16,20 @@ theme:
 plugins:
   - search
 
+exclude_docs: |
+  *.md
+  */**/*.md
+  !index.md
+  !quickstart.md
+  !architecture/index.md
+  !concepts.md
+  !components.md
+  !api/index.md
+  !sdk.md
+  !deployment.md
+  !observability.md
+  !troubleshooting.md
+
 extra_javascript:
   - https://unpkg.com/mermaid@10.9.3/dist/mermaid.min.js
 
@@ -37,10 +51,10 @@ markdown_extensions:
 
 validation:
   nav:
-    omitted_files: ignore
+    omitted_files: warn
   links:
-    not_found: ignore
-    unrecognized_links: ignore
+    not_found: warn
+    unrecognized_links: warn
 
 nav:
   - Overview: index.md

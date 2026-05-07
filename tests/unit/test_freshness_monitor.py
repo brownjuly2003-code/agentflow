@@ -157,6 +157,28 @@ def test_naive_timestamp_is_treated_as_utc(monitor):
         assert latency_labels.called
 
 
+def test_start_skips_none_polls_and_dispatches_valid_messages(monitor):
+    """Cover the `msg is None` continue branch and the valid-message dispatch line."""
+    fresh_ts = datetime.now(UTC).isoformat()
+    payload = json.dumps(
+        {"event_id": "ev-poll", "event_type": "order.created", "timestamp": fresh_ts}
+    ).encode()
+    valid_msg = _make_msg(payload)
+    valid_msg.error.return_value = None
+
+    consumer = monitor.consumer
+    consumer.poll.side_effect = [None, valid_msg, KeyboardInterrupt()]
+
+    with (
+        patch.object(fm_module, "start_http_server"),
+        patch.object(monitor, "_process_message") as proc,
+    ):
+        monitor.start(metrics_port=18002)
+
+    proc.assert_called_once_with(valid_msg)
+    consumer.close.assert_called_once()
+
+
 def test_start_handles_partition_eof_and_real_kafka_errors(monitor):
     # Three poll() yields: real error → ignored EOF → KeyboardInterrupt to exit.
     eof_code = fm_module.KafkaError._PARTITION_EOF

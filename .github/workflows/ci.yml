@@ -70,6 +70,9 @@ jobs:
       - name: Run quality validators coverage gate
         run: |
           python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90
+      - name: Run freshness monitor coverage gate
+        run: |
+          python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=src.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:

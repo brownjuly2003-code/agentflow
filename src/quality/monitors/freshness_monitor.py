@@ -158,7 +158,7 @@ class FreshnessMonitor:
             )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     monitor = FreshnessMonitor(
         bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
         topics=["events.validated", "sessions.aggregated"],

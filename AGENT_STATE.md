@@ -1,6 +1,6 @@
 # Agent State
 
-Updated: 2026-05-06
+Updated: 2026-05-07
 
 ## Current Project State
 
@@ -136,6 +136,18 @@ policy, write proof, or readback evidence).
     - `cd sdk-ts; npm run test:unit`: passed with 46 tests.
     - `cd sdk-ts; npm run typecheck`: passed.
     - `python scripts\bandit_diff.py .bandit-baseline.json .tmp-security\bandit-m1m2-final.json`: passed with no new findings.
+- Freshness monitor scoped coverage gate on 2026-05-07:
+  - Closed local audit item partially: `.github/workflows/ci.yml` now runs `tests/unit/test_freshness_monitor.py` with `--cov=src.quality.monitors.freshness_monitor --cov-fail-under=90`; broader global coverage remains at 60% until additional modules have enough evidence.
+  - Tests-first verification:
+    - `python -m pytest tests/unit/test_freshness_monitor.py --cov=src.quality.monitors.freshness_monitor --cov-fail-under=90 --basetemp .tmp\cov-fresh-baseline`: baseline before new coverage was 94% (4 lines missing: msg-is-None continue, valid-message dispatch, `__main__` block).
+    - `python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=src.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90 --basetemp .tmp\cov-fresh-green`: passed after one new test plus `# pragma: no cover` on the `__main__` entrypoint with total coverage 100.00%.
+  - Targeted verification:
+    - `python -m pytest tests/unit/test_coverage_policy.py tests/unit/test_freshness_monitor.py -v --tb=short -p no:schemathesis --basetemp .tmp\cov-fresh-policy`: passed with 11 tests.
+    - `python -m ruff check tests/unit/test_freshness_monitor.py tests/unit/test_coverage_policy.py src/quality/monitors/freshness_monitor.py`: passed.
+    - `python -m ruff format --check tests/unit/test_freshness_monitor.py tests/unit/test_coverage_policy.py src/quality/monitors/freshness_monitor.py`: passed (3 files already formatted).
+    - `python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('ci.yml yaml ok')"`: passed.
+  - Final verification:
+    - `python -m pytest tests/unit/ -p no:schemathesis --basetemp .tmp\full-unit-after-fresh -o cache_dir=.tmp\cache-full-unit`: passed with 486 tests.
 - M8 scoped validators coverage gate on 2026-05-06:
   - Closed local audit item partially: `.github/workflows/ci.yml` now runs `tests/unit/test_validators.py` with `--cov=src.quality.validators --cov-fail-under=90`; broader global coverage remains at 60% until additional modules have enough evidence.
   - Tests-first verification:

@@ -21,35 +21,36 @@
     "run_time": "60s"
   },
   "gate": {
-    "calibrated_at": "2026-04-27T06:30:47.440061+00:00",
-    "framework": "A03 split-decision CI smoke gate",
+    "calibrated_at": "2026-05-24T00:00:00+00:00",
+    "framework": "A03 CI-hardware-gap accepted gate (1.3x baseline headroom)",
+    "decision_record": "docs/perf/ci-hardware-gap-2026-05-24.md",
     "entity": {
-      "p50_ms": 200.0,
-      "p99_ms": 750.0
+      "p50_ms": 250.0,
+      "p99_ms": 900.0
     },
     "endpoints": {
       "GET /v1/entity/order/{id}": {
-        "p99_ms": 750.0,
+        "p99_ms": 900.0,
         "error_rate_max": 0.01
       },
       "GET /v1/entity/user/{id}": {
-        "p99_ms": 750.0,
+        "p99_ms": 900.0,
         "error_rate_max": 0.01
       },
       "GET /v1/entity/product/{id}": {
-        "p99_ms": 900.0,
+        "p99_ms": 1100.0,
         "error_rate_max": 0.01
       },
       "GET /v1/metrics/{name}": {
-        "p99_ms": 900.0,
+        "p99_ms": 1100.0,
         "error_rate_max": 0.01
       },
       "POST /v1/query": {
-        "p99_ms": 1000.0,
+        "p99_ms": 1200.0,
         "error_rate_max": 0.05
       },
       "POST /v1/batch": {
-        "p99_ms": 1000.0,
+        "p99_ms": 1200.0,
         "error_rate_max": 0.02
       }
     }

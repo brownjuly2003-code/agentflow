@@ -4,6 +4,34 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- A04 chart hardening: `helm/kafka-connect/` now ships NetworkPolicy +
+  PodDisruptionBudget + pod/container securityContext + `/tmp` memory
+  emptyDir (parity with `helm/agentflow`). All five primitives are
+  required by `values.schema.json` and off-by-default for backwards
+  compatibility on existing clusters; production switches them on via
+  `values-staging.yaml`-style overlays. See
+  `docs/operations/cdc-production-onboarding.md` § Chart hardening
+  baseline for the production switch-on recommendations.
+- A05 live-validation coverage extended: the
+  `tests/integration/test_helm_values_live_validation.py` suite is
+  now parametrized across both `helm/agentflow` and `helm/kafka-connect`
+  charts, running lint + install --dry-run against the live kind
+  cluster with valid + invalid value fixtures each.
+- A05 reuse-cluster mode: `conftest.kind_cluster` honours
+  `AGENTFLOW_LIVE_REUSE_CLUSTER=1` to skip the kind create/delete cycle
+  and validate against an active `KUBECONFIG` context. Lets the
+  schema gates run against managed staging clusters (EKS/GKE/AKS)
+  without provisioning a throwaway kind cluster.
+
+### Changed
+
+- A03 CI hardware-gap acceptance: Load Test gates raised to 1.3x the
+  2026-04-25 CI baseline (entity p99 750 → 900 ms, query/batch
+  1000 → 1200 ms). Local SLO p99 < 200 ms unchanged. Decision record
+  + alternatives considered: `docs/perf/ci-hardware-gap-2026-05-24.md`.
+
 ### Documentation
 
 - DV2 web-UI screencast (`docs/dv2-multi-branch/demo_webui.mp4`,

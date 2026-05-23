@@ -3,21 +3,36 @@ Purpose: Canonical order row joining Bitrix order header, 1C pricing, and
          (where present) Wildberries marketplace state, attributed to a
          customer + branch.
 Layer:   Business Vault (read-only view over raw_vault).
-Branch:  all (rows carry the branch column derived from hub_order.record_source).
+Branch:  all 5 (header + pricing satellites are UNION ALL'd across
+         msk / spb / ekb / dxb / ala). Orders carry their own branch
+         column derived from hub_order.record_source so a single view
+         can serve finance, fraud, and supply-chain dashboards.
 Conflict policy:
-  - Order header (status / channel / order_date / total) — Bitrix wins,
-    1C-only orders fall through with NULL header until 1C order sat lands.
-  - Pricing (subtotal / discount / tax / shipping) — 1C wins (accounting
-    source of truth).
-  - Marketplace (wb_status / wb_commission / return_window) — Wildberries
-    where the order was sourced through the marketplace.
-SCD effective row:
-  - argMax(.., load_ts) collapses SCD2 satellite history to the most recent
-    state. Point-in-time travel lives in a separate `bv_order_canonical_pit`
-    object (not implemented in the demo).
+  - Order header (status / channel / order_date / total) — Bitrix wins.
+  - Order pricing (subtotal / discount / tax / shipping) — 1C wins
+    (effective tax rates differ per jurisdiction: 20% RU, 5% UAE, 12% KZ).
+  - Marketplace (wb_status / wb_commission / return_window) — only
+    available for the MSK Wildberries integration today.
+SCD2 collapse: argMax(.., load_ts) by (order_hk).
 */
 CREATE OR REPLACE VIEW rv.bv_order_canonical AS
 WITH
+    header_raw AS (
+        SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
+        FROM rv.sat_order_header__bitrix__msk WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
+        FROM rv.sat_order_header__bitrix__spb WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
+        FROM rv.sat_order_header__bitrix__ekb WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
+        FROM rv.sat_order_header__bitrix__dxb WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
+        FROM rv.sat_order_header__bitrix__ala WHERE is_deleted = 0
+    ),
     header AS (
         SELECT
             order_hk,
@@ -25,9 +40,24 @@ WITH
             argMax(channel, load_ts)       AS channel,
             argMax(order_status, load_ts)  AS order_status,
             argMax(total_amount, load_ts)  AS total_amount
-        FROM rv.sat_order_header__bitrix__msk
-        WHERE is_deleted = 0
+        FROM header_raw
         GROUP BY order_hk
+    ),
+    pricing_raw AS (
+        SELECT order_hk, subtotal_amount, discount_amount, tax_amount, shipping_cost, load_ts
+        FROM rv.sat_order_pricing__1c__msk WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, subtotal_amount, discount_amount, tax_amount, shipping_cost, load_ts
+        FROM rv.sat_order_pricing__1c__spb WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, subtotal_amount, discount_amount, tax_amount, shipping_cost, load_ts
+        FROM rv.sat_order_pricing__1c__ekb WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, subtotal_amount, discount_amount, tax_amount, shipping_cost, load_ts
+        FROM rv.sat_order_pricing__1c__dxb WHERE is_deleted = 0
+        UNION ALL
+        SELECT order_hk, subtotal_amount, discount_amount, tax_amount, shipping_cost, load_ts
+        FROM rv.sat_order_pricing__1c__ala WHERE is_deleted = 0
     ),
     pricing AS (
         SELECT
@@ -36,8 +66,7 @@ WITH
             argMax(discount_amount, load_ts)  AS discount_amount,
             argMax(tax_amount, load_ts)       AS tax_amount,
             argMax(shipping_cost, load_ts)    AS shipping_cost
-        FROM rv.sat_order_pricing__1c__msk
-        WHERE is_deleted = 0
+        FROM pricing_raw
         GROUP BY order_hk
     ),
     marketplace AS (
@@ -84,9 +113,9 @@ SELECT
     m.wb_status          AS wb_status,
     m.wb_commission      AS wb_commission,
     m.wb_return_window_until AS wb_return_window_until,
-    if(h.order_hk != toFixedString('', 16), 'bitrix__msk', NULL) AS header_source,
-    if(p.order_hk != toFixedString('', 16), '1c__msk', NULL)     AS pricing_source,
-    if(m.order_hk != toFixedString('', 16), 'wb__msk', NULL)     AS marketplace_source
+    if(h.order_hk != toFixedString('', 16), concat('bitrix__', o.branch), NULL) AS header_source,
+    if(p.order_hk != toFixedString('', 16), concat('1c__', o.branch), NULL)     AS pricing_source,
+    if(m.order_hk != toFixedString('', 16), 'wb__msk', NULL)                    AS marketplace_source
 FROM order_branch o
 LEFT JOIN header      h ON o.order_hk = h.order_hk
 LEFT JOIN pricing     p ON o.order_hk = p.order_hk

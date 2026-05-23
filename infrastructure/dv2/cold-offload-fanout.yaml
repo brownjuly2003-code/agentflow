@@ -1,0 +1,209 @@
+# Cold-offload fanout for the four non-MSK branches.
+# Reuses the same `cold-exports` PVC that infrastructure/dv2/cold-offload-cronjob.yaml
+# already provisions; schedules are staggered so the RWO PVC is never
+# claimed by two pods at once.
+#
+# Each CronJob is a parameterised clone of dv2-cold-offload-msk — only
+# the name, schedule, branch and record-source env vars differ. All five
+# read exclusively from `sat_customer_anon__1c__{branch}`, never from
+# PII-bearing satellites.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-spb
+  namespace: dv2
+spec:
+  schedule: "30 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: spb}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__spb}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__spb}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  EXPORT_DIR="/exports/branch=${BRANCH}/year=${YEAR}/month=${MONTH}"
+                  mkdir -p "$EXPORT_DIR"
+                  OUTFILE="$EXPORT_DIR/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                    --query "
+                      SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                             customer_segment, load_ts, record_source
+                      FROM rv.${SAT_TABLE}
+                      WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                      INTO OUTFILE '${OUTFILE}' TRUNCATE FORMAT Parquet
+                    "
+                  ls -la "$EXPORT_DIR"
+              volumeMounts:
+                - {name: cold-exports, mountPath: /exports}
+          volumes:
+            - name: cold-exports
+              persistentVolumeClaim: {claimName: cold-exports}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-ekb
+  namespace: dv2
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: ekb}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__ekb}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__ekb}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  EXPORT_DIR="/exports/branch=${BRANCH}/year=${YEAR}/month=${MONTH}"
+                  mkdir -p "$EXPORT_DIR"
+                  OUTFILE="$EXPORT_DIR/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                    --query "
+                      SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                             customer_segment, load_ts, record_source
+                      FROM rv.${SAT_TABLE}
+                      WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                      INTO OUTFILE '${OUTFILE}' TRUNCATE FORMAT Parquet
+                    "
+                  ls -la "$EXPORT_DIR"
+              volumeMounts:
+                - {name: cold-exports, mountPath: /exports}
+          volumes:
+            - name: cold-exports
+              persistentVolumeClaim: {claimName: cold-exports}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-dxb
+  namespace: dv2
+spec:
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: dxb}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__dxb}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__dxb}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  EXPORT_DIR="/exports/branch=${BRANCH}/year=${YEAR}/month=${MONTH}"
+                  mkdir -p "$EXPORT_DIR"
+                  OUTFILE="$EXPORT_DIR/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                    --query "
+                      SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                             customer_segment, load_ts, record_source
+                      FROM rv.${SAT_TABLE}
+                      WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                      INTO OUTFILE '${OUTFILE}' TRUNCATE FORMAT Parquet
+                    "
+                  ls -la "$EXPORT_DIR"
+              volumeMounts:
+                - {name: cold-exports, mountPath: /exports}
+          volumes:
+            - name: cold-exports
+              persistentVolumeClaim: {claimName: cold-exports}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-ala
+  namespace: dv2
+spec:
+  schedule: "0 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: ala}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__ala}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__ala}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  EXPORT_DIR="/exports/branch=${BRANCH}/year=${YEAR}/month=${MONTH}"
+                  mkdir -p "$EXPORT_DIR"
+                  OUTFILE="$EXPORT_DIR/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                    --query "
+                      SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                             customer_segment, load_ts, record_source
+                      FROM rv.${SAT_TABLE}
+                      WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                      INTO OUTFILE '${OUTFILE}' TRUNCATE FORMAT Parquet
+                    "
+                  ls -la "$EXPORT_DIR"
+              volumeMounts:
+                - {name: cold-exports, mountPath: /exports}
+          volumes:
+            - name: cold-exports
+              persistentVolumeClaim: {claimName: cold-exports}

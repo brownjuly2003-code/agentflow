@@ -138,26 +138,56 @@ Lena   Sidorov  cust138@example.test  bronze   1794  pii=1c__msk  loy=bitrix__ms
 tagged `pii=1c__dxb`. The MSK view never returns them — the per-branch view
 + RBAC primitive is what enforces jurisdictional isolation here.
 
-`bv_order_canonical`:
+All five `bv_customer_mdm__*` views populated (after extending spec.yaml +
+satellite_seed_all_branches.sql):
+
+```
+branch  rows  with_pii  with_loyalty
+ala      200       200            0    (KZ — no Bitrix loyalty by design)
+dxb      200       200            0    (UAE — no Bitrix loyalty by design)
+ekb      300       300          240    (80% loyalty coverage)
+msk      800       800          640
+spb      500       500          400
+```
+
+`bv_order_canonical` now joins Bitrix header + 1C pricing across every
+branch (the view UNION ALL's all five `sat_order_header__bitrix__*` and
+`sat_order_pricing__1c__*` satellites):
 
 ```
 branch  orders  with_header  with_pricing
-msk      4000   4000         4000
-spb      2500      0            0
-ekb      1500      0            0
-dxb      1000      0            0
-ala      1000      0            0
+msk      4000        4000         4000
+spb      2500        2500         2500
+ekb      1500        1500         1500
+dxb      1000        1000         1000
+ala      1000        1000         1000
 ```
 
-MSK joins Bitrix header + 1C pricing for every row. The other branches keep
-hub-level order rows visible with NULL header / pricing — analysts see "we
-have the order, we don't yet have the source data" instead of a silent drop.
-Sample:
+The jurisdiction-specific tax rates fall straight out of per-branch 1C
+satellites — one BI query exercises the entire multi-branch model:
+
+```sql
+SELECT branch,
+       round(avg(toFloat64(tax_amount) / nullIf(toFloat64(subtotal_amount), 0)), 4) AS rate
+FROM rv.bv_order_canonical
+WHERE subtotal_amount > 0 AND tax_amount IS NOT NULL
+GROUP BY branch ORDER BY branch;
+```
 
 ```
-msk  retail       paid       8902   subtotal=8902   tax=1780.4   header=bitrix__msk  pricing=1c__msk
-msk  call-center  paid      25327   subtotal=25327  tax=5065.4   header=bitrix__msk  pricing=1c__msk
-msk  call-center  delivered 14091   subtotal=14091  tax=2818.2   header=bitrix__msk  pricing=1c__msk
+ala  0.12   (KZ VAT 12%)
+dxb  0.05   (UAE VAT 5%)
+ekb  0.20   (RU VAT 20%)
+msk  0.20   (RU VAT 20%)
+spb  0.20   (RU VAT 20%)
+```
+
+Sample ALA rows showing localised attribution:
+
+```
+ala  retail       returned   6498   tax=779.76    header=bitrix__ala  pricing=1c__ala
+ala  call-center  returned   8083   tax=969.95    header=bitrix__ala  pricing=1c__ala
+ala  retail       returned  14798   tax=1775.76   header=bitrix__ala  pricing=1c__ala
 ```
 
 ## 9. Cold-offload pipeline — end-to-end run
@@ -192,6 +222,25 @@ Sample (verbatim from the parquet via `clickhouse-local`):
 A grep of the parquet schema for `first_name|last_name|email|phone|birth_date|pii_flag`
 returns 0 — the data-sovereignty contract from `architecture.md` is enforced
 by source (`sat_customer_anon__*` is the only satellite the CronJob reads).
+
+### Branch fanout
+
+`infrastructure/dv2/cold-offload-fanout.yaml` provisions four parameterised
+clones of the MSK CronJob for SPB / EKB / DXB / ALA, staggered so the RWO
+`cold-exports` PVC is never claimed concurrently:
+
+```
+dv2-cold-offload-msk   0  2 * * *
+dv2-cold-offload-spb   30 2 * * *
+dv2-cold-offload-ekb   0  3 * * *
+dv2-cold-offload-dxb   0  4 * * *
+dv2-cold-offload-ala   0  5 * * *
+```
+
+Manual smoke for SPB (`kubectl create job --from=cronjob/dv2-cold-offload-spb
+cold-offload-spb-test`): pod went `Running → Succeeded` in ~8 s (image
+cached from the first MSK run), produced `customers_anon.parquet` of
+13 366 B with 500 rows in `/exports/branch=spb/year=2026/month=05/`.
 
 ## 10. How to re-run on the same cluster
 

@@ -104,7 +104,8 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 | Test suites | `tests/` |
 | Planning trail | `docs/plans/` |
 | Public site | `site/` |
-| IaC | `infrastructure/terraform/`, `helm/`, `k8s/` |
+| IaC | `infrastructure/terraform/`, `infrastructure/dv2/`, `helm/`, `k8s/` |
+| DV2.0 warehouse | `warehouse/agentflow/dv2/` (hubs / links / satellites + X5 loader) |
 
 ## Documentation
 
@@ -128,6 +129,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 - [Audit History](docs/audit-history.md) - baseline-to-release remediation trail
 - [Publication Checklist](docs/publication-checklist.md) - final GitHub publishing checklist
 - [Fly.io Demo Deploy](deploy/fly/README.md) - minimal hosted demo instructions
+- [DV2.0 Multi-Branch Extension](docs/dv2-multi-branch/SESSION_HANDOFF.md) - Data Vault 2.0 model for mid-market e-com with 5 locations / 3 jurisdictions; [schema](docs/dv2-multi-branch/schema_dv2.md), [end-to-end flow](docs/dv2-multi-branch/architecture.md), [live demo evidence](docs/dv2-multi-branch/demo_evidence.md), [k8s manifests](infrastructure/dv2/README.md)
 - [Contributing](CONTRIBUTING.md) - development and PR expectations
 - [Changelog](CHANGELOG.md) - project release notes
 

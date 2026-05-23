@@ -1,0 +1,13 @@
+dv2_marts:
+  outputs:
+    dev:
+      type: clickhouse
+      host: clickhouse
+      port: 9000
+      user: default
+      password: demo
+      schema: marts
+      secure: false
+      verify: false
+      threads: 2
+  target: dev

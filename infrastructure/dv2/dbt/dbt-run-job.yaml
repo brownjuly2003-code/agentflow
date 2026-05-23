@@ -1,0 +1,85 @@
+# Kubernetes Job that runs `dbt run && dbt test` for the dv2_marts
+# project against the in-cluster ClickHouse.
+#
+# Companion script: `infrastructure/dv2/dbt/run.sh` — packages the
+# dbt project from `warehouse/agentflow/dv2/dbt/` into a ConfigMap
+# (`dbt-project` with key `project.tar.gz`) and applies this manifest.
+# An initContainer untars the project into an emptyDir before the
+# main container starts.
+#
+# Pattern (not just the demo): in production the same Job is
+# triggered by an Argo Workflow step. Swap the python:3.11-slim image
+# for a pre-baked dbt-clickhouse image to skip the pip install.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dbt-run-marts
+  namespace: dv2
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: stage
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              mkdir -p /workspace
+              tar -xzf /project/project.tar.gz -C /workspace
+              ls -la /workspace
+          volumeMounts:
+            - {name: project,   mountPath: /project,   readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+      containers:
+        - name: dbt
+          image: python:3.11-slim
+          env:
+            - {name: DBT_PROFILES_DIR, value: /workspace}
+            - {name: DBT_HOST,         value: clickhouse}
+            - {name: DBT_PORT,         value: "9000"}
+            - {name: DBT_USER,         value: default}
+            - name: DBT_PASSWORD
+              valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "==> installing dbt-clickhouse"
+              pip install --quiet --no-cache-dir dbt-core==1.8.7 dbt-clickhouse==1.8.7
+              cd /workspace
+              cat > profiles.yml <<PROF
+              dv2_marts:
+                outputs:
+                  dev:
+                    type: clickhouse
+                    host: $DBT_HOST
+                    port: $DBT_PORT
+                    user: $DBT_USER
+                    password: $DBT_PASSWORD
+                    schema: marts
+                    secure: false
+                    verify: false
+                    threads: 2
+                target: dev
+              PROF
+              # Skip `dbt debug` — its `git --help` probe fails on python:3.11-slim
+              # (git isn't installed) and the connection check is redundant with
+              # `dbt run` which will fail loudly if the warehouse is unreachable.
+              echo "==> dbt run"
+              dbt run
+              echo "==> dbt test"
+              dbt test
+              echo "==> done"
+          volumeMounts:
+            - {name: workspace, mountPath: /workspace}
+      volumes:
+        - name: project
+          configMap:
+            name: dbt-project
+        - name: workspace
+          emptyDir: {}

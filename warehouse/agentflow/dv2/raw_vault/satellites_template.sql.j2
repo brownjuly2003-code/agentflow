@@ -1,0 +1,21 @@
+/*
+Purpose: {{ purpose }}
+Sources: {{ sources | join(', ') }}.
+Branch context: {{ branch_context }}.
+SCD2: {{ 'yes' if scd2 else 'no' }}.
+Anonymization: {{ anonymization }}.
+record_source value: {{ record_source }}
+record_source format: {source_system}__{branch_code}.
+*/
+CREATE TABLE IF NOT EXISTS rv.{{ name }} (
+    {{ parent_hk }} FixedString(16),
+    load_ts       DateTime64(3) DEFAULT now64(3),
+    hash_diff     FixedString(16),
+    record_source LowCardinality(String) DEFAULT '{{ record_source }}',
+{% for attr in attributes %}
+    {{ "%-13s"|format(attr.name) }} {{ attr.type }},
+{% endfor %}
+    is_deleted    UInt8 DEFAULT 0
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(load_ts)
+ORDER BY ({{ parent_hk }}, load_ts);

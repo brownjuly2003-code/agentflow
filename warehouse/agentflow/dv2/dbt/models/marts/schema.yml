@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: customer_360
+    description: "One row per (customer, branch). Joins MDM customer profile with order aggregates from bv_order_canonical."
+    columns:
+      - name: customer_hk
+        description: "MD5 of customer business key (16 byte raw)."
+        tests:
+          - not_null
+      - name: branch
+        description: "Branch code derived from hub_customer.record_source."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['msk', 'spb', 'ekb', 'dxb', 'ala']
+      - name: return_rate
+        description: "returned_orders / order_count, clamped to 0 when order_count is 0."
+        tests:
+          - not_null
+
+  - name: branch_pnl
+    description: "Per-branch monthly P&L: orders, gross/net revenue, tax, discounts, returns. Effective tax rate sanity-checks the per-jurisdiction pricing satellites."
+    columns:
+      - name: branch
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['msk', 'spb', 'ekb', 'dxb', 'ala']
+      - name: month
+        tests:
+          - not_null
+      - name: effective_tax_rate
+        description: "Should be 0.20 for RU branches (msk/spb/ekb), 0.05 for dxb (UAE), 0.12 for ala (KZ)."
+
+  - name: returns_velocity
+    description: "Weekly returns rate per branch+channel for fraud / supply-chain alerting."
+    columns:
+      - name: branch
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['msk', 'spb', 'ekb', 'dxb', 'ala']
+      - name: channel
+        tests:
+          - not_null
+      - name: week
+        tests:
+          - not_null
+      - name: return_rate
+        tests:
+          - not_null

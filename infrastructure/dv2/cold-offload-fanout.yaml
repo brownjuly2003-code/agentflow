@@ -1,0 +1,212 @@
+# Cold-offload fanout for the four non-MSK branches.
+# Identical to dv2-cold-offload-msk but parameterised — each CronJob writes
+# its own branch's anon satellite straight to MinIO (s3:// in cluster terms,
+# served by the in-namespace `minio` service).
+#
+# Schedules are staggered so MinIO isn't hammered by five concurrent writes;
+# in real prod they'd run in parallel via the per-branch edge clusters, not
+# a single cluster as here.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-spb
+  namespace: dv2
+spec:
+  schedule: "30 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: spb}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__spb}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__spb}
+                - {name: S3_ENDPOINT, value: "http://minio:9000"}
+                - {name: S3_BUCKET, value: cold-tier}
+                - name: S3_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+                - name: S3_SECRET_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    INSERT INTO FUNCTION s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                    SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                           customer_segment, load_ts, record_source
+                    FROM rv.${SAT_TABLE}
+                    WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                    SETTINGS s3_truncate_on_insert = 1
+                  "
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    SELECT count() AS rows FROM s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                  "
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-ekb
+  namespace: dv2
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: ekb}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__ekb}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__ekb}
+                - {name: S3_ENDPOINT, value: "http://minio:9000"}
+                - {name: S3_BUCKET, value: cold-tier}
+                - name: S3_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+                - name: S3_SECRET_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    INSERT INTO FUNCTION s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                    SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                           customer_segment, load_ts, record_source
+                    FROM rv.${SAT_TABLE}
+                    WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                    SETTINGS s3_truncate_on_insert = 1
+                  "
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    SELECT count() AS rows FROM s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                  "
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-dxb
+  namespace: dv2
+spec:
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: dxb}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__dxb}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__dxb}
+                - {name: S3_ENDPOINT, value: "http://minio:9000"}
+                - {name: S3_BUCKET, value: cold-tier}
+                - name: S3_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+                - name: S3_SECRET_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    INSERT INTO FUNCTION s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                    SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                           customer_segment, load_ts, record_source
+                    FROM rv.${SAT_TABLE}
+                    WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                    SETTINGS s3_truncate_on_insert = 1
+                  "
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    SELECT count() AS rows FROM s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                  "
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-ala
+  namespace: dv2
+spec:
+  schedule: "0 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
+                - name: CH_PASSWORD
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: ala}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__ala}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__ala}
+                - {name: S3_ENDPOINT, value: "http://minio:9000"}
+                - {name: S3_BUCKET, value: cold-tier}
+                - name: S3_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+                - name: S3_SECRET_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    INSERT INTO FUNCTION s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                    SELECT hex(customer_hk) AS customer_hk_hex, age_bucket, geo_region,
+                           customer_segment, load_ts, record_source
+                    FROM rv.${SAT_TABLE}
+                    WHERE record_source = '${RECORD_SOURCE_FILTER}' AND is_deleted = 0
+                    SETTINGS s3_truncate_on_insert = 1
+                  "
+                  clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+                    SELECT count() AS rows FROM s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                  "

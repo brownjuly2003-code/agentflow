@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: dv2
+spec:
+  replicas: 1
+  serviceName: clickhouse
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      nodeSelector:
+        workload: clickhouse
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:25.5
+          ports:
+            - containerPort: 8123
+            - containerPort: 9000
+          env:
+            - name: CLICKHOUSE_DB
+              value: rv
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ch-creds
+                  key: user
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ch-creds
+                  key: password
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1500Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: dv2
+spec:
+  selector:
+    app: clickhouse
+  ports:
+    - name: http
+      port: 8123
+    - name: tcp
+      port: 9000

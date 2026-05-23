@@ -1,0 +1,18 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hq-demo
+nodes:
+  - role: control-plane
+    labels:
+      branch: msk
+      nodepool: hq-control
+  - role: worker
+    labels:
+      branch: msk
+      nodepool: hq-data-tier-a
+      workload: postgres
+  - role: worker
+    labels:
+      branch: msk
+      nodepool: hq-data-tier-b
+      workload: clickhouse

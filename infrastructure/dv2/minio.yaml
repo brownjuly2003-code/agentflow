@@ -1,0 +1,118 @@
+# MinIO single-node S3-compatible object store for the cold tier.
+# Replaces the local-path-backed `cold-exports` PVC used by the
+# first iteration of cold-offload-cronjob.yaml. ClickHouse writes
+# parquet straight into the `cold-tier` bucket via the native
+# s3() table function — no `mc cp` step required.
+#
+# Secret minio-creds — fixed demo credentials. Replace before any
+# real deployment; the demo cluster lives behind ssh + lima on a
+# local network, so we accept the static value here.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-creds
+  namespace: dv2
+type: Opaque
+stringData:
+  root-user: dv2admin
+  root-password: dv2admin-demo
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-minio
+  namespace: dv2
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: dv2
+spec:
+  replicas: 1
+  serviceName: minio
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+          ports:
+            - {containerPort: 9000, name: api}
+            - {containerPort: 9001, name: console}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits:   {cpu: 500m, memory: 768Mi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: 9000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data-minio
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: dv2
+spec:
+  selector:
+    app: minio
+  ports:
+    - {name: api, port: 9000, targetPort: 9000}
+    - {name: console, port: 9001, targetPort: 9001}
+---
+# One-shot bucket init. Re-running is safe — `mc mb --ignore-existing`
+# is idempotent. Manually triggerable via:
+#   kubectl create job --from=job/minio-init-cold-tier -n dv2 minio-init-manual
+# (but it normally runs to completion at apply-time).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init-cold-tier
+  namespace: dv2
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          env:
+            - name: MINIO_USER
+              valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+            - name: MINIO_PASSWORD
+              valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              until mc alias set local http://minio:9000 "$MINIO_USER" "$MINIO_PASSWORD" 2>/dev/null; do
+                echo "waiting for MinIO..."
+                sleep 2
+              done
+              mc mb --ignore-existing local/cold-tier
+              mc ls local
+              echo "bucket ready"

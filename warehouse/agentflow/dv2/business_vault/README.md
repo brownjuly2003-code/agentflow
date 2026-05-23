@@ -53,16 +53,30 @@ done
 `infrastructure/dv2/bootstrap.sh` does not auto-apply this layer because it
 is optional — add the loop manually after the raw vault is populated.
 
-## Current state in `hq-demo` (2026-05-23)
+## Current state in `hq-demo` (2026-05-23, after satellite seed)
 
-Applied against the running cluster:
+Applied against the running cluster with
+`warehouse/agentflow/dv2/satellite_seed.sql` populating the PII / loyalty /
+header / pricing satellites:
 
-| View | rows | rows_with_PII | rows_with_loyalty / pricing / header |
-| ---- | ---- | ------------- | ------------------------------------ |
-| `bv_customer_mdm__msk` | 800 | 0 | 0 (loyalty sat not seeded) |
-| `bv_customer_mdm__dxb` | 200 | 0 | — |
-| `bv_order_canonical`   | 10000 (40/25/15/10/10 by branch) | n/a | 0 (header/pricing sats not seeded) |
+| View | rows | rows_with_PII | rows_with_loyalty | rows_with_header / pricing |
+| ---- | ---- | ------------- | ----------------- | -------------------------- |
+| `bv_customer_mdm__msk` | 800   | 800 | 640 (160 pii_only) | — |
+| `bv_customer_mdm__dxb` | 200   | 200 | n/a (no Bitrix in DXB) | — |
+| `bv_order_canonical`   | 10000 | n/a | n/a | 4000 / 4000 for msk; 0 for spb/ekb/dxb/ala |
 
-Hub joins + branch attribution are live and verified. Satellite-fed
-columns return NULL because the synthetic seed only populates hubs and
-links; wiring satellite seed or a real ETL is the next step.
+PII + loyalty merge example from `bv_customer_mdm__msk`:
+
+```
+Ivan   Volkov   cust236@example.test  gold     3068  pii=1c__msk  loy=bitrix__msk
+Egor   Petrov   cust833@example.test  bronze  10829  pii=1c__msk  loy=bitrix__msk
+Lena   Sidorov  cust138@example.test  bronze   1794  pii=1c__msk  loy=bitrix__msk
+```
+
+The 160 `pii_only` rows (msk customers without a Bitrix profile) keep
+`loyalty_source = NULL` thanks to the LEFT JOIN — analysts see "no
+loyalty yet" rather than the row silently dropping.
+
+`bv_order_canonical` for the msk slice picks Bitrix header + 1C pricing
+for every row; the other branches keep hub-level rows visible with NULL
+header / pricing, waiting on their own satellite seed.

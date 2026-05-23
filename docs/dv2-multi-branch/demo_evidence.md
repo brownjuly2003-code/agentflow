@@ -102,7 +102,65 @@ SELECT count() FROM rv.lnk_order_product;  -- 24938
 
 Matches the seed's 2.5× average line items per order.
 
-## 8. Cold-offload pipeline — end-to-end run
+## 8. Business Vault — populated views with MDM conflict resolution
+
+`warehouse/agentflow/dv2/satellite_seed.sql` populates the customer / order
+satellites that `synthetic_seed.sql` deliberately leaves empty. After applying:
+
+```
+sat_customer_personal__1c__msk      800 rows  (msk slice)
+sat_customer_personal__1c__dxb      200 rows  (dxb slice)
+sat_customer_loyalty__bitrix__msk   640 rows  (80% loyalty coverage)
+sat_order_header__bitrix__msk      4000 rows  (msk slice)
+sat_order_pricing__1c__msk         4000 rows  (msk slice)
+```
+
+`bv_customer_mdm__msk` (PII from 1C, loyalty from Bitrix):
+
+```
+rows | with_pii | with_loyalty | pii_only | loyalty_only
+ 800 |      800 |          640 |      160 |            0
+```
+
+The 160 `pii_only` rows are msk customers without a Bitrix profile yet — the
+LEFT JOIN keeps them visible with `loyalty_source = NULL`, exactly as the
+view contract documents.
+
+Sample (PII + loyalty merged for the same `customer_hk`):
+
+```
+Ivan   Volkov   cust236@example.test  gold     3068  pii=1c__msk  loy=bitrix__msk
+Egor   Petrov   cust833@example.test  bronze  10829  pii=1c__msk  loy=bitrix__msk
+Lena   Sidorov  cust138@example.test  bronze   1794  pii=1c__msk  loy=bitrix__msk
+```
+
+`bv_customer_mdm__dxb` returns 200 rows with Arabic-style faux PII, all
+tagged `pii=1c__dxb`. The MSK view never returns them — the per-branch view
++ RBAC primitive is what enforces jurisdictional isolation here.
+
+`bv_order_canonical`:
+
+```
+branch  orders  with_header  with_pricing
+msk      4000   4000         4000
+spb      2500      0            0
+ekb      1500      0            0
+dxb      1000      0            0
+ala      1000      0            0
+```
+
+MSK joins Bitrix header + 1C pricing for every row. The other branches keep
+hub-level order rows visible with NULL header / pricing — analysts see "we
+have the order, we don't yet have the source data" instead of a silent drop.
+Sample:
+
+```
+msk  retail       paid       8902   subtotal=8902   tax=1780.4   header=bitrix__msk  pricing=1c__msk
+msk  call-center  paid      25327   subtotal=25327  tax=5065.4   header=bitrix__msk  pricing=1c__msk
+msk  call-center  delivered 14091   subtotal=14091  tax=2818.2   header=bitrix__msk  pricing=1c__msk
+```
+
+## 9. Cold-offload pipeline — end-to-end run
 
 `kubectl apply -f infrastructure/dv2/cold-offload-cronjob.yaml` provisioned
 a 1 Gi `cold-exports` PVC plus a CronJob scheduled at `0 2 * * *` MSK-local.
@@ -135,7 +193,7 @@ A grep of the parquet schema for `first_name|last_name|email|phone|birth_date|pi
 returns 0 — the data-sovereignty contract from `architecture.md` is enforced
 by source (`sat_customer_anon__*` is the only satellite the CronJob reads).
 
-## 9. How to re-run on the same cluster
+## 10. How to re-run on the same cluster
 
 ```bash
 ssh julia@192.168.1.133

@@ -14,6 +14,10 @@ Use it as one of three things:
    cast slowed to match a Russian TTS narration of [`pitch.md`](./pitch.md).
    Reproducible via [`demo_voiced.build.sh`](./demo_voiced.build.sh)
    from [`demo_voiced.narration.txt`](./demo_voiced.narration.txt).
+   Web-UI counterpart: [`demo_webui.mp4`](./demo_webui.mp4) (~60 s,
+   1.6 MB) — Playwright run through Argo workflow archive + DAG and
+   the MinIO `cold-tier` bucket browser, same TTS pipeline. Build
+   script: [`demo_webui.capture.py`](./demo_webui.capture.py).
 3. **Re-render to GIF/MP4** for embedding in a portfolio page —
    [`agg`](https://github.com/asciinema/agg) for GIF,
    [`svg-term-cli`](https://github.com/marionebl/svg-term-cli) for SVG,

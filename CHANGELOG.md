@@ -4,6 +4,23 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- DV2 web-UI screencast (`docs/dv2-multi-branch/demo_webui.mp4`,
+  ~60 s, 1.6 MB) — Playwright run through Argo workflow archive
+  (4× successful `dv2-refresh` runs + DAG drill-in on the latest) and
+  the MinIO `cold-tier` bucket browser (5 per-branch prefixes), with
+  a Russian TTS voice-over. Reproducer:
+  `docs/dv2-multi-branch/demo_webui.capture.py` plus the same
+  edge-tts + ffmpeg pipeline as the terminal cast.
+- CI / release / packaging lessons-learned document
+  (`docs/lessons/ci-repair-sprint-2026-04.md`) — seven concrete
+  Lesson / Apply / Concrete-trace entries covering A06 dependency
+  profiles, single-run baseline anti-pattern, FastAPI version drift,
+  PyPI namespace pre-claim, required-check self-reference deadlock,
+  fail-closed auth + `/v1/health` exemption, and the DV2 voice-over
+  pipeline.
+
 ## [1.2.0] - 2026-05-23
 
 ### Documentation

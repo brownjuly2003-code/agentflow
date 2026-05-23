@@ -1,0 +1,7 @@
+Argo Workflows. Видим четыре прогона dv2-refresh за сегодня — все Succeeded, десять из десяти. Открываю последний run.
+
+DAG показывает реальный пайплайн: promote-oltp, validate-hubs, параллельно validate-links и validate-satellites, пять cold-offload джобов по филиалу, и verify-mirrors на финале. Все ноды зелёные.
+
+MinIO консоль, бакет cold-tier. Видны пять префиксов — branch равно ala, dxb, ekb, msk, spb. Это партиционирование по филиалу для anonymized parquet.
+
+55 килобайт, пять объектов — демо-данные. В проде здесь терабайты per branch, но контракт тот же.

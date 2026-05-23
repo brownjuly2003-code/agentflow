@@ -92,10 +92,11 @@ ssh julia@192.168.1.133 '
 ### Task #5 — DV2.0 extension (in_progress)
 - Foundation ✅ session 1; manifests-in-repo ✅ session 2
 - ✅ k8s deployment manifests в `infrastructure/dv2/`: `kind-hq-demo.yaml`, `namespace.yaml`, `secret.example.yaml`, `clickhouse-sts.yaml`, `postgres-sts.yaml`, `bootstrap.sh`, `README.md`
+- ✅ **Business Vault слой** (session 3): `business_vault/bv_customer_mdm__msk.sql`, `bv_customer_mdm__dxb.sql`, `bv_order_canonical.sql` — views с argMax SCD2-collapse, per-branch RBAC primitive для MDM, `*_source` columns для conflict-resolution audit. Applied в `hq-demo`: 800/200 msk/dxb customer rows, 10000 orders с branch attribution 40/25/15/10/10. PII/loyalty/header/pricing columns NULL потому что соответствующие satellites не в seed — view-логика проверена, дальнейший прогресс требует satellite seeding или real ETL.
 - Открытое (deferred — needs explicit user ask):
   - **Argo Workflows** для оркестрации hub → link → satellite загрузки (упомянуто в schema_dv2.md)
   - **Cold-offload CronJob** для anonymized parquet → HF Datasets (или MinIO в pod как cloud mock)
-  - **Business Vault слой** (`bv_customer_mdm`, `bv_order_canonical`) — placeholder создан, контент нужен
+  - **Satellite seeding** для customer/order sats (либо synthetic seed расширить, либо запустить X5 loader) — даст BV views реальные данные
   - **dbt models на DV2.0** (опционально — можно показать как mart-layer строится поверх raw vault)
 
 ### Task #6 — Demo artifacts ✅ DONE (session 2)

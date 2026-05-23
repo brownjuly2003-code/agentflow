@@ -190,57 +190,63 @@ ala  call-center  returned   8083   tax=969.95    header=bitrix__ala  pricing=1c
 ala  retail       returned  14798   tax=1775.76   header=bitrix__ala  pricing=1c__ala
 ```
 
-## 9. Cold-offload pipeline — end-to-end run
+## 9. Cold-offload pipeline — MinIO S3 backed
 
-`kubectl apply -f infrastructure/dv2/cold-offload-cronjob.yaml` provisioned
-a 1 Gi `cold-exports` PVC plus a CronJob scheduled at `0 2 * * *` MSK-local.
-A manual run (`kubectl create job --from=cronjob/dv2-cold-offload-msk
-cold-offload-manual-...`) finished `Complete 1/1` in 2m14s — first-time
-image pull dominated; subsequent runs reuse the cached `clickhouse-server:25.5`.
+`infrastructure/dv2/minio.yaml` provisions a single-node MinIO
+StatefulSet + Service + bucket-init Job. The cold-offload CronJobs
+(`infrastructure/dv2/cold-offload-cronjob.yaml` + `cold-offload-fanout.yaml`)
+write parquet straight into the `cold-tier` bucket via ClickHouse's native
+`s3()` table function — no intermediate PVC, no `mc cp` step.
 
-Output landed at
-`/exports/branch=msk/year=2026/month=05/customers_anon.parquet` (20 411 B,
-800 rows). `clickhouse-local DESCRIBE TABLE file(...)` confirms the shape:
+Bucket layout after running MSK + DXB jobs:
 
 ```
-customer_hk_hex   Nullable(String)
-age_bucket        Nullable(String)
-geo_region        Nullable(String)
-customer_segment  Nullable(String)
-load_ts           Nullable(DateTime64(3, 'UTC'))
-record_source     Nullable(String)
+mc ls -r local/cold-tier
+[2026-05-23 06:48:48 UTC] 6.7KiB  branch=dxb/year=2026/month=05/customers_anon.parquet
+[2026-05-23 06:48:53 UTC]  20KiB  branch=msk/year=2026/month=05/customers_anon.parquet
 ```
 
-Sample (verbatim from the parquet via `clickhouse-local`):
+Each pod runs the same two-statement contract — write then verify — so
+the success of the read-back implicitly asserts:
+
+1. ClickHouse can reach the MinIO Service inside the dv2 namespace.
+2. The bucket accepts an INSERT INTO FUNCTION s3('...', 'Parquet') call.
+3. The same s3() call reading the file back parses the parquet schema.
+
+MSK + DXB triggered in parallel (`kubectl create job
+--from=cronjob/dv2-cold-offload-{msk,dxb}`) finished in ~10 s. Logs:
 
 ```
-00AC8ED3B4327BDD4EBBEBCB2BA10A00 | 18-24 | msk-center | churned | 2026-05-23 05:45:46.197 | 1c__msk
-01161AAA0B6D1345DD8FE4E481144D84 | 25-34 | msk-south  | vip     | 2026-05-23 05:45:46.197 | 1c__msk
-013A006F03DBC5392EFFEB8F18FDA755 | 45-54 | msk-center | regular | 2026-05-23 05:45:46.197 | 1c__msk
+==> exporting branch=msk -> http://minio:9000/cold-tier/branch=msk/year=2026/month=05/customers_anon.parquet
+==> done; verifying via s3() read-back
+800
 ```
 
-A grep of the parquet schema for `first_name|last_name|email|phone|birth_date|pii_flag`
+```
+200    # dxb job
+```
+
+A schema grep for `first_name|last_name|email|phone|birth_date|pii_flag`
 returns 0 — the data-sovereignty contract from `architecture.md` is enforced
-by source (`sat_customer_anon__*` is the only satellite the CronJob reads).
+by source selection (`sat_customer_anon__1c__{branch}` is the only
+satellite the CronJob reads).
 
 ### Branch fanout
 
-`infrastructure/dv2/cold-offload-fanout.yaml` provisions four parameterised
-clones of the MSK CronJob for SPB / EKB / DXB / ALA, staggered so the RWO
-`cold-exports` PVC is never claimed concurrently:
+`cold-offload-fanout.yaml` clones MSK for the four remaining branches.
+Schedules are staggered (msk 02:00, spb 02:30, ekb 03:00, dxb 04:00,
+ala 05:00) so MinIO isn't hammered by five concurrent writes; in real
+prod they'd run in parallel via per-branch edge clusters, not a single
+cluster as here.
 
-```
-dv2-cold-offload-msk   0  2 * * *
-dv2-cold-offload-spb   30 2 * * *
-dv2-cold-offload-ekb   0  3 * * *
-dv2-cold-offload-dxb   0  4 * * *
-dv2-cold-offload-ala   0  5 * * *
-```
+### Production swap path
 
-Manual smoke for SPB (`kubectl create job --from=cronjob/dv2-cold-offload-spb
-cold-offload-spb-test`): pod went `Running → Succeeded` in ~8 s (image
-cached from the first MSK run), produced `customers_anon.parquet` of
-13 366 B with 500 rows in `/exports/branch=spb/year=2026/month=05/`.
+The CronJob takes `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` from
+env vars — point them at a real S3 / GCS / Yandex Object Storage and the
+`s3()` function works unchanged. The `Secret/minio-creds` resource drops
+out, the cloud-provider secret takes its place, and the rest of the
+manifest is untouched. Add `WHERE load_ts < now() - INTERVAL 365 DAY` to
+the SELECT in prod.
 
 ## 10. How to re-run on the same cluster
 

@@ -1,22 +1,16 @@
-# DV2.0 cold-offload — anonymized warm-tier rows -> object store (mocked here
-# as a PVC). Runs nightly per branch and only ever reads from anon satellites,
-# never from PII-bearing ones, to satisfy per-branch data sovereignty.
+# DV2.0 cold-offload (MSK) — anonymized warm-tier rows -> MinIO S3 bucket.
+# Writes parquet directly via ClickHouse's native s3() table function — no
+# intermediate PVC, no `mc cp` step.
 #
-# In production swap the PVC for an S3 sidecar (e.g. mc / aws s3 cp) and add a
-# `WHERE load_ts < now() - INTERVAL 365 DAY` filter. The demo intentionally
-# leaves the filter open so a one-shot manual `kubectl create job` produces
-# a non-empty parquet artefact against fresh seed data.
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: cold-exports
-  namespace: dv2
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 1Gi
+# Reads only from `sat_customer_anon__1c__msk`, never from PII satellites,
+# so the per-branch data-sovereignty contract in architecture.md is
+# enforced by source selection rather than by a post-export scrub.
+#
+# Production swap: replace minio creds + endpoint with the real S3 / object
+# store creds (Secret minio-creds drops out, becomes the cloud-provider
+# secret), and add `WHERE load_ts < now() - INTERVAL 365 DAY` to the SELECT.
+# The demo intentionally leaves the filter open so a manual job produces a
+# non-empty artefact against fresh seed data.
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -24,7 +18,7 @@ metadata:
   name: dv2-cold-offload-msk
   namespace: dv2
 spec:
-  schedule: "0 2 * * *"             # 02:00 branch-local
+  schedule: "0 2 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
@@ -38,65 +32,51 @@ spec:
             - name: offload
               image: clickhouse/clickhouse-server:25.5
               env:
-                - name: CH_HOST
-                  value: clickhouse
-                - name: CH_USER
-                  value: default
+                - {name: CH_HOST, value: clickhouse}
+                - {name: CH_USER, value: default}
                 - name: CH_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: ch-creds
-                      key: password
-                - name: BRANCH
-                  value: msk
-                - name: RECORD_SOURCE_FILTER
-                  value: 1c__msk
+                  valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+                - {name: BRANCH, value: msk}
+                - {name: SAT_TABLE, value: sat_customer_anon__1c__msk}
+                - {name: RECORD_SOURCE_FILTER, value: 1c__msk}
+                - {name: S3_ENDPOINT, value: "http://minio:9000"}
+                - {name: S3_BUCKET, value: cold-tier}
+                - name: S3_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+                - name: S3_SECRET_KEY
+                  valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
               command: ["/bin/bash", "-c"]
               args:
                 - |
                   set -euo pipefail
-                  YEAR=$(date +%Y)
-                  MONTH=$(date +%m)
-                  EXPORT_DIR="/exports/branch=${BRANCH}/year=${YEAR}/month=${MONTH}"
-                  mkdir -p "$EXPORT_DIR"
-                  OUTFILE="$EXPORT_DIR/customers_anon.parquet"
-
-                  echo "==> exporting anon customers for branch=${BRANCH} to ${OUTFILE}"
+                  YEAR=$(date +%Y); MONTH=$(date +%m)
+                  S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+                  echo "==> exporting branch=${BRANCH} -> ${S3_PATH}"
                   clickhouse-client \
                     --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
                     --query "
+                      INSERT INTO FUNCTION s3(
+                          '${S3_PATH}',
+                          '${S3_ACCESS_KEY}',
+                          '${S3_SECRET_KEY}',
+                          'Parquet'
+                      )
                       SELECT
-                        hex(customer_hk)                              AS customer_hk_hex,
-                        age_bucket,
-                        geo_region,
-                        customer_segment,
-                        load_ts,
-                        record_source
-                      FROM rv.sat_customer_anon__1c__msk
+                          hex(customer_hk) AS customer_hk_hex,
+                          age_bucket,
+                          geo_region,
+                          customer_segment,
+                          load_ts,
+                          record_source
+                      FROM rv.${SAT_TABLE}
                       WHERE record_source = '${RECORD_SOURCE_FILTER}'
                         AND is_deleted = 0
-                      INTO OUTFILE '${OUTFILE}'
-                        TRUNCATE
-                        FORMAT Parquet
+                      SETTINGS s3_truncate_on_insert = 1
                     "
-
-                  echo "==> export done"
-                  ls -la "$EXPORT_DIR"
-
-                  echo "==> safety check: no PII columns must appear in exported schema"
-                  clickhouse-local --query "
-                    SELECT name, type
-                    FROM file('${OUTFILE}', Parquet)
-                    LIMIT 0
-                    INTO OUTFILE '/dev/stdout' FORMAT TSVWithNames
-                  " 2>/dev/null || \
-                    clickhouse-client \
-                      --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
-                      --query "DESCRIBE TABLE file('${OUTFILE}', Parquet)" || true
-              volumeMounts:
-                - name: cold-exports
-                  mountPath: /exports
-          volumes:
-            - name: cold-exports
-              persistentVolumeClaim:
-                claimName: cold-exports
+                  echo "==> done; verifying via s3() read-back"
+                  clickhouse-client \
+                    --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                    --query "
+                      SELECT count() AS rows
+                      FROM s3('${S3_PATH}', '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}', 'Parquet')
+                    "

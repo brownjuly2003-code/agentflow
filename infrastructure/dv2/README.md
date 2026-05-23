@@ -14,6 +14,9 @@ iMac demo host; rebuild from scratch with `bootstrap.sh`.
 | `clickhouse-sts.yaml`      | ClickHouse 25.5 StatefulSet pinned to `workload=clickhouse` worker, 5 Gi PVC, plus headless Service |
 | `postgres-sts.yaml`        | Postgres 17-alpine StatefulSet pinned to `workload=postgres` worker, 2 Gi PVC, plus Service |
 | `bootstrap.sh`             | One-shot rebuild: kind create → apply manifests → apply DV2.0 DDL → seed |
+| `minio.yaml`               | MinIO single-node S3 server + Service + bucket-init Job (`cold-tier`)   |
+| `cold-offload-cronjob.yaml`| MSK cold-offload CronJob; writes parquet to MinIO via ClickHouse `s3()` |
+| `cold-offload-fanout.yaml` | SPB / EKB / DXB / ALA clones of the MSK CronJob, staggered schedules    |
 
 ## Quick rebuild
 

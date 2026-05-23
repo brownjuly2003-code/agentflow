@@ -1,0 +1,25 @@
+name: 'dv2_marts'
+version: '1.0.0'
+config-version: 2
+
+profile: 'dv2_marts'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  dv2_marts:
+    marts:
+      +materialized: table
+      # No +schema override — profile.schema (marts) is used as-is.
+      # Adding +schema here would have dbt-clickhouse build
+      # "<profile_schema>_<model_schema>" (e.g. marts_marts).

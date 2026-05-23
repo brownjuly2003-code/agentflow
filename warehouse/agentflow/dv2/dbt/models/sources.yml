@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: rv
+    description: "DV2.0 raw vault + business vault views in the rv database."
+    database: rv
+    tables:
+      - name: bv_customer_mdm__msk
+        description: "Canonical MSK customer (1C PII + Bitrix loyalty, conflict-resolved)."
+      - name: bv_customer_mdm__spb
+      - name: bv_customer_mdm__ekb
+      - name: bv_customer_mdm__dxb
+        description: "Dubai canonical customer (UAE PDPL — Bitrix loyalty intentionally absent)."
+      - name: bv_customer_mdm__ala
+        description: "Almaty canonical customer (KZ — Bitrix loyalty intentionally absent)."
+      - name: bv_order_canonical
+        description: "Order header (Bitrix) + pricing (1C) + WB marketplace, UNION ALL across 5 branches."

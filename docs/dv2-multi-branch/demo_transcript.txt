@@ -1,0 +1,48 @@
+
+# === Beat 1 — Cluster topology (00:25) ===
+$ kubectl get nodes --show-labels | head -5
+NAME                    STATUS   ROLES           AGE     VERSION   LABELS
+hq-demo-control-plane   Ready    control-plane   6h18m   v1.35.0   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,branch=msk,kubernetes.io/arch=amd64,kubernetes.io/hostname=hq-demo-control-plane,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=,nodepool=hq-control
+hq-demo-worker          Ready    <none>          6h18m   v1.35.0   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,branch=msk,kubernetes.io/arch=amd64,kubernetes.io/hostname=hq-demo-worker,kubernetes.io/os=linux,nodepool=hq-data-tier-a,workload=postgres
+hq-demo-worker2         Ready    <none>          6h18m   v1.35.0   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,branch=msk,kubernetes.io/arch=amd64,kubernetes.io/hostname=hq-demo-worker2,kubernetes.io/os=linux,nodepool=hq-data-tier-b,workload=clickhouse
+
+# === Beat 2 — DV2.0 model surface (00:45) ===
+$ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --query "SELECT splitByString('_', name)[1] AS kind, count() FROM system.tables WHERE database='rv' GROUP BY kind ORDER BY kind"
+bv	6
+hub	8
+lnk	8
+sat	39
+
+# === Beat 3 — Multi-branch distribution (01:05) ===
+$ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --query "SELECT splitByString('__', record_source)[2] AS branch, count() AS orders, round(count()*100.0/(SELECT count() FROM rv.hub_order),1) AS pct FROM rv.hub_order GROUP BY branch ORDER BY pct DESC FORMAT PrettyCompact"
+   ┌─branch─┬─orders─┬──pct─┐
+1. │ msk    │   4200 │ 40.5 │
+2. │ spb    │   2500 │ 24.1 │
+3. │ ekb    │   1500 │ 14.5 │
+4. │ dxb    │   1160 │ 11.2 │
+5. │ ala    │   1000 │  9.7 │
+   └────────┴────────┴──────┘
+
+# === Beat 4 — Business Vault MDM (01:25) ===
+$ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --multiline --query "SELECT 'msk' AS branch, count() AS rows, countIf(first_name != '') AS with_pii, countIf(loyalty_segment != '') AS with_loyalty FROM rv.bv_customer_mdm__msk UNION ALL SELECT 'dxb', count(), countIf(first_name != ''), countIf(loyalty_segment IS NOT NULL AND loyalty_segment != '') FROM rv.bv_customer_mdm__dxb FORMAT PrettyCompact"
+   ┌─branch─┬─rows─┬─with_pii─┬─with_loyalty─┐
+1. │ dxb    │  200 │      200 │            0 │
+2. │ msk    │  800 │      800 │          640 │
+   └────────┴──────┴──────────┴──────────────┘
+
+# === Beat 5a — Cold offload (01:50) ===
+$ kubectl create job --from=cronjob/dv2-cold-offload-msk cold-demo-3455 -n dv2
+job.batch/cold-demo-3455 created
+
+# === Beat 5b — MinIO parquet listing ===
+$ kubectl exec -n dv2 minio-0 -- mc ls -r local/cold-tier | tail -5
+[2026-05-23 09:44:37 UTC] 6.7KiB STANDARD branch=ala/year=2026/month=05/customers_anon.parquet
+[2026-05-23 09:44:32 UTC] 6.7KiB STANDARD branch=dxb/year=2026/month=05/customers_anon.parquet
+[2026-05-23 09:44:37 UTC] 8.6KiB STANDARD branch=ekb/year=2026/month=05/customers_anon.parquet
+[2026-05-23 10:20:13 UTC]  20KiB STANDARD branch=msk/year=2026/month=05/customers_anon.parquet
+[2026-05-23 09:44:32 UTC]  13KiB STANDARD branch=spb/year=2026/month=05/customers_anon.parquet
+
+# === Closing (02:00) — Single bootstrap reproduces everything ===
+$ bash infrastructure/dv2/bootstrap.sh
+
+Demo complete. See docs/dv2-multi-branch/demo_evidence.md for the full breakdown.

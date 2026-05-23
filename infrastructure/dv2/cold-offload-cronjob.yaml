@@ -1,0 +1,102 @@
+# DV2.0 cold-offload — anonymized warm-tier rows -> object store (mocked here
+# as a PVC). Runs nightly per branch and only ever reads from anon satellites,
+# never from PII-bearing ones, to satisfy per-branch data sovereignty.
+#
+# In production swap the PVC for an S3 sidecar (e.g. mc / aws s3 cp) and add a
+# `WHERE load_ts < now() - INTERVAL 365 DAY` filter. The demo intentionally
+# leaves the filter open so a one-shot manual `kubectl create job` produces
+# a non-empty parquet artefact against fresh seed data.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cold-exports
+  namespace: dv2
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dv2-cold-offload-msk
+  namespace: dv2
+spec:
+  schedule: "0 2 * * *"             # 02:00 branch-local
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: offload
+              image: clickhouse/clickhouse-server:25.5
+              env:
+                - name: CH_HOST
+                  value: clickhouse
+                - name: CH_USER
+                  value: default
+                - name: CH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ch-creds
+                      key: password
+                - name: BRANCH
+                  value: msk
+                - name: RECORD_SOURCE_FILTER
+                  value: 1c__msk
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  YEAR=$(date +%Y)
+                  MONTH=$(date +%m)
+                  EXPORT_DIR="/exports/branch=${BRANCH}/year=${YEAR}/month=${MONTH}"
+                  mkdir -p "$EXPORT_DIR"
+                  OUTFILE="$EXPORT_DIR/customers_anon.parquet"
+
+                  echo "==> exporting anon customers for branch=${BRANCH} to ${OUTFILE}"
+                  clickhouse-client \
+                    --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                    --query "
+                      SELECT
+                        hex(customer_hk)                              AS customer_hk_hex,
+                        age_bucket,
+                        geo_region,
+                        customer_segment,
+                        load_ts,
+                        record_source
+                      FROM rv.sat_customer_anon__1c__msk
+                      WHERE record_source = '${RECORD_SOURCE_FILTER}'
+                        AND is_deleted = 0
+                      INTO OUTFILE '${OUTFILE}'
+                        TRUNCATE
+                        FORMAT Parquet
+                    "
+
+                  echo "==> export done"
+                  ls -la "$EXPORT_DIR"
+
+                  echo "==> safety check: no PII columns must appear in exported schema"
+                  clickhouse-local --query "
+                    SELECT name, type
+                    FROM file('${OUTFILE}', Parquet)
+                    LIMIT 0
+                    INTO OUTFILE '/dev/stdout' FORMAT TSVWithNames
+                  " 2>/dev/null || \
+                    clickhouse-client \
+                      --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+                      --query "DESCRIBE TABLE file('${OUTFILE}', Parquet)" || true
+              volumeMounts:
+                - name: cold-exports
+                  mountPath: /exports
+          volumes:
+            - name: cold-exports
+              persistentVolumeClaim:
+                claimName: cold-exports

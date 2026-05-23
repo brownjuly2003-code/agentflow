@@ -102,7 +102,40 @@ SELECT count() FROM rv.lnk_order_product;  -- 24938
 
 Matches the seed's 2.5× average line items per order.
 
-## 8. How to re-run on the same cluster
+## 8. Cold-offload pipeline — end-to-end run
+
+`kubectl apply -f infrastructure/dv2/cold-offload-cronjob.yaml` provisioned
+a 1 Gi `cold-exports` PVC plus a CronJob scheduled at `0 2 * * *` MSK-local.
+A manual run (`kubectl create job --from=cronjob/dv2-cold-offload-msk
+cold-offload-manual-...`) finished `Complete 1/1` in 2m14s — first-time
+image pull dominated; subsequent runs reuse the cached `clickhouse-server:25.5`.
+
+Output landed at
+`/exports/branch=msk/year=2026/month=05/customers_anon.parquet` (20 411 B,
+800 rows). `clickhouse-local DESCRIBE TABLE file(...)` confirms the shape:
+
+```
+customer_hk_hex   Nullable(String)
+age_bucket        Nullable(String)
+geo_region        Nullable(String)
+customer_segment  Nullable(String)
+load_ts           Nullable(DateTime64(3, 'UTC'))
+record_source     Nullable(String)
+```
+
+Sample (verbatim from the parquet via `clickhouse-local`):
+
+```
+00AC8ED3B4327BDD4EBBEBCB2BA10A00 | 18-24 | msk-center | churned | 2026-05-23 05:45:46.197 | 1c__msk
+01161AAA0B6D1345DD8FE4E481144D84 | 25-34 | msk-south  | vip     | 2026-05-23 05:45:46.197 | 1c__msk
+013A006F03DBC5392EFFEB8F18FDA755 | 45-54 | msk-center | regular | 2026-05-23 05:45:46.197 | 1c__msk
+```
+
+A grep of the parquet schema for `first_name|last_name|email|phone|birth_date|pii_flag`
+returns 0 — the data-sovereignty contract from `architecture.md` is enforced
+by source (`sat_customer_anon__*` is the only satellite the CronJob reads).
+
+## 9. How to re-run on the same cluster
 
 ```bash
 ssh julia@192.168.1.133

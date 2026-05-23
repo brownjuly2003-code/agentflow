@@ -18,6 +18,11 @@
     "secrets",
     "connectors",
     "resources",
+    "podSecurityContext",
+    "containerSecurityContext",
+    "tmpVolume",
+    "podDisruptionBudget",
+    "networkPolicy",
     "probes",
     "affinity",
     "nodeSelector",
@@ -265,6 +270,56 @@
       }
     },
     "resources": { "type": "object" },
+    "podSecurityContext": { "type": "object" },
+    "containerSecurityContext": { "type": "object" },
+    "tmpVolume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "sizeLimit"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "sizeLimit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minAvailable"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^[0-9]+%$" }
+          ]
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ingressFromNamespaces", "egressPorts"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingressFromNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "egressPorts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kafka", "postgres", "mysql"],
+          "properties": {
+            "kafka": { "type": "integer", "minimum": 1 },
+            "postgres": { "type": "integer", "minimum": 1 },
+            "mysql": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
     "probes": {
       "type": "object",
       "additionalProperties": false,

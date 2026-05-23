@@ -92,6 +92,51 @@ resources:
     cpu: 2000m
     memory: 4Gi
 
+# Pod-level security context — Connect workers run as non-root with a
+# read-only root filesystem. Confluent base image runs as UID 1000 ("appuser").
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop: ["ALL"]
+
+# /tmp scratch required when readOnlyRootFilesystem=true; Kafka Connect uses
+# /tmp for plugin extraction + JVM PID files. emptyDir backed by node memory.
+tmpVolume:
+  enabled: true
+  sizeLimit: 256Mi
+
+# PodDisruptionBudget keeps at least one worker online during voluntary
+# disruptions (cluster upgrades, node drains). Connectors resume from stored
+# offsets after task reassignment.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# NetworkPolicy enforces a default-deny baseline plus explicit ingress on the
+# REST + metrics ports and egress to dependencies (DNS, Kafka brokers, source
+# databases). Disabled by default so existing clusters without a NetworkPolicy
+# controller are not broken; turn on per environment.
+networkPolicy:
+  enabled: false
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: monitoring
+  egressPorts:
+    kafka: 9092
+    postgres: 5432
+    mysql: 3306
+
 probes:
   readiness:
     initialDelaySeconds: 20

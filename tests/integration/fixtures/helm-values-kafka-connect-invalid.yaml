@@ -1,0 +1,9 @@
+unexpectedTopLevel: true
+
+replicaCount: "two"
+
+service:
+  type: ClusterIP
+  port: 0
+  metricsPort: 9101
+  annotations: {}

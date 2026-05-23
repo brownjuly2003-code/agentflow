@@ -90,12 +90,43 @@ def kafka_bootstrap(kafka_container):
     return kafka_container.get_bootstrap_server()
 
 
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 @pytest.fixture(scope="session")
 def kind_cluster():
+    """Provide a Kubernetes cluster context for helm live-validation tests.
+
+    Default behaviour (CI + local kind): create a throwaway kind cluster
+    named ``agentflow-a05-test`` and tear it down on teardown.
+
+    Reuse mode (external staging / shared cluster): set
+    ``AGENTFLOW_LIVE_REUSE_CLUSTER=1`` to skip the kind create/delete cycle
+    and run validation against the active kubectl context. Useful for
+    pointing the helm-schema tests at a real staging cluster via
+    ``KUBECONFIG=/path/to/staging.kubeconfig`` without provisioning kind.
+
+    The reuse path still requires the ``helm`` CLI but skips the kind/docker
+    preflight, so tests can run on managed control planes (EKS, GKE, AKS)
+    that do not expose a local docker socket. ``AGENTFLOW_KIND_CLUSTER``
+    selects an alternate cluster name when not in reuse mode.
+    """
     if os.getenv("SKIP_DOCKER_TESTS") == "1":
         pytest.skip("SKIP_DOCKER_TESTS=1")
     if shutil.which("helm") is None:
         pytest.skip("helm CLI is required for kind tests")
+
+    reuse = _truthy(os.getenv("AGENTFLOW_LIVE_REUSE_CLUSTER"))
+    if reuse:
+        kubeconfig = os.getenv("KUBECONFIG", "<default>")
+        # The reuse path delegates cluster ownership to the caller; helm
+        # picks up the active kubectl context. We yield a synthetic
+        # cluster_name string so parametrized tests can still log the
+        # target context name if needed.
+        yield f"reuse:{kubeconfig}"
+        return
+
     if shutil.which("kind") is None:
         pytest.skip("kind CLI is required for kind tests")
     if shutil.which("docker") is None:

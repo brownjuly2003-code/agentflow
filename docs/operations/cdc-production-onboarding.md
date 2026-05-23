@@ -62,6 +62,29 @@ CDC disabled and treat this runbook as an operator handoff only.
 | Monitoring owner | Team that watches connector lag, failures, and dead letters |
 | Rollback owner | Person allowed to pause/delete the connector |
 
+## Chart hardening baseline
+
+The `helm/kafka-connect` chart ships with the same hardening primitives as
+`helm/agentflow`, off-by-default so existing clusters do not break, but
+ready to enable per environment:
+
+| Primitive | Values key | Default | Production recommendation |
+|-----------|------------|---------|---------------------------|
+| Pod securityContext (non-root, fsGroup) | `podSecurityContext` | `runAsNonRoot=true, runAsUser=1000` | Keep defaults; Confluent base image runs as UID 1000 |
+| Container securityContext (read-only FS, drop ALL caps) | `containerSecurityContext` | `readOnlyRootFilesystem=true, capabilities.drop=[ALL]` | Keep defaults |
+| `/tmp` scratch (required when root FS is read-only) | `tmpVolume` | `enabled=true, sizeLimit=256Mi` | Keep defaults; raise sizeLimit only if Connect plugin extraction needs more |
+| PodDisruptionBudget | `podDisruptionBudget` | `enabled=true, minAvailable=1` | Keep `minAvailable=1` for `replicaCount<=2`; raise to `minAvailable=2` once `replicaCount>=3` |
+| NetworkPolicy default-deny | `networkPolicy.enabled` | `false` | **Set to `true` in production** to lock down egress to Kafka brokers + source DBs only |
+| NetworkPolicy egress ports | `networkPolicy.egressPorts` | `kafka=9092, postgres=5432, mysql=3306` | Update if production uses non-default ports |
+| NetworkPolicy ingress | `networkPolicy.ingressFromNamespaces` | `monitoring` only | Add Prometheus/scrape namespace and any pod that needs the Connect REST API |
+
+The `values.schema.json` requires all of the keys above; `helm install` and
+`helm lint` fail closed if production values omit them. The
+`tests/integration/test_helm_values_live_validation.py` parametrized live
+validation covers both `helm/agentflow` and `helm/kafka-connect` against a
+real cluster, and accepts a reusable external context via
+`AGENTFLOW_LIVE_REUSE_CLUSTER=1` (see `conftest.kind_cluster`).
+
 ## Preflight Checks
 
 1. Confirm the source database has a dedicated CDC user with least-privilege

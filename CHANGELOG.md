@@ -4,6 +4,8 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-23
+
 ### Documentation
 
 - Documented the demo-key requirement, current DuckDB/ClickHouse serving

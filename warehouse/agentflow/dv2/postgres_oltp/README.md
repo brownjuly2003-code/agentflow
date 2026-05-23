@@ -51,6 +51,104 @@ is dropped entirely and replaced by a PeerDB / Debezium connector
 writing to the same raw_vault tables. The `record_source = pg_ops__*`
 convention survives either way.
 
+## Push-based CDC variant
+
+A drop-in `MaterializedPostgreSQL` variant lives in three companion
+files. It demonstrates the production shape on the same cluster:
+
+| File                          | Where it runs   | What it does                                                                                                          |
+| ----------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `cdc_setup.sql`               | Postgres pod    | Creates `rep_user` (REPLICATION) + grants + transfers table ownership + sets `REPLICA IDENTITY DEFAULT`               |
+| `cdc_bridge.sql`              | ClickHouse pod  | Drops legacy `oltp_live`, creates `oltp_cdc` (`MaterializedPostgreSQL`) covering both `ops_msk` + `ops_dxb` schemas   |
+| `promote_to_raw_vault_cdc.sql`| ClickHouse pod  | Same hub/link/satellite shape as the pull variant, sourced from `oltp_cdc."ops_<branch>.<table>"` (FINAL-deduplicated) |
+
+Prerequisites:
+
+1. `infrastructure/dv2/postgres-sts.yaml` already declares
+   `wal_level=logical`, `max_replication_slots=10`, `max_wal_senders=10`
+   on the postgres args.
+2. After the first apply the postgres pod must be restarted
+   (`kubectl rollout restart statefulset/postgres -n dv2`) so the
+   new postgres.conf flags take effect.
+
+Apply:
+
+```bash
+# 1) wal_level=logical takes effect after restart (idempotent)
+kubectl rollout restart statefulset/postgres -n dv2
+kubectl rollout status  statefulset/postgres -n dv2 --timeout=120s
+
+# 2) Postgres-side: rep_user + REPLICA IDENTITY FULL
+cat cdc_setup.sql | kubectl exec -i -n dv2 postgres-0 -- psql -U ops -d ops
+
+# 3) ClickHouse-side: switch from PostgreSQL() to MaterializedPostgreSQL()
+cat cdc_bridge.sql | kubectl exec -i -n dv2 clickhouse-0 -- clickhouse-client \
+    --user default --password demo --multiquery
+
+# 4) Re-run promotion against the new bridge
+cat promote_to_raw_vault_cdc.sql | kubectl exec -i -n dv2 clickhouse-0 -- \
+    clickhouse-client --user default --password demo --multiquery
+```
+
+Verify the push path is live (insert in Postgres, observe in ClickHouse
+within a few seconds, no manual refresh):
+
+```bash
+# Insert a synthetic row directly in Postgres
+kubectl exec -n dv2 postgres-0 -- psql -U ops -d ops -c "
+  INSERT INTO ops_msk.customers (customer_id, first_name, last_name, email)
+  VALUES ('CUST-MSK-CDC-1', 'CDC', 'Test', 'cdc1@example.test')
+  ON CONFLICT DO NOTHING;
+"
+
+# Wait <5s for WAL replay
+sleep 5
+
+# Read from ClickHouse — table name is `<schema>.<table>` (one CH
+# database, multiple PG schemas), so the dot needs backticks:
+kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default \
+    --password demo --query "
+  SELECT customer_id, first_name, last_name
+  FROM oltp_cdc.\`ops_msk.customers\` FINAL
+  WHERE customer_id = 'CUST-MSK-CDC-1'
+"
+```
+
+### Multi-branch isolation note
+
+CH 25.x `MaterializedPostgreSQL` does NOT expose a
+`publication_name` setting, so two CH databases targeting the same
+Postgres database collide on the auto-generated
+`<src_db>_ch_publication`. For multi-schema CDC into one warehouse
+the supported pattern is the one used here: a single CH database +
+`materialized_postgresql_schema_list`. Each replicated table appears
+as `oltp_cdc."<schema>.<table>"` in CH (the schema name becomes part
+of the table identifier — quote with backticks because of the dot).
+
+For a fully-isolated per-branch CDC fan-out — each branch on its own
+logical replica, its own slot, its own publication — switch to
+PeerDB or Debezium. They reuse the same Postgres replication slot
+plumbing but let each connector own its publication and stream
+independently.
+
+Why MaterializedPostgreSQL (and not Debezium / PeerDB) for the demo:
+
+- **Zero extra pod.** Same ClickHouse instance hosts the consumer; no
+  separate Kafka Connect cluster or PeerDB deployment to babysit. The
+  WAL stream terminates inside the warehouse.
+- **Same DDL surface.** The promotion SQL changes only the FROM clauses
+  (`oltp_live.msk_customers` → `oltp_cdc_msk.customers`). The hub/link/
+  satellite shape and `record_source = pg_ops__*` convention survive
+  the swap.
+- **Logical replication, not snapshots.** UPDATE / DELETE on Postgres
+  is now visible to the warehouse; the old `PostgreSQL()` engine only
+  ever saw "current row state" (no tombstones).
+
+For higher throughput or fan-out to non-CH consumers, PeerDB or
+Debezium become the right answer — they reuse the same replication
+slot model from the Postgres side. The MaterializedPostgreSQL engine
+shown here is the minimal-moving-parts variant.
+
 ## What the demo proves
 
 After the three files apply against `hq-demo`:

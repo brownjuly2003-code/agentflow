@@ -19,6 +19,17 @@ spec:
       containers:
         - name: postgres
           image: postgres:17-alpine
+          # Enable logical replication so ClickHouse's MaterializedPostgreSQL
+          # engine can subscribe via WAL — replaces the pull-based PostgreSQL()
+          # bridge with push-based CDC. See warehouse/agentflow/dv2/postgres_oltp/
+          # README.md § "Push-based CDC variant".
+          args:
+            - "-c"
+            - "wal_level=logical"
+            - "-c"
+            - "max_replication_slots=10"
+            - "-c"
+            - "max_wal_senders=10"
           ports:
             - containerPort: 5432
           env:

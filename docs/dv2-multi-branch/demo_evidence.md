@@ -319,3 +319,173 @@ cluster:
 ```bash
 bash infrastructure/dv2/bootstrap.sh   # idempotent rebuild
 ```
+
+## 12. Argo Workflows orchestration
+
+`infrastructure/dv2/argo/` deploys Argo Workflows v3.5.10 cluster-scope
+plus a `dv2-refresh` WorkflowTemplate that chains the previously
+standalone hot → warm → cold steps as one DAG:
+
+```
+promote-oltp
+    │
+validate-hubs
+    │
+    ├─ validate-links
+    │       │
+    │       └────────────┐
+    └─ validate-satellites
+                          │
+              cold-offload (fan-out: msk, spb, ekb, dxb, ala)
+                          │
+                  verify-mirrors
+```
+
+End-to-end run on the live cluster (`dv2-refresh-xwnb8`, 73 s total
+wall):
+
+```
+promote-oltp           Succeeded   2026-05-23T08:19:31 -> 08:19:36
+validate-hubs          Succeeded   2026-05-23T08:19:41 -> 08:19:46
+validate-links         Succeeded   2026-05-23T08:19:51 -> 08:19:56
+validate-satellites    Succeeded   2026-05-23T08:19:51 -> 08:19:57
+cold-offload(0:msk)    Succeeded   2026-05-23T08:20:01 -> 08:20:25
+cold-offload(1:spb)    Succeeded   2026-05-23T08:20:01 -> 08:20:15
+cold-offload(2:ekb)    Succeeded   2026-05-23T08:20:01 -> 08:20:25
+cold-offload(3:dxb)    Succeeded   2026-05-23T08:20:01 -> 08:20:14
+cold-offload(4:ala)    Succeeded   2026-05-23T08:20:01 -> 08:20:26
+verify-mirrors         Succeeded   2026-05-23T08:20:34 -> 08:20:38
+```
+
+`verify-mirrors` step output (capture run `dv2-refresh-capture-s27ng`):
+
+```
+==> cross-checking mirrors vs source satellites
+    msk  source=800    mirror=800    OK
+    spb  source=500    mirror=500    OK
+    ekb  source=300    mirror=300    OK
+    dxb  source=200    mirror=200    OK
+    ala  source=200    mirror=200    OK
+==> all 5 mirrors match source
+```
+
+Layer ordering (hub → link → satellite → cold-offload) is enforced by
+DAG dependencies — not by clock-time as the standalone CronJobs do.
+A failure in `validate-links` aborts the run before any S3 write, so
+mirrors are never out of sync with the warm tier.
+
+## 13. dbt mart layer
+
+`warehouse/agentflow/dv2/dbt/` ships three materialized marts and 12
+data tests on top of the business vault. Project files are mounted into
+a Kubernetes Job (`infrastructure/dv2/dbt/dbt-run-job.yaml`) via a
+ConfigMap built from the repo by `infrastructure/dv2/dbt/run.sh`.
+
+Run summary (from `kubectl logs job/dbt-run-marts`):
+
+```
+Done. PASS=3   WARN=0  ERROR=0  SKIP=0  TOTAL=3      (dbt run)
+Done. PASS=12  WARN=0  ERROR=0  SKIP=0  TOTAL=12     (dbt test)
+```
+
+`customer_360` populated per branch — one row per `(customer_hk, branch)`:
+
+```
+branch  rows  with_orders  avg_ltv
+ala      200          84    6554.1
+dxb      200          84    7002.4
+ekb      300         157    9212.4
+msk      800         694   25496.5
+spb      500         366   16784.5
+```
+
+`branch_pnl.effective_tax_rate` validates the per-jurisdiction wiring
+end-to-end (1C pricing satellites → BV view → dbt mart):
+
+```
+branch  rate
+ala     0.12   (KZ VAT 12%)
+dxb     0.05   (UAE VAT 5%)
+ekb     0.20   (RU VAT 20%)
+msk     0.20   (RU VAT 20%)
+spb     0.20   (RU VAT 20%)
+```
+
+The 12 dbt tests cover `not_null` on key columns
+(`customer_hk`, `branch`, `month`, `channel`, `week`, `return_rate`)
+and `accepted_values` on `branch` (must be one of msk/spb/ekb/dxb/ala)
+across all three marts.
+
+## 14. Push-based CDC via MaterializedPostgreSQL
+
+The pull-based `oltp_live` bridge (Postgres-engine table mirrors) is
+replaced by a single `oltp_cdc` ClickHouse database backed by
+`MaterializedPostgreSQL`, consuming the Postgres WAL via logical
+replication. `materialized_postgresql_schema_list` lets one CH
+database carry both Postgres schemas — CH 25.x doesn't expose
+`publication_name`, so two CH databases against the same Postgres
+DB collide on the auto-named publication.
+
+Cluster state after `cdc_setup.sql + cdc_bridge.sql`:
+
+```
+oltp_cdc   ops_dxb.customers  ReplacingMergeTree
+oltp_cdc   ops_dxb.orders     ReplacingMergeTree
+oltp_cdc   ops_msk.customers  ReplacingMergeTree
+oltp_cdc   ops_msk.orders     ReplacingMergeTree
+```
+
+(The schema name is part of the CH table name and quoted with
+backticks because of the dot:
+`SELECT ... FROM oltp_cdc.\`ops_msk.customers\` FINAL`.)
+
+Live E2E test — INSERT in Postgres → no manual refresh → SELECT in
+ClickHouse within seconds:
+
+```bash
+# Postgres side
+psql> INSERT INTO ops_msk.customers (customer_id, first_name, last_name)
+        VALUES ('CDC-V2-MSK', 'NewMsk', 'CDC');
+psql> UPDATE ops_msk.customers SET last_name='UPDATED'
+        WHERE customer_id='CDC-V2-MSK';
+
+# ClickHouse side, ~5s later (no INSERT INTO ... SELECT on CH at all)
+clickhouse> SELECT customer_id, first_name, last_name
+              FROM oltp_cdc.`ops_msk.customers` FINAL
+              WHERE customer_id LIKE 'CDC-V2-%';
+
+┌─customer_id─┬─first_name─┬─last_name─┐
+│ CDC-V2-MSK  │ NewMsk     │ UPDATED   │
+└─────────────┴────────────┴───────────┘
+```
+
+Row count parity vs source-of-truth Postgres:
+
+```
+   ┌─t───────────┬─count()─┐
+1. │ msk_c_FINAL │      57 │
+2. │ dxb_c_FINAL │      24 │
+   └─────────────┴─────────┘
+   ─ vs ─
+ branch | pg_count
+--------+----------
+ msk    |    57
+ dxb    |    24
+```
+
+After `promote_to_raw_vault_cdc.sql` re-runs against the CDC tables
+(reading with `FINAL` to dedupe ReplacingMergeTree versions), the
+pg_ops rows land in raw_vault and propagate to the BV order canonical
+view:
+
+```
+   ┌─record_source─┬─count()─┐
+1. │ pg_ops__dxb   │      24 │
+2. │ pg_ops__msk   │      57 │
+   └───────────────┴─────────┘
+```
+
+The `record_source = pg_ops__*` convention is identical to the
+pull-based variant, so any downstream consumer (BV view / dbt mart /
+cold-offload) sees the CDC path the same way it saw the
+`oltp_live`-based promotion.

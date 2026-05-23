@@ -1,7 +1,14 @@
 # DV2.0 Multi-Branch — Session Handoff (2026-05-23)
 
-Working snapshot после двух сессий. Ветка `feat/dv2-multi-branch`.
+Working snapshot после четырёх сессий. Ветка `feat/dv2-multi-branch`.
 
+> **Session 4 (2026-05-23 late-morning)** — закрыто:
+> behavioral pitch (`pitch.md`), Argo Workflows orchestration (DAG
+> поверх hub→link→satellite + 5-way cold-offload + verify), dbt mart
+> layer (3 модели + 12 тестов), push-based CDC через
+> MaterializedPostgreSQL (single CH DB, multi-schema). Все артефакты
+> запущены live на `hq-demo` и зафиксированы в `demo_evidence.md`.
+>
 > **Session 2 (2026-05-23 morning)** — закрыто: k8s manifests вынесены в
 > `infrastructure/dv2/`, end-to-end dataflow diagram (`architecture.md`),
 > live demo evidence (`demo_evidence.md`), main README обновлён,
@@ -99,10 +106,12 @@ ssh julia@192.168.1.133 '
 - ✅ **CronJob fanout** (session 3): `infrastructure/dv2/cold-offload-fanout.yaml` — 4 CronJob клона для spb/ekb/dxb/ala с staggered schedules (msk 02:00, spb 02:30, ekb 03:00, dxb 04:00, ala 05:00).
 - ✅ **MinIO S3 swap** (session 3): `infrastructure/dv2/minio.yaml` — single-node MinIO StatefulSet (2Gi PVC) + Service + bucket-init Job. Все 5 CronJob'ов переписаны на `INSERT INTO FUNCTION s3('http://minio:9000/cold-tier/...', ..., 'Parquet')` напрямую через ClickHouse, без PVC mount / `mc cp`. Старый `cold-exports` PVC удалён. Manual MSK+DXB параллельный run: оба Succeeded за ~10с, в bucket лежат `branch=msk/.../customers_anon.parquet 20KiB` + `branch=dxb/.../customers_anon.parquet 6.7KiB`, read-back через `s3()` SELECT count() возвращает 800 / 200. Prod swap = только заменить `Secret/minio-creds` и `S3_ENDPOINT` env на cloud-provider — манифесты не меняются.
 - ✅ **Postgres OLTP + CDC bridge** (session 3): `warehouse/agentflow/dv2/postgres_oltp/` — `seed.sql` создаёт `ops_msk`/`ops_dxb` schemas в Postgres pod (50+200 / 20+80 customers/orders rows); `bridge.sql` создаёт 4 ClickHouse-таблицы с `Engine = PostgreSQL(...)` live read-through; `promote_to_raw_vault.sql` промоутит OLTP → `rv.hub_customer/hub_order/lnk_order_customer/sat_*` с record_source `pg_ops__{branch}`. Verified: 280 OLTP-* orders видны в `bv_order_canonical` с корректным branch attribution. Convention bug fix: одинарное `pg_ops_msk` ломало `splitByString('__', ...)[2]`, переписано на double-underscore.
+- ✅ **Argo Workflows** (session 4) — `infrastructure/dv2/argo/` (install.sh + RBAC + WorkflowTemplate `dv2-refresh`). DAG: promote-oltp → validate-hubs → (validate-links, validate-satellites) → cold-offload-fanout(5) → verify-mirrors. Live run `dv2-refresh-xwnb8` 73s end-to-end; verify-mirrors output `msk=800/spb=500/ekb=300/dxb=200/ala=200 OK`. Шаги `validate-satellites` и `verify-mirrors` использовали FINAL на сателлитах изначально — поймал ILLEGAL_FINAL (сателлиты = MergeTree, не ReplacingMergeTree), fix landed.
+- ✅ **dbt mart layer** (session 4) — `warehouse/agentflow/dv2/dbt/` + `infrastructure/dv2/dbt/`. 3 модели (customer_360, branch_pnl, returns_velocity) поверх `rv.bv_*`. 12 data tests (not_null + accepted_values('msk','spb','ekb','dxb','ala')). Live run `kubectl logs job/dbt-run-marts`: `PASS=3 ERROR=0` (run) + `PASS=12 ERROR=0` (test). effective_tax_rate per branch: ala=0.12 / dxb=0.05 / msk-spb-ekb=0.20. Pitfall: `+schema: marts` в `dbt_project.yml` + `schema: marts` в profile → tables landed в `marts_marts` вместо `marts`; убрал `+schema`.
+- ✅ **MaterializedPostgreSQL push-based CDC** (session 4) — `warehouse/agentflow/dv2/postgres_oltp/cdc_{setup,bridge}.sql` + `promote_to_raw_vault_cdc.sql`. Postgres: `wal_level=logical` в `postgres-sts.yaml`, rep_user + REPLICA IDENTITY DEFAULT + ALTER TABLE OWNER, ALTER. ClickHouse: single `oltp_cdc` DB через `materialized_postgresql_schema_list='ops_msk,ops_dxb'`. Live E2E: INSERT/UPDATE в Postgres → видно в `oltp_cdc.\`ops_msk.customers\` FINAL` за ~5s без `INSERT INTO ... SELECT` на CH-стороне. Row parity Postgres=ClickHouse (msk 57=57, dxb 24=24).
+  - Pitfalls собрано: (1) `MaterializedPostgreSQL` experimental → нужен `SET allow_experimental_database_materialized_postgresql=1`; (2) rep_user нужен CONNECT + CREATE на БД, OWNER на таблицах (CH делает `CREATE PUBLICATION ... FOR TABLE`); (3) `REPLICA IDENTITY FULL` НЕ поддерживается → нужен DEFAULT (PK); (4) `materialized_postgresql_replication_slot=` требует pre-existing slot, иначе CH сам автосоздаёт; (5) `materialized_postgresql_publication_name` НЕ существует — два CH DB на одной PG DB конфликтуют на дефолтном `<src>_ch_publication`; решение — single CH DB + schema_list (или PeerDB/Debezium для полной изоляции).
 - Открытое (deferred — needs explicit user ask):
-  - **Argo Workflows** для оркестрации hub → link → satellite загрузки (упомянуто в schema_dv2.md)
-  - **dbt models на DV2.0** (опционально — можно показать как mart-layer строится поверх raw vault)
-  - **MaterializedPostgreSQL** или **PeerDB connector** — заменить pull-based `PostgreSQL()` engine на push-based CDC для full prod-shape (требует `wal_level=logical` в Postgres + replication slot, либо PeerDB pod)
+  - **PeerDB connector** — full per-branch publication isolation (текущий single-DB CDC покрывает паттерн, но не fan-out)
 
 ### Task #6 — Demo artifacts ✅ DONE (session 2)
 - `docs/dv2-multi-branch/demo_evidence.md` — `kubectl get nodes --show-labels`, pod-to-node placement, PVC bind, system.tables breakdown (8/8/22), multi-branch distribution (40/25/15/10/10), query latency (3-4ms на 10K rows), line-items count

@@ -18,6 +18,13 @@ Use it as one of three things:
    1.6 MB) — Playwright run through Argo workflow archive + DAG and
    the MinIO `cold-tier` bucket browser, same TTS pipeline. Build
    script: [`demo_webui.capture.py`](./demo_webui.capture.py).
+   Mart-layer counterpart: [`demo_dbt_docs.mp4`](./demo_dbt_docs.mp4)
+   (~55 s, 1.7 MB) — Playwright walk-through of the auto-generated
+   dbt docs site (Project tree → `customer_360` → `branch_pnl` →
+   `returns_velocity`, including the rv → mart lineage graph). Build
+   script: [`demo_dbt_docs.capture.py`](./demo_dbt_docs.capture.py);
+   companion Pod manifest:
+   [`../../infrastructure/dv2/dbt/dbt-docs-pod.yaml`](../../infrastructure/dv2/dbt/dbt-docs-pod.yaml).
 3. **Re-render to GIF/MP4** for embedding in a portfolio page —
    [`agg`](https://github.com/asciinema/agg) for GIF,
    [`svg-term-cli`](https://github.com/marionebl/svg-term-cli) for SVG,

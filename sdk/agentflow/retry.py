@@ -19,7 +19,7 @@ class RetryPolicy:
     def compute_delay(self, attempt: int, retry_after_s: float | None = None) -> float:
         if retry_after_s is not None:
             return min(max(retry_after_s, 0.0), self.max_delay_s)
-        base = min(self.initial_delay_s * (2**attempt), self.max_delay_s)
+        base: float = min(self.initial_delay_s * (2**attempt), self.max_delay_s)
         if self.jitter_factor == 0:
             return base
         jitter_range = base * self.jitter_factor

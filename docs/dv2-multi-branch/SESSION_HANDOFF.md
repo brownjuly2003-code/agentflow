@@ -131,6 +131,7 @@ ssh julia@192.168.1.133 '
 - ✅ **2-min behavioral pitch** (session 4) — `docs/dv2-multi-branch/pitch.md`: 6 beats × 15-25s с live `kubectl` cues для каждого. Спутник к demo_evidence.md
 - ✅ **Voice-over MP4 demo** (session 6, 2026-05-23) — `docs/dv2-multi-branch/demo_voiced.mp4` (~92 s, 3.2 MB). Cast `demo.cast` слоумо до длины русской TTS-narration по pitch.md (ru-RU-SvetlanaNeural, +25%). Reproducible через `docs/dv2-multi-branch/demo_voiced.build.sh` + `demo_voiced.narration.txt` (требует edge-tts, ffmpeg, agg).
 - ✅ **Web-UI screencast** (session 7, 2026-05-23) — `docs/dv2-multi-branch/demo_webui.mp4` (~60 s, 1.6 MB). Playwright headless проходит Argo workflow archive (4× зелёных dv2-refresh + DAG drill-in) + MinIO console (cold-tier bucket, 5 branch префиксов). Russian voice-over (ru-RU-SvetlanaNeural, +20%). Reproducible через `demo_webui.capture.py` + `demo_webui.narration.txt` (требует Playwright, edge-tts, ffmpeg + SSH-tunnels на iMac).
+- ✅ **dbt docs screencast** (session 8, 2026-05-24) — `docs/dv2-multi-branch/demo_dbt_docs.mp4` (~55 s, 1.7 MB). Playwright проходит overview → customer_360 (columns + description) → branch_pnl (с lineage graph showing rv.bv_order_canonical → branch_pnl) → returns_velocity (с lineage). Same TTS pipeline. Reproducible через `demo_dbt_docs.capture.py` + `demo_dbt_docs.narration.txt` + новый `infrastructure/dv2/dbt/dbt-docs-pod.yaml` (Pod вместо Job для `dbt docs serve --port 8080`).
 
 ### Технический долг
 - ✅ **MD5/unhex gotcha** зафиксирован в `warehouse/agentflow/dv2/README.md` и `infrastructure/dv2/README.md`
@@ -144,7 +145,7 @@ ssh julia@192.168.1.133 '
 3. Проверить кластер: `ssh julia@192.168.1.133 'PATH=$HOME/lima/bin:$HOME/bin:$PATH kubectl get pods -n dv2 && kubectl get pods -n argo'`
    - **Ожидаемое:** clickhouse-0 / postgres-0 / minio-0 Running в `dv2`; argo-server + workflow-controller Running в `argo`; `oltp_cdc.*` 4 таблицы видны через CH-клиент; `oltp_cdc_msk.*` + `oltp_cdc_dxb.*` per-branch fan-out таблицы видны
 4. Контекст — этот файл + `demo_evidence.md` (§12-15 свежее) + `pitch.md`
-5. Открытые задачи (deferred, нужен явный ask): **dbt docs screencast** (Argo + MinIO сняты в `demo_webui.mp4`; dbt docs serve требует поднять `dbt docs generate` в Job-контейнере и port-forward 8080 — не сделано session 7) и **Phase 3 ops work** (A04 Debezium / A05 prod cluster / A03 next iter) — multi-week scope, не делалось session 6/7
+5. Открытые задачи (deferred, нужен явный ask): **Phase 3 ops work** — A04 Debezium production CDC ждёт user-side decisions (hosts/creds/network/owners; cdc-production-onboarding.md runbook готов); A05 prod cluster validation требует prod access; A03 next p99 iter gated на CI runner upgrade decision (local 167ms достигнут, CI 800-1000ms — hardware, не код). Все DV2 screencasts (terminal cast + Argo+MinIO + dbt docs) сняты в session 6-8.
 
 ## Current cluster state (на момент закрытия session 5, 2026-05-23)
 

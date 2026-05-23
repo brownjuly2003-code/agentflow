@@ -1,0 +1,7 @@
+dbt docs — авто-генерируемая документация по mart-моделям. Слева Project tree, package dv2_marts с тремя моделями.
+
+customer_360 — table, относится к package dv2_marts, реляция marts.customer_360. Колонки: customer_hk это MD5 хэш, branch код филиала, first_name, last_name, email, loyalty_segment, loyalty_points. Описание — one row per customer и branch, joins MDM customer profile с bv_order_canonical.
+
+branch_pnl — per-branch monthly P&L. Колонки: branch, month, orders, gross_revenue, tax_collected, net_revenue, discounts, shipping. Lineage Graph справа показывает прямую зависимость от rv.bv_order_canonical в Raw Vault.
+
+returns_velocity — третья mart-модель. Все три материализованы в schema marts, проверяются 12 data-тестами в одном dbt run.

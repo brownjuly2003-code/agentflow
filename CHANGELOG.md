@@ -13,6 +13,30 @@ All notable changes to AgentFlow are documented in this file.
   a Russian TTS voice-over. Reproducer:
   `docs/dv2-multi-branch/demo_webui.capture.py` plus the same
   edge-tts + ffmpeg pipeline as the terminal cast.
+- DV2 dbt docs screencast (`docs/dv2-multi-branch/demo_dbt_docs.mp4`,
+  ~55 s, 1.7 MB) — Playwright walk-through of the auto-generated dbt
+  docs site: project tree → `customer_360` columns/description →
+  `branch_pnl` with the `rv.bv_order_canonical → branch_pnl` lineage
+  graph → `returns_velocity` with lineage. Companion Pod manifest
+  `infrastructure/dv2/dbt/dbt-docs-pod.yaml` runs `dbt docs generate`
+  + `dbt docs serve --port 8080 --host 0.0.0.0` against the in-cluster
+  ClickHouse. Reproducer: `demo_dbt_docs.capture.py` plus the same
+  TTS pipeline.
+- Cross-link `docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md`
+  to `docs/operations/cdc-production-onboarding.md` (production source
+  onboarding still blocked on decision-record fill-in) and note that
+  the DV2 demo uses ClickHouse `MaterializedPostgreSQL` as a
+  single-node alternative, not a production replacement for
+  Debezium/Kafka Connect.
+- Exploration archive: `docs/exploration/2026-05/` collects three
+  stale May-6/7 docs-site drafts (`astro_prompt.md`, `kimi.md`,
+  `research.md`) that had been sitting untracked in the repo root.
+
+### Fixed
+
+- Typed `RetryPolicy.compute_delay()` intermediate `base` in
+  `sdk/agentflow/retry.py` so the function no longer returns
+  `Any`; SDK mypy is now strict-clean.
 - CI / release / packaging lessons-learned document
   (`docs/lessons/ci-repair-sprint-2026-04.md`) — seven concrete
   Lesson / Apply / Concrete-trace entries covering A06 dependency

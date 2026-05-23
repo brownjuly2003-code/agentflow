@@ -1,8 +1,24 @@
 # A04 Debezium + Kafka Connect Deployment Plan
 
 **Status:** Implemented for local/demo and Kubernetes-shaped staging primitives; production source onboarding pending
-**Date:** 2026-04-25  
+**Date:** 2026-04-25 (updated 2026-05-24 for cross-link)
 **Scope:** Original research/deploy plan plus implementation state. This is not approval to attach production source databases.
+
+> **For production onboarding** — do not act on this plan directly.
+> See [`docs/operations/cdc-production-onboarding.md`](../operations/cdc-production-onboarding.md)
+> for the decision record (source owner, secret owner, table scope,
+> network path, monitoring owner, rollback owner) that must be filled
+> and approved outside the repo before any connector is created.
+>
+> **Note:** the DV2 demo (`docs/dv2-multi-branch/`, v1.2.0) uses
+> ClickHouse `MaterializedPostgreSQL` as an alternative CDC path — see
+> `warehouse/agentflow/dv2/postgres_oltp/cdc_setup.sql` and the
+> `fanout/` per-database split. That path was chosen because the demo
+> iMac (8 GB RAM) cannot host the Kafka + Connect + Schema Registry
+> stack alongside the DV2 cluster. The Debezium/Kafka Connect plan
+> below remains the canonical production-grade option; the
+> `MaterializedPostgreSQL` path is a single-node demo equivalent, not
+> a production replacement.
 
 Kafka Connect is the runtime that hosts source and sink connectors as workers. In this plan, Debezium PostgreSQL and MySQL source connectors run inside Kafka Connect workers, read database replication logs, and publish raw CDC records to Kafka. AgentFlow then treats those raw Debezium records as an internal capture format and normalizes them before Flink validation, Iceberg writes, and serving-layer reads.
 

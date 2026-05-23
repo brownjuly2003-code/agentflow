@@ -1,0 +1,76 @@
+# Single-shot Pod that runs `dbt docs generate` + `dbt docs serve --port 8080`
+# against the in-cluster ClickHouse. Used to record the dbt-docs screencast.
+#
+# Companion script: same `infrastructure/dv2/dbt/run.sh` builds the
+# `dbt-project` ConfigMap; this Pod mounts it. After capture, delete the Pod
+# with `kubectl -n dv2 delete pod dbt-docs-serve --ignore-not-found`.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dbt-docs-serve
+  namespace: dv2
+  labels:
+    app: dbt-docs
+spec:
+  restartPolicy: Never
+  initContainers:
+    - name: stage
+      image: busybox:1.36
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -eu
+          mkdir -p /workspace
+          tar -xzf /project/project.tar.gz -C /workspace
+      volumeMounts:
+        - {name: project,   mountPath: /project,   readOnly: true}
+        - {name: workspace, mountPath: /workspace}
+  containers:
+    - name: dbt-docs
+      image: python:3.11-slim
+      ports:
+        - {name: http, containerPort: 8080}
+      env:
+        - {name: DBT_PROFILES_DIR, value: /workspace}
+        - {name: DBT_HOST,         value: clickhouse}
+        - {name: DBT_PORT,         value: "9000"}
+        - {name: DBT_USER,         value: default}
+        - name: DBT_PASSWORD
+          valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          set -euo pipefail
+          echo "==> installing dbt-clickhouse"
+          pip install --quiet --no-cache-dir dbt-core==1.8.7 dbt-clickhouse==1.8.7
+          cd /workspace
+          cat > profiles.yml <<PROF
+          dv2_marts:
+            outputs:
+              dev:
+                type: clickhouse
+                host: $DBT_HOST
+                port: $DBT_PORT
+                user: $DBT_USER
+                password: $DBT_PASSWORD
+                schema: marts
+                secure: false
+                verify: false
+                threads: 2
+            target: dev
+          PROF
+          echo "==> dbt deps"
+          dbt deps || true
+          echo "==> dbt docs generate"
+          dbt docs generate
+          echo "==> dbt docs serve --port 8080"
+          dbt docs serve --port 8080 --no-browser --host 0.0.0.0
+      volumeMounts:
+        - {name: workspace, mountPath: /workspace}
+  volumes:
+    - name: project
+      configMap:
+        name: dbt-project
+    - name: workspace
+      emptyDir: {}

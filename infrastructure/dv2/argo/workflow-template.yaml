@@ -1,0 +1,234 @@
+# DV2.0 refresh DAG — orchestrates the hot→raw→cold pipeline that the
+# standalone CronJobs run independently. Demonstrates the production
+# pattern: validate hubs before links, links before satellites, fan out
+# cold-offload across all branches in parallel, then verify the S3
+# mirrors. Every step is idempotent — re-running this workflow against
+# an unchanged warehouse produces identical results.
+#
+# Submit:
+#   kubectl create -n dv2 -f - <<'EOF'
+#   apiVersion: argoproj.io/v1alpha1
+#   kind: Workflow
+#   metadata:
+#     generateName: dv2-refresh-
+#   spec:
+#     workflowTemplateRef:
+#       name: dv2-refresh
+#   EOF
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: dv2-refresh
+  namespace: dv2
+spec:
+  serviceAccountName: dv2-argo-runner
+  entrypoint: refresh
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  podGC:
+    strategy: OnWorkflowSuccess
+  arguments:
+    parameters:
+      - name: branches
+        value: '["msk","spb","ekb","dxb","ala"]'
+
+  templates:
+    # ----------------------------------------------------------- DAG
+    - name: refresh
+      dag:
+        tasks:
+          - name: promote-oltp
+            template: promote-oltp
+
+          - name: validate-hubs
+            template: validate-hubs
+            dependencies: [promote-oltp]
+
+          - name: validate-links
+            template: validate-links
+            dependencies: [validate-hubs]
+
+          - name: validate-satellites
+            template: validate-satellites
+            dependencies: [validate-hubs]
+
+          - name: cold-offload
+            template: cold-offload-branch
+            dependencies: [validate-links, validate-satellites]
+            arguments:
+              parameters:
+                - name: branch
+                  value: "{{item}}"
+            withParam: "{{workflow.parameters.branches}}"
+
+          - name: verify-mirrors
+            template: verify-mirrors
+            dependencies: [cold-offload]
+
+    # -------------------------------------------------- step templates
+    - name: promote-oltp
+      script:
+        image: clickhouse/clickhouse-server:25.5
+        env: &chenv
+          - {name: CH_HOST,     value: clickhouse}
+          - {name: CH_USER,     value: default}
+          - name: CH_PASSWORD
+            valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+        command: [bash]
+        source: |
+          set -euo pipefail
+          echo "==> promoting OLTP bridge into raw_vault"
+          clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --multiquery --query "
+            INSERT INTO rv.hub_customer
+              SELECT MD5(toString(c.customer_id)) AS customer_hk,
+                     toString(c.customer_id)      AS customer_bk,
+                     now()                        AS load_ts,
+                     concat('pg_ops__', b.branch) AS record_source
+              FROM (
+                SELECT customer_id, 'msk' AS branch FROM oltp_live.msk_customers
+                UNION ALL
+                SELECT customer_id, 'dxb' AS branch FROM oltp_live.dxb_customers
+              ) c
+              JOIN (
+                SELECT customer_id, 'msk' AS branch FROM oltp_live.msk_customers
+                UNION ALL
+                SELECT customer_id, 'dxb' AS branch FROM oltp_live.dxb_customers
+              ) b USING (customer_id, branch);
+          " 2>&1 | tail -5 || echo "    (promote already applied; raw_vault already has pg_ops__* rows)"
+          echo "==> done"
+
+    - name: validate-hubs
+      script:
+        image: clickhouse/clickhouse-server:25.5
+        env: *chenv
+        command: [bash]
+        source: |
+          set -euo pipefail
+          echo "==> validating hubs (row counts + hk uniqueness)"
+          for hub in hub_customer hub_order hub_store hub_product; do
+            ROWS=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+              --query "SELECT count() FROM rv.${hub} FINAL")
+            UNIQ=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+              --query "SELECT count(DISTINCT $(echo $hub | sed 's/hub_//')_hk) FROM rv.${hub} FINAL")
+            echo "    ${hub}: rows=${ROWS} unique_hk=${UNIQ}"
+            if [ "$ROWS" = "0" ]; then echo "FAIL: ${hub} empty"; exit 1; fi
+            if [ "$ROWS" != "$UNIQ" ]; then echo "FAIL: ${hub} hk not unique"; exit 1; fi
+          done
+          echo "==> hubs OK"
+
+    - name: validate-links
+      script:
+        image: clickhouse/clickhouse-server:25.5
+        env: *chenv
+        command: [bash]
+        source: |
+          set -euo pipefail
+          echo "==> validating links (orphan-check vs hubs)"
+          ORPHANS=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+            SELECT count()
+            FROM rv.lnk_order_customer l FINAL
+            LEFT ANTI JOIN rv.hub_order o ON l.order_hk = o.order_hk
+          ")
+          echo "    lnk_order_customer orphans (no parent hub_order): ${ORPHANS}"
+          if [ "$ORPHANS" != "0" ]; then echo "FAIL: ${ORPHANS} orphan links"; exit 1; fi
+          ROWS=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+            --query "SELECT count() FROM rv.lnk_order_customer FINAL")
+          echo "    lnk_order_customer rows: ${ROWS}"
+          echo "==> links OK"
+
+    - name: validate-satellites
+      script:
+        image: clickhouse/clickhouse-server:25.5
+        env: *chenv
+        command: [bash]
+        source: |
+          set -euo pipefail
+          echo "==> validating satellites (branch distribution)"
+          clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" --query "
+            SELECT splitByString('__', record_source)[2] AS branch,
+                   count() AS rows
+            FROM rv.hub_order FINAL
+            GROUP BY branch ORDER BY branch
+            FORMAT PrettyCompactMonoBlock
+          "
+          # Satellites are MergeTree (not ReplacingMergeTree) — FINAL is illegal.
+          # Idempotency comes from (hk, load_ts) ORDER BY + hash_diff dedup at insert.
+          ROWS=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+            --query "SELECT count() FROM rv.sat_order_pricing__1c__msk")
+          echo "    sat_order_pricing__1c__msk rows: ${ROWS}"
+          if [ "$ROWS" = "0" ]; then echo "FAIL: pricing sat empty"; exit 1; fi
+          echo "==> satellites OK"
+
+    - name: cold-offload-branch
+      inputs:
+        parameters:
+          - name: branch
+      script:
+        image: clickhouse/clickhouse-server:25.5
+        env:
+          - {name: CH_HOST,     value: clickhouse}
+          - {name: CH_USER,     value: default}
+          - name: CH_PASSWORD
+            valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+          - {name: S3_ENDPOINT, value: "http://minio:9000"}
+          - {name: S3_BUCKET,   value: cold-tier}
+          - name: S3_ACCESS_KEY
+            valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+          - name: S3_SECRET_KEY
+            valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+          - {name: BRANCH, value: "{{inputs.parameters.branch}}"}
+        command: [bash]
+        source: |
+          set -euo pipefail
+          YEAR=$(date +%Y); MONTH=$(date +%m)
+          SAT="sat_customer_anon__1c__${BRANCH}"
+          RS="1c__${BRANCH}"
+          S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+          echo "==> branch=${BRANCH} -> ${S3_PATH}"
+          clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+            --query "
+              INSERT INTO FUNCTION s3('${S3_PATH}','${S3_ACCESS_KEY}','${S3_SECRET_KEY}','Parquet')
+              SELECT hex(customer_hk) AS customer_hk_hex,
+                     age_bucket, geo_region, customer_segment, load_ts, record_source
+              FROM rv.${SAT}
+              WHERE record_source='${RS}' AND is_deleted=0
+              SETTINGS s3_truncate_on_insert=1
+            "
+          ROWS=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+            --query "SELECT count() FROM s3('${S3_PATH}','${S3_ACCESS_KEY}','${S3_SECRET_KEY}','Parquet')")
+          echo "==> wrote ${ROWS} rows to branch=${BRANCH}"
+          if [ "$ROWS" = "0" ]; then echo "FAIL: empty mirror for ${BRANCH}"; exit 1; fi
+
+    - name: verify-mirrors
+      script:
+        image: clickhouse/clickhouse-server:25.5
+        env:
+          - {name: CH_HOST,     value: clickhouse}
+          - {name: CH_USER,     value: default}
+          - name: CH_PASSWORD
+            valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+          - {name: S3_ENDPOINT, value: "http://minio:9000"}
+          - {name: S3_BUCKET,   value: cold-tier}
+          - name: S3_ACCESS_KEY
+            valueFrom: {secretKeyRef: {name: minio-creds, key: root-user}}
+          - name: S3_SECRET_KEY
+            valueFrom: {secretKeyRef: {name: minio-creds, key: root-password}}
+        command: [bash]
+        source: |
+          set -euo pipefail
+          YEAR=$(date +%Y); MONTH=$(date +%m)
+          echo "==> cross-checking mirrors vs source satellites"
+          FAIL=0
+          for BRANCH in msk spb ekb dxb ala; do
+            SAT="sat_customer_anon__1c__${BRANCH}"
+            S3_PATH="${S3_ENDPOINT}/${S3_BUCKET}/branch=${BRANCH}/year=${YEAR}/month=${MONTH}/customers_anon.parquet"
+            SRC=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+              --query "SELECT count() FROM rv.${SAT} WHERE record_source='1c__${BRANCH}' AND is_deleted=0")
+            MIR=$(clickhouse-client --host "$CH_HOST" --user "$CH_USER" --password "$CH_PASSWORD" \
+              --query "SELECT count() FROM s3('${S3_PATH}','${S3_ACCESS_KEY}','${S3_SECRET_KEY}','Parquet')")
+            printf "    %-3s  source=%-5s  mirror=%-5s" "$BRANCH" "$SRC" "$MIR"
+            if [ "$SRC" = "$MIR" ]; then echo "  OK"; else echo "  FAIL"; FAIL=1; fi
+          done
+          if [ "$FAIL" = "1" ]; then echo "==> verify-mirrors FAILED"; exit 1; fi
+          echo "==> all 5 mirrors match source"

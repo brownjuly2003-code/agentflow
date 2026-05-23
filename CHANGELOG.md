@@ -218,6 +218,34 @@ README that maps findings to the six closing commits.
 
 ### Added
 
+- **DV2.0 multi-branch demo** (merged via `ddfb863` from
+  `feat/dv2-multi-branch`, sessions 1-5). Live Data Vault 2.0
+  warehouse on a self-hosted kind cluster with ClickHouse 25.5,
+  Postgres 17, and MinIO. Five branches (MSK / SPB / EKB / DXB / ALA),
+  three source systems (1C + Bitrix24 + WMS Excel), three jurisdictions
+  (RU / UAE / KZ). Artifacts:
+  - `warehouse/agentflow/dv2/raw_vault/` — 8 hubs + 8 links + 39
+    satellites (generator + jinja template + spec.yaml).
+  - `warehouse/agentflow/dv2/business_vault/` — 5 per-branch MDM views
+    plus `bv_order_canonical` with `*_source` audit columns.
+  - `infrastructure/dv2/` — kind topology, ClickHouse / Postgres / MinIO
+    StatefulSets, dbt mart runner, Argo Workflows installer and
+    `dv2-refresh` WorkflowTemplate, cold-offload CronJob fanout (5).
+  - `warehouse/agentflow/dv2/postgres_oltp/` — pull-based PostgreSQL()
+    bridge + push-based MaterializedPostgreSQL CDC (single-DB pattern).
+  - `warehouse/agentflow/dv2/postgres_oltp/fanout/` — per-branch CDC
+    fan-out via per-database split (`ops_msk_db`, `ops_dxb_db` →
+    `oltp_cdc_msk`, `oltp_cdc_dxb`). Native workaround for the
+    `materialized_postgresql_publication_name` setting being unsupported
+    in ClickHouse 25.5; PeerDB OSS was the originally-planned route but
+    does not fit on the 8 GB demo iMac alongside kind + CH + PG + MinIO.
+  - `warehouse/agentflow/dv2/dbt/` — three mart models
+    (`customer_360`, `branch_pnl`, `returns_velocity`) with 12 data
+    tests and a k8s Job runner.
+  - `docs/dv2-multi-branch/` — architecture diagram, demo evidence
+    (15 sections), 2-minute pitch script, recording-day runbook,
+    asciinema cast (`demo.cast`, 42 s, 130×35) plus runner, plain-text
+    transcript, and self-contained HTML player embed.
 - **Debezium/Kafka Connect CDC operationalization**: local compose now
   brings up Postgres/MySQL source databases, Kafka Connect, Debezium
   connector registration, and raw CDC topic bootstrap for the AgentFlow

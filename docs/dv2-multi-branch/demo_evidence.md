@@ -248,7 +248,63 @@ out, the cloud-provider secret takes its place, and the rest of the
 manifest is untouched. Add `WHERE load_ts < now() - INTERVAL 365 DAY` to
 the SELECT in prod.
 
-## 10. How to re-run on the same cluster
+## 10. Hot tier — Postgres OLTP + ClickHouse PostgreSQL() bridge
+
+`warehouse/agentflow/dv2/postgres_oltp/seed.sql` populates the
+previously-empty Postgres pod with `ops_msk` + `ops_dxb` schemas
+(customers + orders, 50/200 and 20/80 rows respectively).
+`bridge.sql` creates four `oltp_live.{msk,dxb}_{customers,orders}`
+tables in ClickHouse using `Engine = PostgreSQL(...)` — live
+read-through of the OLTP tables, no replication slot required.
+`promote_to_raw_vault.sql` runs the hot → warm step.
+
+Live join across the bridge — ClickHouse SELECTs Postgres rows
+directly:
+
+```sql
+SELECT o.order_id, o.channel, o.total_amount, c.first_name, c.last_name
+FROM oltp_live.msk_orders o
+JOIN oltp_live.msk_customers c ON o.customer_id = c.customer_id
+ORDER BY o.order_id LIMIT 3;
+```
+
+```
+OLTP-MSK-000001  mobile       531  Dasha   Sidorov
+OLTP-MSK-000002  retail       562  Egor    Smirnov
+OLTP-MSK-000003  call-center  593  Fedor   Volkov
+```
+
+After the promote step `rv.hub_order` gains two new `record_source`
+values (`pg_ops__msk` 200 rows, `pg_ops__dxb` 80) and the existing
+1C-seeded volumes are untouched:
+
+```
+1c__msk      4000
+1c__spb      2500
+1c__ekb      1500
+1c__ala      1000
+1c__dxb      1000
+pg_ops__msk   200
+pg_ops__dxb    80
+```
+
+End-to-end check — Postgres orders surface inside `bv_order_canonical`
+with correct branch attribution and `header_source` matching the
+destination satellite:
+
+```
+order_bk          branch  channel       total   header_source
+OLTP-MSK-000144   msk     web            4964   bitrix__msk
+OLTP-MSK-000127   msk     call-center    4437   bitrix__msk
+OLTP-MSK-000195   msk     call-center    6545   bitrix__msk
+```
+
+The trip from Postgres → ClickHouse OLTP-bridge → raw_vault →
+business_vault is the same code path a real Debezium / PeerDB consumer
+would land on; the engine swap (`PostgreSQL` → `MaterializedPostgreSQL`
+or a streaming CDC writer) preserves the rest of the model untouched.
+
+## 11. How to re-run on the same cluster
 
 ```bash
 ssh julia@192.168.1.133

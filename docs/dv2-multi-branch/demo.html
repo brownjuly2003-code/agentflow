@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DV2.0 Multi-Branch — Live Demo</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3/dist/bundle/asciinema-player.css" />
+  <style>
+    :root {
+      --text: #0f1115;
+      --muted: #5b6168;
+      --bg: #fafbfd;
+      --frame: #d9dde3;
+    }
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 600;
+      margin: 0 0 8px;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: var(--muted);
+      font-size: 15px;
+      margin: 0 0 28px;
+      max-width: 720px;
+    }
+    .player {
+      border: 1px solid var(--frame);
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+    }
+    .controls {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin: 18px 0 28px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .controls a {
+      color: var(--text);
+      text-decoration: none;
+      border-bottom: 1px solid var(--frame);
+    }
+    .controls a:hover { border-bottom-color: var(--text); }
+    .beats {
+      display: grid;
+      grid-template-columns: 80px 1fr 1fr;
+      gap: 8px 16px;
+      font-size: 14px;
+      margin-top: 24px;
+    }
+    .beats .h {
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: .04em;
+      border-bottom: 1px solid var(--frame);
+      padding-bottom: 6px;
+      margin-bottom: 4px;
+    }
+    .beats .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+    code {
+      font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+      background: rgba(0,0,0,.04);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--frame);
+      font-size: 13px;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>DV2.0 Multi-Branch — Live Demo</h1>
+    <p class="lede">
+      42-second silent terminal recording of the 6-beat pitch executed end-to-end
+      against the live <code>hq-demo</code> Kubernetes cluster on 2026-05-23.
+      Self-hosted upstream Kubernetes, ClickHouse 25.5 + Postgres 17 + MinIO,
+      Data Vault 2.0 schema with five-branch <code>record_source</code> dimension.
+    </p>
+
+    <div class="player" id="player"></div>
+
+    <div class="controls">
+      <span>Playback:</span>
+      <a href="#" onclick="window.player.play(); return false;">play</a>
+      <a href="#" onclick="window.player.pause(); return false;">pause</a>
+      <a href="#" onclick="window.player.seek(0); window.player.play(); return false;">restart</a>
+      <span style="margin-left:auto">
+        <a href="https://asciinema.org/a/ZBTnOWGs5Jzhn7rW" target="_blank">hosted on asciinema.org</a>
+      </span>
+    </div>
+
+    <div class="beats">
+      <div class="h">Time</div><div class="h">Beat</div><div class="h">Output</div>
+      <div class="t">00:00</div><div>Cluster topology — <code>kubectl get nodes</code></div><div>3 nodes, labelled <code>branch</code> / <code>nodepool</code> / <code>workload</code></div>
+      <div class="t">00:08</div><div>Model surface — table kinds in <code>rv</code></div><div>bv 6, hub 8, lnk 8, sat 39</div>
+      <div class="t">00:14</div><div>Multi-branch distribution from <code>hub_order</code></div><div>msk 40.5 / spb 24.1 / ekb 14.5 / dxb 11.2 / ala 9.7 %</div>
+      <div class="t">00:22</div><div>Business Vault MDM — PII + loyalty</div><div>msk 800/800/640, dxb 200/200/0</div>
+      <div class="t">00:30</div><div>Cold-offload <code>kubectl create job</code> + MinIO listing</div><div>parquet files for all 5 branches in <code>local/cold-tier</code></div>
+      <div class="t">00:40</div><div>Closing — single bootstrap reproduces everything</div><div><code>bash infrastructure/dv2/bootstrap.sh</code></div>
+    </div>
+
+    <footer>
+      Source: <a href="https://github.com/brownjuly2003-code/agentflow/tree/main/docs/dv2-multi-branch">docs/dv2-multi-branch/</a>
+      &middot;
+      Cast file: <code>demo.cast</code> (asciinema v2)
+      &middot;
+      Runner: <code>demo_runner.sh</code>
+    </footer>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/asciinema-player@3/dist/bundle/asciinema-player.min.js"></script>
+  <script>
+    window.player = AsciinemaPlayer.create('./demo.cast', document.getElementById('player'), {
+      cols: 130,
+      rows: 35,
+      autoPlay: true,
+      loop: true,
+      idleTimeLimit: 2,
+      theme: 'asciinema',
+      fit: 'width'
+    });
+  </script>
+</body>
+</html>

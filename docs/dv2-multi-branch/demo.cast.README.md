@@ -30,6 +30,21 @@ asciinema cat docs/dv2-multi-branch/demo.cast
 asciinema upload docs/dv2-multi-branch/demo.cast
 ```
 
+### Browser embed
+
+`demo.html` in this directory is a self-contained page that loads
+`demo.cast` via [asciinema-player](https://docs.asciinema.org/manual/player/)
+from a CDN. Open it directly in any browser, or host the directory
+anywhere static (GitHub Pages / Vercel / S3).
+
+### Hosted (live link, expires 2026-05-30)
+
+The cast was uploaded anonymously to asciinema.org on 2026-05-23:
+
+- **https://asciinema.org/a/ZBTnOWGs5Jzhn7rW** (7-day TTL on anonymous
+  uploads; for permanent hosting, link the iMac CLI to an asciinema.org
+  account via `asciinema auth` and re-upload — same URL persists.)
+
 The ANSI-stripped transcript is in `demo_transcript.txt` for diff-friendly
 review (what the cast captures, line for line).
 

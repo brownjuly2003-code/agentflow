@@ -113,11 +113,11 @@ ssh julia@192.168.1.133 '
 - Открытое (deferred — needs explicit user ask):
   - **PeerDB connector** — full per-branch publication isolation (текущий single-DB CDC покрывает паттерн, но не fan-out)
 
-### Task #6 — Demo artifacts ✅ DONE (session 2)
-- `docs/dv2-multi-branch/demo_evidence.md` — `kubectl get nodes --show-labels`, pod-to-node placement, PVC bind, system.tables breakdown (8/8/22), multi-branch distribution (40/25/15/10/10), query latency (3-4ms на 10K rows), line-items count
+### Task #6 — Demo artifacts ✅ DONE (sessions 2 + 4)
+- `docs/dv2-multi-branch/demo_evidence.md` — 14 секций: cluster topology, pod placement, DV2.0 model surface, multi-branch distribution, latency, BV MDM, cold-offload + MinIO, Postgres OLTP, Argo run, dbt run, CDC E2E
 - Воспроизводится одной командой: `bash infrastructure/dv2/bootstrap.sh`
-- 2-min behavioral pitch (заготовка в `kimi_research.md` § POLISHED LEGEND) — pending, нужен живой запуск
-- Optional: запись короткого видео demo — pending
+- ✅ **2-min behavioral pitch** (session 4) — `docs/dv2-multi-branch/pitch.md`: 6 beats × 15-25s с live `kubectl` cues для каждого. Спутник к demo_evidence.md
+- Optional: запись короткого видео demo — pending (deferred, нужен сам live запуск)
 
 ### Технический долг
 - ✅ **MD5/unhex gotcha** зафиксирован в `warehouse/agentflow/dv2/README.md` и `infrastructure/dv2/README.md`
@@ -127,10 +127,65 @@ ssh julia@192.168.1.133 '
 ## Quick-start для следующей сессии
 
 1. Открыть Claude Code в `D:\DE_project`
-2. Проверить ветку: `git branch --show-current` → `feat/dv2-multi-branch`
-3. Проверить кластер: `ssh julia@192.168.1.133 'kubectl get nodes'`
-4. Если нужен контекст — прочитать этот файл
-5. Следующая задача — выбрать из «Что осталось» (рекомендую Task #3 → потом #6, потом отполировать #5 до прод-ready)
+2. Проверить ветку: `git branch --show-current` → `feat/dv2-multi-branch`, HEAD `648af98` (session 4 closed)
+3. Проверить кластер: `ssh julia@192.168.1.133 'PATH=$HOME/lima/bin:$HOME/bin:$PATH kubectl get pods -n dv2 && kubectl get pods -n argo'`
+   - **Ожидаемое:** clickhouse-0 / postgres-0 / minio-0 Running в `dv2`; argo-server + workflow-controller Running в `argo`; `oltp_cdc.*` 4 таблицы видны через CH-клиент
+4. Контекст — этот файл + `demo_evidence.md` (§12-14 свежее) + `pitch.md`
+5. Открытые задачи (deferred, нужен явный ask): **PeerDB connector** (per-branch publication isolation), **видео-демка** поверх `pitch.md` script
+
+## Current cluster state (на момент закрытия session 4, 2026-05-23)
+
+Применено на `hq-demo`:
+- ✅ baseline DV2.0 stack: 3 ноды kind, ClickHouse 25.5 + Postgres 17 + MinIO StatefulSets, 38 rv.* таблиц + 5 BV views + `marts.*` (dbt)
+- ✅ 5 cold-offload CronJobs (msk/spb/ekb/dxb/ala, MinIO бэкэнд)
+- ✅ Argo Workflows v3.5.10 в namespace `argo` + WorkflowTemplate `dv2-refresh` в `dv2`
+- ✅ Postgres `wal_level=logical` + публикация `ops_ch_publication` + 2 logical replication slots (UUID-named)
+- ✅ ClickHouse `oltp_cdc` database (MaterializedPostgreSQL) активно стримит `ops_msk` + `ops_dxb`
+- ✅ dbt marts: `marts.{customer_360,branch_pnl,returns_velocity}` материализованы
+
+## Полная пересборка с нуля (если кластер потерян)
+
+```bash
+ssh julia@192.168.1.133
+export PATH=$HOME/lima/bin:$HOME/bin:$PATH
+limactl start docker            # если Lima VM не запущена
+
+# Step 1: baseline (kind + CH + PG + MinIO + DDL + seed + cold-offload CronJobs)
+bash infrastructure/dv2/bootstrap.sh
+
+# Step 2: Argo Workflows + WorkflowTemplate
+bash infrastructure/dv2/argo/install.sh
+
+# Step 3: push-based CDC (требует postgres-sts.yaml с wal_level=logical — уже в baseline после session 4)
+# 3.1 Postgres-side: rep_user + grants + REPLICA IDENTITY DEFAULT + table ownership
+cat warehouse/agentflow/dv2/postgres_oltp/cdc_setup.sql \
+  | kubectl exec -i -n dv2 postgres-0 -- psql -U ops -d ops
+# 3.2 ClickHouse-side: oltp_cdc DB
+cat warehouse/agentflow/dv2/postgres_oltp/cdc_bridge.sql \
+  | kubectl exec -i -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --multiquery
+# 3.3 Promote CDC OLTP rows → raw_vault (one-shot после первого snapshot)
+cat warehouse/agentflow/dv2/postgres_oltp/promote_to_raw_vault_cdc.sql \
+  | kubectl exec -i -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --multiquery
+
+# Step 4: dbt marts (с Windows-машины — нужны файлы из репо)
+cd /d/DE_project/warehouse/agentflow/dv2/dbt
+tar -czf /tmp/dbt-project.tar.gz dbt_project.yml profiles.example.yml models README.md
+scp /tmp/dbt-project.tar.gz julia@192.168.1.133:/tmp/dbt-project.tar.gz
+ssh julia@192.168.1.133 'export PATH=$HOME/lima/bin:$HOME/bin:$PATH && \
+  kubectl create configmap dbt-project -n dv2 --from-file=project.tar.gz=/tmp/dbt-project.tar.gz --dry-run=client -o yaml | kubectl apply -f -'
+cat /d/DE_project/infrastructure/dv2/dbt/dbt-run-job.yaml \
+  | ssh julia@192.168.1.133 'export PATH=$HOME/lima/bin:$HOME/bin:$PATH && kubectl apply -f -'
+
+# Step 5 (опционально): submit Argo workflow для end-to-end refresh
+ssh julia@192.168.1.133 'export PATH=$HOME/lima/bin:$HOME/bin:$PATH && cat <<EOF | kubectl create -n dv2 -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata: {generateName: dv2-refresh-}
+spec: {workflowTemplateRef: {name: dv2-refresh}}
+EOF'
+```
+
+Время полной пересборки на iMac 2017 ~10-12 минут (kind + image pulls).
 
 ## Командно-строчный cheat sheet
 

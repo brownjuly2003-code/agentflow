@@ -1,6 +1,18 @@
 # DV2.0 Multi-Branch — Session Handoff (2026-05-23)
 
-Working snapshot после четырёх сессий. Ветка `feat/dv2-multi-branch`.
+Working snapshot после пяти сессий. Ветка `feat/dv2-multi-branch`
+merged в `main` (2026-05-23 afternoon, merge commit `ddfb863`).
+
+> **Session 5 (2026-05-23 afternoon)** — закрыто: per-branch CDC fan-out
+> через split на две Postgres-БД (`ops_msk_db`, `ops_dxb_db`) + две
+> отдельных CH MaterializedPostgreSQL DB (`oltp_cdc_msk`, `oltp_cdc_dxb`).
+> Native обход pitfall #5 (CH 25.5 rejects `materialized_postgresql_publication_name`).
+> PeerDB OSS отклонён by hardware constraint — iMac 8 GB RAM не вмещает
+> Temporal + flow services поверх живого kind+CH+PG+MinIO+Argo. Артефакты
+> в `warehouse/agentflow/dv2/postgres_oltp/fanout/` (4 SQL + README).
+> Live verified end-to-end: INSERT/UPDATE в `ops_msk_db` propagated в
+> `oltp_cdc_msk` за ~8s, изоляция от DXB подтверждена нулевым cross-leak.
+> demo_evidence.md § 15 + handoff отражают новый pattern.
 
 > **Session 4 (2026-05-23 late-morning)** — закрыто:
 > behavioral pitch (`pitch.md`), Argo Workflows orchestration (DAG
@@ -110,8 +122,8 @@ ssh julia@192.168.1.133 '
 - ✅ **dbt mart layer** (session 4) — `warehouse/agentflow/dv2/dbt/` + `infrastructure/dv2/dbt/`. 3 модели (customer_360, branch_pnl, returns_velocity) поверх `rv.bv_*`. 12 data tests (not_null + accepted_values('msk','spb','ekb','dxb','ala')). Live run `kubectl logs job/dbt-run-marts`: `PASS=3 ERROR=0` (run) + `PASS=12 ERROR=0` (test). effective_tax_rate per branch: ala=0.12 / dxb=0.05 / msk-spb-ekb=0.20. Pitfall: `+schema: marts` в `dbt_project.yml` + `schema: marts` в profile → tables landed в `marts_marts` вместо `marts`; убрал `+schema`.
 - ✅ **MaterializedPostgreSQL push-based CDC** (session 4) — `warehouse/agentflow/dv2/postgres_oltp/cdc_{setup,bridge}.sql` + `promote_to_raw_vault_cdc.sql`. Postgres: `wal_level=logical` в `postgres-sts.yaml`, rep_user + REPLICA IDENTITY DEFAULT + ALTER TABLE OWNER, ALTER. ClickHouse: single `oltp_cdc` DB через `materialized_postgresql_schema_list='ops_msk,ops_dxb'`. Live E2E: INSERT/UPDATE в Postgres → видно в `oltp_cdc.\`ops_msk.customers\` FINAL` за ~5s без `INSERT INTO ... SELECT` на CH-стороне. Row parity Postgres=ClickHouse (msk 57=57, dxb 24=24).
   - Pitfalls собрано: (1) `MaterializedPostgreSQL` experimental → нужен `SET allow_experimental_database_materialized_postgresql=1`; (2) rep_user нужен CONNECT + CREATE на БД, OWNER на таблицах (CH делает `CREATE PUBLICATION ... FOR TABLE`); (3) `REPLICA IDENTITY FULL` НЕ поддерживается → нужен DEFAULT (PK); (4) `materialized_postgresql_replication_slot=` требует pre-existing slot, иначе CH сам автосоздаёт; (5) `materialized_postgresql_publication_name` НЕ существует — два CH DB на одной PG DB конфликтуют на дефолтном `<src>_ch_publication`; решение — single CH DB + schema_list (или PeerDB/Debezium для полной изоляции).
+- ✅ **Per-branch CDC fan-out** (session 5) — `warehouse/agentflow/dv2/postgres_oltp/fanout/` (01_schema/02_seed/03_cdc_setup/04_ch_bridge + README). Two new Postgres databases `ops_msk_db` (10 cust / 30 orders seed) + `ops_dxb_db` (8 / 20) → two CH databases `oltp_cdc_msk` + `oltp_cdc_dxb`. Auto-named publications no longer collide because source DB name differs. Live verified: INSERT/UPDATE in `ops_msk_db` propagated within ~8s, zero cross-leak from DXB visible in MSK CH DB, two distinct replication slots `ops_msk_db` + `ops_dxb_db` (separate from session-4 `ops` slot). PeerDB OSS was the originally-planned route but its ~3 GB stack (Temporal + cassandra/elasticsearch + flow services + catalog PG) does not fit on the 8 GB demo iMac alongside existing kind + ClickHouse + Postgres + MinIO + Argo. Per-DB split delivers the same architectural property (per-branch isolation) natively. See `fanout/README.md` § "Why not PeerDB" for the reasoning, `demo_evidence.md` § 15 for the live evidence.
 - Открытое (deferred — needs explicit user ask):
-  - **PeerDB connector** — full per-branch publication isolation (текущий single-DB CDC покрывает паттерн, но не fan-out)
 
 ### Task #6 — Demo artifacts ✅ DONE (sessions 2 + 4)
 - `docs/dv2-multi-branch/demo_evidence.md` — 14 секций: cluster topology, pod placement, DV2.0 model surface, multi-branch distribution, latency, BV MDM, cold-offload + MinIO, Postgres OLTP, Argo run, dbt run, CDC E2E
@@ -127,20 +139,21 @@ ssh julia@192.168.1.133 '
 ## Quick-start для следующей сессии
 
 1. Открыть Claude Code в `D:\DE_project`
-2. Проверить ветку: `git branch --show-current` → `feat/dv2-multi-branch`, HEAD `648af98` (session 4 closed)
+2. Проверить ветку: `git branch --show-current` → `main`, HEAD includes merge `ddfb863` (session 5 closed, feat/dv2-multi-branch merged)
 3. Проверить кластер: `ssh julia@192.168.1.133 'PATH=$HOME/lima/bin:$HOME/bin:$PATH kubectl get pods -n dv2 && kubectl get pods -n argo'`
-   - **Ожидаемое:** clickhouse-0 / postgres-0 / minio-0 Running в `dv2`; argo-server + workflow-controller Running в `argo`; `oltp_cdc.*` 4 таблицы видны через CH-клиент
-4. Контекст — этот файл + `demo_evidence.md` (§12-14 свежее) + `pitch.md`
-5. Открытые задачи (deferred, нужен явный ask): **PeerDB connector** (per-branch publication isolation), **видео-демка** поверх `pitch.md` script
+   - **Ожидаемое:** clickhouse-0 / postgres-0 / minio-0 Running в `dv2`; argo-server + workflow-controller Running в `argo`; `oltp_cdc.*` 4 таблицы видны через CH-клиент; `oltp_cdc_msk.*` + `oltp_cdc_dxb.*` per-branch fan-out таблицы видны
+4. Контекст — этот файл + `demo_evidence.md` (§12-15 свежее) + `pitch.md`
+5. Открытые задачи (deferred, нужен явный ask): **видео-демка** поверх `pitch.md` script — единственное что осталось из dv2 backlog
 
-## Current cluster state (на момент закрытия session 4, 2026-05-23)
+## Current cluster state (на момент закрытия session 5, 2026-05-23)
 
 Применено на `hq-demo`:
 - ✅ baseline DV2.0 stack: 3 ноды kind, ClickHouse 25.5 + Postgres 17 + MinIO StatefulSets, 38 rv.* таблиц + 5 BV views + `marts.*` (dbt)
 - ✅ 5 cold-offload CronJobs (msk/spb/ekb/dxb/ala, MinIO бэкэнд)
-- ✅ Argo Workflows v3.5.10 в namespace `argo` + WorkflowTemplate `dv2-refresh` в `dv2`
-- ✅ Postgres `wal_level=logical` + публикация `ops_ch_publication` + 2 logical replication slots (UUID-named)
-- ✅ ClickHouse `oltp_cdc` database (MaterializedPostgreSQL) активно стримит `ops_msk` + `ops_dxb`
+- ✅ Argo Workflows v3.5.10 в namespace `argo` + WorkflowTemplate `dv2-refresh` в `dv2` (post-session-4 rerun `dv2-refresh-spzhf` 90s end-to-end Succeeded, ILLEGAL_FINAL fix verified)
+- ✅ Postgres `wal_level=logical` + 3 logical replication slots (`ops` для session-4 single-DB + `ops_msk_db` + `ops_dxb_db` для session-5 fan-out)
+- ✅ ClickHouse `oltp_cdc` database (MaterializedPostgreSQL) активно стримит `ops_msk` + `ops_dxb` schemas (single-DB pattern)
+- ✅ ClickHouse `oltp_cdc_msk` + `oltp_cdc_dxb` databases (session-5 per-branch fan-out, each bound to its own Postgres database `ops_msk_db` / `ops_dxb_db`)
 - ✅ dbt marts: `marts.{customer_360,branch_pnl,returns_velocity}` материализованы
 
 ## Полная пересборка с нуля (если кластер потерян)
@@ -183,6 +196,14 @@ kind: Workflow
 metadata: {generateName: dv2-refresh-}
 spec: {workflowTemplateRef: {name: dv2-refresh}}
 EOF'
+
+# Step 6: per-branch CDC fan-out (session 5)
+for f in 01_schema 02_seed 03_cdc_setup; do
+  cat warehouse/agentflow/dv2/postgres_oltp/fanout/${f}.sql \
+    | kubectl exec -i -n dv2 postgres-0 -- psql -U ops -d postgres
+done
+cat warehouse/agentflow/dv2/postgres_oltp/fanout/04_ch_bridge.sql \
+  | kubectl exec -i -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --multiquery
 ```
 
 Время полной пересборки на iMac 2017 ~10-12 минут (kind + image pulls).

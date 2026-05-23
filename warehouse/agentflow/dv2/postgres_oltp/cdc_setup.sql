@@ -47,11 +47,13 @@ ALTER TABLE ops_dxb.orders    REPLICA IDENTITY DEFAULT;
 -- engine can self-bootstrap.
 --
 -- This is safe for the demo because the original `ops` superuser
--- retains all privileges via the postgres role. In production, prefer
--- pre-creating the publication as a superuser
--- (`CREATE PUBLICATION dv2_cdc FOR TABLE ...`) and pointing
--- MaterializedPostgreSQL at it via
--- `SETTINGS materialized_postgresql_publication_name = 'dv2_cdc'`.
+-- retains all privileges via the postgres role.
+--
+-- NOTE: ClickHouse 25.5 does NOT accept a custom publication name —
+-- `materialized_postgresql_publication_name` is rejected with
+-- `Code 115. Unknown setting`. The engine always creates
+-- `<source_db>_ch_publication`. The workaround is one Postgres
+-- database per branch, demoed in `fanout/` (see README there).
 ALTER TABLE ops_msk.customers OWNER TO rep_user;
 ALTER TABLE ops_msk.orders    OWNER TO rep_user;
 ALTER TABLE ops_dxb.customers OWNER TO rep_user;

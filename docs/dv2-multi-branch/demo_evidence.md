@@ -489,3 +489,83 @@ The `record_source = pg_ops__*` convention is identical to the
 pull-based variant, so any downstream consumer (BV view / dbt mart /
 cold-offload) sees the CDC path the same way it saw the
 `oltp_live`-based promotion.
+
+## 15. Per-branch CDC fan-out
+
+The session-14 stream is unified (one CH database carries both branches).
+Operational reality wants the opposite: a single branch must be pausable,
+re-snapshotable, and rotatable without touching another branch's stream.
+ClickHouse 25.5 rejects a custom publication name on
+`MaterializedPostgreSQL` (`Code 115. Unknown setting
+'materialized_postgresql_publication_name'`, verified 2026-05-23), so two
+CH databases against the same Postgres DB collide on the auto-generated
+`<src>_ch_publication`.
+
+The fan-out pattern splits the source: one Postgres **database** per
+branch (`ops_msk_db`, `ops_dxb_db`). Each gets its own auto-named
+publication and slot because the source DB name differs. Two CH
+MaterializedPostgreSQL databases (`oltp_cdc_msk`, `oltp_cdc_dxb`) consume
+independently. PeerDB OSS would be the cleaner production path, but its
+~3 GB stack (Temporal + flow services + catalog PG) does not fit on the
+8 GB demo iMac alongside the running kind cluster; the per-database split
+delivers the same isolation property natively.
+
+Apply (Postgres-side schema/seed/CDC + ClickHouse-side bridge):
+
+```bash
+for f in 01_schema 02_seed 03_cdc_setup; do
+  kubectl exec -i -n dv2 postgres-0 -- psql -U ops -d postgres \
+    < warehouse/agentflow/dv2/postgres_oltp/fanout/${f}.sql
+done
+kubectl exec -i -n dv2 clickhouse-0 -- clickhouse-client \
+  --user default --password demo --multiquery \
+  < warehouse/agentflow/dv2/postgres_oltp/fanout/04_ch_bridge.sql
+```
+
+Snapshot result — each CH database carries only its branch:
+
+```
+┌─msk_c─┬─msk_o─┬─dxb_c─┬─dxb_o─┐
+│    10 │    30 │     8 │    20 │
+└───────┴───────┴───────┴───────┘
+```
+
+Two distinct replication slots, one per branch:
+
+```
+ slot_name  |  database  | active | confirmed_flush_lsn
+------------+------------+--------+---------------------
+ ops_msk_db | ops_msk_db | f      | 0/22AC6D0
+ ops_dxb_db | ops_dxb_db | f      | 0/22ACC88
+```
+
+Live E2E — INSERT/UPDATE in `ops_msk_db` propagates only to `oltp_cdc_msk`;
+parallel INSERT in `ops_dxb_db` lands only in `oltp_cdc_dxb`:
+
+```bash
+psql ops_msk_db> INSERT INTO customers VALUES ('msk-c-LIVE','LIVE','TEST',...);
+psql ops_msk_db> INSERT INTO orders    VALUES ('msk-o-LIVE','msk-c-LIVE','paid',99999.99,'RUB');
+psql ops_msk_db> UPDATE customers SET phone='+74950000000' WHERE customer_id='msk-c-001';
+psql ops_dxb_db> INSERT INTO customers VALUES ('dxb-c-LIVE','LIVE','TEST',...);
+```
+
+After ~8 s:
+
+```
+oltp_cdc_msk.customers FINAL → 11 rows (was 10), c-001 phone now +74950000000
+oltp_cdc_msk.orders    FINAL → 31 rows (was 30), msk-o-LIVE total = 99999.99
+oltp_cdc_dxb.customers FINAL →  9 rows (was 8), dxb-c-LIVE present
+```
+
+Isolation check — MSK CH database has zero rows from DXB:
+
+```
+SELECT count() FROM oltp_cdc_msk.customers WHERE customer_id LIKE 'dxb-%';
+─→ 0
+```
+
+Both pattern coexist on the same cluster: `oltp_cdc` (single-DB stream)
+plus `oltp_cdc_msk` / `oltp_cdc_dxb` (per-branch fan-out). The unified
+stream is correct for cross-branch analytics that always want both
+branches together; the fan-out is correct when a single branch's stream
+must be paused or rotated independently.

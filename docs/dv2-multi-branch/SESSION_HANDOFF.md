@@ -129,7 +129,7 @@ ssh julia@192.168.1.133 '
 - `docs/dv2-multi-branch/demo_evidence.md` — 14 секций: cluster topology, pod placement, DV2.0 model surface, multi-branch distribution, latency, BV MDM, cold-offload + MinIO, Postgres OLTP, Argo run, dbt run, CDC E2E
 - Воспроизводится одной командой: `bash infrastructure/dv2/bootstrap.sh`
 - ✅ **2-min behavioral pitch** (session 4) — `docs/dv2-multi-branch/pitch.md`: 6 beats × 15-25s с live `kubectl` cues для каждого. Спутник к demo_evidence.md
-- Optional: запись короткого видео demo — pending (deferred, нужен сам live запуск)
+- ✅ **Voice-over MP4 demo** (session 6, 2026-05-23) — `docs/dv2-multi-branch/demo_voiced.mp4` (~92 s, 3.2 MB). Cast `demo.cast` слоумо до длины русской TTS-narration по pitch.md (ru-RU-SvetlanaNeural, +25%). Reproducible через `docs/dv2-multi-branch/demo_voiced.build.sh` + `demo_voiced.narration.txt` (требует edge-tts, ffmpeg, agg).
 
 ### Технический долг
 - ✅ **MD5/unhex gotcha** зафиксирован в `warehouse/agentflow/dv2/README.md` и `infrastructure/dv2/README.md`
@@ -143,7 +143,7 @@ ssh julia@192.168.1.133 '
 3. Проверить кластер: `ssh julia@192.168.1.133 'PATH=$HOME/lima/bin:$HOME/bin:$PATH kubectl get pods -n dv2 && kubectl get pods -n argo'`
    - **Ожидаемое:** clickhouse-0 / postgres-0 / minio-0 Running в `dv2`; argo-server + workflow-controller Running в `argo`; `oltp_cdc.*` 4 таблицы видны через CH-клиент; `oltp_cdc_msk.*` + `oltp_cdc_dxb.*` per-branch fan-out таблицы видны
 4. Контекст — этот файл + `demo_evidence.md` (§12-15 свежее) + `pitch.md`
-5. Открытые задачи (deferred, нужен явный ask): **видео-демка** поверх `pitch.md` script — единственное что осталось из dv2 backlog
+5. Открытые задачи (deferred, нужен явный ask): **запись live screencast** поверх работающего кластера — текущий `demo_voiced.mp4` это слоумо терминала + TTS; видео с web UI (Argo UI / dbt docs / MinIO console) ещё не снято
 
 ## Current cluster state (на момент закрытия session 5, 2026-05-23)
 

@@ -245,7 +245,10 @@ README that maps findings to the six closing commits.
   - `docs/dv2-multi-branch/` — architecture diagram, demo evidence
     (15 sections), 2-minute pitch script, recording-day runbook,
     asciinema cast (`demo.cast`, 42 s, 130×35) plus runner, plain-text
-    transcript, and self-contained HTML player embed.
+    transcript, self-contained HTML player embed, and a voice-over
+    MP4 (`demo_voiced.mp4`, ~92 s) — cast slowed to match a Russian
+    TTS narration of the pitch (reproducible via
+    `docs/dv2-multi-branch/build/build_voiced_demo.sh`).
 - **Debezium/Kafka Connect CDC operationalization**: local compose now
   brings up Postgres/MySQL source databases, Kafka Connect, Debezium
   connector registration, and raw CDC topic bootstrap for the AgentFlow

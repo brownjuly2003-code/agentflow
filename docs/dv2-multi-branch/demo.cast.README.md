@@ -9,9 +9,11 @@ Use it as one of three things:
 
 1. **Standalone "watch the cluster" demo** — short visual artifact that
    shows every beat producing real output, no narration needed.
-2. **Base track for voice-over** — play at 0.5× (`asciinema play --speed
-   0.5 demo.cast`) and record audio over the top. Total becomes ~84 s,
-   close to the 2:00 pitch budget.
+2. **Base track for voice-over** — already built. See
+   [`demo_voiced.mp4`](./demo_voiced.mp4) (~92 s, h264 + AAC, 3.2 MB):
+   cast slowed to match a Russian TTS narration of [`pitch.md`](./pitch.md).
+   Reproducible via [`demo_voiced.build.sh`](./demo_voiced.build.sh)
+   from [`demo_voiced.narration.txt`](./demo_voiced.narration.txt).
 3. **Re-render to GIF/MP4** for embedding in a portfolio page —
    [`agg`](https://github.com/asciinema/agg) for GIF,
    [`svg-term-cli`](https://github.com/marionebl/svg-term-cli) for SVG,

@@ -1,0 +1,388 @@
+branches:
+  msk:
+    label: Moscow
+  spb:
+    label: Saint Petersburg
+  ekb:
+    label: Yekaterinburg
+  dxb:
+    label: Dubai
+  ala:
+    label: Almaty
+  global:
+    label: Global reference context
+sources:
+  1c:
+    label: 1C UT
+    entities: [customer, product, order, store, supplier, marking_code]
+  1c_zup:
+    label: 1C ZUP
+    entities: [employee]
+  bitrix:
+    label: Bitrix24
+    entities: [customer, order, employee]
+  site:
+    label: Site XML exchange
+    entities: [customer, product, order]
+  wms:
+    label: WMS
+    entities: [product, shipment, marking_code]
+  excel:
+    label: Excel logistics
+    entities: [shipment]
+  wb:
+    label: Wildberries API
+    entities: [customer, product, order]
+  ozon:
+    label: Ozon API
+    entities: [customer, product, order]
+satellites:
+  - name: sat_customer_personal__1c__msk
+    hub: hub_customer
+    parent_hk: customer_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Customer PII from 1C for the Moscow branch.
+    sources: [1c]
+    branch_context: per-branch, hot jurisdictional PII
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: first_name, type: String}
+      - {name: last_name, type: String}
+      - {name: email, type: String}
+      - {name: phone, type: String}
+      - {name: birth_date, type: Nullable(Date)}
+      - {name: pii_flag, type: Bool DEFAULT true}
+  - name: sat_customer_personal__1c__dxb
+    hub: hub_customer
+    parent_hk: customer_hk
+    source_system: 1c
+    branch_code: dxb
+    record_source: 1c__dxb
+    purpose: Customer PII from 1C for Dubai residents.
+    sources: [1c]
+    branch_context: per-branch, hot jurisdictional PII
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: first_name, type: String}
+      - {name: last_name, type: String}
+      - {name: email, type: String}
+      - {name: phone, type: String}
+      - {name: birth_date, type: Nullable(Date)}
+      - {name: pii_flag, type: Bool DEFAULT true}
+  - name: sat_customer_loyalty__bitrix__msk
+    hub: hub_customer
+    parent_hk: customer_hk
+    source_system: bitrix
+    branch_code: msk
+    record_source: bitrix__msk
+    purpose: Customer loyalty state from Bitrix24.
+    sources: [bitrix]
+    branch_context: per-branch loyalty context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: loyalty_segment, type: LowCardinality(String)}
+      - {name: loyalty_points, type: "Decimal(18, 2)"}
+      - {name: last_visit_at, type: Nullable(DateTime64(3))}
+  - name: sat_customer_behavior__site__msk
+    hub: hub_customer
+    parent_hk: customer_hk
+    source_system: site
+    branch_code: msk
+    record_source: site__msk
+    purpose: Aggregated cart and view behavior from site XML exchange.
+    sources: [site]
+    branch_context: per-branch behavioral aggregate
+    scd2: true
+    anonymization: hot with cold anonymized replica
+    attributes:
+      - {name: cart_events_30d, type: UInt32}
+      - {name: view_events_30d, type: UInt32}
+      - {name: last_event_at, type: Nullable(DateTime64(3))}
+  - name: sat_customer_anon__1c__msk
+    hub: hub_customer
+    parent_hk: customer_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Cold anonymized customer projection derived from hot 1C PII.
+    sources: [1c]
+    branch_context: derived cold projection for Moscow
+    scd2: true
+    anonymization: cold
+    attributes:
+      - {name: age_bucket, type: LowCardinality(String)}
+      - {name: geo_region, type: LowCardinality(String)}
+      - {name: customer_segment, type: LowCardinality(String)}
+  - name: sat_product_catalog__1c__msk
+    hub: hub_product
+    parent_hk: product_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Product catalog attributes from 1C.
+    sources: [1c]
+    branch_context: global product with branch-qualified source feed
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: product_name, type: String}
+      - {name: brand, type: LowCardinality(String)}
+      - {name: category, type: LowCardinality(String)}
+      - {name: size_code, type: LowCardinality(String)}
+      - {name: color, type: LowCardinality(String)}
+      - {name: tnved_code, type: Nullable(String)}
+  - name: sat_product_price__1c__msk
+    hub: hub_product
+    parent_hk: product_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Active product price list from 1C.
+    sources: [1c]
+    branch_context: branch-qualified price context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: retail_price, type: "Decimal(18, 2)"}
+      - {name: wholesale_price, type: "Nullable(Decimal(18, 2))"}
+      - {name: currency_code, type: FixedString(3)}
+      - {name: valid_from, type: DateTime64(3)}
+  - name: sat_product_stock__wms__msk
+    hub: hub_product
+    parent_hk: product_hk
+    source_system: wms
+    branch_code: msk
+    record_source: wms__msk
+    purpose: Product stock snapshot from WMS.
+    sources: [wms]
+    branch_context: branch warehouse stock
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: qty_on_hand, type: "Decimal(18, 3)"}
+      - {name: qty_reserved, type: "Decimal(18, 3)"}
+      - {name: qty_available, type: "Decimal(18, 3)"}
+  - name: sat_product_marketplace__wb__msk
+    hub: hub_product
+    parent_hk: product_hk
+    source_system: wb
+    branch_code: msk
+    record_source: wb__msk
+    purpose: Product marketplace listing state from Wildberries.
+    sources: [wb]
+    branch_context: marketplace listing for Moscow fulfillment
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: wb_id, type: String}
+      - {name: wb_price, type: "Decimal(18, 2)"}
+      - {name: wb_status, type: LowCardinality(String)}
+      - {name: wb_rating, type: "Nullable(Decimal(5, 2))"}
+  - name: sat_order_header__bitrix__msk
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: bitrix
+    branch_code: msk
+    record_source: bitrix__msk
+    purpose: Order header and status flow from Bitrix24.
+    sources: [bitrix]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_pricing__1c__msk
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Order pricing recalculations from 1C.
+    sources: [1c]
+    branch_context: per-branch pricing context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: subtotal_amount, type: "Decimal(18, 2)"}
+      - {name: discount_amount, type: "Decimal(18, 2)"}
+      - {name: tax_amount, type: "Decimal(18, 2)"}
+      - {name: shipping_cost, type: "Decimal(18, 2)"}
+  - name: sat_order_marketplace__wb__msk
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: wb
+    branch_code: msk
+    record_source: wb__msk
+    purpose: Wildberries order lifecycle and commission state.
+    sources: [wb]
+    branch_context: marketplace order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: wb_status, type: LowCardinality(String)}
+      - {name: wb_commission, type: "Decimal(18, 2)"}
+      - {name: return_window_until, type: Nullable(Date)}
+  - name: sat_shipment_logistics__wms__msk
+    hub: hub_shipment
+    parent_hk: shipment_hk
+    source_system: wms
+    branch_code: msk
+    record_source: wms__msk
+    purpose: Physical shipment status from WMS.
+    sources: [wms]
+    branch_context: per-branch shipment context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: shipment_status, type: LowCardinality(String)}
+      - {name: carrier_name, type: LowCardinality(String)}
+      - {name: shipped_at, type: Nullable(DateTime64(3))}
+      - {name: delivered_at, type: Nullable(DateTime64(3))}
+  - name: sat_shipment_plan__excel__msk
+    hub: hub_shipment
+    parent_hk: shipment_hk
+    source_system: excel
+    branch_code: msk
+    record_source: excel__msk
+    purpose: Shipment plan data from logistics Excel files.
+    sources: [excel]
+    branch_context: per-branch logistics plan
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: planned_ship_date, type: Nullable(Date)}
+      - {name: planned_delivery_date, type: Nullable(Date)}
+      - {name: route_code, type: Nullable(String)}
+  - name: sat_store_master__1c__global
+    hub: hub_store
+    parent_hk: store_hk
+    source_system: 1c
+    branch_code: global
+    record_source: 1c__global
+    purpose: Store directory attributes from 1C.
+    sources: [1c]
+    branch_context: global reference context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: store_name, type: String}
+      - {name: branch_code, type: LowCardinality(String)}
+      - {name: city, type: LowCardinality(String)}
+      - {name: country_code, type: FixedString(2)}
+      - {name: opened_at, type: Nullable(Date)}
+  - name: sat_supplier_profile__1c__global
+    hub: hub_supplier
+    parent_hk: supplier_hk
+    source_system: 1c
+    branch_code: global
+    record_source: 1c__global
+    purpose: Supplier master data from 1C.
+    sources: [1c]
+    branch_context: global supplier context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: supplier_name, type: String}
+      - {name: tax_country_code, type: FixedString(2)}
+      - {name: supplier_status, type: LowCardinality(String)}
+  - name: sat_employee_profile__1c_zup__msk
+    hub: hub_employee
+    parent_hk: employee_hk
+    source_system: 1c_zup
+    branch_code: msk
+    record_source: 1c_zup__msk
+    purpose: Employee HR profile from 1C ZUP.
+    sources: [1c_zup]
+    branch_context: per-branch employee context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: first_name, type: String}
+      - {name: last_name, type: String}
+      - {name: role_name, type: LowCardinality(String)}
+      - {name: employment_status, type: LowCardinality(String)}
+  - name: sat_employee_sales__bitrix__msk
+    hub: hub_employee
+    parent_hk: employee_hk
+    source_system: bitrix
+    branch_code: msk
+    record_source: bitrix__msk
+    purpose: Employee sales attribution state from Bitrix24.
+    sources: [bitrix]
+    branch_context: per-branch sales attribution
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: bitrix_user_id, type: String}
+      - {name: sales_team, type: LowCardinality(String)}
+      - {name: manager_flag, type: Bool DEFAULT false}
+  - name: sat_marking_code_gs1__1c__global
+    hub: hub_marking_code
+    parent_hk: marking_code_hk
+    source_system: 1c
+    branch_code: global
+    record_source: 1c__global
+    purpose: GS1 marking-code attributes from 1C.
+    sources: [1c]
+    branch_context: global traceability context
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: gs1_gtin, type: String}
+      - {name: serial_number, type: Nullable(String)}
+      - {name: marking_status, type: LowCardinality(String)}
+  - name: sat_marking_code_wms__wms__global
+    hub: hub_marking_code
+    parent_hk: marking_code_hk
+    source_system: wms
+    branch_code: global
+    record_source: wms__global
+    purpose: Marking-code scan state from WMS.
+    sources: [wms]
+    branch_context: global warehouse traceability
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: last_scan_at, type: Nullable(DateTime64(3))}
+      - {name: last_scan_location, type: Nullable(String)}
+      - {name: scan_status, type: LowCardinality(String)}
+  - name: sat_lnk_order_product__1c__msk
+    hub: lnk_order_product
+    parent_hk: link_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Effectivity satellite for order line quantity and price.
+    sources: [1c]
+    branch_context: per-branch line item effectivity
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: qty, type: "Decimal(18, 3)"}
+      - {name: unit_price, type: "Decimal(18, 2)"}
+      - {name: discount_pct, type: "Decimal(5, 2)"}
+      - {name: line_total, type: "Decimal(18, 2)"}
+  - name: sat_lnk_product_supplier__1c__global
+    hub: lnk_product_supplier
+    parent_hk: link_hk
+    source_system: 1c
+    branch_code: global
+    record_source: 1c__global
+    purpose: Effectivity satellite for product-supplier sourcing.
+    sources: [1c]
+    branch_context: global sourcing effectivity
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: valid_from, type: DateTime64(3)}
+      - {name: valid_to, type: Nullable(DateTime64(3))}
+      - {name: supplier_priority, type: UInt16}
+      - {name: purchase_price, type: "Nullable(Decimal(18, 2))"}

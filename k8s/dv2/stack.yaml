@@ -1,0 +1,132 @@
+# DV2.0 demo stack: Postgres OLTP-mirror + ClickHouse analytical warehouse
+# Placement via nodeSelector + workload labels (see k8s/dv2/kind-hq.yaml)
+# Apply with: kubectl apply -f k8s/dv2/stack.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dv2
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ch-creds
+  namespace: dv2
+type: Opaque
+stringData:
+  user: default
+  # NOTE: replace before any non-local deployment
+  password: demo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: dv2
+spec:
+  selector:
+    app: clickhouse
+  ports:
+  - name: http
+    port: 8123
+  - name: tcp
+    port: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: dv2
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      nodeSelector:
+        workload: clickhouse
+      containers:
+      - name: clickhouse
+        image: clickhouse/clickhouse-server:25.5
+        ports:
+        - containerPort: 8123
+        - containerPort: 9000
+        env:
+        - name: CLICKHOUSE_DB
+          value: rv
+        - name: CLICKHOUSE_USER
+          valueFrom: {secretKeyRef: {name: ch-creds, key: user}}
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom: {secretKeyRef: {name: ch-creds, key: password}}
+        resources:
+          requests: {memory: 512Mi, cpu: 200m}
+          limits: {memory: 1500Mi, cpu: 1}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/clickhouse
+  volumeClaimTemplates:
+  - metadata: {name: data}
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests: {storage: 5Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: dv2
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: dv2
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      nodeSelector:
+        workload: postgres
+      containers:
+      - name: postgres
+        image: postgres:17-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: ops
+        - name: POSTGRES_USER
+          value: ops
+        - name: POSTGRES_PASSWORD
+          # NOTE: replace before any non-local deployment
+          value: demo
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests: {memory: 128Mi, cpu: 100m}
+          limits: {memory: 512Mi, cpu: 500m}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata: {name: data}
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests: {storage: 2Gi}

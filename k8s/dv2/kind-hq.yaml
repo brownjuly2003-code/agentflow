@@ -1,0 +1,21 @@
+# kind config: HQ topology for DV2.0 multi-branch demo
+# 1 control-plane + 2 workers, labeled for workload-aware placement
+# (Postgres OLTP on worker, ClickHouse OLAP on worker2)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hq-demo
+nodes:
+- role: control-plane
+  labels:
+    nodepool: hq-control
+    branch: msk
+- role: worker
+  labels:
+    nodepool: hq-data-tier-a
+    branch: msk
+    workload: postgres
+- role: worker
+  labels:
+    nodepool: hq-data-tier-b
+    branch: msk
+    workload: clickhouse

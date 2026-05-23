@@ -30,3 +30,18 @@ The generator reads `spec.yaml`, renders `raw_vault/satellites_template.sql.j2`,
 4. Execute generated files from `raw_vault/satellites/`.
 
 All table files use `CREATE TABLE IF NOT EXISTS`. Hubs and links use `ReplacingMergeTree(load_ts)`. Satellites use `MergeTree`, `PARTITION BY toYYYYMM(load_ts)`, and `ORDER BY (hk, load_ts)`.
+
+## Hash-key gotcha
+
+`MD5(x)` in ClickHouse already returns `FixedString(16)`. Do **not** wrap it
+in `unhex(MD5(x))` — that double-encodes the digest into a 32-byte hex
+string, which:
+
+- breaks join equality against hubs that store the raw 16-byte digest;
+- shifts the `(hk, load_ts)` ORDER BY into a different keyspace, hurting
+  ReplacingMergeTree deduplication;
+- silently inflates `*_hk` storage 2×.
+
+The loader (`loaders/x5_retail_hero/loader.py`) uses
+`hashlib.md5().digest()` for the same reason — keep producer and consumer
+on the raw 16-byte representation.

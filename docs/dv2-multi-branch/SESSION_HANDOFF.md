@@ -1,6 +1,11 @@
 # DV2.0 Multi-Branch — Session Handoff (2026-05-23)
 
-Working snapshot после первой сессии. Ветка `feat/dv2-multi-branch`.
+Working snapshot после двух сессий. Ветка `feat/dv2-multi-branch`.
+
+> **Session 2 (2026-05-23 morning)** — закрыто: k8s manifests вынесены в
+> `infrastructure/dv2/`, end-to-end dataflow diagram (`architecture.md`),
+> live demo evidence (`demo_evidence.md`), main README обновлён,
+> MD5/unhex gotcha задокументирован. Кластер `hq-demo` остался работать.
 
 ## Что сделано
 
@@ -75,35 +80,34 @@ ssh julia@192.168.1.133 '
   - SSH key: `~/.ssh/id_ed25519` на Windows, public установлен в `julia@192.168.1.133:~/.ssh/authorized_keys`
   - DDL: `warehouse/agentflow/dv2/__init.sql` + `raw_vault/{hubs,links,satellites}/*.sql`
   - Seed: `warehouse/agentflow/dv2/synthetic_seed.sql`
-  - K8s manifest: NOT committed yet (был inline в bash), нужно вынести в `helm/dv2/` или `infrastructure/dv2/`
+  - K8s manifests: ✅ committed в `infrastructure/dv2/` — `bash infrastructure/dv2/bootstrap.sh` пересобирает кластер с нуля и накатывает DDL + seed (idempotent).
 
 ## Что осталось
 
-### Task #3 — End-to-end data flow diagram (pending)
-- Mermaid или ASCII диаграмма: источники → Postgres OLTP → CDC → ClickHouse DV2.0 → cold offload в S3-compatible
-- Можно встроить в DE_project main README или в `docs/architecture.md`
-- Оценка: 1-2 часа
+### Task #3 — End-to-end data flow diagram ✅ DONE (session 2)
+- `docs/dv2-multi-branch/architecture.md` — Mermaid диаграмма: 1С / Битрикс / WMS / Excel / XML / WB+Ozon → Postgres OLTP → PeerDB CDC → ClickHouse DV2.0 (raw → business → mart) → anonymized parquet S3
+- Включает per-stage contracts, multi-branch enforcement table, и явный scope «что в demo есть / чего нет»
+- Ссылка добавлена в DE_project main README
 
-### Task #5 — DV2.0 extension (in_progress, foundation done)
-- Foundation: ✅ закрыт этой сессией
-- Открытое:
-  - **k8s deployment manifests** вынести из inline bash в `helm/dv2/` chart или `infrastructure/dv2/*.yaml` (сейчас живёт только в running cluster и в SESSION_HANDOFF)
+### Task #5 — DV2.0 extension (in_progress)
+- Foundation ✅ session 1; manifests-in-repo ✅ session 2
+- ✅ k8s deployment manifests в `infrastructure/dv2/`: `kind-hq-demo.yaml`, `namespace.yaml`, `secret.example.yaml`, `clickhouse-sts.yaml`, `postgres-sts.yaml`, `bootstrap.sh`, `README.md`
+- Открытое (deferred — needs explicit user ask):
   - **Argo Workflows** для оркестрации hub → link → satellite загрузки (упомянуто в schema_dv2.md)
   - **Cold-offload CronJob** для anonymized parquet → HF Datasets (или MinIO в pod как cloud mock)
   - **Business Vault слой** (`bv_customer_mdm`, `bv_order_canonical`) — placeholder создан, контент нужен
   - **dbt models на DV2.0** (опционально — можно показать как mart-layer строится поверх raw vault)
 
-### Task #6 — Demo artifacts (pending)
-- Скриншоты: `kubectl get all -A`, `kubectl describe nodes` (показывает labels/placement), Grafana если поставим, query results
-- Architecture diagram (visual)
-- 2-min behavioral pitch (заготовка в `kimi_research.md` § POLISHED LEGEND)
-- README в DE_project main updates: добавить раздел про DV2.0 multi-branch extension
-- Optional: запись короткого видео demo (kubectl + clickhouse-client + BI query)
+### Task #6 — Demo artifacts ✅ DONE (session 2)
+- `docs/dv2-multi-branch/demo_evidence.md` — `kubectl get nodes --show-labels`, pod-to-node placement, PVC bind, system.tables breakdown (8/8/22), multi-branch distribution (40/25/15/10/10), query latency (3-4ms на 10K rows), line-items count
+- Воспроизводится одной командой: `bash infrastructure/dv2/bootstrap.sh`
+- 2-min behavioral pitch (заготовка в `kimi_research.md` § POLISHED LEGEND) — pending, нужен живой запуск
+- Optional: запись короткого видео demo — pending
 
 ### Технический долг
-- **Не использовать `unhex(MD5(x))`** в ClickHouse SQL — `MD5(x)` уже возвращает FixedString(16). Зафиксировать в README или CONTRIBUTING.
-- **Mac clock auto-sync**: в новой сессии можно подсказать юзеру `sudo systemsetup -setusingnetworktime on` чтобы часы больше не разъезжались с lima VM.
-- **K8s persistent storage**: kind использует hostPath provisioner (local-path-storage), при пересоздании кластера данные теряются. Для production-like demo либо deploy через Helm с external PV, либо backup через `kubectl exec ... | clickhouse-client --query "BACKUP ..."`.
+- ✅ **MD5/unhex gotcha** зафиксирован в `warehouse/agentflow/dv2/README.md` и `infrastructure/dv2/README.md`
+- **Mac clock auto-sync**: в новой сессии можно подсказать юзеру `sudo systemsetup -setusingnetworktime on` чтобы часы больше не разъезжались с lima VM
+- **K8s persistent storage**: kind использует hostPath provisioner (local-path-storage), при пересоздании кластера данные теряются. Для production-like demo либо deploy через Helm с external PV, либо backup через `kubectl exec ... | clickhouse-client --query "BACKUP ..."` (snippet в `infrastructure/dv2/README.md`).
 
 ## Quick-start для следующей сессии
 

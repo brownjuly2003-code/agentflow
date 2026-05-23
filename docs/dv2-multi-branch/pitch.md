@@ -43,7 +43,8 @@ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password 
            WHERE database='rv' GROUP BY kind ORDER BY kind"
 ```
 
-> «38 таблиц: 8 хабов, 8 линков, 22 сателлита. Сателлиты разрезаны по
+> «Шестьдесят с лишним таблиц: 8 хабов, 8 линков, под сорок сателлитов,
+> плюс BV-вьюхи поверх. Сателлиты разрезаны по
 > `record_source = {система}__{филиал}` — это load-bearing dimension всей
 > архитектуры. Один и тот же `customer_hk` приходит из 1С и из Битрикса,
 > но сидит в разных сателлитах — конфликт разрешается через приоритет,
@@ -67,10 +68,17 @@ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password 
 
 ```bash
 kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo \
-  --query "SELECT branch, count() rows, countIf(first_name != '') with_pii,
-                  countIf(loyalty_tier != '') with_loyalty
-           FROM (SELECT 'msk' branch, * FROM rv.bv_customer_mdm__msk UNION ALL
-                 SELECT 'dxb', * FROM rv.bv_customer_mdm__dxb) GROUP BY branch FORMAT PrettyCompact"
+  --multiline --query "
+    SELECT 'msk' AS branch, count() AS rows,
+           countIf(first_name != '') AS with_pii,
+           countIf(loyalty_segment != '') AS with_loyalty
+      FROM rv.bv_customer_mdm__msk
+    UNION ALL
+    SELECT 'dxb', count(),
+           countIf(first_name != ''),
+           countIf(loyalty_segment IS NOT NULL AND loyalty_segment != '')
+      FROM rv.bv_customer_mdm__dxb
+    FORMAT PrettyCompact"
 ```
 
 > «Business Vault — это views поверх raw vault. PII из 1С, loyalty из
@@ -98,6 +106,53 @@ kubectl exec -n dv2 minio-0 -- mc ls -r local/cold-tier | tail -5
 > `bash infrastructure/dv2/bootstrap.sh`. Полный список таблиц,
 > распределений, query plans и schema лежит в `demo_evidence.md` в
 > репозитории. Готова ответить на технические вопросы».
+
+---
+
+## Опциональный Beat 7 — Per-branch CDC fan-out (для Q&A или расширенного демо)
+
+Не входит в 2-минутную версию. Запускать если интервьюер спрашивает
+про operational isolation / blast radius / per-branch pause.
+
+```bash
+# Pre-state: snapshot обоих CH-DB
+kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo \
+  --multiline --query "
+    SELECT (SELECT count() FROM oltp_cdc_msk.customers FINAL) AS msk_c,
+           (SELECT count() FROM oltp_cdc_msk.orders    FINAL) AS msk_o,
+           (SELECT count() FROM oltp_cdc_dxb.customers FINAL) AS dxb_c,
+           (SELECT count() FROM oltp_cdc_dxb.orders    FINAL) AS dxb_o"
+
+# Live INSERT в MSK PG database
+kubectl exec -i -n dv2 postgres-0 -- psql -U ops -d ops_msk_db <<'SQL'
+INSERT INTO customers (customer_id, first_name, last_name, email)
+VALUES ('msk-c-DEMO','Demo','User','demo@example.ru')
+ON CONFLICT (customer_id) DO NOTHING;
+SQL
+
+# 8s WAL roundtrip → CH видит row
+sleep 8
+kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo \
+  --query "SELECT * FROM oltp_cdc_msk.customers FINAL WHERE customer_id='msk-c-DEMO' FORMAT Vertical"
+
+# Изоляция: DXB CH-DB не видит MSK row
+kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo \
+  --query "SELECT count() AS cross_leak FROM oltp_cdc_dxb.customers WHERE customer_id LIKE 'msk-%'"
+```
+
+> «Сессия 4 поставила один CH-DB поверх обоих филиалов через
+> `schema_list` — нормально для unified-analytics, но недостаточно для
+> operational pause. Сессия 5 разнесла источник: `ops_msk_db` и
+> `ops_dxb_db` — отдельные Postgres-БД, каждая мапится в свой
+> CH-MaterializedPostgreSQL. Auto-named publication
+> `<src>_ch_publication` больше не коллидирует. PeerDB OSS был
+> архитектурно чище, но Temporal + flow-services не поместились на
+> 8GB iMac — per-DB split даёт тот же property нативно. INSERT в MSK
+> доезжает за 8 секунд, DXB не видит. Production-pattern будет тот же,
+> только под управлением PeerDB или Debezium».
+
+После Beat 7 — `DELETE FROM ops_msk_db.customers WHERE customer_id='msk-c-DEMO'`
+для cleanup перед следующим прогоном.
 
 ---
 

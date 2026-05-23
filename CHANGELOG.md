@@ -4,6 +4,8 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-24
+
 ### Added
 
 - A04 chart hardening: `helm/kafka-connect/` now ships NetworkPolicy +

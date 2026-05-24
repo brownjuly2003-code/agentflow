@@ -52,6 +52,23 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
     assert "${{ github.sha }}" in steps_text
     assert ":latest" not in steps_text
 
+    build_step = next(
+        step
+        for step in job["steps"]
+        if isinstance(step.get("uses"), str)
+        and step["uses"].startswith("docker/build-push-action@")
+    )
+    assert build_step["id"] == "build", (
+        "downstream sigstore/attest-build-provenance steps reference "
+        "steps.build.outputs.digest"
+    )
+    inputs = build_step["with"]
+    assert inputs["context"] == "."
+    assert inputs["file"] == "Dockerfile.api"
+    assert inputs["push"] is True
+    assert "${{ env.IMAGE_REF }}:${{ github.sha }}" in inputs["tags"]
+    assert "${{ env.IMAGE_REF }}:audit-${{ github.run_id }}" in inputs["tags"]
+
 
 def test_container_attestation_workflow_signs_and_attests_pushed_digest():
     workflow = _load_workflow()

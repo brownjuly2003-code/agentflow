@@ -87,25 +87,28 @@ back online.
 
 - **Before re-enabling `terraform-apply.yml` plan / apply jobs (A04/A05/A03
   unblock):**
-  - Bump `actions/upload-artifact` from `v4` → matching major of
-    `actions/download-artifact@v8` (currently `v7` is latest stable
-    upload-artifact, so the cross-version handoff between plan and
-    apply jobs needs a compatibility check or both pinned to the same
-    major). KM session 18g P1.
-  - Audit `infrastructure/terraform/*.tf` against `hashicorp/aws ~> 6`
-    breaking changes before the first non-disabled `terraform apply` —
-    the `~> 5.60 → ~> 6.46` bump in session 18 only changed the
-    provider constraint, no resource migration sweep was done because
-    the apply path is gated. KM session 18g P2.
+  - Run `terraform init -upgrade` in `infrastructure/terraform/` to
+    bump `.terraform.lock.hcl` from the pinned `5.100.0` to the v6
+    range now allowed in `main.tf:7`. The TF code itself is already
+    v6-compatible — MSK uses the modern `storage_info / ebs_storage_info`
+    nested block, S3 uses the modular `aws_s3_bucket_versioning /
+    aws_s3_bucket_lifecycle_configuration` / etc. siblings (not the
+    deprecated inline blocks), `aws_iam_policy_document` data sources
+    do not set the removed `version` attribute, and there are no
+    `aws_s3_bucket_object` references — but the lockfile bump itself
+    needs a Terraform CLI available, which the local dev env did not
+    have during session 18g. Session 18g P2.
 
 - **Before pushing a new `agentflow-api` container image to production
   (currently `container-attestation.yml` is `workflow_dispatch` only):**
-  - Run the workflow with `mode=build-and-sign` end-to-end as a smoke
-    on `docker/build-push-action@v7` (the unit test in
-    `tests/unit/test_container_attestation_workflow.py:49` only
-    asserts the version string is present in the YAML; v6 → v7
-    input/output schema changes are not validated by that
-    assertion). KM session 18g P1.
+  - Run the workflow with `mode=build-and-sign` end-to-end as a
+    behavioural smoke on `docker/build-push-action@v7`. Session 18h
+    extended the unit test to assert the build step's `id`, `context`,
+    `file`, `push`, and both `tags` shape (so v7 schema changes that
+    rename or retype those inputs would now fail
+    `test_container_attestation_workflow_builds_and_pushes_ghcr_image`),
+    but a real Docker build is still the only path that exercises v7
+    runtime defaults like `provenance` and `attestations`.
 
 ### Anti-tasks — looks like cleanup but isn't
 

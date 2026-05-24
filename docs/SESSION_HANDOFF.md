@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-24 (session 18h — CXKM audit fixes + ruff format)
-**HEAD:** `7a53279` on `main` (KM P1 fixes + ruff format)
+**Last updated:** 2026-05-24 (session 19 — A02 verify + Dependabot deferred-PR closure)
+**HEAD:** `3d9e9e8` on `main` (drop stale A02 protocol-mixin expansion item; next commit will refresh this line)
 **Released:** `v1.3.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-23.
 
@@ -48,13 +48,14 @@ download-artifact, #21 docker/build-push, #12 vitest). Resolver
 smoke (`pip install --dry-run -e ".[dev,cloud,contract]"`) green on
 HEAD `2333104`. See "Recent activity" below for SHAs.
 
-**Two Dependabot PRs still intentionally deferred** — they break
-paths CI does not cover:
+**Two Dependabot PRs closed as `wait-for-upstream`** — neither is
+mergeable without external/upstream movement that this repo can't
+trigger:
 
-| PR | Bump | Why deferred |
-|----|------|--------------|
-| `#23` | `apache-flink` 1.19.1 → 2.2.1 (`flink` extra) | `pyflink.datastream` imports in `src/processing/flink_jobs/` use Flink 1.x API. CI does not install the `[flink]` extra, so a silent regression would ship to downstream users. Needs a Flink 2.x compat sweep before merge |
-| `#11` | `python` 3.11-slim → 3.14-slim (`Dockerfile.api`) | Python 3.14 was released 2026-10; library compat is uneven. Docker build is not part of CI (`container-attestation.yml` is `workflow_dispatch`), so a broken `docker build` would not surface. Defer until the 3.14 ecosystem settles |
+| PR | Bump | Close reason + re-open condition |
+|----|------|--------------------------------|
+| `#23` (closed) | `apache-flink` 1.19.1 → 2.2.1 (`flink` extra) | Apache docs explicitly state "There is no SQL jar (yet) available for Flink version 2.2" / "There is no connector (yet) available for Flink version 2.2" (https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/connectors/datastream/kafka/). The `[flink]` extra exists to power `src/processing/flink_jobs/{stream_processor,session_aggregator}.py`, both of which depend on `pyflink.datastream.connectors.kafka` + the bundled `flink-sql-connector-kafka` JAR. Merging would ship a non-functional extra. **Re-open when**: `flink-sql-connector-kafka` releases a `-2.x` suffix JAR on Maven Central. **Flink 2.0 API changes already mapped** (in the PR close comment + session memory): `ExternalizedCheckpointCleanup` → `ExternalizedCheckpointRetention` (`pyflink.datastream.externalized_checkpoint_retention`, used via `set_externalized_checkpoint_retention()` instead of `enable_externalized_checkpoints()`), `pyflink.common.time.Time` removed (use `Duration.of_millis()` — already imported in `Dockerfile:35`), Scala 2.12 dropped in 2.0 (bump `SCALA_VERSION=2.12` → `2.13` in `Dockerfile:4`). Code-prep is ~half a day once the connector unblocks |
+| `#11` (closed) | `python` 3.11-slim → 3.14-slim (`Dockerfile.api`) | Docker build is not exercised by any required CI workflow (`container-attestation.yml` is `workflow_dispatch`-only), so a broken `docker build` would land silently; ecosystem compat is uneven (`apache-flink`, `dagster`, `langchain-core` have spotty 3.14 wheel coverage, and `slim-bookworm` lacks gcc so source-build fallback fails). **Re-open when**: either `container-attestation.yml` becomes a required check on `pull_request` events OR all heavy extras (`[flink]`, `[ml]`) have published 3.14 wheels on PyPI |
 
 ### Tier B — externally user-gated (cannot be unblocked from inside the repo)
 
@@ -164,6 +165,7 @@ All seven sessions shipped to `main` between 2026-05-24 evening and
 | **18f** | `3479561` (reverted by `d448c34`), `eeb95e0` | First attempt at `dora.yml` `--branch origin/main` (kept `dora-report` from failing on PR runs) + CHANGELOG backfill for 18c-f. Also repo admin actions: `allow_auto_merge=true`, `delete_branch_on_merge=true` |
 | **18g** | `d448c34`, `6f8a28f` | CXKM tri-blocking audit (CX + KM) on sessions 18-18f. CX found that `--branch origin/main` from 18f silently broke `_load_github_runs` and `_load_deployment_log` in `scripts/dora_metrics.py` (their branch filters need plain `main`, not a remote ref). Reverted with a `git update-ref refs/heads/main` prep step instead. KM P2 widened `types-redis<5 → <6`. Three remaining KM findings recorded in the new "Pre-conditions before re-enabling Tier B work" subsection above |
 | **18h** | `34faaeb`, `7a53279` | KM P1 fixes from 18g audit: `upload-artifact@v4 → v7` in `terraform-apply.yml` (matches the v8 download bumped in #20) + five new assertions in `tests/unit/test_container_attestation_workflow.py` covering build step `id`, `context`, `file`, `push`, and `tags` shape so v7 schema changes that rename or retype any of these inputs would fail the unit test. Ruff format catch-up in `7a53279` after the initial commit forgot to run it |
+| **19** | `3d9e9e8` + this commit | (1) Verified A02 protocol-mixin expansion factually complete (0 `[attr-defined]` ignores in `src/`, `disable_error_code` gone from `pyproject.toml`, `mypy src` clean on 96 files) → dropped stale Tier C bullet. (2) Closed both intentionally-deferred Dependabot PRs (#23 apache-flink 2.x, #11 python 3.14-slim) as `wait-for-upstream` after surfacing the Flink-2.2 Kafka-connector gap (Apache docs confirm no `flink-sql-connector-kafka` 2.x JAR yet — merging #23 would ship a non-functional `[flink]` extra). Flink 2.0 API breakage map (`ExternalizedCheckpointCleanup` → `ExternalizedCheckpointRetention`, `pyflink.common.time.Time` removed, Scala 2.12 dropped) preserved in PR close comments + this handoff for the eventual re-bump |
 
 ## Lessons (recent, load-bearing)
 

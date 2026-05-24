@@ -59,8 +59,7 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
         and step["uses"].startswith("docker/build-push-action@")
     )
     assert build_step["id"] == "build", (
-        "downstream sigstore/attest-build-provenance steps reference "
-        "steps.build.outputs.digest"
+        "downstream sigstore/attest-build-provenance steps reference steps.build.outputs.digest"
     )
     inputs = build_step["with"]
     assert inputs["context"] == "."

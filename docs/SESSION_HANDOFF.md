@@ -68,6 +68,16 @@ These need inputs from outside this repo — credentials, cloud
 accounts, budget. No autonomous unblock available; tools cannot
 substitute for them.
 
+### Repo settings (session 18f, admin actions)
+
+- `allow_auto_merge: true` — `gh pr merge <N> --auto --squash` is now
+  supported. Use this for any Dependabot PR whose required checks
+  will pass on the rebased SHA; GitHub will merge automatically once
+  CI is green without needing a wakeup-loop on the human side.
+- `delete_branch_on_merge: true` — squash-merged branches are removed
+  automatically; `--delete-branch` flag on `gh pr merge` is no longer
+  required (still harmless if you forget and pass it).
+
 ### Anti-tasks — looks like cleanup but isn't
 
 - **Do NOT remove the `try: import yaml / except ImportError: yaml = None`

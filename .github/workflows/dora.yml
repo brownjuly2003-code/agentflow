@@ -28,7 +28,7 @@ jobs:
           GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python scripts/dora_metrics.py --days 30 --output dora-report.json
+        run: python scripts/dora_metrics.py --days 30 --branch origin/main --output dora-report.json
       - name: Render markdown summary
         run: |
           python - <<'PY'

@@ -74,7 +74,7 @@ jobs:
         run: |
           python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=src.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: coverage.xml
           use_oidc: true

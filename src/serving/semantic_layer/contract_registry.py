@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 
 def _default_contracts_dir() -> Path:

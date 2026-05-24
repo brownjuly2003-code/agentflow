@@ -7,9 +7,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 
 def default_tenants_config_path() -> Path:

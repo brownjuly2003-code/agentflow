@@ -13,9 +13,9 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 
 def default_api_versions_path() -> Path:

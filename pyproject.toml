@@ -69,6 +69,7 @@ dev = [
     "testcontainers[kafka]>=4.9,<5",
     "ruff>=0.6,<1",
     "mypy>=1.11,<3",
+    "types-PyYAML>=6,<7",
 ]
 
 [build-system]

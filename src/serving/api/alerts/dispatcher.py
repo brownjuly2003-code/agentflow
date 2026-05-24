@@ -12,9 +12,9 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 DEFAULT_ALERTS_CONFIG_PATH = Path(os.getenv("AGENTFLOW_ALERTS_FILE", "config/alerts.yaml"))
 

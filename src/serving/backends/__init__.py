@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from src.serving.backends.duckdb_backend import DuckDBBackend

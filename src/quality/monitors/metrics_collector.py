@@ -13,7 +13,7 @@ from pathlib import Path
 import duckdb
 import httpx
 import structlog
-import yaml  # type: ignore[import-untyped]
+import yaml
 from confluent_kafka import KafkaException
 from prometheus_client import Gauge
 from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError

@@ -10,9 +10,9 @@ from datetime import UTC, datetime, timedelta
 import duckdb
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 from src.serving.api.security import hash_api_key
 from src.serving.duckdb_connection import connect_duckdb

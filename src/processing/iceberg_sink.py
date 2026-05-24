@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pyiceberg.catalog import load_catalog
 from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.schema import Schema

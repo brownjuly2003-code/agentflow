@@ -7,9 +7,9 @@ import sqlglot
 from sqlglot import exp
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 
 class PiiMasker:

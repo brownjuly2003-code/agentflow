@@ -23,9 +23,9 @@ from src.constants import (
 )
 
 try:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 except ImportError:  # pragma: no cover
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 from src.serving.api.rate_limiter import RateLimiter
 from src.serving.api.security import (

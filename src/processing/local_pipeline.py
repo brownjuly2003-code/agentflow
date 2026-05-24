@@ -18,7 +18,7 @@ from pathlib import Path
 
 import duckdb
 import structlog
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
 
 from src.ingestion.producers.event_producer import (

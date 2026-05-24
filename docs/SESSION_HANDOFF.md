@@ -68,6 +68,25 @@ These need inputs from outside this repo — credentials, cloud
 accounts, budget. No autonomous unblock available; tools cannot
 substitute for them.
 
+### Anti-tasks — looks like cleanup but isn't
+
+- **Do NOT remove the `try: import yaml / except ImportError: yaml = None`
+  blocks** in `src/serving/{masking,backends,api/security,api/auth/*,
+  api/alerts/dispatcher,api/routers/slo,api/webhook_dispatcher,
+  api/versioning,semantic_layer/contract_registry}.py` and
+  `src/ingestion/tenant_router.py`. The runtime checks paired with
+  them (`yaml.safe_load(raw) if yaml is not None else json.loads(raw)`
+  in `slo.py:58`, `webhook_dispatcher.py:60`, `alerts/dispatcher.py:95`,
+  and `if yaml is not None: ...` elsewhere) are an intentional
+  JSON-fallback architecture, not dead code. PyYAML is currently
+  pinned as a hard runtime dependency in `pyproject.toml`, but the
+  fallback machinery survives so the optional-pyyaml posture stays
+  available — collapsing it means deciding to lock PyYAML as a hard
+  requirement and dropping JSON-config support, which is an
+  architectural call, not a chore. Session 18e looked at this and
+  deliberately stopped at swapping the `import-untyped` ignores for
+  honest `assignment` ignores on the `yaml = None` fallback line.
+
 ### Tier C — forward backlog (when there is bandwidth)
 
 - Cut **`v1.4.0`** when there are real feature changes worth releasing.
@@ -102,6 +121,7 @@ All seven sessions shipped to `main` between 2026-05-24 evening and
 | **16** | `6f3c588`, `813764d`, `0c1234b`, `e1b3abe`, `6e7759e`, `921a845`, `bddedee` | Dependabot merge cascade — 7 safe PRs squash-merged (`#9 #13 #14 #15 #16 #19 #22`): spec-relaxations + schemathesis minor + codecov + setup-python actions |
 | **17** | `c90511b` | **Hotfix for the regression the cascade introduced** — see Lessons below |
 | **18** | `e2a8288`, `a92f261`, `70d2c51`, `997b8fd`, `b152244`, `695bdf5`, `2333104` | Dependabot Tier A wave 2 — 7 majors squash-merged (`#24 #8 #10 #17 #20 #21 #12`): mypy `<3`, terraform-aws `~> 6.46`, typescript 6, github-script v9, download-artifact v8, build-push-action v7 (with `tests/unit/test_container_attestation_workflow.py` v6→v7 assertion bump in `269c52f`/`26e6808`), vitest 4. All resolved cleanly into the cascade-stable resolver from session 17 |
+| **18b–e** | `728622c`, `38e77ff`, `84ece1c`, `031ec64` | Follow-ups: `contract.yml` `paths:` broadened to `pyproject.toml` + `sdk/pyproject.toml` + `.github/workflows/**` (closes the silent-cascade gap from session 16-17); `CHANGELOG.md` `[Unreleased]` backfilled with session 18 + 18b entries; type-stub adoption — `types-PyYAML` and `types-redis` added to dev extras, 18 `import-untyped` ignores retired across `src/`. Type-ignore count dropped 20 → 13 (remaining 13 are honest `assignment` ignores for the `yaml = None` / `redis = None` JSON-fallback pattern). Mypy still 0 errors on 105 files |
 
 ## Lessons (recent, load-bearing)
 

@@ -210,7 +210,9 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "src.processing.flink_jobs.*"
-ignore_errors = true
+# PyFlink lacks PEP-561 stubs; suppress the no-Any/import-untyped noise from
+# pyflink.* while still catching real type bugs (attr-defined, arg-type, etc.).
+disable_error_code = ["import-untyped", "no-any-return", "no-untyped-call"]
 
 [[tool.mypy.overrides]]
 module = "src.quality.validators.*"

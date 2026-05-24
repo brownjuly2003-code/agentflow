@@ -5,7 +5,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.processing.flink_jobs.checkpointing import configure_checkpointing
 
@@ -36,8 +36,8 @@ class _SessionState:
         return cls(
             start_time=_parse_timestamp(snapshot["start_time"]),
             last_time=_parse_timestamp(snapshot["last_time"]),
-            event_count=int(snapshot["event_count"]),
-            total_value=float(snapshot["total_value"]),
+            event_count=int(cast(int, snapshot["event_count"])),
+            total_value=float(cast(float, snapshot["total_value"])),
         )
 
 
@@ -70,7 +70,7 @@ class SessionAggregator:
     def process_event(self, event: Mapping[str, object]) -> list[dict[str, object]]:
         user_id = str(event["user_id"])
         event_time = _parse_timestamp(event["timestamp"])
-        value = float(event.get("value", 0.0) or 0.0)
+        value = float(cast(float, event.get("value", 0.0) or 0.0))
 
         current = self._state.get(user_id)
         if current is None:

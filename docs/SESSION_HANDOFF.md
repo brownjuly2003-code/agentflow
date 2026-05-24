@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
 **Last updated:** 2026-05-24 (session 19 — A02 verify + Dependabot deferred-PR closure)
-**HEAD:** `3d9e9e8` on `main` (drop stale A02 protocol-mixin expansion item; next commit will refresh this line)
+**HEAD:** `405f8a3` on `main` (close #23 + #11 as wait-for-upstream; open Dependabot queue empty)
 **Released:** `v1.3.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-23.
 

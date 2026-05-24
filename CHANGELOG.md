@@ -106,6 +106,44 @@ All notable changes to AgentFlow are documented in this file.
   those files, the documented workaround is `gh pr merge --admin
   --squash` after a manual `gh workflow run contract.yml --ref
   <branch>` SUCCESS.
+- `dora.yml` now passes `--branch origin/main` to
+  `scripts/dora_metrics.py`. Previously the script defaulted to
+  `--branch main`, which works on the `push` / `schedule` /
+  `workflow_dispatch` events but fails on `pull_request` because
+  `actions/checkout` lands in detached HEAD with no local `main`.
+  Every Dependabot PR therefore showed `dora-report: FAILURE` as
+  triage noise even though the report is not a required check. With
+  `origin/main` the ref resolves correctly in all four event
+  contexts.
+
+### Repo settings
+
+- Auto-merge and auto-delete-branch-on-merge enabled on
+  `brownjuly2003-code/agentflow`. `gh pr merge <N> --auto --squash`
+  is now supported, and Dependabot branches are removed
+  automatically once their PR squash-merges. The earlier session 18
+  flow (admin-merge per PR, manual `--delete-branch` flag) becomes
+  unnecessary for the common case where required checks pass on the
+  rebased SHA.
+
+### Types
+
+- `types-PyYAML` added to the dev extra. 16
+  `# type: ignore[import-untyped]` annotations on `import yaml` lines
+  across `src/` retired; the five remaining `# type: ignore[assignment]`
+  annotations are on the `yaml = None` fallback line inside the
+  optional-pyyaml `try/except ImportError` blocks (PyYAML is currently
+  a hard runtime dependency, but the JSON-fallback machinery in
+  `webhook_dispatcher.py`, `slo.py`, `alerts/dispatcher.py` etc. is
+  intentionally kept available — see SESSION_HANDOFF.md anti-tasks).
+- `types-redis` added to the dev extra. Two
+  `# type: ignore[import-untyped,unused-ignore]` annotations on
+  `import redis.asyncio as redis` retired in `src/serving/cache.py`
+  and `src/serving/api/rate_limiter.py`; the `redis = None` fallback
+  keeps its `assignment` ignore for the same reason as yaml.
+- Net change: total type-ignore count in `src/sdk` dropped 20 → 13,
+  with the `import-untyped` category eliminated entirely. `mypy src
+  sdk` still clean (0 errors, 105 files).
 
 ### Documentation
 

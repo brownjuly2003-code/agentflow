@@ -93,9 +93,8 @@ def test_container_attestation_workflow_runs_smoke_on_pull_request():
     assert inputs["push"] is False, "PR smoke must not push to ghcr.io"
     assert inputs["file"] == "Dockerfile.api"
     assert inputs["context"] == "."
-    assert "load" in inputs and inputs["load"] is True, (
-        "load: true is needed so the image lands in the local docker engine for any follow-up step"
-    )
+    assert "load" in inputs, "load: true is needed so the image lands in the local docker engine"
+    assert inputs["load"] is True, "load must literally be True, not a truthy string"
 
 
 def test_container_attestation_workflow_signs_and_attests_pushed_digest():

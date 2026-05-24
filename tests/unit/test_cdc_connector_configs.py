@@ -23,9 +23,7 @@ def test_postgres_default_connector_emits_pgoutput_plugin_config():
     config = payload["config"]
 
     assert payload["name"] == "agentflow-postgres-cdc"
-    assert config["connector.class"] == (
-        "io.debezium.connector.postgresql.PostgresConnector"
-    )
+    assert config["connector.class"] == ("io.debezium.connector.postgresql.PostgresConnector")
     assert config["plugin.name"] == "pgoutput"
     assert config["topic.prefix"] == "cdc.postgres"
     assert config["slot.name"] == "agentflow_postgres_slot"

@@ -76,6 +76,37 @@ All notable changes to AgentFlow are documented in this file.
   helm lint pass; operators who pin their own registry/tag via
   `image.repository` / `image.tag` overrides are unaffected.
 
+### Changed
+
+- Dependabot Tier A wave 2 — seven majors merged in session 18 (commits
+  `e2a8288 → 2333104`): `mypy <2 → <3` (dev), `hashicorp/aws ~> 5.60 →
+  ~> 6.46` (Terraform), `typescript 5.9.3 → 6.0.3` (sdk-ts),
+  `actions/github-script v7 → v9` (CI), `actions/download-artifact v4 →
+  v8` (CI), `docs/build-push-action v6 → v7` (CI; included a
+  `tests/unit/test_container_attestation_workflow.py` pin bump to match
+  the new action version), `vitest 3.2.4 → 4.1.7` (sdk-ts dev). Local
+  resolver smoke (`pip install --dry-run -e ".[dev,cloud,contract]"`)
+  green on each step. Two Dependabot PRs remain intentionally deferred:
+  `apache-flink 1.x → 2.x` (pyflink datastream API break in
+  `src/processing/flink_jobs/`) and `python:3.11-slim → 3.14-slim`
+  (Docker build is not part of CI, ecosystem compat uneven).
+
+### CI
+
+- `contract.yml` `paths:` filter broadened to also trigger on
+  `pyproject.toml`, `sdk/pyproject.toml`, and `.github/workflows/**`.
+  This closes the session 16-17 "silent deps cascade" gap (a
+  `pyproject.toml`-only commit used to leave Contract Tests on the
+  previous, stale SHA) and the session 18 "workflow-only PR cannot
+  satisfy required contract check" gap (any workflow bump now
+  re-validates the contract suite). Terraform, sdk-ts, and Dockerfile
+  paths were left out deliberately — the contract suite is python
+  schemathesis and does not exercise those paths, so triggering it
+  there would burn CI minutes for no signal. For PRs that touch only
+  those files, the documented workaround is `gh pr merge --admin
+  --squash` after a manual `gh workflow run contract.yml --ref
+  <branch>` SUCCESS.
+
 ### Documentation
 
 - README refreshed to `v1.3.0` reality: release-gate badge bumped, the

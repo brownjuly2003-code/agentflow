@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-24 (session 18 — Dependabot Tier A wave 2)
-**HEAD:** `2333104` on `main` (vitest 4 + 6 prior bumps, all post-cascade)
+**Last updated:** 2026-05-24 (session 18h — CXKM audit fixes + ruff format)
+**HEAD:** `7a53279` on `main` (KM P1 fixes + ruff format)
 **Released:** `v1.3.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-23.
 
@@ -164,6 +164,9 @@ All seven sessions shipped to `main` between 2026-05-24 evening and
 | **17** | `c90511b` | **Hotfix for the regression the cascade introduced** — see Lessons below |
 | **18** | `e2a8288`, `a92f261`, `70d2c51`, `997b8fd`, `b152244`, `695bdf5`, `2333104` | Dependabot Tier A wave 2 — 7 majors squash-merged (`#24 #8 #10 #17 #20 #21 #12`): mypy `<3`, terraform-aws `~> 6.46`, typescript 6, github-script v9, download-artifact v8, build-push-action v7 (with `tests/unit/test_container_attestation_workflow.py` v6→v7 assertion bump in `269c52f`/`26e6808`), vitest 4. All resolved cleanly into the cascade-stable resolver from session 17 |
 | **18b–e** | `728622c`, `38e77ff`, `84ece1c`, `031ec64` | Follow-ups: `contract.yml` `paths:` broadened to `pyproject.toml` + `sdk/pyproject.toml` + `.github/workflows/**` (closes the silent-cascade gap from session 16-17); `CHANGELOG.md` `[Unreleased]` backfilled with session 18 + 18b entries; type-stub adoption — `types-PyYAML` and `types-redis` added to dev extras, 18 `import-untyped` ignores retired across `src/`. Type-ignore count dropped 20 → 13 (remaining 13 are honest `assignment` ignores for the `yaml = None` / `redis = None` JSON-fallback pattern). Mypy still 0 errors on 105 files |
+| **18f** | `3479561` (reverted by `d448c34`), `eeb95e0` | First attempt at `dora.yml` `--branch origin/main` (kept `dora-report` from failing on PR runs) + CHANGELOG backfill for 18c-f. Also repo admin actions: `allow_auto_merge=true`, `delete_branch_on_merge=true` |
+| **18g** | `d448c34`, `6f8a28f` | CXKM tri-blocking audit (CX + KM) on sessions 18-18f. CX found that `--branch origin/main` from 18f silently broke `_load_github_runs` and `_load_deployment_log` in `scripts/dora_metrics.py` (their branch filters need plain `main`, not a remote ref). Reverted with a `git update-ref refs/heads/main` prep step instead. KM P2 widened `types-redis<5 → <6`. Three remaining KM findings recorded in the new "Pre-conditions before re-enabling Tier B work" subsection above |
+| **18h** | `34faaeb`, `7a53279` | KM P1 fixes from 18g audit: `upload-artifact@v4 → v7` in `terraform-apply.yml` (matches the v8 download bumped in #20) + five new assertions in `tests/unit/test_container_attestation_workflow.py` covering build step `id`, `context`, `file`, `push`, and `tags` shape so v7 schema changes that rename or retype any of these inputs would fail the unit test. Ruff format catch-up in `7a53279` after the initial commit forgot to run it |
 
 ## Lessons (recent, load-bearing)
 

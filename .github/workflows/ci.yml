@@ -66,7 +66,10 @@ jobs:
       - name: Run unit and property tests with coverage
         run: |
           # Full src/sdk baseline floor; changed-code coverage stays at 80% via Codecov patch status.
-          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+          # --cov-branch turns the floor into a combined line+branch metric — local baseline
+          # 2026-05-25 is 62% (7716 lines / 2010 branches measured on HEAD `22b1be9`), so the
+          # 60% gate stays passing with a 2pp cushion. Raise the gate once that cushion grows.
+          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-branch --cov-report=xml --cov-report=term-missing --cov-fail-under=60
       - name: Run quality validators coverage gate
         run: |
           python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90

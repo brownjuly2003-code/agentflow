@@ -6,6 +6,14 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Documentation
 
+- README refreshed to `v1.3.0` reality: release-gate badge bumped, the
+  Highlights section reflects the `v1.1` → `v1.3` arc and the DV2 demo
+  triptych, the Status block summarizes what landed in each of the three
+  releases and what external gates remain, and the Documentation index
+  now links to `docs/runbooks/` alongside the existing single-page
+  `docs/runbook.md` (the singular file remains the local-dev
+  quick-reference; the plural directory is the on-call incident
+  playbooks).
 - On-call production incident runbooks in `docs/runbooks/`: index plus five
   symptom-keyed playbooks (`api-5xx-spike.md`, `auth-401-spike.md`,
   `cdc-lag.md`, `load-test-regression.md`, `release-rollback.md`). Each

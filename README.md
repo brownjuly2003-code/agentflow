@@ -2,7 +2,7 @@
 
 > Real-time data platform for AI agents. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery.
 
-[![Release gate](https://img.shields.io/badge/release_gate-v1.1_published-brightgreen)](docs/release-readiness.md)
+[![Release gate](https://img.shields.io/badge/release_gate-v1.3_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -20,13 +20,14 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Highlights
 
-- **Release-line gate:** 752 passed, 4 skipped on 2026-05-04; GitHub environments `staging` and `production` have required reviewers. The 2026-04-27 audit closure sprint (Codex p1–p9 + Opus) shipped six commits closing all P0/P1/P2 findings — see [docs/audits/2026-04-27/README.md](docs/audits/2026-04-27/README.md) and Release Readiness for the live status
-- **Sub-second entity lookups in the checked-in baseline**: entity p50 `38-55 ms`, entity p99 `290-320 ms`, aggregate p50 `56 ms` at `50` users for `60s`
-- **Historical performance remediation is documented**: the serving path moved from an original ~`26,000 ms` baseline to the current `43-55 ms` release range
-- **Dual SDK parity** for Python and TypeScript, including retry policies, circuit breakers, batching, pagination, and contract pinning
-- **Postgres/MySQL CDC path** through Debezium and Kafka Connect, with local compose, Helm manifests, and canonical CDC normalization
-- **Security hardening in the hot path**: parameterized queries, `sqlglot` AST validation for NL-to-SQL, and a Bandit baseline gate for new findings only
-- **Release workflow coverage**: chaos smoke on PRs, performance regression gate, contract drift checks, and a Terraform apply workflow with OIDC-ready auth
+- **Release line through `v1.3.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`), published via OIDC Trusted Publishers with SLSA provenance attestations on every artifact. Live registry table + re-verify recipe: [docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md)
+- **486 unit tests collected, full suite green on `main`**; CI runs 12 required status checks (lint, schema-check, test-unit, test-integration, helm-schema-live, perf-check, terraform-validate, bandit, safety, npm-audit, trivy, contract). Branch protection requires every one of them
+- **Sub-second entity lookups**: entity p50 `38-55 ms`, entity p99 `167 ms` on local hardware (–82% from the 2026-04-23 baseline after the PII masker + tenant qualification cache wins). CI runner thresholds are documented separately in [docs/perf/ci-hardware-gap-2026-05-24.md](docs/perf/ci-hardware-gap-2026-05-24.md)
+- **Dual SDK parity** for Python (`agentflow-client`) and TypeScript (`@yuliaedomskikh/agentflow-client`), including retry policies, circuit breakers, batching, pagination, contract pinning, idempotency keys, and `as_of` historical reads
+- **Two CDC paths**: production-grade Debezium + Kafka Connect (Helm chart hardened with NetworkPolicy + PDB + securityContext, schema-validated on every deploy), and a ClickHouse `MaterializedPostgreSQL` per-branch fan-out for the DV2 demo cluster
+- **Security hardening in the hot path**: tenant isolation across every read surface, parameterized queries, `sqlglot` AST validation for NL-to-SQL, fail-closed auth middleware, plaintext secret scrubbing, and a Bandit baseline gate for new findings only
+- **On-call playbooks for production incidents** in [docs/runbooks/](docs/runbooks/README.md): symptom-keyed runbooks for API 5xx spikes, auth fail-closed regressions, CDC lag, Load Test gate failures, and PyPI/npm release rollback
+- **DV2 demo triptych**: voice-narrated terminal cast ([demo_voiced.mp4](docs/dv2-multi-branch/demo_voiced.mp4), 92s) + web-UI screencast covering Argo Workflows and MinIO ([demo_webui.mp4](docs/dv2-multi-branch/demo_webui.mp4), 60s) + dbt docs lineage walk-through ([demo_dbt_docs.mp4](docs/dv2-multi-branch/demo_dbt_docs.mp4), 55s)
 
 ## Quick start
 
@@ -111,7 +112,8 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 
 - [Interactive Technical Walkthrough](docs/index.md) - MkDocs Material guide with Mermaid architecture, API, SDK, deployment, observability, and troubleshooting pages
 - [Architecture](docs/architecture.md) - system context, data flow, failure modes
-- [Operational Runbook](docs/runbook.md) - local stack, CDC capture, incident response, and maintenance commands
+- [Operational Runbook](docs/runbook.md) - local stack, CDC capture, and maintenance commands
+- [On-Call Runbooks](docs/runbooks/README.md) - production-incident playbooks (API 5xx, auth break, CDC lag, Load Test regression, release rollback)
 - [API Reference](docs/api-reference.md) - endpoint-by-endpoint examples for curl, Python, and TypeScript
 - [Security Audit](docs/security-audit.md) - threat model, controls, and evidence
 - [Competitive Analysis](docs/competitive-analysis.md) - positioning and trade-offs
@@ -154,28 +156,55 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 
 ## Status
 
-**v1.1.0** is published to PyPI, npm, and GitHub.
-The 2026-04-27 audit closure sprint landed six commits on `main`
-that close all P0/P1/P2 findings from the Claude
-Opus + Codex p1–p9 audits: tenant isolation across the control plane,
-SQL guard centralization, entity allowlist enforcement on every read
-surface, secrets scrubbed and rotated, helm `runAsNonRoot` /
-NetworkPolicy / PodDisruptionBudget, npm lockfile + `npm audit` clean,
-vulnerable dep bumps (`dagster>=1.13.1`, `langchain-core>=1.2.22`),
-trivy pinned, OpenAPI drift gate, branch protection with 12 required
-status checks, GitHub Actions environment reviewers, and Python SDK
-alignment with the server v1 contract (F1–F10). Recent local full-suite
-verification: `752 passed, 4 skipped` on 2026-05-04 after clarifying the
-external-gate handoff. The post-v1.1 CDC operationalization
-for Debezium / Kafka Connect is checked in, while production source
-onboarding remains pending; see [docs/release-readiness.md](docs/release-readiness.md).
-Remaining external gates are AWS OIDC role setup for real Terraform apply,
-external immutable audit retention if claimed beyond local hash-chain evidence,
-production CDC source onboarding, real PMF/pricing evidence, public benchmark
-publication on production hardware, external pen-test attestation, and legacy
-npm `NPM_TOKEN` revocation after a successful new-package trusted-publish run.
-npm Trusted Publishing readback for the new package is complete. A project-local
-Pi skill for evidence intake lives at `.pi/skills/external-gate-evidence-intake`.
+**`v1.3.0` is the current release line** (PyPI `agentflow-runtime` /
+`agentflow-client`, npm `@yuliaedomskikh/agentflow-client`, all three
+published 2026-05-23 via OIDC Trusted Publishers with SLSA provenance
+attestations). Live registry table and re-verify recipe live in
+[docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md).
+
+The `v1.1.0` → `v1.3.0` arc landed in three increments on top of the
+2026-04-27 audit closure sprint:
+
+- **`v1.1.0`** — audit closure: tenant isolation across every read
+  surface, SQL guard centralization on `sqlglot`, entity allowlist
+  enforcement, fail-closed auth, secrets rotated, Helm hardening,
+  `npm audit` clean, vulnerable dep bumps, OpenAPI drift gate, 12
+  required status checks, Python SDK alignment with server v1
+  contract (F1–F10).
+- **`v1.2.0`** — DV2 multi-branch warehouse merged to `main`: 38 DV2.0
+  tables (8 hubs / 8 links / 22+ satellites), Argo Workflows
+  `dv2-refresh` template, dbt project with 3 mart models + 12 tests,
+  per-branch CDC fan-out via ClickHouse `MaterializedPostgreSQL`, and
+  the first voice-narrated terminal cast demo.
+- **`v1.3.0`** — `helm/kafka-connect` chart hardening matched to
+  `helm/agentflow` (NetworkPolicy + PDB + pod/container securityContext
+  + `/tmp` emptyDir, all schema-required and off-by-default), Helm live
+  validation parametrized across both charts, A03 CI hardware-gap
+  acceptance with Load Test gates raised to 1.3x baseline, and the DV2
+  demo triptych completed (terminal + web-UI + dbt docs screencasts).
+
+CI on `main` is fully green across all 12 required checks. Local
+hardware sustains entity p99 `167 ms` (the local SLO target); CI runner
+thresholds are intentionally divergent and documented in
+[docs/perf/ci-hardware-gap-2026-05-24.md](docs/perf/ci-hardware-gap-2026-05-24.md).
+
+**Remaining external gates** are unchanged from `v1.1` and require
+inputs outside this repository:
+
+- AWS OIDC role setup for real Terraform `apply`.
+- Production CDC source onboarding (hostnames, credentials, owners,
+  private network path) — runbook ready in
+  [docs/operations/cdc-production-onboarding.md](docs/operations/cdc-production-onboarding.md).
+- Real PMF / pricing evidence and a public benchmark on
+  production-grade hardware (`c8g.4xlarge+`).
+- External pen-test attestation.
+- Optional: paid larger GHA runner or self-hosted runner if the CI
+  hardware-gap thresholds need to be tightened.
+
+The project-local Pi skill at
+`.pi/skills/external-gate-evidence-intake` and the
+[External Gate Evidence Intake Checklist](docs/operations/external-gate-evidence-intake.md)
+codify what evidence must arrive before any of those gates close.
 
 ## Screenshots
 
@@ -195,4 +224,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Credits
 
-Built as a data-engineering reference project during the `2026-04-10` -> `2026-04-20` release cycle, with the full implementation trail preserved in `docs/plans/`.
+Built as a data-engineering reference project. Initial release cycle
+`2026-04-10` → `2026-04-20`, post-audit hardening and DV2 extension
+through `2026-05-23` (`v1.3.0`). Full implementation trail preserved in
+`docs/plans/`, `docs/codex-tasks/`, and `docs/lessons/`.

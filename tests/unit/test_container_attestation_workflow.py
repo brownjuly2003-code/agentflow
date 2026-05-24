@@ -46,7 +46,7 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
     assert workflow["permissions"]["packages"] == "write"
     assert "ghcr.io/${{ github.repository_owner }}/agentflow-api" in workflow_text
     assert "docker/login-action@v3" in steps_text
-    assert "docker/build-push-action@v6" in steps_text
+    assert "docker/build-push-action@v7" in steps_text
     assert "Dockerfile.api" in steps_text
     assert "push: true" in steps_text
     assert "${{ github.sha }}" in steps_text

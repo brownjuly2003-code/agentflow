@@ -23,12 +23,24 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Ensure local main ref
+        # pull_request runs on a detached merge commit with no local 'main',
+        # which made 'git log main' in dora_metrics.py exit 128. Create the
+        # local ref from origin/main (fetched by checkout fetch-depth: 0) so
+        # the script's --branch main default keeps working — and so the
+        # GitHub Actions API / .dora/ deployment-log branch filters in
+        # _load_github_runs() and _load_deployment_log() get the plain
+        # branch name 'main' they expect, not a remote ref.
+        # On push-to-main, 'main' is already the checked-out branch and
+        # update-ref refuses to touch it — that's fine, the ref exists.
+        # On pull_request, HEAD is detached and update-ref creates main.
+        run: git update-ref refs/heads/main "$(git rev-parse origin/main)" || true
       - name: Generate DORA report
         env:
           GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python scripts/dora_metrics.py --days 30 --branch origin/main --output dora-report.json
+        run: python scripts/dora_metrics.py --days 30 --output dora-report.json
       - name: Render markdown summary
         run: |
           python - <<'PY'

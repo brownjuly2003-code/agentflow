@@ -91,17 +91,26 @@ back online.
 
 - **Before re-enabling `terraform-apply.yml` plan / apply jobs (A04/A05/A03
   unblock):**
-  - Run `terraform init -upgrade` in `infrastructure/terraform/` to
-    bump `.terraform.lock.hcl` from the pinned `5.100.0` to the v6
-    range now allowed in `main.tf:7`. The TF code itself is already
-    v6-compatible — MSK uses the modern `storage_info / ebs_storage_info`
-    nested block, S3 uses the modular `aws_s3_bucket_versioning /
-    aws_s3_bucket_lifecycle_configuration` / etc. siblings (not the
-    deprecated inline blocks), `aws_iam_policy_document` data sources
-    do not set the removed `version` attribute, and there are no
-    `aws_s3_bucket_object` references — but the lockfile bump itself
-    needs a Terraform CLI available, which the local dev env did not
-    have during session 18g. Session 18g P2.
+  - **Provider v6 install verified 2026-05-25 (session 19)** — ran
+    `terraform init -backend=false -upgrade` locally with Terraform
+    `v1.15.4` against the `~> 6.46` constraint in `main.tf:7`. The
+    provider plugin installed cleanly at `hashicorp/aws v6.46.0`; the
+    local `.terraform.lock.hcl` is gitignored
+    (`.gitignore:33`), so CI generates its own lockfile per run and
+    no commit is required for this verification. The TF code itself
+    is already v6-compatible — MSK uses the modern `storage_info /
+    ebs_storage_info` nested block, S3 uses the modular
+    `aws_s3_bucket_versioning / aws_s3_bucket_lifecycle_configuration`
+    / etc. siblings (not the deprecated inline blocks),
+    `aws_iam_policy_document` data sources do not set the removed
+    `version` attribute, and there are no `aws_s3_bucket_object`
+    references. The remaining gate is the disabled-by-default
+    `plan` / `apply` jobs (see the `if: false` toggle at
+    `.github/workflows/terraform-apply.yml:79` and the re-enable
+    checklist comment block above it), which require `AWS_TERRAFORM_ROLE_ARN`
+    + `AWS_REGION` repository vars + the tfvars files + GH Actions
+    `staging` / `production` environments + a green OIDC-assume-role
+    staging run to ship.
 
 - **Before pushing a new `agentflow-api` container image to production
   (currently `container-attestation.yml` is `workflow_dispatch` only):**
@@ -141,10 +150,37 @@ back online.
   five entries queued (runbooks + README + helm + SDK + SECURITY +
   Dependabot/.editorconfig + hotfix) so the changelog body is already
   written.
-- **OTEL observability backfill** — wiring is in
-  `src/serving/api/telemetry.py`; downstream Grafana panels referenced
-  in `docs/runbooks/api-5xx-spike.md` need to be authored in
-  `infrastructure/observability/` once a real Prometheus stack exists.
+- **OTEL observability backfill — partial (2026-05-25 session 19)**:
+  - **Pipeline dashboard authored**:
+    `infrastructure/observability/grafana/agentflow-pipeline-health.json`
+    covers the metrics actually exported by
+    `src/quality/monitors/{freshness_monitor,metrics_collector}.py`
+    via the Prometheus ASGI mount at
+    `src/serving/api/main.py:285`. Five panels: pipeline latency
+    p50/p95/p99 by topic (with SLO threshold at 30s), SLA compliance
+    ratio bar gauge, Kafka consumer lag, per-component pipeline
+    health (mapped to healthy / degraded / unhealthy text), events
+    processed running total. The dashboard's `description` field
+    documents the gap below. Importable into any Grafana 9+ via UI
+    or `grafana-cli` against a Prometheus datasource templated to
+    `${DS_PROMETHEUS}`.
+  - **Tracing wiring** in `src/serving/api/telemetry.py` (FastAPIInstrumentor
+    + HTTPXClientInstrumentor) already exports to any
+    `OTEL_EXPORTER_OTLP_ENDPOINT` — no change needed there.
+  - **Still missing — needs API instrumentation, not just dashboards**:
+    the HTTP-level panels referenced in
+    `docs/runbooks/api-5xx-spike.md` (`agentflow_http_requests_total{status=~"5.."}`)
+    and `docs/runbooks/auth-401-spike.md`
+    (`agentflow_auth_failures_total` by `reason`) **are not currently
+    exported by any code path in `src/`**. Adding them requires either
+    `prometheus-fastapi-instrumentator` middleware (for the HTTP
+    counter, ~10 LOC + new dep) or a manual `Counter.inc()` in the
+    auth fail path of `src/serving/api/auth/middleware.py` (for the
+    auth-failure counter, ~3 LOC). Both are bounded follow-ups
+    outside the current scope. Once those metrics are exported, the
+    runbook references resolve and a second dashboard
+    (`agentflow-api-health.json`) can be authored using the same
+    `${DS_PROMETHEUS}` template.
 - **OneScreen / proof-pack-tier polish** lives in separate repos; the
   `docs/codex-tasks/` ledger has historical follow-ups if appetite
   appears for cross-cutting cleanup.

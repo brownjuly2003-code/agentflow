@@ -68,7 +68,7 @@ dev = [
     "pytest-cov>=5,<8",
     "testcontainers[kafka]>=4.9,<5",
     "ruff>=0.6,<1",
-    "mypy>=1.11,<2",
+    "mypy>=1.11,<3",
 ]
 
 [build-system]

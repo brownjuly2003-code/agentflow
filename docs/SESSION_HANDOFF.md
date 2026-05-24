@@ -137,9 +137,6 @@ back online.
   five entries queued (runbooks + README + helm + SDK + SECURITY +
   Dependabot/.editorconfig + hotfix) so the changelog body is already
   written.
-- **Protocol-mixin expansion (A02)** to remaining `attr-defined`
-  override paths beyond `src/serving/semantic_layer/query/` and
-  `sdk/agentflow/retry.py`.
 - **OTEL observability backfill** — wiring is in
   `src/serving/api/telemetry.py`; downstream Grafana panels referenced
   in `docs/runbooks/api-5xx-spike.md` need to be authored in

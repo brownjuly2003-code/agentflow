@@ -1,9 +1,12 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-24 (session 19 — A02 verify + Dependabot deferred-PR closure)
-**HEAD:** `405f8a3` on `main` (close #23 + #11 as wait-for-upstream; open Dependabot queue empty)
-**Released:** `v1.3.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
-and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-23.
+**Last updated:** 2026-05-25 (session 19 — A02 verify + Dependabot deferred-PR closure + v1.4.0 maintenance release)
+**HEAD:** `e58693b` on `main` (chore(release): cut v1.4.0; next docs commit will refresh this line)
+**Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
+and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
+Prior releases v1.3.0/v1.2.0/v1.1.0 still available on the same
+registries; see `docs/dv2-multi-branch/RELEASE_STATUS.md` for the
+full table.
 
 This is the top-level entry point for picking up the project cold. The
 DV2 multi-branch demo has its own scoped handoff at

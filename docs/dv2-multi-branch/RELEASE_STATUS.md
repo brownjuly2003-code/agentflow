@@ -1,16 +1,28 @@
-# Release status — v1.3.0 PUBLISHED
+# Release status — v1.4.0 PUBLISHED
 
-**Status (verified 2026-05-24 via live registry queries):** v1.1.0,
-v1.2.0, and v1.3.0 are all published on the three registries. v1.3.0
-ships the A04 helm/kafka-connect chart hardening (NetworkPolicy + PDB
-+ securityContext + tmp emptyDir), A05 parametrized live validation
-across both production charts + reuse-cluster mode, and A03 CI
-hardware-gap acceptance (Load Test gates 1.3x baseline).
+**Status (verified 2026-05-25 via live registry queries):** v1.1.0,
+v1.2.0, v1.3.0, and v1.4.0 are all published on the three registries.
+v1.4.0 is a maintenance release bundling documentation
+(`docs/SESSION_HANDOFF.md`, `docs/runbooks/` on-call playbooks,
+`SECURITY.md`, issue/PR templates), CI hardening (`contract.yml`
+paths broadening, `dora.yml` ref fix), repo hygiene
+(`.github/dependabot.yml` + `.editorconfig`, auto-merge enabled),
+type-stub adoption (`types-PyYAML` + `types-redis` → 18 import-untyped
+ignores retired), and the Dependabot Tier A wave 2 dependency bumps
+(`mypy<3`, `terraform-aws~>6.46`, `typescript6`, `github-script v9`,
+`download-artifact v8`, `build-push v7`, `vitest4`). Two
+intentionally-deferred Dependabot PRs were closed as
+`wait-for-upstream`: `#23 apache-flink 2.x` (Flink 2.2 Kafka
+connector unavailable) and `#11 python 3.14-slim` (docker-not-in-CI
+gate). No runtime API changes from v1.3.0.
 
 ## Live registry state
 
 | Registry | Package | Version | Upload time (UTC) | Tag commit |
 |----------|---------|---------|-------------------|------------|
+| PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.4.0/) | 1.4.0 | 2026-05-24 21:05 | `e58693b` |
+| PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.4.0/)   | 1.4.0 | 2026-05-24 21:05 | `e58693b` |
+| npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.4.0) | 1.4.0 | 2026-05-24 21:05 | `e58693b` |
 | PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.3.0/) | 1.3.0 | 2026-05-23 23:12 | `8fa99e6` |
 | PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.3.0/)   | 1.3.0 | 2026-05-23 23:12 | `8fa99e6` |
 | npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.3.0) | 1.3.0 | 2026-05-23 23:12 | `8fa99e6` |

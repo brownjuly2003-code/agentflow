@@ -1,6 +1,12 @@
 name: Container Attestation
 
 "on":
+  pull_request:
+    paths:
+      - "Dockerfile*"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - ".github/workflows/container-attestation.yml"
   workflow_dispatch:
     inputs:
       mode:
@@ -34,8 +40,29 @@ env:
   IMAGE_REF: ghcr.io/${{ github.repository_owner }}/agentflow-api
 
 jobs:
+  build-smoke:
+    # Runs on every PR that touches the Dockerfile / pip surface or the
+    # workflow itself. Builds the image without pushing or signing so a
+    # broken Dockerfile fails the PR instead of landing silently.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image (no push)
+        id: smoke
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.api
+          push: false
+          load: true
+          tags: agentflow-api:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   build-push-sign-attest:
-    if: ${{ inputs.confirm == 'SIGN' && inputs.mode == 'build-and-sign' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'SIGN' && inputs.mode == 'build-and-sign' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +101,7 @@ jobs:
           push-to-registry: true
 
   attest-and-sign:
-    if: ${{ inputs.confirm == 'SIGN' && inputs.mode == 'sign-existing-digest' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'SIGN' && inputs.mode == 'sign-existing-digest' }}
     runs-on: ubuntu-latest
     steps:
       - name: Validate digest inputs

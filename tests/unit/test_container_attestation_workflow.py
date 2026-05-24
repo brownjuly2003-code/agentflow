@@ -69,6 +69,35 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
     assert "${{ env.IMAGE_REF }}:audit-${{ github.run_id }}" in inputs["tags"]
 
 
+def test_container_attestation_workflow_runs_smoke_on_pull_request():
+    workflow = _load_workflow()
+    assert "pull_request" in workflow["on"], (
+        "container-attestation must run on PR to catch broken Dockerfiles before merge"
+    )
+    paths = workflow["on"]["pull_request"]["paths"]
+    for required_path in ("Dockerfile*", "pyproject.toml", "requirements.txt"):
+        assert required_path in paths, (
+            f"PR trigger must include {required_path!r} so deps and image changes are smoked"
+        )
+
+    smoke_job = workflow["jobs"]["build-smoke"]
+    assert "github.event_name == 'pull_request'" in smoke_job["if"]
+
+    build_step = next(
+        step
+        for step in smoke_job["steps"]
+        if isinstance(step.get("uses"), str)
+        and step["uses"].startswith("docker/build-push-action@")
+    )
+    inputs = build_step["with"]
+    assert inputs["push"] is False, "PR smoke must not push to ghcr.io"
+    assert inputs["file"] == "Dockerfile.api"
+    assert inputs["context"] == "."
+    assert "load" in inputs and inputs["load"] is True, (
+        "load: true is needed so the image lands in the local docker engine for any follow-up step"
+    )
+
+
 def test_container_attestation_workflow_signs_and_attests_pushed_digest():
     workflow = _load_workflow()
     steps = workflow["jobs"]["build-push-sign-attest"]["steps"]

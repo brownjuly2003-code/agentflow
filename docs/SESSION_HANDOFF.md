@@ -78,6 +78,35 @@ substitute for them.
   automatically; `--delete-branch` flag on `gh pr merge` is no longer
   required (still harmless if you forget and pass it).
 
+### Pre-conditions before re-enabling Tier B work
+
+Recorded from the session 18g CXKM audit (CX P2 confirmed + KM P1×2,
+P2×2, P3×1 solo). All items below are latent — current CI does not
+exercise them — but they will surface the moment the gated jobs come
+back online.
+
+- **Before re-enabling `terraform-apply.yml` plan / apply jobs (A04/A05/A03
+  unblock):**
+  - Bump `actions/upload-artifact` from `v4` → matching major of
+    `actions/download-artifact@v8` (currently `v7` is latest stable
+    upload-artifact, so the cross-version handoff between plan and
+    apply jobs needs a compatibility check or both pinned to the same
+    major). KM session 18g P1.
+  - Audit `infrastructure/terraform/*.tf` against `hashicorp/aws ~> 6`
+    breaking changes before the first non-disabled `terraform apply` —
+    the `~> 5.60 → ~> 6.46` bump in session 18 only changed the
+    provider constraint, no resource migration sweep was done because
+    the apply path is gated. KM session 18g P2.
+
+- **Before pushing a new `agentflow-api` container image to production
+  (currently `container-attestation.yml` is `workflow_dispatch` only):**
+  - Run the workflow with `mode=build-and-sign` end-to-end as a smoke
+    on `docker/build-push-action@v7` (the unit test in
+    `tests/unit/test_container_attestation_workflow.py:49` only
+    asserts the version string is present in the YAML; v6 → v7
+    input/output schema changes are not validated by that
+    assertion). KM session 18g P1.
+
 ### Anti-tasks — looks like cleanup but isn't
 
 - **Do NOT remove the `try: import yaml / except ImportError: yaml = None`

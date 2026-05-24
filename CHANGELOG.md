@@ -4,6 +4,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Top-level [`docs/SESSION_HANDOFF.md`](docs/SESSION_HANDOFF.md) — the
+  entry point for picking up the project cold. Includes the four
+  orientation commands to run first, the priority-tiered open work
+  (Tier A actionable Dependabot PRs, Tier B externally user-gated
+  A04/A05/A03, Tier C forward backlog), a compressed view of sessions
+  11 → 17, and the load-bearing lessons from session 17's regression
+  (Contract Tests path filter, Dependabot cascade transitive
+  conflicts, memory-staleness check before recommending). README
+  surfaces it at the top of the Documentation index.
+
 ### Fixed
 
 - Dependency resolver clash after the Dependabot merge cascade

@@ -110,6 +110,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 
 ## Documentation
 
+- [Session Handoff](docs/SESSION_HANDOFF.md) - **start here when picking up the project cold** — current HEAD, open Dependabot PRs, externally user-gated items, recent lessons (Contract Tests path filter, Dependabot cascade conflicts)
 - [Interactive Technical Walkthrough](docs/index.md) - MkDocs Material guide with Mermaid architecture, API, SDK, deployment, observability, and troubleshooting pages
 - [Architecture](docs/architecture.md) - system context, data flow, failure modes
 - [Operational Runbook](docs/runbook.md) - local stack, CDC capture, and maintenance commands

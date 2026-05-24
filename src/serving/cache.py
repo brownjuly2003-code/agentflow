@@ -12,7 +12,7 @@ logger = structlog.get_logger()
 ENTITY_TTL_SECONDS = 5
 
 try:
-    import redis.asyncio as redis  # type: ignore[import-untyped,unused-ignore]
+    import redis.asyncio as redis
 except ImportError:  # pragma: no cover
     redis = None  # type: ignore[assignment]
 

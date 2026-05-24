@@ -4,6 +4,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Public-repo hygiene files added: `SECURITY.md` (private vulnerability
+  reporting policy, supported-versions table, scope/out-of-scope, 90-day
+  coordinated-disclosure default), structured `.github/ISSUE_TEMPLATE/`
+  forms (`bug_report.yml`, `feature_request.yml`, `config.yml` that
+  disables blank issues and routes reporters to security/runbook links),
+  and a `.github/PULL_REQUEST_TEMPLATE.md` with summary / type-of-change
+  / testing / checklist sections aligned to `CONTRIBUTING.md`. All
+  cross-link to the existing on-call runbooks and CONTRIBUTING guide
+  rather than restating their contents.
+
 ### Changed
 
 - `sdk/README.md` (the PyPI project page bundled into every published

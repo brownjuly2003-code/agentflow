@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/brownjuly2003-code/agentflow/security/advisories/new
+    about: Report a security vulnerability privately via a draft Security Advisory. See SECURITY.md for details and out-of-scope categories.
+  - name: On-call runbooks
+    url: https://github.com/brownjuly2003-code/agentflow/blob/main/docs/runbooks/README.md
+    about: Symptom-keyed playbooks for production incidents (API 5xx, auth break, CDC lag, Load Test regression, release rollback). Check these before opening a bug.
+  - name: Operational runbook (local stack)
+    url: https://github.com/brownjuly2003-code/agentflow/blob/main/docs/runbook.md
+    about: Local-dev quick reference — Kafka/Flink/MinIO endpoints, common commands.

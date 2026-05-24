@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest a new capability, endpoint, integration, or significant behavior change.
+title: "[feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing the idea. Significant design changes typically
+        land with an ADR in [`docs/decisions/`](../../docs/decisions/) —
+        feel free to skip that step on the initial request and let
+        triage decide.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user / agent / operator problem does this solve? Lead with the gap, not the proposed solution.
+      placeholder: "Agents querying /v1/entity in bulk currently make N HTTP calls; there is no way to fetch a list of entity IDs in one round-trip."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you want to see built. API shape, SDK surface, config knobs — whatever is concrete.
+      placeholder: |
+        Add `POST /v1/entity/batch` that accepts a list of `{entity_type, entity_id}` tuples and returns `{results: EntityEnvelope[]}` preserving order.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Ways you ruled out and why. "Use existing /v1/query" type alternatives are fine to mention.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      multiple: true
+      options:
+        - API
+        - Python SDK
+        - TypeScript SDK
+        - Helm chart
+        - CDC pipeline
+        - Observability
+        - DV2 multi-branch demo
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Links to similar features in other tools, agent use-cases, perf considerations.
+    validations:
+      required: false

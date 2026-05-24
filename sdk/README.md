@@ -1,7 +1,9 @@
 # agentflow-client
 
-> PyPI distribution name: **`agentflow-client`**. The package is published as
-> `agentflow-client` 1.1.0 on PyPI. Python import remains `agentflow`.
+> Typed Python SDK for the AgentFlow API. **PyPI distribution name:**
+> `agentflow-client`. **Python import path:** `agentflow` (unchanged across
+> the v1.x line). See [CHANGELOG](https://github.com/brownjuly2003-code/agentflow/blob/main/CHANGELOG.md)
+> for the current release.
 
 Install from PyPI:
 

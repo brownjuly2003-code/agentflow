@@ -6,6 +6,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `sdk/README.md` (the PyPI project page bundled into every published
+  wheel) made version-agnostic: dropped the hardcoded `1.1.0 on PyPI`
+  line that went stale at every release in favour of a CHANGELOG link
+  pinned to `main`. PyPI keeps showing the README from the bundled wheel
+  until the next publish, so this fix is forward-looking — future
+  releases will not need an SDK README touch-up just to keep the version
+  reference current.
 - `helm/agentflow` chart aligned to current release line:
   `Chart.yaml` `appVersion` bumped `1.0.0` → `1.3.0`, default
   `values.yaml` `image.tag` bumped `1.1.0` → `1.3.0`, and

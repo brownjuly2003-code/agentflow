@@ -30,7 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 flink = [
-    "apache-flink==1.19.1",
+    "apache-flink==2.2.1",
 ]
 cloud = [
     "boto3>=1.35,<2",

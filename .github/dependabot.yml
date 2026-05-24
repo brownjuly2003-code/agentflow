@@ -1,0 +1,158 @@
+version: 2
+
+# AgentFlow dependency-update policy.
+#
+# Each ecosystem gets a weekly schedule, conventional-commit prefix that
+# matches CONTRIBUTING.md, and a grouped minor+patch PR so the review
+# queue does not get spammed. Major bumps stay individual.
+#
+# Security advisories from GitHub bypass the schedule and open
+# immediately regardless of group / interval — that is Dependabot
+# default and is what we want.
+
+updates:
+  # ── Python: root runtime (agentflow-runtime) ───────────────────────
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    labels:
+      - dependencies
+      - python
+    groups:
+      python-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # langchain-core / langchain-text-splitters / langsmith / dagster
+      # have explicit floors in pyproject.toml driven by CVE fixes
+      # (see commit e8b1237 and the A06 dependency-profiles block).
+      # Allow minor + patch within the >= floor, never major.
+      - dependency-name: "langchain-core"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "langchain-text-splitters"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "langsmith"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dagster"
+        update-types: ["version-update:semver-major"]
+
+  # ── Python: SDK (agentflow-client) ─────────────────────────────────
+  - package-ecosystem: pip
+    directory: "/sdk"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,sdk)"
+      include: scope
+    labels:
+      - dependencies
+      - python
+      - sdk
+
+  # ── Python: integrations (agentflow-integrations) ──────────────────
+  - package-ecosystem: pip
+    directory: "/integrations"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,integrations)"
+      include: scope
+    labels:
+      - dependencies
+      - python
+      - integrations
+
+  # ── npm: TypeScript SDK ────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: "/sdk-ts"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps,sdk-ts)"
+      include: scope
+    labels:
+      - dependencies
+      - javascript
+      - sdk
+    groups:
+      sdk-ts-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ── Docker: API image base ─────────────────────────────────────────
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,docker)"
+      include: scope
+    labels:
+      - dependencies
+      - docker
+
+  # ── GitHub Actions: workflow pins ──────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps,ci)"
+      include: scope
+    labels:
+      - dependencies
+      - ci
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ── Terraform: infrastructure modules ──────────────────────────────
+  - package-ecosystem: terraform
+    directory: "/infrastructure/terraform"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,terraform)"
+      include: scope
+    labels:
+      - dependencies
+      - terraform

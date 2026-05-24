@@ -4,6 +4,27 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `.github/dependabot.yml` covering seven ecosystems on a Monday 06:00
+  Europe/Moscow weekly schedule: pip (root runtime, SDK, integrations),
+  npm (`sdk-ts/`), Docker (`Dockerfile.api`), GitHub Actions
+  (workflow pins), and Terraform (`infrastructure/terraform/`). Minor
+  and patch updates are grouped per ecosystem to keep the PR queue
+  reviewable; majors stay individual. `langchain-core`,
+  `langchain-text-splitters`, `langsmith`, and `dagster` have explicit
+  CVE-driven floors in `pyproject.toml`, so major bumps for those are
+  ignored (Dependabot still opens advisory PRs immediately for
+  GitHub-reported vulnerabilities regardless of group/interval).
+  Commit prefixes match `CONTRIBUTING.md` (`chore(deps,<scope>)`).
+- `.editorconfig` at the repo root pinning UTF-8 + LF + trailing-whitespace
+  trim across the tree, with per-language overrides (Python 4-space /
+  100-col, JS/TS/JSON/YAML/TOML 2-space, Markdown keeps trailing
+  whitespace for hard-wrap line breaks, Makefile tabs). Aligns the
+  cross-editor behavior with what `ruff format` / `prettier` already
+  enforce in CI; aimed at contributors whose editor does not auto-pick
+  up `pyproject.toml` / `package.json` formatter config.
+
 ### Documentation
 
 - Public-repo hygiene files added: `SECURITY.md` (private vulnerability

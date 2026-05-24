@@ -29,6 +29,7 @@ from src.serving.api.alert_dispatcher import AlertDispatcher
 from src.serving.api.analytics import build_analytics_middleware, ensure_analytics_table
 from src.serving.api.auth import AuthManager, TenantKey, build_auth_middleware
 from src.serving.api.middleware.logging import build_correlation_middleware
+from src.serving.api.middleware.metrics import build_metrics_middleware
 from src.serving.api.routers.admin import router as admin_router
 from src.serving.api.routers.admin_ui import router as admin_ui_router
 from src.serving.api.routers.agent_query import router as agent_router
@@ -264,6 +265,12 @@ async def demo_mode_guard(request: Request, call_next):
                 content={"detail": "Demo mode is read-only for mutating routes."},
             )
     return await call_next(request)
+
+
+# Registered last so it wraps every other HTTP middleware and observes the
+# final response status code; route template is populated by the router after
+# call_next() returns. Backs agentflow-api-health.json + api-5xx-spike.md.
+app.middleware("http")(build_metrics_middleware())
 
 
 cors_origins = [

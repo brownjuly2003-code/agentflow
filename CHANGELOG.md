@@ -4,6 +4,40 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- API-surface Prometheus instrumentation referenced by
+  [`docs/runbooks/api-5xx-spike.md`](docs/runbooks/api-5xx-spike.md) and
+  [`docs/runbooks/auth-401-spike.md`](docs/runbooks/auth-401-spike.md):
+  - `agentflow_http_requests_total{method,route,status}` counter via a
+    new outermost middleware (`src/serving/api/middleware/metrics.py`).
+    Route label uses the FastAPI path template; requests rejected by
+    earlier middleware (auth, demo guard) report as `route=<unmatched>`
+    because the router only populates `scope["route"]` after
+    `call_next`.
+  - `agentflow_auth_failures_total{reason}` counter wired into both
+    `AuthMiddleware` (reasons: `key_file_empty`, `rate_limited`,
+    `missing_key`, `invalid_key`) and `require_admin_key` (reasons:
+    `rate_limited`, `admin_unconfigured`, `admin_invalid`). Reason
+    vocabulary matches the runbook's Detection section.
+  - Sibling Grafana dashboard
+    `infrastructure/observability/grafana/agentflow-api-health.json`
+    with 5 panels: 5xx-rate-by-route, auth-failures-by-reason (stacked),
+    4xx-rate-by-route+status, request-rate-by-status-class (stacked),
+    auth-failures-cumulative-over-range bar gauge. Same
+    `${DS_PROMETHEUS}` datasource template as `agentflow-pipeline-health.json`.
+  - 9 new unit tests in `tests/unit/test_api_metrics.py` cover each
+    counter branch and the `/metrics` exposure round trip.
+
+### Fixed
+
+- Prometheus scrape endpoint (`/metrics`) was rejected with 401 by
+  `AuthMiddleware` whenever the request landed on the trailing-slash
+  variant `/metrics/` that Starlette redirects to from `/metrics`. The
+  exempt set in `_is_exempt_path` only matched the bare path; widened
+  to cover both `/metrics` and any `/metrics/...` sub-path so scrapes
+  succeed without disabling auth.
+
 ## [1.4.0] - 2026-05-25
 
 Maintenance release. No runtime API changes; bundles documentation,

@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "AgentFlow ingestion + CDC pipeline observability. Uses metrics exported by src/quality/monitors/freshness_monitor.py and src/quality/monitors/metrics_collector.py (scraped by Prometheus at the /metrics endpoint mounted in src/serving/api/main.py:285). The Pipeline Latency / SLA Compliance / Consumer Lag panels back the cdc-lag.md runbook directly. HTTP-level panels (api_5xx rate, auth_failures rate) referenced in api-5xx-spike.md and auth-401-spike.md are NOT included — those runbooks reference agentflow_http_requests_total and agentflow_auth_failures_total, neither of which is currently defined in src/. Adding them requires either prometheus-fastapi-instrumentator middleware (HTTP request metrics) or a Counter.inc() call in the auth fail path. Tracked as a follow-up.",
+  "description": "AgentFlow ingestion + CDC pipeline observability. Uses metrics exported by src/quality/monitors/freshness_monitor.py and src/quality/monitors/metrics_collector.py (scraped by Prometheus at the /metrics endpoint mounted in src/serving/api/main.py). The Pipeline Latency / SLA Compliance / Consumer Lag panels back the cdc-lag.md runbook directly. HTTP-level panels for api-5xx-spike.md and auth-401-spike.md live in the sibling dashboard agentflow-api-health.json — both counters (agentflow_http_requests_total + agentflow_auth_failures_total) are now exported by src/serving/api/middleware/metrics.py and src/serving/api/auth/middleware.py respectively.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,

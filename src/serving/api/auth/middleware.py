@@ -14,6 +14,7 @@ from fastapi import Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS, FAILED_AUTH_WINDOW_SECONDS
+from src.serving.api.metrics import AUTH_FAILURES
 from src.serving.api.security import redact_sensitive_headers
 from src.serving.duckdb_connection import connect_duckdb
 
@@ -45,6 +46,7 @@ class AuthMiddleware:
                 "yes",
             } or getattr(request.app.state, "auth_disabled", False):
                 return await call_next(request)
+            AUTH_FAILURES.labels(reason="key_file_empty").inc()
             return JSONResponse(
                 status_code=503,
                 content={
@@ -70,6 +72,7 @@ class AuthMiddleware:
                 path=path,
                 headers=request_headers,
             )
+            AUTH_FAILURES.labels(reason="rate_limited").inc()
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many failed authentication attempts from this IP."},
@@ -87,6 +90,13 @@ class AuthMiddleware:
                 path=path,
                 headers=request_headers,
             )
+            if is_throttled:
+                reason = "rate_limited"
+            elif api_key == "":
+                reason = "missing_key"
+            else:
+                reason = "invalid_key"
+            AUTH_FAILURES.labels(reason=reason).inc()
             return JSONResponse(
                 status_code=429 if is_throttled else 401,
                 content={
@@ -152,15 +162,18 @@ def require_admin_key(
     manager = get_auth_manager(request)
     client_ip = _client_ip(request)
     if manager.is_failed_auth_limited(client_ip):
+        AUTH_FAILURES.labels(reason="rate_limited").inc()
         raise HTTPException(
             status_code=429,
             detail="Too many failed authentication attempts from this IP.",
             headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)},
         )
     if not manager.admin_key:
+        AUTH_FAILURES.labels(reason="admin_unconfigured").inc()
         raise HTTPException(status_code=503, detail="Admin key is not configured.")
     if x_admin_key is None or not secrets.compare_digest(x_admin_key, manager.admin_key):
         manager.record_failed_auth(client_ip)
+        AUTH_FAILURES.labels(reason="admin_invalid").inc()
         raise HTTPException(status_code=401, detail="Invalid or missing admin key.")
     manager.clear_failed_auth(client_ip)
 
@@ -298,14 +311,18 @@ def usage_by_tenant(manager: AuthManager) -> list[dict]:
 
 
 def _is_exempt_path(path: str) -> bool:
+    # `/metrics` is mounted as a sub-app; Starlette redirects bare `/metrics`
+    # to `/metrics/`, so the trailing-slash variant must also be exempted or
+    # Prometheus scrapes are rejected with 401.
     return (
         path.startswith("/docs")
         or path.startswith("/openapi")
+        or path == "/metrics"
+        or path.startswith("/metrics/")
         or path
         in {
             "/health",
             "/v1/health",
-            "/metrics",
         }
     )
 

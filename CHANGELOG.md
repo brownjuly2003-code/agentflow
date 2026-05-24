@@ -4,6 +4,12 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-25
+
+Maintenance release. No runtime API changes; bundles documentation,
+CI hardening, repo hygiene, type-stub adoption, and Dependabot Tier A
+wave 2 dependency bumps that landed in sessions 11–19.
+
 ### Documentation
 
 - Top-level [`docs/SESSION_HANDOFF.md`](docs/SESSION_HANDOFF.md) — the

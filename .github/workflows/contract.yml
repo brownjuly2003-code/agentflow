@@ -13,6 +13,9 @@ on:
       - "tests/contract/**"
       - "tests/unit/test_contracts_in_sync.py"
       - ".github/workflows/contract.yml"
+      - "pyproject.toml"
+      - "sdk/pyproject.toml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "config/contracts/**"
@@ -25,6 +28,9 @@ on:
       - "tests/contract/**"
       - "tests/unit/test_contracts_in_sync.py"
       - ".github/workflows/contract.yml"
+      - "pyproject.toml"
+      - "sdk/pyproject.toml"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 jobs:

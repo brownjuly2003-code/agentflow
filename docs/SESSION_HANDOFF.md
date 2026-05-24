@@ -179,10 +179,18 @@ Session 18 worked around this with `gh pr merge --admin --squash` on
 SUCCESS on the rebased SHA. This is safe **only** because the run
 genuinely passed.
 
-**Better long-term fix** (not done yet, low priority): add
-`.github/workflows/**`, `infrastructure/terraform/**`, `sdk-ts/**`,
-and `Dockerfile*` to `contract.yml`'s `paths:` so the workflow
-triggers naturally on those PRs and `--admin` becomes unnecessary.
+**Partial long-term fix landed in session 18**: `contract.yml`
+`paths:` now also include `pyproject.toml`, `sdk/pyproject.toml`, and
+`.github/workflows/**`. So any deps-only PR (the session 16-17
+cascade pattern) and any workflow bump (the #17/#20 pattern) will
+trigger `contract` naturally. **Still not covered**:
+`infrastructure/terraform/**`, `sdk-ts/**`, `Dockerfile*` — these
+were left out because the contract suite is python schemathesis and
+does not actually exercise terraform/sdk-ts/Dockerfile, so triggering
+it there would burn CI time for no signal. For PRs that touch only
+those paths, `gh pr merge --admin --squash` after a manual
+`gh workflow run contract.yml --ref <branch>` SUCCESS remains the
+documented workaround.
 
 ## Where things live
 

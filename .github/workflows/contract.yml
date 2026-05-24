@@ -16,6 +16,9 @@ on:
       - "pyproject.toml"
       - "sdk/pyproject.toml"
       - ".github/workflows/**"
+      - "infrastructure/terraform/**"
+      - "sdk-ts/**"
+      - "Dockerfile*"
   pull_request:
     paths:
       - "config/contracts/**"
@@ -31,6 +34,9 @@ on:
       - "pyproject.toml"
       - "sdk/pyproject.toml"
       - ".github/workflows/**"
+      - "infrastructure/terraform/**"
+      - "sdk-ts/**"
+      - "Dockerfile*"
   workflow_dispatch:
 
 jobs:

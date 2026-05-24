@@ -4,6 +4,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Dependency resolver clash after the Dependabot merge cascade
+  (`#13 schemathesis 4.10 → 4.19` + `#22 pytest <9 → <10`). schemathesis
+  4.19 requires `pytest>=9`; `pytest-asyncio>=0.24,<1` capped pytest at
+  `<9` so the `contract` extra became unresolvable. Bumped to
+  `pytest-asyncio>=0.24,<2` so pytest-asyncio 1.3.0 (which supports
+  `pytest>=8.2,<10`) is installable. Same change was queued in
+  Dependabot PR #18; landing it directly here unblocks the Contract
+  Tests gate immediately.
+
 ### Added
 
 - `.github/dependabot.yml` covering seven ecosystems on a Monday 06:00

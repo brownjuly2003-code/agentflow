@@ -4,6 +4,23 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- On-call production incident runbooks in `docs/runbooks/`: index plus five
+  symptom-keyed playbooks (`api-5xx-spike.md`, `auth-401-spike.md`,
+  `cdc-lag.md`, `load-test-regression.md`, `release-rollback.md`). Each
+  follows the eight-section format (Symptom / Severity / Owner / Detection /
+  Triage / Mitigation / Resolution / Postmortem trigger) and references real
+  signals already in the codebase: Load Test gates from
+  `tests/load/thresholds.py`, the fail-closed auth path from
+  `src/serving/api/auth/middleware.py`, the v1.3.0 release surfaces
+  (`docs/dv2-multi-branch/RELEASE_STATUS.md`,
+  `.github/workflows/publish-pypi.yml`, `.github/workflows/publish-npm.yml`),
+  and the production CDC onboarding decision record in
+  `docs/operations/cdc-production-onboarding.md`. Severity ladder aligns with
+  `docs/operations/chaos-runbook.md` so paging behavior stays consistent
+  across all incident types.
+
 ## [1.3.0] - 2026-05-24
 
 ### Added

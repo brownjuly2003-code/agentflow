@@ -4,6 +4,15 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- `helm/agentflow` chart aligned to current release line:
+  `Chart.yaml` `appVersion` bumped `1.0.0` → `1.3.0`, default
+  `values.yaml` `image.tag` bumped `1.1.0` → `1.3.0`, and
+  `docs/helm-deployment.md` examples follow. Helm contract tests +
+  helm lint pass; operators who pin their own registry/tag via
+  `image.repository` / `image.tag` overrides are unaffected.
+
 ### Documentation
 
 - README refreshed to `v1.3.0` reality: release-gate badge bumped, the

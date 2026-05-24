@@ -27,12 +27,12 @@ The chart deploys the API only. Redis, Kafka, Prometheus, Grafana, Jaeger, and o
 
 ## Prepare an image
 
-The default chart values expect an image named `agentflow/api:1.1.0`.
+The default chart values expect an image named `agentflow/api:1.3.0`.
 
 If you are using Minikube, build or load an image before the install:
 
 ```bash
-minikube image load agentflow/api:1.1.0
+minikube image load agentflow/api:1.3.0
 ```
 
 If your CI publishes a different image, override `image.repository` and `image.tag`.
@@ -45,7 +45,7 @@ Use a dedicated values file for production secrets and tenant configuration:
 # values-prod.yaml
 image:
   repository: registry.example.com/agentflow/api
-  tag: "1.1.0"
+  tag: "1.3.0"
 
 secrets:
   create: false

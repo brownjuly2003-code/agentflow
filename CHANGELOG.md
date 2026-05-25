@@ -28,6 +28,55 @@ All notable changes to AgentFlow are documented in this file.
     `${DS_PROMETHEUS}` datasource template as `agentflow-pipeline-health.json`.
   - 9 new unit tests in `tests/unit/test_api_metrics.py` cover each
     counter branch and the `/metrics` exposure round trip.
+- 6 new unit tests in `tests/unit/test_cdc_connector_configs.py`
+  exercise `src.ingestion.connectors.{mysql_cdc,postgres_cdc}`
+  pure-Python config builders. Closes Kimi audit R4: both files
+  went from 0% to 100% combined (line+branch) unit coverage; total
+  `src.ingestion` rose 82% → ~85%. Tests pin the operational knobs
+  the `cdc-lag` runbook depends on (snapshot mode, heartbeat
+  interval, custom metric tags) so accidental drift fails the unit
+  step instead of surfacing as silent capture gap.
+
+### Changed
+
+- `.github/workflows/contract.yml` now triggers on
+  `infrastructure/terraform/**`, `sdk-ts/**`, and `Dockerfile*`
+  paths in addition to the existing src/sdk/pyproject/workflows
+  set. Closes Kimi audit R2 and removes the last remaining
+  `--admin merge` workaround from session 18 for changes outside
+  the Python tree.
+- `.github/workflows/ci.yml` main coverage gate
+  (`test-unit / Run unit and property tests with coverage`) now
+  passes `--cov-branch` so the existing `--cov-fail-under=60`
+  threshold catches conditional-branch regressions as well as
+  unexecuted lines. Local baseline measured before the change:
+  62% combined (7716 lines / 2010 branches across 510 tests), so
+  the 60% floor stays passing with a 2pp cushion. Closes Kimi
+  audit R5. The two per-file 90% gates (validators,
+  freshness_monitor) intentionally stay line-only.
+- `.github/workflows/container-attestation.yml` now runs on
+  `pull_request` events that touch `Dockerfile*` / `pyproject.toml`
+  / `requirements.txt` / the workflow file itself, via a new
+  `build-smoke` job that does `docker/build-push-action@v7` with
+  `push: false` + `load: true` + GHA layer cache. The existing
+  `build-push-sign-attest` + `attest-and-sign` jobs are gated
+  behind `github.event_name == 'workflow_dispatch'` so a PR can
+  never accidentally fire the ghcr.io push / cosign sign path.
+  Closes Kimi audit R6. A new
+  `test_container_attestation_workflow_runs_smoke_on_pull_request`
+  unit test asserts the trigger paths, the PR-event gate, and
+  push/load shape. Local Docker Desktop 29.4.0 smoke verified the
+  Dockerfile.api build itself succeeds (910 MB image in 181 s).
+- `src.processing.flink_jobs.*` no longer carries
+  `ignore_errors = true` in the mypy override. Suppressed only the
+  PyFlink-API quirks (`import-untyped`, `no-any-return`,
+  `no-untyped-call`) so real bugs are still caught. Three latent
+  type errors in `session_aggregation.py` (`from_snapshot` /
+  `process_event` passing `dict[str, object]` values straight into
+  `int()` / `float()`) fixed with `cast()` at the JSON boundary.
+  mypy is now clean on all 98 source files including
+  `checkpointing`, `session_aggregation`, `session_aggregator`,
+  `stream_processor`. Closes Kimi audit R7.
 
 ### Fixed
 

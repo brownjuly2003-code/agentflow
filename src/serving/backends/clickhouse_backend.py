@@ -3,12 +3,20 @@ from __future__ import annotations
 import base64
 import json
 import re
+import ssl
 from datetime import UTC, datetime, timedelta
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError, ServingBackend
+
+# Matches a single-quoted SQL string literal with embedded `''` escapes.
+# We mask matches before running ClickHouse-translation regexes (H-C2 /
+# audit_kimi_25_05_26) so a `::FLOAT` substring living inside a literal
+# does not get scrubbed by the dialect rewrites below.
+_SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+_LITERAL_PLACEHOLDER_FMT = "\x00CH_LIT_{idx}\x00"
 
 
 class ClickHouseBackend(ServingBackend):
@@ -33,6 +41,11 @@ class ClickHouseBackend(ServingBackend):
         self._timeout_seconds = timeout_seconds
         scheme = "https" if secure else "http"
         self._base_url = f"{scheme}://{host}:{port}"
+        # H-C2: when running against HTTPS, validate the server cert
+        # against the system trust store explicitly instead of relying on
+        # urllib's default (which on some Python builds disables hostname
+        # verification when no context is passed).
+        self._ssl_context = ssl.create_default_context() if secure else None
 
     def _request(self, sql: str, *, expect_json: bool) -> str:
         translated_sql = self._translate_sql(sql)
@@ -46,7 +59,14 @@ class ClickHouseBackend(ServingBackend):
             request.add_header("Authorization", f"Basic {token}")
 
         try:
-            with urlopen(request, timeout=self._timeout_seconds) as response:
+            # `context=` is only valid for HTTPS targets; passing it on HTTP
+            # urls under some Python stdlib versions raises TypeError, and
+            # passing it as an unconditional kwarg breaks test mocks. Build
+            # the call kwargs explicitly so HTTP paths stay parameter-clean.
+            urlopen_kwargs: dict = {"timeout": self._timeout_seconds}
+            if self._ssl_context is not None:
+                urlopen_kwargs["context"] = self._ssl_context
+            with urlopen(request, **urlopen_kwargs) as response:
                 decoded: str = response.read().decode("utf-8")
                 return decoded
         except HTTPError as exc:
@@ -60,7 +80,26 @@ class ClickHouseBackend(ServingBackend):
             raise BackendExecutionError(str(exc.reason)) from exc
 
     def _translate_sql(self, sql: str) -> str:
-        translated = sql.replace("NOW()", "now()")
+        # H-C2: extract string literals before running DuckDB→ClickHouse
+        # rewrites so a literal like `'price tag ::FLOAT'` is not corrupted
+        # by `::FLOAT` stripping or other bare-text regexes. The INTERVAL
+        # rewrite needs to see literals to match `INTERVAL '5 minutes'`,
+        # so we run it FIRST (against the raw SQL), then mask and apply
+        # the remaining substitutions, then restore the surviving literals.
+        translated = re.sub(
+            r"INTERVAL\s+'(\d+)\s+(minute|minutes|hour|hours|day|days)'",
+            lambda match: f"INTERVAL {match.group(1)} {match.group(2).rstrip('s').upper()}",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        literals: list[str] = []
+
+        def _mask(match: re.Match[str]) -> str:
+            literals.append(match.group(0))
+            return _LITERAL_PLACEHOLDER_FMT.format(idx=len(literals) - 1)
+
+        translated = _SQL_STRING_LITERAL_RE.sub(_mask, translated)
+        translated = translated.replace("NOW()", "now()")
         translated = translated.replace(" FALSE", " 0").replace(" TRUE", " 1")
         translated = re.sub(
             r"COUNT\(\*\)\s+FILTER\s+\(WHERE\s+(.+?)\)",
@@ -89,12 +128,8 @@ class ClickHouseBackend(ServingBackend):
             translated,
             flags=re.IGNORECASE,
         )
-        translated = re.sub(
-            r"INTERVAL\s+'(\d+)\s+(minute|minutes|hour|hours|day|days)'",
-            lambda match: f"INTERVAL {match.group(1)} {match.group(2).rstrip('s').upper()}",
-            translated,
-            flags=re.IGNORECASE,
-        )
+        for idx, literal in enumerate(literals):
+            translated = translated.replace(_LITERAL_PLACEHOLDER_FMT.format(idx=idx), literal)
         return translated
 
     def execute(self, sql: str, params: list | None = None) -> list[dict]:

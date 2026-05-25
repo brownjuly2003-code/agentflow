@@ -107,6 +107,26 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Security
 
+- `ClickHouseBackend._translate_sql` no longer corrupts user data
+  embedded in `'...'` SQL string literals. Before each bare-text
+  DuckDB→ClickHouse rewrite (the `::FLOAT`, `NOW()`, `COUNT(*)`,
+  `TRUE`/`FALSE`, `CAST(... AS FLOAT)` substitutions) all single-quoted
+  literals (including `''`-escaped quotes) are masked with sentinel
+  placeholders and restored after the rewrites. The `INTERVAL '...'`
+  rewrite still runs first against raw SQL so quoted intervals
+  continue to collapse. Closes part of Kimi audit H-C2 (literal
+  corruption vector). Seven regression tests in
+  `tests/unit/test_clickhouse_backend.py::TestTranslateSqlLiteralProtection`
+  pin the contract against `::FLOAT`, `NOW()`, `COUNT(*)`, `TRUE`,
+  `CAST(... AS FLOAT)`, and `''`-escape forms inside literals.
+- `ClickHouseBackend` HTTPS targets now validate the server cert
+  against the system trust store explicitly via
+  `ssl.create_default_context()` plumbed through to `urlopen`. Insecure
+  HTTP backends (default for local-compose) omit the context kwarg so
+  Python's `http.client` path is unchanged. Closes part of Kimi audit
+  H-C2 (no explicit HTTPS validation). Two regression tests cover the
+  secure (CERT_REQUIRED + check_hostname True) and insecure (`None`
+  context) paths.
 - `DuckDBBackend.table_columns()` and `DuckDBBackend.explain()` no
   longer splice arbitrary text into their f-string SQL paths. The
   former now matches an `_IDENTIFIER_RE` accepting either a bare

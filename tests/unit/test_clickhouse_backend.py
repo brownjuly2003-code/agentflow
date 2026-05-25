@@ -235,6 +235,81 @@ def test_secure_flag_switches_scheme_to_https():
     assert secure_backend._base_url == "https://ch.secure:8443"
 
 
+def test_secure_backend_builds_ssl_context_with_trust_store():
+    """H-C2 / audit_kimi_25_05_26: HTTPS targets must validate the server
+    cert against the system trust store explicitly, not rely on urllib's
+    default-no-context behaviour."""
+    secure_backend = ClickHouseBackend(
+        host="ch.secure",
+        port=8443,
+        user="u",
+        password="p",
+        database="db",
+        secure=True,
+    )
+    assert secure_backend._ssl_context is not None
+    # `create_default_context()` enables hostname verification + CERT_REQUIRED.
+    import ssl
+
+    assert secure_backend._ssl_context.verify_mode == ssl.CERT_REQUIRED
+    assert secure_backend._ssl_context.check_hostname is True
+
+
+def test_insecure_backend_omits_ssl_context(backend):
+    """Plain-HTTP backends must not attach an SSL context (mock-friendly,
+    matches the test signature used by the rest of this module)."""
+    assert backend._ssl_context is None
+
+
+class TestTranslateSqlLiteralProtection:
+    """H-C2: string-literal masking before dialect rewrites — bare regexes
+    must not corrupt user data embedded in `'...'` literals."""
+
+    def test_float_token_inside_literal_is_preserved(self, backend):
+        sql = "SELECT 'price tag ::FLOAT cents' FROM t"
+        translated = backend._translate_sql(sql)
+        assert "'price tag ::FLOAT cents'" in translated
+
+    def test_now_token_inside_literal_is_preserved(self, backend):
+        sql = "SELECT 'event=NOW() captured' AS note FROM t"
+        translated = backend._translate_sql(sql)
+        assert "'event=NOW() captured'" in translated
+        # The bare NOW() outside the literal would still be rewritten:
+        sql2 = "SELECT 'event=NOW() captured', NOW() FROM t"
+        translated2 = backend._translate_sql(sql2)
+        assert "'event=NOW() captured'" in translated2
+        assert "now()" in translated2
+
+    def test_count_star_inside_literal_is_preserved(self, backend):
+        sql = "SELECT 'metric=COUNT(*) total' AS lbl FROM t"
+        translated = backend._translate_sql(sql)
+        assert "'metric=COUNT(*) total'" in translated
+
+    def test_true_false_inside_literal_is_preserved(self, backend):
+        sql = "SELECT 'flag is TRUE always' AS note FROM t WHERE alive = TRUE"
+        translated = backend._translate_sql(sql)
+        assert "'flag is TRUE always'" in translated
+        assert "alive = 1" in translated
+
+    def test_cast_inside_literal_is_preserved(self, backend):
+        sql = "SELECT 'doc: CAST(x AS FLOAT)' AS note FROM t"
+        translated = backend._translate_sql(sql)
+        assert "'doc: CAST(x AS FLOAT)'" in translated
+
+    def test_escaped_quote_in_literal_does_not_break_masking(self, backend):
+        sql = "SELECT 'it''s ::FLOAT' AS note FROM t"
+        translated = backend._translate_sql(sql)
+        assert "'it''s ::FLOAT'" in translated
+
+    def test_interval_with_minutes_still_translates(self, backend):
+        # The INTERVAL rewrite runs BEFORE masking so quoted intervals still
+        # collapse to the bare ClickHouse INTERVAL N UNIT form.
+        sql = "SELECT * FROM t WHERE ts > NOW() - INTERVAL '15 minutes'"
+        translated = backend._translate_sql(sql)
+        assert "INTERVAL 15 MINUTE" in translated
+        assert "now()" in translated
+
+
 def test_scalar_returns_first_value_or_none(backend):
     payload = b'{"data":[{"only":42}]}'
     with patch(

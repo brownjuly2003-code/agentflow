@@ -58,17 +58,13 @@ class TestTableColumns:
             " orders ",
         ],
     )
-    def test_rejects_injection_payloads_silently(
-        self, backend: DuckDBBackend, name: str
-    ) -> None:
+    def test_rejects_injection_payloads_silently(self, backend: DuckDBBackend, name: str) -> None:
         # Reject path mirrors CatalogException — return an empty column set
         # rather than 500ing — so callers see a missing-table signal and the
         # f-string never sees the malformed input.
         assert backend.table_columns(name) == set()
 
-    def test_returns_empty_for_unknown_but_valid_identifier(
-        self, backend: DuckDBBackend
-    ) -> None:
+    def test_returns_empty_for_unknown_but_valid_identifier(self, backend: DuckDBBackend) -> None:
         assert backend.table_columns("does_not_exist") == set()
 
 

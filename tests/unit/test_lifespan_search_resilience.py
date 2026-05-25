@@ -32,6 +32,5 @@ def test_lifespan_survives_search_rebuild_failure(
             assert app.state.search_index_rebuild_task is not None
 
     assert any(
-        "search_index_initial_rebuild_failed" in record.getMessage()
-        for record in caplog.records
+        "search_index_initial_rebuild_failed" in record.getMessage() for record in caplog.records
     ), "expected a warning log entry naming the initial-rebuild failure"

@@ -55,7 +55,7 @@ integrations = [
     "llama-index-core>=0.12,<1",
 ]
 contract = [
-    "schemathesis==4.19.0",
+    "schemathesis==4.20.0",
 ]
 dev = [
     "bandit>=1.9,<2",

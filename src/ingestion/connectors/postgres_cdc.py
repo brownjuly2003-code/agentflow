@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass
 
-_CONNECT_SECRET_KEY = "pass" + "word"
+# Identifier of the password field inside the Kafka Connect external
+# secret file (`${file:/path:<key>}` syntax). Not a credential — it's
+# the property key name expected by Connect's FileConfigProvider.
+_CONNECT_SECRET_KEY = "password"  # noqa: S105 - property key name, not a value
 _POSTGRES_SECRET_REF = f"${{file:/opt/connect/secrets/postgres.properties:{_CONNECT_SECRET_KEY}}}"
 
 

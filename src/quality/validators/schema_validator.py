@@ -51,7 +51,7 @@ _CDC_SOURCES = {"postgres_cdc", "mysql_cdc"}
 
 def _get_model_for_event(event_type: str) -> type[BaseModel] | None:
     for prefix, model in _SCHEMA_MAP.items():
-        if event_type.startswith(prefix) or event_type == prefix:
+        if event_type.startswith(prefix):
             return model
     return None
 

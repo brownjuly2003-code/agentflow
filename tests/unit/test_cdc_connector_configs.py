@@ -42,10 +42,11 @@ def test_postgres_connector_keeps_passwords_in_secret_references():
     payload = AGENTFLOW_POSTGRES_CDC.to_connect_config()
     secret_ref = payload["config"]["database.password"]
     # The reference must point at the secrets file rather than embed a
-    # literal password. Splitting the literal "password" via concatenation
-    # in postgres_cdc.py is intentional so secret-scanners don't flag it.
+    # literal password. The `password` token here is the *key name* inside
+    # the Kafka Connect FileConfigProvider properties file, not a value
+    # (see `_CONNECT_SECRET_KEY` in postgres_cdc.py).
     assert secret_ref.startswith("${file:/opt/connect/secrets/postgres.properties:")
-    assert "password" in secret_ref  # the key the file holds, not a value
+    assert secret_ref.endswith(":password}")
 
 
 def test_postgres_connector_respects_overridden_tasks_max():
@@ -93,7 +94,24 @@ def test_mysql_connector_keeps_passwords_in_secret_references():
     payload = AGENTFLOW_MYSQL_CDC.to_connect_config()
     secret_ref = payload["config"]["database.password"]
     assert secret_ref.startswith("${file:/opt/connect/secrets/mysql.properties:")
-    assert "password" in secret_ref
+    assert secret_ref.endswith(":password}")
+
+
+def test_mysql_server_id_overridable_via_env(monkeypatch):
+    """L-C2: the default `database.server.id` must be overridable via env so
+    parallel Debezium instances cannot collide on the replication stream
+    (each instance MUST advertise a unique server.id to MySQL)."""
+
+    from src.ingestion.connectors import mysql_cdc
+
+    monkeypatch.setenv("AGENTFLOW_MYSQL_SERVER_ID", "987654")
+    assert mysql_cdc._resolve_mysql_server_id() == 987654
+
+    monkeypatch.setenv("AGENTFLOW_MYSQL_SERVER_ID", "not-an-int")
+    assert mysql_cdc._resolve_mysql_server_id() == mysql_cdc.DEFAULT_MYSQL_SERVER_ID
+
+    monkeypatch.delenv("AGENTFLOW_MYSQL_SERVER_ID")
+    assert mysql_cdc._resolve_mysql_server_id() == mysql_cdc.DEFAULT_MYSQL_SERVER_ID
 
 
 def test_mysql_connector_respects_overridden_tasks_max():

@@ -127,6 +127,28 @@ All notable changes to AgentFlow are documented in this file.
   against an injection corpus (semicolons, comments, UNION,
   numeric-prefix names, dot-pathology, whitespace) plus
   `main.orders` and `"acme"."orders_v2"` legitimate paths.
+- Debezium MySQL connector default `database.server.id` is now
+  overridable via the `AGENTFLOW_MYSQL_SERVER_ID` env var. Each running
+  Debezium instance MUST advertise a unique `server.id` to MySQL — the
+  prior hard-coded `223345` would collide on the replication stream the
+  moment a second instance came up against the same source. Default
+  preserved as `DEFAULT_MYSQL_SERVER_ID = 223345` so existing
+  deployments are unchanged. Closes Kimi audit L-C2. Regression test
+  `test_mysql_server_id_overridable_via_env` covers env override,
+  invalid-int fallback, and unset-env fallback.
+- `_CONNECT_SECRET_KEY` in `src/ingestion/connectors/{mysql,postgres}_cdc.py`
+  is now the literal `"password"` (with `# noqa: S105` documenting that
+  it is a property *key name* inside the Kafka Connect
+  `FileConfigProvider` `${file:/path:<key>}` syntax, not a credential).
+  The previous `"pass" + "word"` concatenation was security through
+  obscurity — bytecode collapses the expression and string scanners
+  still see the result. Closes Kimi audit L-C1.
+- Redundant `event_type == prefix` clauses dropped from
+  `src/quality/validators/{schema,semantic}_validator.py`. Python's
+  `str.startswith(prefix)` already returns True for the exact-equality
+  case (`"order.".startswith("order.")`), so the `or event_type == prefix`
+  branch could never fire when the prefix was a non-empty string.
+  Closes Kimi audit L-C3.
 - `AuthManager` no longer grows its `_rate_windows`,
   `_failed_auth_windows`, and `_runtime_plaintext_by_hash` dictionaries
   unbounded. A new `_sweep_expired_windows()` helper drops entries

@@ -172,7 +172,7 @@ def validate_semantics(event: dict) -> SemanticResult:
     all_issues: list[SemanticIssue] = []
 
     for prefix, rules in _RULES.items():
-        if event_type.startswith(prefix) or event_type == prefix:
+        if event_type.startswith(prefix):
             for rule_fn in rules:
                 all_issues.extend(rule_fn(event))
 

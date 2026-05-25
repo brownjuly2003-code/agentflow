@@ -105,6 +105,43 @@ All notable changes to AgentFlow are documented in this file.
   M-C1. Regression test:
   `tests/unit/test_lifespan_search_resilience.py::test_lifespan_survives_search_rebuild_failure`.
 
+### Security
+
+- `DuckDBBackend.table_columns()` and `DuckDBBackend.explain()` no
+  longer splice arbitrary text into their f-string SQL paths. The
+  former now matches an `_IDENTIFIER_RE` accepting either a bare
+  `identifier` / `schema.identifier` or a double-quoted DuckDB
+  identifier (`"name"` / `"schema"."name"` — the form produced by
+  `SQLBuilderMixin._quote_identifier` for tenant-scoped tables; CX
+  P1-caught regression — quoted forms must pass through or
+  `_qualify_table`'s tenant fail-closed check silently breaks). Inside
+  double quotes any character is legal except a lone `"`; `""` is the
+  DuckDB-escaped form of an embedded quote. Inputs failing both
+  alternatives return an empty column set, mirroring the
+  `CatalogException` branch so callers see a missing-table signal
+  rather than a 500. The latter parses its input through `sqlglot`
+  (DuckDB dialect) and rejects multi-statement or non-`SELECT`
+  payloads with `BackendExecutionError` before the `EXPLAIN` wrapper
+  runs. Closes Kimi audit H-C1. 13 new regression tests in
+  `tests/unit/test_duckdb_backend_sql_hardening.py` pin both paths
+  against an injection corpus (semicolons, comments, UNION,
+  numeric-prefix names, dot-pathology, whitespace) plus
+  `main.orders` and `"acme"."orders_v2"` legitimate paths.
+- `AuthManager` no longer grows its `_rate_windows`,
+  `_failed_auth_windows`, and `_runtime_plaintext_by_hash` dictionaries
+  unbounded. A new `_sweep_expired_windows()` helper drops entries
+  whose entire window has aged past the configured cutoff and runs (a)
+  on every config reload under `_config_lock`, and (b) opportunistically
+  on every successful `clear_failed_auth` call (the post-auth hot path
+  is cheap and bounds growth between reloads). `load()` also purges
+  cached plaintext-by-hash entries for hashes that no longer appear in
+  the live `_hashed_keys` list, so a revoked/rotated key's plaintext
+  cannot remain pinned in memory across reloads. Closes Kimi audit
+  H-C4. Regression tests in
+  `tests/unit/test_auth_manager_memory_bounds.py` cover the sweep on
+  load, the sweep on clear, the plaintext cache purge, and idempotency
+  on empty state.
+
 ## [1.4.0] - 2026-05-25
 
 Maintenance release. No runtime API changes; bundles documentation,

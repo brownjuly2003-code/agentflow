@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 import duckdb
+import sqlglot
+from sqlglot import exp
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError, ServingBackend
 from src.serving.db_pool import DuckDBPool
 from src.serving.duckdb_connection import connect_duckdb
+
+# Strict identifier validation for f-string SQL paths (H-C1 / audit_kimi_25_05_26).
+# Accepts either a bare DuckDB identifier (`name` or `schema.name`) or a
+# double-quoted identifier (`"name"` / `"schema"."name"`), the form produced
+# by `SQLBuilderMixin._quote_identifier` for tenant-scoped tables. Inside
+# double quotes any character is legal except a lone `"` — `""` is the
+# DuckDB-escaped form of an embedded quote. Bare-identifier injection
+# payloads (`"; DROP TABLE`, `WHERE 1=1`, `--`) all fail to match either
+# alternative.
+_IDENTIFIER_PART = r'(?:[A-Za-z_][A-Za-z0-9_]*|"(?:[^"]|"")+")'
+_IDENTIFIER_RE = re.compile(rf"^{_IDENTIFIER_PART}(?:\.{_IDENTIFIER_PART})?$")
 
 
 class DuckDBBackend(ServingBackend):
@@ -67,9 +81,15 @@ class DuckDBBackend(ServingBackend):
         return row[0]
 
     def table_columns(self, table_name: str) -> set[str]:
+        # H-C1: reject anything that is not a bare identifier or `schema.identifier`.
+        # The f-string SQL path means a malformed name would otherwise be
+        # interpolated raw into the query — caller should already pass a
+        # catalog-resolved name, but enforce the invariant in code.
+        if not _IDENTIFIER_RE.match(table_name):
+            return set()
         try:
             with self.read_connection() as conn:
-                conn.execute(f"SELECT * FROM {table_name} LIMIT 0")  # nosec B608 - table names come from internal catalog/config lookups
+                conn.execute(f"SELECT * FROM {table_name} LIMIT 0")  # nosec B608 - identifier validated above
                 return {desc[0] for desc in conn.description}
         except duckdb.CatalogException:
             return set()
@@ -77,9 +97,20 @@ class DuckDBBackend(ServingBackend):
             raise BackendExecutionError(str(exc)) from exc
 
     def explain(self, sql: str) -> list[tuple]:
+        # H-C1: require the input to parse as a single SELECT statement
+        # before splicing it into `EXPLAIN <sql>`. The semantic layer's
+        # NL-to-SQL pipeline already validates via `sql_guard.validate_nl_sql`,
+        # but `explain()` is also reachable from other call sites and must
+        # not be a back-door for `EXPLAIN ; DROP TABLE ...` style injection.
+        try:
+            statements = sqlglot.parse(sql, dialect="duckdb")
+        except sqlglot.errors.ParseError as exc:
+            raise BackendExecutionError(f"Unparseable SQL: {exc}") from exc
+        if len(statements) != 1 or not isinstance(statements[0], exp.Select):
+            raise BackendExecutionError("EXPLAIN only supports a single SELECT statement")
         try:
             with self.read_connection() as conn:
-                return conn.execute(f"EXPLAIN {sql}").fetchall()
+                return conn.execute(f"EXPLAIN {sql}").fetchall()  # nosec B608 - statement validated above
         except duckdb.CatalogException as exc:
             raise BackendMissingTableError(str(exc)) from exc
         except duckdb.Error as exc:

@@ -200,6 +200,18 @@ class AuthManager:
                 list,
                 {key: self._rate_windows.get(key, []) for key in self.keys_by_value},
             )
+            # H-C4: drop cached plaintext entries for hashes that no longer
+            # exist after this reload (revoked/rotated keys). Without this the
+            # `_runtime_plaintext_by_hash` cache grows unbounded across the
+            # lifetime of the process — every accepted hashed key ever
+            # validated remains in memory even after the key was removed.
+            live_hashes = {item.key_hash for item in self._hashed_keys if item.key_hash}
+            self._runtime_plaintext_by_hash = {
+                hsh: plain
+                for hsh, plain in self._runtime_plaintext_by_hash.items()
+                if hsh in live_hashes
+            }
+            self._sweep_expired_windows()
         from src.serving.api import auth as auth_package
 
         auth_package.logger.info(
@@ -207,6 +219,30 @@ class AuthManager:
             path=str(self.api_keys_path) if self.api_keys_path else "env_only",
             keys=self.configured_key_count,
         )
+
+    def _sweep_expired_windows(self) -> None:
+        # H-C4: opportunistic GC for the per-key/per-IP rate-limit and
+        # failed-auth dicts. Entries created for a one-shot caller (e.g.
+        # short-lived CI tenant, scanned IP) otherwise live forever; this
+        # removes any window whose timestamps have all fallen out of the
+        # cutoff. Safe to call from the config-lock-holding `load()` and
+        # from the `clear_failed_auth` hot path (cheap O(n_keys * window)).
+        now = self.time_source()
+        rate_cutoff = now - DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+        for key in list(self._rate_windows):
+            window = [stamp for stamp in self._rate_windows[key] if stamp > rate_cutoff]
+            if window:
+                self._rate_windows[key] = window
+            else:
+                self._rate_windows.pop(key, None)
+        failed_cutoff = now - FAILED_AUTH_WINDOW_SECONDS
+        for client_ip in list(self._failed_auth_windows):
+            stamps = self._failed_auth_windows[client_ip]
+            window = [stamp for stamp in stamps if stamp > failed_cutoff]
+            if window:
+                self._failed_auth_windows[client_ip] = window
+            else:
+                self._failed_auth_windows.pop(client_ip, None)
 
     def reload(self, *_: object) -> None:
         self.load()
@@ -314,6 +350,10 @@ class AuthManager:
 
     def clear_failed_auth(self, client_ip: str) -> None:
         self._failed_auth_windows.pop(client_ip, None)
+        # H-C4: piggy-back an opportunistic sweep on every successful auth.
+        # Successful auth is on the hot path but cheap, and it bounds growth
+        # of the per-IP dict between explicit reloads.
+        self._sweep_expired_windows()
 
     def is_entity_allowed(self, tenant_key: TenantKey, entity_type: str) -> bool:
         if tenant_key.allowed_entity_types is None:

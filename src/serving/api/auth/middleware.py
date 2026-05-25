@@ -257,6 +257,7 @@ def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> 
         "key_id": tenant_key.key_id,
         "key_slot": tenant_key.matched_slot,
     }
+    inserted = False
     for attempt in range(10):
         try:
             conn = connect_duckdb(manager.db_path)
@@ -280,14 +281,28 @@ def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> 
                     tenant_key.matched_slot,
                 ],
             )
-            manager.audit_publisher.publish(payload)
-            return
+            inserted = True
+            break
         except duckdb.Error:
             if attempt == 9:
                 raise
             time.sleep(0.01 * (attempt + 1))
         finally:
             conn.close()
+
+    # Audit publish is intentionally outside the DB retry loop: a publish
+    # failure must not trigger another INSERT (H-C3 / audit_kimi_25_05_26).
+    if inserted:
+        try:
+            manager.audit_publisher.publish(payload)
+        except Exception:
+            structlog.get_logger(__name__).warning(
+                "audit_publish_failed",
+                tenant=tenant_key.tenant,
+                endpoint=endpoint,
+                key_id=tenant_key.key_id,
+                exc_info=True,
+            )
 
 
 def usage_by_tenant(manager: AuthManager) -> list[dict]:

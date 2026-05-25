@@ -122,7 +122,14 @@ async def lifespan(app: FastAPI):
         catalog=app.state.catalog,
         query_engine=app.state.query_engine,
     )
-    app.state.search_index.rebuild()
+    # Search rebuild must not block API startup: catalogue/query backend
+    # transient failures should leave the rest of the surface online with
+    # degraded search rather than crash the lifespan (M-C1 /
+    # audit_kimi_25_05_26).
+    try:
+        app.state.search_index.rebuild()
+    except Exception:
+        logger.warning("search_index_initial_rebuild_failed", exc_info=True)
     app.state.search_index_rebuild_task = asyncio.create_task(
         app.state.search_index.rebuild_periodically(interval_seconds=60)
     )

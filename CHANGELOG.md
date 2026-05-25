@@ -86,6 +86,24 @@ All notable changes to AgentFlow are documented in this file.
   exempt set in `_is_exempt_path` only matched the bare path; widened
   to cover both `/metrics` and any `/metrics/...` sub-path so scrapes
   succeed without disabling auth.
+- `record_usage` in `src/serving/api/auth/middleware.py` no longer
+  re-INSERTs an `api_usage` row when `audit_publisher.publish()`
+  fails. The DuckDB insert is now retried in isolation; the audit
+  publish runs exactly once after a successful insert and a publish
+  failure is logged as `audit_publish_failed` instead of re-driving
+  the retry loop. Closes Kimi audit H-C3. Two regression tests in
+  `tests/unit/test_audit_publisher.py` pin the contract:
+  `test_record_usage_no_duplicate_insert_when_publish_raises` and
+  `test_record_usage_skips_publish_when_all_inserts_fail`.
+- The lifespan-time `SearchIndex.rebuild()` call in
+  `src/serving/api/main.py` is now wrapped so a catalog/query-engine
+  failure during initial index build leaves the API up with a
+  warning (`search_index_initial_rebuild_failed`) instead of
+  aborting startup. The 60-second periodic rebuilder (which already
+  catches its own exceptions) is still scheduled, so the search
+  surface can recover without a process restart. Closes Kimi audit
+  M-C1. Regression test:
+  `tests/unit/test_lifespan_search_resilience.py::test_lifespan_survives_search_rebuild_failure`.
 
 ## [1.4.0] - 2026-05-25
 

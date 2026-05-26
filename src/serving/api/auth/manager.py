@@ -265,7 +265,7 @@ class AuthManager:
             auth_package.logger.warning("api_keys_signal_handler_skipped", reason="not_main_thread")
 
     def ensure_usage_table(self) -> None:
-        from .middleware import ensure_usage_table
+        from .usage_table import ensure_usage_table
 
         ensure_usage_table(self)
 
@@ -361,7 +361,7 @@ class AuthManager:
         return entity_type in tenant_key.allowed_entity_types
 
     def record_usage(self, tenant_key: TenantKey, endpoint: str) -> None:
-        from .middleware import record_usage
+        from .usage_table import record_usage
 
         record_usage(self, tenant_key, endpoint)
 
@@ -369,7 +369,7 @@ class AuthManager:
         return self._key_rotator.list_keys_with_usage()
 
     def usage_by_tenant(self) -> list[dict]:
-        from .middleware import usage_by_tenant
+        from .usage_table import usage_by_tenant
 
         return usage_by_tenant(self)
 

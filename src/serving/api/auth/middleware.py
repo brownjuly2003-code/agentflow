@@ -3,12 +3,9 @@ from __future__ import annotations
 import os
 import re
 import secrets
-import time
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from typing import cast
 
-import duckdb
 import structlog
 from fastapi import Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -16,9 +13,8 @@ from fastapi.responses import JSONResponse
 from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS, FAILED_AUTH_WINDOW_SECONDS
 from src.serving.api.metrics import AUTH_FAILURES
 from src.serving.api.security import redact_sensitive_headers
-from src.serving.duckdb_connection import connect_duckdb
 
-from .manager import _CURRENT_TENANT_ID, AuthManager, TenantKey, get_auth_manager
+from .manager import _CURRENT_TENANT_ID, TenantKey, get_auth_manager
 
 
 class AuthMiddleware:
@@ -187,142 +183,6 @@ def require_auth(request: Request) -> TenantKey:
 
 def build_auth_middleware() -> AuthMiddleware:
     return AuthMiddleware()
-
-
-def ensure_usage_table(manager: AuthManager) -> None:
-    for attempt in range(10):
-        try:
-            conn = connect_duckdb(manager.db_path)
-        except duckdb.IOException as exc:
-            if (
-                os.getenv("AGENTFLOW_USAGE_DB_PATH") is None
-                and manager.db_path.name == "agentflow_api.duckdb"
-            ):
-                from src.serving.api import auth as auth_package
-
-                fallback_path = (
-                    Path(os.getenv("TEMP", "."))
-                    / f"agentflow_api_{os.getpid()}_{time.time_ns()}.duckdb"
-                )
-                auth_package.logger.warning(
-                    "usage_db_path_fallback",
-                    original=str(manager.db_path),
-                    fallback=str(fallback_path),
-                    error=str(exc),
-                )
-                manager.db_path = fallback_path
-                conn = connect_duckdb(manager.db_path)
-            else:
-                if attempt == 9:
-                    raise
-                time.sleep(0.01 * (attempt + 1))
-                continue
-        except duckdb.Error:
-            if attempt == 9:
-                raise
-            time.sleep(0.01 * (attempt + 1))
-            continue
-
-        try:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS api_usage (
-                    tenant TEXT,
-                    key_name TEXT,
-                    endpoint TEXT,
-                    ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            columns = {row[1] for row in conn.execute("PRAGMA table_info('api_usage')").fetchall()}
-            if "key_id" not in columns:
-                conn.execute("ALTER TABLE api_usage ADD COLUMN key_id TEXT")
-            if "key_slot" not in columns:
-                conn.execute("ALTER TABLE api_usage ADD COLUMN key_slot TEXT")
-            return
-        except duckdb.Error:
-            if attempt == 9:
-                raise
-            time.sleep(0.01 * (attempt + 1))
-        finally:
-            conn.close()
-
-
-def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> None:
-    payload = {
-        "event_type": "api_usage",
-        "tenant": tenant_key.tenant,
-        "key_name": tenant_key.name,
-        "endpoint": endpoint,
-        "key_id": tenant_key.key_id,
-        "key_slot": tenant_key.matched_slot,
-    }
-    inserted = False
-    for attempt in range(10):
-        try:
-            conn = connect_duckdb(manager.db_path)
-        except duckdb.Error:
-            if attempt == 9:
-                raise
-            time.sleep(0.01 * (attempt + 1))
-            continue
-
-        try:
-            conn.execute(
-                """
-                INSERT INTO api_usage (tenant, key_name, endpoint, key_id, key_slot)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                [
-                    tenant_key.tenant,
-                    tenant_key.name,
-                    endpoint,
-                    tenant_key.key_id,
-                    tenant_key.matched_slot,
-                ],
-            )
-            inserted = True
-            break
-        except duckdb.Error:
-            if attempt == 9:
-                raise
-            time.sleep(0.01 * (attempt + 1))
-        finally:
-            conn.close()
-
-    # Audit publish is intentionally outside the DB retry loop: a publish
-    # failure must not trigger another INSERT (H-C3 / audit_kimi_25_05_26).
-    if inserted:
-        try:
-            manager.audit_publisher.publish(payload)
-        except Exception:
-            structlog.get_logger(__name__).warning(
-                "audit_publish_failed",
-                tenant=tenant_key.tenant,
-                endpoint=endpoint,
-                key_id=tenant_key.key_id,
-                exc_info=True,
-            )
-
-
-def usage_by_tenant(manager: AuthManager) -> list[dict]:
-    conn = connect_duckdb(manager.db_path)
-    try:
-        rows = conn.execute(
-            """
-            SELECT tenant, COUNT(*) AS requests_last_24h
-            FROM api_usage
-            WHERE ts >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-            GROUP BY tenant
-            ORDER BY tenant
-            """
-        ).fetchall()
-    finally:
-        conn.close()
-    return [
-        {"tenant": tenant, "requests_last_24h": requests_last_24h}
-        for tenant, requests_last_24h in rows
-    ]
 
 
 def _is_exempt_path(path: str) -> bool:

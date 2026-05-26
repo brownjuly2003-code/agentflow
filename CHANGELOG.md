@@ -4,6 +4,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- New module `src/serving/api/auth/usage_table.py` holds
+  `ensure_usage_table` / `record_usage` / `usage_by_tenant`, which used
+  to live alongside the ASGI middleware in
+  `src/serving/api/auth/middleware.py`. Closes Kimi audit L-C4
+  ("DB utilities don't belong in a middleware file"). Public callers
+  go through `AuthManager.*` shim methods unchanged; the only direct
+  importer was `tests/unit/test_audit_publisher.py`, repointed to the
+  new module. Middleware drops four dead imports (`duckdb`, `time`,
+  `pathlib.Path`, `AuthManager`).
+
 ### Performance
 
 - `scripts/perf/auth_bench.py` + `docs/perf/auth-bench-2026-05-26.md`

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.serving.api.auth.manager import AuthManager, TenantKey
-from src.serving.api.auth.middleware import ensure_usage_table, record_usage
+from src.serving.api.auth.usage_table import ensure_usage_table, record_usage
 from src.serving.audit_publisher import HashChainedFileAuditPublisher, verify_hash_chain
 
 
@@ -112,9 +112,9 @@ def test_record_usage_skips_publish_when_all_inserts_fail(
 
     import duckdb
 
-    from src.serving.api.auth import middleware as middleware_module
+    from src.serving.api.auth import usage_table as usage_table_module
 
-    real_connect = middleware_module.connect_duckdb
+    real_connect = usage_table_module.connect_duckdb
     call_count = {"n": 0}
 
     class _InsertFailingConn:
@@ -133,9 +133,9 @@ def test_record_usage_skips_publish_when_all_inserts_fail(
         call_count["n"] += 1
         return _InsertFailingConn(real_connect(db_path))
 
-    monkeypatch.setattr(middleware_module, "connect_duckdb", _always_fail_insert)
+    monkeypatch.setattr(usage_table_module, "connect_duckdb", _always_fail_insert)
     # Also speed up the retry loop so the test does not spend ~0.55s sleeping.
-    monkeypatch.setattr(middleware_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(usage_table_module.time, "sleep", lambda _seconds: None)
 
     with pytest.raises(duckdb.Error):
         record_usage(manager, tenant_key, "/v1/entity/order")

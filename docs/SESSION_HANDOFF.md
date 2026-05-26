@@ -93,9 +93,9 @@ Audit file itself stays in the repo root for reference. Sessions
 | L-C1 `"pass"+"word"` obfuscation | closed s24 | `bbc9827` | renamed to `"password"` + `# noqa: S105` |
 | L-C2 hardcoded MySQL server.id | closed s24 | `bbc9827` | `AGENTFLOW_MYSQL_SERVER_ID` env override |
 | L-C3 redundant `or event_type == prefix` | closed s24 | `bbc9827` | both validators |
-| L-C4 DB utils in middleware file | DEFERRED | — | stylistic refactor (module-organization) — pure cosmetic, no behaviour change |
+| L-C4 DB utils in middleware file | closed s26 | new `src/serving/api/auth/usage_table.py` | `ensure_usage_table` / `record_usage` / `usage_by_tenant` extracted (~135 LOC); middleware drops 4 dead imports (`duckdb`, `time`, `pathlib.Path`, `AuthManager`); manager lazy imports + test_audit_publisher monkeypatch sites repointed; 543/543 unit green |
 | R8 stale `coverage.xml` | closed s22 | `64252d3` | file deleted locally (was always in `.gitignore:43`, audit read stale state) |
-| R9 `.tmp/` cleanup | OPEN-housekeeping | — | hundreds of pytest-basetemp dirs accumulate; not in `.gitignore` for that path. Cheap to address |
+| R9 `.tmp/` cleanup | non-issue | — | audit claim "not in `.gitignore` for that path" is false — `.gitignore:53` covers `.tmp/`. Accumulation is local-disk-only and pytest-basetemp managed; treat as `git clean -fdx .tmp/` housekeeping, not a repo gap |
 | R10 `node_modules/` in root | non-issue | — | already in `.gitignore:62`, untracked — audit read stale state |
 
 **Next audit-driven session is unblocked on:** none of the deferred

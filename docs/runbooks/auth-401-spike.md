@@ -1,6 +1,6 @@
 # Auth 401/403 Spike
 
-**Last updated:** 2026-05-24
+**Last updated:** 2026-05-26
 
 ## Symptom
 
@@ -141,3 +141,28 @@ plaintext keys (verified in security boundary work `1c24e58` / `e8b1237`).
   The `/v1/health` exemption is intentional but it masks total-auth-failure
   from naive uptime monitors; the postmortem should produce a synthetic auth
   probe alert if one is not already wired up.
+
+## Hashed-key sizing guidance (M-C4 perf-baseline)
+
+`AuthManager.authenticate()` iterates `_hashed_keys` linearly, calling
+`bcrypt.checkpw` on each. At production `bcrypt_rounds=12`, each verify
+costs ≈ 400 ms on a modern x86 CPU; the per-process steady state is
+saved by the plaintext cache at
+[`src/serving/api/auth/manager.py:284`](../../src/serving/api/auth/manager.py#L284)
+(first auth populates `keys_by_value` so subsequent auths take the
+microsecond `compare_digest` path).
+
+The cold path is still O(N × 400 ms): every process restart and every
+SIGHUP reload pays the full cost on the first auth per key. **Soft cap:
+keep `_hashed_keys` ≤ 10 per AuthManager instance**.
+
+- N=5: hit-last p95 ≈ 1.9 s
+- N=20: hit-last p95 ≈ 8.1 s → exceeds the 1100 ms POST load gate
+  (`tests/load/thresholds.py`)
+
+If a tenant config legitimately needs > 10 hashed keys, file an issue
+referencing this section — the long-term fix is a hash-format swap
+(argon2id with a deterministic peppered prefix) so we can index the
+lookup, but bcrypt's self-salting precludes a same-format optimisation.
+
+Full bench: [`docs/perf/auth-bench-2026-05-26.md`](../perf/auth-bench-2026-05-26.md).

@@ -88,8 +88,8 @@ Audit file itself stays in the repo root for reference. Sessions
 | M-C1 search rebuild crash | closed s22 | `64252d3` | lifespan rebuild wrapped, periodic still scheduled |
 | M-C2 SessionAggregator per-event | DEFERRED | — | Flink hot-path; gated behind PR #23 Flink 2.x wait-for-upstream |
 | M-C3 double `json.loads` Flink | DEFERRED | — | same gate as M-C2 |
-| M-C4 O(n) hashed key auth | DEFERRED | — | needs perf-baseline measurement before data-structure rewrite |
-| M-C5 O(n) rate window trimming | DEFERRED | — | same gate as M-C4; `_sweep_expired_windows` from s23 partially mitigates unbounded growth, but trim cost per call is still O(n) |
+| M-C4 O(n) hashed key auth | partial s26 | `docs/perf/auth-bench-2026-05-26.md` | Measured: bcrypt-12 N=20 hit-last p95 = 8146 ms (exceeds 1100 ms load gate). Steady-state mitigated by plaintext cache (`manager.py:284`) + failed-auth backoff. Cold-start / SIGHUP / DoS remain; ≤ 10 hashed-key guidance documented. Rewrite needs hash-format swap — out of scope |
+| M-C5 O(n) rate window trimming | closed s26 | `docs/perf/auth-bench-2026-05-26.md` | Measured: 6 μs p95 at W=120 (default), 0.45 ms p95 at W=10000 pathological. Constant factor (list-comp on floats) makes O(n) invisible at realistic scale. Ring-buffer rewrite skipped — gains negligible vs added complexity |
 | L-C1 `"pass"+"word"` obfuscation | closed s24 | `bbc9827` | renamed to `"password"` + `# noqa: S105` |
 | L-C2 hardcoded MySQL server.id | closed s24 | `bbc9827` | `AGENTFLOW_MYSQL_SERVER_ID` env override |
 | L-C3 redundant `or event_type == prefix` | closed s24 | `bbc9827` | both validators |
@@ -99,10 +99,11 @@ Audit file itself stays in the repo root for reference. Sessions
 | R10 `node_modules/` in root | non-issue | — | already in `.gitignore:62`, untracked — audit read stale state |
 
 **Next audit-driven session is unblocked on:** none of the deferred
-items require autonomous further work in this codebase; M-C4/M-C5
-need a perf-baseline run (e.g. against the existing `tests/load/`
-locust harness or a fresh microbench), and M-C2/M-C3 need Flink 2.x
-to ship a compatible kafka connector JAR. Pick up H-C2 full sqlglot
+items require autonomous further work in this codebase. M-C2/M-C3
+need Flink 2.x to ship a compatible kafka connector JAR (PR #23
+wait-for-upstream). M-C4 has documented guidance (≤ 10 hashed-key
+soft cap, plaintext cache + failed-auth backoff handle steady-state)
+and a rewrite needs the hash-format swap. Pick up H-C2 full sqlglot
 transpile only when integration coverage against a live ClickHouse
 is available — masking + HTTPS cert validation already address the
 two security concerns the audit raised.
@@ -254,7 +255,7 @@ All seven sessions shipped to `main` between 2026-05-24 evening and
 
 | Session | SHAs | Theme |
 |---------|------|-------|
-| **26** | `dc74bd1` (handoff), `d674afa` (#25), `6a30ac7` (#26), `69fd3b3` (#29), `d92938e` (#30), `2322916` (lint catch-up), `d249448` (#27), `da52ca1` (#28) | Tier A Dependabot wave 3 + push of sessions 22–25 audit closures. Pushed the 5-commit audit stack to `origin/main` (`64252d3`, `356715e`, `bbc9827`, `8198af4`, `dc74bd1`) — handoff text was stale on "push deferred". Six new Dependabot PRs (#25–#30) opened 2026-05-25T03:46Z, all merged via `gh pr merge --admin --squash`. **Merged green directly**: #25 schemathesis 4.19.0→4.20.0 (minor patch group), #26 hashicorp/setup-terraform 3→4, #29 azure/setup-helm 4.3.0→5.0.0, #30 actions/setup-node 4→6. **Fixed via push to dependabot branch**: #27 docker/login-action 3→4 (test asserted `@v3` → bumped to `@v4` in `tests/unit/test_container_attestation_workflow.py:48`), #28 actions/upload-artifact 4→7 (two asserts bumped in `tests/unit/test_security_workflow.py:34` + `tests/unit/test_performance_workflows.py:40`). Both rebased onto latest main after lint regression surfaced. **Lint regression fixed** in `2322916` — two test files from session 23 H-C1/H-C4 closure (`test_duckdb_backend_sql_hardening.py`, `test_lifespan_search_resilience.py`) had line-length forms ruff 0.x catches but slipped through the owner-bypass push; pure cosmetic line consolidation. **Lesson 5**: when bumping a dependabot-managed major version of a GH Action that pins assertions in unit tests, the test bump must land on the dependabot branch itself, not on main — otherwise the PR's `test-unit` job stays red and `--admin --squash` ships a broken state for one merge cycle. Pushing directly to `dependabot/...` branches with `--force-with-lease` is supported. |
+| **26** | `dc74bd1` (handoff), `d674afa` (#25), `6a30ac7` (#26), `69fd3b3` (#29), `d92938e` (#30), `2322916` (lint catch-up), `d249448` (#27), `da52ca1` (#28), `b7d562c` (handoff), + this perf-bench commit | Tier A Dependabot wave 3 + push of sessions 22–25 audit closures + M-C4/M-C5 perf-baseline closure (`docs/perf/auth-bench-2026-05-26.md`, `scripts/perf/auth_bench.py`). Pushed the 5-commit audit stack to `origin/main` (`64252d3`, `356715e`, `bbc9827`, `8198af4`, `dc74bd1`) — handoff text was stale on "push deferred". Six new Dependabot PRs (#25–#30) opened 2026-05-25T03:46Z, all merged via `gh pr merge --admin --squash`. **Merged green directly**: #25 schemathesis 4.19.0→4.20.0 (minor patch group), #26 hashicorp/setup-terraform 3→4, #29 azure/setup-helm 4.3.0→5.0.0, #30 actions/setup-node 4→6. **Fixed via push to dependabot branch**: #27 docker/login-action 3→4 (test asserted `@v3` → bumped to `@v4` in `tests/unit/test_container_attestation_workflow.py:48`), #28 actions/upload-artifact 4→7 (two asserts bumped in `tests/unit/test_security_workflow.py:34` + `tests/unit/test_performance_workflows.py:40`). Both rebased onto latest main after lint regression surfaced. **Lint regression fixed** in `2322916` — two test files from session 23 H-C1/H-C4 closure (`test_duckdb_backend_sql_hardening.py`, `test_lifespan_search_resilience.py`) had line-length forms ruff 0.x catches but slipped through the owner-bypass push; pure cosmetic line consolidation. **Lesson 5**: when bumping a dependabot-managed major version of a GH Action that pins assertions in unit tests, the test bump must land on the dependabot branch itself, not on main — otherwise the PR's `test-unit` job stays red and `--admin --squash` ships a broken state for one merge cycle. Pushing directly to `dependabot/...` branches with `--force-with-lease` is supported. |
 | **11** | `3053576` | `docs/runbooks/` — 5 on-call incident playbooks (api-5xx, auth-401, cdc-lag, load-test-regression, release-rollback) in the same eight-section format and severity ladder as `chaos-runbook.md` |
 | **12** | `29d058a`, `576c2d6` | README + helm chart aligned to `v1.3.0` — badge, Highlights/Status under the `v1.1 → v1.3` arc, DV2 triptych, `helm/agentflow` `appVersion` + `image.tag` bumped |
 | **13** | `c684e5f` | `sdk/README.md` made version-agnostic — the PyPI page no longer needs a touch-up at every release |

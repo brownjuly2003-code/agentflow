@@ -4,6 +4,21 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Performance
+
+- `scripts/perf/auth_bench.py` + `docs/perf/auth-bench-2026-05-26.md`
+  — perf-baseline microbench closing two deferred Kimi audit findings.
+  Measured `authenticate()` worst-case at production `bcrypt_rounds=12`:
+  N=5 hit-last p95 = 1.9 s, N=20 hit-last p95 = 8.1 s (exceeds the
+  1100 ms POST load gate). M-C4 stays partial-deferred — steady-state
+  is already O(1) via the plaintext cache at `manager.py:284-285`;
+  the worst case is cold-cache after process restart / SIGHUP reload,
+  bounded by a "≤ 10 hashed keys per AuthManager" guidance now
+  documented in `docs/runbooks/auth-401-spike.md`. Measured
+  `is_rate_limited()` window-trim p95 at the production default
+  `rate_limit_rpm=120` window: **6 microseconds**. M-C5 closed —
+  ring-buffer rewrite not worth it.
+
 ### Dependencies
 
 - Dependabot Tier A wave 3 (session 26): `schemathesis` 4.19.0 → 4.20.0

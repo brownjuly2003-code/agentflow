@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-25 (session 25 — Kimi audit H-C2 narrow closure: ClickHouse string-literal masking before dialect rewrites + explicit `ssl.create_default_context` for HTTPS)
-**HEAD:** `8198af4` on `main` locally (sessions 22+23+24+25 are 4 commits ahead of `origin/main = 4df9714`). Push intentionally deferred — user has not asked to publish, all four commits are reversible.
+**Last updated:** 2026-05-26 (session 26 — Tier A wave 3: 6 Dependabot PRs merged + sessions 22–25 audit closures pushed to origin + ruff format catch-up on session 23 files)
+**HEAD:** `da52ca1` on `main` and `origin/main` aligned.
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
 Prior releases v1.3.0/v1.2.0/v1.1.0 still available on the same
@@ -45,11 +45,18 @@ cluster credentials, asciinema cast pipeline, and the five CH
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**All six Tier A Dependabot PRs landed in session 18** (#24 mypy,
+**Six Tier A Dependabot PRs landed in session 18** (#24 mypy,
 #8 terraform-aws, #10 typescript, #17 github-script, #20
 download-artifact, #21 docker/build-push, #12 vitest). Resolver
 smoke (`pip install --dry-run -e ".[dev,cloud,contract]"`) green on
-HEAD `2333104`. See "Recent activity" below for SHAs.
+HEAD `2333104`. **Six more landed in session 26** (#25 schemathesis
+4.20, #26 setup-terraform v4, #27 docker/login v4, #28 upload-artifact
+v7, #29 setup-helm v5, #30 setup-node v6); two pinned unit-test
+assertions had to be pushed onto the dependabot branches before
+`--admin --squash`. See "Recent activity" below for SHAs.
+
+**Dependabot queue currently empty.** Next batch will open on the
+weekly Monday 06:00 MSK schedule (see `.github/dependabot.yml`).
 
 **Two Dependabot PRs closed as `wait-for-upstream`** — neither is
 mergeable without external/upstream movement that this repo can't
@@ -64,8 +71,8 @@ trigger:
 
 Live source-of-truth for which findings are closed and which remain.
 Audit file itself stays in the repo root for reference. Sessions
-22→25 are 4 commits ahead of `origin/main` locally; everything below
-reflects the local HEAD `8198af4`.
+22→25 audit closures shipped to `origin/main` in session 26 (push
+`dc74bd1`); everything below reflects HEAD `da52ca1`.
 
 | Finding | Status | Where | Notes |
 |---------|--------|-------|-------|
@@ -247,6 +254,7 @@ All seven sessions shipped to `main` between 2026-05-24 evening and
 
 | Session | SHAs | Theme |
 |---------|------|-------|
+| **26** | `dc74bd1` (handoff), `d674afa` (#25), `6a30ac7` (#26), `69fd3b3` (#29), `d92938e` (#30), `2322916` (lint catch-up), `d249448` (#27), `da52ca1` (#28) | Tier A Dependabot wave 3 + push of sessions 22–25 audit closures. Pushed the 5-commit audit stack to `origin/main` (`64252d3`, `356715e`, `bbc9827`, `8198af4`, `dc74bd1`) — handoff text was stale on "push deferred". Six new Dependabot PRs (#25–#30) opened 2026-05-25T03:46Z, all merged via `gh pr merge --admin --squash`. **Merged green directly**: #25 schemathesis 4.19.0→4.20.0 (minor patch group), #26 hashicorp/setup-terraform 3→4, #29 azure/setup-helm 4.3.0→5.0.0, #30 actions/setup-node 4→6. **Fixed via push to dependabot branch**: #27 docker/login-action 3→4 (test asserted `@v3` → bumped to `@v4` in `tests/unit/test_container_attestation_workflow.py:48`), #28 actions/upload-artifact 4→7 (two asserts bumped in `tests/unit/test_security_workflow.py:34` + `tests/unit/test_performance_workflows.py:40`). Both rebased onto latest main after lint regression surfaced. **Lint regression fixed** in `2322916` — two test files from session 23 H-C1/H-C4 closure (`test_duckdb_backend_sql_hardening.py`, `test_lifespan_search_resilience.py`) had line-length forms ruff 0.x catches but slipped through the owner-bypass push; pure cosmetic line consolidation. **Lesson 5**: when bumping a dependabot-managed major version of a GH Action that pins assertions in unit tests, the test bump must land on the dependabot branch itself, not on main — otherwise the PR's `test-unit` job stays red and `--admin --squash` ships a broken state for one merge cycle. Pushing directly to `dependabot/...` branches with `--force-with-lease` is supported. |
 | **11** | `3053576` | `docs/runbooks/` — 5 on-call incident playbooks (api-5xx, auth-401, cdc-lag, load-test-regression, release-rollback) in the same eight-section format and severity ladder as `chaos-runbook.md` |
 | **12** | `29d058a`, `576c2d6` | README + helm chart aligned to `v1.3.0` — badge, Highlights/Status under the `v1.1 → v1.3` arc, DV2 triptych, `helm/agentflow` `appVersion` + `image.tag` bumped |
 | **13** | `c684e5f` | `sdk/README.md` made version-agnostic — the PyPI page no longer needs a touch-up at every release |

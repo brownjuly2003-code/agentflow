@@ -4,6 +4,27 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Dependencies
+
+- Dependabot Tier A wave 3 (session 26): `schemathesis` 4.19.0 → 4.20.0
+  (#25, python-minor-patch group), `hashicorp/setup-terraform` 3 → 4
+  (#26), `docker/login-action` 3 → 4 (#27), `actions/upload-artifact`
+  4 → 7 (#28), `azure/setup-helm` 4.3.0 → 5.0.0 (#29),
+  `actions/setup-node` 4 → 6 (#30). For #27 and #28, the version-pin
+  assertions in `tests/unit/test_container_attestation_workflow.py`,
+  `tests/unit/test_security_workflow.py`, and
+  `tests/unit/test_performance_workflows.py` were bumped on the
+  dependabot branches before merge so the squashed commits land green
+  in one cycle.
+
+### Fixed
+
+- Ruff format catch-up on two test files from the session-23
+  H-C1/H-C4 audit closures (`test_duckdb_backend_sql_hardening.py`,
+  `test_lifespan_search_resilience.py`) that had line-length forms
+  ruff 0.x rejects. Pure cosmetic line-consolidation, no behaviour
+  change.
+
 ### Added
 
 - API-surface Prometheus instrumentation referenced by

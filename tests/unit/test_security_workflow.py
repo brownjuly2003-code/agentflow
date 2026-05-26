@@ -31,7 +31,7 @@ def test_trivy_job_generates_cyclonedx_sbom_artifact() -> None:
         None,
     )
     assert upload_step is not None
-    assert upload_step["uses"] == "actions/upload-artifact@v4"
+    assert upload_step["uses"] == "actions/upload-artifact@v7"
     assert upload_step["with"]["name"] == "agentflow-api-sbom-cyclonedx"
     assert upload_step["with"]["path"] == "agentflow-api.cdx.json"
     assert upload_step["with"]["if-no-files-found"] == "error"

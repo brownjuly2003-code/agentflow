@@ -106,7 +106,7 @@ jobs:
             --backup "${{ steps.backup.outputs.archive_path }}" \
             --target-root /tmp/agentflow-restore
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: agentflow-nightly-backup
           path: ${{ steps.backup.outputs.archive_path }}

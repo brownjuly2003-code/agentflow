@@ -74,6 +74,23 @@ merged в `main` (2026-05-23 afternoon, merge commit `ddfb863`).
 - Закрытие ssh-сессии (caffeinate активен до 2026-05-23 ~00:35 MSK = +4h от старта)
 - Сетевые блипы (kind+colima переживают)
 
+### Временная пауза кластера (2026-05-26)
+
+На 2026-05-26 05:32 MSK DV2 demo-кластер временно остановлен, чтобы освободить
+8GB iMac для другой работы. Перед остановкой `kubectl get cronjobs -n dv2`
+показывал `ACTIVE 0` для всех five cold-offload CronJobs; manual Argo workloads
+не запускались. Остановлена только Lima VM:
+
+```bash
+ssh julia@192.168.1.133 'PATH=$HOME/lima/bin:$HOME/bin:$PATH limactl stop docker'
+```
+
+Состояние данных остается в Lima/Docker volumes. Для возврата к demo:
+
+```bash
+ssh julia@192.168.1.133 'PATH=$HOME/lima/bin:$HOME/bin:$PATH limactl start docker && kubectl get nodes && kubectl get pods -n dv2 && kubectl get pods -n argo'
+```
+
 ## Как возобновить (новая сессия)
 
 ### Если iMac жив и кластер бежит

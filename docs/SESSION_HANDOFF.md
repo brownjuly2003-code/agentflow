@@ -108,17 +108,22 @@ transpile only when integration coverage against a live ClickHouse
 is available — masking + HTTPS cert validation already address the
 two security concerns the audit raised.
 
-### Tier B — externally user-gated (cannot be unblocked from inside the repo)
+### Tier B — what these gates actually mean
 
-| Gate | What is missing | Where the runbook lives |
-|------|-----------------|-------------------------|
-| **A04** prod CDC source onboarding | Source DB hostnames, credentials, table allowlist, network path, secret-owner / monitoring-owner / rollback-owner assignment | `docs/operations/cdc-production-onboarding.md` § Required Decision Record |
-| **A05** prod K8s cluster access | Real cluster context (EKS/GKE/AKS); the test harness already honours external `KUBECONFIG` via `AGENTFLOW_LIVE_REUSE_CLUSTER=1` | `tests/integration/test_helm_values_live_validation.py` (parametrized across `helm/agentflow` + `helm/kafka-connect`) |
-| **A03** CI hardware-gap | Decision on paid larger GHA runner or self-hosted; local p99 already at 167 ms target | `docs/perf/ci-hardware-gap-2026-05-24.md` § Alternatives ledger |
+These were carried as a generic "user-gated" bucket in earlier
+handoffs; on re-inspection only A04 / A05 are *waiting* on anything,
+and what they're waiting on is a real production deployment that
+doesn't exist yet. A03 was actually closed in session 9.
 
-These need inputs from outside this repo — credentials, cloud
-accounts, budget. No autonomous unblock available; tools cannot
-substitute for them.
+| Gate | Real status | Where the decision/runbook lives |
+|------|-------------|----------------------------------|
+| **A03** CI hardware-gap | **Closed s9 (`e38a6e5` + `docs/perf/ci-hardware-gap-2026-05-24.md`)** — Decision is "Accept divergent perf thresholds between local + CI", thresholds raised to 900 / 1100 / 1200 ms in `tests/load/thresholds.py`, all subsequent load-test runs green. Re-open only if a real prod tenant complains about CI-vs-prod divergence | `docs/perf/ci-hardware-gap-2026-05-24.md` § Decision |
+| **A04** prod CDC source onboarding | **Not applicable until a prod deployment exists.** The runbook is documentation-complete (decision-record template, network/secret/monitoring/rollback owner slots, sample tfvars). It "executes" the day someone wires a real source DB — until then there is no input to gate on | `docs/operations/cdc-production-onboarding.md` § Required Decision Record |
+| **A05** prod K8s cluster access | **Not applicable until a prod cluster exists.** Test harness already honours external `KUBECONFIG` via `AGENTFLOW_LIVE_REUSE_CLUSTER=1`; once a real EKS/GKE/AKS context is wired into CI as a secret, the parametrized live-validation suite picks it up with zero code changes | `tests/integration/test_helm_values_live_validation.py` |
+
+In short: A03 is done; A04 / A05 are documentation-complete and
+behavioural-complete and just don't have a customer yet. There is no
+hidden engineering task here — only a missing real-prod deployment.
 
 ### Repo settings (session 18f, admin actions)
 

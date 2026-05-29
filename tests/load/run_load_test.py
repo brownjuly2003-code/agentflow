@@ -38,6 +38,8 @@ def test_load_locust_rows_parses_endpoint_metrics(tmp_path: Path):
 
 def test_check_thresholds_reports_latency_and_error_violations():
     assert "GET /v1/health" not in THRESHOLDS
+    order_p99_limit = THRESHOLDS["GET /v1/entity/order/{id}"]["p99_ms"]
+    order_p99_violation = order_p99_limit + 10.0
 
     violations = check_thresholds(
         {
@@ -46,7 +48,7 @@ def test_check_thresholds_reports_latency_and_error_violations():
                 "failure_count": 1,
                 "fail_ratio": 1 / 12,
                 "p95_ms": 40.0,
-                "p99_ms": 760.0,
+                "p99_ms": order_p99_violation,
                 "rps": 4.0,
             },
             "GET /v1/health": {
@@ -61,7 +63,8 @@ def test_check_thresholds_reports_latency_and_error_violations():
     )
 
     assert violations == [
-        "GET /v1/entity/order/{id}: p99 760.0 ms exceeds threshold 750.0 ms",
+        "GET /v1/entity/order/{id}: p99 "
+        f"{order_p99_violation:.1f} ms exceeds threshold {order_p99_limit:.1f} ms",
         "GET /v1/entity/order/{id}: error rate 8.33% exceeds threshold 1.00%",
     ]
 

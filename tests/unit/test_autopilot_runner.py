@@ -89,18 +89,36 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
     _write_shim(
         shim_dir,
         "codex",
-        "@echo off\n"
-        ":check_args\n"
-        'if "%~1"=="" goto done\n'
-        'if "%~1"=="--ask-for-approval" exit /b 2\n'
-        "shift\n"
-        "goto check_args\n"
-        ":done\n"
-        "exit /b 0\n",
         "\n".join(
             [
-                'for arg in "$@"; do',
-                '  if [ "$arg" = "--ask-for-approval" ]; then exit 2; fi',
+                "@echo off",
+                ":check_args",
+                'if "%~1"=="" goto done',
+                'if "%~1"=="--ask-for-approval" exit /b 2',
+                'if "%~1"=="--sandbox" (',
+                '  if "%~2"=="danger-full-access" (',
+                "    shift",
+                "    shift",
+                "    goto check_args",
+                "  )",
+                "  exit /b 3",
+                ")",
+                "shift",
+                "goto check_args",
+                ":done",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                'while [ "$#" -gt 0 ]; do',
+                '  if [ "$1" = "--ask-for-approval" ]; then exit 2; fi',
+                '  if [ "$1" = "--sandbox" ]; then',
+                '    if [ "$2" != "danger-full-access" ]; then exit 3; fi',
+                "    shift 2",
+                "    continue",
+                "  fi",
+                "  shift",
                 "done",
                 "exit 0",
             ]
@@ -171,6 +189,14 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
                 ":check_args",
                 'if "%~1"=="" goto plan',
                 'if "%~1"=="--ask-for-approval" exit /b 2',
+                'if "%~1"=="--sandbox" (',
+                '  if "%~2"=="danger-full-access" (',
+                "    shift",
+                "    shift",
+                "    goto check_args",
+                "  )",
+                "  exit /b 3",
+                ")",
                 "shift",
                 "goto check_args",
                 ":plan",
@@ -184,8 +210,14 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
         ),
         "\n".join(
             [
-                'for arg in "$@"; do',
-                '  if [ "$arg" = "--ask-for-approval" ]; then exit 2; fi',
+                'while [ "$#" -gt 0 ]; do',
+                '  if [ "$1" = "--ask-for-approval" ]; then exit 2; fi',
+                '  if [ "$1" = "--sandbox" ]; then',
+                '    if [ "$2" != "danger-full-access" ]; then exit 3; fi',
+                "    shift 2",
+                "    continue",
+                "  fi",
+                "  shift",
                 "done",
                 "mkdir -p .autopilot",
                 "echo task title> .autopilot/NEXT_TASK.md",

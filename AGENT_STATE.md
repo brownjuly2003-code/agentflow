@@ -5,10 +5,10 @@ Updated: 2026-05-29
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
-- Branch: `main...origin/main [ahead 5]`
+- Branch: `main...origin/main [ahead 8]`
 - Backlog correction base HEAD: `3080275`
-- Current local HEAD: `6ff78607d31f9a9a5b41f63ef645a000ffbaf00b` (`6ff7860`)
-- Git status at refresh: clean for the allowed tracked handoff files (`AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`) before this update; full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0/` through `pytest_temp2/pytest-of-uedom/pytest-9/`, and `pytest_temp_root/pytest-of-uedom/`.
+- Current local HEAD: `bd18aff8e0c86f9f95625045be6692a98f24be5c` (`bd18aff`)
+- Git status at refresh: clean tracked-file status via `git status --short -uno`; the allowed tracked handoff files (`AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`) were clean before this update. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0/` through `pytest_temp2/pytest-of-uedom/pytest-9/`, and `pytest_temp_root/pytest-of-uedom/`.
 - Current expected worktree changes for this autopilot refresh: documentation/state-only edits to `AGENT_STATE.md` and `docs/SESSION_HANDOFF.md`; no product code, tests, deployment, Terraform, secrets, scheduler state, external accounts, paid APIs, production data, or runtime databases.
 - File count: `git ls-files` reports 901 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs/state-only refresh.
 

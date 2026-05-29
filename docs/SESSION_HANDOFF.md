@@ -1,10 +1,13 @@
 # AgentFlow — Session Handoff
 
 **Last updated:** 2026-05-29 (local autopilot/state refresh)
-**HEAD:** `6ff7860` (`6ff78607d31f9a9a5b41f63ef645a000ffbaf00b`) on `main`.
-**Branch state:** `main...origin/main [ahead 5]`; local `main` has five commits not on `origin/main`.
+**HEAD:** `bd18aff` (`bd18aff8e0c86f9f95625045be6692a98f24be5c`) on `main`.
+**Branch state:** `main...origin/main [ahead 8]`; local `main` has eight commits not on `origin/main`.
 **Tracked files:** `901` via `git ls-files`.
 **Latest local commits:**
+- `bd18aff` fix(autopilot): default planner to codex
+- `eb1074b` fix(autopilot): ignore active concurrent locks
+- `96cd198` docs: refresh autopilot handoff state
 - `6ff7860` fix(autopilot): run gates for bounded product tasks
 - `cccc9f7` fix(dv2): align X5 loader with live schema
 - `43cf655` chore(autopilot): block repeated task loops

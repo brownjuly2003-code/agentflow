@@ -23,7 +23,7 @@ if (-not (Test-Path $RunnerPath)) {
     throw "Runner not found: $RunnerPath"
 }
 
-$arguments = "-ExecutionPolicy Bypass -File `"$RunnerPath`" -Planner $Planner"
+$arguments = "-ExecutionPolicy Bypass -File `"$RunnerPath`" -Planner $Planner -ExitZeroOnBlocked"
 if ($Commit) {
     $arguments = "$arguments -Commit"
 }

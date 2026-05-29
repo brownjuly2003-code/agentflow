@@ -715,6 +715,69 @@ def test_autopilot_commit_gate_accepts_markdown_section_format(tmp_path):
     assert not (repo / ".autopilot" / "BLOCKED.md").exists()
 
 
+def test_autopilot_exit_zero_on_existing_blocked_when_requested(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    autopilot_dir = repo / ".autopilot"
+    autopilot_dir.mkdir()
+    (autopilot_dir / "BLOCKED.md").write_text("no safe task\n", encoding="utf-8")
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 9\n", "exit 9\n")
+    _write_shim(shim_dir, "codex", "@echo off\nexit /b 0\n", "exit 0\n")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+            "-ExitZeroOnBlocked",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "BLOCKED.md exists; exiting without work." in result.stdout
+
+
+def test_install_autopilot_task_uses_exit_zero_on_blocked_by_default():
+    script = (PROJECT_ROOT / "scripts" / "install-autopilot-task.ps1").read_text(encoding="utf-8")
+
+    assert "-ExitZeroOnBlocked" in script
+    assert '-File `"$RunnerPath`" -Planner $Planner -ExitZeroOnBlocked' in script
+
+
 def test_autopilot_exits_without_blocking_when_active_lock_exists(tmp_path):
     powershell = _powershell()
 

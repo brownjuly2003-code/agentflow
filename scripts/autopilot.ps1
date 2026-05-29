@@ -2,6 +2,7 @@
 param(
     [switch]$DryRun,
     [switch]$Commit,
+    [switch]$ExitZeroOnBlocked,
     [ValidateSet("auto", "pi", "codex")]
     [string]$Planner = "codex",
     [string]$RepoRoot = ""
@@ -57,6 +58,16 @@ Resolve the blocker, verify the working tree, then remove this file before retry
 "@
     Set-Content -Path $BlockedPath -Value $body -Encoding UTF8
     Write-Log "BLOCKED: $Message"
+    exit 1
+}
+
+function Exit-BlockedState {
+    param([string]$Message)
+
+    Write-Log $Message
+    if ($ExitZeroOnBlocked) {
+        exit 0
+    }
     exit 1
 }
 
@@ -418,6 +429,9 @@ function Invoke-Planner {
 
     if (Test-Path $BlockedPath) {
         Write-Log "Planner wrote BLOCKED.md."
+        if ($ExitZeroOnBlocked) {
+            exit 0
+        }
         exit 1
     }
     if (-not (Test-Path $NextTaskPath)) {
@@ -442,6 +456,9 @@ function Invoke-Executor {
     }
     if (Test-Path $BlockedPath) {
         Write-Log "Executor wrote BLOCKED.md."
+        if ($ExitZeroOnBlocked) {
+            exit 0
+        }
         exit 1
     }
 }
@@ -529,8 +546,7 @@ try {
         exit 0
     }
     if (Test-Path $BlockedPath) {
-        Write-Log "BLOCKED.md exists; exiting without work."
-        exit 1
+        Exit-BlockedState "BLOCKED.md exists; exiting without work."
     }
 
     $initialChanges = @(Get-ChangedFiles)

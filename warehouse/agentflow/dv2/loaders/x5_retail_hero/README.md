@@ -1,11 +1,11 @@
 # X5 Retail Hero DV2.0 Loader
 
-Loads the Kaggle `shonenkov/x5retailheroupliftrawdata` CSV files into the AgentFlow DV2.0 raw vault tables in ClickHouse.
+Loads the Kaggle `mvyurchenko/x5-retail-hero` CSV files into the AgentFlow DV2.0 raw vault tables in ClickHouse.
 
 Download the dataset with Kaggle CLI:
 
 ```bash
-kaggle datasets download -d shonenkov/x5retailheroupliftrawdata -p /path/to/x5 --unzip
+kaggle datasets download -d mvyurchenko/x5-retail-hero -p /path/to/x5 --unzip
 ```
 
 Expected files:
@@ -17,7 +17,7 @@ Expected files:
 Run:
 
 ```bash
-python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-port 9000 --batch-size 100000
+python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-port 9000 --clickhouse-user default --clickhouse-password demo --batch-size 100000
 ```
 
 Dry run parses and maps chunks without inserting:
@@ -29,7 +29,7 @@ python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-
 Replay with a fixed UTC load timestamp:
 
 ```bash
-python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-port 9000 --batch-size 100000 --load-ts 2026-05-23T10:15:30Z
+python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-port 9000 --clickhouse-user default --clickhouse-password demo --batch-size 100000 --load-ts 2026-05-23T10:15:30Z
 ```
 
 ## Schema Assumptions
@@ -40,7 +40,7 @@ Satellite idempotency is handled by the raw vault table engines. The loader alwa
 
 The X5 `clients.csv` file has no branch field, so `hub_customer` rows use `record_source = '1c__msk'`. Per-branch `sat_customer_personal__1c__{branch}` rows are emitted while processing purchases, using each customer's observed purchase branch.
 
-`store_id` values are converted to store codes as `{branch}-{store_id}` before hashing into `hub_store.store_hk`.
+`store_id` values are converted to store business keys as `{branch}-{store_id}` before hashing into `hub_store.store_hk` and writing `hub_store.store_bk`.
 
 ## Branch Distribution
 

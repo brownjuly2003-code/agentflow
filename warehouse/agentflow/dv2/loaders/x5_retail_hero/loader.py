@@ -3,16 +3,21 @@ from __future__ import annotations
 import logging
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import click
 import pandas as pd
-from clickhouse_driver import Client
-from clickhouse_driver.errors import Error as ClickHouseError
 from pydantic import BaseModel
 from tqdm import tqdm
+
+try:
+    from clickhouse_driver import Client
+    from clickhouse_driver.errors import Error as ClickHouseError
+except ModuleNotFoundError:
+    Client = None  # type: ignore[assignment]
+    ClickHouseError = Exception  # type: ignore[misc, assignment]
 
 try:
     from .branch_distributor import distribute_stores_to_branches
@@ -41,14 +46,22 @@ LOGGER = logging.getLogger("x5_retail_hero_loader")
 @click.option("--clickhouse-host", default="localhost", show_default=True)
 @click.option("--clickhouse-port", default=9000, show_default=True, type=int)
 @click.option("--clickhouse-database", default="rv", show_default=True)
+@click.option("--clickhouse-user", default="default", show_default=True)
+@click.option("--clickhouse-password", default="", show_default=True)
 @click.option("--batch-size", default=100_000, show_default=True, type=int)
 @click.option("--dry-run", is_flag=True)
-@click.option("--load-ts", default=None, help="UTC timestamp override, for example 2026-05-23T10:15:30Z.")
+@click.option(
+    "--load-ts",
+    default=None,
+    help="UTC timestamp override, for example 2026-05-23T10:15:30Z.",
+)
 def cli(
     csv_dir: Path,
     clickhouse_host: str,
     clickhouse_port: int,
     clickhouse_database: str,
+    clickhouse_user: str,
+    clickhouse_password: str,
     batch_size: int,
     dry_run: bool,
     load_ts: str | None,
@@ -56,7 +69,11 @@ def cli(
     _configure_logging()
     csv_paths = _validate_csvs(csv_dir)
     current_load_ts = _parse_load_ts(load_ts)
-    client = None if dry_run else _connect(clickhouse_host, clickhouse_port)
+    client = (
+        None
+        if dry_run
+        else _connect(clickhouse_host, clickhouse_port, clickhouse_user, clickhouse_password)
+    )
 
     client_lookup: dict[str, dict[str, Any]] = {}
 
@@ -117,9 +134,12 @@ def _validate_csvs(csv_dir: Path) -> dict[str, Path]:
     return paths
 
 
-def _connect(host: str, port: int) -> Client:
+def _connect(host: str, port: int, user: str, password: str) -> Client:
+    if Client is None:
+        raise click.ClickException("clickhouse-driver is required unless --dry-run is used.")
+
     try:
-        client = Client(host=host, port=port)
+        client = Client(host=host, port=port, user=user, password=password)
         client.execute("SELECT 1")
         return client
     except ClickHouseError as exc:
@@ -130,13 +150,13 @@ def _connect(host: str, port: int) -> Client:
 
 def _parse_load_ts(value: str | None) -> datetime:
     if not value:
-        return datetime.now(timezone.utc).replace(tzinfo=None)
+        return datetime.now(UTC).replace(tzinfo=None)
 
     normalized = value.replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
     if parsed.tzinfo is None:
         return parsed
-    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed.astimezone(UTC).replace(tzinfo=None)
 
 
 def _build_store_branch_map(purchases_path: Path, batch_size: int) -> dict[Any, str]:

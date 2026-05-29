@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping
+from typing import Any
 
 import pandas as pd
 from pydantic import BaseModel
@@ -57,16 +58,17 @@ ClientLookup = dict[str, dict[str, Any]]
 
 
 def md5_digest(value: Any) -> bytes:
-    return hashlib.md5(_canonical(value).encode("utf-8")).digest()
+    return hashlib.md5(_canonical(value).encode("utf-8"), usedforsecurity=False).digest()
 
 
 def composite_md5_digest(*parts: Any) -> bytes:
-    return hashlib.md5("||".join(_canonical(part) for part in parts).encode("utf-8")).digest()
+    payload = "||".join(_canonical(part) for part in parts).encode("utf-8")
+    return hashlib.md5(payload, usedforsecurity=False).digest()
 
 
 def hash_diff(attributes: Mapping[str, Any]) -> bytes:
     payload = "||".join(f"{key}={_canonical(attributes[key])}" for key in sorted(attributes))
-    return hashlib.md5(payload.encode("utf-8")).digest()
+    return hashlib.md5(payload.encode("utf-8"), usedforsecurity=False).digest()
 
 
 def record_source(branch_code: str) -> str:
@@ -209,7 +211,7 @@ def map_purchases_chunk(
             mapped[TABLE_HUB_STORE].append(
                 HubStore(
                     store_hk=store_hk,
-                    store_code=current_store_code,
+                    store_bk=current_store_code,
                     load_ts=load_ts,
                     record_source=source,
                 )
@@ -218,7 +220,12 @@ def map_purchases_chunk(
 
         if order_bk not in seen_orders:
             mapped[TABLE_HUB_ORDER].append(
-                HubOrder(order_hk=order_hk, order_bk=order_bk, load_ts=load_ts, record_source=source)
+                HubOrder(
+                    order_hk=order_hk,
+                    order_bk=order_bk,
+                    load_ts=load_ts,
+                    record_source=source,
+                )
             )
             seen_orders.add(order_bk)
 

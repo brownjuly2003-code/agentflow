@@ -6,7 +6,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 Hash16 = Annotated[bytes, Field(min_length=16, max_length=16)]
 
 
@@ -30,7 +29,7 @@ class HubProduct(VaultRow):
 
 class HubStore(VaultRow):
     store_hk: Hash16
-    store_code: str
+    store_bk: str
     load_ts: datetime
     record_source: str
 

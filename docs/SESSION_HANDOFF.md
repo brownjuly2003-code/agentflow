@@ -1,7 +1,16 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-26 (session 26 — Tier A wave 3: 6 Dependabot PRs merged + sessions 22–25 audit closures pushed to origin + ruff format catch-up on session 23 files)
-**HEAD:** `da52ca1` on `main` and `origin/main` aligned.
+**Last updated:** 2026-05-29 (local autopilot/state refresh)
+**HEAD:** `6ff7860` (`6ff78607d31f9a9a5b41f63ef645a000ffbaf00b`) on `main`.
+**Branch state:** `main...origin/main [ahead 5]`; local `main` has five commits not on `origin/main`.
+**Tracked files:** `901` via `git ls-files`.
+**Latest local commits:**
+- `6ff7860` fix(autopilot): run gates for bounded product tasks
+- `cccc9f7` fix(dv2): align X5 loader with live schema
+- `43cf655` chore(autopilot): block repeated task loops
+- `ed3c21b` fix(autopilot): use codex sandbox compatible with Windows
+- `c647621` Document paused DV2 demo cluster
+
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
 Prior releases v1.3.0/v1.2.0/v1.1.0 still available on the same
@@ -72,7 +81,9 @@ trigger:
 Live source-of-truth for which findings are closed and which remain.
 Audit file itself stays in the repo root for reference. Sessions
 22→25 audit closures shipped to `origin/main` in session 26 (push
-`dc74bd1`); everything below reflects HEAD `da52ca1`.
+`dc74bd1`). The ledger below still reflects audit state as of HEAD
+`da52ca1`; the 2026-05-29 local refresh found no owner-provided
+external evidence that would change blocked or deferred gate status.
 
 | Finding | Status | Where | Notes |
 |---------|--------|-------|-------|

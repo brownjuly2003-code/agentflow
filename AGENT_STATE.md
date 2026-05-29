@@ -1,16 +1,16 @@
 # Agent State
 
-Updated: 2026-05-07
+Updated: 2026-05-29
 
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
-- Branch: `main`
+- Branch: `main...origin/main [ahead 5]`
 - Backlog correction base HEAD: `3080275`
-- Current resume HEAD: `1683d5dcf7051ad7da4a8a87145b94f93320d348`
-- Git status at resume: clean for tracked files on `main`, `main...origin/main`; full status still reports expected access-denied warnings for old local temp directories.
-- Current expected worktree changes before the external-evidence-gates commit: documentation-only H4/H5/M9 evidence status files.
-- File count: `git ls-files` reports 710 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this backend/security/audit task.
+- Current local HEAD: `6ff78607d31f9a9a5b41f63ef645a000ffbaf00b` (`6ff7860`)
+- Git status at refresh: clean for the allowed tracked handoff files (`AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`) before this update; full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0/` through `pytest_temp2/pytest-of-uedom/pytest-9/`, and `pytest_temp_root/pytest-of-uedom/`.
+- Current expected worktree changes for this autopilot refresh: documentation/state-only edits to `AGENT_STATE.md` and `docs/SESSION_HANDOFF.md`; no product code, tests, deployment, Terraform, secrets, scheduler state, external accounts, paid APIs, production data, or runtime databases.
+- File count: `git ls-files` reports 901 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs/state-only refresh.
 
 ## Available Runtime
 
@@ -24,6 +24,8 @@ Updated: 2026-05-07
 Status: READY_WITH_GUARDRAILS
 
 The autopilot handoff files are project artifacts. `.autopilot/` is local runtime state and remains ignored. Do not run deploys, Terraform apply, production scripts, secret rotation, package publishing, paid external API calls, or live account operations.
+
+The 2026-05-29 local refresh does not add owner-provided external evidence. External AWS/Terraform, production CDC, PMF/pricing, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable; do not infer completion from local docs/state commits.
 
 The 2026-05-05 closeout was interrupted by an explicit audit-remediation request. Commit `adb9c8e` records the first five locally verifiable Kimi audit fixes, Codex+Kimi synthesis under `res/codex/`, M1/M2 SQL static-analysis gate narrowing, L6 SBOM artifact generation, M7 staging rollback safety, and the first narrow M3 mypy strict slice for `src.quality.validators.*`. Commit `afbe643` records the M8 scoped validators coverage gate. Tasks 18-22 stay blocked until real owner-provided evidence is supplied.
 

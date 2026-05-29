@@ -66,6 +66,26 @@ function Require-Command {
     return $cmd.Source
 }
 
+function Get-LockProcessId {
+    if (-not (Test-Path $LockPath)) {
+        return $null
+    }
+
+    $content = Get-Content -Raw $LockPath
+    $match = [regex]::Match($content, "(?m)^pid=(\d+)\s*$")
+    if (-not $match.Success) {
+        return $null
+    }
+    return [int]$match.Groups[1].Value
+}
+
+function Test-LockProcessActive {
+    param([int]$ProcessIdValue)
+
+    $process = Get-Process -Id $ProcessIdValue -ErrorAction SilentlyContinue
+    return ($null -ne $process)
+}
+
 function Invoke-RepoCommand {
     param([string]$CommandLine)
     Write-Log "RUN: $CommandLine"
@@ -449,7 +469,12 @@ if ($DryRun) {
 }
 
 if (Test-Path $LockPath) {
-    Stop-Blocked "Lock exists: $LockPath"
+    $lockProcessId = Get-LockProcessId
+    if ($null -ne $lockProcessId -and (Test-LockProcessActive -ProcessIdValue $lockProcessId)) {
+        Write-Log "Lock exists and another autopilot run is active (pid=$lockProcessId); exiting without work."
+        exit 0
+    }
+    Stop-Blocked "Stale lock exists: $LockPath"
 }
 
 Set-Content -Path $LockPath -Value "pid=$PID`nstarted=$(Get-Date -Format "s")" -Encoding UTF8

@@ -509,3 +509,62 @@ def test_autopilot_runs_python_gates_for_warehouse_changes(tmp_path):
     python_calls = python_log.read_text(encoding="utf-8")
     assert "-m pytest -p no:schemathesis" in python_calls
     assert "-m ruff check warehouse/example.py" in python_calls
+
+
+def test_autopilot_exits_without_blocking_when_active_lock_exists(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    autopilot_dir = repo / ".autopilot"
+    autopilot_dir.mkdir()
+    (autopilot_dir / "autopilot.lock").write_text(
+        f"pid={os.getpid()}\nstarted=2026-05-29T06:54:30\n",
+        encoding="utf-8",
+    )
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 0\n", "exit 0\n")
+    _write_shim(shim_dir, "codex", "@echo off\nexit /b 0\n", "exit 0\n")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "another autopilot run is active" in result.stdout
+    assert not (autopilot_dir / "BLOCKED.md").exists()

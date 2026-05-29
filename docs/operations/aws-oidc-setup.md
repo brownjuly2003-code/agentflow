@@ -41,6 +41,15 @@ environment hints, AWS config, or AWS credentials file; `aws`, `terraform`, and
 GitHub Actions API reports `total_count: 0` for `Terraform Apply` workflow runs,
 so there is no apply/preflight run or CloudTrail evidence to cite.
 
+Evidence recheck on 2026-05-30 keeps the blocker external. Repository variables
+still contain only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is absent;
+`terraform` is now available in `PATH`, but AWS CLI and AWS credential
+environment hints are absent; workflow-expected
+`infrastructure/terraform/environments/*.tfvars` files remain absent; both
+Terraform plan/apply jobs remain guarded with `if: false`; and `gh run list
+--workflow terraform-apply.yml` reports no workflow runs. Local Terraform CLI
+availability is not AWS role, tfvars, CloudTrail, approval, or apply evidence.
+
 The tracked root-level `infrastructure/terraform/dev.tfvars` and
 `infrastructure/terraform/prod.tfvars` are not proof of H4 readiness. The
 current workflow resolves only `environments/staging.tfvars` and

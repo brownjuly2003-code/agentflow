@@ -112,14 +112,24 @@ Do not use `git add -A` or `git add .`.
 
 ## Remote Boundary
 
-Local autonomy does not imply remote autonomy. Push, force-push, deploy,
-release, package publish, Terraform apply, scheduler/env changes, destructive
-git operations, and stash drops are boundaries unless the latest operator
-instruction explicitly names the action and target.
+The operator has granted standing authorization for ordinary
+`git push origin main` from a human-agent autonomous session. Run it without
+asking again only after:
 
-If a boundary is reached, finish all safe local preparation first. Then record
-the exact blocked command and the missing authority. Do not keep asking for the
-same boundary decision on every turn.
+- `git status --short --branch --untracked-files=no` shows a clean tracked
+  worktree and no unexpected branch divergence;
+- `git diff --check` passes;
+- the commits being pushed were created or reviewed in this autonomous session.
+
+This authorization is narrow. Force-push, pushing other branches or tags,
+deploy, release, package publish, Terraform apply, scheduler/env changes,
+destructive git operations, stash drops, and secret/account work remain remote
+or destructive boundaries unless the latest operator instruction explicitly
+names that action and target.
+
+If any non-authorized boundary is reached, finish all safe local preparation
+first. Then record the exact blocked command and the missing authority. Do not
+keep asking for the same boundary decision on every turn.
 
 ## Windows No-Docker Rule
 

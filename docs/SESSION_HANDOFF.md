@@ -103,9 +103,11 @@ Continuation rules:
   branch-ahead counts, or handoff prose.
 - Delegate admin/external gates to an admin-capable tool when available, but
   integrate only real non-secret evidence.
-- Local commits are autonomous after scoped verification. Push, deploy, release,
-  publish, Terraform apply, scheduler/env changes, and destructive git
-  operations remain explicit remote/destructive boundaries.
+- Local commits are autonomous after scoped verification. Ordinary
+  `git push origin main` is authorized for the human-agent autonomous session
+  after clean tracked status and `git diff --check`. Force-push, deploy,
+  release, publish, Terraform apply, scheduler/env changes, other branches/tags,
+  and destructive git operations remain explicit remote/destructive boundaries.
 - Stop only for a hard-stop trigger, real local blocker with no safe local
   candidate left, unexpected dirty-file conflict, or an explicit
   remote/destructive boundary with no safe local prep remaining.

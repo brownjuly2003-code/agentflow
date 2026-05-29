@@ -1,6 +1,10 @@
 # Autopilot
 
-This repository is suitable for a guarded local autopilot only. The runner must keep planning, execution, verification, and commits local; it must never push, deploy, read secrets, or run paid/external production actions.
+This repository is suitable for a guarded local autopilot only. The runner must
+keep planning, execution, verification, and commits local; it must never deploy,
+read secrets, or run paid/external production actions. Human-agent autonomous
+sessions have standing authorization to run ordinary `git push origin main`
+after the push gates below are green.
 
 ## Applicability Verdict
 
@@ -105,6 +109,24 @@ The autonomous loop is:
 
 Do not stop merely because a local commit was created, a handoff file was
 updated, or a status report was written.
+
+## Standing Push Authorization
+
+The operator has authorized the human-agent autonomous session to run ordinary
+`git push origin main` without asking again when all of these gates are true:
+
+- `git status --short --branch --untracked-files=no` shows a clean tracked
+  worktree and no unexpected branch divergence;
+- `git diff --check` passes;
+- the commits being pushed were created or reviewed in this autonomous session;
+- no force-push, tag push, release, deploy, package publish, scheduler/env
+  change, Terraform apply, secret/account operation, or destructive git command
+  is involved.
+
+This standing authorization does not allow `git push --force`, pushing other
+branches or tags, deploy/release/publish actions, Terraform apply, or any
+operation that needs external credentials or secrets. The scheduled autopilot
+runner still does not push; this applies to the interactive autonomous agent.
 
 ## Admin And External Delegation
 

@@ -84,7 +84,8 @@ Then read, in this order:
 2. `docs/SESSION_HANDOFF.md`
 3. `docs/operations/local-verification-matrix.md`
 4. `AUTOPILOT.md`
-5. `BACKLOG.md`, only if the first four docs expose a safe local candidate
+5. `docs/operations/autonomous-compact-safe-process.md`
+6. `BACKLOG.md`, only if the first five docs expose a safe local candidate
 
 Use this operator prompt to continue without a pause:
 
@@ -98,8 +99,16 @@ Continuation rules:
 - Prefer closing current dirty WIP before choosing new work.
 - If compaction loses details, re-read the durable docs above and continue from
   repo evidence instead of asking for a recap.
-- Stop only for a hard-stop trigger, real local blocker, unexpected dirty-file
-  conflict, or an explicit commit/push boundary.
+- Do not repeat a blocked item family just to refresh timestamps, HEAD hashes,
+  branch-ahead counts, or handoff prose.
+- Delegate admin/external gates to an admin-capable tool when available, but
+  integrate only real non-secret evidence.
+- Local commits are autonomous after scoped verification. Push, deploy, release,
+  publish, Terraform apply, scheduler/env changes, and destructive git
+  operations remain explicit remote/destructive boundaries.
+- Stop only for a hard-stop trigger, real local blocker with no safe local
+  candidate left, unexpected dirty-file conflict, or an explicit
+  remote/destructive boundary with no safe local prep remaining.
 
 ## Open work — priorities
 

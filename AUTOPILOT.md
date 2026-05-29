@@ -22,6 +22,13 @@ Runtime:
 4. `README.md`, `CONTRIBUTING.md`, and `docs/`
 5. Git branch, HEAD, and working tree status
 
+When chat context is compacted, stale, contradictory, or incomplete, rebuild
+from these durable files and current git state. Do not ask the operator for a
+recap while the repository contains enough evidence to continue.
+
+See `docs/operations/autonomous-compact-safe-process.md` for the compact-safe
+autonomous process.
+
 ## Roles
 
 ### Planner
@@ -35,6 +42,12 @@ The planner chooses exactly one bounded task and writes only:
 - `.autopilot/BLOCKED.md`, when no safe task exists
 
 The planner may choose product-code work only when the task is bounded, has explicit allowed paths, requires tests before behavior changes, and can be verified locally without external services or Docker on this host. It must not choose documentation churn only to keep the autopilot moving, and it must not choose handoff refresh solely to update HEAD, branch-ahead counts, timestamps, latest commits, or tracked-file counts after local autopilot commits.
+
+Before choosing a task, the planner must compare the candidate with the most
+recent completed or blocked item family in durable state. It must not repeat the
+same family unless there is new owner-provided evidence, a fresh failed
+verification with a local diagnostic path, current dirty WIP to close, or a
+distinct named atomic item with different verification.
 
 ### Codex Executor
 
@@ -69,6 +82,40 @@ Stop and write `.autopilot/BLOCKED.md` when:
 - any required gate fails;
 - the task requires Docker on this Windows workstation;
 - the task requires secrets, deploys, production data, paid APIs, external accounts, or manual credentials.
+
+A true external blocker is not a reason to keep planning the same task. The
+runner should record the non-secret blocker evidence once, exit cleanly in
+scheduled mode, and wait for new evidence or a different bounded local task.
+
+## Autonomous No-Prompt Mode
+
+When the latest operator instruction requests autonomous work, the local agent
+owns tactical decisions and should not ask what to do next while a safe local
+candidate exists.
+
+The autonomous loop is:
+
+1. Refresh git status and durable handoff state.
+2. Close current dirty WIP first.
+3. Select the highest-confidence safe atomic item.
+4. Make the smallest scoped edit.
+5. Run relevant no-Docker verification.
+6. Create a local commit when the item is verified and the dirty set is scoped.
+7. Continue to the next safe candidate.
+
+Do not stop merely because a local commit was created, a handoff file was
+updated, or a status report was written.
+
+## Admin And External Delegation
+
+If an item requires repository admin rights, cloud/account access, production
+evidence, customer evidence, external pen-test evidence, publishing, deploys, or
+Terraform apply, delegate to an available admin-capable agent or tool with exact
+scope and forbidden operations. Integrate only verified non-secret facts.
+
+If no real external evidence exists, keep the gate blocked. Do not invent owner
+inputs, enable disabled workflows, create placeholder secrets, or convert
+documentation-complete gates into completed production claims.
 
 ## Required Gates
 

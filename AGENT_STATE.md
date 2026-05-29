@@ -5,25 +5,27 @@ Updated: 2026-05-29
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
-- Branch: `main...origin/main [ahead 8]`
+- Branch: `main...origin/main [ahead 12]`
 - Backlog correction base HEAD: `3080275`
-- Current local HEAD: `bd18aff8e0c86f9f95625045be6692a98f24be5c` (`bd18aff`)
-- Git status at refresh: clean tracked-file status via `git status --short -uno`; the allowed tracked handoff files (`AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`) were clean before this update. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0/` through `pytest_temp2/pytest-of-uedom/pytest-9/`, and `pytest_temp_root/pytest-of-uedom/`.
-- Current expected worktree changes for this autopilot refresh: documentation/state-only edits to `AGENT_STATE.md` and `docs/SESSION_HANDOFF.md`; no product code, tests, deployment, Terraform, secrets, scheduler state, external accounts, paid APIs, production data, or runtime databases.
+- Current local HEAD before this docs/plan update: `c43111c7b1e417d5ed7c3eff6e884734b19be9e5` (`c43111c`)
+- Git status at refresh: clean tracked-file status via `git status --short --branch --untracked-files=no`. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0` through `pytest_temp2/pytest-of-uedom/pytest-9`, and `pytest_temp_root/pytest-of-uedom/`.
+- Current expected worktree changes for this requested docs/plan update: `AUTOPILOT.md`, `AGENT_STATE.md`, `BACKLOG.md`, and `docs/SESSION_HANDOFF.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
 - File count: `git ls-files` reports 901 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs/state-only refresh.
 
 ## Available Runtime
 
-- pi CLI: available at `C:\Users\uedom\AppData\Roaming\npm\pi.ps1`
+- pi CLI: available at `C:\Users\uedom\AppData\Roaming\npm\pi.ps1`, but current local `pi` planner runs fail without an API key and are not used by the scheduled task.
 - codex CLI: available at `C:\Users\uedom\AppData\Roaming\npm\codex.ps1`
-- Runner: `scripts/autopilot.ps1`
-- Scheduler: opt-in only through `scripts/install-autopilot-task.ps1`; preview without `-Install` must not modify scheduler state.
+- Runner: `scripts/autopilot.ps1`, default planner `codex`
+- Scheduler: installed as `AgentFlow Local Autopilot` with `-Planner codex -ExitZeroOnBlocked -Commit`; preview without `-Install` must not modify scheduler state.
 
 ## Operating Mode
 
 Status: READY_WITH_GUARDRAILS
 
 The autopilot handoff files are project artifacts. `.autopilot/` is local runtime state and remains ignored. Do not run deploys, Terraform apply, production scripts, secret rotation, package publishing, paid external API calls, or live account operations.
+
+The guarded local autopilot has been hardened through HEAD `c43111c`: it defaults to the Codex planner, treats active concurrent locks as a clean no-work exit, accepts both inline and markdown `Commit Allowed` gates, exits cleanly for scheduled no-task blockers, and forbids HEAD-only handoff churn as an autonomous task. A real scheduled-mode run wrote `.autopilot/BLOCKED.md` because no bounded safe local task remained.
 
 The 2026-05-29 local refresh does not add owner-provided external evidence. External AWS/Terraform, production CDC, PMF/pricing, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable; do not infer completion from local docs/state commits.
 

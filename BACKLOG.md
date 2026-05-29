@@ -1,5 +1,38 @@
 # Backlog
 
+## 23. Harden Continuous Local Autopilot Runner
+
+Status: Done.
+
+Allowed files/directories:
+- `scripts/autopilot.ps1`
+- `scripts/install-autopilot-task.ps1`
+- `tests/unit/test_autopilot_runner.py`
+- `AUTOPILOT.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+- `docs/SESSION_HANDOFF.md`
+
+Acceptance criteria:
+- Default the guarded runner to the Codex planner while preserving explicit `pi` and `auto` modes.
+- Keep scheduled task runs local, non-pushing, and explicit-path commit only.
+- Treat active concurrent locks as a clean no-work exit instead of writing a false blocker.
+- Accept both `commit allowed: yes` and markdown `## Commit Allowed` / `yes` planner gates.
+- Let scheduled runs exit cleanly when `.autopilot/BLOCKED.md` represents "no safe local task".
+- Prevent autonomous handoff churn that only updates HEAD, branch-ahead counts, timestamps, latest commits, or tracked-file counts.
+- Record that the remaining backlog blockers require external owner evidence and are not safe autonomous local tasks.
+
+Required verification:
+- `python -m pytest tests/unit/test_autopilot_runner.py -q -p no:schemathesis`
+- `python -m ruff check tests/unit/test_autopilot_runner.py`
+- `python -m ruff format --check tests/unit/test_autopilot_runner.py`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -Planner codex -ExitZeroOnBlocked -Commit`
+
+Forbidden scope:
+- No push, deploy, publish, Terraform, secret, external account, paid API, production data, or destructive cleanup.
+
 ## 0. Reconcile The Autopilot Handoff State
 
 Status: Done.

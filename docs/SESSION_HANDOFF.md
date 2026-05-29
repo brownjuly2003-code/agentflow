@@ -1,18 +1,18 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-29 (local autopilot/state refresh)
-**HEAD:** `bd18aff` (`bd18aff8e0c86f9f95625045be6692a98f24be5c`) on `main`.
-**Branch state:** `main...origin/main [ahead 8]`; local `main` has eight commits not on `origin/main`.
+**Last updated:** 2026-05-29 (autopilot docs/plan refresh)
+**HEAD before this docs/plan update:** `c43111c` (`c43111c7b1e417d5ed7c3eff6e884734b19be9e5`) on `main`.
+**Branch state before this docs/plan update:** `main...origin/main [ahead 12]`; local `main` has twelve commits not on `origin/main`.
 **Tracked files:** `901` via `git ls-files`.
 **Latest local commits:**
+- `c43111c` fix(autopilot): avoid handoff churn tasks
+- `3f4a74c` fix(autopilot): exit cleanly on scheduled blockers
+- `ad0f5c3` fix(autopilot): accept markdown commit gate
+- `5f4d70c` docs: refresh autopilot handoff state
 - `bd18aff` fix(autopilot): default planner to codex
 - `eb1074b` fix(autopilot): ignore active concurrent locks
 - `96cd198` docs: refresh autopilot handoff state
 - `6ff7860` fix(autopilot): run gates for bounded product tasks
-- `cccc9f7` fix(dv2): align X5 loader with live schema
-- `43cf655` chore(autopilot): block repeated task loops
-- `ed3c21b` fix(autopilot): use codex sandbox compatible with Windows
-- `c647621` Document paused DV2 demo cluster
 
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
@@ -69,6 +69,14 @@ assertions had to be pushed onto the dependabot branches before
 
 **Dependabot queue currently empty.** Next batch will open on the
 weekly Monday 06:00 MSK schedule (see `.github/dependabot.yml`).
+
+**Local autopilot status:** the scheduled task is installed as
+`scripts/autopilot.ps1 -Planner codex -ExitZeroOnBlocked -Commit`.
+The latest scheduled-mode run wrote `.autopilot/BLOCKED.md` and exited
+cleanly because no bounded safe local task remained. Do not remove that
+runtime blocker merely to keep the loop moving; provide external owner
+evidence for one blocked gate or assign a new bounded local task with
+allowed paths and local verification.
 
 **Two Dependabot PRs closed as `wait-for-upstream`** — neither is
 mergeable without external/upstream movement that this repo can't

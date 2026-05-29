@@ -7,9 +7,11 @@ This repository is suitable for a guarded local autopilot only. The runner must 
 Status: READY_WITH_GUARDRAILS
 
 Runtime:
-- Planner: pi.dev via `pi` CLI
+- Planner: Codex via `codex` CLI by default
+- Optional planner modes: `-Planner auto` for `pi` then Codex fallback, `-Planner pi` for forced `pi`
 - Executor: Codex via `codex` CLI
 - Runner: `scripts/autopilot.ps1`
+- Scheduled task: `AgentFlow Local Autopilot`, installed as `-Planner codex -ExitZeroOnBlocked -Commit`
 
 ## Mission Source Order
 
@@ -21,7 +23,9 @@ Runtime:
 
 ## Roles
 
-### pi.dev Planner
+### Planner
+
+The runner defaults to the Codex planner. The optional `pi` planner remains available through `-Planner auto` or `-Planner pi`, but the scheduled task uses `-Planner codex` to avoid repeated startup failures when `pi` has no local API key.
 
 The planner chooses exactly one bounded task and writes only:
 - `.autopilot/NEXT_TASK.md`
@@ -29,7 +33,7 @@ The planner chooses exactly one bounded task and writes only:
 - `.autopilot/commit-message.txt`
 - `.autopilot/BLOCKED.md`, when no safe task exists
 
-The planner must not edit product code and must not ask the user questions.
+The planner may choose product-code work only when the task is bounded, has explicit allowed paths, requires tests before behavior changes, and can be verified locally without external services. It must not choose documentation churn only to keep the autopilot moving, and it must not choose handoff refresh solely to update HEAD, branch-ahead counts, timestamps, latest commits, or tracked-file counts after local autopilot commits.
 
 ### Codex Executor
 
@@ -43,12 +47,14 @@ The runner is the gatekeeper. It:
 - creates a lock before work starts;
 - respects `.autopilot/PAUSE`;
 - stops on `.autopilot/BLOCKED.md`;
-- runs `pi` to produce the next task;
+- runs the selected planner to produce the next task;
 - runs `codex exec` for execution;
 - validates changed files against `.autopilot/allowed-paths.txt`;
 - runs gates that exist locally;
 - commits only with explicit pathspec when started with `-Commit`;
 - never runs `git add .`, `git add -A`, `git push`, deploy commands, or destructive cleanup.
+
+When started with `-ExitZeroOnBlocked`, the runner exits with code `0` for an existing or newly planned `.autopilot/BLOCKED.md`. This is the scheduled-task mode: "no safe local task" is recorded as runtime state instead of reported as a recurring task failure.
 
 ## Hard Stops
 
@@ -56,7 +62,7 @@ Stop and write `.autopilot/BLOCKED.md` when:
 - the working tree is dirty before a non-dry run;
 - `.autopilot/PAUSE` exists;
 - `.autopilot/BLOCKED.md` already exists;
-- `pi`, `codex`, or `git` is unavailable;
+- the selected planner, `codex`, or `git` is unavailable;
 - the planner does not create `NEXT_TASK.md` and `allowed-paths.txt`;
 - any changed file is outside `.autopilot/allowed-paths.txt`;
 - any required gate fails;
@@ -69,8 +75,8 @@ The runner always runs:
 
 When relevant commands are available and changed paths require them, it also runs:
 - `python -m pytest -p no:schemathesis`
-- `python -m ruff check src/ tests/`
-- `python -m ruff format --check src/ tests/`
+- `python -m ruff check <changed-python-files>`
+- `python -m ruff format --check <changed-python-files>`
 - `python -m mypy src/`
 - `npm run typecheck`
 - `npm run test:unit`
@@ -127,11 +133,17 @@ powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1
 One guarded run with explicit-path commit:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -Commit
+powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -Planner codex -Commit
+```
+
+Scheduled-task equivalent, where a planner blocker is a clean no-work result:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -Planner codex -ExitZeroOnBlocked -Commit
 ```
 
 Install the opt-in scheduled task:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install-autopilot-task.ps1 -Install
+powershell -ExecutionPolicy Bypass -File scripts/install-autopilot-task.ps1 -Install -Commit -Planner codex
 ```

@@ -344,6 +344,8 @@ Hard rules:
 - Do not ask the user anything.
 - Do not read, print, or request secrets.
 - Do not choose deploy, publish, Terraform apply, production DB, paid API, or external account work.
+- Do not choose handoff refresh solely to update HEAD, branch-ahead counts, timestamps, latest commits, or tracked-file counts after autopilot local commits.
+- Do not choose documentation churn only to keep the autopilot moving.
 - If no safe task exists, write .autopilot/BLOCKED.md with the blocker.
 "@
     Set-Content -Path $PlannerPromptPath -Value $prompt -Encoding UTF8

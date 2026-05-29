@@ -401,6 +401,13 @@ def test_autopilot_planner_prompt_allows_bounded_product_code():
     assert "Product code is allowed only for bounded local tasks" in script
 
 
+def test_autopilot_planner_prompt_blocks_head_only_handoff_churn():
+    script = (PROJECT_ROOT / "scripts" / "autopilot.ps1").read_text(encoding="utf-8")
+
+    assert "Do not choose handoff refresh solely to update HEAD" in script
+    assert "documentation churn only to keep the autopilot moving" in script
+
+
 def test_autopilot_runs_python_gates_for_warehouse_changes(tmp_path):
     powershell = _powershell()
 

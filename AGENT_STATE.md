@@ -1,15 +1,15 @@
 # Agent State
 
-Updated: 2026-05-29
+Updated: 2026-05-30
 
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
-- Branch: `main...origin/main [ahead 12]`
+- Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Current local HEAD before this docs/plan update: `c43111c7b1e417d5ed7c3eff6e884734b19be9e5` (`c43111c`)
+- Current local HEAD at this no-Docker docs update: `3edc4f2af8a36b1d06b91ed62ed8c51e7d492c01` (`3edc4f2`)
 - Git status at refresh: clean tracked-file status via `git status --short --branch --untracked-files=no`. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0` through `pytest_temp2/pytest-of-uedom/pytest-9`, and `pytest_temp_root/pytest-of-uedom/`.
-- Current expected worktree changes for this requested docs/plan update: `AUTOPILOT.md`, `AGENT_STATE.md`, `BACKLOG.md`, and `docs/SESSION_HANDOFF.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
+- Current expected worktree changes for this requested no-Docker docs update: `AGENT_STATE.md`, `AUTOPILOT.md`, `docs/SESSION_HANDOFF.md`, and `docs/operations/local-verification-matrix.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
 - File count: `git ls-files` reports 901 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs/state-only refresh.
 
 ## Available Runtime
@@ -18,6 +18,7 @@ Updated: 2026-05-29
 - codex CLI: available at `C:\Users\uedom\AppData\Roaming\npm\codex.ps1`
 - Runner: `scripts/autopilot.ps1`, default planner `codex`
 - Scheduler: installed as `AgentFlow Local Autopilot` with `-Planner codex -ExitZeroOnBlocked -Commit`; preview without `-Install` must not modify scheduler state.
+- Docker Desktop / Docker daemon: do not start on this Windows workstation. Docker has been observed to hang local processes here; Docker-heavy validation belongs on the Mac runner or CI.
 
 ## Operating Mode
 
@@ -28,6 +29,10 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 The guarded local autopilot has been hardened through HEAD `c43111c`: it defaults to the Codex planner, treats active concurrent locks as a clean no-work exit, accepts both inline and markdown `Commit Allowed` gates, exits cleanly for scheduled no-task blockers, and forbids HEAD-only handoff churn as an autonomous task. A real scheduled-mode run wrote `.autopilot/BLOCKED.md` because no bounded safe local task remained.
 
 The 2026-05-29 local refresh does not add owner-provided external evidence. External AWS/Terraform, production CDC, PMF/pricing, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable; do not infer completion from local docs/state commits.
+
+The 2026-05-30 local policy update marks this Windows workstation as no-Docker. Local broad pytest must use `SKIP_DOCKER_TESTS=1`; Docker Desktop, Docker compose/build, kind/Helm live validation, chaos tests, and Docker-dependent full pytest must run on the Mac runner or in CI before claiming Docker-heavy coverage.
+
+For a compact-safe next session, rebuild context from checked-in files instead of relying on chat memory: read `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, `docs/operations/local-verification-matrix.md`, and `AUTOPILOT.md` first. A continuation prompt can be: `D:\DE_project. Продолжай автономно без Docker на этой Windows-машине. Восстанови состояние из checked-in docs, не опирайся на неполный chat compact, закрывай текущий dirty WIP первым и используй только no-Docker локальные проверки.`
 
 The 2026-05-05 closeout was interrupted by an explicit audit-remediation request. Commit `adb9c8e` records the first five locally verifiable Kimi audit fixes, Codex+Kimi synthesis under `res/codex/`, M1/M2 SQL static-analysis gate narrowing, L6 SBOM artifact generation, M7 staging rollback safety, and the first narrow M3 mypy strict slice for `src.quality.validators.*`. Commit `afbe643` records the M8 scoped validators coverage gate. Tasks 18-22 stay blocked until real owner-provided evidence is supplied.
 
@@ -219,8 +224,8 @@ policy, write proof, or readback evidence).
 - `python -m pytest tests/unit -p no:schemathesis`: passed with 454 tests.
 - `python -m ruff check src/ tests/`: passed.
 - `python -m ruff format --check src/ tests/`: passed.
-- `python -m pytest -p no:schemathesis`: passed with 753 passed, 4 skipped, and 104 warnings after Docker Desktop was started.
-- `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis`: passed with 729 passed, 28 skipped, and 104 warnings before Docker was available.
+- Historical only; do not repeat on this Windows workstation: `python -m pytest -p no:schemathesis` passed with 753 passed, 4 skipped, and 104 warnings after Docker Desktop was started.
+- Current Windows broad-test pattern: `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis` passed with 729 passed, 28 skipped, and 104 warnings before Docker was available.
 - Standalone lint/typecheck/build gates: not run separately; no frontend source was changed.
 - Local verification matrix: documented in `docs/operations/local-verification-matrix.md`.
 - `cd sdk-ts; npm run typecheck`: passed.
@@ -230,6 +235,7 @@ policy, write proof, or readback evidence).
 ## Runtime Gaps
 
 - Integration, staging, load, publish, and Terraform workflows depend on Docker, Kubernetes, cloud credentials, external services, or GitHub secrets and are forbidden for autopilot by default.
+- On this Windows workstation, Docker Desktop, Docker compose/build, kind, Helm live validation, chaos tests, and Docker-dependent full pytest are forbidden local gates because Docker can hang processes. Use the Mac runner or CI for that evidence.
 - The runner cannot sandbox `pi` or `codex` to path-level writes before execution; it enforces allowed paths after execution and blocks commits on violations.
 - Scheduler is intentionally not enabled by setup.
 
@@ -237,12 +243,14 @@ policy, write proof, or readback evidence).
 
 - Documentation under `docs/` and root markdown files.
 - Unit/property tests that do not require Docker, cloud credentials, or live services.
+- Broad local pytest with `SKIP_DOCKER_TESTS=1`.
 - Local-only scripts that do not deploy, publish, rotate secrets, or delete project data.
 - Small source changes when the required verification can run locally.
 
 ## Forbidden Scope
 
 - `.github/workflows/*publish*`, `.github/workflows/terraform-apply.yml`, deployment workflows, and release publishing.
+- Starting Docker Desktop or running Docker-backed gates on this Windows workstation.
 - `deploy/`, production `docker-compose` flows, `helm/`, `k8s/`, and `infrastructure/terraform/` unless the user explicitly assigns a bounded non-deploy documentation task.
 - Secret files, `.env*`, API keys, tokens, recovery codes, cloud accounts, npm/PyPI publishing, and paid external API calls.
 - Runtime databases, warehouses, logs, and generated artifacts.

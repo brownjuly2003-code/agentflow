@@ -1,18 +1,18 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-29 (autopilot docs/plan refresh)
-**HEAD before this docs/plan update:** `c43111c` (`c43111c7b1e417d5ed7c3eff6e884734b19be9e5`) on `main`.
-**Branch state before this docs/plan update:** `main...origin/main [ahead 12]`; local `main` has twelve commits not on `origin/main`.
+**Last updated:** 2026-05-30 (Windows no-Docker verification policy)
+**HEAD at this docs update:** `3edc4f2` (`3edc4f2af8a36b1d06b91ed62ed8c51e7d492c01`) on `main`.
+**Branch state at this docs update:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files:** `901` via `git ls-files`.
 **Latest local commits:**
+- `3edc4f2` fix(ci): set git identity in committing autopilot test
+- `63ae86b` fix(ci): configure git identity in autopilot test
+- `fc02390` fix(ci): include pandas in dev dependencies
+- `bc5b920` docs: update autopilot plan state
 - `c43111c` fix(autopilot): avoid handoff churn tasks
 - `3f4a74c` fix(autopilot): exit cleanly on scheduled blockers
 - `ad0f5c3` fix(autopilot): accept markdown commit gate
 - `5f4d70c` docs: refresh autopilot handoff state
-- `bd18aff` fix(autopilot): default planner to codex
-- `eb1074b` fix(autopilot): ignore active concurrent locks
-- `96cd198` docs: refresh autopilot handoff state
-- `6ff7860` fix(autopilot): run gates for bounded product tasks
 
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
@@ -27,13 +27,13 @@ this document is the whole-project view.
 
 ## How to start a new session
 
-Run these four commands first; they orient you in under a minute:
+Run these PowerShell commands first; they orient you in under a minute:
 
-```bash
+```powershell
 cd D:/DE_project
-git fetch origin main && git log --oneline origin/main -10
-gh run list --branch main --limit 6 --json status,conclusion,workflowName,headSha \
-  | python -c "import sys,json; [print(f\"{r['conclusion'] or r['status']:11s} {r['workflowName']:25s} {r['headSha'][:7]}\") for r in json.load(sys.stdin)[:6]]"
+git fetch origin main
+git log --oneline origin/main -10
+gh run list --branch main --limit 6 --json status,conclusion,workflowName,headSha | python -c "import sys,json; [print(f\"{r['conclusion'] or r['status']:11s} {r['workflowName']:25s} {r['headSha'][:7]}\") for r in json.load(sys.stdin)[:6]]"
 gh pr list --state open --limit 15
 ```
 
@@ -52,6 +52,54 @@ For DV2 multi-branch demo work specifically, also read
 `docs/dv2-multi-branch/SESSION_HANDOFF.md` — it has the iMac/Lima
 cluster credentials, asciinema cast pipeline, and the five CH
 `MaterializedPostgreSQL` pitfalls.
+
+## Local Windows Verification Policy
+
+This Windows workstation is a no-Docker host. Do not start Docker Desktop,
+`docker compose`, `docker build`, kind, Helm live validation, chaos tests, or
+Docker-dependent full pytest here; Docker has been observed to hang local
+processes on this machine.
+
+Use `$env:SKIP_DOCKER_TESTS='1'` for broad local pytest. Run Docker-heavy gates
+on the Mac runner or in CI, and record the command, commit SHA, and result before
+claiming full Docker coverage. If only this Windows machine was used, report the
+state as `local no-Docker green; Docker-heavy verification pending on Mac/CI`.
+
+## Compact-Safe Autonomous Start
+
+If the next chat session starts with missing or compacted context, do not ask the
+operator to reconstruct this session. Treat the checked-in docs as the durable
+handoff and rebuild state from the repo:
+
+```powershell
+cd D:/DE_project
+git status --short --branch -uno
+git rev-parse --short HEAD
+git log --oneline -8
+```
+
+Then read, in this order:
+
+1. `AGENT_STATE.md`
+2. `docs/SESSION_HANDOFF.md`
+3. `docs/operations/local-verification-matrix.md`
+4. `AUTOPILOT.md`
+5. `BACKLOG.md`, only if the first four docs expose a safe local candidate
+
+Use this operator prompt to continue without a pause:
+
+```text
+D:\DE_project. Продолжай автономно без Docker на этой Windows-машине. Сначала восстанови состояние из AGENT_STATE.md, docs/SESSION_HANDOFF.md, docs/operations/local-verification-matrix.md и AUTOPILOT.md. Не опирайся на старый chat compact, если он неполный. Бери следующий безопасный атомарный пункт из текущего dirty WIP, failed verification, PLAN/BACKLOG или handoff docs. Локально используй только no-Docker проверки; Docker-heavy проверки отмечай как Mac/CI-pending.
+```
+
+Continuation rules:
+
+- Do not start Docker Desktop or any Docker-backed gate on this Windows host.
+- Prefer closing current dirty WIP before choosing new work.
+- If compaction loses details, re-read the durable docs above and continue from
+  repo evidence instead of asking for a recap.
+- Stop only for a hard-stop trigger, real local blocker, unexpected dirty-file
+  conflict, or an explicit commit/push boundary.
 
 ## Open work — priorities
 
@@ -408,17 +456,18 @@ documented workaround.
 
 ## Quick health commands
 
-```bash
+```powershell
 # Verify all six workflows on HEAD
-gh run list --branch main --limit 12 --json status,conclusion,workflowName,headSha \
-  | python -c "import sys,json; runs=json.load(sys.stdin); seen=set(); [print(f\"{r['conclusion'] or r['status']:11s} {r['workflowName']}\") for r in runs if r['workflowName'] in ('CI','Security Scan','Load Test','E2E Tests','Staging Deploy','Contract Tests') and not (r['workflowName'] in seen or seen.add(r['workflowName']))]"
+gh run list --branch main --limit 12 --json status,conclusion,workflowName,headSha | python -c "import sys,json; runs=json.load(sys.stdin); seen=set(); [print(f\"{r['conclusion'] or r['status']:11s} {r['workflowName']}\") for r in runs if r['workflowName'] in ('CI','Security Scan','Load Test','E2E Tests','Staging Deploy','Contract Tests') and not (r['workflowName'] in seen or seen.add(r['workflowName']))]"
 
 # Open Dependabot PRs with merge state
 gh pr list --state open --limit 15 --json number,title,mergeable,mergeStateStatus
 
 # Smoke contract resolver locally
-python -m pip install --dry-run -e ".[dev,cloud,contract]" 2>&1 | tail -20
+python -m pip install --dry-run -e ".[dev,cloud,contract]" 2>&1 | Select-Object -Last 20
 
-# Run main test slice
-python -m pytest tests/unit tests/integration tests/sdk -q
+# Run broad local no-Docker pytest
+$env:SKIP_DOCKER_TESTS='1'
+python -m pytest -p no:schemathesis
+Remove-Item Env:\SKIP_DOCKER_TESTS
 ```

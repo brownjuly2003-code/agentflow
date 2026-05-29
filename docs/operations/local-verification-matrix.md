@@ -4,6 +4,18 @@ This guide defines which verification commands are safe for the guarded local
 autopilot path and which commands require Docker, cloud credentials, external
 services, or manual operator intent.
 
+## Windows Workstation No-Docker Policy
+
+Treat this Windows workstation as a no-Docker host. Do not start Docker Desktop,
+`docker compose`, `docker build`, kind, Helm live validation, chaos tests, or a
+Docker-dependent full pytest run here; Docker has been observed to hang local
+processes on this machine.
+
+Run Docker-heavy validation on the Mac runner or in CI. When reporting local
+evidence from this machine, use wording like `local no-Docker green; Docker-heavy
+verification pending on Mac/CI` unless the Mac or CI evidence is already attached
+with command, commit SHA, and result.
+
 ## Default Safe Gates
 
 Run these commands by default when the touched files make them relevant. They
@@ -15,6 +27,7 @@ accounts.
 | Whitespace | `git diff --check` | Always before handoff, commit, or autopilot retry. |
 | Python unit tests | `python -m pytest tests/unit -p no:schemathesis` | Python source, SDK, or unit-test changes. |
 | Targeted Python test | `python -m pytest <test-path> -p no:schemathesis` | TDD loop for one file or one test node. |
+| No-Docker broad pytest | `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis` | Broad local regression on this Windows workstation. |
 | Ruff lint | `python -m ruff check src/ tests/` | Any Python source or test change. |
 | Ruff format check | `python -m ruff format --check src/ tests/` | Any Python source or test change. |
 | mypy | `python -m mypy src/` | Typed serving, processing, or SDK-adjacent Python changes. |
@@ -35,13 +48,15 @@ npm install
 cd ..
 ```
 
-## Docker-Dependent Local Gates
+## Docker-Dependent Gates
 
-These commands are local, but not safe as autopilot defaults because they start
-containers, require Docker health, or depend on reserved local ports.
+These commands are not safe on this Windows workstation. They start containers,
+require Docker health, or depend on reserved local ports. Use the Mac runner or
+CI for them.
 
 | Scope | Command | Requirements |
 | --- | --- | --- |
+| Full Docker-capable pytest | `python -m pytest -p no:schemathesis` | Run on Mac/CI when Docker-dependent tests must be included. On this Windows host use the `SKIP_DOCKER_TESTS=1` gate above. |
 | Integration tests | `python -m pytest tests/integration -v --tb=short` | Kafka and service dependencies; CI starts Kafka for the main integration job. |
 | Helm live validation | `python -m pytest tests/integration/test_helm_values_live_validation.py -v -m integration --tb=short` | Helm/kind tooling. |
 | E2E tests | `python -m pytest tests/e2e -v --tb=short --timeout=60` | Temporary local API, or an explicit `AGENTFLOW_E2E_BASE_URL` and matching test keys. |
@@ -95,5 +110,8 @@ explicitly assigns a bounded operator task:
 
 The guarded autopilot runner should always run `git diff --check`. It may run
 Python, Ruff, mypy, and TypeScript SDK gates when changed paths require them and
-the commands are available locally. It should record missing tooling as a
-runtime gap in `AGENT_STATE.md` instead of silently trusting an unverified area.
+the commands are available locally. On this Windows workstation, broad pytest
+must set `SKIP_DOCKER_TESTS=1`; Docker-required gates must be recorded as
+Mac/CI-pending evidence instead of attempted locally. It should record missing
+tooling as a runtime gap in `AGENT_STATE.md` instead of silently trusting an
+unverified area.

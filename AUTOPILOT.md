@@ -12,6 +12,7 @@ Runtime:
 - Executor: Codex via `codex` CLI
 - Runner: `scripts/autopilot.ps1`
 - Scheduled task: `AgentFlow Local Autopilot`, installed as `-Planner codex -ExitZeroOnBlocked -Commit`
+- Local host policy: this Windows workstation is no-Docker; do not start Docker Desktop or Docker-backed gates here because Docker can hang local processes.
 
 ## Mission Source Order
 
@@ -33,7 +34,7 @@ The planner chooses exactly one bounded task and writes only:
 - `.autopilot/commit-message.txt`
 - `.autopilot/BLOCKED.md`, when no safe task exists
 
-The planner may choose product-code work only when the task is bounded, has explicit allowed paths, requires tests before behavior changes, and can be verified locally without external services. It must not choose documentation churn only to keep the autopilot moving, and it must not choose handoff refresh solely to update HEAD, branch-ahead counts, timestamps, latest commits, or tracked-file counts after local autopilot commits.
+The planner may choose product-code work only when the task is bounded, has explicit allowed paths, requires tests before behavior changes, and can be verified locally without external services or Docker on this host. It must not choose documentation churn only to keep the autopilot moving, and it must not choose handoff refresh solely to update HEAD, branch-ahead counts, timestamps, latest commits, or tracked-file counts after local autopilot commits.
 
 ### Codex Executor
 
@@ -66,6 +67,7 @@ Stop and write `.autopilot/BLOCKED.md` when:
 - the planner does not create `NEXT_TASK.md` and `allowed-paths.txt`;
 - any changed file is outside `.autopilot/allowed-paths.txt`;
 - any required gate fails;
+- the task requires Docker on this Windows workstation;
 - the task requires secrets, deploys, production data, paid APIs, external accounts, or manual credentials.
 
 ## Required Gates
@@ -74,13 +76,17 @@ The runner always runs:
 - `git diff --check`
 
 When relevant commands are available and changed paths require them, it also runs:
-- `python -m pytest -p no:schemathesis`
+- `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis`
 - `python -m ruff check <changed-python-files>`
 - `python -m ruff format --check <changed-python-files>`
 - `python -m mypy src/`
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run build`
+
+Full pytest without `SKIP_DOCKER_TESTS`, Docker build, Docker compose, chaos,
+kind, and Helm live gates are Mac/CI evidence on this workstation. Do not start
+Docker Desktop locally to satisfy an autopilot gate.
 
 Missing local tools are recorded as runtime gaps in `AGENT_STATE.md` and must become backlog work before the autopilot is trusted for those areas.
 

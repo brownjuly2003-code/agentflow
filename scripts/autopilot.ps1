@@ -83,7 +83,7 @@ function Invoke-RepoCommand {
 function Get-ChangedFiles {
     Push-Location $RepoRoot
     try {
-        $lines = @(git status --porcelain=v1)
+        $lines = @(git status --porcelain=v1 --untracked-files=all)
     } finally {
         Pop-Location
     }
@@ -158,6 +158,28 @@ function Test-PythonModuleCommand {
     }
 }
 
+function Get-PythonGateFiles {
+    param([string[]]$ChangedFiles)
+
+    $items = @()
+    foreach ($file in $ChangedFiles) {
+        if ($file -match "\.py$" -and $file -match "^(src|tests|sdk|integrations|warehouse|scripts)/") {
+            $items += $file
+        }
+    }
+    return $items
+}
+
+function Join-CommandArguments {
+    param([string[]]$Arguments)
+
+    $escaped = @()
+    foreach ($argument in $Arguments) {
+        $escaped += "'" + ($argument -replace "'", "''") + "'"
+    }
+    return ($escaped -join " ")
+}
+
 function Run-Gates {
     param([string[]]$ChangedFiles)
 
@@ -165,8 +187,9 @@ function Run-Gates {
 
     $pythonTouched = $false
     $typescriptTouched = $false
+    $pythonGateFiles = @(Get-PythonGateFiles -ChangedFiles $ChangedFiles)
     foreach ($file in $ChangedFiles) {
-        if ($file -match "^(src|tests|sdk|integrations)/" -or $file -eq "pyproject.toml" -or $file -eq "requirements.txt") {
+        if ($pythonGateFiles.Count -gt 0 -or $file -eq "pyproject.toml" -or $file -eq "requirements.txt") {
             $pythonTouched = $true
         }
         if ($file -match "^(sdk-ts/|tests/client\.test\.ts)" -or $file -eq "package-lock.json") {
@@ -178,8 +201,14 @@ function Run-Gates {
         Require-Command "python" | Out-Null
         Invoke-RepoCommand "python -m pytest -p no:schemathesis"
         if (Test-PythonModuleCommand "ruff") {
-            Invoke-RepoCommand "python -m ruff check src/ tests/"
-            Invoke-RepoCommand "python -m ruff format --check src/ tests/"
+            if ($pythonGateFiles.Count -gt 0) {
+                $ruffTargets = Join-CommandArguments -Arguments $pythonGateFiles
+                Invoke-RepoCommand "python -m ruff check $ruffTargets"
+                Invoke-RepoCommand "python -m ruff format --check $ruffTargets"
+            } else {
+                Invoke-RepoCommand "python -m ruff check src/ tests/"
+                Invoke-RepoCommand "python -m ruff format --check src/ tests/"
+            }
         } else {
             Write-Log "GAP: python -m ruff is unavailable; record this in AGENT_STATE.md."
         }
@@ -265,7 +294,7 @@ Also write .autopilot/allowed-paths.txt with one repo-relative allowed file or d
 Also write .autopilot/commit-message.txt with one short commit message.
 
 Hard rules:
-- Do not edit product code.
+- Product code is allowed only for bounded local tasks with explicit allowed paths, failing tests before behavior changes, and local verification that does not require external services.
 - Do not ask the user anything.
 - Do not read, print, or request secrets.
 - Do not choose deploy, publish, Terraform apply, production DB, paid API, or external account work.

@@ -384,3 +384,128 @@ def test_autopilot_blocks_repeated_task_fingerprint(tmp_path):
     assert "Autopilot run finished." in first.stdout
     assert second.returncode == 1
     assert "same task fingerprint" in second.stdout
+
+
+def test_autopilot_planner_prompt_allows_bounded_product_code():
+    script = (PROJECT_ROOT / "scripts" / "autopilot.ps1").read_text(encoding="utf-8")
+
+    assert "- Do not edit product code." not in script
+    assert "Product code is allowed only for bounded local tasks" in script
+
+
+def test_autopilot_runs_python_gates_for_warehouse_changes(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shim_dir = tmp_path / "bin"
+    python_log = tmp_path / "python.log"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(
+        shim_dir,
+        "pi",
+        "\n".join(
+            [
+                "@echo off",
+                "if not exist .autopilot mkdir .autopilot",
+                "echo warehouse task> .autopilot\\NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot\\NEXT_TASK.md",
+                "echo warehouse/> .autopilot\\allowed-paths.txt",
+                "echo warehouse commit> .autopilot\\commit-message.txt",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                "mkdir -p .autopilot",
+                "echo warehouse task> .autopilot/NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot/NEXT_TASK.md",
+                "echo warehouse/> .autopilot/allowed-paths.txt",
+                "echo warehouse commit> .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
+    )
+    _write_shim(
+        shim_dir,
+        "codex",
+        "\n".join(
+            [
+                "@echo off",
+                "if not exist warehouse mkdir warehouse",
+                "echo VALUE = 1> warehouse\\example.py",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                "mkdir -p warehouse",
+                "echo 'VALUE = 1' > warehouse/example.py",
+                "exit 0",
+            ]
+        ),
+    )
+    _write_shim(
+        shim_dir,
+        "python",
+        "\n".join(
+            [
+                "@echo off",
+                f'echo %*>> "{python_log}"',
+                'if "%~1"=="-m" if "%~2"=="mypy" if "%~3"=="--version" exit /b 1',
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                f'printf "%s\\n" "$*" >> "{python_log}"',
+                'if [ "$1" = "-m" ] && [ "$2" = "mypy" ] && [ "$3" = "--version" ]; then',
+                "  exit 1",
+                "fi",
+                "exit 0",
+            ]
+        ),
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    python_calls = python_log.read_text(encoding="utf-8")
+    assert "-m pytest -p no:schemathesis" in python_calls
+    assert "-m ruff check warehouse/example.py" in python_calls

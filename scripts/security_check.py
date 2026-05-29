@@ -4,9 +4,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 import tomllib
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,6 +34,68 @@ def write_requirements(target: Path, entries: list[str]) -> None:
     target.write_text("\n".join(deduped) + "\n", encoding="utf-8")
 
 
+def resolve_requirements(name: str, entries: list[str], target: Path, work_dir: Path) -> int:
+    temp_input = work_dir / f"{name}.in"
+    write_requirements(temp_input, entries)
+
+    venv_dir = work_dir / f"safety-{name}-venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)  # noqa: S603
+    scripts_dir = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
+    python = scripts_dir / ("python.exe" if sys.platform == "win32" else "python")
+    subprocess.run(  # noqa: S603
+        [str(python), "-m", "pip", "install", "--upgrade", "pip"],
+        check=True,
+    )
+    subprocess.run(  # noqa: S603
+        [str(python), "-m", "pip", "install", "-r", str(temp_input)],
+        check=True,
+    )
+    freeze = subprocess.run(  # noqa: S603
+        [str(python), "-m", "pip", "freeze"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    resolved = [line for line in freeze.stdout.splitlines() if line.strip()]
+    if any("==" not in line for line in resolved):
+        raise SystemExit(f"{name} requirements were not fully resolved")
+    target.write_text("\n".join(resolved) + "\n", encoding="utf-8")
+    return len(resolved)
+
+
+def build_resolved_requirement_files(temp_path: Path) -> tuple[Path, Path, Path]:
+    main_requirements = temp_path / "requirements-main.txt"
+    sdk_requirements = temp_path / "requirements-sdk.txt"
+    integrations_requirements = temp_path / "requirements-integrations.txt"
+
+    resolve_requirements(
+        "main",
+        load_project_dependencies(REPO_ROOT / "pyproject.toml")
+        + load_requirements(REPO_ROOT / "requirements.txt"),
+        main_requirements,
+        temp_path,
+    )
+    resolve_requirements(
+        "sdk",
+        load_project_dependencies(REPO_ROOT / "sdk" / "pyproject.toml"),
+        sdk_requirements,
+        temp_path,
+    )
+    integrations_deps = [
+        dep
+        for dep in load_project_dependencies(REPO_ROOT / "integrations" / "pyproject.toml")
+        if not dep.lower().startswith(("agentflow-client", "agentflow-runtime"))
+    ]
+    resolve_requirements(
+        "integrations",
+        integrations_deps,
+        integrations_requirements,
+        temp_path,
+    )
+    return main_requirements, sdk_requirements, integrations_requirements
+
+
 def resolve_command(program: str) -> str:
     command = shutil.which(program)
     if command:
@@ -51,7 +112,7 @@ def resolve_command(program: str) -> str:
 
     raise FileNotFoundError(
         f"Required command '{program}' was not found. Install with: "
-        "pip install bandit \"safety<3\" pip-audit"
+        'pip install bandit "safety<3" pip-audit'
     )
 
 
@@ -64,17 +125,8 @@ def run_check(name: str, command: list[str]) -> bool:
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="agentflow-security-") as temp_dir:
         temp_path = Path(temp_dir)
-        main_requirements = temp_path / "requirements-main.txt"
-        sdk_requirements = temp_path / "requirements-sdk.txt"
-
-        write_requirements(
-            main_requirements,
-            load_project_dependencies(REPO_ROOT / "pyproject.toml")
-            + load_requirements(REPO_ROOT / "requirements.txt"),
-        )
-        write_requirements(
-            sdk_requirements,
-            load_project_dependencies(REPO_ROOT / "sdk" / "pyproject.toml"),
+        main_requirements, sdk_requirements, integrations_requirements = (
+            build_resolved_requirement_files(temp_path)
         )
 
         checks = [
@@ -102,6 +154,8 @@ def main() -> int:
                     str(main_requirements),
                     "-r",
                     str(sdk_requirements),
+                    "-r",
+                    str(integrations_requirements),
                 ],
             ),
             (
@@ -112,6 +166,8 @@ def main() -> int:
                     str(main_requirements),
                     "-r",
                     str(sdk_requirements),
+                    "-r",
+                    str(integrations_requirements),
                     "--progress-spinner",
                     "off",
                 ],

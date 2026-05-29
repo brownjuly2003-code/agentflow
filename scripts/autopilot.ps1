@@ -2,6 +2,8 @@
 param(
     [switch]$DryRun,
     [switch]$Commit,
+    [ValidateSet("auto", "pi", "codex")]
+    [string]$Planner = "codex",
     [string]$RepoRoot = ""
 )
 
@@ -31,6 +33,7 @@ New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $LogPath = Join-Path $LogDir "$RunId.log"
+$PlannerExitCode = 0
 
 function Write-Log {
     param([string]$Message)
@@ -345,36 +348,62 @@ Hard rules:
     Set-Content -Path $ExecutorPromptPath -Value $prompt -Encoding UTF8
 }
 
-function Invoke-Planner {
-    Write-PlannerPrompt
+function Invoke-PiPlanner {
     Write-Log "RUN: pi planner"
     Push-Location $RepoRoot
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
         & pi --mode text --print --no-session --tools read,grep,find,ls,bash,write,edit "@$PlannerPromptPath" 2>&1 | Tee-Object -FilePath $LogPath -Append
-        $plannerExitCode = $LASTEXITCODE
+        $script:PlannerExitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
         Pop-Location
     }
-    if ($plannerExitCode -ne 0) {
-        Write-Log "pi planner failed with exit code $plannerExitCode; falling back to codex planner."
-        Write-Log "RUN: codex planner"
-        Push-Location $RepoRoot
-        $previousErrorActionPreference = $ErrorActionPreference
-        try {
-            $ErrorActionPreference = "Continue"
-            Get-Content -Raw $PlannerPromptPath | codex exec -c 'approval_policy="never"' --cd $RepoRoot --sandbox danger-full-access - 2>&1 | Tee-Object -FilePath $LogPath -Append
-            $plannerExitCode = $LASTEXITCODE
-        } finally {
-            $ErrorActionPreference = $previousErrorActionPreference
-            Pop-Location
+}
+
+function Invoke-CodexPlanner {
+    Write-Log "RUN: codex planner"
+    Push-Location $RepoRoot
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        Get-Content -Raw $PlannerPromptPath | codex exec -c 'approval_policy="never"' --cd $RepoRoot --sandbox danger-full-access - 2>&1 | Tee-Object -FilePath $LogPath -Append
+        $script:PlannerExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        Pop-Location
+    }
+}
+
+function Invoke-Planner {
+    Write-PlannerPrompt
+
+    if ($Planner -eq "pi") {
+        Invoke-PiPlanner
+        $plannerExitCode = $script:PlannerExitCode
+        if ($plannerExitCode -ne 0) {
+            Stop-Blocked "pi planner failed with exit code $plannerExitCode"
         }
+    } elseif ($Planner -eq "auto") {
+        Invoke-PiPlanner
+        $plannerExitCode = $script:PlannerExitCode
+        if ($plannerExitCode -ne 0) {
+            Write-Log "pi planner failed with exit code $plannerExitCode; falling back to codex planner."
+            Invoke-CodexPlanner
+            $plannerExitCode = $script:PlannerExitCode
+            if ($plannerExitCode -ne 0) {
+                Stop-Blocked "codex planner failed with exit code $plannerExitCode"
+            }
+        }
+    } else {
+        Invoke-CodexPlanner
+        $plannerExitCode = $script:PlannerExitCode
         if ($plannerExitCode -ne 0) {
             Stop-Blocked "codex planner failed with exit code $plannerExitCode"
         }
     }
+
     if (Test-Path $BlockedPath) {
         Write-Log "Planner wrote BLOCKED.md."
         exit 1
@@ -446,11 +475,14 @@ function Invoke-ExplicitCommit {
 }
 
 Require-Command "git" | Out-Null
-Require-Command "pi" | Out-Null
+if ($Planner -eq "pi" -or $Planner -eq "auto") {
+    Require-Command "pi" | Out-Null
+}
 Require-Command "codex" | Out-Null
 
 if ($DryRun) {
     Write-Log "Dry-run: repo=$RepoRoot"
+    Write-Log "Dry-run: planner=$Planner"
     if (Test-Path $PausePath) {
         Write-Log "Dry-run: PAUSE exists; non-dry run would exit before work."
     } else {
@@ -462,7 +494,7 @@ if ($DryRun) {
         Write-Log "Dry-run: BLOCKED protocol OK."
     }
     Write-Log "Dry-run: allowed-paths protocol requires .autopilot/allowed-paths.txt before execution."
-    Write-Log "Dry-run: pi and codex commands are available."
+    Write-Log "Dry-run: required planner commands are available."
     Invoke-RepoCommand "git status --short -uno"
     Invoke-RepoCommand "git diff --check"
     exit 0

@@ -4,6 +4,8 @@ param(
     [switch]$Commit,
     [string]$TaskName = "AgentFlow Local Autopilot",
     [int]$FrequencyMinutes = 60,
+    [ValidateSet("auto", "pi", "codex")]
+    [string]$Planner = "codex",
     [string]$RepoRoot = ""
 )
 
@@ -21,7 +23,7 @@ if (-not (Test-Path $RunnerPath)) {
     throw "Runner not found: $RunnerPath"
 }
 
-$arguments = "-ExecutionPolicy Bypass -File `"$RunnerPath`""
+$arguments = "-ExecutionPolicy Bypass -File `"$RunnerPath`" -Planner $Planner"
 if ($Commit) {
     $arguments = "$arguments -Commit"
 }
@@ -31,6 +33,7 @@ if (-not $Install) {
     Write-Output "Preview:"
     Write-Output "  Task name: $TaskName"
     Write-Output "  Every minutes: $FrequencyMinutes"
+    Write-Output "  Planner: $Planner"
     Write-Output "  Command: powershell $arguments"
     Write-Output ""
     Write-Output "Install with:"

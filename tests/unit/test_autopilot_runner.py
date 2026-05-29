@@ -136,6 +136,8 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
             str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
             "-RepoRoot",
             str(repo),
+            "-Planner",
+            "pi",
         ],
         env=env,
         capture_output=True,
@@ -240,6 +242,8 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
             str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
             "-RepoRoot",
             str(repo),
+            "-Planner",
+            "auto",
         ],
         env=env,
         capture_output=True,
@@ -300,6 +304,8 @@ def test_autopilot_clears_stale_task_handoff_before_planning(tmp_path):
             str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
             "-RepoRoot",
             str(repo),
+            "-Planner",
+            "pi",
         ],
         env=env,
         capture_output=True,
@@ -375,6 +381,8 @@ def test_autopilot_blocks_repeated_task_fingerprint(tmp_path):
         str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
         "-RepoRoot",
         str(repo),
+        "-Planner",
+        "pi",
     ]
 
     first = subprocess.run(command, env=env, capture_output=True, text=True)
@@ -499,6 +507,8 @@ def test_autopilot_runs_python_gates_for_warehouse_changes(tmp_path):
             str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
             "-RepoRoot",
             str(repo),
+            "-Planner",
+            "pi",
         ],
         env=env,
         capture_output=True,
@@ -509,6 +519,105 @@ def test_autopilot_runs_python_gates_for_warehouse_changes(tmp_path):
     python_calls = python_log.read_text(encoding="utf-8")
     assert "-m pytest -p no:schemathesis" in python_calls
     assert "-m ruff check warehouse/example.py" in python_calls
+
+
+def test_autopilot_defaults_to_codex_planner_without_running_pi(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 9\n", "exit 9\n")
+    _write_shim(
+        shim_dir,
+        "codex",
+        "\n".join(
+            [
+                "@echo off",
+                ":check_args",
+                'if "%~1"=="" goto plan',
+                'if "%~1"=="--sandbox" (',
+                '  if "%~2"=="danger-full-access" (',
+                "    shift",
+                "    shift",
+                "    goto check_args",
+                "  )",
+                "  exit /b 3",
+                ")",
+                "shift",
+                "goto check_args",
+                ":plan",
+                "if not exist .autopilot mkdir .autopilot",
+                "echo codex task> .autopilot\\NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot\\NEXT_TASK.md",
+                "echo docs/operations/> .autopilot\\allowed-paths.txt",
+                "echo codex commit> .autopilot\\commit-message.txt",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                'while [ "$#" -gt 0 ]; do',
+                '  if [ "$1" = "--sandbox" ]; then',
+                '    if [ "$2" != "danger-full-access" ]; then exit 3; fi',
+                "    shift 2",
+                "    continue",
+                "  fi",
+                "  shift",
+                "done",
+                "mkdir -p .autopilot",
+                "echo codex task> .autopilot/NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot/NEXT_TASK.md",
+                "echo docs/operations/> .autopilot/allowed-paths.txt",
+                "echo codex commit> .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RUN: pi planner" not in result.stdout
+    assert "RUN: codex planner" in result.stdout
+    assert "Autopilot run finished." in result.stdout
 
 
 def test_autopilot_exits_without_blocking_when_active_lock_exists(tmp_path):

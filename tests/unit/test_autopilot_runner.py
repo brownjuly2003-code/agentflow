@@ -620,6 +620,101 @@ def test_autopilot_defaults_to_codex_planner_without_running_pi(tmp_path):
     assert "Autopilot run finished." in result.stdout
 
 
+def test_autopilot_commit_gate_accepts_markdown_section_format(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    (repo / "state.md").write_text("old\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore", "state.md"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 9\n", "exit 9\n")
+    _write_shim(
+        shim_dir,
+        "codex",
+        "\n".join(
+            [
+                "@echo off",
+                ":check_args",
+                'if "%~1"=="" goto plan_or_execute',
+                "shift",
+                "goto check_args",
+                ":plan_or_execute",
+                "if exist .autopilot\\NEXT_TASK.md goto execute",
+                "if not exist .autopilot mkdir .autopilot",
+                "echo # Task> .autopilot\\NEXT_TASK.md",
+                "echo ## Commit Allowed>> .autopilot\\NEXT_TASK.md",
+                "echo yes>> .autopilot\\NEXT_TASK.md",
+                "echo state.md> .autopilot\\allowed-paths.txt",
+                "echo docs: update state> .autopilot\\commit-message.txt",
+                "exit /b 0",
+                ":execute",
+                "echo new> state.md",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                'while [ "$#" -gt 0 ]; do shift; done',
+                "mkdir -p .autopilot",
+                "if [ -f .autopilot/NEXT_TASK.md ]; then",
+                "  echo new > state.md",
+                "  exit 0",
+                "fi",
+                "echo '# Task' > .autopilot/NEXT_TASK.md",
+                "echo '## Commit Allowed' >> .autopilot/NEXT_TASK.md",
+                "echo 'yes' >> .autopilot/NEXT_TASK.md",
+                "echo state.md > .autopilot/allowed-paths.txt",
+                "echo 'docs: update state' > .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+            "-Commit",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Committed verified autopilot changes." in result.stdout
+    assert not (repo / ".autopilot" / "BLOCKED.md").exists()
+
+
 def test_autopilot_exits_without_blocking_when_active_lock_exists(tmp_path):
     powershell = _powershell()
 

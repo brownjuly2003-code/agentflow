@@ -297,6 +297,18 @@ function Write-CompletedTaskFingerprint {
     Set-Content -Path $LastTaskFingerprintPath -Value $Fingerprint -Encoding UTF8
 }
 
+function Test-CommitAllowed {
+    param([string]$TaskText)
+
+    if ($TaskText -match "(?im)^commit allowed:\s*yes\s*$") {
+        return $true
+    }
+    if ($TaskText -match "(?ims)^#{1,6}\s*commit allowed\s*\r?\n\s*yes\s*(\r?\n|$)") {
+        return $true
+    }
+    return $false
+}
+
 function Write-PlannerPrompt {
     $prompt = @"
 You are the pi.dev planner for the AgentFlow local autopilot.
@@ -446,7 +458,7 @@ function Invoke-ExplicitCommit {
     }
 
     $taskText = Get-Content -Raw $NextTaskPath
-    if ($taskText -notmatch "(?im)^commit allowed:\s*yes\s*$") {
+    if (-not (Test-CommitAllowed -TaskText $taskText)) {
         Stop-Blocked "Commit requested but NEXT_TASK.md does not say 'commit allowed: yes'."
     }
 

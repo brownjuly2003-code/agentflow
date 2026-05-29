@@ -249,3 +249,138 @@ def test_autopilot_falls_back_to_codex_planner_when_pi_fails(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "RUN: codex planner" in result.stdout
     assert "Autopilot run finished." in result.stdout
+
+
+def test_autopilot_clears_stale_task_handoff_before_planning(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    autopilot_dir = repo / ".autopilot"
+    autopilot_dir.mkdir()
+    (autopilot_dir / "NEXT_TASK.md").write_text(
+        "stale task\ncommit allowed: no\n", encoding="utf-8"
+    )
+    (autopilot_dir / "allowed-paths.txt").write_text("docs/\n", encoding="utf-8")
+    (autopilot_dir / "commit-message.txt").write_text("stale commit\n", encoding="utf-8")
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 0\n", "exit 0\n")
+    _write_shim(shim_dir, "codex", "@echo off\nexit /b 0\n", "exit 0\n")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Planner did not create .autopilot/NEXT_TASK.md" in result.stdout
+
+
+def test_autopilot_blocks_repeated_task_fingerprint(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    _write_shim(
+        shim_dir,
+        "pi",
+        "\n".join(
+            [
+                "@echo off",
+                "if not exist .autopilot mkdir .autopilot",
+                "echo repeated task> .autopilot\\NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot\\NEXT_TASK.md",
+                "echo docs/operations/> .autopilot\\allowed-paths.txt",
+                "echo repeated commit> .autopilot\\commit-message.txt",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                "mkdir -p .autopilot",
+                "echo repeated task> .autopilot/NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot/NEXT_TASK.md",
+                "echo docs/operations/> .autopilot/allowed-paths.txt",
+                "echo repeated commit> .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
+    )
+    _write_shim(shim_dir, "codex", "@echo off\nexit /b 0\n", "exit 0\n")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    command = [
+        powershell,
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+        "-RepoRoot",
+        str(repo),
+    ]
+
+    first = subprocess.run(command, env=env, capture_output=True, text=True)
+    second = subprocess.run(command, env=env, capture_output=True, text=True)
+
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert "Autopilot run finished." in first.stdout
+    assert second.returncode == 1
+    assert "same task fingerprint" in second.stdout

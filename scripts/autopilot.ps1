@@ -24,6 +24,7 @@ $AllowedPathsPath = Join-Path $AutopilotDir "allowed-paths.txt"
 $CommitMessagePath = Join-Path $AutopilotDir "commit-message.txt"
 $PlannerPromptPath = Join-Path $AutopilotDir "planner-prompt.md"
 $ExecutorPromptPath = Join-Path $AutopilotDir "executor-prompt.md"
+$LastTaskFingerprintPath = Join-Path $AutopilotDir "last-task-fingerprint.txt"
 
 New-Item -ItemType Directory -Path $AutopilotDir -Force | Out-Null
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
@@ -193,6 +194,55 @@ function Run-Gates {
         Require-Command "npm" | Out-Null
         Invoke-RepoCommand "Push-Location sdk-ts; npm run typecheck; if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }; npm run test:unit; if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }; npm run build; exit `$LASTEXITCODE"
     }
+}
+
+function Clear-TaskHandoff {
+    foreach ($path in @($NextTaskPath, $AllowedPathsPath, $CommitMessagePath)) {
+        if (Test-Path $path) {
+            Remove-Item -Path $path -Force
+        }
+    }
+}
+
+function Get-TaskFingerprint {
+    if (-not (Test-Path $NextTaskPath) -or -not (Test-Path $AllowedPathsPath)) {
+        Stop-Blocked "Cannot fingerprint task because NEXT_TASK.md or allowed-paths.txt is missing."
+    }
+
+    $commitText = ""
+    if (Test-Path $CommitMessagePath) {
+        $commitText = Get-Content -Raw $CommitMessagePath
+    }
+    $payload = @(
+        Get-Content -Raw $NextTaskPath
+        "---ALLOWED-PATHS---"
+        Get-Content -Raw $AllowedPathsPath
+        "---COMMIT-MESSAGE---"
+        $commitText
+    ) -join "`n"
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+        return ([System.BitConverter]::ToString($sha256.ComputeHash($bytes)) -replace "-", "").ToLowerInvariant()
+    } finally {
+        $sha256.Dispose()
+    }
+}
+
+function Assert-TaskNotRepeated {
+    $fingerprint = Get-TaskFingerprint
+    if (Test-Path $LastTaskFingerprintPath) {
+        $lastFingerprint = (Get-Content -Raw $LastTaskFingerprintPath).Trim()
+        if ($lastFingerprint -eq $fingerprint) {
+            Stop-Blocked "Planner selected the same task fingerprint as the previous completed run. Refusing to repeat it without operator review."
+        }
+    }
+    return $fingerprint
+}
+
+function Write-CompletedTaskFingerprint {
+    param([string]$Fingerprint)
+    Set-Content -Path $LastTaskFingerprintPath -Value $Fingerprint -Encoding UTF8
 }
 
 function Write-PlannerPrompt {
@@ -390,7 +440,9 @@ try {
         Stop-Blocked "Working tree is not clean before autopilot: $($initialChanges -join ', ')"
     }
 
+    Clear-TaskHandoff
     Invoke-Planner
+    $taskFingerprint = Assert-TaskNotRepeated
     $plannerChanges = @(Get-ChangedFiles)
     if ($plannerChanges.Count -gt 0) {
         Stop-Blocked "Planner changed tracked files before execution: $($plannerChanges -join ', ')"
@@ -400,6 +452,7 @@ try {
     $changed = @(Assert-AllowedChanges)
     Run-Gates -ChangedFiles $changed
     Invoke-ExplicitCommit -ChangedFiles $changed
+    Write-CompletedTaskFingerprint -Fingerprint $taskFingerprint
     Write-Log "Autopilot run finished."
 } finally {
     if (Test-Path $LockPath) {

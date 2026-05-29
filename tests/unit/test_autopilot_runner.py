@@ -57,6 +57,10 @@ def test_autopilot_accepts_clean_worktree_with_no_initial_changes(tmp_path):
         capture_output=True,
         text=True,
     )
+    subprocess.run(["git", "config", "user.name", "Autopilot Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "autopilot@example.invalid"], cwd=repo, check=True
+    )
 
     shim_dir = tmp_path / "bin"
     shim_dir.mkdir()

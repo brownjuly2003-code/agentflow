@@ -28,7 +28,7 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 The guarded local autopilot has been hardened through HEAD `c43111c`: it defaults to the Codex planner, treats active concurrent locks as a clean no-work exit, accepts both inline and markdown `Commit Allowed` gates, exits cleanly for scheduled no-task blockers, and forbids HEAD-only handoff churn as an autonomous task. A real scheduled-mode run wrote `.autopilot/BLOCKED.md` because no bounded safe local task remained.
 
-The 2026-05-29 local refresh does not add owner-provided external evidence. External AWS/Terraform, production CDC, PMF/pricing, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable; do not infer completion from local docs/state commits.
+The 2026-05-29 local refresh did not add owner-provided external evidence. The 2026-05-30 external-outreach restart added two accepted public-form contact submissions for PMF/customer discovery and several non-counting attempts documented in `docs/customer-discovery-tracker.md`. This is outreach evidence only; PMF/pricing remains blocked until real replies, scheduled/completed interviews, WTP/pricing evidence, LOI/invoice/procurement artifacts, or first-paying-customer signals exist. External AWS/Terraform remains not applicable without budget/explicit reintroduction; production CDC, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable.
 
 The 2026-05-30 local policy update marks this Windows workstation as no-Docker. Local broad pytest must use `SKIP_DOCKER_TESTS=1`; Docker Desktop, Docker compose/build, kind/Helm live validation, chaos tests, and Docker-dependent full pytest must run on the Mac runner or in CI before claiming Docker-heavy coverage.
 
@@ -82,7 +82,7 @@ policy, write proof, or readback evidence).
 - Manual access triage for backlog tasks 18-22 on 2026-05-04:
   - Task 18 AWS OIDC: GitHub CLI is authenticated for repository inspection; AWS CLI and Terraform CLI are not available in `PATH`; `AWS_REGION` is the only repo variable; Terraform workflow jobs remain `if: false`; real tfvars are absent.
   - Task 19 production CDC: no source owner, secret owner, source endpoint, table scope, private network path, Kubernetes Secret owner, monitoring owner, or rollback owner was available; no production connector was touched.
-  - Task 20 PMF/pricing: no approved outbound account/session, warm intro thread, CRM/calendar artifact, interview evidence, pricing/WTP artifact, LOI, invoice, or first-paying-customer signal was available.
+  - Task 20 PMF/pricing: no approved outbound account/session, warm intro thread, CRM/calendar artifact, interview evidence, pricing/WTP artifact, LOI, invoice, or first-paying-customer signal was available during the 2026-05-04 triage. On 2026-05-30, two public-form outreach submissions were accepted, but no replies, scheduled/completed interviews, pricing/WTP artifact, LOI, invoice, procurement artifact, or first-paying-customer signal exists yet.
   - Task 21 production benchmark: only historical local `.artifacts/benchmark/` files were found; no approved production-class host, budget, operator-run artifacts, fixture-safety confirmation, or publication approval was available.
   - Task 22 external pen-test: no third-party report, signed attestation, scope, severity summary, remediation map, retest status, or attestation owner was available; no external scanning or paid security service was run.
   - Each task handoff now includes a concise next operator packet describing the exact redacted owner-provided artifacts needed to unblock review.
@@ -93,7 +93,7 @@ policy, write proof, or readback evidence).
   - `git status --short --branch`: clean tracked tree, `main...origin/main [ahead 21]`, with the known local access-denied warnings from old temp directories.
   - Task 18 AWS OIDC remains blocked: `gh variable list` reports only `AWS_REGION`; AWS CLI and Terraform CLI are not available; real staging/prod tfvars are absent.
   - Task 19 production CDC remains blocked: no approved production source owner packet or first-run evidence was available.
-  - Task 20 PMF/pricing remains blocked: no real CRM/email/calendar/interview/pricing/LOI/invoice/procurement evidence was available.
+  - Task 20 PMF/pricing remains blocked for PMF/pricing claims: 2026-05-30 public-form outreach created two accepted submissions, but no real CRM reply, scheduled/completed interview, pricing/WTP, LOI, invoice, procurement, or paying-customer evidence is available.
   - Task 21 production benchmark remains blocked: no production-hardware artifacts or publication approval were available.
   - Task 22 external pen-test remains blocked: no third-party report or attestation packet was available.
   - Follow-up verification:

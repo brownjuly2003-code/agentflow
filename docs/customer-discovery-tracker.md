@@ -5,10 +5,10 @@
 **Script:** [Customer Discovery Questions](customer-discovery-questions.md)
 **Research baseline:** [v1.1 Interview Preparation Report](v1-1-interview-prep.md)
 
-This tracker keeps the PMF work operational in permanent `Synthetic / Modeled
-only` mode. Use it to record modelled assumptions, score synthetic segment
-rehearsals, and decide which v1.1 risks need product judgment. It does not mark
-the PMF gate complete.
+This tracker keeps the PMF work operational with a clear split between real
+external outreach and `Synthetic / Modeled only` planning material. Use it to
+record modelled assumptions, score synthetic segment rehearsals, and decide
+which v1.1 risks need product judgment. It does not mark the PMF gate complete.
 
 The named people below are real-world research anchors used to model plausible
 customer-discovery scenarios from public context. They are not contacted
@@ -20,29 +20,36 @@ thread is available in the workspace. Simulated sends, replies, scheduling
 intake, and modeled workflow details are planning inputs only. They do not count
 as real outreach, replies, interviews, PMF evidence, or scope-gate evidence.
 
-Permanent synthetic-mode decision, 2026-05-03: real outreach, real replies,
-scheduled interviews, completed interviews, and other real customer-discovery
-data will not be available for this project. All customer-discovery work in this
-tracker is therefore `Synthetic / Modeled only`. Keep real funnel metrics frozen
-at `0`, keep evidence counts at `0`, and use the modeled sections as the active
-planning surface.
+Synthetic-mode decision, 2026-05-03: real outreach, real replies, scheduled
+interviews, completed interviews, and other real customer-discovery data were
+not available at that time. This remains true for the modeled sections below:
+do not convert synthetic sends, replies, interviews, or scorecards into PMF
+evidence.
+
+Real-outreach restart, 2026-05-30: after explicit operator direction to work on
+external gates, outbound contact attempts resumed through public web forms using
+a non-free sender address from the local secret note. Do not commit sender
+addresses or private contact details. Real funnel counts now track only accepted
+external submissions and scheduled/completed real calls.
 
 ## Current PMF Evidence Handoff
 
-Status as of 2026-05-04: blocked on external founder/customer evidence for any
-real PMF claim.
+Status as of 2026-05-30: partially restarted, still blocked for any real PMF
+claim.
 
-No real outreach sends, replies, scheduled calls, completed interviews,
-first-paying-customer signals, or PMF score evidence are present in the repo or
-the task prompt. The modeled sections below remain useful planning inputs, but
-they do not count as customer validation, pricing evidence, PMF evidence, or a
-release-readiness gate.
+Two accepted external contact submissions now exist, plus three attempted
+channels that did not create a completed scheduled meeting. No real replies,
+scheduled calls, completed interviews, first-paying-customer signals, pricing
+evidence, or PMF score evidence are present. The modeled sections below remain
+useful planning inputs, but they do not count as customer validation, pricing
+evidence, PMF evidence, or a release-readiness gate.
 
 Access triage on 2026-05-04 found no approved outbound account/session, warm
 intro thread, CRM, calendar evidence, interview notes, LOI, invoice,
-procurement artifact, or founder-provided customer evidence to ingest. No
-outreach was sent and no real participant record was created. Keep real funnel
-metrics and evidence counts at `0`.
+procurement artifact, or founder-provided customer evidence to ingest. The
+2026-05-30 restart added accepted public-form submissions only; it did not add
+replies, interviews, pricing/WTP evidence, LOI, invoice, procurement, or
+customer validation evidence.
 
 Next operator packet to unblock review:
 
@@ -56,14 +63,15 @@ Next operator packet to unblock review:
 
 ## Current Operating Step
 
-Batch 1 sourcing is complete. The current operating step is using the modeled
-Batch A action-safety and minimum security-control passes as hypotheses only.
-Batch B remains unmodeled unless a specific modeled gap appears. Do not wait
-for real access or convert synthetic outputs into real evidence.
+Batch 1 sourcing is complete. The current operating step is waiting for real
+responses to the 2026-05-30 accepted outreach submissions while continuing to
+keep modeled Batch A action-safety and minimum security-control passes as
+hypotheses only. Batch B remains unmodeled unless a specific modeled gap
+appears. Do not convert synthetic outputs into real evidence.
 
 - Keep the 15 named candidates below as the first sourcing baseline.
-- Keep all real funnel metrics at 0 because no real sends or interviews will
-  occur.
+- Keep real funnel metrics tied only to accepted external submissions,
+  scheduled calls, completed calls, and real replies.
 - Use Batch A and Batch B simulations to refine the interview script, triage
   criteria, source-quality assumptions, and product-risk questions.
 - Model no more than 2 interview records from the same profile until all 5 slots
@@ -130,16 +138,34 @@ research, not a product pitch.
 
 | Candidate/team | Target slot | Source | Outreach sent | Follow-up due | Outcome |
 |----------------|-------------|--------|---------------|---------------|---------|
-| Markus Haverinen, Frends | 1 | Fin customer story | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
+| Markus Haverinen, Frends | 1 | Fin customer story | Yes - public contact form accepted 2026-05-30 | Await reply | Research request routed through Frends contact form; no reply or interview yet |
 | Darren Hockley, Dotdigital | 1 | Fin AI Agent Blueprint | No - not modeled yet | N/A - modeled | Not modeled |
 | Erik Munson, Day AI | 2 | Materialize case study | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | James Luo, BGL | 2 | ZenML LLMOps case study | No - not modeled yet | N/A - modeled | Not modeled |
-| Lucrezia Keane, GWI | 3 | Hook customer proof | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
+| Lucrezia Keane, GWI | 3 | Hook customer proof | Yes - Hook contact/demo form accepted 2026-05-30 | Await reply | Contact request accepted; no reply or interview yet |
 | Nicole Looker, Rebuy Engine | 3 | Sweep customer page | No - not modeled yet | N/A - modeled | Not modeled |
 | Jesse Zhang, Decagon | 4 | OpenAI customer story | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
-| Marty Kausas, Pylon | 4 | Y Combinator company profile | No - not modeled yet | N/A - modeled | Not modeled |
+| Marty Kausas, Pylon | 4 | Y Combinator company profile | Partial - intake advanced to calendar 2026-05-30 | Calendar slot not booked | Do not count as scheduled interview until a time is selected and confirmed |
 | Talha Tariq, Vercel | 5 | ITPro 1Password coverage | No - simulated only | N/A - modeled | Modeled scenario / no real contact |
 | Haider Pasha, Palo Alto Networks | 5 | ITPro agentic AI security interview | No - not modeled yet | N/A - modeled | Not modeled |
+
+## Real Outreach Attempt Log
+
+This log records non-secret evidence for actual external activity. Local
+screenshots are stored under `.artifacts/external-outreach/`, which is ignored
+and must not be committed because screenshots can contain sender addresses.
+
+| Date | Channel | Target slot | Result | Evidence | PMF evidence count |
+|------|---------|-------------|--------|----------|--------------------|
+| 2026-05-30 | Frends public contact form | 1 | Accepted; thank-you page shown | `.artifacts/external-outreach/2026-05-30-frends-contact-confirmation.png` | Real send: 1; replies/interviews: 0 |
+| 2026-05-30 | Hook public contact/demo form | 3 | Accepted; thank-you text shown | `.artifacts/external-outreach/2026-05-30-hook-contact-confirmation.png` | Real send: 1; replies/interviews: 0 |
+| 2026-05-30 | Pylon public demo intake | 4 | Advanced to calendar, but no time booked because scheduling creates a real calendar commitment | `.artifacts/external-outreach/2026-05-30-pylon-contact-confirmation.png` | Real send: 0 until a time is confirmed |
+| 2026-05-30 | Sweep demo intake | 3 | Advanced to calendar; no available time selected | `.artifacts/external-outreach/2026-05-30-sweep-contact-confirmation.png` | Real send: 0 until a time is confirmed |
+| 2026-05-30 | BGL contact form | 2 | Not submitted; phone number was required and no fake phone number was entered | `.artifacts/external-outreach/2026-05-30-bgl-contact-confirmation.png` | 0 |
+
+Current real funnel count: accepted external submissions `2`, real replies `0`,
+scheduled calls `0`, completed interviews `0`, pricing/WTP artifacts `0`, first
+paying customer artifacts `0`.
 
 ## First 10 Outreach Drafts
 

@@ -509,10 +509,10 @@ Forbidden scope:
 
 ## 20. Prepare Phase 1 PMF Outreach And Pricing Evidence Handoff
 
-Status: Blocked.
+Status: Blocked (partial external outreach started).
 
 Blocked reason:
-- Real Phase 1 PMF evidence is still absent after 2026-05-04 access triage: no approved outbound account/session, warm intro thread, CRM/calendar artifact, real outreach sends, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, or first-paying-customer signals. Handoff recorded in `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`.
+- Real Phase 1 PMF evidence remains insufficient after the 2026-05-30 external-outreach restart. Two public-form contact submissions were accepted, but there are still no replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, LOI, invoice, procurement artifact, or first-paying-customer signals. Handoff recorded in `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`.
 
 Allowed files/directories:
 - `docs/customer-discovery-tracker.md`
@@ -534,7 +534,7 @@ Required verification:
 - `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
 
 Forbidden scope:
-- No customer outreach, email sending, scraping, CRM changes, external account access, paid API usage, payment collection, deploy, publish, Terraform, scheduler install, push, production data, or product-code changes.
+- Default guarded-autopilot runs must not perform customer outreach, email sending, scraping, CRM changes, external account access, paid API usage, payment collection, deploy, publish, Terraform, scheduler install, push, production data, or product-code changes. The 2026-05-30 public-form outreach restart was performed only after explicit operator direction to work on external gates; future scheduling, calls, CRM changes, payment collection, or publishing still require real availability/evidence and must not fabricate inputs.
 
 ## 21. Define Public Benchmark Production-Hardware Plan
 

@@ -10,17 +10,21 @@ price points, tiers, or sales collateral from this document alone.
 
 ## Current Pricing Evidence Handoff
 
-Status as of 2026-05-04: blocked on external founder/customer evidence.
+Status as of 2026-05-30: external outreach restarted; pricing evidence still
+blocked.
 
-The current tracker has no real interview evidence for budget owner,
-replaceable cost, natural value metric, paid pilot shape, pricing risk, or first
-paying customer intent. Keep pricing uncommitted until real founder/customer
-evidence is supplied outside the repo and recorded in the discovery tracker.
+The current tracker has two accepted external contact submissions, but no real
+reply, interview, budget-owner evidence, replaceable cost, natural value metric,
+paid pilot shape, pricing risk, or first paying customer intent. Keep pricing
+uncommitted until real founder/customer evidence is supplied outside the repo
+and recorded in the discovery tracker.
 
 Access triage on 2026-05-04 found no budget-owner notes, WTP record, pilot
 proposal, LOI, invoice, procurement artifact, or first-paying-customer evidence
-to review. Do not add public pricing, tiers, or sales collateral from modeled
-material.
+to review. The 2026-05-30 external outreach restart did not change that: public
+form submissions are outreach evidence, not pricing/WTP evidence. Do not add
+public pricing, tiers, or sales collateral from modeled material or from
+unanswered outreach.
 
 Next operator packet to unblock review:
 

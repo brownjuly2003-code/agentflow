@@ -1218,7 +1218,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Contracts V1 Contracts Get"
+                }
               }
             }
           }
@@ -1266,7 +1270,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Diff Contract Versions V1 Contracts  Entity  Diff  From Version   To Version  Get"
+                }
               }
             }
           },
@@ -1318,7 +1326,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Validate Contract V1 Contracts  Entity  Validate Post"
+                }
               }
             }
           },
@@ -1367,7 +1379,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Contract Version V1 Contracts  Entity   Version  Get"
+                }
               }
             }
           },
@@ -1407,7 +1423,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Latest Contract V1 Contracts  Entity  Get"
+                }
               }
             }
           },

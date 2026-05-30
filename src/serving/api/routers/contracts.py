@@ -2,7 +2,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src.serving.semantic_layer.contract_registry import SchemaContract
+from src.serving.semantic_layer.contract_registry import ContractRegistry, SchemaContract
 from src.serving.semantic_layer.schema_evolution import (
     EvolutionChecker,
     has_version_bump,
@@ -12,8 +12,8 @@ from src.serving.semantic_layer.schema_evolution import (
 router = APIRouter(tags=["contracts"])
 
 
-def _get_registry(request: Request):
-    return request.app.state.catalog.contract_registry
+def _get_registry(request: Request) -> ContractRegistry:
+    return cast(ContractRegistry, request.app.state.catalog.contract_registry)
 
 
 def _base_contract_schema(contract: SchemaContract) -> dict[str, Any]:
@@ -23,7 +23,7 @@ def _base_contract_schema(contract: SchemaContract) -> dict[str, Any]:
 
 
 @router.get("/contracts")
-async def list_contracts(request: Request):
+async def list_contracts(request: Request) -> dict[str, object]:
     registry = _get_registry(request)
     return {"contracts": [contract.summary().to_dict() for contract in registry.list_contracts()]}
 
@@ -34,7 +34,7 @@ async def diff_contract_versions(
     from_version: str,
     to_version: str,
     request: Request,
-):
+) -> dict[str, Any]:
     registry = _get_registry(request)
     try:
         return registry.diff(entity, from_version, to_version)
@@ -47,7 +47,7 @@ async def validate_contract(
     entity: str,
     candidate_schema: dict[str, Any],
     request: Request,
-):
+) -> dict[str, Any]:
     registry = _get_registry(request)
     contract = registry.get_latest_stable(entity)
     if contract is None:
@@ -81,7 +81,7 @@ async def get_contract_version(
     entity: str,
     version: str,
     request: Request,
-):
+) -> dict[str, Any]:
     registry = _get_registry(request)
     try:
         return registry.get_contract(entity, version).to_dict()
@@ -90,7 +90,7 @@ async def get_contract_version(
 
 
 @router.get("/contracts/{entity}")
-async def get_latest_contract(entity: str, request: Request):
+async def get_latest_contract(entity: str, request: Request) -> dict[str, Any]:
     registry = _get_registry(request)
     contract = registry.get_latest_stable(entity)
     if contract is None:

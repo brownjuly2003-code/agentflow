@@ -105,3 +105,9 @@ def test_alerts_router_is_a_strict_mypy_slice() -> None:
     # Alerts expose tenant-scoped rule management, test dispatch, and history;
     # keep this operator integration surface fully annotated.
     assert "src.serving.api.routers.alerts" in _strict_modules()
+
+
+def test_contracts_router_is_a_strict_mypy_slice() -> None:
+    # Contract routes are the schema governance API; keep version lookup,
+    # diff, and validation endpoints fully annotated.
+    assert "src.serving.api.routers.contracts" in _strict_modules()

@@ -1,9 +1,10 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (auth strict mypy slice)
-**Verified HEAD:** `f977317` on `main` (six main workflows green; Load Test
-re-run once on the same SHA for runner variance). Prior code HEAD `e444ecf`
-(M-C4 guidance enforcement); prior state-refresh HEAD `0759fc6`.
+**Last updated:** 2026-05-30 (monitors strict mypy slice + tombstone fix)
+**Verified HEAD:** `3e7434b` on `main` (six main workflows green). Session
+2026-05-30 code stack: `e444ecf` (M-C4 guidance enforcement), `f977317` (auth
+strict mypy slice; Load Test re-run once for runner variance), `3e7434b`
+(monitors strict slice + tombstone fix). Prior state-refresh HEAD `0759fc6`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
@@ -170,14 +171,15 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Auth promoted to a strict mypy slice (`f977317`, 2026-05-30):**
-`src.serving.api.auth.*` now sets `disallow_untyped_defs = true` so the
-security-critical key / rate-limit / audit paths stay fully annotated
-(`tests/unit/test_typing_policy.py` pins it; `mypy src` clean on 99 files).
-Next strict-slice candidates by ascending effort: `src/quality/monitors`
-(3 untyped defs) and `src/serving/semantic_layer` (3, but 17 files). This is
-the established per-module hardening cadence — pick it up if no higher-value
-local work is queued, but it is incremental, not load-bearing.
+**Strict mypy slices extended + a latent bug found (`f977317`, `3e7434b`, 2026-05-30):**
+`src.serving.api.auth.*` and `src.quality.monitors.*` now set
+`disallow_untyped_defs = true` (`tests/unit/test_typing_policy.py` pins both;
+`mypy src` clean on 99 files). Typing the monitors slice surfaced a real
+tombstone bug in `FreshnessMonitor._process_message` (now skipped with
+`reason="empty_message"`, 100% module coverage). Remaining strict-slice
+candidate: `src/serving/semantic_layer` (3 untyped defs, 17 files). The
+per-module typing cadence is incremental hardening, not load-bearing — pick it
+up only if no higher-value local work is queued.
 
 **M-C4 hashed-key guidance now enforced (`e444ecf`, 2026-05-30):**
 `AuthManager.load()` emits a `hashed_key_count_exceeds_guidance` warning once

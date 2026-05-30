@@ -77,6 +77,17 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Monitors strict mypy slice + tombstone fix through HEAD `3e7434b` on 2026-05-30:
+  - `fix(monitors): skip tombstone records + make monitors a strict mypy slice`
+    promotes `src.quality.monitors.*` to `disallow_untyped_defs = true`. Typing
+    `_process_message(msg: Message)` surfaced two latent bugs:
+    `Message.value()` is `bytes | None` (`.decode()` would crash on a
+    tombstone) and `.topic()` is `str | None` (used as a dict key / metric
+    label). The handler now skips such records with a `reason="empty_message"`
+    warning.
+  - `python -m mypy src --config-file pyproject.toml`: clean on 99 files.
+  - `python -m pytest tests/unit/test_freshness_monitor.py tests/unit/test_typing_policy.py --cov=src.quality.monitors.freshness_monitor --cov-fail-under=90`: 14 passed, freshness_monitor at 100% coverage (two new tombstone/no-topic tests). `ruff check` / `ruff format --check` / `git diff --check`: passed.
+  - GitHub evidence on `3e7434b`: CI, Contract Tests, E2E Tests, Load Test, Security Scan, and Staging Deploy all completed successfully.
 - Auth strict mypy slice through HEAD `f977317` on 2026-05-30:
   - `refactor(auth): promote auth package to a strict mypy slice` sets
     `disallow_untyped_defs = true` for `src.serving.api.auth.*`. The only gap

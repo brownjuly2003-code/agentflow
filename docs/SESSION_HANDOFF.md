@@ -1,20 +1,20 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (Codex audit remediation closeout)
-**Verified HEAD before this state-refresh commit:** `93b04b7` (`93b04b7639fc0fd1e7ae2918046fe39216dc79e5`) on `main`.
+**Last updated:** 2026-05-30 (autonomous local follow-up closeout)
+**Verified HEAD before this state-refresh commit:** `0759fc6` (`0759fc6ce8929cd7e49a9498c7cabae585a3be71`) on `main`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `0759fc6` docs(security): clarify TLS termination boundary
+- `5926d8e` feat(sdk): expose latest version header
+- `c2f4db5` docs(api): note sdk version header accessors
+- `0e47794` feat(sdk): expose deprecated version header
+- `ed50b2d` docs(dv2): clarify recording-day cluster resume
+- `20fbba3` docs: clarify container smoke required-check gap
+- `1b122cf` ci: stabilize container build smoke check name
+- `eadbd0b` docs(state): record aws no-budget boundary
 - `93b04b7` docs(state): record codex audit closeout
 - `65863f8` fix(docker): carry security pins into api image
-- `7b0f924` fix(docker): reuse api Dockerfile in prod compose
-- `8c96128` chore(gitignore): ignore locked local temp dirs
-- `dce7115` fix(quality): refresh report in no-docker mode
-- `c61a28c` fix(query): remove explain plan mojibake
-- `672c8fd` fix(security): bound streamed request bodies
-- `397925c` docs(state): refresh codex audit remediation handoff
-- `a261b95` docs(release): refresh v1.4.0 status
-- `0ea3da6` fix(openapi): normalize validation error schema export
 
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
@@ -129,7 +129,9 @@ Then read, in this order:
 3. `docs/operations/local-verification-matrix.md`
 4. `AUTOPILOT.md`
 5. `docs/operations/autonomous-compact-safe-process.md`
-6. `BACKLOG.md`, only if the first five docs expose a safe local candidate
+6. `BACKLOG.md`
+7. `.autopilot/BLOCKED.md`, if present
+8. `next-session-autonomous-local-plan.md`
 
 Use this operator prompt to continue without a pause:
 
@@ -156,9 +158,28 @@ Continuation rules:
   candidate left, unexpected dirty-file conflict, or an explicit
   remote/destructive boundary with no safe local prep remaining.
 
+Pre-refresh closeout evidence: `git status --short --branch --untracked-files=no`
+was clean at `main...origin/main`, HEAD was `0759fc6`, open PRs were empty, and
+the latest six workflows for `0759fc6` were green: CI, Security Scan, Load Test,
+E2E Tests, Staging Deploy, and manually dispatched Contract Tests. The
+next-session checklist is `next-session-autonomous-local-plan.md`.
+
 ## Open work — priorities
 
 ### Tier A — actionable in-repo (no external blocker)
+
+**Autonomous local follow-up closeout:** the post-audit safe local queue is
+closed through `0759fc6`. `1b122cf` pins the PR Docker smoke check name as
+`build-smoke` and covers it with unit tests; `20fbba3` records that
+`build-smoke` is still not a required branch-protection check; `ed50b2d`
+clarifies the DV2 recording-day cluster resume path; `0e47794` and `5926d8e`
+add Python SDK accessors for deprecated/deprecation-warning/latest version
+headers; `c2f4db5` documents the SDK accessors; `0759fc6` clarifies that TLS is
+terminated at the edge/ingress boundary rather than inside FastAPI. No Docker,
+AWS, Terraform, deploy, publish, paid service, secret, or production operation
+was used. If no new dirty WIP, failed workflow, owner evidence, admin
+authorization, or bounded local assignment appears, do not repeat this closed
+family.
 
 **Six Tier A Dependabot PRs landed in session 18** (#24 mypy,
 #8 terraform-aws, #10 typescript, #17 github-script, #20

@@ -66,6 +66,22 @@ on the Mac runner or in CI, and record the command, commit SHA, and result befor
 claiming full Docker coverage. If only this Windows machine was used, report the
 state as `local no-Docker green; Docker-heavy verification pending on Mac/CI`.
 
+Current Mac evidence, collected 2026-05-30 on `julia@192.168.1.133`: the iMac
+is reachable over SSH, Lima `docker` is running Docker Engine `29.5.2`, and
+Docker Compose CLI plugin `v5.1.4` is installed in the user Docker CLI plugins.
+The checkout `/Users/julia/agentflow-docker-check` was reset to `origin/main`
+at `ffeb423`. `docker build -f Dockerfile.api -t
+agentflow-api:mac-docker-smoke-ffeb423 .` passed. `docker compose -p
+agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait
+agentflow-api` also passed; Redis, Postgres, Kafka, and API reached Docker
+`Healthy`, and `/v1/health` reported `kafka:healthy` plus
+`duckdb_pool:healthy`. The aggregate API health stayed `unhealthy` because
+Flink, Iceberg, freshness, and quality signals are not part of the e2e compose
+stack. Cleanup with `down -v` completed and only the pre-existing `hq-demo` kind
+containers remained. The repo has no registered self-hosted GitHub Actions
+runners (`total=0`), and the iMac currently exposes only system Python 3.9, so
+pytest-based Docker suites still need Python 3.11 setup on the Mac or CI.
+
 ## Compact-Safe Autonomous Start
 
 If the next chat session starts with missing or compacted context, do not ask the

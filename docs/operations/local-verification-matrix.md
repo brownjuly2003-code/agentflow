@@ -16,6 +16,14 @@ evidence from this machine, use wording like `local no-Docker green; Docker-heav
 verification pending on Mac/CI` unless the Mac or CI evidence is already attached
 with command, commit SHA, and result.
 
+Current Mac host note: iMac `julia@192.168.1.133` is reachable by SSH and can
+run Docker through Lima. On 2026-05-30 it had Docker Engine `29.5.2` and the
+user-local Docker Compose CLI plugin `v5.1.4`; the repo checkout lives at
+`/Users/julia/agentflow-docker-check`. This is not a GitHub Actions
+self-hosted runner (`gh api .../actions/runners` reported `total=0`). It can
+provide manual Docker build/compose evidence, but pytest-based Docker suites
+need Python 3.11 installed or CI.
+
 ## Default Safe Gates
 
 Run these commands by default when the touched files make them relevant. They
@@ -64,6 +72,21 @@ CI for them.
 | Full chaos | `python -m pytest tests/chaos/ --ignore=tests/chaos/test_chaos_smoke.py -v --tb=short` | Docker compose chaos services; prefer the dedicated chaos runbook. |
 | Demo stack | `make demo` | Redis via Docker and a foreground API server. |
 | Prod-like stack | `docker compose -f docker-compose.prod.yml up -d` | Local Docker resources and operator intent. |
+
+Latest Mac Docker smoke evidence at checkout HEAD `ffeb423`:
+
+```bash
+docker build -f Dockerfile.api -t agentflow-api:mac-docker-smoke-ffeb423 .
+docker compose -p agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait agentflow-api
+curl -fsS http://127.0.0.1:8000/v1/health
+docker compose -p agentflow-e2e-mac -f docker-compose.e2e.yml down -v
+```
+
+The build passed. The e2e compose stack brought Redis, Postgres, Kafka, and the
+API to Docker `Healthy`; `/v1/health` reported `kafka:healthy` and
+`duckdb_pool:healthy`. The aggregate health JSON stayed `unhealthy` because
+Flink, Iceberg, freshness, and quality signals are outside the e2e compose
+stack. Cleanup removed the `agentflow-e2e-mac` containers, network, and volume.
 
 ## Benchmark And Load Gates
 

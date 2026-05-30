@@ -1,59 +1,124 @@
-# Next Session Autonomous Local Plan
+# Autonomous Session Kickoff Plan
 
-## Goal
+This is the canonical starter for an **uninterrupted autonomous session**: the
+agent rebuilds state from checked-in docs, owns all tactical decisions, keeps
+finishing safe local work, and only stops at a real boundary. It supersedes any
+stale chat context.
 
-Restore the repository from durable state, close any current dirty WIP first,
-and continue only if there is a safe local atomic task. This Windows workstation
-is no-Docker; Docker-heavy verification stays Mac/CI-pending unless explicitly
-assigned to the iMac path.
+## How To Start (copy-paste prompt)
+
+```text
+D:\DE_project. Работай автономно и без перерыва, решения принимай сам.
+Сначала восстанови состояние из AGENT_STATE.md, docs/SESSION_HANDOFF.md,
+docs/operations/local-verification-matrix.md, AUTOPILOT.md, BACKLOG.md и
+этого файла — не опирайся на неполный chat compact. Затем бери следующий
+безопасный атомарный пункт по приоритету ниже, делай TDD-фикс, гоняй
+no-Docker верификацию, коммить явными pathspec и пушь origin main после
+чистого статуса + git diff --check. Жди CI зелёным перед следующим коммитом.
+НЕ запускай Docker на этой машине (слабая, вешает процессы) — Docker-heavy
+только Mac/CI. Внешние данные/AWS не трогай (нет карты/бюджета). Не спрашивай
+"что дальше", пока есть безопасный локальный пункт; не стекай однотипные
+мелкие коммиты ради движения. Останавливайся только на реальной границе
+(deploy/publish/release/force-push/secret/Terraform/scheduler) или когда
+безопасных локальных пунктов не осталось.
+```
+
+## Standing Mandate (operator-granted)
+
+- **Decisions are the agent's.** Pick and execute; do not return option-menus.
+- **External data / strategy: decide autonomously.** There is no foreign
+  payment card and no budget — AWS/Terraform-apply/paid services are out of
+  scope, not a recurring deficiency. Do not re-probe them.
+- **Local commits are autonomous** after scoped verification. **Ordinary
+  `git push origin main` is authorized** after clean tracked status +
+  `git diff --check`.
+- **Hard boundaries (need explicit, named instruction):** deploy, release/tag
+  publish, package publish (PyPI/npm), force-push, Terraform apply, branch
+  protection changes, scheduler/env changes, secret access/rotation, other
+  branches/tags, destructive git.
+- **No Docker on this Windows host.** It is low-powered and Docker hangs
+  processes. Even a one-off "run Docker here" instruction does not override this
+  (issued and reversed within one session on 2026-05-30). Docker-heavy
+  verification is Mac (`julia@192.168.1.133`, Lima) / CI only; local broad
+  pytest uses `SKIP_DOCKER_TESTS=1`.
 
 ## Start Checklist
 
-- [ ] Run `git status --short --branch --untracked-files=no`.
-- [ ] Run `git rev-parse HEAD` and `git log --oneline -10`.
-- [ ] Check open PRs with `gh pr list --state open`.
-- [ ] Check current `main` workflows with `gh run list --branch main --limit 12`.
-- [ ] Read `AGENT_STATE.md`.
-- [ ] Read `docs/SESSION_HANDOFF.md`.
-- [ ] Read `docs/operations/local-verification-matrix.md`.
-- [ ] Read `AUTOPILOT.md`.
-- [ ] Read `docs/operations/autonomous-compact-safe-process.md`.
-- [ ] Read `BACKLOG.md`.
-- [ ] Read `.autopilot/BLOCKED.md` if it exists.
+```powershell
+cd D:/DE_project
+git status --short --branch --untracked-files=no
+git rev-parse --short HEAD
+git log --oneline -8
+gh pr list --state open --limit 15
+gh run list --branch main --limit 6 --json conclusion,status,workflowName,headSha
+```
 
-## Decision Rules
+Then read, in order: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`,
+`docs/operations/local-verification-matrix.md`, `AUTOPILOT.md`,
+`docs/operations/autonomous-compact-safe-process.md`, `BACKLOG.md`, and
+`.autopilot/BLOCKED.md` if present.
 
-- If the worktree is dirty, inspect those files first and close only the
-  current WIP unless there is an unrelated dirty-file conflict.
-- If a workflow is failed or pending for the current HEAD, diagnose that exact
-  run before selecting new work. Use no-Docker local checks on Windows.
-- If a PR is open, handle only safe local review/test/docs work unless merge,
-  branch-protection, deploy, release, or secret boundaries are explicitly
-  authorized.
-- If the only known item is promoting `build-smoke` to a required status check,
-  stop unless the operator explicitly authorizes the GitHub branch-protection
-  change and target.
-- If the only known items are AWS/Terraform, paid services, secrets,
-  production/deploy/publish, external pen-test, production CDC, production
-  benchmark, or PMF/pricing evidence, record the blocker and do not simulate
-  real evidence.
-- If there is a new bounded local docs/code/test task, make the smallest scoped
-  change, run relevant no-Docker verification, commit with explicit pathspecs,
-  and push `origin main` only after clean status and `git diff --check`.
+## Work-Selection Priority
 
-## Current Safe State
+Pick the first that applies; finish it before the next.
 
-- Current verified HEAD before this plan was written: `0759fc6`.
-- Open PRs: none.
-- GitHub workflows for `0759fc6`: CI, Security Scan, Load Test, E2E Tests,
-  Staging Deploy, and Contract Tests all green.
-- Backlog tasks 0-17 and 23-24 are done.
-- Task 18 AWS/Terraform is out of scope by budget/payment constraint.
-- Tasks 19-22 need real owner-provided external evidence.
-- The `build-smoke` required-check promotion remains a remote/admin boundary.
+1. **Close current dirty WIP** — inspect changed files, finish the in-flight
+   change only (don't revert unrelated work).
+2. **Diagnose a failed/pending workflow on the current HEAD** — for Load Test,
+   a broad uniform p99 inflation with 0.00% functional failures is runner
+   variance: re-run on the same SHA per `docs/runbooks/load-test-regression.md`,
+   do not "fix" latency.
+3. **A bounded local code/test fix from a real gap** — a TODO/FIXME, a doc↔code
+   gap (guidance not enforced), a latent bug surfaced by typing/coverage. TDD:
+   failing test first, then the fix.
+4. **Strict-typing cadence** (incremental, not load-bearing) — promote one more
+   module to a strict mypy slice (`disallow_untyped_defs = true`). Done so far:
+   `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`.
+   Next candidate: `src/serving/semantic_layer` (3 untyped defs, 17 files).
+   Typing a module often surfaces real latent bugs — fix them, don't suppress.
+5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
+   module is under-tested.
+
+If only external/upstream/Docker-gated items remain (below), stop and record it
+— do not fabricate evidence or churn docs.
+
+## Verification Discipline
+
+- TDD: write the failing test first; show red, then green.
+- `python -m mypy src --config-file pyproject.toml` (clean on 99 files). Do not
+  trust `--follow-imports=skip` — it emits false `no-any-return`.
+- `python -m ruff check` + `python -m ruff format --check` on touched files.
+- Broad regression: `$env:SKIP_DOCKER_TESTS='1'; python -m pytest tests/unit
+  -p no:schemathesis --continue-on-collection-errors`. Two known local-`.venv`
+  artifacts are NOT regressions: `test_x5_retail_hero_loader.py` (no `pandas`
+  installed) and `test_version.py` (installed `agentflow-client` metadata lags
+  `__version__` — the Python313/Python312 shadow; CI has full deps and is green).
+- `git diff --check` before every commit/push.
+- After push, **wait for all six main workflows green** (CI, Contract Tests,
+  E2E Tests, Load Test, Security Scan, Staging Deploy) before the next commit.
+- End each verified atomic item with a state-doc + memory refresh that records
+  the real CI evidence — but never refresh docs only to bump HEAD/timestamps.
+
+## Known Open Threads (all gated)
+
+- **H-C2** full sqlglot ClickHouse transpile — needs live ClickHouse coverage
+  (Mac/Docker).
+- **M-C2 / M-C3** Flink hot-path — gated on upstream PR #23 (no Flink 2.x Kafka
+  connector JAR yet).
+- **M-C4** full hashed-key-lookup rewrite — needs the bcrypt→argon2id
+  hash-format swap (the soft-limit warning is already shipped).
+- **build-smoke → required check** — needs a workflow change first (it is
+  path-filtered, so a bare promotion hangs every non-Docker PR like the
+  `contract` Lessons 1/4 trap); then a branch-protection change (named
+  boundary).
+- **Tier B A04/A05** + **tasks 19-22** — production CDC owners, real
+  PMF/customer evidence, production-hardware benchmark, external pen-test:
+  external evidence only.
+- **v1.5.0** — cut only when real feature changes accumulate (current
+  `[Unreleased]` is hardening + deps); tag publish is a named boundary.
 
 ## Done When
 
-The next session should end with either a verified scoped commit pushed to
-`origin/main` and green workflows, or a clean worktree plus a durable note that
-no safe local candidate exists without new evidence or explicit authorization.
+The session ends with either a verified scoped commit pushed to `origin/main`
+with six green workflows, or a clean worktree plus a durable note that no safe
+local candidate remains without new evidence or an explicitly named boundary.

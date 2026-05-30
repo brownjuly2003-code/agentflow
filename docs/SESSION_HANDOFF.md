@@ -136,10 +136,12 @@ Then read, in this order:
 7. `.autopilot/BLOCKED.md`, if present
 8. `next-session-autonomous-local-plan.md`
 
-Use this operator prompt to continue without a pause:
+Use the copy-paste kickoff prompt and the work-selection priority order in
+[`next-session-autonomous-local-plan.md`](../next-session-autonomous-local-plan.md)
+— that file is the canonical uninterrupted-session starter. Short form:
 
 ```text
-D:\DE_project. Продолжай автономно без Docker на этой Windows-машине. Сначала восстанови состояние из AGENT_STATE.md, docs/SESSION_HANDOFF.md, docs/operations/local-verification-matrix.md и AUTOPILOT.md. Не опирайся на старый chat compact, если он неполный. Бери следующий безопасный атомарный пункт из текущего dirty WIP, failed verification, PLAN/BACKLOG или handoff docs. Локально используй только no-Docker проверки; Docker-heavy проверки отмечай как Mac/CI-pending.
+D:\DE_project. Работай автономно и без перерыва, решения принимай сам. Восстанови состояние из AGENT_STATE.md, docs/SESSION_HANDOFF.md, docs/operations/local-verification-matrix.md, AUTOPILOT.md, BACKLOG.md и next-session-autonomous-local-plan.md (не опирайся на неполный chat compact). Бери следующий безопасный атомарный пункт по приоритету из плана, TDD-фикс, no-Docker верификация, коммит явными pathspec, push origin main после чистого статуса + git diff --check, жди CI зелёным перед следующим коммитом. НЕ запускай Docker тут (Mac/CI). Внешнее/AWS не трогай (нет карты/бюджета). Не спрашивай "что дальше" пока есть безопасный пункт; не стекай однотипные мелкие коммиты. Стоп только на named boundary или когда безопасных локальных пунктов нет.
 ```
 
 Continuation rules:

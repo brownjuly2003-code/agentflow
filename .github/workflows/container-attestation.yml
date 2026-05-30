@@ -41,6 +41,7 @@ env:
 
 jobs:
   build-smoke:
+    name: build-smoke
     # Runs on every PR that touches the Dockerfile / pip surface or the
     # workflow itself. Builds the image without pushing or signing so a
     # broken Dockerfile fails the PR instead of landing silently.

@@ -81,6 +81,9 @@ def test_container_attestation_workflow_runs_smoke_on_pull_request():
         )
 
     smoke_job = workflow["jobs"]["build-smoke"]
+    assert smoke_job["name"] == "build-smoke", (
+        "required-check branch protection depends on a stable PR job context"
+    )
     assert "github.event_name == 'pull_request'" in smoke_job["if"]
 
     build_step = next(

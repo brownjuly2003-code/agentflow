@@ -93,3 +93,9 @@ def test_deadletter_router_is_a_strict_mypy_slice() -> None:
     # The dead-letter router is the operator-facing recovery surface over the
     # same table the event_replayer / outbox slices manage; keep it annotated.
     assert "src.serving.api.routers.deadletter" in _strict_modules()
+
+
+def test_webhooks_router_is_a_strict_mypy_slice() -> None:
+    # Webhooks expose tenant-scoped callback registration and delivery logs;
+    # keep this operator integration surface fully annotated.
+    assert "src.serving.api.routers.webhooks" in _strict_modules()

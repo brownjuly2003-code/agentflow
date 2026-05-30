@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import AnyHttpUrl, BaseModel, Field
 
 from src.serving.api.webhook_dispatcher import (
+    WebhookDispatcher,
     WebhookFilters,
     create_webhook,
     deactivate_webhook,
@@ -23,11 +25,13 @@ class WebhookCreateRequest(BaseModel):
 
 def _tenant(request: Request) -> str:
     tenant_key = getattr(request.state, "tenant_key", None)
-    return tenant_key.tenant if tenant_key is not None else "default"
+    if tenant_key is None:
+        return "default"
+    return str(tenant_key.tenant)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def register_webhook(payload: WebhookCreateRequest, request: Request):
+async def register_webhook(payload: WebhookCreateRequest, request: Request) -> dict[str, object]:
     registration = create_webhook(
         get_webhook_config_path(request.app),
         url=str(payload.url),
@@ -38,7 +42,7 @@ async def register_webhook(payload: WebhookCreateRequest, request: Request):
 
 
 @router.get("")
-async def list_my_webhooks(request: Request):
+async def list_my_webhooks(request: Request) -> dict[str, object]:
     webhooks = list_webhooks(get_webhook_config_path(request.app), _tenant(request))
     # Exclude `secret` from list/read responses. Plaintext signing material
     # is returned only once on POST. Listing it again would let any tenant
@@ -49,7 +53,7 @@ async def list_my_webhooks(request: Request):
 
 
 @router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def unregister_webhook(webhook_id: str, request: Request):
+async def unregister_webhook(webhook_id: str, request: Request) -> Response:
     removed = deactivate_webhook(
         get_webhook_config_path(request.app),
         webhook_id,
@@ -61,7 +65,7 @@ async def unregister_webhook(webhook_id: str, request: Request):
 
 
 @router.post("/{webhook_id}/test")
-async def test_webhook(webhook_id: str, request: Request):
+async def test_webhook(webhook_id: str, request: Request) -> dict[str, object]:
     registration = get_webhook(
         get_webhook_config_path(request.app),
         webhook_id,
@@ -77,11 +81,12 @@ async def test_webhook(webhook_id: str, request: Request):
         "test": True,
         "created_at": datetime.now(UTC).isoformat(),
     }
-    return await request.app.state.webhook_dispatcher.deliver(registration, payload)
+    dispatcher = cast(WebhookDispatcher, request.app.state.webhook_dispatcher)
+    return cast(dict[str, object], await dispatcher.deliver(registration, payload))
 
 
 @router.get("/{webhook_id}/logs")
-async def webhook_logs(webhook_id: str, request: Request):
+async def webhook_logs(webhook_id: str, request: Request) -> dict[str, object]:
     registration = get_webhook(
         get_webhook_config_path(request.app),
         webhook_id,

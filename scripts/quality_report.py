@@ -17,13 +17,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from scripts import mutation_report as mutation_report_module  # noqa: E402
 from scripts.security_check import (  # noqa: E402
-    load_project_dependencies,
-    load_requirements,
+    build_resolved_requirement_files,
     resolve_command,
-    write_requirements,
 )
 from tests.load.thresholds import LOAD_PROFILE  # noqa: E402
-
 
 OUTPUT_PATH = PROJECT_ROOT / "docs" / "quality.md"
 NODEIDS_CACHE_PATH = PROJECT_ROOT / ".pytest_cache" / "v" / "cache" / "nodeids"
@@ -40,7 +37,15 @@ TEST_SUITES = {
 }
 
 PERFORMANCE_ROWS = (
-    ("Entity lookup", ("GET /v1/entity/order/{id}", "GET /v1/entity/user/{id}", "GET /v1/entity/product/{id}"), 50.0),
+    (
+        "Entity lookup",
+        (
+            "GET /v1/entity/order/{id}",
+            "GET /v1/entity/user/{id}",
+            "GET /v1/entity/product/{id}",
+        ),
+        50.0,
+    ),
     ("NL query", ("POST /v1/query",), 500.0),
     ("Batch", ("POST /v1/batch",), 200.0),
 )
@@ -82,7 +87,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_command(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603
         command,
         cwd=PROJECT_ROOT,
         capture_output=True,
@@ -125,9 +130,7 @@ def collect_suite_metric(name: str, paths: tuple[str, ...]) -> SuiteMetric:
 
     cached_nodeids = load_cached_nodeids()
     cached_count = sum(
-        1
-        for nodeid in cached_nodeids
-        if any(nodeid.startswith(f"{path}/") for path in paths)
+        1 for nodeid in cached_nodeids if any(nodeid.startswith(f"{path}/") for path in paths)
     )
     if cached_count:
         detail = (result.stderr or result.stdout).strip().splitlines()
@@ -151,7 +154,7 @@ def load_coverage_detail() -> str:
     coverage_path = PROJECT_ROOT / "coverage.xml"
     if not coverage_path.exists():
         return "coverage.xml not found"
-    root = ET.parse(coverage_path).getroot()
+    root = ET.parse(coverage_path).getroot()  # noqa: S314
     line_rate = root.attrib.get("line-rate")
     lines_valid = root.attrib.get("lines-valid")
     lines_covered = root.attrib.get("lines-covered")
@@ -166,19 +169,8 @@ def load_coverage_detail() -> str:
     return f"{percentage:.2f}% line coverage (source `coverage.xml`)"
 
 
-def build_requirement_files(temp_path: Path) -> tuple[Path, Path]:
-    main_requirements = temp_path / "requirements-main.txt"
-    sdk_requirements = temp_path / "requirements-sdk.txt"
-    write_requirements(
-        main_requirements,
-        load_project_dependencies(PROJECT_ROOT / "pyproject.toml")
-        + load_requirements(PROJECT_ROOT / "requirements.txt"),
-    )
-    write_requirements(
-        sdk_requirements,
-        load_project_dependencies(PROJECT_ROOT / "sdk" / "pyproject.toml"),
-    )
-    return main_requirements, sdk_requirements
+def build_requirement_files(temp_path: Path) -> tuple[Path, Path, Path]:
+    return build_resolved_requirement_files(temp_path)
 
 
 def parse_json_output(text: str) -> dict | list | None:
@@ -234,7 +226,11 @@ def collect_bandit_metric() -> SecurityMetric:
     )
 
 
-def collect_safety_metric(main_requirements: Path, sdk_requirements: Path) -> SecurityMetric:
+def collect_safety_metric(
+    main_requirements: Path,
+    sdk_requirements: Path,
+    integrations_requirements: Path,
+) -> SecurityMetric:
     try:
         command = resolve_command("safety")
     except FileNotFoundError as error:
@@ -249,6 +245,8 @@ def collect_safety_metric(main_requirements: Path, sdk_requirements: Path) -> Se
             str(main_requirements),
             "-r",
             str(sdk_requirements),
+            "-r",
+            str(integrations_requirements),
         ],
         timeout=SECURITY_TIMEOUT_SECONDS,
     )
@@ -261,7 +259,9 @@ def collect_safety_metric(main_requirements: Path, sdk_requirements: Path) -> Se
     if isinstance(payload, list):
         vulnerabilities = len(payload)
     elif isinstance(payload, dict):
-        vulnerabilities = len(payload.get("vulnerabilities") or payload.get("affected_packages") or [])
+        vulnerabilities = len(
+            payload.get("vulnerabilities") or payload.get("affected_packages") or []
+        )
 
     status = "PASS" if vulnerabilities == 0 and result.returncode == 0 else "FAIL"
     return SecurityMetric(
@@ -271,7 +271,11 @@ def collect_safety_metric(main_requirements: Path, sdk_requirements: Path) -> Se
     )
 
 
-def collect_pip_audit_metric(main_requirements: Path, sdk_requirements: Path) -> SecurityMetric:
+def collect_pip_audit_metric(
+    main_requirements: Path,
+    sdk_requirements: Path,
+    integrations_requirements: Path,
+) -> SecurityMetric:
     try:
         command = resolve_command("pip-audit")
     except FileNotFoundError as error:
@@ -284,6 +288,8 @@ def collect_pip_audit_metric(main_requirements: Path, sdk_requirements: Path) ->
             str(main_requirements),
             "-r",
             str(sdk_requirements),
+            "-r",
+            str(integrations_requirements),
             "--progress-spinner",
             "off",
             "--format",
@@ -353,11 +359,21 @@ def collect_trivy_metric() -> SecurityMetric:
 
 def collect_security_metrics() -> list[SecurityMetric]:
     with tempfile.TemporaryDirectory(prefix="agentflow-quality-security-") as temp_dir:
-        main_requirements, sdk_requirements = build_requirement_files(Path(temp_dir))
+        main_requirements, sdk_requirements, integrations_requirements = build_requirement_files(
+            Path(temp_dir)
+        )
         return [
             collect_bandit_metric(),
-            collect_safety_metric(main_requirements, sdk_requirements),
-            collect_pip_audit_metric(main_requirements, sdk_requirements),
+            collect_safety_metric(
+                main_requirements,
+                sdk_requirements,
+                integrations_requirements,
+            ),
+            collect_pip_audit_metric(
+                main_requirements,
+                sdk_requirements,
+                integrations_requirements,
+            ),
             collect_trivy_metric(),
         ]
 
@@ -456,9 +472,7 @@ def load_mutation_metrics() -> tuple[list[MutationMetric], str]:
     results_dir = PROJECT_ROOT / "mutants"
     overall_path = results_dir / "mutmut-cicd-stats.json"
     overall = (
-        json.loads(overall_path.read_text(encoding="utf-8-sig"))
-        if overall_path.exists()
-        else None
+        json.loads(overall_path.read_text(encoding="utf-8-sig")) if overall_path.exists() else None
     )
     module_targets = getattr(mutation_report_module, "MODULE_TARGETS", {})
     if not module_targets:
@@ -478,7 +492,8 @@ def load_mutation_metrics() -> tuple[list[MutationMetric], str]:
             status = "PASS" if result.score >= threshold else "FAIL"
             detail = (
                 f"{result.score:.1%} score "
-                f"({result.killed} killed / {result.total_scored} scored, threshold {threshold:.0%})"
+                f"({result.killed} killed / {result.total_scored} scored, "
+                f"threshold {threshold:.0%})"
             )
         if result.problematic_mutants:
             detail += f"; {len(result.problematic_mutants)} problematic mutant(s)"
@@ -564,7 +579,8 @@ def render_markdown(
             "",
             "## Notes",
             "- Missing tools or fresh artifacts are reported explicitly instead of placeholders.",
-            "- This report uses local repo state plus the newest local quality artifacts it can find.",
+            "- This report uses local repo state plus the newest local quality "
+            "artifacts it can find.",
             "",
             f"_Last updated automatically by `scripts/quality_report.py` at `{generated_at}`._",
             "",
@@ -577,10 +593,7 @@ def main() -> int:
     args = parse_args()
     output_path = Path(args.output)
     generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
-    suite_metrics = [
-        collect_suite_metric(name, paths)
-        for name, paths in TEST_SUITES.items()
-    ]
+    suite_metrics = [collect_suite_metric(name, paths) for name, paths in TEST_SUITES.items()]
     coverage_detail = load_coverage_detail()
     security_metrics = collect_security_metrics()
     performance_profile, performance_metrics, performance_source = load_performance_metrics()

@@ -24,6 +24,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.processing.event_replayer` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the dead-letter replay path (which
+  re-emits failed events through the transactional outbox) fully annotated. The
+  gaps were four untyped parameters (`ensure_dead_letter_table`'s `conn`,
+  `EventReplayer.__init__`'s `conn`, `_decoded_payload`'s `payload`, and the
+  nested Kafka `on_delivery` callback). Pinned by
+  `tests/unit/test_typing_policy.py`; `mypy src` stays clean on 99 files.
 - `src.orchestration.dags.*` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the daily batch DAG's scheduled
   asset functions fully annotated. The gaps were six missing return-type

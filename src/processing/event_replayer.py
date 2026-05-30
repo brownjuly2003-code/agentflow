@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import duckdb
 import structlog
 from opentelemetry import trace
 
@@ -38,7 +39,7 @@ class ReplayResult:
     payload: dict
 
 
-def ensure_dead_letter_table(conn) -> None:
+def ensure_dead_letter_table(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS dead_letter_events (
@@ -63,7 +64,7 @@ def ensure_dead_letter_table(conn) -> None:
 class EventReplayer:
     def __init__(
         self,
-        conn,
+        conn: duckdb.DuckDBPyConnection,
         producer: Callable[[str, dict], None] | None = None,
         bootstrap_servers: str | None = None,
     ) -> None:
@@ -176,7 +177,7 @@ class EventReplayer:
             "retry_count": row[2],
         }
 
-    def _decoded_payload(self, payload) -> dict:
+    def _decoded_payload(self, payload: object) -> dict:
         if isinstance(payload, dict):
             return payload
         if isinstance(payload, str):
@@ -203,7 +204,7 @@ class EventReplayer:
 
         delivery_errors: list[str] = []
 
-        def on_delivery(err, msg) -> None:
+        def on_delivery(err: object, msg: object) -> None:
             del msg
             if err is not None:
                 delivery_errors.append(str(err))

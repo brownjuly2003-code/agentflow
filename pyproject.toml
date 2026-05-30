@@ -250,6 +250,13 @@ disallow_untyped_defs = true
 module = "src.orchestration.dags.*"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Dead-letter event replay is a delivery-correctness path (re-emits failed
+# events through the transactional outbox); keep it fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.processing.event_replayer"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

@@ -63,3 +63,9 @@ def test_orchestration_dags_are_a_strict_mypy_slice() -> None:
     # Batch DAGs drive Iceberg maintenance + aggregate materialization; keep
     # the scheduled asset functions fully annotated.
     assert "src.orchestration.dags.*" in _strict_modules()
+
+
+def test_event_replayer_is_a_strict_mypy_slice() -> None:
+    # Dead-letter event replay re-emits failed events through the transactional
+    # outbox; keep this delivery-correctness path fully annotated.
+    assert "src.processing.event_replayer" in _strict_modules()

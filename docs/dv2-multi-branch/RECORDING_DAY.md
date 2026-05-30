@@ -15,7 +15,19 @@ kubectl get pods -n dv2
 kubectl get pods -n argo
 ```
 
-Если что-то не Running → `infrastructure/dv2/bootstrap.sh` (≈10 мин на пересборку).
+Если `kubectl` не видит кластер после плановой паузы iMac, сначала поднять
+Lima/Docker и повторить проверку; данные остаются в Docker volumes:
+
+```bash
+export PATH=$HOME/lima/bin:$HOME/bin:$PATH
+limactl start docker
+kubectl get pods -n dv2
+kubectl get pods -n argo
+```
+
+К `infrastructure/dv2/bootstrap.sh` переходить только если Lima поднялась, но
+kind-кластер, namespace или StatefulSet'ы реально потеряны (≈10 мин на
+пересборку).
 
 - [ ] Caffeinate обновить: `nohup caffeinate -dimsu -t 7200 >/tmp/caffeinate.log 2>&1 & disown` (2 часа запас)
 

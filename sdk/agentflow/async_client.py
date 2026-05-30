@@ -99,6 +99,10 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         return self._last_server_version
 
     @property
+    def last_latest_version(self) -> str | None:
+        return self._last_latest_version
+
+    @property
     def last_deprecated(self) -> str | None:
         return self._last_deprecated
 

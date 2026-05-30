@@ -20,7 +20,7 @@ Common response headers:
 - `X-Cache` on metric requests
 - `X-PII-Masked` when masking was applied
 
-The Python SDK stores the latest version headers on `last_server_version`, `last_deprecated`, and `last_deprecation_warning` after each request.
+The Python SDK stores the latest version headers on `last_server_version`, `last_latest_version`, `last_deprecated`, and `last_deprecation_warning` after each request.
 
 Auth exemptions:
 - `GET /v1/health`

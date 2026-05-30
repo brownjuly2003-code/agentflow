@@ -342,6 +342,7 @@ def test_records_version_deprecation_headers(monkeypatch):
     client.health()
 
     assert client.last_server_version == "2026-01-01"
+    assert client.last_latest_version == "2026-04-11"
     assert client.last_deprecated == "true"
     assert client.last_deprecation_warning == "deprecated pin"
 

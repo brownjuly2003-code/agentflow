@@ -318,6 +318,34 @@ def test_health_returns_typed_status(monkeypatch):
     assert health.freshness_seconds == 12.0
 
 
+def test_records_version_deprecation_headers(monkeypatch):
+    def handler(method, url, **kwargs):
+        assert url == "/v1/health"
+        return _json_response(
+            200,
+            {
+                "status": "healthy",
+                "checked_at": datetime.now(UTC).isoformat(),
+                "components": [],
+            },
+            headers={
+                "X-AgentFlow-Version": "2026-01-01",
+                "X-AgentFlow-Latest-Version": "2026-04-11",
+                "X-AgentFlow-Deprecated": "true",
+                "X-AgentFlow-Deprecation-Warning": "deprecated pin",
+            },
+        )
+
+    _install_request_stub(monkeypatch, handler)
+
+    client = AgentFlowClient("http://example.com", api_key="test-key")
+    client.health()
+
+    assert client.last_server_version == "2026-01-01"
+    assert client.last_deprecated == "true"
+    assert client.last_deprecation_warning == "deprecated pin"
+
+
 def test_catalog_returns_typed_response(monkeypatch):
     def handler(method, url, **kwargs):
         assert url == "/v1/catalog"

@@ -1,6 +1,7 @@
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any, Iterator, TypeVar, cast
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 import httpx
@@ -10,9 +11,9 @@ from agentflow.circuit_breaker import CircuitBreaker
 from agentflow.exceptions import (
     AgentFlowError,
     AuthError,
-    PermissionDeniedError,
     DataFreshnessError,
     EntityNotFoundError,
+    PermissionDeniedError,
     RateLimitError,
 )
 from agentflow.models import (
@@ -21,8 +22,8 @@ from agentflow.models import (
     ContractDiff,
     ContractSummary,
     ContractValidation,
-    EntityEnvelope,
     EntityContract,
+    EntityEnvelope,
     HealthStatus,
     Lineage,
     MetricResult,
@@ -96,6 +97,10 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
     @property
     def last_server_version(self) -> str | None:
         return self._last_server_version
+
+    @property
+    def last_deprecated(self) -> str | None:
+        return self._last_deprecated
 
     @property
     def last_deprecation_warning(self) -> str | None:
@@ -492,7 +497,8 @@ class AgentFlowClient(metaclass=_LegacyResilienceInitCompat):
             )
         if health.freshness_seconds is None:
             raise DataFreshnessError("Pipeline freshness metric is unavailable")
-        return health.freshness_seconds < max_age_seconds
+        freshness_seconds = cast(float, health.freshness_seconds)
+        return freshness_seconds < max_age_seconds
 
     def catalog(self) -> CatalogResponse:
         payload = self._request("GET", "/v1/catalog")

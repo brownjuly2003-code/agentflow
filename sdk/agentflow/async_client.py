@@ -1,6 +1,7 @@
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any, AsyncIterator, TypeVar, cast
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 import httpx
@@ -21,8 +22,8 @@ from agentflow.models import (
     ContractDiff,
     ContractSummary,
     ContractValidation,
-    EntityEnvelope,
     EntityContract,
+    EntityEnvelope,
     HealthStatus,
     Lineage,
     MetricResult,
@@ -96,6 +97,10 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
     @property
     def last_server_version(self) -> str | None:
         return self._last_server_version
+
+    @property
+    def last_deprecated(self) -> str | None:
+        return self._last_deprecated
 
     @property
     def last_deprecation_warning(self) -> str | None:
@@ -488,7 +493,8 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
             )
         if health.freshness_seconds is None:
             raise DataFreshnessError("Pipeline freshness metric is unavailable")
-        return health.freshness_seconds < max_age_seconds
+        freshness_seconds = cast(float, health.freshness_seconds)
+        return freshness_seconds < max_age_seconds
 
     async def catalog(self) -> CatalogResponse:
         payload = await self._request("GET", "/v1/catalog")

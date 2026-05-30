@@ -16,6 +16,7 @@ Deprecation policy:
 ### Added
 - `RetryPolicy` with exponential backoff, jitter, and `Retry-After` support for transient SDK failures
 - `CircuitBreaker` and `CircuitOpenError` for repeated backend failure protection in sync and async clients
+- `last_deprecated` accessors on sync and async clients for the latest `X-AgentFlow-Deprecated` response header
 
 ### Changed
 - `AgentFlowClient` and `AsyncAgentFlowClient` now accept optional `retry_policy` and `circuit_breaker` parameters

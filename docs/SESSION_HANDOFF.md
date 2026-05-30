@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (serving/api slices: middleware + deadletter router)
-**Verified HEAD:** `e92a6eb` on `main` (all six workflows green: CI, Contract
+**Last updated:** 2026-05-30 (serving/api slices: middleware + deadletter + webhooks)
+**Verified code HEAD:** `45d3fc5` on `main` (all six workflows green: CI, Contract
 Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -11,12 +11,18 @@ clickhouse CRLF→LF), `dd0a46d` (bandit baseline line-drift fix), `80316fb`
 `8a50ab6` (event_replayer strict slice), `98a9ed5` (local_pipeline strict
 slice), `0953fcc` (outbox strict slice + `_connection` use-after-close guard),
 `4ad01fd` (api request-middleware strict slice — first `src/serving/api` slice),
-`e92a6eb` (dead-letter router strict slice — second `src/serving/api` slice).
+`e92a6eb` (dead-letter router strict slice — second `src/serving/api` slice),
+`452d120` (webhooks router strict slice — third `src/serving/api` slice), and
+`45d3fc5` (generated OpenAPI refresh for the webhooks response schemas).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
-strict-typed. Prior state-refresh HEAD `0759fc6`.
+strict-typed. Prior state-refresh HEAD `0abb206`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `45d3fc5` docs(openapi): refresh webhooks response schemas
+- `452d120` refactor(api): promote webhooks router to a strict mypy slice
+- `0abb206` docs(state): record dead-letter router strict mypy slice
+- `e92a6eb` refactor(api): promote dead-letter router to a strict mypy slice
 - `0759fc6` docs(security): clarify TLS termination boundary
 - `5926d8e` feat(sdk): expose latest version header
 - `c2f4db5` docs(api): note sdk version header accessors
@@ -182,15 +188,20 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + a latent bug found (`f977317`→`dd0a46d`, 2026-05-30):**
+**Strict mypy slices extended + latent bugs found (`f977317`→`45d3fc5`, 2026-05-30):**
 `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
-and `src.serving.backends.*` now set `disallow_untyped_defs = true` (joining
-`src.quality.validators.*`); `tests/unit/test_typing_policy.py` pins each and
-`mypy src` is clean on 99 files. Typing the monitors slice surfaced a real
-tombstone bug in `FreshnessMonitor._process_message` (now skipped with
-`reason="empty_message"`, 100% module coverage). ~113 untyped defs remain,
-mostly in `src/serving/api` (73) — a large multi-file grind that is a deliberate
-stopping point, incremental not load-bearing. Two gotchas this session: (1) the
+`src.serving.backends.*`, `src.serving.api.middleware.*`,
+`src.serving.api.routers.deadletter`, and `src.serving.api.routers.webhooks`
+now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
+`tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
+files. Typing the monitors slice surfaced a real tombstone bug in
+`FreshnessMonitor._process_message` (now skipped with `reason="empty_message"`,
+100% module coverage). The webhooks slice required a generated
+`docs/openapi.json` refresh because FastAPI now exposes object response schemas
+for the typed router returns. Measured after the webhooks slice, 60 untyped
+defs remain: 47 in `src/serving/api` and 13 in `src/processing/flink_jobs`.
+The API remainder is a large multi-file grind that is a deliberate stopping
+point, incremental not load-bearing. Two gotchas this session: (1) the
 Edit tool flips/corrupts EOL on this repo — edit source byte-level and re-check
 CRLF + `git diff --check` + staged blob size; (2) the bandit baseline is
 line-keyed, so a line-shifting edit (e.g. a new import) to a file with a

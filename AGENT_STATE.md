@@ -7,7 +7,7 @@ Updated: 2026-05-30
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local HEAD before this state-refresh commit: `0759fc6ce8929cd7e49a9498c7cabae585a3be71` (`0759fc6`)
+- Verified local code HEAD before this state-refresh commit: `45d3fc59d5133d4c1f424c3a9dd0d49b68b63191` (`45d3fc5`)
 - Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
 - State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `next-session-autonomous-local-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
 - File count at refresh start: `git ls-files` reports 906 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
@@ -77,6 +77,30 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Webhooks router strict mypy slice through code HEAD `45d3fc5` on 2026-05-30:
+  - `452d120` promotes `src.serving.api.routers.webhooks` (tenant-scoped
+    callback registration, test delivery, unsubscribe, and delivery-log read
+    API) to `disallow_untyped_defs = true`. The gaps were `_tenant`'s dynamic
+    `app.state` return, five route-handler return annotations, and a
+    `WebhookDispatcher` cast for the dynamically typed `app.state` dispatcher.
+    Pure annotation; route behavior is unchanged.
+  - `45d3fc5` regenerates `docs/openapi.json` for the expected FastAPI response
+    schema drift from those return annotations. The first pushed code commit
+    (`452d120`) failed Contract Tests only at `python scripts/export_openapi.py
+    --check`; the generated OpenAPI fix commit passed Contract Tests.
+  - Tests-first: `tests/unit/test_typing_policy.py::test_webhooks_router_is_a_strict_mypy_slice` (red→green).
+  - Local verification: `python -m mypy src --config-file pyproject.toml` clean
+    on 99 files; `python -m pytest tests/unit/test_typing_policy.py
+    tests/integration/test_webhooks.py -q -p no:schemathesis` passed with 21
+    tests; `SKIP_DOCKER_TESTS=1 python -m pytest tests/unit -p
+    no:schemathesis --continue-on-collection-errors` passed with 596 passed, 1
+    skipped; `python scripts/export_openapi.py --check` passed; `python -m
+    pytest tests/unit/test_export_openapi.py tests/contract -q -p
+    no:schemathesis` passed with 18 tests and 104 warnings; targeted `ruff
+    check` / `ruff format --check` and `git diff --check` passed.
+  - GitHub evidence on `45d3fc5`: CI, Contract Tests, E2E Tests, Load Test,
+    Security Scan, and Staging Deploy all completed successfully. `gh pr list
+    --state open` empty before the slice.
 - Dead-letter router strict mypy slice through HEAD `e92a6eb` on 2026-05-30:
   - `e92a6eb` promotes `src.serving.api.routers.deadletter` (the operator-facing
     recovery API: list / detail / stats / replay / dismiss) to
@@ -457,6 +481,6 @@ On 2026-05-30 the strict-typing cadence was extended autonomously across two mor
 
 **Standing autonomous mandate (operator-granted 2026-05-30):** the agent owns all tactical and external/strategic decisions, keeps finishing safe local work without asking "what next", and stops only at a named hard boundary. External data / AWS / paid services are out of scope (no card/budget), not a deficiency. Local commits and ordinary `git push origin main` are authorized after clean status + `git diff --check`. The canonical uninterrupted-session starter, including the copy-paste kickoff prompt, the work-selection priority order, and the verification discipline, is `next-session-autonomous-local-plan.md` — start there.
 
-Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus two `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`) and `src.serving.api.routers.deadletter` (HEAD `e92a6eb`). The remaining untyped-def population is ~64, concentrated almost entirely in `src/serving/api` (~49 still, spread across many files — `routers/admin.py`=12, `main.py`=7, `routers/{agent_query,alerts,contracts}`=6 each, `routers/webhooks`=5, then a long tail of 1-4 per file) plus `src/processing/flink_jobs` (15, gated by its own override + PR #23 / Docker). The `src/serving/api` remainder is the deliberate stopping point — it is incremental, not load-bearing, and module-by-module typing of that many files on this low-powered machine risks churn; pick it up only as bounded, individually-verified slices (the middleware slice is the template: one coherent module/package at a time, typing-policy assertion + full `mypy src` + broad unit + six green workflows each). Continuing the cadence into `src/serving/api` is a large multi-file effort and is a deliberate stopping point — it is incremental, not load-bearing, and grinding it module-by-module on this low-powered machine risks churn. Pick it up only as bounded, individually-verified slices.
+Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus three `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), and `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`). Measured after the webhooks slice, the remaining untyped-def population is 60: `src/serving/api` has 47 remaining (largest clusters: `routers/admin.py`=12, `main.py`=6, `routers/{alerts,contracts}`=6 each, `routers/agent_query.py`=5, then a long tail of 1-2 per file) plus `src/processing/flink_jobs` has 13 (gated by its own override + PR #23 / Docker). The `src/serving/api` remainder is incremental, not load-bearing; pick it up only as bounded, individually-verified slices (one coherent module/package at a time, typing-policy assertion + full `mypy src` + broad unit + six green workflows each).
 
 Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.

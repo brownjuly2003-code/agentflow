@@ -73,8 +73,16 @@ Pick the first that applies; finish it before the next.
    failing test first, then the fix.
 4. **Strict-typing cadence** (incremental, not load-bearing) — promote one more
    module to a strict mypy slice (`disallow_untyped_defs = true`). Done so far:
-   `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`.
-   Next candidate: `src/serving/semantic_layer` (3 untyped defs, 17 files).
+   `src.quality.validators.*`, `src.serving.api.auth.*`,
+   `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
+   `src.serving.backends.*`, `src.orchestration.dags.*`,
+   `src.processing.{event_replayer,local_pipeline,outbox}`,
+   `src.serving.api.middleware.*`, `src.serving.api.routers.deadletter`, and
+   `src.serving.api.routers.webhooks`.
+   Remaining measured candidates: `src/serving/api` has 47 untyped defs
+   (`routers/admin.py`=12, `main.py`=6, `routers/{alerts,contracts}`=6 each,
+   `routers/agent_query.py`=5, then smaller files); `src/processing/flink_jobs`
+   has 13 but remains gated by PR #23 / Docker.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
    module is under-tested.

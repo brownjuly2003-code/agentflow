@@ -205,7 +205,7 @@ trigger:
 | PR | Bump | Close reason + re-open condition |
 |----|------|--------------------------------|
 | `#23` (closed) | `apache-flink` 1.19.1 → 2.2.1 (`flink` extra) | Apache docs explicitly state "There is no SQL jar (yet) available for Flink version 2.2" / "There is no connector (yet) available for Flink version 2.2" (https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/connectors/datastream/kafka/). The `[flink]` extra exists to power `src/processing/flink_jobs/{stream_processor,session_aggregator}.py`, both of which depend on `pyflink.datastream.connectors.kafka` + the bundled `flink-sql-connector-kafka` JAR. Merging would ship a non-functional extra. **Re-open when**: `flink-sql-connector-kafka` releases a `-2.x` suffix JAR on Maven Central. **Flink 2.0 API changes already mapped** (in the PR close comment + session memory): `ExternalizedCheckpointCleanup` → `ExternalizedCheckpointRetention` (`pyflink.datastream.externalized_checkpoint_retention`, used via `set_externalized_checkpoint_retention()` instead of `enable_externalized_checkpoints()`), `pyflink.common.time.Time` removed (use `Duration.of_millis()` — already imported in `Dockerfile:35`), Scala 2.12 dropped in 2.0 (bump `SCALA_VERSION=2.12` → `2.13` in `Dockerfile:4`). Code-prep is ~half a day once the connector unblocks |
-| `#11` (closed) | `python` 3.11-slim → 3.14-slim (`Dockerfile.api`) | Docker build is not exercised by any required CI workflow (`container-attestation.yml` is `workflow_dispatch`-only), so a broken `docker build` would land silently; ecosystem compat is uneven (`apache-flink`, `dagster`, `langchain-core` have spotty 3.14 wheel coverage, and `slim-bookworm` lacks gcc so source-build fallback fails). **Re-open when**: either `container-attestation.yml` becomes a required check on `pull_request` events OR all heavy extras (`[flink]`, `[ml]`) have published 3.14 wheels on PyPI |
+| `#11` (closed) | `python` 3.11-slim → 3.14-slim (`Dockerfile.api`) | Docker build is not exercised by any required CI workflow. `container-attestation.yml` now has a PR `build-smoke` job for Dockerfile / pip-surface changes, but `build-smoke` is not yet in branch protection's required status checks, so a broken `docker build` could still land if the non-required check is bypassed. Ecosystem compat is uneven (`apache-flink`, `dagster`, `langchain-core` have spotty 3.14 wheel coverage, and `slim-bookworm` lacks gcc so source-build fallback fails). **Re-open when**: either `build-smoke` becomes a required check on `pull_request` events OR all heavy extras (`[flink]`, `[ml]`) have published 3.14 wheels on PyPI |
 
 ### Kimi audit closure ledger (`audit_kimi_25_05_26.md`)
 
@@ -319,7 +319,8 @@ back online.
     via `gh api -X PATCH /repos/brownjuly2003-code/agentflow/branches/main/protection`
     once one PR-run confirms standard-runner timings (held off because
     promoting before the first PR-event run lands would block all open
-    PRs; do this in a quiet window).
+    PRs; do this in a quiet window). Commit `1b122cf` pins the PR job name to
+    `build-smoke`, but did not change branch protection.
   - Running `build-and-sign` end-to-end manually (via
     `gh workflow run container-attestation.yml -f mode=build-and-sign -f confirm=SIGN`)
     is still useful before a release tag — it's the only path that

@@ -157,7 +157,6 @@ def test_runtime_and_sdk_package_identities_are_split():
 def test_docker_build_contexts_prepare_root_package_metadata():
     docker_contexts = [
         PROJECT_ROOT / "Dockerfile.api",
-        PROJECT_ROOT / "docker-compose.prod.yml",
         PROJECT_ROOT / "scripts" / "k8s_staging_up.sh",
     ]
 
@@ -175,6 +174,15 @@ def test_docker_build_contexts_prepare_root_package_metadata():
             assert "COPY README.md /app/README.md" in text, (
                 f"{relative_path} must copy README.md before installing the root package"
             )
+
+
+def test_prod_compose_api_build_reuses_dockerfile_api():
+    compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8"))
+    build = compose["services"]["agentflow-api"]["build"]
+
+    assert build["context"] == "."
+    assert build["dockerfile"] == "Dockerfile.api"
+    assert "dockerfile_inline" not in build
 
 
 def test_prod_compose_default_duckdb_config_has_no_required_secret_interpolation():

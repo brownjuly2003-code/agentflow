@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -50,6 +52,8 @@ PERFORMANCE_ROWS = (
     ("Batch", ("POST /v1/batch",), 200.0),
 )
 
+JsonPayload = dict[str, Any] | list[Any]
+
 
 @dataclass
 class SuiteMetric:
@@ -83,6 +87,16 @@ class MutationMetric:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default=str(OUTPUT_PATH))
+    parser.add_argument(
+        "--skip-docker",
+        action="store_true",
+        help="Skip Docker-backed image scanning in no-Docker local environments.",
+    )
+    parser.add_argument(
+        "--skip-dependency-scans",
+        action="store_true",
+        help="Skip Safety and pip-audit dependency scans for quick local snapshots.",
+    )
     return parser.parse_args()
 
 
@@ -95,6 +109,29 @@ def run_command(command: list[str], timeout: int) -> subprocess.CompletedProcess
         check=False,
         timeout=timeout,
     )
+
+
+def should_skip_docker(skip_docker_arg: bool) -> bool:
+    return skip_docker_arg or os.getenv("SKIP_DOCKER_TESTS") == "1"
+
+
+def resolve_output_path(output: str) -> Path:
+    output_path = Path(output)
+    if output_path.is_absolute():
+        return output_path
+    return PROJECT_ROOT / output_path
+
+
+def build_generator_command(
+    skip_docker: bool = False,
+    skip_dependency_scans: bool = False,
+) -> str:
+    parts = ["python scripts/quality_report.py"]
+    if skip_docker:
+        parts.append("--skip-docker")
+    if skip_dependency_scans:
+        parts.append("--skip-dependency-scans")
+    return " ".join(parts)
 
 
 def load_cached_nodeids() -> list[str]:
@@ -173,19 +210,19 @@ def build_requirement_files(temp_path: Path) -> tuple[Path, Path, Path]:
     return build_resolved_requirement_files(temp_path)
 
 
-def parse_json_output(text: str) -> dict | list | None:
+def parse_json_output(text: str) -> JsonPayload | None:
     stripped = text.strip()
     if not stripped:
         return None
     try:
-        return json.loads(stripped)
+        return cast(JsonPayload, json.loads(stripped))
     except json.JSONDecodeError:
         for token in ("{", "["):
             index = stripped.find(token)
             if index == -1:
                 continue
             try:
-                return json.loads(stripped[index:])
+                return cast(JsonPayload, json.loads(stripped[index:]))
             except json.JSONDecodeError:
                 continue
     return None
@@ -281,22 +318,29 @@ def collect_pip_audit_metric(
     except FileNotFoundError as error:
         return SecurityMetric("pip-audit", "WARN", str(error))
 
-    result = run_command(
-        [
-            command,
-            "-r",
-            str(main_requirements),
-            "-r",
-            str(sdk_requirements),
-            "-r",
-            str(integrations_requirements),
-            "--progress-spinner",
-            "off",
-            "--format",
-            "json",
-        ],
-        timeout=SECURITY_TIMEOUT_SECONDS,
-    )
+    try:
+        result = run_command(
+            [
+                command,
+                "-r",
+                str(main_requirements),
+                "-r",
+                str(sdk_requirements),
+                "-r",
+                str(integrations_requirements),
+                "--progress-spinner",
+                "off",
+                "--format",
+                "json",
+            ],
+            timeout=SECURITY_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return SecurityMetric(
+            "pip-audit",
+            "WARN",
+            f"`pip-audit` timed out after {SECURITY_TIMEOUT_SECONDS} seconds",
+        )
     payload = parse_json_output(result.stdout)
     if payload is None:
         detail = (result.stderr or result.stdout).strip() or "pip-audit output was empty"
@@ -313,7 +357,14 @@ def collect_pip_audit_metric(
     )
 
 
-def collect_trivy_metric() -> SecurityMetric:
+def collect_trivy_metric(skip_docker: bool = False) -> SecurityMetric:
+    if skip_docker:
+        return SecurityMetric(
+            "Trivy",
+            "SKIP",
+            "Docker image scan skipped (`--skip-docker` or `SKIP_DOCKER_TESTS=1`)",
+        )
+
     dockerfile_path = PROJECT_ROOT / "Dockerfile.api"
     if not dockerfile_path.exists():
         return SecurityMetric("Trivy", "WARN", "`Dockerfile.api` not found")
@@ -357,25 +408,47 @@ def collect_trivy_metric() -> SecurityMetric:
     )
 
 
-def collect_security_metrics() -> list[SecurityMetric]:
-    with tempfile.TemporaryDirectory(prefix="agentflow-quality-security-") as temp_dir:
-        main_requirements, sdk_requirements, integrations_requirements = build_requirement_files(
-            Path(temp_dir)
+def skipped_dependency_metric(name: str) -> SecurityMetric:
+    return SecurityMetric(
+        name,
+        "SKIP",
+        "dependency scan skipped (`--skip-dependency-scans`)",
+    )
+
+
+def collect_security_metrics(
+    skip_docker: bool = False,
+    skip_dependency_scans: bool = False,
+) -> list[SecurityMetric]:
+    metrics = [collect_bandit_metric()]
+    if skip_dependency_scans:
+        metrics.extend(
+            [
+                skipped_dependency_metric("Safety"),
+                skipped_dependency_metric("pip-audit"),
+            ]
         )
-        return [
-            collect_bandit_metric(),
-            collect_safety_metric(
-                main_requirements,
-                sdk_requirements,
-                integrations_requirements,
-            ),
-            collect_pip_audit_metric(
-                main_requirements,
-                sdk_requirements,
-                integrations_requirements,
-            ),
-            collect_trivy_metric(),
-        ]
+    else:
+        with tempfile.TemporaryDirectory(prefix="agentflow-quality-security-") as temp_dir:
+            main_requirements, sdk_requirements, integrations_requirements = (
+                build_requirement_files(Path(temp_dir))
+            )
+            metrics.extend(
+                [
+                    collect_safety_metric(
+                        main_requirements,
+                        sdk_requirements,
+                        integrations_requirements,
+                    ),
+                    collect_pip_audit_metric(
+                        main_requirements,
+                        sdk_requirements,
+                        integrations_requirements,
+                    ),
+                ]
+            )
+    metrics.append(collect_trivy_metric(skip_docker=skip_docker))
+    return metrics
 
 
 def load_latest_load_report() -> tuple[Path | None, dict]:
@@ -521,6 +594,7 @@ def load_mutation_metrics() -> tuple[list[MutationMetric], str]:
 
 def render_markdown(
     generated_at: str,
+    generator_command: str,
     suite_metrics: list[SuiteMetric],
     coverage_detail: str,
     security_metrics: list[SecurityMetric],
@@ -534,14 +608,16 @@ def render_markdown(
         "# AgentFlow Quality Report",
         "",
         f"- Generated: `{generated_at}`",
-        "- Generator: `python scripts/quality_report.py`",
+        f"- Generator: `{generator_command}`",
         "",
         "## Test Suites",
     ]
 
-    for metric in suite_metrics:
-        detail = f" ({metric.detail})" if metric.detail else ""
-        lines.append(f"- {metric.name}: {metric.count} collected ({metric.source}){detail}")
+    for suite_metric in suite_metrics:
+        detail = f" ({suite_metric.detail})" if suite_metric.detail else ""
+        lines.append(
+            f"- {suite_metric.name}: {suite_metric.count} collected ({suite_metric.source}){detail}"
+        )
     lines.append(f"- Coverage: {coverage_detail}")
     lines.append(f"- Property detail: {load_hypothesis_profile_detail()}")
     lines.append(f"- Chaos latest run: {load_chaos_detail()}")
@@ -551,8 +627,10 @@ def render_markdown(
             "## Security",
         ]
     )
-    for metric in security_metrics:
-        lines.append(f"- {metric.name}: {metric.status} - {metric.detail}")
+    for security_metric in security_metrics:
+        lines.append(
+            f"- {security_metric.name}: {security_metric.status} - {security_metric.detail}"
+        )
     lines.extend(
         [
             "",
@@ -560,8 +638,11 @@ def render_markdown(
         ]
     )
     if performance_metrics:
-        for metric in performance_metrics:
-            lines.append(f"- {metric.name}: {metric.status} - {metric.detail}")
+        for performance_metric in performance_metrics:
+            lines.append(
+                f"- {performance_metric.name}: {performance_metric.status} - "
+                f"{performance_metric.detail}"
+            )
     else:
         lines.append(f"- No performance metrics available ({performance_source})")
     lines.append(f"- Evidence: {performance_source}")
@@ -571,8 +652,10 @@ def render_markdown(
             "## Mutation Score",
         ]
     )
-    for metric in mutation_metrics:
-        lines.append(f"- {metric.module_name}: {metric.status} - {metric.detail}")
+    for mutation_metric in mutation_metrics:
+        lines.append(
+            f"- {mutation_metric.module_name}: {mutation_metric.status} - {mutation_metric.detail}"
+        )
     lines.append(f"- Overall: {mutation_overall}")
     lines.extend(
         [
@@ -591,15 +674,23 @@ def render_markdown(
 
 def main() -> int:
     args = parse_args()
-    output_path = Path(args.output)
+    output_path = resolve_output_path(args.output)
+    skip_docker = should_skip_docker(args.skip_docker)
     generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     suite_metrics = [collect_suite_metric(name, paths) for name, paths in TEST_SUITES.items()]
     coverage_detail = load_coverage_detail()
-    security_metrics = collect_security_metrics()
+    security_metrics = collect_security_metrics(
+        skip_docker=skip_docker,
+        skip_dependency_scans=args.skip_dependency_scans,
+    )
     performance_profile, performance_metrics, performance_source = load_performance_metrics()
     mutation_metrics, mutation_overall = load_mutation_metrics()
     report = render_markdown(
         generated_at=generated_at,
+        generator_command=build_generator_command(
+            skip_docker=skip_docker,
+            skip_dependency_scans=args.skip_dependency_scans,
+        ),
         suite_metrics=suite_metrics,
         coverage_detail=coverage_detail,
         security_metrics=security_metrics,

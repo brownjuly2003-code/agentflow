@@ -8,6 +8,22 @@ import pytest
 import scripts.quality_report as quality_report
 
 
+def test_resolve_output_path_anchors_relative_paths() -> None:
+    assert quality_report.resolve_output_path("docs/quality.md") == (
+        quality_report.PROJECT_ROOT / "docs" / "quality.md"
+    )
+
+
+def test_build_generator_command_includes_skip_flags() -> None:
+    assert (
+        quality_report.build_generator_command(
+            skip_docker=True,
+            skip_dependency_scans=True,
+        )
+        == "python scripts/quality_report.py --skip-docker --skip-dependency-scans"
+    )
+
+
 def test_build_requirement_files_reuses_resolved_security_inputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -119,3 +135,72 @@ def test_collect_pip_audit_metric_scans_all_runtime_requirement_files(
             "json",
         ]
     ]
+
+
+def test_collect_trivy_metric_skips_docker_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(quality_report, "resolve_command", lambda program: program)
+    monkeypatch.setattr(
+        quality_report,
+        "run_command",
+        lambda command, timeout: pytest.fail(f"unexpected command: {command!r}"),
+    )
+
+    metric = quality_report.collect_trivy_metric(skip_docker=True)
+
+    assert metric.name == "Trivy"
+    assert metric.status == "SKIP"
+    assert "Docker image scan skipped" in metric.detail
+
+
+def test_collect_security_metrics_can_skip_dependency_scans(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        quality_report,
+        "build_requirement_files",
+        lambda temp_path: pytest.fail("dependency requirements should not be built"),
+    )
+    monkeypatch.setattr(
+        quality_report,
+        "collect_bandit_metric",
+        lambda: quality_report.SecurityMetric("Bandit", "PASS", "ok"),
+    )
+    monkeypatch.setattr(
+        quality_report,
+        "collect_trivy_metric",
+        lambda skip_docker=False: quality_report.SecurityMetric("Trivy", "SKIP", "ok"),
+    )
+
+    metrics = quality_report.collect_security_metrics(skip_dependency_scans=True)
+
+    assert [(metric.name, metric.status) for metric in metrics] == [
+        ("Bandit", "PASS"),
+        ("Safety", "SKIP"),
+        ("pip-audit", "SKIP"),
+        ("Trivy", "SKIP"),
+    ]
+
+
+def test_collect_pip_audit_metric_reports_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("fastapi==0.1.0\n", encoding="utf-8")
+
+    def raise_timeout(command: list[str], timeout: int):
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(quality_report, "resolve_command", lambda program: program)
+    monkeypatch.setattr(quality_report, "run_command", raise_timeout)
+
+    metric = quality_report.collect_pip_audit_metric(
+        requirements,
+        requirements,
+        requirements,
+    )
+
+    assert metric.name == "pip-audit"
+    assert metric.status == "WARN"
+    assert "timed out" in metric.detail

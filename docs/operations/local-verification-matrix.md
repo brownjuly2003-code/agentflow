@@ -21,8 +21,8 @@ run Docker through Lima. On 2026-05-30 it had Docker Engine `29.5.2` and the
 user-local Docker Compose CLI plugin `v5.1.4`; the repo checkout lives at
 `/Users/julia/agentflow-docker-check`. This is not a GitHub Actions
 self-hosted runner (`gh api .../actions/runners` reported `total=0`). It can
-provide manual Docker build/compose evidence, but pytest-based Docker suites
-need Python 3.11 installed or CI.
+provide manual Docker build/compose evidence, and pytest-based Docker suites can
+use `/Users/julia/agentflow-docker-check/.venv-mac-docker`.
 
 ## Default Safe Gates
 
@@ -87,6 +87,18 @@ API to Docker `Healthy`; `/v1/health` reported `kafka:healthy` and
 `duckdb_pool:healthy`. The aggregate health JSON stayed `unhealthy` because
 Flink, Iceberg, freshness, and quality signals are outside the e2e compose
 stack. Cleanup removed the `agentflow-e2e-mac` containers, network, and volume.
+
+Latest Mac pytest compose smoke evidence after commit `677de80`:
+
+```bash
+AGENTFLOW_E2E_MODE=compose AGENTFLOW_E2E_TIMEOUT=180 .venv-mac-docker/bin/python -m pytest tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp .tmp/mac-e2e-smoke-basetemp -o cache_dir=.tmp/mac-e2e-smoke-cache
+```
+
+That run passed with `10 passed in 121.10s`, including the webhook callback
+test. The Mac/Lima callback host is `host.lima.internal`; Linux/CI remains on
+`host.docker.internal`, and `AGENTFLOW_E2E_CALLBACK_HOST` can still override the
+callback host explicitly. Cleanup left only the pre-existing `hq-demo` kind
+containers.
 
 ## Benchmark And Load Gates
 

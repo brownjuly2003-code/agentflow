@@ -79,8 +79,15 @@ agentflow-api` also passed; Redis, Postgres, Kafka, and API reached Docker
 Flink, Iceberg, freshness, and quality signals are not part of the e2e compose
 stack. Cleanup with `down -v` completed and only the pre-existing `hq-demo` kind
 containers remained. The repo has no registered self-hosted GitHub Actions
-runners (`total=0`), and the iMac currently exposes only system Python 3.9, so
-pytest-based Docker suites still need Python 3.11 setup on the Mac or CI.
+runners (`total=0`). A repo-local Python 3.11 venv now exists at
+`/Users/julia/agentflow-docker-check/.venv-mac-docker`; after commit `677de80`
+the Mac compose smoke `AGENTFLOW_E2E_MODE=compose
+AGENTFLOW_E2E_TIMEOUT=180 .venv-mac-docker/bin/python -m pytest
+tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp
+.tmp/mac-e2e-smoke-basetemp -o cache_dir=.tmp/mac-e2e-smoke-cache` passed with
+`10 passed in 121.10s`. The fix keeps Linux/CI callback URLs on
+`host.docker.internal` and uses Lima's `host.lima.internal` on Darwin unless
+`AGENTFLOW_E2E_CALLBACK_HOST` is set explicitly.
 
 ## Compact-Safe Autonomous Start
 

@@ -19,7 +19,7 @@ Updated: 2026-05-30
 - Runner: `scripts/autopilot.ps1`, default planner `codex`
 - Scheduler: installed as `AgentFlow Local Autopilot` with `-Planner codex -ExitZeroOnBlocked -Commit`; preview without `-Install` must not modify scheduler state.
 - Docker Desktop / Docker daemon: do not start on this Windows workstation. Docker has been observed to hang local processes here; Docker-heavy validation belongs on the Mac runner or CI.
-- iMac Docker host: `julia@192.168.1.133` is reachable over SSH; Lima `docker` instance is running with Docker Engine `29.5.2`; Docker Compose CLI plugin `v5.1.4` is installed under the user Docker CLI plugins; checkout path is `/Users/julia/agentflow-docker-check` at `origin/main`. GitHub repo self-hosted Actions runners currently report `total=0`, so this is an SSH-operated Mac host, not a registered GitHub Actions runner.
+- iMac Docker host: `julia@192.168.1.133` is reachable over SSH; Lima `docker` instance is running with Docker Engine `29.5.2`; Docker Compose CLI plugin `v5.1.4` is installed under the user Docker CLI plugins; checkout path is `/Users/julia/agentflow-docker-check`. GitHub repo self-hosted Actions runners currently report `total=0`, so this is an SSH-operated Mac host, not a registered GitHub Actions runner. Python 3.11 is available for repo verification through `/Users/julia/agentflow-docker-check/.venv-mac-docker`.
 
 ## Operating Mode
 
@@ -36,6 +36,8 @@ The 2026-05-30 generated external gate pack is checked in at `docs/operations/ge
 The 2026-05-30 local policy update marks this Windows workstation as no-Docker. Local broad pytest must use `SKIP_DOCKER_TESTS=1`; Docker Desktop, Docker compose/build, kind/Helm live validation, chaos tests, and Docker-dependent full pytest must run on the Mac runner or in CI before claiming Docker-heavy coverage.
 
 A 2026-05-30 autonomous Mac Docker verification on iMac `julia@192.168.1.133` checked out `origin/main` at HEAD `ffeb423` and installed the user-local Docker Compose CLI plugin because Docker Engine was present but `docker compose` was initially missing. Direct `docker build -f Dockerfile.api -t agentflow-api:mac-docker-smoke-ffeb423 .` passed. `docker compose -p agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait agentflow-api` passed: Redis, Postgres, Kafka, and API containers reached Docker `Healthy`, and `curl http://127.0.0.1:8000/v1/health` returned with `kafka:healthy` and `duckdb_pool:healthy`. The app aggregate status remained `unhealthy` because the e2e compose stack intentionally does not include Flink or Iceberg and no pipeline events had been produced. `docker compose ... down -v` cleanup ran and only the pre-existing `hq-demo` kind containers remained. Full Docker-capable pytest was not run on the Mac because only system Python 3.9 is currently available there; install/use Python 3.11 before running pytest-based Docker gates outside CI.
+
+A follow-up Mac pytest-based compose smoke on 2026-05-30 found the webhook callback path failing on Lima because `host.docker.internal:host-gateway` shadows Lima's native host DNS. Commit `677de80` keeps Linux/CI on `host.docker.internal` but uses `host.lima.internal` for compose-mode callback URLs on Darwin, while preserving an explicit `AGENTFLOW_E2E_CALLBACK_HOST` override. On iMac, `/Users/julia/agentflow-docker-check/.venv-mac-docker/bin/python -m pytest tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp .tmp/mac-e2e-smoke-basetemp -o cache_dir=.tmp/mac-e2e-smoke-cache` with `AGENTFLOW_E2E_MODE=compose` and `AGENTFLOW_E2E_TIMEOUT=180` passed with `10 passed in 121.10s`; cleanup left only the pre-existing `hq-demo` kind containers.
 
 A 2026-05-30 autonomous external-gate recheck did not unblock tasks 18-22. For AWS OIDC/Terraform apply readiness, `gh variable list --repo brownjuly2003-code/agentflow` still reports only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is absent; `terraform` is now available in `PATH`, but AWS CLI and AWS credential environment hints are absent; workflow-expected `infrastructure/terraform/environments/*.tfvars` files are absent; and `gh run list --workflow terraform-apply.yml` reports no `Terraform Apply` runs. Terraform CLI availability corrects an old local-tooling note only; it is not owner-provided role, tfvars, CloudTrail, approval, or apply evidence.
 
@@ -240,6 +242,10 @@ policy, write proof, or readback evidence).
   - `docker compose -p agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait agentflow-api`: passed; Redis/Postgres/Kafka/API containers reached Docker `Healthy`.
   - `curl http://127.0.0.1:8000/v1/health`: returned JSON with `kafka:healthy` and `duckdb_pool:healthy`; aggregate `status` stayed `unhealthy` because Flink/Iceberg/freshness/quality are outside the e2e compose stack.
   - Cleanup verified with `docker compose ... down -v`; only pre-existing `hq-demo` kind containers remained.
+- Mac pytest-based compose smoke on iMac `julia@192.168.1.133` after commit `677de80`:
+  - `AGENTFLOW_E2E_MODE=compose AGENTFLOW_E2E_TIMEOUT=180 .venv-mac-docker/bin/python -m pytest tests/e2e/test_smoke.py::test_webhook_test_endpoint_delivers_callback -v --tb=short -p no:schemathesis --basetemp .tmp/mac-e2e-webhook-basetemp -o cache_dir=.tmp/mac-e2e-webhook-cache`: passed with `1 passed in 108.91s`.
+  - `AGENTFLOW_E2E_MODE=compose AGENTFLOW_E2E_TIMEOUT=180 .venv-mac-docker/bin/python -m pytest tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp .tmp/mac-e2e-smoke-basetemp -o cache_dir=.tmp/mac-e2e-smoke-cache`: passed with `10 passed in 121.10s`.
+  - Cleanup verified with `docker ps --all`; only pre-existing `hq-demo` kind containers remained.
 - Standalone lint/typecheck/build gates: not run separately; no frontend source was changed.
 - Local verification matrix: documented in `docs/operations/local-verification-matrix.md`.
 - `cd sdk-ts; npm run typecheck`: passed.
@@ -250,7 +256,7 @@ policy, write proof, or readback evidence).
 
 - Integration, staging, load, publish, and Terraform workflows depend on Docker, Kubernetes, cloud credentials, external services, or GitHub secrets and are forbidden for autopilot by default.
 - On this Windows workstation, Docker Desktop, Docker compose/build, kind, Helm live validation, chaos tests, and Docker-dependent full pytest are forbidden local gates because Docker can hang processes. Use the Mac runner or CI for that evidence.
-- The iMac host can run Docker build and compose smoke checks via SSH, but it is not registered as a GitHub Actions self-hosted runner and currently lacks Python 3.11 for pytest-based Docker suites.
+- The iMac host can run Docker build and compose smoke checks via SSH and now has a repo-local Python 3.11 verification environment at `/Users/julia/agentflow-docker-check/.venv-mac-docker`, but it is not registered as a GitHub Actions self-hosted runner.
 - The runner cannot sandbox `pi` or `codex` to path-level writes before execution; it enforces allowed paths after execution and blocks commits on violations.
 - Scheduler is intentionally not enabled by setup.
 

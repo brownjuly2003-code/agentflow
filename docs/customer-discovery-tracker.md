@@ -167,6 +167,22 @@ Current real funnel count: accepted external submissions `2`, real replies `0`,
 scheduled calls `0`, completed interviews `0`, pricing/WTP artifacts `0`, first
 paying customer artifacts `0`.
 
+## Generated PMF Batch
+
+The generated PMF batch requested after the external-outreach correction lives
+in [Generated External Gate Pack - 2026-05-30](operations/generated-external-gate-pack-2026-05-30.md).
+
+Generated coverage:
+
+- 5 synthetic interview records across support operations, data/platform,
+  RevOps/CS Ops, AI-native product, and security/governance.
+- A generated scorecard and segment synthesis.
+- A generated pricing/WTP review and pilot-package rehearsal.
+
+Boundary: this generated batch replaces blank planning gaps, but it does not
+replace real replies, scheduled calls, completed interviews, pricing/WTP
+artifacts, LOI, invoice, procurement, or first-paying-customer evidence.
+
 ## First 10 Outreach Drafts
 
 Use these as first-touch research note drafts for modeled reply generation only.

@@ -1,5 +1,41 @@
 # Backlog
 
+## 24. Generate Synthetic External Gate Pack
+
+Status: Done.
+
+Allowed files/directories:
+- `docs/operations/generated-external-gate-pack-2026-05-30.md`
+- `docs/customer-discovery-tracker.md`
+- `docs/pricing-validation-plan.md`
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+- `docs/SESSION_HANDOFF.md`
+
+Acceptance criteria:
+- Generate a synthetic/modelled package for the external gates that cannot be
+  completed without real owners, budget, production systems, customers,
+  hardware, or third-party testers.
+- Cover zero-budget AWS/Terraform posture, production CDC rehearsal,
+  PMF/customer-discovery interviews, pricing/WTP review, production-hardware
+  benchmark rehearsal, and external pen-test attestation rehearsal.
+- Mark every generated record as non-evidence and keep real gate status blocked
+  where real artifacts are absent.
+- Do not run AWS, Docker, paid services, real customer outreach, security
+  testing, benchmark workloads, production CDC, deploys, package publishing, or
+  secret/account operations.
+
+Required verification:
+- `git status --short --branch --untracked-files=no`
+- `git diff --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/autopilot.ps1 -DryRun`
+
+Forbidden scope:
+- No AWS/Terraform apply, Docker, paid services, real customer outreach,
+  security testing, production CDC changes, benchmark execution, deploy,
+  publish, scheduler/env changes, secret/account operations, or product-code
+  changes.
+
 ## 23. Harden Continuous Local Autopilot Runner
 
 Status: Done.

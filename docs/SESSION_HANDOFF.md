@@ -5,6 +5,7 @@
 **Branch state at this docs update:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files:** `901` via `git ls-files`.
 **Latest local commits:**
+- `8412a53` docs: record external outreach restart
 - `3edc4f2` fix(ci): set git identity in committing autopilot test
 - `63ae86b` fix(ci): configure git identity in autopilot test
 - `fc02390` fix(ci): include pandas in dev dependencies
@@ -128,6 +129,15 @@ assertions had to be pushed onto the dependabot branches before
 
 **Dependabot queue currently empty.** Next batch will open on the
 weekly Monday 06:00 MSK schedule (see `.github/dependabot.yml`).
+
+**Generated external gate pack:** after the operator clarified that external
+gate material should be generated/modelled rather than pursued through real
+outreach, `docs/operations/generated-external-gate-pack-2026-05-30.md` now
+contains the synthetic package for zero-budget AWS posture, production CDC
+rehearsal, five PMF interviews, pricing/WTP review, production-hardware
+benchmark report shape, and external pen-test attestation rehearsal. Treat that
+pack as generated planning material only. It does not close real external
+evidence gates.
 
 **Local autopilot status:** the scheduled task is installed as
 `scripts/autopilot.ps1 -Planner codex -ExitZeroOnBlocked -Commit`.

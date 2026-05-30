@@ -19,6 +19,12 @@ paid pilot shape, pricing risk, or first paying customer intent. Keep pricing
 uncommitted until real founder/customer evidence is supplied outside the repo
 and recorded in the discovery tracker.
 
+The generated pricing/WTP rehearsal requested after the external-outreach
+correction is recorded in
+[Generated External Gate Pack - 2026-05-30](operations/generated-external-gate-pack-2026-05-30.md).
+It provides a generated pilot-package shape, value-metric read, and pricing-gate
+review. Treat it as synthetic planning material only.
+
 Access triage on 2026-05-04 found no budget-owner notes, WTP record, pilot
 proposal, LOI, invoice, procurement artifact, or first-paying-customer evidence
 to review. The 2026-05-30 external outreach restart did not change that: public

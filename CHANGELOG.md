@@ -17,6 +17,10 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.serving.semantic_layer.*` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the agent-facing catalog /
+  NL→SQL / contracts query surface fully annotated. Pinned by
+  `tests/unit/test_typing_policy.py`; `mypy src` stays clean on 99 files.
 - `src.quality.monitors.*` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the freshness / SLA /
   pipeline-health observability paths fully annotated. Pinned by

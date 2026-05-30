@@ -231,6 +231,12 @@ disallow_untyped_defs = true
 module = "src.quality.monitors.*"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Semantic layer (catalog / NL→SQL / contracts) is the agent-facing query
+# surface; keep it fully annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.semantic_layer.*"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

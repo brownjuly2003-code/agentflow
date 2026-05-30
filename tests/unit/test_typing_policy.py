@@ -45,3 +45,9 @@ def test_quality_monitors_are_a_strict_mypy_slice() -> None:
     # Monitors gate freshness / SLA / pipeline-health signals; keep them fully
     # annotated so the observability path stays type-checked.
     assert "src.quality.monitors.*" in _strict_modules()
+
+
+def test_semantic_layer_is_a_strict_mypy_slice() -> None:
+    # Catalog / NL->SQL / contracts is the agent-facing query surface; keep it
+    # fully annotated.
+    assert "src.serving.semantic_layer.*" in _strict_modules()

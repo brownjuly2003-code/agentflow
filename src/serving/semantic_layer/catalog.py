@@ -40,7 +40,7 @@ class DataCatalog:
         self.contract_registry = contract_registry or ContractRegistry()
         self._register_defaults()
 
-    def _register_defaults(self):
+    def _register_defaults(self) -> None:
         for entity in load_entity_contracts():
             entity.contract_version = self.contract_registry.latest_contract_version(entity.name)
             self.register_entity(entity)
@@ -148,10 +148,10 @@ class DataCatalog:
             )
         )
 
-    def register_entity(self, entity: EntityDefinition):
+    def register_entity(self, entity: EntityDefinition) -> None:
         self.entities[entity.name] = entity
 
-    def register_metric(self, metric: MetricDefinition):
+    def register_metric(self, metric: MetricDefinition) -> None:
         self.metrics[metric.name] = metric
 
     def serialize_entities(self) -> dict[str, dict]:

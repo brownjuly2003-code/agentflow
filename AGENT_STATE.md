@@ -77,6 +77,16 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Auth strict mypy slice through HEAD `f977317` on 2026-05-30:
+  - `refactor(auth): promote auth package to a strict mypy slice` sets
+    `disallow_untyped_defs = true` for `src.serving.api.auth.*`. The only gap
+    was `AuthManager.__init__`'s `time_source` parameter, now typed
+    `Callable[[], float]`. `tests/unit/test_typing_policy.py` gains a
+    `test_auth_package_is_a_strict_mypy_slice` assertion (red before the
+    pyproject override, green after).
+  - `python -m mypy src --config-file pyproject.toml`: `Success: no issues found in 99 source files`.
+  - `python -m pytest tests/unit/test_typing_policy.py tests/unit/test_auth.py tests/unit/test_auth_hashed_key_guidance.py -p no:schemathesis`: passed (16 tests). `ruff check` / `ruff format --check` on touched files passed. `git diff --check`: passed.
+  - GitHub evidence on `f977317`: CI, Contract Tests, E2E Tests, Security Scan, and Staging Deploy completed successfully. The push Load Test run `26686620700` failed with a broad uniform p99 inflation (all six endpoints ~1900-2200 ms, 0.00% functional failures) — the documented runner-variance signature, not a code regression (the change is type-only). Per `docs/runbooks/load-test-regression.md` the run was re-run on the same SHA and completed successfully.
 - M-C4 hashed-key guidance enforcement through HEAD `e444ecf` on 2026-05-30:
   - `feat(auth): warn when hashed-key count exceeds M-C4 soft limit` adds
     `HASHED_KEY_SOFT_LIMIT = 10` in `src/constants.py`, a

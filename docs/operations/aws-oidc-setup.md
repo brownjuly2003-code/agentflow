@@ -2,11 +2,15 @@
 
 ## Purpose
 
-This guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml`.
+This archived optional guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml` if AWS is ever explicitly reintroduced.
+
+Current project decision as of 2026-05-30: AWS/Terraform apply is out of scope because the operator has no foreign payment card for AWS signup and no AWS budget. Do not treat missing AWS apply evidence as a project deficiency, active blocker, or autonomous follow-up. Reopen this path only if the operator explicitly provides budget, account/payment path, and approval to reintroduce AWS.
+
+For the DV2/X5 demo, use the already documented S3-compatible cold-tier path with HF Datasets or Backblaze B2 for derived/anonymized parquet. Do not require AWS/S3 for that dataset.
 
 ## Current readiness handoff
 
-Status as of 2026-05-06: blocked on external AWS account inputs.
+Status as of 2026-05-30: not applicable under the operator's no-budget/no-card constraint. The older AWS evidence below is retained only as historical context.
 
 Confirmed local/repository evidence:
 
@@ -41,7 +45,7 @@ environment hints, AWS config, or AWS credentials file; `aws`, `terraform`, and
 GitHub Actions API reports `total_count: 0` for `Terraform Apply` workflow runs,
 so there is no apply/preflight run or CloudTrail evidence to cite.
 
-Evidence recheck on 2026-05-30 keeps the blocker external. Repository variables
+Historical evidence recheck on 2026-05-30 kept the blocker external. Repository variables
 still contain only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is absent;
 `terraform` is now available in `PATH`, but AWS CLI and AWS credential
 environment hints are absent; workflow-expected
@@ -49,6 +53,8 @@ environment hints are absent; workflow-expected
 Terraform plan/apply jobs remain guarded with `if: false`; and `gh run list
 --workflow terraform-apply.yml` reports no workflow runs. Local Terraform CLI
 availability is not AWS role, tfvars, CloudTrail, approval, or apply evidence.
+Under the current no-budget decision this is expected and should not be
+rechecked without new operator input.
 
 The tracked root-level `infrastructure/terraform/dev.tfvars` and
 `infrastructure/terraform/prod.tfvars` are not proof of H4 readiness. The
@@ -62,7 +68,7 @@ evidence intake but does not close H4 because no AWS role ARN, real tfvars,
 CloudTrail `AssumeRoleWithWebIdentity` proof, owner approval, or successful
 apply evidence was supplied.
 
-Next operator packet to unblock review:
+If AWS is explicitly reintroduced later, the operator packet to unblock review is:
 
 - Secure ticket or evidence folder with AWS account owner and bootstrap
   operator.
@@ -72,8 +78,9 @@ Next operator packet to unblock review:
 - First apply environment, reviewer, rollback owner, run URL or transcript, and
   redacted CloudTrail `AssumeRoleWithWebIdentity` proof.
 
-Do not enable the workflow or run a real Terraform apply until an operator
-provides all external inputs:
+Do not enable the workflow or run a real Terraform apply unless the operator
+first reopens AWS with budget/account/payment path and then provides all
+external inputs:
 
 - AWS account owner and bootstrap operator.
 - Approved IAM role creation path for GitHub Actions OIDC.

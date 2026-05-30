@@ -64,9 +64,9 @@ Source: `docs/benchmark-baseline.json` generated 2026-04-17T13:37:10+03:00.
 - Scope cut was intentionally not applied; v1.0.0 keeps the current 15-endpoint surface.
 - Entity p99 remains 290-320 ms in `docs/benchmark-baseline.json` generated on 2026-04-17T13:37:10+03:00: above the earlier ~170 ms pre-regression lab result, but still inside the <500 ms gate.
 - v14 changes only SDK resilience and SDK tests/docs, so this release records the entity p99 tail as a serving-path known limitation rather than claiming a new performance fix.
-- Real Terraform `apply` has not been executed from GitHub Actions yet; current state is local `terraform init -backend=false` and `terraform validate` through the Terraform container plus workflow wiring.
+- Real Terraform `apply` has not been executed from GitHub Actions and is no longer an active gate for the current plan. AWS is out of scope unless the operator later reintroduces budget/account/payment details.
 - GitHub Actions environments `staging` and `production` are configured with required reviewer `brownjuly2003-code`; `prevent_self_review=false` because the repo currently has one admin collaborator.
-- AWS OIDC role setup for GitHub Actions is still a manual setup step. As of 2026-05-30, repo variable `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is not configured, `.github/workflows/terraform-apply.yml` remains disabled with `if: false`, real `infrastructure/terraform/environments/*.tfvars` files are not committed, root-level `infrastructure/terraform/*.tfvars` files are not used by the workflow and still contain placeholder-shaped values, no `Terraform Apply` workflow runs exist, AWS CLI/credential hints are absent, and local Terraform CLI availability is not apply evidence. Current handoff: [AWS OIDC Setup For Terraform Apply](operations/aws-oidc-setup.md).
+- AWS OIDC role setup for GitHub Actions is archived as an optional path only. As of 2026-05-30, the operator has no foreign payment card and no AWS budget, so missing `AWS_TERRAFORM_ROLE_ARN`, tfvars, CloudTrail, or apply evidence should not be counted as a release weakness. Current archived handoff: [AWS OIDC Setup For Terraform Apply](operations/aws-oidc-setup.md).
 - SDK registry publish evidence is complete for v1.1.0. The legacy npm package `@uedomskikh/agentflow-client` remains live but is not the future publish target. Future TypeScript SDK publishing now targets `@yuliaedomskikh/agentflow-client`, which is public, owned by `yuliaedomskikh`, and has npm Trusted Publishing configured for GitHub Actions OIDC (`brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, no environment). CLI readback confirmed the same Trusted Publisher on 2026-05-01. The current npm `NPM_TOKEN` is a time-limited write token created on 2026-04-30 with a 90-day expiry selected in the npm UI; treat it as expiring by 2026-07-29 until revoked. Revoke it only after the first successful trusted-publish workflow run on the new package. The green `publish-npm.yml` run on `2c72387` is not sufficient revocation proof because it published legacy `@uedomskikh/agentflow-client` with `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`. A new account still cannot control the old `@uedomskikh/agentflow-client` package unless old owner auth adds it as a maintainer or npm support intervenes; scoped packages cannot be transferred to a different user scope.
 - Public benchmark on production hardware is still pending; current evidence is the checked-in single-node baseline. Current plan: [Public Production-Hardware Benchmark Plan](perf/public-production-hardware-benchmark-plan.md).
 - Chaos full suite runs on schedule; PR path covers smoke scope only.
@@ -83,7 +83,7 @@ compliance claims:
 
 | Gate | Practical impact while open | Claim blocked |
 | --- | --- | --- |
-| AWS OIDC Terraform apply | Cloud infrastructure changes still require an operator-owned bootstrap path; GitHub Actions cannot be treated as the safe production apply path. | "AWS infrastructure is managed by approved GitHub OIDC Terraform apply." |
+| AWS OIDC Terraform apply | N/A for the current plan: no AWS budget or foreign-card/payment path exists. Reopen only on explicit operator request. | "AWS infrastructure is managed by approved GitHub OIDC Terraform apply." |
 | External pen-test attestation | Enterprise security review can reject the release even if internal scans are green. | "A third party completed and retested a penetration test." |
 | External immutable audit retention | Local hash-chained JSONL supports tamper-evidence only on the configured host. | "Audit logs are retained in WORM/Object Lock/SIEM-backed immutable storage." |
 
@@ -101,7 +101,7 @@ compliance claims:
 - [x] v1.1 runtime/SDK package split documented
 - [x] Local and Kubernetes-shaped CDC operationalization checked in
 - [x] GitHub environments `staging` and `production` configured with required reviewer `brownjuly2003-code` (verified via `gh api` on 2026-04-30; `prevent_self_review=false` because the repo currently has one admin collaborator)
-- [ ] AWS OIDC role configured for GitHub Actions (`AWS_REGION` exists; `AWS_TERRAFORM_ROLE_ARN`, enabled terraform workflow, real environment tfvars, and operator approval are still missing; handoff in `docs/operations/aws-oidc-setup.md`)
+- [x] AWS/Terraform apply removed from active release gates under the 2026-05-30 no-budget/no-card decision; archived optional handoff remains in `docs/operations/aws-oidc-setup.md`
 - [ ] External immutable audit retention accepted if claimed beyond local hash-chain evidence (WORM/Object Lock/SIEM target, retention policy, write proof, and readback evidence are still missing; handoff in `docs/operations/immutable-retention-evidence-handoff.md`)
 - [x] First approved registry release tag produces green `Publish TypeScript SDK` and `Publish Python Packages` runs (`v1.1.0` tag target `2c72387`)
 - [ ] Production CDC source onboarding approved and configured (source owner, secret owner, source connection details, table scope, private network path, monitoring owner, and rollback owner are still missing)
@@ -181,7 +181,7 @@ compliance claims:
 | Audit closure sprint (Codex p1–p9 + Opus) | ✅ CLOSED | 6 commits landed on `main`: `e8b1237`, `fb6aa14`, `1c24e58`, `d295ecf`, `d61261b`, `3c887b1`. Full mapping in [`docs/audits/2026-04-27/README.md`](audits/2026-04-27/README.md) |
 | Branch protection on `main` | ✅ APPLIED | 12 required status checks via `gh api`; `strict=true`, force-pushes / deletions disabled |
 | GitHub Actions environments `staging` and `production` | ✅ APPLIED | `gh api repos/brownjuly2003-code/agentflow/environments` shows a `required_reviewers` protection rule on both environments with reviewer `brownjuly2003-code`; `prevent_self_review=false` |
-| AWS OIDC Terraform apply readiness | ⚠️ BLOCKED | 2026-05-30 access triage reconfirmed on local HEAD `1ebfa0a`: GitHub CLI can inspect `brownjuly2003-code/agentflow`; repository variables contain only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is missing; terraform apply jobs are still `if: false`; workflow-expected `environments/*.tfvars` are absent; root-level `*.tfvars` files are not workflow inputs and still contain placeholder-shaped values; AWS CLI and AWS credential environment hints are absent; local Terraform CLI is available but is not AWS role, tfvars, CloudTrail, approval, or apply evidence; and `gh run list --workflow terraform-apply.yml` reports no workflow runs. |
+| AWS OIDC Terraform apply readiness | N/A | Operator stated on 2026-05-30 that there is no foreign payment card for AWS signup and no AWS budget. Keep `.github/workflows/terraform-apply.yml` disabled and preserve [AWS OIDC Setup](operations/aws-oidc-setup.md) only as an archived optional path. Do not treat missing AWS role, tfvars, CloudTrail, or apply evidence as a project deficiency unless AWS is explicitly reintroduced with budget/account/payment details. |
 | External immutable audit retention | ⚠️ BLOCKED | 2026-05-06 evidence triage found local hash-chained JSONL support only. No WORM/Object Lock/SIEM retention target, retention-policy artifact, storage owner, write proof, readback proof, or review owner was available. Handoff: `docs/operations/immutable-retention-evidence-handoff.md`. |
 | Production CDC source onboarding | ⚠️ BLOCKED | 2026-05-04 access triage found no source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, rollback owner, or approved production context to inspect. Handoff: `docs/operations/cdc-production-onboarding.md`. |
 | Phase 1 PMF and pricing evidence | ⚠️ BLOCKED | 2026-05-04 access triage found no approved outbound account/session, warm intro thread, CRM/calendar artifact, real outreach, replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP artifact, LOI, invoice, procurement artifact, or first-paying-customer signal. Handoffs: `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. |
@@ -213,7 +213,7 @@ Local note: `tests/chaos` already manage their own Docker stack via fixture. Run
 - Security triage: `.artifacts/security/bandit-triage-2026-04-17.md`
 - Post-release external-gate handoffs:
   - External gate evidence intake checklist: `docs/operations/external-gate-evidence-intake.md`
-  - AWS OIDC Terraform apply readiness: `docs/operations/aws-oidc-setup.md`
+  - AWS OIDC Terraform apply readiness: archived optional path only, `docs/operations/aws-oidc-setup.md`
   - External immutable audit retention: `docs/operations/immutable-retention-evidence-handoff.md`
   - Production CDC source onboarding: `docs/operations/cdc-production-onboarding.md`
   - Phase 1 PMF evidence: `docs/customer-discovery-tracker.md`
@@ -269,10 +269,9 @@ npm follow-up note:
 
 **v1.1.0 release line prepared; post-release local gates recorded.**
 
-AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. Do not treat AWS Terraform apply, production CDC source onboarding, Phase 1 PMF evidence, public production-hardware benchmarks, or external pen-test attestation as complete until the unchecked gates above are closed. Remaining open items:
+AgentFlow is publicly available and the current checked-in docs/code describe the intended release, npm Trusted Publishing, Docker-backed verification, and CDC state. AWS Terraform apply is intentionally out of scope under the operator's no-budget/no-card constraint; do not list it as an active release blocker or project weakness unless AWS is explicitly reopened. Do not treat production CDC source onboarding, Phase 1 PMF evidence, public production-hardware benchmarks, or external pen-test attestation as complete until the unchecked gates above are closed. Remaining open items:
 - External gate evidence intake: use [External Gate Evidence Intake Checklist](operations/external-gate-evidence-intake.md) and the project-local Pi skill `.pi/skills/external-gate-evidence-intake` before marking any blocked external gate complete
 - Phase 1 PMF: real customer discovery and pricing validation evidence; current tracker content is synthetic/modelled only, with real evidence count still `0`
-- AWS OIDC role setup for real terraform apply: create/apply the IAM role, add `AWS_TERRAFORM_ROLE_ARN`, provide real environment tfvars, and re-enable `.github/workflows/terraform-apply.yml` only after explicit operator approval
 - External immutable audit retention: provide WORM/Object Lock/SIEM retention evidence before claiming anything beyond local hash-chain support
 - Revoke the legacy npm `NPM_TOKEN` after the first successful trusted-publish run for `@yuliaedomskikh/agentflow-client`
 - Production CDC source onboarding decision and secrets/network setup; use [Production CDC Source Onboarding](operations/cdc-production-onboarding.md) as the approval checklist

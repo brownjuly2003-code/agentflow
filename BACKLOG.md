@@ -489,12 +489,12 @@ Forbidden scope:
 - No source code changes.
 - No cleanup, revert, push, test, SDK package, deployment, Terraform, secret, scheduler install, external account, paid service, or production data changes.
 
-## 18. Prepare AWS OIDC Terraform Apply Readiness Handoff
+## 18. Record AWS/Terraform No-Budget Boundary
 
-Status: Blocked.
+Status: Not applicable unless explicitly reopened.
 
-Blocked reason:
-- External AWS inputs are still absent after 2026-05-04 access triage: `AWS_TERRAFORM_ROLE_ARN`, real staging/prod tfvars, AWS account bootstrap approval, OIDC proof, first apply evidence, and explicit workflow-enable approval. Handoff recorded in `docs/operations/aws-oidc-setup.md`.
+Out-of-scope reason:
+- Operator stated on 2026-05-30 that there is no foreign payment card for AWS signup and no AWS budget. AWS OIDC/Terraform apply must not be treated as a recurring project deficiency, active blocker, or autonomous follow-up. Reopen only if the operator explicitly provides budget/account/payment path and asks to reintroduce AWS.
 
 Allowed files/directories:
 - `docs/operations/`
@@ -503,10 +503,10 @@ Allowed files/directories:
 - `BACKLOG.md`
 
 Acceptance criteria:
-- Summarize the current AWS OIDC Terraform apply blockers from `docs/release-readiness.md` and `docs/codex-tasks/2026-05-01/T32-post-release-external-gates.md`: `AWS_REGION` exists, `AWS_TERRAFORM_ROLE_ARN` is missing, terraform apply jobs remain disabled, real environment tfvars are absent, and this workstation has no AWS credentials.
-- Create or update a bounded operator handoff that lists the external inputs required before a real Terraform apply can be enabled.
-- If the external AWS role ARN, tfvars, and operator approval are still absent, mark this item blocked in `BACKLOG.md` and `AGENT_STATE.md` instead of enabling apply.
-- Keep the handoff limited to documentation and backlog/state updates.
+- Preserve the historical AWS OIDC/Terraform handoff as an optional archived path, but mark it not applicable for the current project plan.
+- Record that missing `AWS_TERRAFORM_ROLE_ARN`, tfvars, CloudTrail, and apply evidence are expected under the no-budget/no-card constraint and should not lower project assessment.
+- For DV2/X5 data storage, point to the S3-compatible cold-tier path using HF Datasets or Backblaze B2 for derived/anonymized parquet instead of AWS.
+- Keep the change limited to documentation and backlog/state updates.
 
 Required verification:
 - `git status --short --branch`

@@ -7,9 +7,9 @@ Updated: 2026-05-30
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local HEAD before this state-refresh commit: `65863f8bbe9bfe49839aef4f898f1a6fccdd1c09` (`65863f8`)
+- Verified local HEAD before this state-refresh commit: `93b04b7639fc0fd1e7ae2918046fe39216dc79e5` (`93b04b7`)
 - Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
-- State refresh scope: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `docs/operations/local-verification-matrix.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
+- State refresh scope: durable AWS/no-budget boundary docs only: `AGENT_STATE.md`, `BACKLOG.md`, `README.md`, `docs/SESSION_HANDOFF.md`, `docs/operations/aws-oidc-setup.md`, `docs/operations/external-gate-evidence-intake.md`, and `docs/release-readiness.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
 - File count at refresh start: `git ls-files` reports 906 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
 
 ## Available Runtime
@@ -29,7 +29,9 @@ The autopilot handoff files are project artifacts. `.autopilot/` is local runtim
 
 The guarded local autopilot has been hardened through HEAD `c43111c`: it defaults to the Codex planner, treats active concurrent locks as a clean no-work exit, accepts both inline and markdown `Commit Allowed` gates, exits cleanly for scheduled no-task blockers, and forbids HEAD-only handoff churn as an autonomous task. A real scheduled-mode run wrote `.autopilot/BLOCKED.md` because no bounded safe local task remained.
 
-The 2026-05-29 local refresh did not add owner-provided external evidence. The 2026-05-30 external-outreach restart added two accepted public-form contact submissions for PMF/customer discovery and several non-counting attempts documented in `docs/customer-discovery-tracker.md`. This is outreach evidence only; PMF/pricing remains blocked until real replies, scheduled/completed interviews, WTP/pricing evidence, LOI/invoice/procurement artifacts, or first-paying-customer signals exist. External AWS/Terraform remains not applicable without budget/explicit reintroduction; production CDC, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable.
+The 2026-05-29 local refresh did not add owner-provided external evidence. The 2026-05-30 external-outreach restart added two accepted public-form contact submissions for PMF/customer discovery and several non-counting attempts documented in `docs/customer-discovery-tracker.md`. This is outreach evidence only; PMF/pricing remains blocked until real replies, scheduled/completed interviews, WTP/pricing evidence, LOI/invoice/procurement artifacts, or first-paying-customer signals exist. External AWS/Terraform is now explicitly out of scope for this project unless the operator later reintroduces a budget, account, and foreign-card/payment path; do not cite missing AWS apply as a project deficiency or recurring blocker. Production CDC, production benchmark, external pen-test, and real production deployment gates remain blocked or not applicable.
+
+Operator budget constraint recorded on 2026-05-30: the operator has no foreign payment card for AWS signup and no AWS budget. The replacement path for the DV2/X5 demo is not AWS; use the already documented S3-compatible cold-tier story with HF Datasets or Backblaze B2 for anonymized parquet. Raw X5/Kaggle source data should not be committed to git, and any public dataset repo should contain only license-compatible derived/anonymized parquet plus a dataset card linking back to the original Kaggle source.
 
 The 2026-05-30 generated external gate pack is checked in at `docs/operations/generated-external-gate-pack-2026-05-30.md`. It covers zero-budget AWS/Terraform posture, synthetic production CDC intake, five generated PMF interviews, generated pricing/WTP review, synthetic production-hardware benchmark report shape, and simulated external pen-test attestation. This closes the generated/modelled deliverable only; it does not close any real external evidence gate.
 
@@ -41,9 +43,9 @@ A follow-up Mac pytest-based compose smoke on 2026-05-30 found the webhook callb
 
 The 2026-05-30 Codex audit remediation has closed all locally actionable findings from ignored `audit_codex_30_05_26.md`: `0ea3da6` normalizes FastAPI-owned `ValidationError.input/ctx` fields in `scripts/export_openapi.py`, regenerates `docs/openapi.json`, and adds `tests/unit/test_export_openapi.py`; `a261b95` refreshes README and `docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality and documents that GitHub Release objects currently stop at `v1.1.0`; `397925c` refreshed durable state after the first P1 fixes; `672c8fd` bounds streamed request bodies without `Content-Length`; `c61a28c` removes mojibake from the DuckDB explain-plan scrubber and pins box-drawing parsing; `dce7115` refreshes `docs/quality.md` through a no-Docker quality-report mode; `8c96128` ignores locked local temp roots without hiding project outputs; and `7b0f924`/`65863f8` make `docker-compose.prod.yml` reuse `Dockerfile.api` while carrying the prior security pins into the runtime image.
 
-Current HEAD `65863f8` has GitHub push green for CI, Contract Tests, Security Scan, E2E Tests, and Staging Deploy. Push Load Test run `26677145590` failed with broad p99 slowdown and no functional request failures; artifacts were compared against the previous green `8c96128` run and only latency shifted. Per `docs/runbooks/load-test-regression.md`, two subsequent manual Load Test runs on the same SHA, `26677294150` and `26677355752`, both completed successfully, so this is recorded as runner variance. The failed push run remains in GitHub history.
+Code HEAD `65863f8` had GitHub push green for CI, Contract Tests, Security Scan, E2E Tests, and Staging Deploy. Push Load Test run `26677145590` failed with broad p99 slowdown and no functional request failures; artifacts were compared against the previous green `8c96128` run and only latency shifted. Per `docs/runbooks/load-test-regression.md`, two subsequent manual Load Test runs on the same SHA, `26677294150` and `26677355752`, both completed successfully, so this is recorded as runner variance. Follow-up state closeout commit `93b04b7` was pushed with CI, Security Scan, Load Test, E2E Tests, Staging Deploy, and manually dispatched Contract Tests all green. The failed `65863f8` push Load Test run remains in GitHub history.
 
-A 2026-05-30 autonomous external-gate recheck did not unblock tasks 18-22. For AWS OIDC/Terraform apply readiness, `gh variable list --repo brownjuly2003-code/agentflow` still reports only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is absent; `terraform` is now available in `PATH`, but AWS CLI and AWS credential environment hints are absent; workflow-expected `infrastructure/terraform/environments/*.tfvars` files are absent; and `gh run list --workflow terraform-apply.yml` reports no `Terraform Apply` runs. Terraform CLI availability corrects an old local-tooling note only; it is not owner-provided role, tfvars, CloudTrail, approval, or apply evidence.
+A 2026-05-30 autonomous external-gate recheck found the historical AWS OIDC/Terraform apply path unconfigured: `AWS_REGION=us-east-1` was the only repo variable, `AWS_TERRAFORM_ROLE_ARN` and workflow-expected `infrastructure/terraform/environments/*.tfvars` files were absent, and `gh run list --workflow terraform-apply.yml` reported no `Terraform Apply` runs. This is now historical context only. Because the operator has no AWS budget or foreign-card/payment path, do not repeat AWS readiness probes or present AWS absence as a live gap unless the operator explicitly reopens AWS with budget/account details.
 
 The 2026-05-30 autonomy process update adds `docs/operations/autonomous-compact-safe-process.md` as the durable rule for no-prompt local continuation, compact-safe recovery, anti-repeat checks, admin delegation, local commit autonomy, and remote/destructive boundaries. Local commits are at the agent's discretion after scoped verification. The operator has granted standing authorization for ordinary `git push origin main` from the human-agent autonomous session after clean tracked status and `git diff --check`; force-push/deploy/release/publish/Terraform apply/scheduler/env/destructive actions still require an explicit latest instruction naming the action and target.
 
@@ -63,12 +65,13 @@ evidence-pending until owner-supplied artifacts exist.
 
 The 2026-05-06 external evidence-gates continuation started from pushed HEAD
 `1683d5d`, branch `main...origin/main`, with `git ls-files` count `710`.
-Recheck found H4 still blocked (`AWS_REGION` only, no
+Historical recheck found H4 unconfigured (`AWS_REGION` only, no
 `AWS_TERRAFORM_ROLE_ARN`, no local AWS credential hints, no `aws`/`terraform`
-CLI, no real tfvars, no Terraform Apply runs), H5 still blocked (no external
-tester/report/attestation packet), and M9 external immutable retention still
-blocked if claimed beyond local hash-chain support (no WORM/Object Lock/SIEM
-policy, write proof, or readback evidence).
+CLI, no real tfvars, no Terraform Apply runs). That AWS path is now superseded
+by the 2026-05-30 no-budget/no-card decision and is not an active blocker. H5
+still blocked (no external tester/report/attestation packet), and M9 external
+immutable retention still blocked if claimed beyond local hash-chain support
+(no WORM/Object Lock/SIEM policy, write proof, or readback evidence).
 
 ## Last Verified Gates
 
@@ -101,7 +104,7 @@ policy, write proof, or readback evidence).
   - `cd sdk-ts; npm run typecheck`: passed.
   - `powershell -ExecutionPolicy Bypass -File scripts\autopilot.ps1 -DryRun`: passed before the explicit no-autopilot continuation request; do not use autopilot for the current manual continuation.
 - Manual access triage for backlog tasks 18-22 on 2026-05-04:
-  - Task 18 AWS OIDC: GitHub CLI is authenticated for repository inspection; AWS CLI and Terraform CLI are not available in `PATH`; `AWS_REGION` is the only repo variable; Terraform workflow jobs remain `if: false`; real tfvars are absent.
+  - Task 18 AWS OIDC historical note: GitHub CLI was authenticated for repository inspection; AWS CLI and Terraform CLI were not available in `PATH`; `AWS_REGION` was the only repo variable; Terraform workflow jobs remained `if: false`; real tfvars were absent. Superseded on 2026-05-30 by the operator no-budget/no-card decision; do not treat as an active blocker.
   - Task 19 production CDC: no source owner, secret owner, source endpoint, table scope, private network path, Kubernetes Secret owner, monitoring owner, or rollback owner was available; no production connector was touched.
   - Task 20 PMF/pricing: no approved outbound account/session, warm intro thread, CRM/calendar artifact, interview evidence, pricing/WTP artifact, LOI, invoice, or first-paying-customer signal was available during the 2026-05-04 triage. On 2026-05-30, two public-form outreach submissions were accepted, but no replies, scheduled/completed interviews, pricing/WTP artifact, LOI, invoice, procurement artifact, or first-paying-customer signal exists yet.
   - Task 21 production benchmark: only historical local `.artifacts/benchmark/` files were found; no approved production-class host, budget, operator-run artifacts, fixture-safety confirmation, or publication approval was available.
@@ -112,7 +115,7 @@ policy, write proof, or readback evidence).
   - `git rev-parse --short HEAD`: `10bc3c7`.
   - `git ls-files`: 673 tracked files.
   - `git status --short --branch`: clean tracked tree, `main...origin/main [ahead 21]`, with the known local access-denied warnings from old temp directories.
-  - Task 18 AWS OIDC remains blocked: `gh variable list` reports only `AWS_REGION`; AWS CLI and Terraform CLI are not available; real staging/prod tfvars are absent.
+  - Task 18 AWS OIDC historical note: `gh variable list` reported only `AWS_REGION`; AWS CLI and Terraform CLI were not available; real staging/prod tfvars were absent. Superseded on 2026-05-30 by the operator no-budget/no-card decision.
   - Task 19 production CDC remains blocked: no approved production source owner packet or first-run evidence was available.
   - Task 20 PMF/pricing remains blocked for PMF/pricing claims: 2026-05-30 public-form outreach created two accepted submissions, but no real CRM reply, scheduled/completed interview, pricing/WTP, LOI, invoice, procurement, or paying-customer evidence is available.
   - Task 21 production benchmark remains blocked: no production-hardware artifacts or publication approval were available.
@@ -292,6 +295,6 @@ policy, write proof, or readback evidence).
 
 ## Next Step
 
-Backlog tasks 0 through 17 and 23 through 24 are complete. Tasks 18 through 22 remain blocked on real external inputs: AWS/OIDC role and tfvars, production CDC owner decisions, real PMF/pricing/customer evidence, approved production-hardware benchmark evidence, and an external pen-test attestation. The 2026-05-30 Codex audit items from `audit_codex_30_05_26.md` are locally closed through `65863f8`; no additional safe audit-driven code item is queued.
+Backlog tasks 0 through 17 and 23 through 24 are complete. Task 18 AWS/Terraform is out of scope by operator budget/payment constraint, not an active blocker. Tasks 19 through 22 remain blocked on real external inputs: production CDC owner decisions, real PMF/pricing/customer evidence, approved production-hardware benchmark evidence, and an external pen-test attestation. The 2026-05-30 Codex audit items from `audit_codex_30_05_26.md` are locally closed through `65863f8`; no additional safe audit-driven code item is queued.
 
 The external gate evidence intake checklist is checked in at `docs/operations/external-gate-evidence-intake.md`, with a project-local Pi skill at `.pi/skills/external-gate-evidence-intake`. No next bounded safe backlog item is currently queued. Continue only when an operator supplies real external evidence for one blocked gate or explicitly assigns another bounded local documentation/task-maintenance item. Keep work outside external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.

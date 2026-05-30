@@ -101,24 +101,31 @@ test. The Mac/Lima callback host is `host.lima.internal`; Linux/CI remains on
 callback host explicitly. Cleanup left only the pre-existing `hq-demo` kind
 containers.
 
-Latest Windows no-Docker audit-remediation evidence at HEAD `a261b95`:
+Latest Windows no-Docker audit-remediation evidence at HEAD `65863f8`:
 
 ```powershell
 python scripts\export_openapi.py --check
 python -m pytest tests\unit\test_export_openapi.py tests\contract -p no:schemathesis
-$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis --basetemp .tmp\codex-openapi-drift-full-basetemp -o cache_dir=.tmp\codex-openapi-drift-full-cache
+$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis --basetemp .tmp\codex-query-engine-full-basetemp -o cache_dir=.tmp\codex-query-engine-full-cache
+python -m pytest tests\unit\test_quality_report.py -q -p no:schemathesis
+python scripts\quality_report.py --skip-docker --skip-dependency-scans
+python -m pytest tests\unit\test_contract_dependencies.py tests\unit\test_security_workflow.py tests\unit\test_container_attestation_workflow.py -q -p no:schemathesis
 python -m ruff check src/ tests/ scripts\export_openapi.py
 python -m ruff format --check src/ tests/ scripts\export_openapi.py
+python -m mypy scripts\quality_report.py
 git diff --check
 ```
 
 The export check passed; targeted contract/unit tests passed with 18 tests and
-104 warnings; broad no-Docker pytest passed with 842 passed, 32 skipped, and
-104 warnings; ruff and whitespace checks passed. GitHub workflows on
-`0ea3da6` all completed successfully including Contract Tests. GitHub workflows
-on the docs-only `a261b95` push completed successfully for CI, Security Scan,
-Load Test, E2E Tests, and Staging Deploy; Contract Tests did not trigger for
-README/release-status-only paths.
+104 warnings; broad no-Docker pytest passed with 846 passed, 32 skipped, and
+104 warnings; quality-report tests passed with 8 tests; prod-compose/security
+workflow policy tests passed with 22 tests; targeted ruff, format, mypy, and
+whitespace checks passed. GitHub evidence on current HEAD `65863f8`: push CI,
+Contract Tests, Security Scan, E2E Tests, and Staging Deploy completed
+successfully. Push Load Test run `26677145590` failed from broad p99 runner
+slowdown with no functional request failures; manual Load Test reruns
+`26677294150` and `26677355752` on the same SHA both completed successfully per
+the load-regression runbook's runner-variance check.
 
 ## Benchmark And Load Gates
 

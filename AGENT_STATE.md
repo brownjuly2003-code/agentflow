@@ -7,9 +7,9 @@ Updated: 2026-05-30
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local HEAD before this state-refresh commit: `a261b954f93724ce086355ef50051da2ee188fa5` (`a261b95`)
-- Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0` through `pytest_temp2/pytest-of-uedom/pytest-9`, and `pytest_temp_root/pytest-of-uedom/`.
-- State refresh scope: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, `docs/operations/local-verification-matrix.md`, and ignored local runtime `.autopilot/BLOCKED.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
+- Verified local HEAD before this state-refresh commit: `65863f8bbe9bfe49839aef4f898f1a6fccdd1c09` (`65863f8`)
+- Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
+- State refresh scope: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `docs/operations/local-verification-matrix.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
 - File count at refresh start: `git ls-files` reports 906 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
 
 ## Available Runtime
@@ -39,7 +39,9 @@ A 2026-05-30 autonomous Mac Docker verification on iMac `julia@192.168.1.133` ch
 
 A follow-up Mac pytest-based compose smoke on 2026-05-30 found the webhook callback path failing on Lima because `host.docker.internal:host-gateway` shadows Lima's native host DNS. Commit `677de80` keeps Linux/CI on `host.docker.internal` but uses `host.lima.internal` for compose-mode callback URLs on Darwin, while preserving an explicit `AGENTFLOW_E2E_CALLBACK_HOST` override. On iMac, `/Users/julia/agentflow-docker-check/.venv-mac-docker/bin/python -m pytest tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp .tmp/mac-e2e-smoke-basetemp -o cache_dir=.tmp/mac-e2e-smoke-cache` with `AGENTFLOW_E2E_MODE=compose` and `AGENTFLOW_E2E_TIMEOUT=180` passed with `10 passed in 121.10s`; cleanup left only the pre-existing `hq-demo` kind containers.
 
-The 2026-05-30 Codex audit remediation closed two P1 local findings from ignored `audit_codex_30_05_26.md`: commit `0ea3da6` normalizes FastAPI-owned `ValidationError.input/ctx` fields in `scripts/export_openapi.py`, regenerates `docs/openapi.json`, and adds `tests/unit/test_export_openapi.py`; commit `a261b95` refreshes README and `docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality and documents that GitHub Release objects currently stop at `v1.1.0` while git tags plus PyPI/npm records are the release source of truth for `v1.2.0` through `v1.4.0`.
+The 2026-05-30 Codex audit remediation has closed all locally actionable findings from ignored `audit_codex_30_05_26.md`: `0ea3da6` normalizes FastAPI-owned `ValidationError.input/ctx` fields in `scripts/export_openapi.py`, regenerates `docs/openapi.json`, and adds `tests/unit/test_export_openapi.py`; `a261b95` refreshes README and `docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality and documents that GitHub Release objects currently stop at `v1.1.0`; `397925c` refreshed durable state after the first P1 fixes; `672c8fd` bounds streamed request bodies without `Content-Length`; `c61a28c` removes mojibake from the DuckDB explain-plan scrubber and pins box-drawing parsing; `dce7115` refreshes `docs/quality.md` through a no-Docker quality-report mode; `8c96128` ignores locked local temp roots without hiding project outputs; and `7b0f924`/`65863f8` make `docker-compose.prod.yml` reuse `Dockerfile.api` while carrying the prior security pins into the runtime image.
+
+Current HEAD `65863f8` has GitHub push green for CI, Contract Tests, Security Scan, E2E Tests, and Staging Deploy. Push Load Test run `26677145590` failed with broad p99 slowdown and no functional request failures; artifacts were compared against the previous green `8c96128` run and only latency shifted. Per `docs/runbooks/load-test-regression.md`, two subsequent manual Load Test runs on the same SHA, `26677294150` and `26677355752`, both completed successfully, so this is recorded as runner variance. The failed push run remains in GitHub history.
 
 A 2026-05-30 autonomous external-gate recheck did not unblock tasks 18-22. For AWS OIDC/Terraform apply readiness, `gh variable list --repo brownjuly2003-code/agentflow` still reports only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is absent; `terraform` is now available in `PATH`, but AWS CLI and AWS credential environment hints are absent; workflow-expected `infrastructure/terraform/environments/*.tfvars` files are absent; and `gh run list --workflow terraform-apply.yml` reports no `Terraform Apply` runs. Terraform CLI availability corrects an old local-tooling note only; it is not owner-provided role, tfvars, CloudTrail, approval, or apply evidence.
 
@@ -70,15 +72,16 @@ policy, write proof, or readback evidence).
 
 ## Last Verified Gates
 
-- Codex audit remediation on 2026-05-30 at HEAD `a261b95`:
+- Codex audit remediation on 2026-05-30 through HEAD `65863f8`:
   - `python scripts\export_openapi.py --check`: passed.
   - `python -m pytest tests\unit\test_export_openapi.py tests\contract -p no:schemathesis`: passed with 18 tests and 104 warnings.
-  - `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis --basetemp .tmp\codex-openapi-drift-full-basetemp -o cache_dir=.tmp\codex-openapi-drift-full-cache`: passed with 842 passed, 32 skipped, and 104 warnings.
-  - `python -m ruff check src/ tests/ scripts\export_openapi.py`: passed.
-  - `python -m ruff format --check src/ tests/ scripts\export_openapi.py`: passed with 236 files already formatted.
-  - `git diff --check`: passed.
-  - GitHub push workflows on `0ea3da6`: CI, Security Scan, Load Test, E2E Tests, Staging Deploy, and Contract Tests all completed successfully.
-  - GitHub push workflows on `a261b95`: CI, Security Scan, Load Test, E2E Tests, and Staging Deploy completed successfully; Contract Tests did not trigger for README/release-status-only paths.
+  - `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis --basetemp .tmp\codex-query-engine-full-basetemp -o cache_dir=.tmp\codex-query-engine-full-cache`: passed with 846 passed, 32 skipped, and 104 warnings.
+  - `python -m pytest tests\unit\test_quality_report.py -q -p no:schemathesis`: passed with 8 tests.
+  - `python scripts\quality_report.py --skip-docker --skip-dependency-scans`: passed and regenerated `docs/quality.md` with Safety/pip-audit/Trivy marked skipped for local no-Docker mode.
+  - `python -m pytest tests\unit\test_contract_dependencies.py tests\unit\test_security_workflow.py tests\unit\test_container_attestation_workflow.py -q -p no:schemathesis`: passed with 22 tests.
+  - `python -m ruff check` and `python -m ruff format --check` passed for each touched Python/test slice; `python -m mypy scripts\quality_report.py` passed for the quality-report change.
+  - `git diff --check`: passed before each local commit and push.
+  - GitHub evidence on current HEAD `65863f8`: push CI, Contract Tests, Security Scan, E2E Tests, and Staging Deploy completed successfully; Load Test push run `26677145590` failed from broad latency variance, then manual Load Test reruns `26677294150` and `26677355752` on the same SHA both completed successfully.
 - Manual release-readiness sync verification on 2026-05-04:
   - `git rev-parse --short HEAD`: `3f88d74` at sync start.
   - `git diff --check`: passed.
@@ -289,6 +292,6 @@ policy, write proof, or readback evidence).
 
 ## Next Step
 
-Backlog tasks 0 through 17 are complete. Tasks 18 through 22 have now had a manual no-autopilot access triage. Task 18 remains blocked on external AWS account inputs after updating `docs/operations/aws-oidc-setup.md`. Task 19 remains blocked on external production CDC source decisions after updating `docs/operations/cdc-production-onboarding.md`. Task 20 remains blocked on absent real PMF outreach, interview, pricing/WTP, and first-paying-customer evidence after updating `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`. Task 21 remains blocked on absent approved production-hardware access, budget, operator-run results, fixture-safety confirmation, and publication approval after updating `docs/perf/public-production-hardware-benchmark-plan.md`. Task 22 remains blocked on absent external pen-test report or attestation after updating `docs/operations/external-pen-test-attestation-handoff.md`.
+Backlog tasks 0 through 17 and 23 through 24 are complete. Tasks 18 through 22 remain blocked on real external inputs: AWS/OIDC role and tfvars, production CDC owner decisions, real PMF/pricing/customer evidence, approved production-hardware benchmark evidence, and an external pen-test attestation. The 2026-05-30 Codex audit items from `audit_codex_30_05_26.md` are locally closed through `65863f8`; no additional safe audit-driven code item is queued.
 
-The external gate evidence intake checklist is now checked in at `docs/operations/external-gate-evidence-intake.md`, with a project-local Pi skill at `.pi/skills/external-gate-evidence-intake`. No next bounded safe backlog item is currently queued. Continue only when an operator supplies real external evidence for one blocked gate or explicitly assigns another bounded local documentation/task-maintenance item. Keep work outside external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.
+The external gate evidence intake checklist is checked in at `docs/operations/external-gate-evidence-intake.md`, with a project-local Pi skill at `.pi/skills/external-gate-evidence-intake`. No next bounded safe backlog item is currently queued. Continue only when an operator supplies real external evidence for one blocked gate or explicitly assigns another bounded local documentation/task-maintenance item. Keep work outside external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.

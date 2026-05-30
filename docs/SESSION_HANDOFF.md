@@ -1,20 +1,20 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (Codex audit remediation state refresh)
-**Verified HEAD before this state-refresh commit:** `a261b95` (`a261b954f93724ce086355ef50051da2ee188fa5`) on `main`.
+**Last updated:** 2026-05-30 (Codex audit remediation closeout)
+**Verified HEAD before this state-refresh commit:** `65863f8` (`65863f8bbe9bfe49839aef4f898f1a6fccdd1c09`) on `main`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `65863f8` fix(docker): carry security pins into api image
+- `7b0f924` fix(docker): reuse api Dockerfile in prod compose
+- `8c96128` chore(gitignore): ignore locked local temp dirs
+- `dce7115` fix(quality): refresh report in no-docker mode
+- `c61a28c` fix(query): remove explain plan mojibake
+- `672c8fd` fix(security): bound streamed request bodies
+- `397925c` docs(state): refresh codex audit remediation handoff
 - `a261b95` docs(release): refresh v1.4.0 status
 - `0ea3da6` fix(openapi): normalize validation error schema export
 - `6f9d6b2` docs: record mac compose e2e verification
-- `677de80` fix(e2e): use lima callback host on mac compose
-- `28d7a58` docs: record mac docker verification
-- `ffeb423` docs: generate external gate pack
-- `8412a53` docs: record external outreach restart
-- `173069b` fix(security): align quality report dependency scans
-- `dd06473` fix(security): resolve local safety scan inputs
-- `73e2eb7` docs: authorize autonomous origin main push
 
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
@@ -47,8 +47,8 @@ In order, those tell you:
    Contract Tests when verifying green; it has a path filter that
    bypasses `pyproject.toml`-only commits and a stale red there has
    already burned us once (see Lessons below).
-3. **Open PRs** — the only mover right now is Dependabot. See "Open work"
-   for which are safe to merge and which need a smoke test first.
+3. **Open PRs** — currently expected to be empty. See "Open work" for
+   Dependabot queue rules when new PRs appear.
 
 For DV2 multi-branch demo work specifically, also read
 `docs/dv2-multi-branch/SESSION_HANDOFF.md` — it has the iMac/Lima
@@ -91,19 +91,23 @@ tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp
 `host.docker.internal` and uses Lima's `host.lima.internal` on Darwin unless
 `AGENTFLOW_E2E_CALLBACK_HOST` is set explicitly.
 
-Current 2026-05-30 Codex audit remediation evidence: `0ea3da6` closed the
-OpenAPI export drift by normalizing FastAPI-owned `ValidationError.input/ctx`
-fields, regenerated `docs/openapi.json`, and added
-`tests/unit/test_export_openapi.py`; `a261b95` refreshed README and
-`docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality and
-documents that GitHub Release objects currently stop at `v1.1.0` while git tags
-plus PyPI/npm records are the release source of truth for `v1.2.0` through
-`v1.4.0`. Local evidence: `python scripts\export_openapi.py --check`, targeted
-contract/unit tests, full Windows no-Docker pytest (`842 passed, 32 skipped`),
-ruff check/format, and `git diff --check` all passed. GitHub workflows on
-`0ea3da6` all completed successfully, including Contract Tests; GitHub workflows
-on `a261b95` completed successfully for the path-filtered docs commit (CI,
-Security Scan, Load Test, E2E Tests, and Staging Deploy).
+Current 2026-05-30 Codex audit remediation evidence through HEAD `65863f8`:
+`0ea3da6` closed OpenAPI export drift; `a261b95` refreshed README and
+`docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality;
+`672c8fd` bounded streamed request bodies without `Content-Length`; `c61a28c`
+removed the mojibake box-drawing regex in the DuckDB explain-plan scrubber;
+`dce7115` regenerated `docs/quality.md` through local no-Docker reporting;
+`8c96128` ignored locked local temp roots; and `7b0f924`/`65863f8` made
+`docker-compose.prod.yml` reuse `Dockerfile.api` while preserving the runtime
+security pins. Local evidence includes OpenAPI check, full Windows no-Docker
+pytest (`846 passed, 32 skipped`), quality-report tests and generator,
+prod-compose/security workflow policy tests (`22 passed`), targeted ruff/format,
+`mypy scripts\quality_report.py`, and `git diff --check`. GitHub evidence on
+`65863f8`: push CI, Contract Tests, Security Scan, E2E Tests, and Staging Deploy
+completed successfully. Push Load Test run `26677145590` failed from broad p99
+runner slowdown; manual Load Test reruns `26677294150` and `26677355752` on the
+same SHA both completed successfully, satisfying the load-regression runbook's
+runner-variance recheck.
 
 ## Compact-Safe Autonomous Start
 

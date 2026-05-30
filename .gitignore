@@ -51,6 +51,14 @@ docker-compose.override.yml
 .hypothesis/
 .iceberg/
 .tmp/
+# Local Windows test/build temp directories can contain locked pytest artifacts.
+/.manual-build-tmp/
+/.pytest-basetemp-sdk/
+/.pytest-temp/
+/.pytest_tmp/
+/.sdk-build-tmp/
+/pytest_temp2/
+/pytest_temp_root/
 .dora/
 .bandit-baseline.json
 !.bandit-baseline.json

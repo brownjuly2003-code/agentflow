@@ -243,6 +243,13 @@ disallow_untyped_defs = true
 module = "src.serving.backends.*"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Batch DAGs drive Iceberg maintenance + aggregate materialization; keep the
+# scheduled asset functions fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.orchestration.dags.*"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

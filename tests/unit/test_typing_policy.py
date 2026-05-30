@@ -57,3 +57,9 @@ def test_serving_backends_are_a_strict_mypy_slice() -> None:
     # Backends build / execute SQL (the H-C1 / H-C2 injection-hardening
     # surface); keep them fully annotated.
     assert "src.serving.backends.*" in _strict_modules()
+
+
+def test_orchestration_dags_are_a_strict_mypy_slice() -> None:
+    # Batch DAGs drive Iceberg maintenance + aggregate materialization; keep
+    # the scheduled asset functions fully annotated.
+    assert "src.orchestration.dags.*" in _strict_modules()

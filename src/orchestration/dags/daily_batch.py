@@ -7,6 +7,7 @@ Local mode uses DuckDB; production uses Trino/Iceberg catalog.
 """
 
 import os
+from typing import Any
 
 import duckdb
 from dagster import (
@@ -20,12 +21,12 @@ from dagster import (
 DB_PATH = os.getenv("DUCKDB_PATH", ":memory:")
 
 
-def _get_conn():
+def _get_conn() -> duckdb.DuckDBPyConnection:
     return duckdb.connect(DB_PATH)
 
 
 @asset(group_name="maintenance")
-def iceberg_snapshot_expiry(context: AssetExecutionContext):
+def iceberg_snapshot_expiry(context: AssetExecutionContext) -> dict[str, Any]:
     """Expire old Iceberg snapshots to prevent metadata bloat.
 
     Keeps last 30 days of snapshots for time-travel debugging.
@@ -43,7 +44,7 @@ def iceberg_snapshot_expiry(context: AssetExecutionContext):
 
 
 @asset(group_name="maintenance", deps=[iceberg_snapshot_expiry])
-def iceberg_compaction(context: AssetExecutionContext):
+def iceberg_compaction(context: AssetExecutionContext) -> dict[str, Any]:
     """Compact small Iceberg data files into larger ones.
 
     Target: 128-512 MB per file for optimal read performance.
@@ -61,7 +62,7 @@ def iceberg_compaction(context: AssetExecutionContext):
 
 
 @asset(group_name="aggregation")
-def daily_user_profiles(context: AssetExecutionContext):
+def daily_user_profiles(context: AssetExecutionContext) -> dict[str, int]:
     """Pre-compute user profile aggregates for fast entity lookups.
 
     Materializes users_enriched from orders_v2.
@@ -108,11 +109,12 @@ def daily_user_profiles(context: AssetExecutionContext):
 
 
 @asset(group_name="aggregation")
-def daily_product_metrics(context: AssetExecutionContext):
+def daily_product_metrics(context: AssetExecutionContext) -> dict[str, int]:
     """Pre-compute product-level metrics from pipeline events."""
     conn = _get_conn()
 
-    count = conn.execute("SELECT COUNT(*) FROM products_current").fetchone()[0]
+    row = conn.execute("SELECT COUNT(*) FROM products_current").fetchone()
+    count = row[0] if row else 0
     conn.close()
 
     context.log.info("Product metrics refreshed: %d", count)
@@ -123,7 +125,7 @@ def daily_product_metrics(context: AssetExecutionContext):
     group_name="quality",
     deps=[daily_user_profiles, daily_product_metrics],
 )
-def daily_quality_report(context: AssetExecutionContext):
+def daily_quality_report(context: AssetExecutionContext) -> dict[str, Any]:
     """Generate daily data quality report.
 
     Checks:
@@ -144,16 +146,18 @@ def daily_quality_report(context: AssetExecutionContext):
             row = conn.execute(
                 f"SELECT COUNT(*) FROM {table}"  # nosec B608 - table comes from the fixed health-check allowlist
             ).fetchone()
-            checks[table] = {"rows": row[0], "status": "ok"}
+            checks[table] = {"rows": row[0] if row else 0, "status": "ok"}
         except duckdb.Error as e:
             checks[table] = {"rows": 0, "status": f"error: {e}"}
 
     # Dead letter ratio
     try:
-        total = conn.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0]
-        dead = conn.execute(
+        total_row = conn.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()
+        total = total_row[0] if total_row else 0
+        dead_row = conn.execute(
             "SELECT COUNT(*) FROM pipeline_events WHERE topic = 'events.deadletter'"
-        ).fetchone()[0]
+        ).fetchone()
+        dead = dead_row[0] if dead_row else 0
         dl_ratio = dead / total if total > 0 else 0.0
         checks["dead_letter_ratio"] = {"value": round(dl_ratio, 4)}
     except duckdb.Error:

@@ -6,6 +6,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Fixed
 
+- The daily batch DAG's `daily_product_metrics` and `daily_quality_report`
+  assets no longer assume `DuckDBPyConnection.fetchone()` returns a row.
+  `fetchone()` is typed `tuple[Any, ...] | None`; the previously untyped
+  `COUNT(*)` lookups indexed `[0]` on a possibly-`None` result, which would
+  raise if the query returned no row. They now fall back to `0`. Surfaced by
+  promoting `src.orchestration.dags.*` to a strict mypy slice; covered by new
+  tests in `tests/unit/test_daily_batch_dag.py`.
 - `FreshnessMonitor._process_message` no longer crashes on a tombstone /
   payload-less Kafka record. `confluent_kafka.Message.value()` is
   `bytes | None` and `.topic()` is `str | None`; the previously untyped
@@ -17,6 +24,11 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.orchestration.dags.*` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the daily batch DAG's scheduled
+  asset functions fully annotated. The gaps were six missing return-type
+  annotations on `_get_conn` and the five Dagster `@asset` functions. Pinned
+  by `tests/unit/test_typing_policy.py`; `mypy src` stays clean on 99 files.
 - `src.serving.backends.*` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the SQL-building DuckDB /
   ClickHouse backends (the H-C1 / H-C2 injection-hardening surface) fully

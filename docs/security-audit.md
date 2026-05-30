@@ -90,7 +90,7 @@ Security headers are applied centrally and include:
 - `X-Content-Type-Options`
 - `Referrer-Policy`
 
-These controls improve baseline browser-facing hardening for docs/admin surfaces. TLS itself is still assumed to be terminated by an upstream edge or ingress layer; that part is not implemented inside the FastAPI application.
+These controls improve baseline browser-facing hardening for docs/admin surfaces. TLS termination is intentionally delegated to an upstream edge or ingress layer; the FastAPI application applies HTTP-layer security controls behind that boundary.
 
 Evidence: `src/serving/masking.py`, `src/serving/api/routers/agent_query.py`, `src/serving/api/security.py`, `tests/unit/test_masking.py`
 

@@ -1,14 +1,17 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (event_replayer strict slice)
-**Verified HEAD:** `8a50ab6` on `main` (all six workflows green: CI, Contract
+**Last updated:** 2026-05-30 (processing slices: local_pipeline + outbox)
+**Verified HEAD:** `0953fcc` on `main` (all six workflows green: CI, Contract
 Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
 `30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
 clickhouse CRLF→LF), `dd0a46d` (bandit baseline line-drift fix), `80316fb`
 (orchestration.dags strict slice + DuckDB `fetchone()` None-safety fix),
-`8a50ab6` (event_replayer strict slice). Prior state-refresh HEAD `0759fc6`.
+`8a50ab6` (event_replayer strict slice), `98a9ed5` (local_pipeline strict
+slice), `0953fcc` (outbox strict slice + `_connection` use-after-close guard).
+All of `src/processing` except the PR-#23-gated `flink_jobs` is now
+strict-typed. Prior state-refresh HEAD `0759fc6`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**

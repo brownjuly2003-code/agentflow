@@ -24,6 +24,15 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.serving.api.routers.deadletter` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the operator-facing dead-letter
+  recovery API (list / detail / stats / replay / dismiss) fully annotated over
+  the same `dead_letter_events` table the `event_replayer` / `outbox` slices
+  manage. The gaps were `_conn`'s return (now a `cast` to
+  `duckdb.DuckDBPyConnection` since `app.state` is dynamically typed),
+  `_decode_payload`'s `payload`, and the five route-handler return types (their
+  Pydantic response models). Pinned by `tests/unit/test_typing_policy.py`;
+  `mypy src` stays clean on 99 files.
 - `src.serving.api.middleware.*` is now a strict mypy slice
   (`disallow_untyped_defs = true`) — the first bounded slice into
   `src/serving/api`. Keeps the per-request observability path (correlation

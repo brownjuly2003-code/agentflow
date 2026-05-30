@@ -279,6 +279,14 @@ disallow_untyped_defs = true
 module = "src.serving.api.middleware.*"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Dead-letter router (list / detail / stats / replay / dismiss) drives the
+# operator-facing recovery surface over the same dead_letter_events table that
+# the strict-typed event_replayer / outbox slices manage; keep it fully
+# annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.deadletter"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

@@ -87,3 +87,9 @@ def test_api_middleware_is_a_strict_mypy_slice() -> None:
     # Request middleware (correlation logging + HTTP metrics + tracing) is the
     # per-request observability path; keep it fully annotated.
     assert "src.serving.api.middleware.*" in _strict_modules()
+
+
+def test_deadletter_router_is_a_strict_mypy_slice() -> None:
+    # The dead-letter router is the operator-facing recovery surface over the
+    # same table the event_replayer / outbox slices manage; keep it annotated.
+    assert "src.serving.api.routers.deadletter" in _strict_modules()

@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime
+from typing import cast
 
+import duckdb
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
@@ -59,8 +61,9 @@ class DismissResponse(BaseModel):
     status: str
 
 
-def _conn(request: Request):
-    conn = request.app.state.query_engine._conn
+def _conn(request: Request) -> duckdb.DuckDBPyConnection:
+    # app.state is dynamically typed; the query engine owns a real DuckDB handle.
+    conn = cast(duckdb.DuckDBPyConnection, request.app.state.query_engine._conn)
     ensure_dead_letter_table(conn)
     return conn
 
@@ -71,7 +74,7 @@ def _tenant_id(request: Request) -> str:
     return str(tenant_id or getattr(tenant_key, "tenant", "default"))
 
 
-def _decode_payload(payload) -> dict:
+def _decode_payload(payload: object) -> dict:
     if isinstance(payload, dict):
         return payload
     if isinstance(payload, str):
@@ -112,7 +115,7 @@ def _require_deadletter_write_access(request: Request, event_id: str) -> None:
 
 
 @router.get("/stats", response_model=DeadLetterStatsResponse)
-async def deadletter_stats(request: Request):
+async def deadletter_stats(request: Request) -> DeadLetterStatsResponse:
     conn = _conn(request)
     tenant_id = _tenant_id(request)
     rows = conn.execute(
@@ -167,7 +170,7 @@ async def list_deadletter_events(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     reason: str | None = Query(default=None),
-):
+) -> DeadLetterListResponse:
     conn = _conn(request)
     tenant_id = _tenant_id(request)
     params: list[object]
@@ -262,7 +265,7 @@ async def list_deadletter_events(
 
 
 @router.get("/{event_id}", response_model=DeadLetterDetail)
-async def get_deadletter_event(event_id: str, request: Request):
+async def get_deadletter_event(event_id: str, request: Request) -> DeadLetterDetail:
     conn = _conn(request)
     row = conn.execute(
         """
@@ -302,7 +305,7 @@ async def replay_deadletter_event(
     event_id: str,
     request: Request,
     payload: ReplayRequest | None = None,
-):
+) -> ReplayResponse:
     _require_deadletter_write_access(request, event_id)
     try:
         result = _replayer(request).replay(
@@ -325,7 +328,7 @@ async def replay_deadletter_event(
 
 
 @router.post("/{event_id}/dismiss", response_model=DismissResponse)
-async def dismiss_deadletter_event(event_id: str, request: Request):
+async def dismiss_deadletter_event(event_id: str, request: Request) -> DismissResponse:
     _require_deadletter_write_access(request, event_id)
     try:
         _replayer(request).dismiss(event_id)

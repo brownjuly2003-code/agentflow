@@ -78,10 +78,10 @@ Pick the first that applies; finish it before the next.
    `src.serving.backends.*`, `src.orchestration.dags.*`,
    `src.processing.{event_replayer,local_pipeline,outbox}`,
    `src.serving.api.middleware.*`, `src.serving.api.routers.deadletter`, and
-   `src.serving.api.routers.{webhooks,alerts}`.
-   Remaining measured candidates: `src/serving/api` has 41 untyped defs
-   (`routers/admin.py`=12, `main.py`=6, `routers/contracts.py`=6,
-   `routers/agent_query.py`=5, then smaller files); `src/processing/flink_jobs`
+   `src.serving.api.routers.{webhooks,alerts,contracts}`.
+   Remaining measured candidates: `src/serving/api` has 35 untyped defs
+   (`routers/admin.py`=12, `main.py`=6, `routers/agent_query.py`=5,
+   then smaller files); `src/processing/flink_jobs`
    has 13 but remains gated by PR #23 / Docker.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a

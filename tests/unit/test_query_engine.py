@@ -73,3 +73,44 @@ def test_query_package_exports_query_engine() -> None:
     from src.serving.semantic_layer.query import QueryEngine as PackageQueryEngine
 
     assert PackageQueryEngine is QueryEngine
+
+
+def test_nl_query_plan_normalizer_source_has_no_mojibake() -> None:
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "serving"
+        / "semantic_layer"
+        / "query"
+        / "nl_queries.py"
+    ).read_bytes()
+
+    assert b"\xc3\xa2\xe2\x80\x9d" not in source
+
+
+def test_explain_extracts_row_estimate_from_box_drawing_plan(
+    engine: QueryEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        engine,
+        "_translate_question_to_sql",
+        lambda question, tenant_id=None: "SELECT * FROM orders_v2",
+    )
+    monkeypatch.setattr(
+        engine._backend,
+        "explain",
+        lambda sql: [
+            (
+                "physical_plan",
+                "\u250c\u2500\u2500\u2500\u2510\n"
+                "\u2502 SEQ_SCAN \u2502\n"
+                "\u2502 ~1,234 rows \u2502\n"
+                "\u2514\u2500\u2500\u2500\u2518",
+            )
+        ],
+    )
+
+    result = engine.explain("show orders")
+
+    assert result["estimated_rows"] == 1234

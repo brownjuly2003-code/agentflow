@@ -24,6 +24,12 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.processing.local_pipeline` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the zero-infra end-to-end demo
+  pipeline (generate → validate → enrich → DuckDB) fully annotated. The gaps
+  were five missing `-> None` return annotations (`_ensure_tables`,
+  `_upsert_order`, `_upsert_product`, `_upsert_session`, `run`). Pinned by
+  `tests/unit/test_typing_policy.py`; `mypy src` stays clean on 99 files.
 - `src.processing.event_replayer` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the dead-letter replay path (which
   re-emits failed events through the transactional outbox) fully annotated. The

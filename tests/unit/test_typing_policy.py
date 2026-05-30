@@ -69,3 +69,9 @@ def test_event_replayer_is_a_strict_mypy_slice() -> None:
     # Dead-letter event replay re-emits failed events through the transactional
     # outbox; keep this delivery-correctness path fully annotated.
     assert "src.processing.event_replayer" in _strict_modules()
+
+
+def test_local_pipeline_is_a_strict_mypy_slice() -> None:
+    # The local end-to-end pipeline (generate->validate->enrich->DuckDB) is the
+    # zero-infra demo path; keep it fully annotated.
+    assert "src.processing.local_pipeline" in _strict_modules()

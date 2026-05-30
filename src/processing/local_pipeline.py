@@ -40,7 +40,7 @@ from src.quality.validators.semantic_validator import validate_semantics
 DB_PATH = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
 
 
-def _ensure_tables(conn: duckdb.DuckDBPyConnection):
+def _ensure_tables(conn: duckdb.DuckDBPyConnection) -> None:
     """Create all tables if they don't exist."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS orders_v2 (
@@ -225,7 +225,7 @@ def _process_event(
         raise
 
 
-def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict):
+def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
     conn.execute(
         """
         INSERT OR REPLACE INTO orders_v2
@@ -262,7 +262,7 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict):
     )
 
 
-def _upsert_product(conn: duckdb.DuckDBPyConnection, event: dict):
+def _upsert_product(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
     conn.execute(
         """
         INSERT OR REPLACE INTO products_current
@@ -280,7 +280,7 @@ def _upsert_product(conn: duckdb.DuckDBPyConnection, event: dict):
     )
 
 
-def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict):
+def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
     session_id = event.get("session_id", "unknown")
     derived = event.get("_derived", {})
     page_cat = derived.get("page_category", "other")
@@ -359,7 +359,7 @@ def _generate_random_event() -> tuple[str, dict]:
     return topic, json.loads(event.model_dump_json())
 
 
-def run(events_per_second: int = 10, burst: int = 0):
+def run(events_per_second: int = 10, burst: int = 0) -> None:
     """Run the local pipeline."""
     configure_logging()
     logger = structlog.get_logger()

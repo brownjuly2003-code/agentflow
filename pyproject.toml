@@ -257,6 +257,13 @@ disallow_untyped_defs = true
 module = "src.processing.event_replayer"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Local end-to-end pipeline (generate→validate→enrich→DuckDB) is the
+# zero-infra demo path; keep it fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.processing.local_pipeline"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

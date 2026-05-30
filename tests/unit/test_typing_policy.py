@@ -81,3 +81,9 @@ def test_outbox_is_a_strict_mypy_slice() -> None:
     # The transactional outbox is an at-least-once delivery-guarantee path;
     # keep it fully annotated.
     assert "src.processing.outbox" in _strict_modules()
+
+
+def test_api_middleware_is_a_strict_mypy_slice() -> None:
+    # Request middleware (correlation logging + HTTP metrics + tracing) is the
+    # per-request observability path; keep it fully annotated.
+    assert "src.serving.api.middleware.*" in _strict_modules()

@@ -24,6 +24,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.serving.api.middleware.*` is now a strict mypy slice
+  (`disallow_untyped_defs = true`) — the first bounded slice into
+  `src/serving/api`. Keeps the per-request observability path (correlation
+  logging, HTTP metrics, tracing) fully annotated. The gaps were the two
+  middleware-factory return types (`build_correlation_middleware`,
+  `build_metrics_middleware`). Pinned by `tests/unit/test_typing_policy.py`;
+  `mypy src` stays clean on 99 files.
 - `src.processing.outbox` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the transactional outbox
   (at-least-once delivery guarantee) fully annotated. Typing the

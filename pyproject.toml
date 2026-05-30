@@ -272,6 +272,13 @@ disallow_untyped_defs = true
 module = "src.processing.outbox"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Request middleware (correlation logging + HTTP metrics + tracing) is the
+# per-request observability path; keep it fully annotated. First bounded slice
+# into src/serving/api. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.middleware.*"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

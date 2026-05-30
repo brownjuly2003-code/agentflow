@@ -22,7 +22,9 @@ def _route_label(request: Request) -> str:
     return path_template or UNMATCHED_ROUTE_LABEL
 
 
-def build_metrics_middleware():
+def build_metrics_middleware() -> Callable[
+    [Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]
+]:
     async def metrics_middleware(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],

@@ -13,7 +13,9 @@ CORRELATION_HEADER = "X-Correlation-ID"
 REQUEST_ID_HEADER = "X-Request-Id"
 
 
-def build_correlation_middleware():
+def build_correlation_middleware() -> Callable[
+    [Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]
+]:
     async def correlation_middleware(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],

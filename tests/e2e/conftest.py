@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import socket
 import subprocess
 import sys
@@ -64,27 +65,39 @@ def _tail(path: Path, lines: int = 40) -> str:
 
 
 def _write_compose_override(path: Path, host_port: int) -> None:
-    path.write_text(
-        "\n".join(
+    lines = [
+        "services:",
+        "  agentflow-api:",
+        "    environment:",
+        f'      AGENTFLOW_API_KEYS: "{SUPPORT_API_KEY}:Support Agent,{OPS_API_KEY}:Ops Agent,{RATE_LIMIT_API_KEY}:Rate Limit Agent"',
+        '      AGENTFLOW_RATE_LIMIT_RPM: "120"',
+        "      AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb",
+        "      AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml",
+        '      OTEL_SDK_DISABLED: "true"',
+        "    ports:",
+        f'      - "127.0.0.1:{host_port}:8000"',
+    ]
+    if platform.system() != "Darwin":
+        lines.extend(
             [
-                "services:",
-                "  agentflow-api:",
-                "    environment:",
-                f'      AGENTFLOW_API_KEYS: "{SUPPORT_API_KEY}:Support Agent,{OPS_API_KEY}:Ops Agent,{RATE_LIMIT_API_KEY}:Rate Limit Agent"',
-                '      AGENTFLOW_RATE_LIMIT_RPM: "120"',
-                "      AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb",
-                "      AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml",
-                '      OTEL_SDK_DISABLED: "true"',
-                "    ports:",
-                f'      - "127.0.0.1:{host_port}:8000"',
                 "    extra_hosts:",
                 '      - "host.docker.internal:host-gateway"',
             ]
         )
-        + "\n",
+    path.write_text(
+        "\n".join(lines) + "\n",
         encoding="utf-8",
         newline="\n",
     )
+
+
+def _compose_callback_host() -> str:
+    configured = os.getenv("AGENTFLOW_E2E_CALLBACK_HOST")
+    if configured:
+        return configured
+    if platform.system() == "Darwin":
+        return "host.lima.internal"
+    return "host.docker.internal"
 
 
 def _compose_logs(compose_cmd: list[str]) -> str:
@@ -145,7 +158,7 @@ def _start_compose_api(tmp_path: Path) -> dict[str, object]:
 
     return {
         "base_url": base_url,
-        "callback_host": "host.docker.internal",
+        "callback_host": _compose_callback_host(),
         "compose_cmd": compose_cmd,
     }
 

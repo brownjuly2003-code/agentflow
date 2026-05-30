@@ -75,6 +75,56 @@ def test_lite_compose_mounts_contracts_for_api_startup():
     assert "./contracts:/app/contracts:ro" in compose["services"]["agentflow-api"]["volumes"]
 
 
+def test_compose_override_keeps_host_gateway_on_linux(tmp_path, monkeypatch):
+    conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
+    monkeypatch.setattr(conftest_module.platform, "system", lambda: "Linux")
+
+    override_path = tmp_path / "docker-compose.e2e.override.yml"
+    conftest_module._write_compose_override(override_path, 18080)
+
+    override = yaml.safe_load(override_path.read_text(encoding="utf-8"))
+
+    assert override["services"]["agentflow-api"]["extra_hosts"] == [
+        "host.docker.internal:host-gateway"
+    ]
+
+
+def test_compose_override_uses_native_host_dns_on_darwin(tmp_path, monkeypatch):
+    conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
+    monkeypatch.setattr(conftest_module.platform, "system", lambda: "Darwin")
+
+    override_path = tmp_path / "docker-compose.e2e.override.yml"
+    conftest_module._write_compose_override(override_path, 18080)
+
+    override = yaml.safe_load(override_path.read_text(encoding="utf-8"))
+
+    assert "extra_hosts" not in override["services"]["agentflow-api"]
+
+
+def test_compose_callback_host_uses_linux_docker_alias(monkeypatch):
+    conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
+    monkeypatch.delenv("AGENTFLOW_E2E_CALLBACK_HOST", raising=False)
+    monkeypatch.setattr(conftest_module.platform, "system", lambda: "Linux")
+
+    assert conftest_module._compose_callback_host() == "host.docker.internal"
+
+
+def test_compose_callback_host_uses_lima_alias_on_darwin(monkeypatch):
+    conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
+    monkeypatch.delenv("AGENTFLOW_E2E_CALLBACK_HOST", raising=False)
+    monkeypatch.setattr(conftest_module.platform, "system", lambda: "Darwin")
+
+    assert conftest_module._compose_callback_host() == "host.lima.internal"
+
+
+def test_compose_callback_host_honors_explicit_env(monkeypatch):
+    conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
+    monkeypatch.setenv("AGENTFLOW_E2E_CALLBACK_HOST", "callback.example")
+    monkeypatch.setattr(conftest_module.platform, "system", lambda: "Darwin")
+
+    assert conftest_module._compose_callback_host() == "callback.example"
+
+
 def test_e2e_workflow_parses_compose_ps_ndjson_output():
     parse_compose_ps_output = _load_compose_ps_parser()
 

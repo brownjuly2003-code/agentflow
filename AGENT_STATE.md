@@ -77,6 +77,30 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Strict-typing cadence extended + bandit-baseline drift fix through HEAD `dd0a46d` on 2026-05-30:
+  - `30e20a7` promotes `src.serving.semantic_layer.*` to a strict mypy slice
+    (three `DataCatalog` return-type annotations). `346bf64` promotes
+    `src.serving.backends.*` (the two `scalar()` methods typed `-> Any` to match
+    the `ServingBackend` ABC) and normalizes `clickhouse_backend.py` from its
+    historical CRLF to LF. `dd0a46d` fixes the fallout (below).
+  - **Gotcha 1 — Edit-tool EOL flips.** On this repo the Edit tool rewrote
+    `clickhouse_backend.py` to CRLF and at one point truncated it to 0 bytes
+    (ruff/mypy "pass" on an empty `.py`, masking it). The repo has no
+    `.gitattributes` and mixed EOL (catalog.py was LF, clickhouse was CRLF).
+    Fix pattern: edit source with a single atomic byte-level Python
+    read-into-variable → transform → write (never chained
+    `open(wb).write(open(rb).read())`), and after any source edit check
+    `CRLF` count + `git diff --check` + that staged blob size is non-empty.
+  - **Gotcha 2 — bandit baseline is line-keyed.** `scripts/bandit_diff.py`
+    `_issue_key` is `(test_id, filename, line_number)`. Adding the
+    `from typing import Any` import shifted the audited `urlopen()` B310 finding
+    from line 69 to 70, so both the Security Scan workflow and the CI
+    `test_bandit_diff` unit test flagged it as a new finding. `dd0a46d` updates
+    `.bandit-baseline.json` line 69 → 70. Any line-shifting edit to a file with
+    a baseline finding needs the baseline refreshed.
+  - `python -m mypy src --config-file pyproject.toml`: clean on 99 files.
+    `python -m pytest tests/unit/test_typing_policy.py tests/unit/test_bandit_diff.py tests/unit/test_duckdb_backend_sql_hardening.py tests/unit/test_clickhouse_backend.py -p no:schemathesis`: passed. `ruff check` / `ruff format --check` / `git diff --check`: passed. Local `bandit -r src sdk --ini .bandit ...` + `scripts/bandit_diff.py`: "No new findings".
+  - GitHub evidence: `30e20a7` six workflows green; `346bf64` had CI + Security Scan red from the baseline drift; `dd0a46d` green on CI, E2E, Load Test, Security Scan, Staging Deploy (Contract Tests path-filtered on a baseline-only change, required check carries the prior SUCCESS — Lesson 4).
 - Monitors strict mypy slice + tombstone fix through HEAD `3e7434b` on 2026-05-30:
   - `fix(monitors): skip tombstone records + make monitors a strict mypy slice`
     promotes `src.quality.monitors.*` to `disallow_untyped_defs = true`. Typing
@@ -347,4 +371,6 @@ On 2026-05-30 the strict-typing cadence was extended autonomously across two mor
 
 **Standing autonomous mandate (operator-granted 2026-05-30):** the agent owns all tactical and external/strategic decisions, keeps finishing safe local work without asking "what next", and stops only at a named hard boundary. External data / AWS / paid services are out of scope (no card/budget), not a deficiency. Local commits and ordinary `git push origin main` are authorized after clean status + `git diff --check`. The canonical uninterrupted-session starter, including the copy-paste kickoff prompt, the work-selection priority order, and the verification discipline, is `next-session-autonomous-local-plan.md` — start there.
 
-The next safe local candidate is the strict-typing/coverage cadence (next module: `src/serving/semantic_layer`, 3 untyped defs), which is incremental, not load-bearing. Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.
+Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, and `src.serving.backends.*`. The remaining untyped-def population is ~113, concentrated in `src/serving/api` (73, many files) plus `src/processing/{outbox,local_pipeline,event_replayer}` (~14), `src/orchestration/dags` (6), and `src/processing/flink_jobs` (15, but that package is gated by its own override + PR #23 / Docker). Continuing the cadence into `src/serving/api` is a large multi-file effort and is a deliberate stopping point — it is incremental, not load-bearing, and grinding it module-by-module on this low-powered machine risks churn. Pick it up only as bounded, individually-verified slices.
+
+Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.

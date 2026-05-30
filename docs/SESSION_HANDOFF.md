@@ -1,10 +1,13 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (monitors strict mypy slice + tombstone fix)
-**Verified HEAD:** `3e7434b` on `main` (six main workflows green). Session
-2026-05-30 code stack: `e444ecf` (M-C4 guidance enforcement), `f977317` (auth
-strict mypy slice; Load Test re-run once for runner variance), `3e7434b`
-(monitors strict slice + tombstone fix). Prior state-refresh HEAD `0759fc6`.
+**Last updated:** 2026-05-30 (strict-typing cadence + bandit-baseline fix)
+**Verified HEAD:** `dd0a46d` on `main` (CI/E2E/Load/Security/Staging green;
+Contract Tests path-filtered on the baseline-only commit). Session 2026-05-30
+code stack: `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict
+slice; Load Test re-run once for variance), `3e7434b` (monitors strict slice +
+tombstone fix), `30e20a7` (semantic-layer strict slice), `346bf64` (backends
+strict slice + clickhouse CRLF→LF), `dd0a46d` (bandit baseline line-drift fix).
+Prior state-refresh HEAD `0759fc6`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
@@ -173,15 +176,20 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + a latent bug found (`f977317`, `3e7434b`, 2026-05-30):**
-`src.serving.api.auth.*` and `src.quality.monitors.*` now set
-`disallow_untyped_defs = true` (`tests/unit/test_typing_policy.py` pins both;
-`mypy src` clean on 99 files). Typing the monitors slice surfaced a real
+**Strict mypy slices extended + a latent bug found (`f977317`→`dd0a46d`, 2026-05-30):**
+`src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
+and `src.serving.backends.*` now set `disallow_untyped_defs = true` (joining
+`src.quality.validators.*`); `tests/unit/test_typing_policy.py` pins each and
+`mypy src` is clean on 99 files. Typing the monitors slice surfaced a real
 tombstone bug in `FreshnessMonitor._process_message` (now skipped with
-`reason="empty_message"`, 100% module coverage). Remaining strict-slice
-candidate: `src/serving/semantic_layer` (3 untyped defs, 17 files). The
-per-module typing cadence is incremental hardening, not load-bearing — pick it
-up only if no higher-value local work is queued.
+`reason="empty_message"`, 100% module coverage). ~113 untyped defs remain,
+mostly in `src/serving/api` (73) — a large multi-file grind that is a deliberate
+stopping point, incremental not load-bearing. Two gotchas this session: (1) the
+Edit tool flips/corrupts EOL on this repo — edit source byte-level and re-check
+CRLF + `git diff --check` + staged blob size; (2) the bandit baseline is
+line-keyed, so a line-shifting edit (e.g. a new import) to a file with a
+baseline finding breaks Security Scan + the CI `test_bandit_diff` test until
+`.bandit-baseline.json` is refreshed.
 
 **M-C4 hashed-key guidance now enforced (`e444ecf`, 2026-05-30):**
 `AuthManager.load()` emits a `hashed_key_count_exceeds_guidance` warning once

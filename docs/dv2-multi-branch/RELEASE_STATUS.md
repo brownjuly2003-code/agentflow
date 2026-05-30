@@ -1,6 +1,6 @@
 # Release status — v1.4.0 PUBLISHED
 
-**Status (verified 2026-05-25 via live registry queries):** v1.1.0,
+**Status (verified 2026-05-30 via live registry queries):** v1.1.0,
 v1.2.0, v1.3.0, and v1.4.0 are all published on the three registries.
 v1.4.0 is a maintenance release bundling documentation
 (`docs/SESSION_HANDOFF.md`, `docs/runbooks/` on-call playbooks,
@@ -33,21 +33,46 @@ gate). No runtime API changes from v1.3.0.
 | PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.1.0/)   | 1.1.0 | 2026-04-29 09:07 | `2c72387` |
 | npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.1.0) | 1.1.0 | 2026-05-01 03:42 | `2c72387` |
 
+## GitHub Releases note
+
+`gh release list` currently reports GitHub Release objects only through
+`v1.1.0`. For `v1.2.0`, `v1.3.0`, and `v1.4.0`, the release source of truth is
+the signed git tag, PyPI/npm package records, and Trusted Publishing workflow
+runs listed here. No GitHub Release objects were created for those maintenance
+releases.
+
 ## Re-verify
 
 ```bash
 # PyPI metadata
-curl -sf "https://pypi.org/pypi/agentflow-runtime/1.3.0/json" -o /dev/null && echo OK
-curl -sf "https://pypi.org/pypi/agentflow-client/1.3.0/json"  -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-runtime/1.4.0/json" -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-client/1.4.0/json"  -o /dev/null && echo OK
 
 # npm metadata
-npm view "@yuliaedomskikh/agentflow-client@1.3.0" version dist.tarball
+npm view "@yuliaedomskikh/agentflow-client@1.4.0" version dist.tarball
 
 # Install smoke
 python -m venv /tmp/.afcheck && . /tmp/.afcheck/bin/activate
-pip install agentflow-runtime==1.3.0 agentflow-client==1.3.0
+pip install agentflow-runtime==1.4.0 agentflow-client==1.4.0
 python -c "from importlib.metadata import version; print(version('agentflow-runtime'), version('agentflow-client'))"
 ```
+
+## What's in v1.4.0 vs v1.3.0
+
+`git log --oneline 8fa99e6..e58693b` shows the changes. The high-level shape:
+
+- **Public repo and release docs:** top-level `SESSION_HANDOFF.md`,
+  refreshed README/release status, on-call runbooks, `SECURITY.md`,
+  issue/PR templates, and release rollback guidance.
+- **CI and repo hygiene:** `contract.yml` trigger broadening, DORA workflow
+  ref hardening, Dependabot configuration, `.editorconfig`, and auto-merge
+  readiness documentation.
+- **Type and dependency maintenance:** `types-PyYAML` and `types-redis`
+  adoption, `mypy<3`, Terraform AWS provider `~> 6.46`, TypeScript 6,
+  GitHub Actions major bumps, and Vitest 4. Two Dependabot PRs remain closed
+  as `wait-for-upstream`: Flink 2.x Kafka connector availability and Python
+  3.14 Docker build coverage.
+- **Runtime compatibility:** no runtime API changes from `v1.3.0`.
 
 ## What's in v1.3.0 vs v1.2.0
 
@@ -108,12 +133,13 @@ shows the changes. The high-level shape:
 
 ## How the release fired
 
-Tag `v1.3.0` on commit `8fa99e6` triggered both
+Tag `v1.4.0` on commit `e58693b` triggered both
 [`publish-pypi.yml`](../../.github/workflows/publish-pypi.yml) (OIDC
 Trusted Publishing, no token) and
 [`publish-npm.yml`](../../.github/workflows/publish-npm.yml) (npm
 Trusted Publishing, OIDC, npm CLI ≥ 11.5.1, no `NPM_TOKEN`). Both
-runs completed `success` on 2026-05-23T23:12Z. Re-running them is
+runs completed `success` on 2026-05-24T21:04Z, and packages were visible in
+the registries at 2026-05-24T21:05Z. Re-running them is
 idempotent on the verify step but will fail at the upload step with
 `File already exists` — re-tag with a new version, do not retry the
 same one.
@@ -128,11 +154,13 @@ same one.
 | v1.1.0     | `2c72387` | published  |
 | v1.2.0     | `eb59508` | published  |
 | v1.3.0     | `8fa99e6` | published  |
+| v1.4.0     | `e58693b` | published  |
 
-The next release (1.4.0 or 2.0.0) should follow the same recipe:
+The next release (1.5.0 or 2.0.0) should follow the same recipe:
 bump 5 files (root `pyproject.toml`, `sdk/pyproject.toml`,
 `sdk/agentflow/__init__.py`, `sdk-ts/package.json`,
-`sdk-ts/package-lock.json`), update the two version assertions in
+`sdk-ts/package-lock.json`), update Helm chart/app image pins when the
+release scope requires it, update the two version assertions in
 `tests/unit/test_version.py` and
 `tests/unit/test_sdk_backwards_compat.py`, move the `## [Unreleased]`
 block to a dated heading in `CHANGELOG.md`, commit, tag, push tag.

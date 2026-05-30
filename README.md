@@ -2,7 +2,7 @@
 
 > Real-time data platform for AI agents. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery.
 
-[![Release gate](https://img.shields.io/badge/release_gate-v1.3_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
+[![Release gate](https://img.shields.io/badge/release_gate-v1.4_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -20,8 +20,8 @@ AgentFlow turns that problem into one serving boundary:
 
 ## Highlights
 
-- **Release line through `v1.3.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`), published via OIDC Trusted Publishers with SLSA provenance attestations on every artifact. Live registry table + re-verify recipe: [docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md)
-- **486 unit tests collected, full suite green on `main`**; CI runs 12 required status checks (lint, schema-check, test-unit, test-integration, helm-schema-live, perf-check, terraform-validate, bandit, safety, npm-audit, trivy, contract). Branch protection requires every one of them
+- **Release line through `v1.4.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`), published via OIDC Trusted Publishers with SLSA provenance attestations on every artifact. Live registry table + re-verify recipe: [docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md)
+- **561 unit tests and the 842-test Windows no-Docker suite green locally**; CI runs 12 required status checks (lint, schema-check, test-unit, test-integration, helm-schema-live, perf-check, terraform-validate, bandit, safety, npm-audit, trivy, contract). Branch protection requires every one of them
 - **Sub-second entity lookups**: entity p50 `38-55 ms`, entity p99 `167 ms` on local hardware (–82% from the 2026-04-23 baseline after the PII masker + tenant qualification cache wins). CI runner thresholds are documented separately in [docs/perf/ci-hardware-gap-2026-05-24.md](docs/perf/ci-hardware-gap-2026-05-24.md)
 - **Dual SDK parity** for Python (`agentflow-client`) and TypeScript (`@yuliaedomskikh/agentflow-client`), including retry policies, circuit breakers, batching, pagination, contract pinning, idempotency keys, and `as_of` historical reads
 - **Two CDC paths**: production-grade Debezium + Kafka Connect (Helm chart hardened with NetworkPolicy + PDB + securityContext, schema-validated on every deploy), and a ClickHouse `MaterializedPostgreSQL` per-branch fan-out for the DV2 demo cluster
@@ -157,13 +157,13 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 
 ## Status
 
-**`v1.3.0` is the current release line** (PyPI `agentflow-runtime` /
+**`v1.4.0` is the current release line** (PyPI `agentflow-runtime` /
 `agentflow-client`, npm `@yuliaedomskikh/agentflow-client`, all three
-published 2026-05-23 via OIDC Trusted Publishers with SLSA provenance
-attestations). Live registry table and re-verify recipe live in
+published 2026-05-24T21:05Z via OIDC Trusted Publishers with SLSA
+provenance attestations). Live registry table and re-verify recipe live in
 [docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md).
 
-The `v1.1.0` → `v1.3.0` arc landed in three increments on top of the
+The `v1.1.0` → `v1.4.0` arc landed in four increments on top of the
 2026-04-27 audit closure sprint:
 
 - **`v1.1.0`** — audit closure: tenant isolation across every read
@@ -183,6 +183,11 @@ The `v1.1.0` → `v1.3.0` arc landed in three increments on top of the
   validation parametrized across both charts, A03 CI hardware-gap
   acceptance with Load Test gates raised to 1.3x baseline, and the DV2
   demo triptych completed (terminal + web-UI + dbt docs screencasts).
+- **`v1.4.0`** — maintenance release: top-level handoff and release docs,
+  on-call runbooks, `SECURITY.md`, issue/PR templates, contract/DORA CI
+  hardening, Dependabot/editorconfig repo hygiene, type-stub adoption, and
+  the Tier A dependency wave (`mypy`, Terraform AWS provider, TypeScript,
+  GitHub Actions, Vitest). No runtime API changes from `v1.3.0`.
 
 CI on `main` is fully green across all 12 required checks. Local
 hardware sustains entity p99 `167 ms` (the local SLO target); CI runner
@@ -227,5 +232,5 @@ MIT. See [LICENSE](LICENSE).
 
 Built as a data-engineering reference project. Initial release cycle
 `2026-04-10` → `2026-04-20`, post-audit hardening and DV2 extension
-through `2026-05-23` (`v1.3.0`). Full implementation trail preserved in
+through `2026-05-25` (`v1.4.0`). Full implementation trail preserved in
 `docs/plans/`, `docs/codex-tasks/`, and `docs/lessons/`.

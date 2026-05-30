@@ -29,6 +29,7 @@ COPY contracts /app/contracts
 COPY --from=builder /tmp/dist /tmp/dist
 
 RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --upgrade setuptools==82.0.1 wheel==0.47.0 \
     && pip install --no-cache-dir -r requirements.txt \
     && wheel="$(find /tmp/dist -name '*.whl' -print -quit)" \
     && pip install --no-cache-dir "${wheel}[cloud]" \

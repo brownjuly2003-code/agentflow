@@ -168,6 +168,8 @@ def test_docker_build_contexts_prepare_root_package_metadata():
             assert "COPY README.md /build/README.md" in text
             assert "python -m build --wheel" in text
             assert "pip install --no-cache-dir -e" not in text
+            assert "setuptools==82.0.1" in text
+            assert "wheel==0.47.0" in text
             assert "COPY contracts /app/contracts" in text
             assert "AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities" in text
         else:

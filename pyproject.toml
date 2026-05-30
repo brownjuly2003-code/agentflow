@@ -294,6 +294,13 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.webhooks"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Alerts expose tenant-scoped rule management, test dispatch, and history; keep
+# this operator integration surface fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.alerts"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import AnyHttpUrl, BaseModel, Field
@@ -40,7 +40,9 @@ class AlertUpdateRequest(BaseModel):
 
 def _tenant(request: Request) -> str:
     tenant_key = getattr(request.state, "tenant_key", None)
-    return tenant_key.tenant if tenant_key is not None else "default"
+    if tenant_key is None:
+        return "default"
+    return str(tenant_key.tenant)
 
 
 def _validate_metric_request(request: Request, metric: str, window: str) -> None:
@@ -62,7 +64,7 @@ def _validate_metric_request(request: Request, metric: str, window: str) -> None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def register_alert(payload: AlertCreateRequest, request: Request):
+async def register_alert(payload: AlertCreateRequest, request: Request) -> dict[str, object]:
     _validate_metric_request(request, payload.metric, payload.window)
     rule = create_alert(
         get_alert_config_path(request.app),
@@ -80,14 +82,16 @@ async def register_alert(payload: AlertCreateRequest, request: Request):
 
 
 @router.get("")
-async def list_my_alerts(request: Request):
+async def list_my_alerts(request: Request) -> dict[str, object]:
     alerts = list_alerts(get_alert_config_path(request.app), _tenant(request))
     # Exclude signing `secret` from list responses (Codex audit p2_2 #7).
     return {"alerts": [alert.model_dump(mode="json", exclude={"secret"}) for alert in alerts]}
 
 
 @router.put("/{alert_id}")
-async def modify_alert(alert_id: str, payload: AlertUpdateRequest, request: Request):
+async def modify_alert(
+    alert_id: str, payload: AlertUpdateRequest, request: Request
+) -> dict[str, object]:
     path = get_alert_config_path(request.app)
     existing = get_alert(path, alert_id, _tenant(request))
     if existing is None:
@@ -106,7 +110,7 @@ async def modify_alert(alert_id: str, payload: AlertUpdateRequest, request: Requ
 
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_alert(alert_id: str, request: Request):
+async def remove_alert(alert_id: str, request: Request) -> Response:
     removed = deactivate_alert(
         get_alert_config_path(request.app),
         alert_id,
@@ -118,15 +122,15 @@ async def remove_alert(alert_id: str, request: Request):
 
 
 @router.post("/{alert_id}/test")
-async def test_alert(alert_id: str, request: Request):
+async def test_alert(alert_id: str, request: Request) -> dict[str, object]:
     rule = get_alert(get_alert_config_path(request.app), alert_id, _tenant(request))
     if rule is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
-    return await ensure_alert_dispatcher(request.app).send_test_alert(rule)
+    return cast(dict[str, object], await ensure_alert_dispatcher(request.app).send_test_alert(rule))
 
 
 @router.get("/{alert_id}/history")
-async def alert_history(alert_id: str, request: Request):
+async def alert_history(alert_id: str, request: Request) -> dict[str, object]:
     rule = get_alert(get_alert_config_path(request.app), alert_id, _tenant(request))
     if rule is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")

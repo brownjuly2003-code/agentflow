@@ -979,7 +979,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List My Alerts V1 Alerts Get"
+                }
               }
             }
           }
@@ -1006,7 +1010,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Register Alert V1 Alerts Post"
+                }
               }
             }
           },
@@ -1056,7 +1064,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Modify Alert V1 Alerts  Alert Id  Put"
+                }
               }
             }
           },
@@ -1129,7 +1141,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Test Alert V1 Alerts  Alert Id  Test Post"
+                }
               }
             }
           },
@@ -1169,7 +1185,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Alert History V1 Alerts  Alert Id  History Get"
+                }
               }
             }
           },

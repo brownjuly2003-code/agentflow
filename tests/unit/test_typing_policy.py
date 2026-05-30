@@ -99,3 +99,9 @@ def test_webhooks_router_is_a_strict_mypy_slice() -> None:
     # Webhooks expose tenant-scoped callback registration and delivery logs;
     # keep this operator integration surface fully annotated.
     assert "src.serving.api.routers.webhooks" in _strict_modules()
+
+
+def test_alerts_router_is_a_strict_mypy_slice() -> None:
+    # Alerts expose tenant-scoped rule management, test dispatch, and history;
+    # keep this operator integration surface fully annotated.
+    assert "src.serving.api.routers.alerts" in _strict_modules()

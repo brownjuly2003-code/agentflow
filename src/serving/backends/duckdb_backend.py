@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import duckdb
 import sqlglot
@@ -68,7 +69,7 @@ class DuckDBBackend(ServingBackend):
             raise BackendExecutionError(str(exc)) from exc
         return [dict(zip(columns, row, strict=False)) for row in rows]
 
-    def scalar(self, sql: str, params: list | None = None):
+    def scalar(self, sql: str, params: list | None = None) -> Any:
         try:
             with self.read_connection() as conn:
                 row = conn.execute(sql, params or []).fetchone()

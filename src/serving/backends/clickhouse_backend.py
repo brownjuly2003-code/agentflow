@@ -5,6 +5,7 @@ import json
 import re
 import ssl
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -139,7 +140,7 @@ class ClickHouseBackend(ServingBackend):
         rows: list[dict] = data.get("data", [])
         return rows
 
-    def scalar(self, sql: str, params: list | None = None):
+    def scalar(self, sql: str, params: list | None = None) -> Any:
         del params
         rows = self.execute(sql)
         if not rows:

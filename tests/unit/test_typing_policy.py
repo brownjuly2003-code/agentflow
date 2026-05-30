@@ -51,3 +51,9 @@ def test_semantic_layer_is_a_strict_mypy_slice() -> None:
     # Catalog / NL->SQL / contracts is the agent-facing query surface; keep it
     # fully annotated.
     assert "src.serving.semantic_layer.*" in _strict_modules()
+
+
+def test_serving_backends_are_a_strict_mypy_slice() -> None:
+    # Backends build / execute SQL (the H-C1 / H-C2 injection-hardening
+    # surface); keep them fully annotated.
+    assert "src.serving.backends.*" in _strict_modules()

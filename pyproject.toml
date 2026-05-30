@@ -237,6 +237,12 @@ disallow_untyped_defs = true
 module = "src.serving.semantic_layer.*"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Query backends build/execute SQL (the H-C1/H-C2 injection-hardening
+# surface); keep them fully annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.backends.*"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

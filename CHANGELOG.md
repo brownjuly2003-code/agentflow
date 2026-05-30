@@ -17,6 +17,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.serving.backends.*` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the SQL-building DuckDB /
+  ClickHouse backends (the H-C1 / H-C2 injection-hardening surface) fully
+  annotated. The gaps were the two `scalar()` return types, now `-> Any` to
+  match the `ServingBackend` ABC. Pinned by `tests/unit/test_typing_policy.py`.
+  (`clickhouse_backend.py` is also normalized from its historical CRLF to LF
+  so the repo line-endings are consistent.)
 - `src.serving.semantic_layer.*` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the agent-facing catalog /
   NL→SQL / contracts query surface fully annotated. Pinned by

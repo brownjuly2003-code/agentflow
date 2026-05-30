@@ -156,6 +156,12 @@ The cold path is still O(N × 400 ms): every process restart and every
 SIGHUP reload pays the full cost on the first auth per key. **Soft cap:
 keep `_hashed_keys` ≤ 10 per AuthManager instance**.
 
+This soft cap is enforced as a runtime signal: `AuthManager.load()` logs a
+`hashed_key_count_exceeds_guidance` warning (with `hashed_keys` and
+`soft_limit` fields) whenever the configured count crosses
+`HASHED_KEY_SOFT_LIMIT`. Alert on that event name to catch a misconfiguration
+before the cold-start latency cliff shows up in the POST load gate.
+
 - N=5: hit-last p95 ≈ 1.9 s
 - N=20: hit-last p95 ≈ 8.1 s → exceeds the 1100 ms POST load gate
   (`tests/load/thresholds.py`)

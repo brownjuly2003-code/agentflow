@@ -20,6 +20,7 @@ from src.constants import (
     DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
     DEFAULT_ROTATION_GRACE_PERIOD_SECONDS,
     FAILED_AUTH_WINDOW_SECONDS,
+    HASHED_KEY_SOFT_LIMIT,
 )
 
 try:
@@ -219,6 +220,21 @@ class AuthManager:
             path=str(self.api_keys_path) if self.api_keys_path else "env_only",
             keys=self.configured_key_count,
         )
+
+        # M-C4: surface the documented hashed-key soft limit as a runtime
+        # signal. Past this count the cold-cache authenticate() worst case
+        # (one bcrypt verify per hashed key) crosses the POST load gate; warn
+        # so operators see it before the latency cliff rather than only in
+        # docs/runbooks/auth-401-spike.md.
+        hashed_key_count = len(self._hashed_keys)
+        if hashed_key_count > HASHED_KEY_SOFT_LIMIT:
+            auth_package.logger.warning(
+                "hashed_key_count_exceeds_guidance",
+                hashed_keys=hashed_key_count,
+                soft_limit=HASHED_KEY_SOFT_LIMIT,
+                reason="cold_cache_bcrypt_latency",
+                guidance="docs/runbooks/auth-401-spike.md",
+            )
 
     def _sweep_expired_windows(self) -> None:
         # H-C4: opportunistic GC for the per-key/per-IP rate-limit and

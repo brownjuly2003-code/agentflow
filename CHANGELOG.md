@@ -6,6 +6,16 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `AuthManager.load()` now emits a `hashed_key_count_exceeds_guidance`
+  warning when more than `HASHED_KEY_SOFT_LIMIT` (10) hashed API keys are
+  configured. This turns the previously docs-only M-C4 guidance
+  (`docs/runbooks/auth-401-spike.md`) into a runtime signal: past the
+  soft limit the cold-cache `authenticate()` worst case (one bcrypt
+  verify per hashed key) crosses the 1100 ms POST load gate measured in
+  `docs/perf/auth-bench-2026-05-26.md`, and operators now see it in logs
+  before the latency cliff bites. Steady-state stays O(1) via the
+  plaintext cache; the full hashed-key-lookup rewrite remains deferred
+  (needs the bcrypt hash-format swap).
 - New module `src/serving/api/auth/usage_table.py` holds
   `ensure_usage_table` / `record_usage` / `usage_by_tenant`, which used
   to live alongside the ASGI middleware in

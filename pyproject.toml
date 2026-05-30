@@ -219,6 +219,12 @@ disable_error_code = ["import-untyped", "no-any-return", "no-untyped-call"]
 module = "src.quality.validators.*"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Security-critical: keep the API key / rate-limit / audit paths fully
+# annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.auth.*"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

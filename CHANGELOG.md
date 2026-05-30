@@ -6,6 +6,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.serving.api.auth.*` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the security-critical
+  key / rate-limit / audit paths fully annotated. Promoting it required
+  one annotation (`AuthManager.__init__`'s `time_source` parameter typed
+  as `Callable[[], float]`); `tests/unit/test_typing_policy.py` pins the
+  slice and `mypy src` stays clean on 99 files. Follows the same
+  per-module strict-typing cadence as `src.quality.validators.*`.
 - `AuthManager.load()` now emits a `hashed_key_count_exceeds_guidance`
   warning when more than `HASHED_KEY_SOFT_LIMIT` (10) hashed API keys are
   configured. This turns the previously docs-only M-C4 guidance

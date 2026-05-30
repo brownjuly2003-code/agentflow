@@ -7,7 +7,7 @@ import signal
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -106,7 +106,7 @@ class AuthManager:
         db_path: Path | str = DEFAULT_USAGE_DB_PATH,
         admin_key: str | None = None,
         security_config_path: Path | str = DEFAULT_SECURITY_CONFIG_PATH,
-        time_source=time.monotonic,
+        time_source: Callable[[], float] = time.monotonic,
         rate_limiter: RateLimiter | None = None,
         redis_url: str | None = None,
         audit_publisher: AuditPublisher | None = None,

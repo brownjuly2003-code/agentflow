@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -156,6 +155,29 @@ def _serialize_json(payload: object) -> str:
     return json.dumps(payload, indent=2) + "\n"
 
 
+def _normalize_fastapi_validation_error_schema(
+    schema: dict[str, object],
+) -> dict[str, object]:
+    normalized = json.loads(json.dumps(schema))
+    components = normalized.get("components")
+    if not isinstance(components, dict):
+        return normalized
+    schemas = components.get("schemas")
+    if not isinstance(schemas, dict):
+        return normalized
+    validation_error = schemas.get("ValidationError")
+    if not isinstance(validation_error, dict):
+        return normalized
+    properties = validation_error.get("properties")
+    if isinstance(properties, dict):
+        properties.pop("input", None)
+        properties.pop("ctx", None)
+    required = validation_error.get("required")
+    if isinstance(required, list):
+        validation_error["required"] = [name for name in required if name not in {"input", "ctx"}]
+    return normalized
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -167,7 +189,7 @@ def main() -> int:
 
     from src.serving.api.main import app
 
-    schema = app.openapi()
+    schema = _normalize_fastapi_validation_error_schema(app.openapi())
     docs_dir = ROOT / "docs"
     agent_tools_dir = docs_dir / "agent-tools"
 

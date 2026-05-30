@@ -77,6 +77,26 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Event-replayer strict mypy slice through HEAD `8a50ab6` on 2026-05-30:
+  - `8a50ab6` promotes `src.processing.event_replayer` (exact module, not a
+    package glob — the `src.processing.*` neighbours `outbox` / `local_pipeline`
+    / `flink_jobs` stay untyped/own-override) to `disallow_untyped_defs = true`.
+    The dead-letter replay path re-emits failed events through the transactional
+    outbox; keeping it annotated guards a delivery-correctness surface. Four
+    untyped params annotated (`ensure_dead_letter_table`'s `conn` and
+    `EventReplayer.__init__`'s `conn` → `duckdb.DuckDBPyConnection` with a new
+    `import duckdb`; `_decoded_payload`'s `payload` → `object`; the nested Kafka
+    `on_delivery(err, msg)` → `object`). Pure annotation change — no behavior
+    change and no latent bug surfaced (the `fetchone()` lookup in `_load_row`
+    was already `None`-guarded). `src.processing.outbox` was assessed and
+    deferred: its connection is `DuckDBPyConnection | None` (set to `None` in
+    `close()`), so typing it cascades `None`-access checks across every method —
+    not a bounded annotation-only slice.
+  - Tests-first: added `tests/unit/test_typing_policy.py::test_event_replayer_is_a_strict_mypy_slice`
+    (red before the pyproject override, green after). Replay behavior is covered
+    by the existing `tests/integration/test_outbox.py` + `test_logical_correctness.py`.
+  - `python -m mypy src --config-file pyproject.toml`: clean on 99 files. `python -m pytest tests/unit/test_typing_policy.py -p no:schemathesis`: 7 passed. `ruff check` / `ruff format --check` on the touched files: passed. `git diff --check`: passed (no EOL flip this commit). `SKIP_DOCKER_TESTS=1 python -m pytest tests/unit -p no:schemathesis --continue-on-collection-errors`: 588 passed, 1 skipped.
+  - GitHub evidence on `8a50ab6`: CI, Contract Tests, E2E Tests, Load Test, Security Scan, and Staging Deploy all completed successfully. `gh pr list --state open` empty.
 - Orchestration-DAGs strict mypy slice + DuckDB `fetchone()` None-safety fix through HEAD `80316fb` on 2026-05-30:
   - `80316fb` promotes `src.orchestration.dags.*` to a strict mypy slice
     (`disallow_untyped_defs = true`). Annotating the six previously-untyped
@@ -389,6 +409,6 @@ On 2026-05-30 the strict-typing cadence was extended autonomously across two mor
 
 **Standing autonomous mandate (operator-granted 2026-05-30):** the agent owns all tactical and external/strategic decisions, keeps finishing safe local work without asking "what next", and stops only at a named hard boundary. External data / AWS / paid services are out of scope (no card/budget), not a deficiency. Local commits and ordinary `git push origin main` are authorized after clean status + `git diff --check`. The canonical uninterrupted-session starter, including the copy-paste kickoff prompt, the work-selection priority order, and the verification discipline, is `next-session-autonomous-local-plan.md` — start there.
 
-Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, and `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug). The remaining untyped-def population is ~107, concentrated in `src/serving/api` (73, many files) plus `src/processing/{outbox,local_pipeline,event_replayer}` (~14), `src/orchestration/dags` (now done), and `src/processing/flink_jobs` (15, but that package is gated by its own override + PR #23 / Docker). Continuing the cadence into `src/serving/api` is a large multi-file effort and is a deliberate stopping point — it is incremental, not load-bearing, and grinding it module-by-module on this low-powered machine risks churn. Pick it up only as bounded, individually-verified slices.
+Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), and `src.processing.event_replayer` (HEAD `8a50ab6`; pure annotation slice). The remaining untyped-def population is ~103, concentrated in `src/serving/api` (73, many files) plus `src/processing/{outbox(5),local_pipeline(5)}` (~10) and `src/processing/flink_jobs` (15, but that package is gated by its own override + PR #23 / Docker). `outbox` is deferred: its `conn` is `DuckDBPyConnection | None` (nulled in `close()`), so a strict slice there cascades `None`-access checks across every method — not bounded annotation-only. Continuing the cadence into `src/serving/api` is a large multi-file effort and is a deliberate stopping point — it is incremental, not load-bearing, and grinding it module-by-module on this low-powered machine risks churn. Pick it up only as bounded, individually-verified slices.
 
 Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.

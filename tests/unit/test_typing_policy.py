@@ -75,3 +75,9 @@ def test_local_pipeline_is_a_strict_mypy_slice() -> None:
     # The local end-to-end pipeline (generate->validate->enrich->DuckDB) is the
     # zero-infra demo path; keep it fully annotated.
     assert "src.processing.local_pipeline" in _strict_modules()
+
+
+def test_outbox_is_a_strict_mypy_slice() -> None:
+    # The transactional outbox is an at-least-once delivery-guarantee path;
+    # keep it fully annotated.
+    assert "src.processing.outbox" in _strict_modules()

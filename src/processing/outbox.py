@@ -6,6 +6,7 @@ import os
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import duckdb
 import structlog
@@ -21,7 +22,7 @@ tracer = trace.get_tracer("agentflow.outbox")
 DEFAULT_KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 
-def ensure_outbox_table(conn) -> None:
+def ensure_outbox_table(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS outbox (
@@ -44,7 +45,7 @@ class OutboxProcessor:
     def __init__(
         self,
         duckdb_path: str | None = None,
-        conn=None,
+        conn: duckdb.DuckDBPyConnection | None = None,
         producer: Callable[[str, dict], None] | None = None,
         bootstrap_servers: str | None = None,
         max_retries: int = 5,
@@ -52,11 +53,19 @@ class OutboxProcessor:
         if conn is None and duckdb_path is None:
             raise ValueError("duckdb_path or conn is required")
         self._owns_conn = conn is None
-        self._conn = conn if conn is not None else connect_duckdb(str(duckdb_path))
+        self._conn: duckdb.DuckDBPyConnection | None = (
+            conn if conn is not None else connect_duckdb(str(duckdb_path))
+        )
         self._producer = producer or self._produce_to_kafka
         self._bootstrap_servers = bootstrap_servers or DEFAULT_KAFKA_BOOTSTRAP
         self._max_retries = max_retries
-        ensure_outbox_table(self._conn)
+        ensure_outbox_table(self._connection)
+
+    @property
+    def _connection(self) -> duckdb.DuckDBPyConnection:
+        if self._conn is None:
+            raise RuntimeError("OutboxProcessor connection is closed")
+        return self._conn
 
     def close(self) -> None:
         if self._owns_conn and self._conn is not None:
@@ -81,7 +90,7 @@ class OutboxProcessor:
             self.close()
 
     def process_pending(self, limit: int = 100) -> int:
-        rows = self._conn.execute(
+        rows = self._connection.execute(
             """
             SELECT id, event_id, payload, topic, retry_count
             FROM outbox
@@ -99,7 +108,7 @@ class OutboxProcessor:
         return processed
 
     def process_entry(self, outbox_id: str) -> bool:
-        row = self._conn.execute(
+        row = self._connection.execute(
             """
             SELECT id, event_id, payload, topic, retry_count
             FROM outbox
@@ -112,7 +121,7 @@ class OutboxProcessor:
             return False
         return self._process_row(row)
 
-    def _process_row(self, row) -> bool:
+    def _process_row(self, row: tuple[Any, ...]) -> bool:
         outbox_id, event_id, payload, topic, retry_count = row
         decoded_payload = self._decode_payload(payload)
         try:
@@ -146,9 +155,9 @@ class OutboxProcessor:
 
     def _mark_sent(self, outbox_id: str, event_id: str) -> None:
         sent_at = datetime.now(UTC)
-        self._conn.execute("BEGIN TRANSACTION")
+        self._connection.execute("BEGIN TRANSACTION")
         try:
-            self._conn.execute(
+            self._connection.execute(
                 """
                 UPDATE outbox
                 SET status = 'sent',
@@ -158,14 +167,14 @@ class OutboxProcessor:
                 """,
                 [sent_at, outbox_id],
             )
-            self._conn.execute(
+            self._connection.execute(
                 "UPDATE dead_letter_events SET status = 'replayed' WHERE event_id = ?",
                 [event_id],
             )
-            self._conn.execute("COMMIT")
+            self._connection.execute("COMMIT")
         except Exception:  # nosec B110 - rollback must preserve the original replay failure
             # Transaction rollback must happen before unexpected errors propagate.
-            self._conn.execute("ROLLBACK")
+            self._connection.execute("ROLLBACK")
             raise
 
     def _schedule_retry(
@@ -186,12 +195,12 @@ class OutboxProcessor:
         next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(
             seconds=retry_delay_seconds
         )
-        self._conn.execute("BEGIN TRANSACTION")
+        self._connection.execute("BEGIN TRANSACTION")
         try:
             if retry_count >= self._max_retries:
                 status = "failed"
                 next_attempt_at = None
-            self._conn.execute(
+            self._connection.execute(
                 """
                 UPDATE outbox
                 SET status = ?,
@@ -203,17 +212,17 @@ class OutboxProcessor:
                 [status, retry_count, next_attempt_at, error_message, outbox_id],
             )
             if status == "failed":
-                self._conn.execute(
+                self._connection.execute(
                     "UPDATE dead_letter_events SET status = 'failed' WHERE event_id = ?",
                     [event_id],
                 )
-            self._conn.execute("COMMIT")
+            self._connection.execute("COMMIT")
         except Exception:  # nosec B110 - rollback must preserve the original retry scheduling failure
             # Transaction rollback must happen before unexpected errors propagate.
-            self._conn.execute("ROLLBACK")
+            self._connection.execute("ROLLBACK")
             raise
 
-    def _decode_payload(self, payload) -> dict:
+    def _decode_payload(self, payload: object) -> dict:
         if isinstance(payload, dict):
             return payload
         if isinstance(payload, str):
@@ -227,7 +236,7 @@ class OutboxProcessor:
 
         delivery_errors: list[str] = []
 
-        def on_delivery(err, msg) -> None:
+        def on_delivery(err: object, msg: object) -> None:
             del msg
             if err is not None:
                 delivery_errors.append(str(err))

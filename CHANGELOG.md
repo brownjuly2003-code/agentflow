@@ -24,6 +24,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.processing.outbox` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the transactional outbox
+  (at-least-once delivery guarantee) fully annotated. Typing the
+  `DuckDBPyConnection | None` handle (nulled in `close()`) is now routed through
+  a `_connection` property, so a use-after-close raises a clear
+  `RuntimeError("OutboxProcessor connection is closed")` instead of an
+  `AttributeError` on `None`. Other gaps annotated: `ensure_outbox_table`'s
+  `conn`, `_process_row`'s `row`, `_decode_payload`'s `payload`, and the nested
+  Kafka `on_delivery` callback. Covered by the new
+  `tests/unit/test_outbox_connection_guard.py` and pinned by
+  `tests/unit/test_typing_policy.py`; `mypy src` stays clean on 99 files.
 - `src.processing.local_pipeline` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the zero-infra end-to-end demo
   pipeline (generate → validate → enrich → DuckDB) fully annotated. The gaps

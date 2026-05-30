@@ -7,10 +7,10 @@ Updated: 2026-05-30
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Current local HEAD at this no-Docker docs update: `3edc4f2af8a36b1d06b91ed62ed8c51e7d492c01` (`3edc4f2`)
-- Git status at refresh: clean tracked-file status via `git status --short --branch --untracked-files=no`. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0` through `pytest_temp2/pytest-of-uedom/pytest-9`, and `pytest_temp_root/pytest-of-uedom/`.
-- Current expected worktree changes for this requested no-Docker docs update: `AGENT_STATE.md`, `AUTOPILOT.md`, `docs/SESSION_HANDOFF.md`, and `docs/operations/local-verification-matrix.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
-- File count: `git ls-files` reports 901 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this docs/state-only refresh.
+- Verified local HEAD before this state-refresh commit: `a261b954f93724ce086355ef50051da2ee188fa5` (`a261b95`)
+- Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`. Full status still reports expected access-denied warnings for old local temp directories: `.manual-build-tmp/tmpsba8ecxa/`, `.pytest-basetemp-sdk/`, `.pytest-temp/pytest-of-uedom/`, `.pytest_tmp/targeted/`, `.sdk-build-tmp/tmp9p05jsuv/`, `.sdk-build-tmp/tmpf4uy6wmc/`, `pytest_temp2/pytest-of-uedom/pytest-0` through `pytest_temp2/pytest-of-uedom/pytest-9`, and `pytest_temp_root/pytest-of-uedom/`.
+- State refresh scope: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, `docs/operations/local-verification-matrix.md`, and ignored local runtime `.autopilot/BLOCKED.md`; no product code, deployment, Terraform, secrets, external accounts, paid APIs, production data, or runtime databases.
+- File count at refresh start: `git ls-files` reports 906 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
 
 ## Available Runtime
 
@@ -35,9 +35,11 @@ The 2026-05-30 generated external gate pack is checked in at `docs/operations/ge
 
 The 2026-05-30 local policy update marks this Windows workstation as no-Docker. Local broad pytest must use `SKIP_DOCKER_TESTS=1`; Docker Desktop, Docker compose/build, kind/Helm live validation, chaos tests, and Docker-dependent full pytest must run on the Mac runner or in CI before claiming Docker-heavy coverage.
 
-A 2026-05-30 autonomous Mac Docker verification on iMac `julia@192.168.1.133` checked out `origin/main` at HEAD `ffeb423` and installed the user-local Docker Compose CLI plugin because Docker Engine was present but `docker compose` was initially missing. Direct `docker build -f Dockerfile.api -t agentflow-api:mac-docker-smoke-ffeb423 .` passed. `docker compose -p agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait agentflow-api` passed: Redis, Postgres, Kafka, and API containers reached Docker `Healthy`, and `curl http://127.0.0.1:8000/v1/health` returned with `kafka:healthy` and `duckdb_pool:healthy`. The app aggregate status remained `unhealthy` because the e2e compose stack intentionally does not include Flink or Iceberg and no pipeline events had been produced. `docker compose ... down -v` cleanup ran and only the pre-existing `hq-demo` kind containers remained. Full Docker-capable pytest was not run on the Mac because only system Python 3.9 is currently available there; install/use Python 3.11 before running pytest-based Docker gates outside CI.
+A 2026-05-30 autonomous Mac Docker verification on iMac `julia@192.168.1.133` checked out `origin/main` at historical HEAD `ffeb423` and installed the user-local Docker Compose CLI plugin because Docker Engine was present but `docker compose` was initially missing. Direct `docker build -f Dockerfile.api -t agentflow-api:mac-docker-smoke-ffeb423 .` passed. `docker compose -p agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait agentflow-api` passed: Redis, Postgres, Kafka, and API containers reached Docker `Healthy`, and `curl http://127.0.0.1:8000/v1/health` returned with `kafka:healthy` and `duckdb_pool:healthy`. The app aggregate status remained `unhealthy` because the e2e compose stack intentionally does not include Flink or Iceberg and no pipeline events had been produced. `docker compose ... down -v` cleanup ran and only the pre-existing `hq-demo` kind containers remained. Full Docker-capable pytest was not run on the Mac because only system Python 3.9 is currently available there; install/use Python 3.11 before running pytest-based Docker gates outside CI.
 
 A follow-up Mac pytest-based compose smoke on 2026-05-30 found the webhook callback path failing on Lima because `host.docker.internal:host-gateway` shadows Lima's native host DNS. Commit `677de80` keeps Linux/CI on `host.docker.internal` but uses `host.lima.internal` for compose-mode callback URLs on Darwin, while preserving an explicit `AGENTFLOW_E2E_CALLBACK_HOST` override. On iMac, `/Users/julia/agentflow-docker-check/.venv-mac-docker/bin/python -m pytest tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp .tmp/mac-e2e-smoke-basetemp -o cache_dir=.tmp/mac-e2e-smoke-cache` with `AGENTFLOW_E2E_MODE=compose` and `AGENTFLOW_E2E_TIMEOUT=180` passed with `10 passed in 121.10s`; cleanup left only the pre-existing `hq-demo` kind containers.
+
+The 2026-05-30 Codex audit remediation closed two P1 local findings from ignored `audit_codex_30_05_26.md`: commit `0ea3da6` normalizes FastAPI-owned `ValidationError.input/ctx` fields in `scripts/export_openapi.py`, regenerates `docs/openapi.json`, and adds `tests/unit/test_export_openapi.py`; commit `a261b95` refreshes README and `docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality and documents that GitHub Release objects currently stop at `v1.1.0` while git tags plus PyPI/npm records are the release source of truth for `v1.2.0` through `v1.4.0`.
 
 A 2026-05-30 autonomous external-gate recheck did not unblock tasks 18-22. For AWS OIDC/Terraform apply readiness, `gh variable list --repo brownjuly2003-code/agentflow` still reports only `AWS_REGION=us-east-1`; `AWS_TERRAFORM_ROLE_ARN` is absent; `terraform` is now available in `PATH`, but AWS CLI and AWS credential environment hints are absent; workflow-expected `infrastructure/terraform/environments/*.tfvars` files are absent; and `gh run list --workflow terraform-apply.yml` reports no `Terraform Apply` runs. Terraform CLI availability corrects an old local-tooling note only; it is not owner-provided role, tfvars, CloudTrail, approval, or apply evidence.
 
@@ -68,6 +70,15 @@ policy, write proof, or readback evidence).
 
 ## Last Verified Gates
 
+- Codex audit remediation on 2026-05-30 at HEAD `a261b95`:
+  - `python scripts\export_openapi.py --check`: passed.
+  - `python -m pytest tests\unit\test_export_openapi.py tests\contract -p no:schemathesis`: passed with 18 tests and 104 warnings.
+  - `$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis --basetemp .tmp\codex-openapi-drift-full-basetemp -o cache_dir=.tmp\codex-openapi-drift-full-cache`: passed with 842 passed, 32 skipped, and 104 warnings.
+  - `python -m ruff check src/ tests/ scripts\export_openapi.py`: passed.
+  - `python -m ruff format --check src/ tests/ scripts\export_openapi.py`: passed with 236 files already formatted.
+  - `git diff --check`: passed.
+  - GitHub push workflows on `0ea3da6`: CI, Security Scan, Load Test, E2E Tests, Staging Deploy, and Contract Tests all completed successfully.
+  - GitHub push workflows on `a261b95`: CI, Security Scan, Load Test, E2E Tests, and Staging Deploy completed successfully; Contract Tests did not trigger for README/release-status-only paths.
 - Manual release-readiness sync verification on 2026-05-04:
   - `git rev-parse --short HEAD`: `3f88d74` at sync start.
   - `git diff --check`: passed.

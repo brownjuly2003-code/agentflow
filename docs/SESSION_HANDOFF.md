@@ -1,19 +1,20 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (Windows no-Docker verification policy)
-**HEAD at this docs update:** `3edc4f2` (`3edc4f2af8a36b1d06b91ed62ed8c51e7d492c01`) on `main`.
-**Branch state at this docs update:** `main...origin/main`; local `main` is even with `origin/main`.
-**Tracked files:** `901` via `git ls-files`.
-**Latest local commits:**
+**Last updated:** 2026-05-30 (Codex audit remediation state refresh)
+**Verified HEAD before this state-refresh commit:** `a261b95` (`a261b954f93724ce086355ef50051da2ee188fa5`) on `main`.
+**Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
+**Tracked files at refresh start:** `906` via `git ls-files`.
+**Latest local commits before this state refresh:**
+- `a261b95` docs(release): refresh v1.4.0 status
+- `0ea3da6` fix(openapi): normalize validation error schema export
+- `6f9d6b2` docs: record mac compose e2e verification
+- `677de80` fix(e2e): use lima callback host on mac compose
+- `28d7a58` docs: record mac docker verification
+- `ffeb423` docs: generate external gate pack
 - `8412a53` docs: record external outreach restart
-- `3edc4f2` fix(ci): set git identity in committing autopilot test
-- `63ae86b` fix(ci): configure git identity in autopilot test
-- `fc02390` fix(ci): include pandas in dev dependencies
-- `bc5b920` docs: update autopilot plan state
-- `c43111c` fix(autopilot): avoid handoff churn tasks
-- `3f4a74c` fix(autopilot): exit cleanly on scheduled blockers
-- `ad0f5c3` fix(autopilot): accept markdown commit gate
-- `5f4d70c` docs: refresh autopilot handoff state
+- `173069b` fix(security): align quality report dependency scans
+- `dd06473` fix(security): resolve local safety scan inputs
+- `73e2eb7` docs: authorize autonomous origin main push
 
 **Released:** `v1.4.0` live on PyPI (`agentflow-runtime`, `agentflow-client`)
 and npm (`@yuliaedomskikh/agentflow-client`) since 2026-05-24T21:05Z.
@@ -66,11 +67,12 @@ on the Mac runner or in CI, and record the command, commit SHA, and result befor
 claiming full Docker coverage. If only this Windows machine was used, report the
 state as `local no-Docker green; Docker-heavy verification pending on Mac/CI`.
 
-Current Mac evidence, collected 2026-05-30 on `julia@192.168.1.133`: the iMac
-is reachable over SSH, Lima `docker` is running Docker Engine `29.5.2`, and
-Docker Compose CLI plugin `v5.1.4` is installed in the user Docker CLI plugins.
-The checkout `/Users/julia/agentflow-docker-check` was reset to `origin/main`
-at `ffeb423`. `docker build -f Dockerfile.api -t
+Current Mac Docker evidence, collected 2026-05-30 on `julia@192.168.1.133`, is
+historical evidence for the Docker build/compose surface rather than current
+HEAD evidence: the iMac is reachable over SSH, Lima `docker` is running Docker
+Engine `29.5.2`, and Docker Compose CLI plugin `v5.1.4` is installed in the
+user Docker CLI plugins. The checkout `/Users/julia/agentflow-docker-check` was
+reset to `origin/main` at `ffeb423`. `docker build -f Dockerfile.api -t
 agentflow-api:mac-docker-smoke-ffeb423 .` passed. `docker compose -p
 agentflow-e2e-mac -f docker-compose.e2e.yml up -d --build --wait
 agentflow-api` also passed; Redis, Postgres, Kafka, and API reached Docker
@@ -88,6 +90,20 @@ tests/e2e/test_smoke.py -v --tb=short -p no:schemathesis --basetemp
 `10 passed in 121.10s`. The fix keeps Linux/CI callback URLs on
 `host.docker.internal` and uses Lima's `host.lima.internal` on Darwin unless
 `AGENTFLOW_E2E_CALLBACK_HOST` is set explicitly.
+
+Current 2026-05-30 Codex audit remediation evidence: `0ea3da6` closed the
+OpenAPI export drift by normalizing FastAPI-owned `ValidationError.input/ctx`
+fields, regenerated `docs/openapi.json`, and added
+`tests/unit/test_export_openapi.py`; `a261b95` refreshed README and
+`docs/dv2-multi-branch/RELEASE_STATUS.md` to `v1.4.0` registry reality and
+documents that GitHub Release objects currently stop at `v1.1.0` while git tags
+plus PyPI/npm records are the release source of truth for `v1.2.0` through
+`v1.4.0`. Local evidence: `python scripts\export_openapi.py --check`, targeted
+contract/unit tests, full Windows no-Docker pytest (`842 passed, 32 skipped`),
+ruff check/format, and `git diff --check` all passed. GitHub workflows on
+`0ea3da6` all completed successfully, including Contract Tests; GitHub workflows
+on `a261b95` completed successfully for the path-filtered docs commit (CI,
+Security Scan, Load Test, E2E Tests, and Staging Deploy).
 
 ## Compact-Safe Autonomous Start
 

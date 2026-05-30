@@ -73,7 +73,8 @@ CI for them.
 | Demo stack | `make demo` | Redis via Docker and a foreground API server. |
 | Prod-like stack | `docker compose -f docker-compose.prod.yml up -d` | Local Docker resources and operator intent. |
 
-Latest Mac Docker smoke evidence at checkout HEAD `ffeb423`:
+Latest Mac Docker build/compose health smoke evidence (historical evidence; not
+current HEAD evidence) at checkout HEAD `ffeb423`:
 
 ```bash
 docker build -f Dockerfile.api -t agentflow-api:mac-docker-smoke-ffeb423 .
@@ -99,6 +100,25 @@ test. The Mac/Lima callback host is `host.lima.internal`; Linux/CI remains on
 `host.docker.internal`, and `AGENTFLOW_E2E_CALLBACK_HOST` can still override the
 callback host explicitly. Cleanup left only the pre-existing `hq-demo` kind
 containers.
+
+Latest Windows no-Docker audit-remediation evidence at HEAD `a261b95`:
+
+```powershell
+python scripts\export_openapi.py --check
+python -m pytest tests\unit\test_export_openapi.py tests\contract -p no:schemathesis
+$env:SKIP_DOCKER_TESTS='1'; python -m pytest -p no:schemathesis --basetemp .tmp\codex-openapi-drift-full-basetemp -o cache_dir=.tmp\codex-openapi-drift-full-cache
+python -m ruff check src/ tests/ scripts\export_openapi.py
+python -m ruff format --check src/ tests/ scripts\export_openapi.py
+git diff --check
+```
+
+The export check passed; targeted contract/unit tests passed with 18 tests and
+104 warnings; broad no-Docker pytest passed with 842 passed, 32 skipped, and
+104 warnings; ruff and whitespace checks passed. GitHub workflows on
+`0ea3da6` all completed successfully including Contract Tests. GitHub workflows
+on the docs-only `a261b95` push completed successfully for CI, Security Scan,
+Load Test, E2E Tests, and Staging Deploy; Contract Tests did not trigger for
+README/release-status-only paths.
 
 ## Benchmark And Load Gates
 

@@ -28,6 +28,10 @@ DEFAULT_SECURITY_CONFIG_PATH = Path(
 )
 
 
+class RequestBodyTooLargeError(Exception):
+    pass
+
+
 class SecurityPolicy(BaseModel):
     key_hashing: str = "bcrypt"
     bcrypt_rounds: int = Field(default=12, ge=4)
@@ -86,7 +90,26 @@ def build_security_headers_middleware(config_path: Path | str | None = None):
                 content={"detail": "Request body too large."},
             )
         else:
-            response = await call_next(request)
+            if content_length is None:
+                received_bytes = 0
+                chunks: list[bytes] = []
+                try:
+                    async for chunk in request.stream():
+                        received_bytes += len(chunk)
+                        if received_bytes > policy.request_size_limit_bytes:
+                            raise RequestBodyTooLargeError
+                        chunks.append(chunk)
+                except RequestBodyTooLargeError:
+                    response = JSONResponse(
+                        status_code=413,
+                        content={"detail": "Request body too large."},
+                    )
+                else:
+                    body = b"".join(chunks)
+                    request._body = body
+                    response = await call_next(request)
+            else:
+                response = await call_next(request)
         for header_name, header_value in SECURITY_HEADERS.items():
             response.headers.setdefault(header_name, header_value)
         return response

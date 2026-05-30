@@ -8,7 +8,7 @@ from pathlib import Path
 import bcrypt
 import pytest
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from src.serving.api.auth import AuthManager, KeyCreateRequest, build_auth_middleware
@@ -57,6 +57,7 @@ def _write_security_config(
     *,
     bcrypt_rounds: int = 4,
     max_failed_auth_per_ip_per_hour: int = 10,
+    request_size_limit_bytes: int = 1_048_576,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -68,7 +69,7 @@ def _write_security_config(
                     "min_key_length": 32,
                     "max_failed_auth_per_ip_per_hour": max_failed_auth_per_ip_per_hour,
                     "sensitive_headers_to_redact": ["Authorization", "X-API-Key"],
-                    "request_size_limit_bytes": 1_048_576,
+                    "request_size_limit_bytes": request_size_limit_bytes,
                 }
             },
             sort_keys=False,
@@ -362,6 +363,91 @@ def test_request_size_limit_blocks_oversized_bodies(
 
     assert response.status_code == 413
     assert response.json()["detail"] == "Request body too large."
+
+
+async def _call_asgi_without_content_length(app: FastAPI, body: bytes) -> tuple[int, bytes]:
+    receive_messages = [{"type": "http.request", "body": body, "more_body": False}]
+    sent_messages = []
+
+    async def receive():
+        if receive_messages:
+            return receive_messages.pop(0)
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        sent_messages.append(message)
+
+    await app(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/echo",
+            "raw_path": b"/echo",
+            "query_string": b"",
+            "headers": [],
+            "client": ("testclient", 50000),
+            "server": ("testserver", 80),
+        },
+        receive,
+        send,
+    )
+
+    status = next(
+        message["status"] for message in sent_messages if message["type"] == "http.response.start"
+    )
+    response_body = b"".join(
+        message.get("body", b"")
+        for message in sent_messages
+        if message["type"] == "http.response.body"
+    )
+    return status, response_body
+
+
+@pytest.mark.asyncio
+async def test_request_size_limit_blocks_streamed_body_without_content_length(
+    tmp_path: Path,
+) -> None:
+    from src.serving.api.security import build_security_headers_middleware
+
+    security_config_path = tmp_path / "config" / "security.yaml"
+    _write_security_config(security_config_path, request_size_limit_bytes=8)
+    app = FastAPI()
+    app.middleware("http")(build_security_headers_middleware(security_config_path))
+
+    @app.post("/echo")
+    async def echo(request: Request):
+        await request.body()
+        return {"ok": True}
+
+    status, body = await _call_asgi_without_content_length(app, b"x" * 9)
+
+    assert status == 413
+    assert b"Request body too large." in body
+
+
+@pytest.mark.asyncio
+async def test_request_size_limit_replays_streamed_body_without_content_length(
+    tmp_path: Path,
+) -> None:
+    from src.serving.api.security import build_security_headers_middleware
+
+    security_config_path = tmp_path / "config" / "security.yaml"
+    _write_security_config(security_config_path, request_size_limit_bytes=16)
+    app = FastAPI()
+    app.middleware("http")(build_security_headers_middleware(security_config_path))
+
+    @app.post("/echo")
+    async def echo(request: Request):
+        body = await request.body()
+        return {"size": len(body)}
+
+    status, body = await _call_asgi_without_content_length(app, b"x" * 9)
+
+    assert status == 200
+    assert body == b'{"size":9}'
 
 
 def test_failed_auth_is_throttled_by_ip_after_limit(

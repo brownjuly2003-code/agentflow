@@ -1,12 +1,13 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (strict-typing cadence + bandit-baseline fix)
-**Verified HEAD:** `dd0a46d` on `main` (CI/E2E/Load/Security/Staging green;
-Contract Tests path-filtered on the baseline-only commit). Session 2026-05-30
-code stack: `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict
-slice; Load Test re-run once for variance), `3e7434b` (monitors strict slice +
-tombstone fix), `30e20a7` (semantic-layer strict slice), `346bf64` (backends
-strict slice + clickhouse CRLF→LF), `dd0a46d` (bandit baseline line-drift fix).
+**Last updated:** 2026-05-30 (orchestration-DAGs strict slice + fetchone None fix)
+**Verified HEAD:** `80316fb` on `main` (all six workflows green: CI, Contract
+Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
+`e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
+re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
+`30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
+clickhouse CRLF→LF), `dd0a46d` (bandit baseline line-drift fix), `80316fb`
+(orchestration.dags strict slice + DuckDB `fetchone()` None-safety fix).
 Prior state-refresh HEAD `0759fc6`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.

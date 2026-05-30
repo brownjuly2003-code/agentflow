@@ -39,3 +39,9 @@ def test_auth_package_is_a_strict_mypy_slice() -> None:
     # Auth is security-critical: every def in src/serving/api/auth must carry
     # full annotations so the key / rate-limit / audit paths stay type-checked.
     assert "src.serving.api.auth.*" in _strict_modules()
+
+
+def test_quality_monitors_are_a_strict_mypy_slice() -> None:
+    # Monitors gate freshness / SLA / pipeline-health signals; keep them fully
+    # annotated so the observability path stays type-checked.
+    assert "src.quality.monitors.*" in _strict_modules()

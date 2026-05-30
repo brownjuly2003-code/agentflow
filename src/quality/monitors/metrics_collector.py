@@ -81,7 +81,7 @@ class PipelineHealth:
 class HealthCollector:
     """Aggregates health from all pipeline components."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._checks: list = [
             self._check_kafka,
             self._check_flink,

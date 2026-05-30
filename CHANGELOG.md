@@ -4,8 +4,23 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `FreshnessMonitor._process_message` no longer crashes on a tombstone /
+  payload-less Kafka record. `confluent_kafka.Message.value()` is
+  `bytes | None` and `.topic()` is `str | None`; the previously untyped
+  handler called `.decode()` on a possibly-`None` body and used a
+  possibly-`None` topic as a `dict` key / metric label. It now skips such
+  records with a `reason="empty_message"` warning. Surfaced by promoting
+  `src.quality.monitors.*` to a strict mypy slice; covered by two new
+  tests in `tests/unit/test_freshness_monitor.py` (100% module coverage).
+
 ### Changed
 
+- `src.quality.monitors.*` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), keeping the freshness / SLA /
+  pipeline-health observability paths fully annotated. Pinned by
+  `tests/unit/test_typing_policy.py`.
 - `src.serving.api.auth.*` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the security-critical
   key / rate-limit / audit paths fully annotated. Promoting it required

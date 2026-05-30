@@ -92,6 +92,53 @@ def test_process_message_skips_invalid_json(monitor):
     assert skip_calls[0].kwargs.get("reason") == "invalid_payload"
 
 
+def test_process_message_skips_tombstone_without_value(monitor):
+    # confluent_kafka Message.value() is bytes | None; a tombstone / payload-less
+    # record must be skipped, not crash on None.decode().
+    msg = _make_msg(None)
+
+    with patch.object(fm_module, "logger") as logger:
+        monitor._process_message(msg)
+
+    reason = next(
+        (
+            c.kwargs.get("reason")
+            for c in logger.warning.call_args_list
+            if c.args and c.args[0] == "freshness_message_skipped"
+        ),
+        None,
+    )
+    assert reason == "empty_message"
+    assert monitor._sla_window == {}
+
+
+def test_process_message_skips_message_without_topic(monitor):
+    # Message.topic() is str | None; a record with no topic must not be used as
+    # a dict key / metric label.
+    payload = json.dumps(
+        {
+            "event_id": "ev-x",
+            "event_type": "order.created",
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    ).encode()
+    msg = _make_msg(payload, topic=None)
+
+    with patch.object(fm_module, "logger") as logger:
+        monitor._process_message(msg)
+
+    reason = next(
+        (
+            c.kwargs.get("reason")
+            for c in logger.warning.call_args_list
+            if c.args and c.args[0] == "freshness_message_skipped"
+        ),
+        None,
+    )
+    assert reason == "empty_message"
+    assert monitor._sla_window == {}
+
+
 def test_process_message_skips_missing_timestamp(monitor):
     payload = json.dumps({"event_id": "ev-3", "event_type": "order.created"}).encode()
     msg = _make_msg(payload)

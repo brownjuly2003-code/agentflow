@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 import structlog
-from confluent_kafka import Consumer, KafkaError
+from confluent_kafka import Consumer, KafkaError, Message
 from prometheus_client import Gauge, Histogram, start_http_server
 
 logger = structlog.get_logger()
@@ -56,7 +56,7 @@ class FreshnessMonitor:
         self._sla_window: dict[str, list[bool]] = defaultdict(list)
         self._window_size = 1000  # last N events per topic
 
-    def start(self, metrics_port: int = 8001):
+    def start(self, metrics_port: int = 8001) -> None:
         """Start monitoring loop with Prometheus metrics endpoint."""
         start_http_server(metrics_port)
         logger.info("freshness_monitor_started", topics=self.topics, port=metrics_port)
@@ -80,10 +80,21 @@ class FreshnessMonitor:
         finally:
             self.consumer.close()
 
-    def _process_message(self, msg):
+    def _process_message(self, msg: Message) -> None:
         topic = msg.topic()
+        raw_value = msg.value()
+        if topic is None or raw_value is None:
+            # Tombstone / payload-less record: no topic or no body to score.
+            logger.warning(
+                "freshness_message_skipped",
+                topic=topic,
+                partition=msg.partition(),
+                offset=msg.offset(),
+                reason="empty_message",
+            )
+            return
         try:
-            event = json.loads(msg.value().decode())
+            event = json.loads(raw_value.decode())
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             logger.warning(
                 "freshness_message_skipped",

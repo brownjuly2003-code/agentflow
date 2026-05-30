@@ -1865,7 +1865,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List My Webhooks V1 Webhooks Get"
+                }
               }
             }
           }
@@ -1892,7 +1896,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Register Webhook V1 Webhooks Post"
+                }
               }
             }
           },
@@ -1967,7 +1975,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Test Webhook V1 Webhooks  Webhook Id  Test Post"
+                }
               }
             }
           },
@@ -2007,7 +2019,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Webhook Logs V1 Webhooks  Webhook Id  Logs Get"
+                }
               }
             }
           },

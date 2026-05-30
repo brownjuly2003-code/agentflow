@@ -77,6 +77,20 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- M-C4 hashed-key guidance enforcement through HEAD `e444ecf` on 2026-05-30:
+  - `feat(auth): warn when hashed-key count exceeds M-C4 soft limit` adds
+    `HASHED_KEY_SOFT_LIMIT = 10` in `src/constants.py`, a
+    `hashed_key_count_exceeds_guidance` warning in `AuthManager.load()`, and
+    `tests/unit/test_auth_hashed_key_guidance.py` (3 tests). Turns the
+    previously docs-only M-C4 guidance into a runtime signal. CHANGELOG and
+    `docs/runbooks/auth-401-spike.md` updated.
+  - Red/green: the warning test failed before the `load()` change (no warning
+    emitted), then passed after. Captured via `structlog.testing.capture_logs`
+    because `configure_logging()` (stdlib factory) is not active in unit tests.
+  - `python -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py -p no:schemathesis`: passed with 19 tests.
+  - `SKIP_DOCKER_TESTS=1 python -m pytest tests/unit -p no:schemathesis --continue-on-collection-errors`: 571 passed, 1 skipped. Two pre-existing local-`.venv` artifacts unrelated to this change: `test_x5_retail_hero_loader.py` collection error (no `pandas` installed in `.venv`) and `test_version.py::test_distribution_version_matches_sdk_version` (installed `agentflow-client` metadata is `1.3.0` vs `__version__` `1.4.0` — the SDK was not reinstalled in this `.venv` after the v1.4.0 bump; the Python313/Python312 shadow). CI installs full deps and is green.
+  - `python -m ruff check` / `python -m ruff format --check` on the touched files: passed. `python -m mypy src/serving/api/auth/manager.py src/constants.py --config-file pyproject.toml --no-incremental`: `Success: no issues found`. `git diff --check`: passed.
+  - GitHub evidence on `e444ecf`: CI, Contract Tests, E2E Tests, Load Test, Security Scan, and Staging Deploy all completed successfully (owner-bypass push of the 12 required checks; all subsequently green). `gh pr list --state open` empty.
 - Autonomous local follow-up through HEAD `0759fc6` on 2026-05-30:
   - `python -m pytest tests\unit\test_container_attestation_workflow.py -q -p no:schemathesis`: passed after tests-first coverage for the `build-smoke` job name.
   - `python -m pytest tests\unit\test_sdk_client.py tests\unit\test_sdk_async_client.py -q -p no:schemathesis`: passed with 42 tests after adding `last_deprecated`, `last_deprecation_warning`, and `last_latest_version` accessors.
@@ -304,6 +318,8 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Next Step
 
-Backlog tasks 0 through 17 and 23 through 24 are complete. Task 18 AWS/Terraform is out of scope by operator budget/payment constraint, not an active blocker. Tasks 19 through 22 remain blocked on real external inputs: production CDC owner decisions, real PMF/pricing/customer evidence, approved production-hardware benchmark evidence, and an external pen-test attestation. The 2026-05-30 Codex audit items from `audit_codex_30_05_26.md` and the follow-up local docs/SDK/security boundary items are locally closed through `0759fc6`; no additional safe audit-driven code item is queued.
+Backlog tasks 0 through 17 and 23 through 24 are complete. Task 18 AWS/Terraform is out of scope by operator budget/payment constraint, not an active blocker. Tasks 19 through 22 remain blocked on real external inputs: production CDC owner decisions, real PMF/pricing/customer evidence, approved production-hardware benchmark evidence, and an external pen-test attestation. The 2026-05-30 Codex audit items from `audit_codex_30_05_26.md` and the follow-up local docs/SDK/security boundary items are locally closed through `0759fc6`. On 2026-05-30 the M-C4 hashed-key guidance was promoted from docs-only to a runtime `hashed_key_count_exceeds_guidance` warning in `AuthManager.load()` (HEAD `e444ecf`, six main workflows green). The full hashed-key-lookup rewrite (bcrypt hash-format swap) stays deferred. No additional safe audit-driven code item is queued.
+
+The 2026-05-30 operator instruction to run Docker locally on this Windows workstation was issued and then explicitly reversed within the same session ("do not run Docker here, it kills processes; run on the Mac"). A Docker Desktop start + `docker build` were begun and then fully stopped: the background build and monitor were killed, Docker Desktop / engine / `docker-agent` / `docker-sandbox` processes were force-stopped, and `wsl --shutdown` released the WSL2 VM. No containers or compose stacks were started, no image was produced, and the worktree stayed clean. The no-Docker-on-Windows policy stands: Docker-heavy verification is Mac/CI only; the machine is low-powered and Docker hangs processes here.
 
 The external gate evidence intake checklist is checked in at `docs/operations/external-gate-evidence-intake.md`, with a project-local Pi skill at `.pi/skills/external-gate-evidence-intake`. The remaining known `build-smoke` required-check promotion is a GitHub branch-protection/admin boundary, not an ordinary local task. No next bounded safe backlog item is currently queued. Continue only when an operator supplies real external evidence for one blocked gate, explicitly authorizes the branch-protection change, or assigns another bounded local documentation/task-maintenance item. Keep work outside external systems, and do not convert blocked external gates into completed work without real operator-provided evidence.

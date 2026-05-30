@@ -1,7 +1,8 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-30 (autonomous local follow-up closeout)
-**Verified HEAD before this state-refresh commit:** `0759fc6` (`0759fc6ce8929cd7e49a9498c7cabae585a3be71`) on `main`.
+**Last updated:** 2026-05-30 (M-C4 hashed-key guidance enforcement)
+**Verified HEAD:** `e444ecf` on `main` (six main workflows green); prior
+state-refresh HEAD was `0759fc6` (`0759fc6ce8929cd7e49a9498c7cabae585a3be71`).
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
@@ -167,6 +168,15 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 ## Open work — priorities
 
 ### Tier A — actionable in-repo (no external blocker)
+
+**M-C4 hashed-key guidance now enforced (`e444ecf`, 2026-05-30):**
+`AuthManager.load()` emits a `hashed_key_count_exceeds_guidance` warning once
+more than `HASHED_KEY_SOFT_LIMIT` (10) hashed keys are configured, turning the
+docs-only M-C4 soft cap into a runtime signal operators can alert on before the
+cold-start bcrypt latency cliff. TDD via `structlog.testing.capture_logs`
+(stdlib factory is not active in unit tests, so `caplog` does not see structlog
+events). Six main workflows green. The full hashed-key-lookup rewrite (bcrypt
+hash-format swap) stays deferred — it needs the format change, not a perf tweak.
 
 **Autonomous local follow-up closeout:** the post-audit safe local queue is
 closed through `0759fc6`. `1b122cf` pins the PR Docker smoke check name as

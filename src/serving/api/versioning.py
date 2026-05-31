@@ -18,6 +18,12 @@ except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
 
+VersioningMiddleware = Callable[
+    [Request, Callable[[Request], Awaitable[Response]]],
+    Awaitable[Response],
+]
+
+
 def default_api_versions_path() -> Path:
     return Path(os.getenv("AGENTFLOW_API_VERSIONS_FILE", "config/api_versions.yaml"))
 
@@ -257,7 +263,7 @@ def resolve_request_version(request: Request) -> str:
     return latest
 
 
-def build_versioning_middleware():
+def build_versioning_middleware() -> VersioningMiddleware:
     async def versioning(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],

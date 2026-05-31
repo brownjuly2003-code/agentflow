@@ -240,6 +240,13 @@ module = "src.serving.api.security"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+# Versioning helpers set compatibility headers and response transforms; keep
+# the middleware factory boundary fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.versioning"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 # Quality monitors gate freshness / SLA / pipeline-health signals; keep them
 # fully annotated. Gated by tests/unit/test_typing_policy.py.
 module = "src.quality.monitors.*"

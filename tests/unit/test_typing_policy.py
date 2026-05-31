@@ -141,3 +141,9 @@ def test_security_helpers_are_a_strict_mypy_slice() -> None:
     # Security helpers enforce request-size limits and response headers; keep
     # the middleware factory boundary fully annotated.
     assert "src.serving.api.security" in _strict_modules()
+
+
+def test_versioning_helpers_are_a_strict_mypy_slice() -> None:
+    # Versioning helpers set compatibility headers and response transforms;
+    # keep the middleware factory boundary fully annotated.
+    assert "src.serving.api.versioning" in _strict_modules()

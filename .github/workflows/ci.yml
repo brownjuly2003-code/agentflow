@@ -76,6 +76,9 @@ jobs:
       - name: Run freshness monitor coverage gate
         run: |
           python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=src.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90
+      - name: Run event producer coverage gate
+        run: |
+          python -m pytest tests/unit/test_event_producer.py -v --tb=short --cov=src.ingestion.producers.event_producer --cov-report=term-missing --cov-fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:

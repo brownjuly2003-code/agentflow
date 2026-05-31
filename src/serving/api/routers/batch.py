@@ -38,7 +38,7 @@ class BatchResponse(BaseModel):
     duration_ms: float
 
 
-def _run_engine_call(engine, method_name: str, *args, **kwargs):
+def _run_engine_call(engine: Any, method_name: str, *args: Any, **kwargs: Any) -> Any:
     worker_engine = copy(engine)
     worker_engine._conn = engine._conn.cursor()
     try:
@@ -213,7 +213,7 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
 
 
 @router.post("/batch", response_model=BatchResponse)
-async def batch_query(request: BatchRequest, req: Request):
+async def batch_query(request: BatchRequest, req: Request) -> BatchResponse:
     started_at = time.monotonic()
     outcomes = await asyncio.gather(
         *[_execute_item(item, req) for item in request.requests],

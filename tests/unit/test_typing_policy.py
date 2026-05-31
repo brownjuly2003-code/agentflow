@@ -117,3 +117,9 @@ def test_agent_query_router_is_a_strict_mypy_slice() -> None:
     # Agent query routes are the core LLM-facing API for query execution,
     # entity lookup, metrics, and catalog discovery; keep them annotated.
     assert "src.serving.api.routers.agent_query" in _strict_modules()
+
+
+def test_batch_router_is_a_strict_mypy_slice() -> None:
+    # Batch route fans out entity, metric, and query requests concurrently; keep
+    # the wrapper annotated.
+    assert "src.serving.api.routers.batch" in _strict_modules()

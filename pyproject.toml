@@ -315,6 +315,12 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.agent_query"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Batch route fans out entity, metric, and query requests concurrently; keep
+# the wrapper fully annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.batch"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

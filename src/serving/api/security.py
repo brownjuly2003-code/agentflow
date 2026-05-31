@@ -23,6 +23,11 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 
+SecurityHeadersMiddleware = Callable[
+    [Request, Callable[[Request], Awaitable[Response]]],
+    Awaitable[Response],
+]
+
 DEFAULT_SECURITY_CONFIG_PATH = Path(
     os.getenv("AGENTFLOW_SECURITY_CONFIG_FILE", "config/security.yaml")
 )
@@ -75,7 +80,9 @@ def redact_sensitive_headers(
     return redacted
 
 
-def build_security_headers_middleware(config_path: Path | str | None = None):
+def build_security_headers_middleware(
+    config_path: Path | str | None = None,
+) -> SecurityHeadersMiddleware:
     policy = load_security_policy(config_path)
 
     async def security_headers(

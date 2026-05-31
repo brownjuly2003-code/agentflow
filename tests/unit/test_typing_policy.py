@@ -135,3 +135,9 @@ def test_rate_limiter_is_a_strict_mypy_slice() -> None:
     # Rate limiting protects the API hot path and auth headers; keep the
     # Redis/memory boundary fully annotated.
     assert "src.serving.api.rate_limiter" in _strict_modules()
+
+
+def test_security_helpers_are_a_strict_mypy_slice() -> None:
+    # Security helpers enforce request-size limits and response headers; keep
+    # the middleware factory boundary fully annotated.
+    assert "src.serving.api.security" in _strict_modules()

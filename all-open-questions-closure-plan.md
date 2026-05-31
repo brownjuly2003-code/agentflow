@@ -28,14 +28,19 @@ Canonical supporting docs:
 
 ## Work Plan
 
-- [ ] Stabilize latest HEAD evidence.
+- [x] Stabilize latest code HEAD evidence through `b0c784f`.
   Verify: `git status --short --branch --untracked-files=no`; six workflows
   checked on HEAD; Load Test run IDs recorded when runner variance appears.
+  Evidence: CI, Contract Tests, E2E Tests, Load Test, Security Scan, and
+  Staging Deploy all succeeded on `b0c784f`; no Load Test variance rerun was
+  needed.
 
 - [ ] Finish `src/serving/api` strict mypy coverage by bounded slices.
   Verify each slice with policy-test red->green, `python -m mypy src
   --config-file pyproject.toml`, focused tests, broad no-Docker unit tests,
   OpenAPI check, ruff, `git diff --check`, commit, push, and six workflows.
+  Latest slice: `src.serving.api.rate_limiter` reached strict mypy coverage in
+  `b0c784f`.
 
 - [ ] Use Claude as second opinion for risky slices.
   Required for `src/serving/api/main.py`, `routers/admin.py`,

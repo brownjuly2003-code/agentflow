@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter + security + versioning)
-**Verified code HEAD:** `eb5919e` on `main` (all six workflows green: CI,
+**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter + security + versioning + analytics)
+**Verified code HEAD:** `271b82c` on `main` (all six workflows green: CI,
 Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -18,14 +18,17 @@ slice), `0953fcc` (outbox strict slice + `_connection` use-after-close guard),
 `84c63dc` (contracts router strict slice + generated OpenAPI refresh),
 `0cdac06` (agent query router strict slice), `0729fe5` (batch router strict
 slice), `3d8c2e8` (search router strict slice), `b0c784f`
-(rate-limiter strict slice), `44df329` (security helpers strict slice), and
-`eb5919e` (versioning helpers strict slice).
+(rate-limiter strict slice), `44df329` (security helpers strict slice),
+`eb5919e` (versioning helpers strict slice), and `271b82c` (analytics
+middleware strict slice).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `271b82c` refactor(api): promote analytics middleware to a strict mypy slice
+- `305cbc4` docs(state): record versioning strict mypy slice
 - `eb5919e` refactor(api): promote versioning helpers to a strict mypy slice
 - `3eedbf9` docs(state): record security strict mypy slice
 - `44df329` refactor(api): promote security helpers to a strict mypy slice
@@ -209,23 +212,23 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + latent bugs found (`f977317`→`eb5919e`, 2026-05-31):**
+**Strict mypy slices extended + latent bugs found (`f977317`→`271b82c`, 2026-05-31):**
 `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
 `src.serving.backends.*`, `src.serving.api.middleware.*`,
 `src.serving.api.routers.deadletter`, `src.serving.api.routers.webhooks`, and
 `src.serving.api.routers.{alerts,contracts,agent_query,batch,search}`, plus
-`src.serving.api.rate_limiter`, `src.serving.api.security`, and
-`src.serving.api.versioning`
+`src.serving.api.rate_limiter`, `src.serving.api.security`,
+`src.serving.api.versioning`, and `src.serving.api.analytics`
 now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
 `tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
 files. Typing the monitors slice surfaced a real tombstone bug in
 `FreshnessMonitor._process_message` (now skipped with `reason="empty_message"`,
 100% module coverage). The webhooks slice required a generated
 `docs/openapi.json` refresh because FastAPI now exposes object response schemas
-for the typed router returns. The batch, search, rate-limiter, security, and
-versioning slices were pure annotation and produced no OpenAPI drift. Measured
-after the versioning slice, the remaining API-side AST baseline is 33 untyped
-functions across 9 files; `src/processing/flink_jobs` remains the separate 15-error /
+for the typed router returns. The batch, search, rate-limiter, security,
+versioning, and analytics slices were pure annotation and produced no OpenAPI
+drift. Measured after the analytics slice, the remaining API-side AST baseline
+is 32 untyped functions across 8 files; `src/processing/flink_jobs` remains the separate 15-error /
 12-function PR-#23/Docker-gated slice. Load Test on the security commit
 `44df329` failed once on p99 spikes with 0.00% functional failures and then
 passed two same-SHA reruns (`26703049909`, `26703112750`), so record it as

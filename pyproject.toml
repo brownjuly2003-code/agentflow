@@ -379,6 +379,12 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.admin_ui"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Webhook dispatcher signs and retries tenant-scoped deliveries; keep its
+# FastAPI app boundary annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.webhook_dispatcher"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

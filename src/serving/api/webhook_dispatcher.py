@@ -14,6 +14,7 @@ from pathlib import Path
 import duckdb
 import httpx
 import structlog
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 try:
@@ -46,7 +47,7 @@ class WebhookConfig(BaseModel):
     webhooks: list[WebhookRegistration] = Field(default_factory=list)
 
 
-def get_webhook_config_path(app) -> Path:
+def get_webhook_config_path(app: FastAPI) -> Path:
     configured = getattr(app.state, "webhook_config_path", None)
     return Path(configured) if configured else DEFAULT_WEBHOOKS_CONFIG_PATH
 
@@ -156,7 +157,7 @@ def get_delivery_logs(conn: duckdb.DuckDBPyConnection, webhook_id: str) -> list[
 
 
 class WebhookDispatcher:
-    def __init__(self, app, poll_interval_seconds: float = 2.0) -> None:
+    def __init__(self, app: FastAPI, poll_interval_seconds: float = 2.0) -> None:
         self.app = app
         self.poll_interval_seconds = poll_interval_seconds
         self.backoff_seconds = [1.0, 5.0, 25.0]

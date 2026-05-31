@@ -177,3 +177,9 @@ def test_admin_ui_router_is_a_strict_mypy_slice() -> None:
     # Admin UI renders operator-only status pages; keep route and context
     # builders fully annotated.
     assert "src.serving.api.routers.admin_ui" in _strict_modules()
+
+
+def test_webhook_dispatcher_is_a_strict_mypy_slice() -> None:
+    # Webhook dispatcher signs and retries tenant-scoped deliveries; keep its
+    # FastAPI app boundary fully annotated.
+    assert "src.serving.api.webhook_dispatcher" in _strict_modules()

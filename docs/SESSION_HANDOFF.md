@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (serving/api slices through webhook_dispatcher; event_producer coverage gate; alerts dispatcher second-opinion prompt recorded)
-**Verified code HEAD:** `5fecb1b` on `main` (all six workflows green: CI,
+**Last updated:** 2026-06-01 (event schemas strict slice; event_producer coverage gate; alerts dispatcher second-opinion prompt recorded)
+**Verified code HEAD:** `fc01360` on `main` (all six workflows green: CI,
 Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -25,13 +25,15 @@ middleware strict slice), `d45ec9b` (lineage router strict slice),
 slice), `e53e0d3` (admin UI router strict slice), `66bc820`
 (webhook dispatcher strict slice), `42c1f02` (alerts dispatcher second-opinion
 prompt recorded after Claude socket close), and `5fecb1b`
-(event producer scoped coverage gate).
+(event producer scoped coverage gate), and `fc01360`
+(ingestion event schemas strict slice).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `913` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `fc01360` refactor(ingestion): promote event schemas to strict mypy
 - `5fecb1b` ci: gate event producer coverage
 - `42c1f02` docs(tasks): record alerts dispatcher second opinion prompt
 - `12d20d9` docs(state): record webhook dispatcher strict mypy slice
@@ -230,8 +232,9 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + latent bugs found (`f977317`→`271b82c`, 2026-05-31):**
-`src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
+**Strict mypy slices extended + latent bugs found (`f977317`→`fc01360`, 2026-06-01):**
+`src.ingestion.schemas.events`, `src.serving.api.auth.*`,
+`src.quality.monitors.*`, `src.serving.semantic_layer.*`,
 `src.serving.backends.*`, `src.serving.api.middleware.*`,
 `src.serving.api.routers.deadletter`, `src.serving.api.routers.webhooks`, and
 `src.serving.api.routers.{alerts,contracts,agent_query,batch,search}`, plus
@@ -248,8 +251,15 @@ files. Typing the monitors slice surfaced a real tombstone bug in
 `docs/openapi.json` refresh because FastAPI now exposes object response schemas
 for the typed router returns. The batch, search, rate-limiter, security,
 versioning, analytics, lineage, SLO, stream, admin UI, and webhook dispatcher
-slices were pure annotation and produced no OpenAPI drift. Measured after the
-webhook dispatcher slice, the remaining API-side AST baseline is 20 untyped
+slices were pure annotation and produced no OpenAPI drift. The event-schemas
+slice was also pure annotation, adding `ValidationInfo` to
+`OrderEvent.total_matches_items()`; local evidence included the red/green
+policy test, targeted event-schema tests, full `mypy src --no-incremental`,
+ruff/format, broad no-Docker unit tests (`612 passed, 1 skipped`), and `git
+diff --check`. GitHub evidence on `fc01360`: CI `26727188068`, Contract Tests
+`26727188052`, E2E Tests `26727188055`, Load Test `26727188040`, Security Scan
+`26727188061`, and Staging Deploy `26727188070` all completed successfully.
+The API-side AST baseline remains the webhook-dispatcher measurement: 20 untyped
 functions across 3 files (`routers/admin.py`=12, `main.py`=6, and
 `alerts/dispatcher.py`=2); all remaining API-side files are on the
 required-second-opinion list. The next attempted API-side candidate,

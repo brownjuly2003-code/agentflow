@@ -73,7 +73,8 @@ Pick the first that applies; finish it before the next.
    failing test first, then the fix.
 4. **Strict-typing cadence** (incremental, not load-bearing) — promote one more
    module to a strict mypy slice (`disallow_untyped_defs = true`). Done so far:
-   `src.quality.validators.*`, `src.serving.api.auth.*`,
+   `src.quality.validators.*`, `src.ingestion.schemas.events`,
+   `src.serving.api.auth.*`,
    `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
    `src.serving.backends.*`, `src.orchestration.dags.*`,
    `src.processing.{event_replayer,local_pipeline,outbox}`,
@@ -93,6 +94,8 @@ Pick the first that applies; finish it before the next.
    `second-opinion-alerts-dispatcher.md`, and no code was changed. Do not retry
    the same alerts prompt unchanged without new evidence that Claude is
    available. `src/processing/flink_jobs` remains gated by PR #23 / Docker.
+   The latest completed non-API slice is `src.ingestion.schemas.events`
+   (`fc01360`, all six workflows green); do not repeat it.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
    module is under-tested. Latest completed gate: `5fecb1b` pins

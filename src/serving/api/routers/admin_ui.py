@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import State
+from starlette.responses import Response
 
 from src.serving.api.analytics import ensure_analytics_table
 from src.serving.api.auth import require_admin_key
@@ -22,7 +24,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def admin_dashboard(request: Request):
+async def admin_dashboard(request: Request) -> Response:
     context = await _build_context(request, partial=False)
     return templates.TemplateResponse(
         request=request,
@@ -32,7 +34,7 @@ async def admin_dashboard(request: Request):
 
 
 @router.get("/partials/summary", response_class=HTMLResponse, include_in_schema=False)
-async def admin_dashboard_summary(request: Request):
+async def admin_dashboard_summary(request: Request) -> Response:
     context = await _build_context(request, partial=True)
     return templates.TemplateResponse(
         request=request,
@@ -57,13 +59,13 @@ async def _build_context(request: Request, *, partial: bool) -> dict[str, object
     }
 
 
-async def _gather_health(state) -> dict[str, object]:
+async def _gather_health(state: State) -> dict[str, object]:
     payload = await run_in_threadpool(state.health_collector.collect)
     result: dict[str, object] = payload.to_dict()
     return result
 
 
-def _cache_stats(state) -> dict[str, object]:
+def _cache_stats(state: State) -> dict[str, object]:
     query_cache = getattr(state, "query_cache", None)
     rate_limiter = getattr(getattr(state, "auth_manager", None), "rate_limiter", None)
     cache_backend = "redis" if getattr(query_cache, "_redis", None) is not None else "none"

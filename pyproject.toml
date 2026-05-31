@@ -373,6 +373,12 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.stream"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Admin UI routes render operator-only status pages; keep route and context
+# builders annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.admin_ui"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

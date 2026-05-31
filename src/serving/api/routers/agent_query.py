@@ -7,7 +7,7 @@ Every response includes metadata that helps agents assess data reliability.
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, cast
 
 import sqlglot
 import structlog
@@ -40,17 +40,22 @@ def _get_pii_masker() -> PiiMasker:
     return _PII_MASKER
 
 
-def _transform_payload_for_requested_version(req: Request, payload: dict) -> dict:
+def _transform_payload_for_requested_version(
+    req: Request, payload: dict[str, Any]
+) -> dict[str, Any]:
     try:
         requested_version = resolve_request_version(req)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     registry = get_version_registry(req)
     transformer = get_response_transformer(req)
-    return transformer.transform(
-        payload,
-        from_version=registry.latest().date,
-        to_version=requested_version,
+    return cast(
+        dict[str, Any],
+        transformer.transform(
+            payload,
+            from_version=registry.latest().date,
+            to_version=requested_version,
+        ),
     )
 
 
@@ -71,7 +76,7 @@ def _allowed_tables_for_request(req: Request) -> list[str]:
     return tables
 
 
-def _metric_tables(catalog, metric_name: str) -> set[str]:
+def _metric_tables(catalog: Any, metric_name: str) -> set[str]:
     metric = catalog.metrics.get(metric_name)
     if metric is None:
         return set()
@@ -171,7 +176,7 @@ class MetricResponse(BaseModel):
 
 
 @router.post("/query/explain", response_model=ExplainResponse)
-async def explain_query(request: ExplainRequest, req: Request):
+async def explain_query(request: ExplainRequest, req: Request) -> ExplainResponse:
     """Return the SQL plan for a natural language query without executing it."""
     engine = req.app.state.query_engine
     tenant_key = getattr(req.state, "tenant_key", None)
@@ -203,7 +208,9 @@ async def explain_query(request: ExplainRequest, req: Request):
 
 
 @router.post("/query", response_model=QueryResponse)
-async def natural_language_query(request: NLQueryRequest, req: Request, response: Response):
+async def natural_language_query(
+    request: NLQueryRequest, req: Request, response: Response
+) -> QueryResponse:
     """Execute a natural language query against the data platform.
 
     The query engine translates natural language to SQL, executes it,
@@ -343,7 +350,7 @@ async def get_entity(
             description="Return state as of this UTC timestamp (ISO 8601)",
         ),
     ] = None,
-):
+) -> EntityResponse:
     """Look up a specific entity by type and ID.
 
     Supported entity types: order, user, product, session.
@@ -501,7 +508,7 @@ async def get_metric(
             description="Compute the metric at this UTC timestamp (ISO 8601)",
         ),
     ] = None,
-):
+) -> MetricResponse:
     """Get a real-time metric value.
 
     Supported metrics: revenue, order_count, avg_order_value, conversion_rate,
@@ -612,7 +619,7 @@ async def get_metric(
 
 
 @router.get("/catalog")
-async def get_catalog(req: Request):
+async def get_catalog(req: Request) -> dict[str, object]:
     """List all available data assets — entities, metrics, and their schemas.
 
     Agents should call this to discover what data is available

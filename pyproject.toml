@@ -308,6 +308,13 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.contracts"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Agent query routes are the LLM-facing query execution, entity lookup, metric,
+# and catalog discovery surface; keep them fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.agent_query"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

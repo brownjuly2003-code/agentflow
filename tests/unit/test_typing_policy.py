@@ -111,3 +111,9 @@ def test_contracts_router_is_a_strict_mypy_slice() -> None:
     # Contract routes are the schema governance API; keep version lookup,
     # diff, and validation endpoints fully annotated.
     assert "src.serving.api.routers.contracts" in _strict_modules()
+
+
+def test_agent_query_router_is_a_strict_mypy_slice() -> None:
+    # Agent query routes are the core LLM-facing API for query execution,
+    # entity lookup, metrics, and catalog discovery; keep them annotated.
+    assert "src.serving.api.routers.agent_query" in _strict_modules()

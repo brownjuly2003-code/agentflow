@@ -22,6 +22,12 @@ def test_quality_validators_are_a_strict_mypy_slice() -> None:
     assert "src.quality.validators.*" in strict_modules
 
 
+def test_ingestion_event_schemas_are_a_strict_mypy_slice() -> None:
+    # Event schemas are the data-contract boundary shared by producers,
+    # validators, and API-facing models; keep their validators annotated.
+    assert "src.ingestion.schemas.events" in _strict_modules()
+
+
 def _strict_modules() -> set[str]:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     overrides = pyproject["tool"]["mypy"].get("overrides", [])

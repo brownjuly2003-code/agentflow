@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 
 class EventType(StrEnum):
@@ -100,7 +100,7 @@ class OrderEvent(BaseEvent):
 
     @field_validator("total_amount")
     @classmethod
-    def total_matches_items(cls, v: Decimal, info) -> Decimal:
+    def total_matches_items(cls, v: Decimal, info: ValidationInfo) -> Decimal:
         items = info.data.get("items")
         if items:
             expected = sum(item.quantity * item.unit_price for item in items)

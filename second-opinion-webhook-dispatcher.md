@@ -1,9 +1,15 @@
-# Second Opinion Prompt: Webhook Dispatcher Strict Mypy Slice
+# Resolved Second Opinion: Webhook Dispatcher Strict Mypy Slice
 
-Claude CLI timed out while requesting this focused review on 2026-05-31.
-Do not start the risky `src.serving.api.webhook_dispatcher` strict-mypy slice
-until a second opinion answers this prompt or the operator explicitly overrides
-the second-opinion requirement.
+Claude CLI timed out while requesting this focused review on 2026-05-31. A
+shorter follow-up prompt succeeded on 2026-06-01 and recommended the minimal
+safe plan: annotate only the FastAPI app boundary, avoid broad event/delivery
+`dict` narrowing, add the typing-policy gate, run mypy, focused webhooks tests,
+OpenAPI check, ruff, broad no-Docker unit tests, then push and wait for six
+main workflows.
+
+This was implemented in code commit `66bc820` and verified on GitHub with CI,
+Contract Tests, E2E Tests, Load Test, Security Scan, and Staging Deploy all
+green. The original prompt is retained below as historical context.
 
 ```text
 You are giving a focused second opinion for a risky typing-only slice in a

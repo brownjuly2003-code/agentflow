@@ -1,8 +1,9 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter)
-**Verified code HEAD:** `b0c784f` on `main` (all six workflows green: CI, Contract
-Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
+**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter + security)
+**Verified code HEAD:** `44df329` on `main` (CI, Contract Tests, E2E,
+Security, and Staging Deploy green; Load Test push red then two same-SHA reruns
+green per the load-regression runbook). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
 `30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
@@ -17,14 +18,16 @@ slice), `0953fcc` (outbox strict slice + `_connection` use-after-close guard),
 `5f61fd3` (alerts router strict slice + generated OpenAPI refresh),
 `84c63dc` (contracts router strict slice + generated OpenAPI refresh),
 `0cdac06` (agent query router strict slice), `0729fe5` (batch router strict
-slice), `3d8c2e8` (search router strict slice), and `b0c784f`
-(rate-limiter strict slice).
+slice), `3d8c2e8` (search router strict slice), `b0c784f`
+(rate-limiter strict slice), and `44df329` (security helpers strict slice).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `44df329` refactor(api): promote security helpers to a strict mypy slice
+- `9302129` docs(state): record rate limiter strict mypy slice
 - `b0c784f` refactor(api): promote rate limiter to a strict mypy slice
 - `34d99da` docs(plan): record open questions closure plan
 - `6866f68` docs(state): record search strict mypy slice
@@ -204,23 +207,26 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + latent bugs found (`f977317`→`b0c784f`, 2026-05-31):**
+**Strict mypy slices extended + latent bugs found (`f977317`→`44df329`, 2026-05-31):**
 `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
 `src.serving.backends.*`, `src.serving.api.middleware.*`,
 `src.serving.api.routers.deadletter`, `src.serving.api.routers.webhooks`, and
 `src.serving.api.routers.{alerts,contracts,agent_query,batch,search}`, plus
-`src.serving.api.rate_limiter`
+`src.serving.api.rate_limiter` and `src.serving.api.security`
 now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
 `tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
 files. Typing the monitors slice surfaced a real tombstone bug in
 `FreshnessMonitor._process_message` (now skipped with `reason="empty_message"`,
 100% module coverage). The webhooks slice required a generated
 `docs/openapi.json` refresh because FastAPI now exposes object response schemas
-for the typed router returns. The batch, search, and rate-limiter slices were
-pure annotation and produced no OpenAPI drift. Measured after the rate-limiter
-slice, the remaining API-side AST baseline is 35 untyped functions across 11
-files; `src/processing/flink_jobs` remains the separate 15-error / 12-function
-PR-#23/Docker-gated slice.
+for the typed router returns. The batch, search, rate-limiter, and security
+slices were pure annotation and produced no OpenAPI drift. Measured after the
+security slice, the remaining API-side AST baseline is 34 untyped functions
+across 10 files; `src/processing/flink_jobs` remains the separate 15-error /
+12-function PR-#23/Docker-gated slice. Load Test on the security commit
+`44df329` failed once on p99 spikes with 0.00% functional failures and then
+passed two same-SHA reruns (`26703049909`, `26703112750`), so record it as
+runner variance per `docs/runbooks/load-test-regression.md`.
 The API remainder is a large multi-file grind that is a deliberate stopping
 point, incremental not load-bearing. Two gotchas this session: (1) the
 Edit tool flips/corrupts EOL on this repo — edit source byte-level and re-check

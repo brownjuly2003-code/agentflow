@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query)
-**Verified code HEAD:** `0cdac06` on `main` (all six workflows green: CI, Contract
+**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch)
+**Verified code HEAD:** `0729fe5` on `main` (all six workflows green: CI, Contract
 Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -15,13 +15,16 @@ slice), `0953fcc` (outbox strict slice + `_connection` use-after-close guard),
 `452d120` (webhooks router strict slice — third `src/serving/api` slice),
 `45d3fc5` (generated OpenAPI refresh for the webhooks response schemas),
 `5f61fd3` (alerts router strict slice + generated OpenAPI refresh),
-`84c63dc` (contracts router strict slice + generated OpenAPI refresh), and
-`0cdac06` (agent query router strict slice).
+`84c63dc` (contracts router strict slice + generated OpenAPI refresh),
+`0cdac06` (agent query router strict slice), and `0729fe5` (batch router strict
+slice).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `0abb206`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `906` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `0729fe5` refactor(api): promote batch router to a strict mypy slice
+- `5790bc5` docs(state): record agent query strict mypy slice
 - `0cdac06` refactor(api): promote agent query router to a strict mypy slice
 - `84c63dc` refactor(api): promote contracts router to a strict mypy slice
 - `5f61fd3` refactor(api): promote alerts router to a strict mypy slice
@@ -194,19 +197,22 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + latent bugs found (`f977317`→`45d3fc5`, 2026-05-30):**
+**Strict mypy slices extended + latent bugs found (`f977317`→`0729fe5`, 2026-05-31):**
 `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
 `src.serving.backends.*`, `src.serving.api.middleware.*`,
 `src.serving.api.routers.deadletter`, `src.serving.api.routers.webhooks`, and
-`src.serving.api.routers.{alerts,contracts,agent_query}`
+`src.serving.api.routers.{alerts,contracts,agent_query,batch}`
 now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
 `tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
 files. Typing the monitors slice surfaced a real tombstone bug in
 `FreshnessMonitor._process_message` (now skipped with `reason="empty_message"`,
 100% module coverage). The webhooks slice required a generated
 `docs/openapi.json` refresh because FastAPI now exposes object response schemas
-for the typed router returns. Measured after the agent-query slice, 43 untyped
-defs remain: 30 in `src/serving/api` and 13 in `src/processing/flink_jobs`.
+for the typed router returns. The batch slice was pure annotation and produced
+no OpenAPI drift. Measured after the batch slice with direct
+`mypy --disallow-untyped-defs` diagnostics, 53 no-untyped-def errors remain
+across 49 functions: 38 errors / 37 functions in `src/serving/api` and 15
+errors / 12 functions in `src/processing/flink_jobs`.
 The API remainder is a large multi-file grind that is a deliberate stopping
 point, incremental not load-bearing. Two gotchas this session: (1) the
 Edit tool flips/corrupts EOL on this repo — edit source byte-level and re-check

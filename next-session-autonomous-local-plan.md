@@ -78,11 +78,13 @@ Pick the first that applies; finish it before the next.
    `src.serving.backends.*`, `src.orchestration.dags.*`,
    `src.processing.{event_replayer,local_pipeline,outbox}`,
    `src.serving.api.middleware.*`, `src.serving.api.routers.deadletter`, and
-   `src.serving.api.routers.{webhooks,alerts,contracts,agent_query}`.
-   Remaining measured candidates: `src/serving/api` has 30 untyped defs
-   (`routers/admin.py`=12, `main.py`=6, then smaller files);
-   `src/processing/flink_jobs`
-   has 13 but remains gated by PR #23 / Docker.
+   `src.serving.api.routers.{webhooks,alerts,contracts,agent_query,batch}`.
+   Remaining measured candidates after the batch slice: direct
+   `mypy --disallow-untyped-defs` diagnostics report 38 no-untyped-def errors
+   across 37 functions in `src/serving/api` (`routers/admin.py`=12,
+   `main.py`=6, `routers/admin_ui.py`=4, then smaller files) plus 15 errors
+   across 12 functions in `src/processing/flink_jobs`, which remains gated by
+   PR #23 / Docker.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
    module is under-tested.

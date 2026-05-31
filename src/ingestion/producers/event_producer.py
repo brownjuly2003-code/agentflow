@@ -14,9 +14,10 @@ import time
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 import structlog
-from confluent_kafka import Producer
+from confluent_kafka import KafkaError, Message, Producer
 from pydantic_settings import BaseSettings
 
 from src.ingestion.schemas.events import (
@@ -68,13 +69,13 @@ USER_AGENTS = [
 
 
 class DecimalEncoder(json.JSONEncoder):
-    def default(self, o):
+    def default(self, o: Any) -> Any:
         if isinstance(o, Decimal):
             return float(o)
         return super().default(o)
 
 
-def _delivery_report(err, msg):
+def _delivery_report(err: KafkaError | None, msg: Message) -> None:
     if err:
         logger.error("delivery_failed", error=str(err), topic=msg.topic())
 
@@ -170,7 +171,7 @@ def generate_product() -> tuple[str, ProductEvent]:
     return "products.cdc", event
 
 
-def run_producer():
+def run_producer() -> None:
     config = ProducerConfig()
     producer = Producer(
         {

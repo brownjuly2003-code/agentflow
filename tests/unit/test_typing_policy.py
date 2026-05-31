@@ -28,6 +28,13 @@ def test_ingestion_event_schemas_are_a_strict_mypy_slice() -> None:
     assert "src.ingestion.schemas.events" in _strict_modules()
 
 
+def test_event_producer_is_a_strict_mypy_slice() -> None:
+    # The synthetic event producer feeds the local/demo Kafka path and is
+    # already coverage-gated; keep its serialization and delivery callbacks
+    # fully annotated.
+    assert "src.ingestion.producers.event_producer" in _strict_modules()
+
+
 def _strict_modules() -> set[str]:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     overrides = pyproject["tool"]["mypy"].get("overrides", [])

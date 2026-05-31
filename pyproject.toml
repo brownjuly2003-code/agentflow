@@ -227,6 +227,13 @@ module = "src.ingestion.schemas.events"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+# Synthetic producer drives the local/demo Kafka event stream and is covered by
+# a scoped CI coverage gate; keep serialization and delivery callbacks
+# annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.ingestion.producers.event_producer"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 # Security-critical: keep the API key / rate-limit / audit paths fully
 # annotated. Gated by tests/unit/test_typing_policy.py.
 module = "src.serving.api.auth.*"

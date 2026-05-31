@@ -88,10 +88,16 @@ Pick the first that applies; finish it before the next.
    untyped functions across 3 files in `src/serving/api`
    (`routers/admin.py`=12, `main.py`=6, and `alerts/dispatcher.py`=2). These
    three API-side files all require a focused Claude second opinion before
-   coding. `src/processing/flink_jobs` remains gated by PR #23 / Docker.
+   coding. The attempted `alerts/dispatcher.py` second-opinion call failed with
+   a Claude socket close; the exact prompt is preserved in
+   `second-opinion-alerts-dispatcher.md`, and no code was changed. Do not retry
+   the same alerts prompt unchanged without new evidence that Claude is
+   available. `src/processing/flink_jobs` remains gated by PR #23 / Docker.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
-   module is under-tested.
+   module is under-tested. Latest completed gate: `5fecb1b` pins
+   `src.ingestion.producers.event_producer` at 90% minimum module coverage
+   (local baseline 96.39%, all six workflows green).
 
 If only external/upstream/Docker-gated items remain (below), stop and record it
 — do not fabricate evidence or churn docs.

@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter + security + versioning + analytics + lineage + slo + stream + admin_ui + webhook_dispatcher)
-**Verified code HEAD:** `66bc820` on `main` (all six workflows green: CI,
+**Last updated:** 2026-06-01 (serving/api slices through webhook_dispatcher; event_producer coverage gate; alerts dispatcher second-opinion prompt recorded)
+**Verified code HEAD:** `5fecb1b` on `main` (all six workflows green: CI,
 Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -22,15 +22,21 @@ slice), `3d8c2e8` (search router strict slice), `b0c784f`
 `eb5919e` (versioning helpers strict slice), `271b82c` (analytics
 middleware strict slice), `d45ec9b` (lineage router strict slice),
 `7a9379d` (SLO router strict slice), `3b2078a` (stream router strict
-slice), `e53e0d3` (admin UI router strict slice), and `66bc820`
-(webhook dispatcher strict slice).
+slice), `e53e0d3` (admin UI router strict slice), `66bc820`
+(webhook dispatcher strict slice), `42c1f02` (alerts dispatcher second-opinion
+prompt recorded after Claude socket close), and `5fecb1b`
+(event producer scoped coverage gate).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
-**Tracked files at refresh start:** `912` via `git ls-files`.
+**Tracked files at refresh start:** `913` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `5fecb1b` ci: gate event producer coverage
+- `42c1f02` docs(tasks): record alerts dispatcher second opinion prompt
+- `12d20d9` docs(state): record webhook dispatcher strict mypy slice
 - `66bc820` refactor(api): promote webhook dispatcher to strict mypy slice
+- `ee2a6d0` docs(tasks): record webhook dispatcher second opinion prompt
 - `e53e0d3` refactor(api): promote admin ui router to strict mypy slice
 - `3b19067` docs(state): record stream strict mypy slice
 - `3b2078a` refactor(api): promote stream router to strict mypy slice
@@ -246,7 +252,12 @@ slices were pure annotation and produced no OpenAPI drift. Measured after the
 webhook dispatcher slice, the remaining API-side AST baseline is 20 untyped
 functions across 3 files (`routers/admin.py`=12, `main.py`=6, and
 `alerts/dispatcher.py`=2); all remaining API-side files are on the
-required-second-opinion list.
+required-second-opinion list. The next attempted API-side candidate,
+`src.serving.api.alerts.dispatcher`, did not receive a Claude review because
+`claude -p` closed the socket. The exact prompt and non-secret error are
+recorded in `second-opinion-alerts-dispatcher.md` at HEAD `42c1f02`; no alerts
+dispatcher code was changed, and that prompt should not be retried unchanged
+without new evidence that Claude is available.
 `src/processing/flink_jobs` remains the separate 15-error / 12-function
 PR-#23/Docker-gated slice. Load Test on the security commit
 `44df329` failed once on p99 spikes with 0.00% functional failures and then
@@ -259,6 +270,17 @@ CRLF + `git diff --check` + staged blob size; (2) the bandit baseline is
 line-keyed, so a line-shifting edit (e.g. a new import) to a file with a
 baseline finding breaks Security Scan + the CI `test_bandit_diff` test until
 `.bandit-baseline.json` is refreshed.
+
+**Coverage cadence (`5fecb1b`, 2026-06-01):** `src.ingestion.producers.event_producer`
+now has a CI `test-unit` scoped coverage gate at 90%, pinned by
+`tests/unit/test_coverage_policy.py`. Local evidence: the red policy test failed
+before the CI step existed, then passed; `tests/unit/test_event_producer.py`
+passed with 96.39% module coverage at `--cov-fail-under=90`; combined policy +
+event producer tests passed with 12 tests; `SKIP_DOCKER_TESTS=1 python -m
+pytest tests/unit -p no:schemathesis --continue-on-collection-errors` passed
+with 611 passed, 1 skipped. GitHub evidence on `5fecb1b`: CI, Contract Tests,
+E2E Tests, Load Test, Security Scan, and Staging Deploy all completed
+successfully.
 
 **M-C4 hashed-key guidance now enforced (`e444ecf`, 2026-05-30):**
 `AuthManager.load()` emits a `hashed_key_count_exceeds_guidance` warning once

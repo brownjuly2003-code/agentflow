@@ -1,16 +1,16 @@
 # Agent State
 
-Updated: 2026-05-31
+Updated: 2026-06-01
 
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local code HEAD before this state-refresh commit: `66bc820d82d2f70945b771cc832c4a433b8dfe1b` (`66bc820`)
+- Verified local code/CI HEAD before this state-refresh commit: `5fecb1b955c199aee6b8f8f8b911f7a759c1a71a` (`5fecb1b`)
 - Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
-- State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, `next-session-autonomous-local-plan.md`, and `all-open-questions-closure-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
-- File count at refresh start: `git ls-files` reports 912 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
+- State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `next-session-autonomous-local-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
+- File count at refresh start: `git ls-files` reports 913 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
 
 ## Available Runtime
 
@@ -77,6 +77,30 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Event producer scoped coverage gate through CI HEAD `5fecb1b` on 2026-06-01:
+  - `5fecb1b` adds a CI `test-unit` step that runs
+    `tests/unit/test_event_producer.py` with
+    `--cov=src.ingestion.producers.event_producer --cov-fail-under=90`.
+    `tests/unit/test_coverage_policy.py` pins the workflow step so the gate
+    cannot silently drift.
+  - Tests-first: `tests/unit/test_coverage_policy.py::test_ci_has_scoped_event_producer_coverage_gate`
+    failed before the CI step existed and passed after adding it.
+  - Local verification: `python -m pytest tests/unit/test_event_producer.py
+    -v --tb=short --cov=src.ingestion.producers.event_producer
+    --cov-report=term-missing --cov-fail-under=90 -p no:schemathesis`
+    passed with 9 tests and 96.39% coverage; `python -m pytest
+    tests/unit/test_coverage_policy.py tests/unit/test_event_producer.py -q
+    -p no:schemathesis` passed with 12 tests; workflow YAML parsed with
+    `yaml.safe_load`; targeted `ruff check` / `ruff format --check` passed;
+    `SKIP_DOCKER_TESTS=1 python -m pytest tests/unit -p no:schemathesis
+    --continue-on-collection-errors` passed with 611 passed, 1 skipped; `git
+    diff --check` passed. A discarded `ruff check .github/workflows/ci.yml`
+    invocation failed only because ruff parses YAML as Python; YAML syntax was
+    covered by the explicit parser check.
+  - GitHub evidence on `5fecb1b`: CI `26726164270`, Contract Tests
+    `26726164290`, E2E Tests `26726164262`, Load Test `26726164261`, Security
+    Scan `26726164272`, and Staging Deploy `26726164282` all completed
+    successfully.
 - Webhook dispatcher strict mypy slice through code HEAD `66bc820` on 2026-06-01:
   - `66bc820` promotes `src.serving.api.webhook_dispatcher` (signed webhook
     registration delivery, retries, and logs) to `disallow_untyped_defs =
@@ -750,6 +774,8 @@ On 2026-05-30 the strict-typing cadence was extended autonomously across two mor
 
 **Standing autonomous mandate (operator-granted 2026-05-30):** the agent owns all tactical and external/strategic decisions, keeps finishing safe local work without asking "what next", and stops only at a named hard boundary. External data / AWS / paid services are out of scope (no card/budget), not a deficiency. Local commits and ordinary `git push origin main` are authorized after clean status + `git diff --check`. The canonical uninterrupted-session starter, including the copy-paste kickoff prompt, the work-selection priority order, and the verification discipline, is `next-session-autonomous-local-plan.md` — start there.
 
-Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus seventeen `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`), `src.serving.api.routers.alerts` (code HEAD `5f61fd3`), `src.serving.api.routers.contracts` (code HEAD `84c63dc`), `src.serving.api.routers.agent_query` (code HEAD `0cdac06`), `src.serving.api.routers.batch` (code HEAD `0729fe5`), `src.serving.api.routers.search` (code HEAD `3d8c2e8`), `src.serving.api.rate_limiter` (code HEAD `b0c784f`), `src.serving.api.security` (code HEAD `44df329`), `src.serving.api.versioning` (code HEAD `eb5919e`), `src.serving.api.analytics` (code HEAD `271b82c`), `src.serving.api.routers.lineage` (code HEAD `d45ec9b`), `src.serving.api.routers.slo` (code HEAD `7a9379d`), `src.serving.api.routers.stream` (code HEAD `3b2078a`), `src.serving.api.routers.admin_ui` (code HEAD `e53e0d3`), and `src.serving.api.webhook_dispatcher` (code HEAD `66bc820`). After the webhook dispatcher slice, the remaining API-side AST baseline is 20 untyped functions across 3 files (`routers/admin.py`=12, `main.py`=6, and `alerts/dispatcher.py`=2), plus the existing `src/processing/flink_jobs` 15-error / 12-function gate in 3 files (gated by PR #23 / Docker). The remaining API-side files are still on the required-second-opinion list; do not start them without a focused Claude review first. This supersedes the older 52-error / 48-function post-search baseline for local planning.
+Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus seventeen `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`), `src.serving.api.routers.alerts` (code HEAD `5f61fd3`), `src.serving.api.routers.contracts` (code HEAD `84c63dc`), `src.serving.api.routers.agent_query` (code HEAD `0cdac06`), `src.serving.api.routers.batch` (code HEAD `0729fe5`), `src.serving.api.routers.search` (code HEAD `3d8c2e8`), `src.serving.api.rate_limiter` (code HEAD `b0c784f`), `src.serving.api.security` (code HEAD `44df329`), `src.serving.api.versioning` (code HEAD `eb5919e`), `src.serving.api.analytics` (code HEAD `271b82c`), `src.serving.api.routers.lineage` (code HEAD `d45ec9b`), `src.serving.api.routers.slo` (code HEAD `7a9379d`), `src.serving.api.routers.stream` (code HEAD `3b2078a`), `src.serving.api.routers.admin_ui` (code HEAD `e53e0d3`), and `src.serving.api.webhook_dispatcher` (code HEAD `66bc820`). After the webhook dispatcher slice, the remaining API-side AST baseline is 20 untyped functions across 3 files (`routers/admin.py`=12, `main.py`=6, and `alerts/dispatcher.py`=2), plus the existing `src/processing/flink_jobs` 15-error / 12-function gate in 3 files (gated by PR #23 / Docker). The next attempted API-side candidate, `src.serving.api.alerts.dispatcher`, is blocked on second opinion because `claude -p` closed the socket; the exact prompt and error are recorded in `second-opinion-alerts-dispatcher.md` (HEAD `42c1f02`), and no alerts dispatcher code was changed. The remaining API-side files are still on the required-second-opinion list; do not start them without a focused Claude review first. This supersedes the older 52-error / 48-function post-search baseline for local planning.
+
+The coverage cadence has one additional CI gate through `5fecb1b`: `src.ingestion.producers.event_producer` is pinned at 90% minimum module coverage by `tests/unit/test_event_producer.py` and `tests/unit/test_coverage_policy.py`, with current local coverage 96.39%.
 
 Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.

@@ -159,3 +159,9 @@ def test_lineage_router_is_a_strict_mypy_slice() -> None:
     # Lineage reconstructs tenant-scoped provenance chains; keep its response
     # model boundary fully annotated.
     assert "src.serving.api.routers.lineage" in _strict_modules()
+
+
+def test_slo_router_is_a_strict_mypy_slice() -> None:
+    # SLO aggregates tenant-scoped operational health budgets; keep its route
+    # and config boundaries fully annotated.
+    assert "src.serving.api.routers.slo" in _strict_modules()

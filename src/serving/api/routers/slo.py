@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 try:
@@ -44,7 +44,7 @@ class SLOResponse(BaseModel):
     slos: list[SLOStatus]
 
 
-def get_slo_config_path(app) -> Path:
+def get_slo_config_path(app: FastAPI) -> Path:
     configured = getattr(app.state, "slo_config_path", None)
     return Path(configured) if configured else DEFAULT_SLO_CONFIG_PATH
 
@@ -192,7 +192,7 @@ def _error_budget_remaining(target: float, current: float) -> float:
 
 
 @router.get("", response_model=SLOResponse)
-async def get_slos(request: Request):
+async def get_slos(request: Request) -> SLOResponse:
     definitions = load_slos(get_slo_config_path(request.app))
     columns = _pipeline_event_columns(request)
     time_column = _time_column(columns)

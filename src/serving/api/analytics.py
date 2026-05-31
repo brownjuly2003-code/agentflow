@@ -18,6 +18,11 @@ from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
 
+AnalyticsMiddleware = Callable[
+    [Request, Callable[[Request], Awaitable[Response]]],
+    Awaitable[Response],
+]
+
 
 def ensure_analytics_table(db_path: Path | str) -> None:
     for attempt in range(10):
@@ -66,7 +71,7 @@ def ensure_analytics_table(db_path: Path | str) -> None:
             conn.close()
 
 
-def build_analytics_middleware():
+def build_analytics_middleware() -> AnalyticsMiddleware:
     async def analytics_middleware(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],

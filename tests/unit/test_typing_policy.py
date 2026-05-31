@@ -147,3 +147,9 @@ def test_versioning_helpers_are_a_strict_mypy_slice() -> None:
     # Versioning helpers set compatibility headers and response transforms;
     # keep the middleware factory boundary fully annotated.
     assert "src.serving.api.versioning" in _strict_modules()
+
+
+def test_analytics_middleware_is_a_strict_mypy_slice() -> None:
+    # Analytics middleware records request telemetry and replays request bodies;
+    # keep the middleware factory boundary fully annotated.
+    assert "src.serving.api.analytics" in _strict_modules()

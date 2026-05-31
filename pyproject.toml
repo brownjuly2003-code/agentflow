@@ -247,6 +247,13 @@ module = "src.serving.api.versioning"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+# Analytics middleware records request telemetry and replays request bodies;
+# keep the middleware factory boundary fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.analytics"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 # Quality monitors gate freshness / SLA / pipeline-health signals; keep them
 # fully annotated. Gated by tests/unit/test_typing_policy.py.
 module = "src.quality.monitors.*"

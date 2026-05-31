@@ -63,7 +63,7 @@ async def search(
     q: str = SEARCH_QUERY,
     limit: int = SEARCH_LIMIT,
     entity_types: list[str] | None = SEARCH_ENTITY_TYPES,
-):
+) -> SearchResponse:
     search_index = req.app.state.search_index
     normalized_entity_types = _normalize_entity_types(entity_types)
     allowed_entity_types = _allowed_entity_types(req)

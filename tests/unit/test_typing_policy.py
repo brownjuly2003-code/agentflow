@@ -123,3 +123,9 @@ def test_batch_router_is_a_strict_mypy_slice() -> None:
     # Batch route fans out entity, metric, and query requests concurrently; keep
     # the wrapper annotated.
     assert "src.serving.api.routers.batch" in _strict_modules()
+
+
+def test_search_router_is_a_strict_mypy_slice() -> None:
+    # Search is the typed semantic discovery API over catalog/search-index
+    # results; keep its response model boundary annotated.
+    assert "src.serving.api.routers.search" in _strict_modules()

@@ -367,6 +367,12 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.slo"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Stream routes emit tenant-scoped SSE payloads; keep fetch and generator
+# boundaries annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.stream"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

@@ -165,3 +165,9 @@ def test_slo_router_is_a_strict_mypy_slice() -> None:
     # SLO aggregates tenant-scoped operational health budgets; keep its route
     # and config boundaries fully annotated.
     assert "src.serving.api.routers.slo" in _strict_modules()
+
+
+def test_stream_router_is_a_strict_mypy_slice() -> None:
+    # Stream emits tenant-scoped SSE payloads; keep its fetch and generator
+    # boundaries fully annotated.
+    assert "src.serving.api.routers.stream" in _strict_modules()

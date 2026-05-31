@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from datetime import datetime
 
 from fastapi import APIRouter, Request
@@ -17,7 +18,7 @@ async def fetch_recent_events(
     event_type: str | None = None,
     entity_id: str | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Fetch recent pipeline events from DuckDB with optional filters."""
     conn = request.app.state.query_engine._conn
     columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
@@ -88,10 +89,10 @@ async def stream_events(
     request: Request,
     event_type: str | None = None,
     entity_id: str | None = None,
-):
+) -> StreamingResponse:
     """Server-Sent Events stream of validated pipeline events."""
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
         seen_event_ids: set[str] = set()
         events_sent = 0
 

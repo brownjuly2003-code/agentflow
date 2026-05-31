@@ -7,7 +7,7 @@ Updated: 2026-05-31
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local code HEAD before this state-refresh commit: `44df329dff7d0fb5964afca5f41c225946942f32` (`44df329`)
+- Verified local code HEAD before this state-refresh commit: `eb5919ed42f6fd2c30e7050f709561089514099e` (`eb5919e`)
 - Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
 - State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, `next-session-autonomous-local-plan.md`, and `all-open-questions-closure-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
 - File count at refresh start: `git ls-files` reports 911 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
@@ -77,6 +77,25 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Versioning helpers strict mypy slice through code HEAD `eb5919e` on 2026-05-31:
+  - `eb5919e` promotes `src.serving.api.versioning` (request version
+    resolution, compatibility headers, and response transforms) to
+    `disallow_untyped_defs = true`. The gap was the
+    `build_versioning_middleware()` return annotation. Pure annotation;
+    runtime behavior is unchanged.
+  - Tests-first: `tests/unit/test_typing_policy.py::test_versioning_helpers_are_a_strict_mypy_slice`
+    failed before the override and passed after the override plus
+    `VersioningMiddleware` return alias.
+  - Local verification: `python -m mypy src --config-file pyproject.toml
+    --show-error-codes` clean on 99 files; `python -m pytest
+    tests/unit/test_typing_policy.py tests/unit/test_versioning.py -q -p
+    no:schemathesis` passed with 32 tests; `SKIP_DOCKER_TESTS=1 python -m
+    pytest tests/unit -p no:schemathesis --continue-on-collection-errors`
+    passed with 604 passed, 1 skipped; `python scripts/export_openapi.py
+    --check` passed; targeted `ruff check` / `ruff format --check` and `git
+    diff --check` passed.
+  - GitHub evidence on `eb5919e`: CI, Contract Tests, E2E Tests, Load Test,
+    Security Scan, and Staging Deploy all completed successfully.
 - Security helpers strict mypy slice through code HEAD `44df329` on 2026-05-31:
   - `44df329` promotes `src.serving.api.security` (request-size guard,
     sensitive-header redaction, and security response headers) to
@@ -616,6 +635,6 @@ On 2026-05-30 the strict-typing cadence was extended autonomously across two mor
 
 **Standing autonomous mandate (operator-granted 2026-05-30):** the agent owns all tactical and external/strategic decisions, keeps finishing safe local work without asking "what next", and stops only at a named hard boundary. External data / AWS / paid services are out of scope (no card/budget), not a deficiency. Local commits and ordinary `git push origin main` are authorized after clean status + `git diff --check`. The canonical uninterrupted-session starter, including the copy-paste kickoff prompt, the work-selection priority order, and the verification discipline, is `next-session-autonomous-local-plan.md` — start there.
 
-Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus ten `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`), `src.serving.api.routers.alerts` (code HEAD `5f61fd3`), `src.serving.api.routers.contracts` (code HEAD `84c63dc`), `src.serving.api.routers.agent_query` (code HEAD `0cdac06`), `src.serving.api.routers.batch` (code HEAD `0729fe5`), `src.serving.api.routers.search` (code HEAD `3d8c2e8`), `src.serving.api.rate_limiter` (code HEAD `b0c784f`), and `src.serving.api.security` (code HEAD `44df329`). After the security slice, the remaining API-side AST baseline is 34 untyped functions across 10 files (`routers/admin.py`=12, `main.py`=6, `routers/admin_ui.py`=4, `alerts/dispatcher.py`=3, `webhook_dispatcher.py`=2, `routers/slo.py`=2, `routers/stream.py`=2, and `analytics.py` / `routers/lineage.py` / `versioning.py`=1 each), plus the existing `src/processing/flink_jobs` 15-error / 12-function gate in 3 files (gated by PR #23 / Docker). This supersedes the older 52-error / 48-function post-search baseline for local planning. The `src/serving/api` remainder is incremental, not load-bearing; pick it up only as bounded, individually-verified slices (one coherent module/package at a time, typing-policy assertion + full `mypy src` + broad unit + six green workflows each).
+Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus eleven `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`), `src.serving.api.routers.alerts` (code HEAD `5f61fd3`), `src.serving.api.routers.contracts` (code HEAD `84c63dc`), `src.serving.api.routers.agent_query` (code HEAD `0cdac06`), `src.serving.api.routers.batch` (code HEAD `0729fe5`), `src.serving.api.routers.search` (code HEAD `3d8c2e8`), `src.serving.api.rate_limiter` (code HEAD `b0c784f`), `src.serving.api.security` (code HEAD `44df329`), and `src.serving.api.versioning` (code HEAD `eb5919e`). After the versioning slice, the remaining API-side AST baseline is 33 untyped functions across 9 files (`routers/admin.py`=12, `main.py`=6, `routers/admin_ui.py`=4, `alerts/dispatcher.py`=3, `webhook_dispatcher.py`=2, `routers/slo.py`=2, `routers/stream.py`=2, and `analytics.py` / `routers/lineage.py`=1 each), plus the existing `src/processing/flink_jobs` 15-error / 12-function gate in 3 files (gated by PR #23 / Docker). This supersedes the older 52-error / 48-function post-search baseline for local planning. The `src/serving/api` remainder is incremental, not load-bearing; pick it up only as bounded, individually-verified slices (one coherent module/package at a time, typing-policy assertion + full `mypy src` + broad unit + six green workflows each).
 
 Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.

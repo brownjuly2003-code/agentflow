@@ -28,13 +28,12 @@ Canonical supporting docs:
 
 ## Work Plan
 
-- [x] Stabilize latest code HEAD evidence through `44df329`.
+- [x] Stabilize latest code HEAD evidence through `eb5919e`.
   Verify: `git status --short --branch --untracked-files=no`; six workflows
   checked on HEAD; Load Test run IDs recorded when runner variance appears.
-  Evidence: CI, Contract Tests, E2E Tests, Security Scan, and Staging Deploy
-  succeeded on `44df329`; Load Test push run `26702983127` failed with p99
-  spikes and 0.00% functional failures, then same-SHA reruns `26703049909` and
-  `26703112750` succeeded per `docs/runbooks/load-test-regression.md`.
+  Evidence: CI, Contract Tests, E2E Tests, Load Test, Security Scan, and
+  Staging Deploy all succeeded on `eb5919e`. Prior Load Test variance on
+  `44df329` is recorded in `AGENT_STATE.md`.
 
 - [ ] Finish `src/serving/api` strict mypy coverage by bounded slices.
   Verify each slice with policy-test red->green, `python -m mypy src
@@ -42,7 +41,8 @@ Canonical supporting docs:
   OpenAPI check, ruff, `git diff --check`, commit, push, and six workflows.
   Latest slices: `src.serving.api.rate_limiter` reached strict mypy coverage in
   `b0c784f`, and `src.serving.api.security` reached strict mypy coverage in
-  `44df329`.
+  `44df329`; `src.serving.api.versioning` reached strict mypy coverage in
+  `eb5919e`.
 
 - [ ] Use Claude as second opinion for risky slices.
   Required for `src/serving/api/main.py`, `routers/admin.py`,

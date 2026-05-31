@@ -355,6 +355,12 @@ disallow_untyped_defs = true
 module = "src.serving.api.routers.search"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Lineage reconstructs tenant-scoped provenance chains; keep its response model
+# boundary annotated. Gated by tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.lineage"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

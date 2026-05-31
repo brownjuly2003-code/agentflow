@@ -153,3 +153,9 @@ def test_analytics_middleware_is_a_strict_mypy_slice() -> None:
     # Analytics middleware records request telemetry and replays request bodies;
     # keep the middleware factory boundary fully annotated.
     assert "src.serving.api.analytics" in _strict_modules()
+
+
+def test_lineage_router_is_a_strict_mypy_slice() -> None:
+    # Lineage reconstructs tenant-scoped provenance chains; keep its response
+    # model boundary fully annotated.
+    assert "src.serving.api.routers.lineage" in _strict_modules()

@@ -114,7 +114,7 @@ def _fetch_matching_events(request: Request, entity_type: str, entity_id: str) -
     response_model=LineageResponse,
     summary="Get provenance chain for an entity",
 )
-async def get_lineage(entity_type: str, entity_id: str, request: Request):
+async def get_lineage(entity_type: str, entity_id: str, request: Request) -> LineageResponse:
     """Return the reconstructed lineage for an entity from source to serving."""
     catalog = request.app.state.catalog
     entity = catalog.entities.get(entity_type)

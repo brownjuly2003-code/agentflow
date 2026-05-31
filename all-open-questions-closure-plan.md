@@ -28,11 +28,11 @@ Canonical supporting docs:
 
 ## Work Plan
 
-- [x] Stabilize latest code HEAD evidence through `3b2078a`.
+- [x] Stabilize latest code HEAD evidence through `e53e0d3`.
   Verify: `git status --short --branch --untracked-files=no`; six workflows
   checked on HEAD; Load Test run IDs recorded when runner variance appears.
   Evidence: CI, Contract Tests, E2E Tests, Load Test, Security Scan, and
-  Staging Deploy all succeeded on `3b2078a`. Prior Load Test variance on
+  Staging Deploy all succeeded on `e53e0d3`. Prior Load Test variance on
   `44df329` is recorded in `AGENT_STATE.md`.
 
 - [ ] Finish `src/serving/api` strict mypy coverage by bounded slices.
@@ -46,7 +46,8 @@ Canonical supporting docs:
   `271b82c`; `src.serving.api.routers.lineage` reached strict mypy coverage in
   `d45ec9b`; `src.serving.api.routers.slo` reached strict mypy coverage in
   `7a9379d`; `src.serving.api.routers.stream` reached strict mypy coverage in
-  `3b2078a`.
+  `3b2078a`; `src.serving.api.routers.admin_ui` reached strict mypy coverage
+  in `e53e0d3`.
 
 - [ ] Use Claude as second opinion for risky slices.
   Required for `src/serving/api/main.py`, `routers/admin.py`,

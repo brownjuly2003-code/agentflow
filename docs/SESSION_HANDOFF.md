@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter + security + versioning + analytics + lineage + slo + stream)
-**Verified code HEAD:** `3b2078a` on `main` (all six workflows green: CI,
+**Last updated:** 2026-05-31 (serving/api slices: middleware + deadletter + webhooks + alerts + contracts + agent_query + batch + search + rate_limiter + security + versioning + analytics + lineage + slo + stream + admin_ui)
+**Verified code HEAD:** `e53e0d3` on `main` (all six workflows green: CI,
 Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -21,14 +21,16 @@ slice), `3d8c2e8` (search router strict slice), `b0c784f`
 (rate-limiter strict slice), `44df329` (security helpers strict slice),
 `eb5919e` (versioning helpers strict slice), `271b82c` (analytics
 middleware strict slice), `d45ec9b` (lineage router strict slice),
-`7a9379d` (SLO router strict slice), and `3b2078a` (stream router strict
-slice).
+`7a9379d` (SLO router strict slice), `3b2078a` (stream router strict
+slice), and `e53e0d3` (admin UI router strict slice).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `911` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `e53e0d3` refactor(api): promote admin ui router to strict mypy slice
+- `3b19067` docs(state): record stream strict mypy slice
 - `3b2078a` refactor(api): promote stream router to strict mypy slice
 - `279332e` docs(state): record slo strict mypy slice
 - `7a9379d` refactor(api): promote slo router to strict mypy slice
@@ -228,7 +230,7 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 `src.serving.api.rate_limiter`, `src.serving.api.security`,
 `src.serving.api.versioning`, `src.serving.api.analytics`,
 `src.serving.api.routers.lineage`, `src.serving.api.routers.slo`, and
-`src.serving.api.routers.stream`
+`src.serving.api.routers.stream`, plus `src.serving.api.routers.admin_ui`
 now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
 `tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
 files. Typing the monitors slice surfaced a real tombstone bug in
@@ -236,11 +238,12 @@ files. Typing the monitors slice surfaced a real tombstone bug in
 100% module coverage). The webhooks slice required a generated
 `docs/openapi.json` refresh because FastAPI now exposes object response schemas
 for the typed router returns. The batch, search, rate-limiter, security,
-versioning, analytics, lineage, SLO, and stream slices were pure annotation
-and produced no OpenAPI drift. Measured after the stream slice, the remaining
-API-side AST baseline is 23 untyped functions across 5 files
+versioning, analytics, lineage, SLO, stream, and admin UI slices were pure
+annotation and produced no OpenAPI drift. Measured after the admin UI slice,
+the remaining API-side AST baseline is 21 untyped functions across 4 files
 (`routers/admin.py`=12, `main.py`=6, `alerts/dispatcher.py`=2,
-`routers/admin_ui.py`=2, `webhook_dispatcher.py`=1);
+`webhook_dispatcher.py`=1); all remaining API-side files are on the
+required-second-opinion list.
 `src/processing/flink_jobs` remains the separate 15-error / 12-function
 PR-#23/Docker-gated slice. Load Test on the security commit
 `44df329` failed once on p99 spikes with 0.00% functional failures and then

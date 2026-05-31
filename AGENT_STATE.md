@@ -7,7 +7,7 @@ Updated: 2026-05-31
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local code HEAD before this state-refresh commit: `3b2078af2b3c407732035eb566ef496cef011542` (`3b2078a`)
+- Verified local code HEAD before this state-refresh commit: `e53e0d3d1393b1550baff0f2bb9152512b5bacd4` (`e53e0d3`)
 - Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
 - State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, `next-session-autonomous-local-plan.md`, and `all-open-questions-closure-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
 - File count at refresh start: `git ls-files` reports 911 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
@@ -77,6 +77,24 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Admin UI router strict mypy slice through code HEAD `e53e0d3` on 2026-05-31:
+  - `e53e0d3` promotes `src.serving.api.routers.admin_ui` (operator-only
+    status pages and partial summary rendering) to `disallow_untyped_defs =
+    true`. The gaps were route response annotations plus `State` annotations
+    for the context helpers. Pure annotation; runtime behavior is unchanged.
+  - Tests-first: `tests/unit/test_typing_policy.py::test_admin_ui_router_is_a_strict_mypy_slice`
+    failed before the override and passed after the override plus route/context
+    helper annotations.
+  - Local verification: `python -m mypy src --config-file pyproject.toml
+    --show-error-codes` clean on 99 files; `python -m pytest
+    tests/unit/test_typing_policy.py tests/integration/test_admin_ui.py -q -p
+    no:schemathesis` passed with 28 tests; `SKIP_DOCKER_TESTS=1 python -m
+    pytest tests/unit -p no:schemathesis --continue-on-collection-errors`
+    passed with 609 passed, 1 skipped; `python scripts/export_openapi.py
+    --check` passed; targeted `ruff check` / `ruff format --check` and `git
+    diff --check` passed.
+  - GitHub evidence on `e53e0d3`: CI, Contract Tests, E2E Tests, Load Test,
+    Security Scan, and Staging Deploy all completed successfully.
 - Stream router strict mypy slice through code HEAD `3b2078a` on 2026-05-31:
   - `3b2078a` promotes `src.serving.api.routers.stream` (tenant-scoped SSE
     event streaming) to `disallow_untyped_defs = true`. The gaps were the
@@ -712,6 +730,6 @@ On 2026-05-30 the strict-typing cadence was extended autonomously across two mor
 
 **Standing autonomous mandate (operator-granted 2026-05-30):** the agent owns all tactical and external/strategic decisions, keeps finishing safe local work without asking "what next", and stops only at a named hard boundary. External data / AWS / paid services are out of scope (no card/budget), not a deficiency. Local commits and ordinary `git push origin main` are authorized after clean status + `git diff --check`. The canonical uninterrupted-session starter, including the copy-paste kickoff prompt, the work-selection priority order, and the verification discipline, is `next-session-autonomous-local-plan.md` — start there.
 
-Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus fifteen `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`), `src.serving.api.routers.alerts` (code HEAD `5f61fd3`), `src.serving.api.routers.contracts` (code HEAD `84c63dc`), `src.serving.api.routers.agent_query` (code HEAD `0cdac06`), `src.serving.api.routers.batch` (code HEAD `0729fe5`), `src.serving.api.routers.search` (code HEAD `3d8c2e8`), `src.serving.api.rate_limiter` (code HEAD `b0c784f`), `src.serving.api.security` (code HEAD `44df329`), `src.serving.api.versioning` (code HEAD `eb5919e`), `src.serving.api.analytics` (code HEAD `271b82c`), `src.serving.api.routers.lineage` (code HEAD `d45ec9b`), `src.serving.api.routers.slo` (code HEAD `7a9379d`), and `src.serving.api.routers.stream` (code HEAD `3b2078a`). After the stream slice, the remaining API-side AST baseline is 23 untyped functions across 5 files (`routers/admin.py`=12, `main.py`=6, `alerts/dispatcher.py`=2, `routers/admin_ui.py`=2, and `webhook_dispatcher.py`=1), plus the existing `src/processing/flink_jobs` 15-error / 12-function gate in 3 files (gated by PR #23 / Docker). This supersedes the older 52-error / 48-function post-search baseline for local planning. The `src/serving/api` remainder is incremental, not load-bearing; pick it up only as bounded, individually-verified slices (one coherent module/package at a time, typing-policy assertion + full `mypy src` + broad unit + six green workflows each).
+Strict mypy slices now cover `src.quality.validators.*`, `src.serving.api.auth.*`, `src.quality.monitors.*`, `src.serving.semantic_layer.*`, `src.serving.backends.*`, `src.orchestration.dags.*` (HEAD `80316fb`; surfaced + fixed the DuckDB `fetchone()` None-indexing bug), `src.processing.event_replayer` (HEAD `8a50ab6`), `src.processing.local_pipeline` (HEAD `98a9ed5`), and `src.processing.outbox` (HEAD `0953fcc`; `_connection` property guards use-after-close). All of `src/processing` except the PR-#23-gated `flink_jobs` is now strict-typed, plus sixteen `src/serving/api` slices: `src.serving.api.middleware.*` (HEAD `4ad01fd`), `src.serving.api.routers.deadletter` (HEAD `e92a6eb`), `src.serving.api.routers.webhooks` (code HEAD `45d3fc5`), `src.serving.api.routers.alerts` (code HEAD `5f61fd3`), `src.serving.api.routers.contracts` (code HEAD `84c63dc`), `src.serving.api.routers.agent_query` (code HEAD `0cdac06`), `src.serving.api.routers.batch` (code HEAD `0729fe5`), `src.serving.api.routers.search` (code HEAD `3d8c2e8`), `src.serving.api.rate_limiter` (code HEAD `b0c784f`), `src.serving.api.security` (code HEAD `44df329`), `src.serving.api.versioning` (code HEAD `eb5919e`), `src.serving.api.analytics` (code HEAD `271b82c`), `src.serving.api.routers.lineage` (code HEAD `d45ec9b`), `src.serving.api.routers.slo` (code HEAD `7a9379d`), `src.serving.api.routers.stream` (code HEAD `3b2078a`), and `src.serving.api.routers.admin_ui` (code HEAD `e53e0d3`). After the admin UI slice, the remaining API-side AST baseline is 21 untyped functions across 4 files (`routers/admin.py`=12, `main.py`=6, `alerts/dispatcher.py`=2, and `webhook_dispatcher.py`=1), plus the existing `src/processing/flink_jobs` 15-error / 12-function gate in 3 files (gated by PR #23 / Docker). All remaining API-side files are on the required-second-opinion list; do not start them without a focused Claude review first. This supersedes the older 52-error / 48-function post-search baseline for local planning.
 
 Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.

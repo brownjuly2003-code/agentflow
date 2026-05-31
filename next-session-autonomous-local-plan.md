@@ -82,12 +82,12 @@ Pick the first that applies; finish it before the next.
    `src.serving.api.rate_limiter`, `src.serving.api.security`,
    `src.serving.api.versioning`, `src.serving.api.analytics`,
    `src.serving.api.routers.lineage`, `src.serving.api.routers.slo`, and
-   `src.serving.api.routers.stream`.
-   Remaining measured candidates after the stream slice: 23 untyped functions
-   across 5 files in `src/serving/api` (`routers/admin.py`=12,
-   `main.py`=6, `alerts/dispatcher.py`=2, `routers/admin_ui.py`=2,
-   and `webhook_dispatcher.py`=1) plus 15 errors across 12 functions in
-   `src/processing/flink_jobs`, which remains gated by PR #23 / Docker.
+   `src.serving.api.routers.stream`, plus `src.serving.api.routers.admin_ui`.
+   Remaining measured candidates after the admin UI slice: 21 untyped
+   functions across 4 files in `src/serving/api` (`routers/admin.py`=12,
+   `main.py`=6, `alerts/dispatcher.py`=2, and `webhook_dispatcher.py`=1).
+   These four API-side files all require a focused Claude second opinion before
+   coding. `src/processing/flink_jobs` remains gated by PR #23 / Docker.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
    module is under-tested.

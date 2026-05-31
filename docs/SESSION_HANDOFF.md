@@ -1,8 +1,9 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (event schemas strict slice; event_producer coverage gate; alerts dispatcher second-opinion prompt recorded)
-**Verified code HEAD:** `fc01360` on `main` (all six workflows green: CI,
-Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
+**Last updated:** 2026-06-01 (event producer strict slice; event schemas strict slice; alerts dispatcher second-opinion prompt recorded)
+**Verified code HEAD:** `890b30f` on `main` (CI, Contract Tests, E2E,
+Security, and Staging Deploy green; push Load Test failed on p99 variance, then
+two same-SHA Load Test reruns passed). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
 `30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
@@ -24,15 +25,17 @@ middleware strict slice), `d45ec9b` (lineage router strict slice),
 `7a9379d` (SLO router strict slice), `3b2078a` (stream router strict
 slice), `e53e0d3` (admin UI router strict slice), `66bc820`
 (webhook dispatcher strict slice), `42c1f02` (alerts dispatcher second-opinion
-prompt recorded after Claude socket close), and `5fecb1b`
-(event producer scoped coverage gate), and `fc01360`
-(ingestion event schemas strict slice).
+prompt recorded after Claude socket close), `5fecb1b` (event producer scoped
+coverage gate), `fc01360` (ingestion event schemas strict slice), and
+`890b30f` (event producer strict slice).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `913` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `890b30f` refactor(ingestion): promote event producer to strict mypy
+- `154eb0c` docs(state): record event schemas strict mypy slice
 - `fc01360` refactor(ingestion): promote event schemas to strict mypy
 - `5fecb1b` ci: gate event producer coverage
 - `42c1f02` docs(tasks): record alerts dispatcher second opinion prompt
@@ -232,8 +235,9 @@ next-session checklist is `next-session-autonomous-local-plan.md`.
 
 ### Tier A — actionable in-repo (no external blocker)
 
-**Strict mypy slices extended + latent bugs found (`f977317`→`fc01360`, 2026-06-01):**
-`src.ingestion.schemas.events`, `src.serving.api.auth.*`,
+**Strict mypy slices extended + latent bugs found (`f977317`→`890b30f`, 2026-06-01):**
+`src.ingestion.schemas.events`, `src.ingestion.producers.event_producer`,
+`src.serving.api.auth.*`,
 `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
 `src.serving.backends.*`, `src.serving.api.middleware.*`,
 `src.serving.api.routers.deadletter`, `src.serving.api.routers.webhooks`, and
@@ -253,12 +257,20 @@ for the typed router returns. The batch, search, rate-limiter, security,
 versioning, analytics, lineage, SLO, stream, admin UI, and webhook dispatcher
 slices were pure annotation and produced no OpenAPI drift. The event-schemas
 slice was also pure annotation, adding `ValidationInfo` to
-`OrderEvent.total_matches_items()`; local evidence included the red/green
-policy test, targeted event-schema tests, full `mypy src --no-incremental`,
-ruff/format, broad no-Docker unit tests (`612 passed, 1 skipped`), and `git
-diff --check`. GitHub evidence on `fc01360`: CI `26727188068`, Contract Tests
-`26727188052`, E2E Tests `26727188055`, Load Test `26727188040`, Security Scan
-`26727188061`, and Staging Deploy `26727188070` all completed successfully.
+`OrderEvent.total_matches_items()`. The event-producer slice was also pure
+annotation, covering `DecimalEncoder.default()`, the Kafka delivery callback,
+and `run_producer()`. Local evidence included red/green policy tests, targeted
+event-schema and producer tests, full `mypy src --no-incremental`, ruff/format,
+event producer coverage at 96.43%, broad no-Docker unit tests (`613 passed, 1
+skipped`), and `git diff --check`. GitHub evidence on `fc01360`: CI
+`26727188068`, Contract Tests `26727188052`, E2E Tests `26727188055`, Load Test
+`26727188040`, Security Scan `26727188061`, and Staging Deploy `26727188070`
+all completed successfully. GitHub evidence on `890b30f`: CI `26727775488`,
+Contract Tests `26727775500`, E2E Tests `26727775494`, Security Scan
+`26727775502`, and Staging Deploy `26727775493` completed successfully; push
+Load Test `26727775487` failed on p99 spikes with 0.00% functional failures,
+then same-SHA reruns `26727841007` and `26727894286` both passed, so this is
+recorded as runner variance under `docs/runbooks/load-test-regression.md`.
 The API-side AST baseline remains the webhook-dispatcher measurement: 20 untyped
 functions across 3 files (`routers/admin.py`=12, `main.py`=6, and
 `alerts/dispatcher.py`=2); all remaining API-side files are on the

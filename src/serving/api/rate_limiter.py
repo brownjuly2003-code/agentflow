@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 import structlog
@@ -23,8 +25,8 @@ class RateLimiter:
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379",
-        redis_client=None,
-        time_source=time.time,
+        redis_client: Any | None = None,
+        time_source: Callable[[], float] = time.time,
     ) -> None:
         self._redis = redis_client
         if self._redis is None and redis is not None:

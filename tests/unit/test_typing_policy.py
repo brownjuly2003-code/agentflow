@@ -129,3 +129,9 @@ def test_search_router_is_a_strict_mypy_slice() -> None:
     # Search is the typed semantic discovery API over catalog/search-index
     # results; keep its response model boundary annotated.
     assert "src.serving.api.routers.search" in _strict_modules()
+
+
+def test_rate_limiter_is_a_strict_mypy_slice() -> None:
+    # Rate limiting protects the API hot path and auth headers; keep the
+    # Redis/memory boundary fully annotated.
+    assert "src.serving.api.rate_limiter" in _strict_modules()

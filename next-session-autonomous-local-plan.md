@@ -95,12 +95,18 @@ Pick the first that applies; finish it before the next.
    `second-opinion-alerts-dispatcher.md`, and no code was changed. Do not retry
    the same alerts prompt unchanged without new evidence that Claude is
    available. `src/processing/flink_jobs` remains gated by PR #23 / Docker.
+   After the cache slice, local non-gated strict candidates
+   `src/processing/iceberg_sink.py`, `src/serving/db_pool.py`,
+   `src/serving/masking.py`, `src/serving/semantic_layer/catalog.py`, and
+   `src/serving/semantic_layer/query/engine.py` were checked with narrow strict
+   commands and were already clean; do not add override-only churn there.
    The latest completed non-API slices are `src.ingestion.schemas.events`
    (`fc01360`, all six workflows green) and
    `src.ingestion.producers.event_producer` (`890b30f`; push Load Test had a
    p99-only variance failure, and same-SHA reruns `26727841007` /
    `26727894286` passed), and `src.serving.cache` (`fb7c4e8`, all six
-   workflows green); do not repeat them.
+   workflows green; state refresh `0d733e7` also has all six workflows green);
+   do not repeat them.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
    module is under-tested. Latest completed gate: `5fecb1b` pins
@@ -124,6 +130,10 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
 - `git diff --check` before every commit/push.
 - After push, **wait for all six main workflows green** (CI, Contract Tests,
   E2E Tests, Load Test, Security Scan, Staging Deploy) before the next commit.
+- Before handoff/stop, audit for stuck local project processes matching
+  `DE_project|mypy|pytest|ruff|run_load_test|uvicorn|locust`; record any real
+  live project process and stop only after it is resolved or clearly not from
+  this work.
 - End each verified atomic item with a state-doc + memory refresh that records
   the real CI evidence — but never refresh docs only to bump HEAD/timestamps.
 

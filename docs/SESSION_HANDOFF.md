@@ -1,7 +1,7 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (serving cache strict slice; event producer strict slice; alerts dispatcher second-opinion prompt recorded)
-**Verified code HEAD:** `fb7c4e8` on `main` (all six workflows green: CI,
+**Last updated:** 2026-06-01 (autonomous closeout/process audit; serving cache strict slice; event producer strict slice; alerts dispatcher second-opinion prompt recorded)
+**Verified code/state HEAD before this refresh:** `0d733e7` on `main` (all six workflows green: CI,
 Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
@@ -26,13 +26,15 @@ slice), `e53e0d3` (admin UI router strict slice), `66bc820`
 (webhook dispatcher strict slice), `42c1f02` (alerts dispatcher second-opinion
 prompt recorded after Claude socket close), `5fecb1b` (event producer scoped
 coverage gate), `fc01360` (ingestion event schemas strict slice), `890b30f`
-(event producer strict slice), and `fb7c4e8` (serving cache strict slice).
+(event producer strict slice), `fb7c4e8` (serving cache strict slice), and
+`0d733e7` (serving cache state refresh).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `913` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `0d733e7` docs(state): record serving cache strict mypy slice
 - `fb7c4e8` refactor(serving): promote cache to strict mypy
 - `ebbe44a` docs(state): record event producer strict mypy slice
 - `890b30f` refactor(ingestion): promote event producer to strict mypy
@@ -227,10 +229,14 @@ Continuation rules:
   remote/destructive boundary with no safe local prep remaining.
 
 Pre-refresh closeout evidence: `git status --short --branch --untracked-files=no`
-was clean at `main...origin/main`, HEAD was `0759fc6`, open PRs were empty, and
-the latest six workflows for `0759fc6` were green: CI, Security Scan, Load Test,
-E2E Tests, Staging Deploy, and manually dispatched Contract Tests. The
-next-session checklist is `next-session-autonomous-local-plan.md`.
+was clean at `main...origin/main`, HEAD was `0d733e7`, and the latest six
+workflows for `0d733e7` were green: CI `26728505643`, Security Scan
+`26728505651`, Load Test `26728505661`, E2E Tests `26728505657`, Staging Deploy
+`26728505691`, and manually dispatched Contract Tests `26728522414`. The local
+process audit found no live `mypy`, `pytest`, `ruff`, `run_load_test`,
+`uvicorn`, or `locust` process from `D:\DE_project`; the only matching command
+line was the audit PowerShell itself. The next-session checklist is
+`next-session-autonomous-local-plan.md`.
 
 ## Open work — priorities
 
@@ -278,6 +284,17 @@ recorded as runner variance under `docs/runbooks/load-test-regression.md`.
 GitHub evidence on `fb7c4e8`: CI `26728301122`, Contract Tests `26728301116`,
 E2E Tests `26728301110`, Load Test `26728301106`, Security Scan `26728301120`,
 and Staging Deploy `26728301115` all completed successfully.
+State-refresh evidence on `0d733e7`: CI `26728505643`, Security Scan
+`26728505651`, E2E Tests `26728505657`, Load Test `26728505661`, Staging Deploy
+`26728505691`, and manually dispatched Contract Tests `26728522414` all
+completed successfully. The Staging Deploy run initially failed in kind
+bootstrap checksum validation and passed on rerun of the same workflow run, so
+record it as CI infrastructure variance rather than code variance.
+After the cache slice, local non-gated strict candidates
+`src/processing/iceberg_sink.py`, `src/serving/db_pool.py`,
+`src/serving/masking.py`, `src/serving/semantic_layer/catalog.py`, and
+`src/serving/semantic_layer/query/engine.py` were checked with narrow strict
+commands and were already clean; avoid override-only churn there.
 The API-side AST baseline remains the webhook-dispatcher measurement: 20 untyped
 functions across 3 files (`routers/admin.py`=12, `main.py`=6, and
 `alerts/dispatcher.py`=2); all remaining API-side files are on the

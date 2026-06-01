@@ -268,6 +268,13 @@ module = "src.serving.api.analytics"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+# QueryCache is the Redis/fallback boundary for cached entity and metric
+# lookups; keep the client injection and invalidation helpers annotated. Gated
+# by tests/unit/test_typing_policy.py.
+module = "src.serving.cache"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 # Quality monitors gate freshness / SLA / pipeline-health signals; keep them
 # fully annotated. Gated by tests/unit/test_typing_policy.py.
 module = "src.quality.monitors.*"

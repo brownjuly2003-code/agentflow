@@ -35,6 +35,12 @@ def test_event_producer_is_a_strict_mypy_slice() -> None:
     assert "src.ingestion.producers.event_producer" in _strict_modules()
 
 
+def test_serving_cache_is_a_strict_mypy_slice() -> None:
+    # QueryCache is the Redis/memory fallback boundary for entity and metric
+    # lookups; keep the client injection and invalidation helpers annotated.
+    assert "src.serving.cache" in _strict_modules()
+
+
 def _strict_modules() -> set[str]:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     overrides = pyproject["tool"]["mypy"].get("overrides", [])

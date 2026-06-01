@@ -21,8 +21,8 @@ class QueryCache:
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379",
-        redis_client=None,
-    ):
+        redis_client: Any | None = None,
+    ) -> None:
         self._redis = redis_client
         if self._redis is None and redis is not None:
             self._redis = redis.from_url(redis_url)

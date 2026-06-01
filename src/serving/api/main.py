@@ -11,9 +11,10 @@ Security: API key authentication + per-key rate limiting.
 
 import asyncio
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import structlog
 from fastapi import FastAPI, Request
@@ -21,6 +22,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from src.logger import configure_logging
 from src.processing.outbox import OutboxProcessor
@@ -74,7 +77,7 @@ logger = structlog.get_logger()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize shared resources on startup."""
     logger.info("api_starting")
     setup_telemetry(app)
@@ -195,7 +198,7 @@ async def lifespan(app: FastAPI):
     app.state.webhook_dispatcher = WebhookDispatcher(app)
     original_dispatch_new_events = app.state.webhook_dispatcher.dispatch_new_events
 
-    async def dispatch_new_events_with_cache_invalidation():
+    async def dispatch_new_events_with_cache_invalidation() -> None:
         seen_before = len(app.state.webhook_dispatcher.seen_event_ids)
         await original_dispatch_new_events()
         if len(app.state.webhook_dispatcher.seen_event_ids) > seen_before:
@@ -258,7 +261,7 @@ app.middleware("http")(build_correlation_middleware())
 
 
 @app.middleware("http")
-async def demo_mode_guard(request: Request, call_next):
+async def demo_mode_guard(request: Request, call_next: RequestResponseEndpoint) -> Response:
     if getattr(request.app.state, "demo_mode", False):
         path = request.url.path
         if path.startswith("/v1/admin") or path.startswith("/admin"):
@@ -320,16 +323,16 @@ app.include_router(stream_router)
 app.include_router(webhook_router)
 
 
-@app.get("/v1/changelog")
-async def changelog():
+@app.get("/v1/changelog", response_model=None)
+async def changelog(request: Request) -> dict:
     """Return the configured date-based API version history."""
-    return app.state.version_registry.changelog()
+    return cast(dict, request.app.state.version_registry.changelog())
 
 
-@app.get("/v1/catalog")
-async def catalog():
+@app.get("/v1/catalog", response_model=None)
+async def catalog(request: Request) -> dict:
     """List available entities, metrics, and streaming sources for agents."""
-    catalog = app.state.catalog
+    catalog = request.app.state.catalog
     return {
         "entities": catalog.serialize_entities(),
         "metrics": catalog.serialize_metrics(),
@@ -360,8 +363,8 @@ async def catalog():
     }
 
 
-@app.get("/v1/health")
-async def health(request: Request):
+@app.get("/v1/health", response_model=None)
+async def health(request: Request) -> dict:
     """Pipeline health check - agents should call this before answering time-sensitive queries.
 
     Returns overall pipeline status and per-component health.
@@ -401,4 +404,4 @@ async def health(request: Request):
                 request.app.state.health_cache_expires_at = (
                     now + request.app.state.health_cache_ttl_seconds
                 )
-    return health_payload
+    return cast(dict, health_payload)

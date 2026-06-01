@@ -268,6 +268,13 @@ module = "src.serving.api.analytics"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+# FastAPI app wiring owns lifespan resources, middleware order, and top-level
+# routes; keep those boundaries annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.main"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 # QueryCache is the Redis/fallback boundary for cached entity and metric
 # lookups; keep the client injection and invalidation helpers annotated. Gated
 # by tests/unit/test_typing_policy.py.

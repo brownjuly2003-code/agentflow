@@ -204,6 +204,12 @@ def test_admin_router_is_a_strict_mypy_slice() -> None:
     assert "src.serving.api.routers.admin" in _strict_modules()
 
 
+def test_api_main_is_a_strict_mypy_slice() -> None:
+    # The FastAPI app wiring owns lifespan resources, top-level routes, and
+    # middleware ordering; keep those boundaries fully annotated.
+    assert "src.serving.api.main" in _strict_modules()
+
+
 def test_webhook_dispatcher_is_a_strict_mypy_slice() -> None:
     # Webhook dispatcher signs and retries tenant-scoped deliveries; keep its
     # FastAPI app boundary fully annotated.

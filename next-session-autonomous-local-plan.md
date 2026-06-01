@@ -74,7 +74,8 @@ Pick the first that applies; finish it before the next.
 4. **Strict-typing cadence** (incremental, not load-bearing) — promote one more
    module to a strict mypy slice (`disallow_untyped_defs = true`). Done so far:
    `src.quality.validators.*`, `src.ingestion.schemas.events`,
-   `src.ingestion.producers.event_producer`, `src.serving.api.auth.*`,
+   `src.ingestion.producers.event_producer`, `src.serving.cache`,
+   `src.serving.api.auth.*`,
    `src.quality.monitors.*`, `src.serving.semantic_layer.*`,
    `src.serving.backends.*`, `src.orchestration.dags.*`,
    `src.processing.{event_replayer,local_pipeline,outbox}`,
@@ -98,7 +99,8 @@ Pick the first that applies; finish it before the next.
    (`fc01360`, all six workflows green) and
    `src.ingestion.producers.event_producer` (`890b30f`; push Load Test had a
    p99-only variance failure, and same-SHA reruns `26727841007` /
-   `26727894286` passed); do not repeat them.
+   `26727894286` passed), and `src.serving.cache` (`fb7c4e8`, all six
+   workflows green); do not repeat them.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
    module is under-tested. Latest completed gate: `5fecb1b` pins

@@ -2,6 +2,13 @@
 
 Updated: 2026-06-01
 
+## Temporary infra note resolved (2026-06-01)
+
+- **iMac `julia@192.168.1.133` Lima VM `docker` was restarted on 2026-06-01 at ~17:39 EEST** after being stopped earlier that day to free RAM for an Auto_try_v2 feasibility test.
+- Project Docker/k8s capacity is back online: `limactl shell docker docker version` reports Docker Engine/client `29.5.2`, and `hq-demo-control-plane`, `hq-demo-worker`, and `hq-demo-worker2` are `Up`.
+- Host-side non-interactive SSH PATH did not include a `docker` binary during the restore check; use `/Users/julia/lima/bin/limactl shell docker docker ...` for direct Mac verification if the host Docker CLI is not available.
+- Not a code/CI change; no repo product state affected.
+
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.

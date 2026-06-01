@@ -16,7 +16,7 @@ router = APIRouter(
 )
 
 
-@router.post("/keys", status_code=status.HTTP_201_CREATED)
+@router.post("/keys", status_code=status.HTTP_201_CREATED, response_model=None)
 async def create_api_key(payload: KeyCreateRequest, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     item = manager.create_key(payload)
@@ -31,13 +31,13 @@ async def create_api_key(payload: KeyCreateRequest, request: Request) -> dict[st
     }
 
 
-@router.get("/keys")
+@router.get("/keys", response_model=None)
 async def list_api_keys(request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     return {"keys": manager.list_keys_with_usage()}
 
 
-@router.post("/keys/{key_id}/rotate")
+@router.post("/keys/{key_id}/rotate", response_model=None)
 async def rotate_api_key(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
@@ -52,7 +52,7 @@ async def rotate_api_key(key_id: str, request: Request) -> dict[str, object]:
     }
 
 
-@router.get("/keys/{key_id}/rotation-status")
+@router.get("/keys/{key_id}/rotation-status", response_model=None)
 async def get_rotation_status(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
@@ -61,7 +61,7 @@ async def get_rotation_status(key_id: str, request: Request) -> dict[str, object
         raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
 
 
-@router.post("/keys/{key_id}/revoke-old")
+@router.post("/keys/{key_id}/revoke-old", response_model=None)
 async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
@@ -73,7 +73,11 @@ async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]
     return {"revoked": True}
 
 
-@router.delete("/keys/{api_key}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/keys/{api_key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def revoke_api_key(api_key: str, request: Request) -> Response:
     manager = get_auth_manager(request)
     if not manager.revoke_key(api_key):
@@ -81,13 +85,13 @@ async def revoke_api_key(api_key: str, request: Request) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/usage")
+@router.get("/usage", response_model=None)
 async def get_usage(request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     return {"usage": manager.usage_by_tenant()}
 
 
-@router.get("/analytics/usage")
+@router.get("/analytics/usage", response_model=None)
 async def get_analytics_usage(
     request: Request,
     window: str = Query("24h"),
@@ -100,7 +104,7 @@ async def get_analytics_usage(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/analytics/top-queries")
+@router.get("/analytics/top-queries", response_model=None)
 async def get_analytics_top_queries(
     request: Request,
     limit: int = Query(10, ge=1, le=100),
@@ -113,7 +117,7 @@ async def get_analytics_top_queries(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/analytics/top-entities")
+@router.get("/analytics/top-entities", response_model=None)
 async def get_analytics_top_entities(
     request: Request,
     limit: int = Query(10, ge=1, le=100),
@@ -126,7 +130,7 @@ async def get_analytics_top_entities(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/analytics/latency")
+@router.get("/analytics/latency", response_model=None)
 async def get_analytics_latency(
     request: Request,
     window: str = Query("24h"),
@@ -138,7 +142,7 @@ async def get_analytics_latency(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/analytics/anomalies")
+@router.get("/analytics/anomalies", response_model=None)
 async def get_analytics_anomalies(
     request: Request,
     window: str = Query("24h"),

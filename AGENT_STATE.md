@@ -84,6 +84,35 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- Admin router strict mypy slice through CI HEAD `28acdf9` on 2026-06-01:
+  - `8e58854` promotes `src.serving.api.routers.admin` (operator-only key
+    management and analytics routes) to `disallow_untyped_defs = true`.
+    `28acdf9` adds explicit `response_model=None` on those typed FastAPI
+    route decorators after Contract Tests on `8e58854` caught generated
+    OpenAPI drift. Runtime response payloads are unchanged; the follow-up
+    preserves the pre-annotation OpenAPI/response-model contract.
+  - Tests-first: `tests/unit/test_typing_policy.py::test_admin_router_is_a_strict_mypy_slice`
+    failed before the mypy override and passed after the override plus route
+    return annotations. A focused Claude second opinion was used for the
+    annotation shape, but local Contract Tests proved that FastAPI return
+    annotations are not always inert for OpenAPI generation.
+  - Local verification: `python scripts\export_openapi.py --check` passed;
+    `python -m mypy src\serving\api\routers\admin.py --config-file
+    pyproject.toml --disallow-untyped-defs --show-error-codes
+    --no-incremental` passed; `python -m mypy src --config-file
+    pyproject.toml --show-error-codes` passed on 99 files; targeted
+    admin/auth/analytics tests passed with 36 tests; `SKIP_DOCKER_TESTS=1
+    python -m pytest tests\unit -p no:schemathesis
+    --continue-on-collection-errors` passed with 615 passed, 1 skipped;
+    targeted `ruff check` / `ruff format --check` and `git diff --check`
+    passed.
+  - GitHub evidence on `28acdf9`: CI `26764466357`, Contract Tests
+    `26764465421`, E2E Tests `26764467344`, Security Scan `26764465393`,
+    and Staging Deploy `26764468572` completed successfully. Push Load Test
+    `26764465394` failed with broad p99-only slowdown and 0.00% functional
+    failures; same-SHA Load Test rerun `26764636429` completed successfully,
+    so this is recorded as runner variance under
+    `docs/runbooks/load-test-regression.md`.
 - Autonomous closeout/process audit through state HEAD `0d733e7` on 2026-06-01:
   - `0d733e7` records the serving-cache strict mypy state refresh after the
     code slice landed at `fb7c4e8`; no product code changed in that state

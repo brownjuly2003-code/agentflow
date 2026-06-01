@@ -1,8 +1,9 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (autonomous closeout/process audit; serving cache strict slice; event producer strict slice; alerts dispatcher second-opinion prompt recorded)
-**Verified code/state HEAD before this refresh:** `0d733e7` on `main` (all six workflows green: CI,
-Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
+**Last updated:** 2026-06-01 (admin router strict slice; Mac Docker restored; autonomous closeout/process audit)
+**Verified code/state HEAD before this refresh:** `28acdf9` on `main` (CI,
+Contract Tests, E2E, Security, and Staging Deploy green; push Load Test failed
+with p99-only runner variance and same-SHA rerun `26764636429` passed). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
 `30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
@@ -27,13 +28,19 @@ slice), `e53e0d3` (admin UI router strict slice), `66bc820`
 prompt recorded after Claude socket close), `5fecb1b` (event producer scoped
 coverage gate), `fc01360` (ingestion event schemas strict slice), `890b30f`
 (event producer strict slice), `fb7c4e8` (serving cache strict slice), and
-`0d733e7` (serving cache state refresh).
+`0d733e7` (serving cache state refresh). Session 2026-06-01 then added
+`da1bcfb` (Mac Docker restore state), `8e58854` (admin router strict slice),
+and `28acdf9` (preserve admin OpenAPI response-model behavior after route
+return annotations).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `913` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `28acdf9` fix(api): preserve admin route response models
+- `8e58854` refactor(api): promote admin router to strict mypy
+- `da1bcfb` docs(state): record mac docker restore
 - `0d733e7` docs(state): record serving cache strict mypy slice
 - `fb7c4e8` refactor(serving): promote cache to strict mypy
 - `ebbe44a` docs(state): record event producer strict mypy slice
@@ -254,16 +261,19 @@ line was the audit PowerShell itself. The next-session checklist is
 `src.serving.api.versioning`, `src.serving.api.analytics`,
 `src.serving.api.routers.lineage`, `src.serving.api.routers.slo`, and
 `src.serving.api.routers.stream`, plus `src.serving.api.routers.admin_ui` and
-`src.serving.api.webhook_dispatcher`
+`src.serving.api.webhook_dispatcher`, plus `src.serving.api.routers.admin`
 now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
 `tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
 files. Typing the monitors slice surfaced a real tombstone bug in
 `FreshnessMonitor._process_message` (now skipped with `reason="empty_message"`,
 100% module coverage). The webhooks slice required a generated
 `docs/openapi.json` refresh because FastAPI now exposes object response schemas
-for the typed router returns. The batch, search, rate-limiter, security,
-versioning, analytics, lineage, SLO, stream, admin UI, and webhook dispatcher
-slices were pure annotation and produced no OpenAPI drift. The event-schemas
+for the typed router returns. The admin router slice also proved the same
+FastAPI return-annotation/OpenAPI interaction: `8e58854` initially caused
+OpenAPI drift, and `28acdf9` preserved the prior route contract with explicit
+`response_model=None`. The batch, search, rate-limiter, security, versioning,
+analytics, lineage, SLO, stream, admin UI, and webhook dispatcher slices were
+pure annotation and produced no OpenAPI drift. The event-schemas
 slice was also pure annotation, adding `ValidationInfo` to
 `OrderEvent.total_matches_items()`. The event-producer slice was also pure
 annotation, covering `DecimalEncoder.default()`, the Kafka delivery callback,
@@ -290,15 +300,24 @@ State-refresh evidence on `0d733e7`: CI `26728505643`, Security Scan
 completed successfully. The Staging Deploy run initially failed in kind
 bootstrap checksum validation and passed on rerun of the same workflow run, so
 record it as CI infrastructure variance rather than code variance.
+Admin router evidence on `28acdf9`: local OpenAPI export check passed, strict
+admin mypy passed, full `mypy src` passed on 99 files, targeted admin/auth/API
+tests passed with 36 tests, broad no-Docker unit tests passed with 615 passed
+and 1 skipped, and targeted ruff/format plus `git diff --check` passed.
+GitHub evidence: CI `26764466357`, Contract Tests `26764465421`, E2E Tests
+`26764467344`, Security Scan `26764465393`, and Staging Deploy `26764468572`
+completed successfully. Push Load Test `26764465394` failed with broad p99
+slowdown and 0.00% functional failures; same-SHA rerun `26764636429` passed,
+so it is runner variance under `docs/runbooks/load-test-regression.md`.
 After the cache slice, local non-gated strict candidates
 `src/processing/iceberg_sink.py`, `src/serving/db_pool.py`,
 `src/serving/masking.py`, `src/serving/semantic_layer/catalog.py`, and
 `src/serving/semantic_layer/query/engine.py` were checked with narrow strict
 commands and were already clean; avoid override-only churn there.
-The API-side AST baseline remains the webhook-dispatcher measurement: 20 untyped
-functions across 3 files (`routers/admin.py`=12, `main.py`=6, and
-`alerts/dispatcher.py`=2); all remaining API-side files are on the
-required-second-opinion list. The next attempted API-side candidate,
+The API-side AST baseline after the admin router slice is 8 untyped functions
+across 2 files (`main.py`=6 and `alerts/dispatcher.py`=2); both remaining
+API-side files are on the required-second-opinion list. The next attempted
+API-side candidate,
 `src.serving.api.alerts.dispatcher`, did not receive a Claude review because
 `claude -p` closed the socket. The exact prompt and non-secret error are
 recorded in `second-opinion-alerts-dispatcher.md` at HEAD `42c1f02`; no alerts

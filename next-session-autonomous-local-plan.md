@@ -85,16 +85,20 @@ Pick the first that applies; finish it before the next.
    `src.serving.api.versioning`, `src.serving.api.analytics`,
    `src.serving.api.routers.lineage`, `src.serving.api.routers.slo`, and
    `src.serving.api.routers.stream`, `src.serving.api.routers.admin_ui`, and
-   `src.serving.api.webhook_dispatcher`.
-   Remaining measured candidates after the webhook dispatcher slice: 20
-   untyped functions across 3 files in `src/serving/api`
-   (`routers/admin.py`=12, `main.py`=6, and `alerts/dispatcher.py`=2). These
-   three API-side files all require a focused Claude second opinion before
-   coding. The attempted `alerts/dispatcher.py` second-opinion call failed with
-   a Claude socket close; the exact prompt is preserved in
-   `second-opinion-alerts-dispatcher.md`, and no code was changed. Do not retry
-   the same alerts prompt unchanged without new evidence that Claude is
-   available. `src/processing/flink_jobs` remains gated by PR #23 / Docker.
+   `src.serving.api.webhook_dispatcher`, and
+   `src.serving.api.routers.admin`.
+   Remaining measured candidates after the admin router slice: 8 untyped
+   functions across 2 files in `src/serving/api` (`main.py`=6 and
+   `alerts/dispatcher.py`=2). Both API-side files still require a focused
+   Claude second opinion before coding. The attempted `alerts/dispatcher.py`
+   second-opinion call failed with a Claude socket close; the exact prompt is
+   preserved in `second-opinion-alerts-dispatcher.md`, and no code was changed.
+   Do not retry the same alerts prompt unchanged without new evidence that
+   Claude is available. Admin router typing needed a follow-up
+   `response_model=None` fix because FastAPI return annotations changed
+   OpenAPI generation; keep `python scripts/export_openapi.py --check` in the
+   local gate for remaining FastAPI route slices. `src/processing/flink_jobs`
+   remains gated by PR #23 / Docker.
    After the cache slice, local non-gated strict candidates
    `src/processing/iceberg_sink.py`, `src/serving/db_pool.py`,
    `src/serving/masking.py`, `src/serving/semantic_layer/catalog.py`, and

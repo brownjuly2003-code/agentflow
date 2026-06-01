@@ -84,6 +84,37 @@ immutable retention still blocked if claimed beyond local hash-chain support
 
 ## Last Verified Gates
 
+- API main strict mypy slice through CI HEAD `8032e24` on 2026-06-01:
+  - `8032e24` promotes `src.serving.api.main` (FastAPI app wiring, lifespan
+    resources, middleware order, and top-level routes) to
+    `disallow_untyped_defs = true`. Runtime route payloads are unchanged.
+    Top-level route decorators use `response_model=None` to avoid FastAPI
+    OpenAPI drift from return annotations.
+  - The slice also fixes a real reload-state coupling: `changelog()` and
+    `catalog()` now read `request.app.state` instead of the module-global
+    `app`, so tests or tools that reload `src.serving.api.main` no longer make
+    old app route functions read state from the reloaded app object.
+  - Tests-first: `tests/unit/test_typing_policy.py::test_api_main_is_a_strict_mypy_slice`
+    failed before the mypy override and passed after the override plus
+    annotations. The pollution reproduction
+    `tests/unit/test_cors.py tests/integration/test_pipeline.py::TestAgentAPI::test_catalog_endpoint`
+    failed before the `request.app` fix and passed after it.
+  - Local verification: `python scripts\export_openapi.py --check` passed;
+    `python -m mypy src\serving\api\main.py --config-file pyproject.toml
+    --disallow-untyped-defs --show-error-codes --no-incremental` passed;
+    monolithic `python -m mypy src --config-file pyproject.toml
+    --show-error-codes` hit local Windows `-1` without diagnostics, so the
+    full source tree was verified with the same config split by top-level
+    package (`src\ingestion`, `src\orchestration`, `src\processing`,
+    `src\quality`, `src\serving`), all clean. Targeted app/lifespan tests
+    passed with 45 tests; `SKIP_DOCKER_TESTS=1 python -m pytest tests\unit
+    -p no:schemathesis --continue-on-collection-errors` passed with
+    616 passed, 1 skipped; targeted `ruff check` / `ruff format --check`
+    and `git diff --check` passed.
+  - GitHub evidence on `8032e24`: CI `26766623636`, Contract Tests
+    `26766623641`, E2E Tests `26766623602`, Load Test `26766622645`,
+    Security Scan `26766623507`, and Staging Deploy `26766623441` all
+    completed successfully.
 - Admin router strict mypy slice through CI HEAD `28acdf9` on 2026-06-01:
   - `8e58854` promotes `src.serving.api.routers.admin` (operator-only key
     management and analytics routes) to `disallow_untyped_defs = true`.

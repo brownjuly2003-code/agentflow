@@ -1,9 +1,8 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (admin router strict slice; Mac Docker restored; autonomous closeout/process audit)
-**Verified code/state HEAD before this refresh:** `28acdf9` on `main` (CI,
-Contract Tests, E2E, Security, and Staging Deploy green; push Load Test failed
-with p99-only runner variance and same-SHA rerun `26764636429` passed). Session 2026-05-30 code stack:
+**Last updated:** 2026-06-01 (API main strict slice; admin router strict slice; Mac Docker restored)
+**Verified code/state HEAD before this refresh:** `8032e24` on `main` (all six
+workflows green: CI, Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
 `30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
@@ -31,13 +30,15 @@ coverage gate), `fc01360` (ingestion event schemas strict slice), `890b30f`
 `0d733e7` (serving cache state refresh). Session 2026-06-01 then added
 `da1bcfb` (Mac Docker restore state), `8e58854` (admin router strict slice),
 and `28acdf9` (preserve admin OpenAPI response-model behavior after route
-return annotations).
+return annotations), and `8032e24` (API main strict slice + request.app state
+lookup fix).
 All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
 **Tracked files at refresh start:** `913` via `git ls-files`.
 **Latest local commits before this state refresh:**
+- `8032e24` refactor(api): promote app main to strict mypy
 - `28acdf9` fix(api): preserve admin route response models
 - `8e58854` refactor(api): promote admin router to strict mypy
 - `da1bcfb` docs(state): record mac docker restore
@@ -261,7 +262,8 @@ line was the audit PowerShell itself. The next-session checklist is
 `src.serving.api.versioning`, `src.serving.api.analytics`,
 `src.serving.api.routers.lineage`, `src.serving.api.routers.slo`, and
 `src.serving.api.routers.stream`, plus `src.serving.api.routers.admin_ui` and
-`src.serving.api.webhook_dispatcher`, plus `src.serving.api.routers.admin`
+`src.serving.api.webhook_dispatcher`, plus `src.serving.api.routers.admin` and
+`src.serving.api.main`
 now set `disallow_untyped_defs = true` (joining `src.quality.validators.*`);
 `tests/unit/test_typing_policy.py` pins each and `mypy src` is clean on 99
 files. Typing the monitors slice surfaced a real tombstone bug in
@@ -271,7 +273,10 @@ files. Typing the monitors slice surfaced a real tombstone bug in
 for the typed router returns. The admin router slice also proved the same
 FastAPI return-annotation/OpenAPI interaction: `8e58854` initially caused
 OpenAPI drift, and `28acdf9` preserved the prior route contract with explicit
-`response_model=None`. The batch, search, rate-limiter, security, versioning,
+`response_model=None`. The API main slice used the same `response_model=None`
+guard for top-level routes and fixed a reload-state coupling by reading
+`request.app.state` in `changelog()` and `catalog()` instead of the
+module-global `app`. The batch, search, rate-limiter, security, versioning,
 analytics, lineage, SLO, stream, admin UI, and webhook dispatcher slices were
 pure annotation and produced no OpenAPI drift. The event-schemas
 slice was also pure annotation, adding `ValidationInfo` to
@@ -309,15 +314,22 @@ GitHub evidence: CI `26764466357`, Contract Tests `26764465421`, E2E Tests
 completed successfully. Push Load Test `26764465394` failed with broad p99
 slowdown and 0.00% functional failures; same-SHA rerun `26764636429` passed,
 so it is runner variance under `docs/runbooks/load-test-regression.md`.
+API main evidence on `8032e24`: local OpenAPI export check passed, strict main
+mypy passed, full source-tree mypy passed when split by top-level package after
+the monolithic Windows command exited `-1` without type diagnostics, targeted
+app/lifespan tests passed with 45 tests, broad no-Docker unit tests passed with
+616 passed and 1 skipped, and targeted ruff/format plus `git diff --check`
+passed. GitHub evidence: CI `26766623636`, Contract Tests `26766623641`, E2E
+Tests `26766623602`, Load Test `26766622645`, Security Scan `26766623507`, and
+Staging Deploy `26766623441` all completed successfully.
 After the cache slice, local non-gated strict candidates
 `src/processing/iceberg_sink.py`, `src/serving/db_pool.py`,
 `src/serving/masking.py`, `src/serving/semantic_layer/catalog.py`, and
 `src/serving/semantic_layer/query/engine.py` were checked with narrow strict
 commands and were already clean; avoid override-only churn there.
-The API-side AST baseline after the admin router slice is 8 untyped functions
-across 2 files (`main.py`=6 and `alerts/dispatcher.py`=2); both remaining
-API-side files are on the required-second-opinion list. The next attempted
-API-side candidate,
+The API-side AST baseline after the API main slice is 2 untyped functions in
+`alerts/dispatcher.py`, still on the required-second-opinion list. The next
+attempted API-side candidate,
 `src.serving.api.alerts.dispatcher`, did not receive a Claude review because
 `claude -p` closed the socket. The exact prompt and non-secret error are
 recorded in `second-opinion-alerts-dispatcher.md` at HEAD `42c1f02`; no alerts

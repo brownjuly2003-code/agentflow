@@ -401,6 +401,13 @@ module = "src.serving.api.routers.admin_ui"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+# Admin key-management and analytics endpoints expose operator-only control
+# plane data; keep route boundaries annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.routers.admin"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 # Webhook dispatcher signs and retries tenant-scoped deliveries; keep its
 # FastAPI app boundary annotated. Gated by tests/unit/test_typing_policy.py.
 module = "src.serving.api.webhook_dispatcher"

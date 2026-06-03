@@ -71,8 +71,13 @@ Pick the first that applies; finish it before the next.
 3. **A bounded local code/test fix from a real gap** — a TODO/FIXME, a doc↔code
    gap (guidance not enforced), a latent bug surfaced by typing/coverage. TDD:
    failing test first, then the fix.
-4. **Strict-typing cadence** (incremental, not load-bearing) — promote one more
-   module to a strict mypy slice (`disallow_untyped_defs = true`). Done so far:
+4. **Strict-typing cadence** (incremental, not load-bearing) — **CLOSED (2026-06-03, `25d9f6b`).** Strict typing is now the global mypy
+   default (`disallow_untyped_defs = true`); the per-module slice cadence is
+   complete and there is nothing left to promote. `src.processing.flink_jobs.*`
+   is the sole relaxation (PyFlink, gated on PR #23) and the only typing work
+   that remains. Do **not** re-add per-module `disallow_untyped_defs = true`
+   overrides — `tests/unit/test_typing_policy.py` now fails on redundant ones.
+   Historical slice list (reference only):
    `src.quality.validators.*`, `src.ingestion.schemas.events`,
    `src.ingestion.producers.event_producer`, `src.serving.cache`,
    `src.serving.api.auth.*`,
@@ -87,13 +92,9 @@ Pick the first that applies; finish it before the next.
    `src.serving.api.routers.stream`, `src.serving.api.routers.admin_ui`, and
    `src.serving.api.webhook_dispatcher`, and
    `src.serving.api.routers.admin`, and `src.serving.api.main`.
-   Remaining measured candidate after the API main slice: 2 untyped functions
-   in `src/serving/api/alerts/dispatcher.py`. It still requires a focused
-   Claude second opinion before coding. The earlier `alerts/dispatcher.py`
-   second-opinion call failed with a Claude socket close; the exact prompt is
-   preserved in `second-opinion-alerts-dispatcher.md`, and no code was changed.
-   Do not retry that exact prompt unchanged without new evidence that Claude is
-   available. Admin/main route typing needed `response_model=None` because
+   The former last candidate `src/serving/api/alerts/dispatcher.py` was promoted
+   in `af37432` and then folded into the global default by the `25d9f6b`
+   inversion; `second-opinion-alerts-dispatcher.md` is now historical. Admin/main route typing needed `response_model=None` because
    FastAPI return annotations changed OpenAPI generation; keep
    `python scripts/export_openapi.py --check` in the local gate for remaining
    FastAPI route slices. `src/processing/flink_jobs` remains gated by PR #23 /

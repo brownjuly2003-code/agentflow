@@ -54,6 +54,51 @@ done: Dependabot merges including the `python:3.11-slim` → `3.14-slim` base
 bump (H-9), the `agent_query.py` thinning (H-4, working-surface redesign), and
 the `feat/dv2-x5-real-data` branch disposition (H-8).
 
+## 2026-06-03 strict-typing inversion + mutmut security target (main)
+
+Two further verified commits landed on `main` after the audit batch above
+(triggered by an operator request to study `audit_mm_03_06_26.md`, the
+delta-audit at `7f978a7`). Each was pushed after a clean `git diff --check`
+with all six required workflows green:
+
+- `25d9f6b` — strict typing (`disallow_untyped_defs`) is now the **global**
+  mypy default for `src/`, replacing ~32 per-module opt-in overrides. A
+  measured `mypy src --disallow-untyped-defs` probe confirmed
+  `src.processing.flink_jobs.*` (15 untyped defs in 3 files) was the *only*
+  remaining untyped surface, so the flip kept `mypy src` clean on 99 files;
+  flink_jobs stays the sole explicit relaxation (PyFlink, no PEP-561 stubs,
+  gated on PR #23). `tests/unit/test_typing_policy.py` was rewritten from ~28
+  per-module assertions to the inverted invariant (global strict on, flink_jobs
+  the sole relaxation, **no** redundant per-module `disallow_untyped_defs = true`
+  override may creep back). This **closes the strict-typing cadence** (audit
+  jgec H-3 / mm F-2): there are no per-module slices left to promote — the only
+  remaining typing work is flink_jobs, which stays gated. Do not re-open the
+  per-module slice cadence.
+- `6ae7936` — `src/serving/semantic_layer/sql_guard.py` (the NL→SQL denylist;
+  the H-6 projection-position bypass lived here, and `9f11417` already pinned it
+  at 100% coverage) added to `[tool.mutmut].paths_to_mutate`, completing the
+  H-2 remediation (`1480a32` only repointed the auth paths) per audit mm F-1.
+  New `tests/unit/test_mutmut_policy.py` asserts every mutation target exists on
+  disk (the H-2 path-rot failure mode, where the deleted `auth.py` made the gate
+  silently mutate nothing) and that the security-critical set (sql_guard, auth
+  manager / key rotation, masking, rate limiter) stays listed. The CI mutation
+  gate is driven by `scripts/mutation_report.py` `MODULE_TARGETS`, **not**
+  `[tool.mutmut].paths_to_mutate`, so this only widens local/manual `mutmut run`
+  coverage and cannot fail CI on surviving mutants. Note: `audit_mm`'s F-1 cited
+  the wrong path (`src/agent/sql_guard.py`); the canonical module verified via
+  `validate_nl_sql` + the `test_coverage_policy.py` cov target is
+  `src/serving/semantic_layer/sql_guard.py` (the `query/sql_guard.py` sibling is
+  a 3-line re-export shim).
+
+Audit `audit_mm_03_06_26.md` safe-local items still open after this batch:
+**F-3** (explicit coverage floor — global `--cov-fail-under` on the no-Docker
+slice or per-module 90% for the security-critical list; only `event_producer`
+90% and `sql_guard` 100% are scoped today) and **F-6** (SESSION_HANDOFF Tier A
+HEAD drift). Gated / low-ROI: **F-4** (`agent_query.py` thinning — working-surface
+redesign, do only with a real reason to touch it), **F-5** (bandit B310 baseline
+`# nosec`, cosmetic). H-7/H-8/H-9 unchanged (root `p*.md` is untracked
+user-scratch; DV2 branch parked; Dependabot wait-for-upstream).
+
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.

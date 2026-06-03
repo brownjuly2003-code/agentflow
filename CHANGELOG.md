@@ -51,6 +51,16 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- Added direct unit coverage for the pure, infra-free security logic in
+  `src.serving.api.auth.manager` that the integration / e2e auth suites only
+  exercised indirectly: `tenant_key_allowed_tables` (tenant table-allowlist
+  resolution / isolation), `TenantKey` key-material validation, legacy
+  `AGENTFLOW_API_KEYS` env parsing, and the `_matches_key_material` revoke-path
+  matcher — none of which had a direct unit test. `tests/unit/test_auth_manager_pure_logic.py`
+  pins their behavior so a tenant-isolation or key-matching regression fails at
+  the unit layer. (audit jgec H-5 / mm F-3, partial: the auth/masking modules
+  stay integration-covered overall, so no unit-only 90% per-module gate was
+  added; the global `--cov-fail-under=60` floor still backstops regressions.)
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

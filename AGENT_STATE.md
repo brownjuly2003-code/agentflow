@@ -1,6 +1,6 @@
 # Agent State
 
-Updated: 2026-06-01
+Updated: 2026-06-03
 
 ## Temporary infra note resolved (2026-06-01)
 
@@ -9,12 +9,51 @@ Updated: 2026-06-01
 - Host-side non-interactive SSH PATH did not include a `docker` binary during the restore check; use `/Users/julia/lima/bin/limactl shell docker docker ...` for direct Mac verification if the host Docker CLI is not available.
 - Not a code/CI change; no repo product state affected.
 
+## 2026-06-03 autonomous audit + safe-fix batch (main)
+
+Operator-requested full local re-audit, written to `audit_jgec_03_06_26.md`.
+Re-ran the local gates (ruff, `mypy src` on 99 files, openapi / contract /
+schema-evolution checks, broad unit suite) and confirmed the 2026-05-30 Codex
+findings are closed except local temp-dir cleanup and the GitHub Releases
+provenance gap (v1.2-v1.4 tags exist but have no Release objects) — both still
+open and operator-gated.
+
+Five verified commits then landed on `main`, each pushed after a clean
+`git diff --check` with all six required workflows green:
+
+- `af37432` — `src.serving.api.alerts.dispatcher` promoted to a strict mypy
+  slice, completing strict typing across `src/serving/api`. The prior blocker
+  (a failed Claude second opinion, preserved in
+  `second-opinion-alerts-dispatcher.md`) is resolved: the three FastAPI `app`
+  boundaries are annotated and `ensure_alert_dispatcher` is guarded against
+  `no-any-return` from the dynamic `app.state` via a typed local, not a cast.
+- `1480a32` — `[tool.mutmut].paths_to_mutate` repointed off the deleted
+  `src/serving/api/auth.py` onto `auth/manager.py` + `auth/key_rotation.py`;
+  the mutation gate had been silently mutating nothing for the auth surface.
+- `7eb8461` — security fix. The NL→SQL guard (`validate_nl_sql`) now rejects
+  DuckDB scan functions that sqlglot parses into typed `Func` nodes. `read_csv`
+  / `read_parquet` parse to `exp.ReadCSV` / `exp.ReadParquet`, not
+  `exp.Anonymous`, so `SELECT read_csv('/etc/passwd') AS v` and the
+  `read_parquet` form previously passed the guard in projection position — an
+  NL→SQL guard bypass enabling arbitrary local-file / remote reads through
+  DuckDB. The check now inspects the call name on every `exp.Func` node. Found
+  and fixed TDD; the `FROM`-clause form was already caught.
+- `10c37a6` — CHANGELOG `[Unreleased]` entries for the above.
+- `9f11417` — `sql_guard` pinned at 100% module coverage behind a new
+  per-module 90% CI gate (cadence match to the validators / freshness /
+  event-producer gates), with added DML-in-CTE and unparseable-SQL tests.
+
+This was an interactive operator session (not the scheduled autopilot); push to
+`origin/main` was authorized under the standing autonomous mandate. No boundary
+actions were taken: no GitHub Release publish (H-1), no temp-dir deletion
+(H-7), no Dependabot merges (H-9), no DV2 branch changes.
+
 ## Current Project State
 
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local code/CI HEAD before this state-refresh commit: `0d733e75142adc55a22729f902fac0a1e5d2da43` (`0d733e7`)
+- Verified local code/CI HEAD before this state-refresh commit: `9f11417c13702b63d2dd40e1070a99eeacb91b93` (`9f11417`) — all six required workflows green on this SHA
 - Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
 - State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `next-session-autonomous-local-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
 - File count at refresh start: `git ls-files` reports 913 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.

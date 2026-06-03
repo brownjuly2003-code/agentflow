@@ -1,8 +1,28 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-01 (API main strict slice; admin router strict slice; Mac Docker restored)
-**Verified code/state HEAD before this refresh:** `8032e24` on `main` (all six
-workflows green: CI, Contract Tests, E2E, Load, Security, Staging Deploy). Session 2026-05-30 code stack:
+**Last updated:** 2026-06-03 (strict-typing cadence CLOSED via global inversion; H-6 NL→SQL guard bypass fixed; coverage floor landed; HEAD-drift refresh)
+**Verified code/state HEAD before this refresh:** `5936f8d` on `main` (even with
+`origin/main`). Session 2026-06-03 stack on top of the prior `8032e24` state:
+`09cc0ea` (api main strict slice state), `af37432` (alerts dispatcher strict
+slice — closes the last src API untyped surface), `1480a32` (point mutmut
+`paths_to_mutate` at the real `auth/manager.py` + `auth/key_rotation.py`; the
+old `auth.py` path rotted and silently mutated nothing), `7eb8461` (**security
+fix H-6**: NL→SQL guard now rejects DuckDB scan funcs — `read_csv`/`read_parquet`
+parse to typed `exp.ReadCSV`/`exp.ReadParquet`, not `exp.Anonymous`, so they
+bypassed the projection-position denylist; the check now inspects every
+`exp.Func` node), `10c37a6` (changelog), `9f11417` (**F-3**: pin `sql_guard`
+100% coverage behind a CI `--cov-fail-under=90` scoped gate), `475e984` +
+`7f978a7` (docs/state + GitHub Releases v1.2–v1.4 record), `25d9f6b`
+(**strict-typing cadence CLOSED** — invert `disallow_untyped_defs` to the global
+default; `mypy src --disallow-untyped-defs` confirmed `flink_jobs` was the sole
+untyped surface, so ~32 per-module overrides collapse to one relaxation),
+`6ae7936` (pin `sql_guard` into mutmut targets + path-rot policy test
+`test_mutmut_policy.py`), `f393cce` (state closeout), and `5936f8d` (**F-3 auth
+half**: unit-cover the pure security logic in `auth/manager.py` —
+`tenant_key_allowed_tables`, `validate_key_material`, `_legacy_env_keys`,
+`_matches_key_material`; 21 new tests; CI now also carries a global
+`--cov-fail-under=60` floor in `ci.yml`). Six main workflows green on
+`5936f8d`. Earlier 2026-05-30 code stack:
 `e444ecf` (M-C4 guidance enforcement), `f977317` (auth strict slice; Load Test
 re-run once for variance), `3e7434b` (monitors strict slice + tombstone fix),
 `30e20a7` (semantic-layer strict slice), `346bf64` (backends strict slice +
@@ -36,8 +56,21 @@ All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
-**Tracked files at refresh start:** `913` via `git ls-files`.
+**Tracked files at refresh start:** `915` via `git ls-files` (+2 test files:
+`tests/unit/test_mutmut_policy.py`, `tests/unit/test_auth_manager_pure_logic.py`).
 **Latest local commits before this state refresh:**
+- `5936f8d` test(auth): unit-cover pure security logic in auth manager
+- `f393cce` docs(state): record strict-typing inversion + mutmut target, close cadence
+- `6ae7936` test(security): pin sql_guard into mutmut targets + guard path rot
+- `25d9f6b` refactor(mypy): invert strict typing to the global default
+- `7f978a7` docs: record GitHub Releases v1.2-v1.4 creation, sync release/state docs
+- `475e984` docs(state): record 2026-06-03 audit + safe-fix batch
+- `9f11417` test(security): pin sql_guard at 100% coverage behind a 90% CI gate
+- `10c37a6` docs(changelog): record NL->SQL guard fix, mutmut repoint, alerts strict slice
+- `7eb8461` fix(security): reject DuckDB scan funcs parsed as typed nodes in NL->SQL guard
+- `1480a32` fix(mutmut): point paths_to_mutate at the real auth modules
+- `af37432` refactor(api): promote alerts dispatcher to strict mypy
+- `09cc0ea` docs(state): record api main strict slice
 - `8032e24` refactor(api): promote app main to strict mypy
 - `28acdf9` fix(api): preserve admin route response models
 - `8e58854` refactor(api): promote admin router to strict mypy
@@ -622,6 +655,7 @@ All seven sessions shipped to `main` between 2026-05-24 evening and
 
 | Session | SHAs | Theme |
 |---------|------|-------|
+| **29–30 (2026-06-03)** | `09cc0ea`, `af37432`, `1480a32`, `7eb8461`, `10c37a6`, `9f11417`, `475e984`, `7f978a7`, `25d9f6b`, `6ae7936`, `f393cce`, `5936f8d` | **Strict-typing cadence CLOSED** — `af37432` promotes the alerts dispatcher (last untyped src API surface), then `25d9f6b` inverts `disallow_untyped_defs` to the global default: `mypy src --disallow-untyped-defs` confirmed `flink_jobs` (PR-#23-gated) is the sole remaining untyped surface, so ~32 per-module overrides collapse to one relaxation; `test_typing_policy.py` rewritten to the inverted invariant with zero redundant `=true` overrides. **Security fix H-6** (`7eb8461`): the NL→SQL guard (`validate_nl_sql`) missed DuckDB scan funcs in projection position — `read_csv`/`read_parquet` parse to typed `exp.ReadCSV`/`exp.ReadParquet`, not `exp.Anonymous`, so `SELECT read_csv('/etc/passwd')` passed; the check now inspects the call name on every `exp.Func` node, parser-shape-agnostic, covered by two new `tests/unit/test_sql_guard.py` cases. **Mutmut path-rot fixed** (`1480a32`, `6ae7936`): `paths_to_mutate` pointed at the deleted `auth.py` and silently mutated nothing — now targets `auth/manager.py` + `auth/key_rotation.py` + `sql_guard.py`, with `test_mutmut_policy.py` asserting every target exists and the security-critical set stays listed. **F-3 coverage floor** (`9f11417`, `5936f8d`): CI `ci.yml` now carries a global `--cov-fail-under=60` floor plus scoped per-module 90% gates (validators, freshness_monitor, event_producer, sql_guard), and `5936f8d` adds 21 direct unit tests for the pure security logic in `auth/manager.py` (`tenant_key_allowed_tables`, `validate_key_material`, `_legacy_env_keys`, `_matches_key_material`). Six main workflows green on `5936f8d`; HEAD even with `origin/main`. |
 | **26** | `dc74bd1` (handoff), `d674afa` (#25), `6a30ac7` (#26), `69fd3b3` (#29), `d92938e` (#30), `2322916` (lint catch-up), `d249448` (#27), `da52ca1` (#28), `b7d562c` (handoff), + this perf-bench commit | Tier A Dependabot wave 3 + push of sessions 22–25 audit closures + M-C4/M-C5 perf-baseline closure (`docs/perf/auth-bench-2026-05-26.md`, `scripts/perf/auth_bench.py`). Pushed the 5-commit audit stack to `origin/main` (`64252d3`, `356715e`, `bbc9827`, `8198af4`, `dc74bd1`) — handoff text was stale on "push deferred". Six new Dependabot PRs (#25–#30) opened 2026-05-25T03:46Z, all merged via `gh pr merge --admin --squash`. **Merged green directly**: #25 schemathesis 4.19.0→4.20.0 (minor patch group), #26 hashicorp/setup-terraform 3→4, #29 azure/setup-helm 4.3.0→5.0.0, #30 actions/setup-node 4→6. **Fixed via push to dependabot branch**: #27 docker/login-action 3→4 (test asserted `@v3` → bumped to `@v4` in `tests/unit/test_container_attestation_workflow.py:48`), #28 actions/upload-artifact 4→7 (two asserts bumped in `tests/unit/test_security_workflow.py:34` + `tests/unit/test_performance_workflows.py:40`). Both rebased onto latest main after lint regression surfaced. **Lint regression fixed** in `2322916` — two test files from session 23 H-C1/H-C4 closure (`test_duckdb_backend_sql_hardening.py`, `test_lifespan_search_resilience.py`) had line-length forms ruff 0.x catches but slipped through the owner-bypass push; pure cosmetic line consolidation. **Lesson 5**: when bumping a dependabot-managed major version of a GH Action that pins assertions in unit tests, the test bump must land on the dependabot branch itself, not on main — otherwise the PR's `test-unit` job stays red and `--admin --squash` ships a broken state for one merge cycle. Pushing directly to `dependabot/...` branches with `--force-with-lease` is supported. |
 | **11** | `3053576` | `docs/runbooks/` — 5 on-call incident playbooks (api-5xx, auth-401, cdc-lag, load-test-regression, release-rollback) in the same eight-section format and severity ladder as `chaos-runbook.md` |
 | **12** | `29d058a`, `576c2d6` | README + helm chart aligned to `v1.3.0` — badge, Highlights/Status under the `v1.1 → v1.3` arc, DV2 triptych, `helm/agentflow` `appVersion` + `image.tag` bumped |

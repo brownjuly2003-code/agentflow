@@ -95,6 +95,16 @@ All notable changes to AgentFlow are documented in this file.
   coverage list** — masking, rate limiter, and auth manager now have unit-only
   90% gates alongside the existing `sql_guard` (100%) and `event_producer`
   gates.
+- Added a per-module 90% coverage gate for `src.serving.api.auth.key_rotation`,
+  the security-critical key-rotation lifecycle (create / rotate / revoke /
+  revoke-old, grace-period scheduling and expiry, rotation status, usage-stat
+  queries) and a mutmut target. Like the auth manager gate it uses
+  `coverage run` + `coverage report --include` (key_rotation imports duckdb, so
+  `pytest --cov` trips the `_duckdb._sqltypes` collection break). A new
+  dedicated `tests/unit/test_key_rotation.py` raises the module's own-file
+  coverage from 58% to 93%, pinning the rotator logic at the unit layer
+  alongside the existing HTTP-level `tests/integration/test_rotation.py`. This
+  extends the audit security-critical mutmut-target set with a unit-only gate.
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

@@ -127,8 +127,14 @@ Pick the first that applies; finish it before the next.
    even though plain `coverage run -m pytest` and the CI gate (clean duckdb)
    both work — measure auth/usage-table module coverage with
    `python -m coverage run -m pytest <files>` + `coverage report`, not
-   pytest-cov, on this Windows host. No obvious next coverage target remains;
-   pick a new under-tested module only on real evidence.
+   pytest-cov, on this Windows host. The same `coverage run` mechanism now also
+   gates `src.serving.api.auth.key_rotation` (`c65de9d`, 58%→93% via the new
+   `tests/unit/test_key_rotation.py`), extending the security-critical
+   mutmut-target set. Remaining mutmut targets without a unit-only gate are
+   `src.processing.outbox` and `src.serving.semantic_layer.query_engine` (both
+   import duckdb → use the `coverage run` gate form if pursued). Pick a new
+   under-tested module only on real evidence (mutmut/security-critical
+   qualifies; arbitrary modules do not).
 
 If only external/upstream/Docker-gated items remain (below), stop and record it
 — do not fabricate evidence or churn docs.

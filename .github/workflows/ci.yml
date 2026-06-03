@@ -114,6 +114,15 @@ jobs:
           # runners. `coverage run` imports duckdb normally and avoids the break.
           python -m coverage run -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/manager.py" --show-missing --fail-under=90
+      - name: Run key rotation coverage gate
+        run: |
+          # Security-critical key-rotation lifecycle (create/rotate/revoke,
+          # grace-period scheduling, rotation status) and a mutmut target. Like
+          # the auth manager gate it pulls in duckdb, so it uses coverage run +
+          # coverage report --include (not pytest --cov) to avoid the
+          # duckdb _duckdb._sqltypes collection break. Module coverage is 93%.
+          python -m coverage run -m pytest tests/unit/test_key_rotation.py -p no:schemathesis
+          python -m coverage report --include="*/serving/api/auth/key_rotation.py" --show-missing --fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:

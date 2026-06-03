@@ -6,6 +6,24 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Fixed
 
+- The NL→SQL guard (`validate_nl_sql`) now rejects DuckDB scan functions that
+  `sqlglot` parses into typed `Func` nodes. `read_csv` / `read_parquet` parse to
+  `exp.ReadCSV` / `exp.ReadParquet`, not `exp.Anonymous`, so the
+  forbidden-function check — which only inspected `exp.Anonymous` — missed them
+  in projection position: `SELECT read_csv('/etc/passwd') AS v` and the
+  `read_parquet` equivalent passed validation untouched (the `FROM`-clause form
+  was already caught as a table-valued function). That was an NL→SQL guard
+  bypass enabling arbitrary local-file / remote reads through DuckDB scan
+  functions. The check now inspects the call name on every `exp.Func` node
+  (`.name` for `exp.Anonymous`, `.sql_name()` for typed funcs), so the denylist
+  is parser-shape-agnostic and survives `sqlglot` promoting more scan functions
+  to typed nodes. Covered by two new projection-position cases in
+  `tests/unit/test_sql_guard.py`.
+- `[tool.mutmut].paths_to_mutate` pointed at `src/serving/api/auth.py`, which no
+  longer exists (auth was split into the `auth/` package), so the mutation gate
+  silently mutated nothing for the auth surface. It now targets
+  `auth/manager.py` and `auth/key_rotation.py`, restoring mutation coverage of
+  the key / verify / rotation paths.
 - The daily batch DAG's `daily_product_metrics` and `daily_quality_report`
   assets no longer assume `DuckDBPyConnection.fetchone()` returns a row.
   `fetchone()` is typed `tuple[Any, ...] | None`; the previously untyped
@@ -24,6 +42,14 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `src.serving.api.alerts.dispatcher` is now a strict mypy slice
+  (`disallow_untyped_defs = true`), completing strict typing across
+  `src/serving/api`. The gaps were the three FastAPI app boundaries
+  (`get_alert_config_path`, `ensure_alert_dispatcher`,
+  `AlertDispatcher.__init__`); `ensure_alert_dispatcher` is guarded against
+  `no-any-return` from the dynamically typed `app.state` via a typed local
+  rather than a `cast`. Pinned by `tests/unit/test_typing_policy.py`;
+  `mypy src` stays clean on 99 files.
 - `src.serving.api.routers.deadletter` is now a strict mypy slice
   (`disallow_untyped_defs = true`), keeping the operator-facing dead-letter
   recovery API (list / detail / stats / replay / dismiss) fully annotated over

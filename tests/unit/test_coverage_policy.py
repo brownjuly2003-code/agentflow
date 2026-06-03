@@ -148,3 +148,23 @@ def test_ci_has_scoped_key_rotation_coverage_gate() -> None:
     assert "coverage run -m pytest" in gate_step["run"]
     assert "*/serving/api/auth/key_rotation.py" in gate_step["run"]
     assert "--fail-under=90" in gate_step["run"]
+
+
+def test_ci_has_scoped_outbox_coverage_gate() -> None:
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["test-unit"]["steps"]
+
+    gate_step = next(
+        (step for step in steps if step.get("name") == "Run outbox coverage gate"),
+        None,
+    )
+
+    assert gate_step is not None
+    # outbox imports duckdb, so the gate uses coverage run + report --include
+    # rather than pytest --cov (same duckdb-under-cov constraint as the auth gates).
+    assert "tests/unit/test_outbox_processor.py" in gate_step["run"]
+    assert "coverage run -m pytest" in gate_step["run"]
+    assert "*/processing/outbox.py" in gate_step["run"]
+    assert "--fail-under=90" in gate_step["run"]

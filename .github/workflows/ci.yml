@@ -123,6 +123,15 @@ jobs:
           # duckdb _duckdb._sqltypes collection break. Module coverage is 93%.
           python -m coverage run -m pytest tests/unit/test_key_rotation.py -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/key_rotation.py" --show-missing --fail-under=90
+      - name: Run outbox coverage gate
+        run: |
+          # Security/reliability-critical at-least-once outbox dispatch loop
+          # (delivery, retry/backoff, poison-to-failed, mark-sent transactions)
+          # and a mutmut target. Imports duckdb, so it uses coverage run +
+          # coverage report --include like the auth gates. Module coverage is
+          # 92% across the two dedicated unit files.
+          python -m coverage run -m pytest tests/unit/test_outbox_processor.py tests/unit/test_outbox_connection_guard.py -p no:schemathesis
+          python -m coverage report --include="*/processing/outbox.py" --show-missing --fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:

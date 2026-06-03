@@ -72,6 +72,15 @@ All notable changes to AgentFlow are documented in this file.
   address masker (numbered street, single-part, non-numbered street). This
   closes the masking half of the earlier "no unit-only 90% per-module gate"
   note (audit mm F-3 / jgec H-5); the auth manager stays integration-covered.
+- Added a per-module 90% coverage gate for `src.serving.api.rate_limiter`, the
+  security-critical sliding-window rate limiter and a mutmut target, again
+  mirroring the existing gates and pinned by `tests/unit/test_coverage_policy.py`.
+  The dedicated test file previously exercised only the Redis path; new tests in
+  `tests/unit/test_rate_limiter.py` cover the in-memory fail-open fallback (allow
+  up to limit, block over limit, sliding-window expiry, zero-limit block),
+  raising own-file coverage from 78% to 98% (only the optional `redis.from_url`
+  auto-construct line stays uncovered, env-gated on the `redis` package). This
+  extends the audit mm F-3 security-module coverage list beyond masking.
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

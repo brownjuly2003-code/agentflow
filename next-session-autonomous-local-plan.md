@@ -113,15 +113,16 @@ Pick the first that applies; finish it before the next.
    do not repeat them.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
-   module is under-tested. Latest completed gate: `6400a83` pins
-   `src.serving.masking` (security-critical PII masker, mutmut target) at 90%
-   minimum module coverage (local baseline raised 66%→99% by new
-   `tests/unit/test_masking.py` cases; all six workflows green on the pushed
-   SHA). Prior gate: `5fecb1b` pins `src.ingestion.producers.event_producer` at
-   90% (local baseline 96.39%). The auth manager (`src.serving.api.auth.manager`)
-   stays integration-covered with no unit-only per-module gate; its dedicated
-   unit files do not yet reach 90% standalone, so a gate there needs new tests
-   first, not just a pin.
+   module is under-tested. Latest completed gate: `5a72476` pins
+   `src.serving.api.rate_limiter` (security-critical sliding-window limiter,
+   mutmut target) at 90% (local baseline raised 78%→98% by new in-memory
+   fail-open fallback tests in `tests/unit/test_rate_limiter.py`). Prior gates:
+   `6400a83` pins `src.serving.masking` (PII masker) at 90% (66%→99%);
+   `5fecb1b` pins `src.ingestion.producers.event_producer` at 90% (96.39%).
+   The remaining security-list module without a unit-only gate is the auth
+   manager (`src.serving.api.auth.manager`): it stays integration-covered and
+   its dedicated unit files do not reach 90% standalone, so a gate there needs
+   new tests first, not just a pin.
 
 If only external/upstream/Docker-gated items remain (below), stop and record it
 — do not fabricate evidence or churn docs.

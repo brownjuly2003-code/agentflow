@@ -35,11 +35,14 @@ gate). No runtime API changes from v1.3.0.
 
 ## GitHub Releases note
 
-`gh release list` currently reports GitHub Release objects only through
-`v1.1.0`. For `v1.2.0`, `v1.3.0`, and `v1.4.0`, the release source of truth is
-the signed git tag, PyPI/npm package records, and Trusted Publishing workflow
-runs listed here. No GitHub Release objects were created for those maintenance
-releases.
+`gh release list` reports GitHub Release objects for every tag through
+`v1.4.0`. The `v1.2.0`, `v1.3.0`, and `v1.4.0` Release objects were created on
+2026-06-03 from the existing signed tags to close the provenance gap with the
+package registries. This was metadata only — no re-publish: the PyPI/npm
+artifacts and Trusted Publishing runs predate the Release objects and remain
+the package source of truth (the publish workflows trigger on tag push, not on
+`release`). GitHub Releases and the PyPI/npm registries are now consistent
+through `v1.4.0`.
 
 ## Re-verify
 

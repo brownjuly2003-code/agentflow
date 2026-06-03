@@ -44,9 +44,15 @@ Five verified commits then landed on `main`, each pushed after a clean
   event-producer gates), with added DML-in-CTE and unparseable-SQL tests.
 
 This was an interactive operator session (not the scheduled autopilot); push to
-`origin/main` was authorized under the standing autonomous mandate. No boundary
-actions were taken: no GitHub Release publish (H-1), no temp-dir deletion
-(H-7), no Dependabot merges (H-9), no DV2 branch changes.
+`origin/main` was authorized under the standing autonomous mandate. Follow-on
+operator-directed work: removed nine stale gitignored/untracked temp
+directories (H-7; no tracked-tree change) and created GitHub Release objects
+for `v1.2.0` / `v1.3.0` / `v1.4.0` from the existing signed tags (H-1; metadata
+only — no package re-publish, since the publish workflows trigger on tag push,
+not on `release`). `RELEASE_STATUS.md` updated to match. Still gated and not
+done: Dependabot merges including the `python:3.11-slim` → `3.14-slim` base
+bump (H-9), the `agent_query.py` thinning (H-4, working-surface redesign), and
+the `feat/dv2-x5-real-data` branch disposition (H-8).
 
 ## Current Project State
 

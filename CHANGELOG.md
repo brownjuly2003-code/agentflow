@@ -61,6 +61,17 @@ All notable changes to AgentFlow are documented in this file.
   the unit layer. (audit jgec H-5 / mm F-3, partial: the auth/masking modules
   stay integration-covered overall, so no unit-only 90% per-module gate was
   added; the global `--cov-fail-under=60` floor still backstops regressions.)
+- Added a per-module 90% coverage gate for `src.serving.masking`, the
+  security-critical PII masker and a mutmut target, mirroring the existing
+  `sql_guard` / `validators` / `freshness_monitor` / `event_producer` gates in
+  `ci.yml` and pinned by `tests/unit/test_coverage_policy.py`. New unit tests in
+  `tests/unit/test_masking.py` raise the module's own-file coverage from 66% to
+  99%, covering `mask_query_results` (single / multiple / unmapped entity types,
+  unparseable SQL, no-op rows), the `None` / unknown-strategy / empty-string
+  strategy branches, an empty-local-part email, a single-token name, and the
+  address masker (numbered street, single-part, non-numbered street). This
+  closes the masking half of the earlier "no unit-only 90% per-module gate"
+  note (audit mm F-3 / jgec H-5); the auth manager stays integration-covered.
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

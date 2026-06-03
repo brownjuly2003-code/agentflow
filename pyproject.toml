@@ -420,6 +420,14 @@ disallow_untyped_defs = true
 module = "src.serving.api.webhook_dispatcher"
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Alert dispatcher owns the tenant-scoped alert evaluation loop and the FastAPI
+# app-state wiring (config path + dispatcher lifecycle); keep the app
+# boundaries and dispatch helpers fully annotated. Gated by
+# tests/unit/test_typing_policy.py.
+module = "src.serving.api.alerts.dispatcher"
+disallow_untyped_defs = true
+
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]
 

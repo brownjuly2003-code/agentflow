@@ -7,7 +7,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -15,6 +15,9 @@ try:
     import yaml
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 DEFAULT_ALERTS_CONFIG_PATH = Path(os.getenv("AGENTFLOW_ALERTS_FILE", "config/alerts.yaml"))
 
@@ -81,7 +84,7 @@ class AlertConfig(BaseModel):
     alerts: list[AlertRule] = Field(default_factory=list)
 
 
-def get_alert_config_path(app) -> Path:
+def get_alert_config_path(app: FastAPI) -> Path:
     configured = getattr(app.state, "alert_config_path", None)
     return Path(configured) if configured else DEFAULT_ALERTS_CONFIG_PATH
 
@@ -190,8 +193,8 @@ def deactivate_alert(path: Path, alert_id: str, tenant: str) -> bool:
     return changed
 
 
-def ensure_alert_dispatcher(app) -> AlertDispatcher:
-    dispatcher = getattr(app.state, "alert_dispatcher", None)
+def ensure_alert_dispatcher(app: FastAPI) -> AlertDispatcher:
+    dispatcher: AlertDispatcher | None = getattr(app.state, "alert_dispatcher", None)
     if dispatcher is None:
         dispatcher = AlertDispatcher(app)
         app.state.alert_dispatcher = dispatcher
@@ -229,7 +232,7 @@ def next_escalation_step(
 
 
 class AlertDispatcher:
-    def __init__(self, app, poll_interval_seconds: float = 60.0) -> None:
+    def __init__(self, app: FastAPI, poll_interval_seconds: float = 60.0) -> None:
         self.app = app
         self.poll_interval_seconds = poll_interval_seconds
         self.backoff_seconds = [1.0, 5.0, 25.0]

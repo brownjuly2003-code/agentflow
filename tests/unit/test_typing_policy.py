@@ -214,3 +214,10 @@ def test_webhook_dispatcher_is_a_strict_mypy_slice() -> None:
     # Webhook dispatcher signs and retries tenant-scoped deliveries; keep its
     # FastAPI app boundary fully annotated.
     assert "src.serving.api.webhook_dispatcher" in _strict_modules()
+
+
+def test_alerts_dispatcher_is_a_strict_mypy_slice() -> None:
+    # The alert dispatcher owns the tenant-scoped evaluation loop and the
+    # FastAPI app-state wiring; keep its app boundaries and dispatch helpers
+    # fully annotated.
+    assert "src.serving.api.alerts.dispatcher" in _strict_modules()

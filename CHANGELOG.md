@@ -24,6 +24,15 @@ All notable changes to AgentFlow are documented in this file.
   silently mutated nothing for the auth surface. It now targets
   `auth/manager.py` and `auth/key_rotation.py`, restoring mutation coverage of
   the key / verify / rotation paths.
+- `[tool.mutmut].paths_to_mutate` now also includes
+  `src/serving/semantic_layer/sql_guard.py`, the security-critical NL→SQL
+  denylist where the H-6 projection-position bypass lived — a surviving mutant
+  in its forbidden-node / forbidden-function checks is a guard bypass, so it is
+  the most valuable module to mutate and pairs with its 100% coverage pin. A new
+  `tests/unit/test_mutmut_policy.py` asserts every configured mutation target
+  still exists on disk (the H-2 failure mode, where a path rotted to the deleted
+  `auth.py` and silently mutated nothing) and that the security-critical set
+  (sql_guard, auth manager / key rotation, masking, rate limiter) stays listed.
 - The daily batch DAG's `daily_product_metrics` and `daily_quality_report`
   assets no longer assume `DuckDBPyConnection.fetchone()` returns a row.
   `fetchone()` is typed `tuple[Any, ...] | None`; the previously untyped

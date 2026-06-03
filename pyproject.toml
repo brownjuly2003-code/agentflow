@@ -187,6 +187,7 @@ paths_to_mutate = [
     "src/serving/api/auth/key_rotation.py",
     "src/serving/masking.py",
     "src/serving/semantic_layer/query_engine.py",
+    "src/serving/semantic_layer/sql_guard.py",
     "src/processing/outbox.py",
     "src/serving/api/rate_limiter.py",
 ]

@@ -119,6 +119,11 @@ def test_ci_has_scoped_auth_manager_coverage_gate() -> None:
     )
 
     assert gate_step is not None
+    # The auth manager pulls in duckdb, and pytest-cov's source instrumentation
+    # of a duckdb-importing module trips duckdb's lazy `_duckdb._sqltypes`
+    # import at collection time (local + CI), so this gate uses `coverage run`
+    # + `coverage report --include` instead of `pytest --cov=<module>`.
     assert "tests/unit/test_auth_manager_pure_logic.py" in gate_step["run"]
-    assert "--cov=src.serving.api.auth.manager" in gate_step["run"]
-    assert "--cov-fail-under=90" in gate_step["run"]
+    assert "coverage run -m pytest" in gate_step["run"]
+    assert "*/serving/api/auth/manager.py" in gate_step["run"]
+    assert "--fail-under=90" in gate_step["run"]

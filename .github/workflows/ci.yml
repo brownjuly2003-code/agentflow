@@ -101,11 +101,19 @@ jobs:
         run: |
           # Security-critical auth manager (key match/verify, tenant isolation,
           # rate-limit/failed-auth windows, rotation grace) and a mutmut target;
-          # the gate runs its dedicated unit files. Local module coverage is 94%
-          # so the 90% gate keeps a cushion. The remaining gap is the
-          # platform-divergent SIGHUP handler and bcrypt rotation paths covered
-          # by the integration/e2e auth suites.
-          python -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py -v --tb=short --cov=src.serving.api.auth.manager --cov-report=term-missing --cov-fail-under=90
+          # the gate runs its dedicated unit files. Module coverage is 94% so the
+          # 90% gate keeps a cushion; the remaining gap is the platform-divergent
+          # SIGHUP handler and bcrypt rotation paths the integration/e2e auth
+          # suites cover.
+          #
+          # NOTE: unlike the other per-module gates this uses `coverage run` +
+          # `coverage report --include`, NOT `pytest --cov=<module>`. The auth
+          # manager pulls in duckdb (usage table), and pytest-cov's source
+          # instrumentation of a duckdb-importing module trips duckdb's lazy
+          # `_duckdb._sqltypes` import at COLLECTION time, both locally and on CI
+          # runners. `coverage run` imports duckdb normally and avoids the break.
+          python -m coverage run -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py -p no:schemathesis
+          python -m coverage report --include="*/serving/api/auth/manager.py" --show-missing --fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:

@@ -36,6 +36,11 @@ UNSAFE_SQL = [
     # as a table-valued function). The guard must reject them everywhere.
     ("SELECT read_csv('/tmp/orders.csv') AS v", "Forbidden function"),
     ("SELECT read_parquet('s3://bucket/x.parquet') AS v", "Forbidden function"),
+    # DML smuggled into a CTE still parses as a top-level SELECT, so the walk
+    # must reject the nested forbidden node.
+    ("WITH x AS (DELETE FROM orders_v2 RETURNING id) SELECT * FROM x", "Forbidden node"),
+    # Unparseable SQL must fail closed instead of falling through the guard.
+    ("SELECT * FROM (((", "Unparseable"),
 ]
 
 

@@ -54,3 +54,20 @@ def test_ci_has_scoped_event_producer_coverage_gate() -> None:
     assert "tests/unit/test_event_producer.py" in gate_step["run"]
     assert "--cov=src.ingestion.producers.event_producer" in gate_step["run"]
     assert "--cov-fail-under=90" in gate_step["run"]
+
+
+def test_ci_has_scoped_sql_guard_coverage_gate() -> None:
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["test-unit"]["steps"]
+
+    gate_step = next(
+        (step for step in steps if step.get("name") == "Run SQL guard coverage gate"),
+        None,
+    )
+
+    assert gate_step is not None
+    assert "tests/unit/test_sql_guard.py" in gate_step["run"]
+    assert "--cov=src.serving.semantic_layer.sql_guard" in gate_step["run"]
+    assert "--cov-fail-under=90" in gate_step["run"]

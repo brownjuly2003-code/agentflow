@@ -65,8 +65,18 @@ def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
             raise UnsafeSQLError(f"Forbidden node: {type(node).__name__}")
         if isinstance(node, exp.Table) and not node.name:
             raise UnsafeSQLError("Table-valued functions not allowed")
-        if isinstance(node, exp.Anonymous) and node.name.lower() in _FORBIDDEN_FUNCTION_NAMES:
-            raise UnsafeSQLError(f"Forbidden function: {node.name.lower()}")
+        if isinstance(node, exp.Func):
+            # sqlglot models some DuckDB scan functions as typed Func nodes
+            # (read_csv -> exp.ReadCSV, read_parquet -> exp.ReadParquet) rather
+            # than exp.Anonymous, so an Anonymous-only check missed them in
+            # projection position. Anonymous carries the call name on `.name`
+            # (its `.sql_name()` is just "ANONYMOUS"); typed funcs expose it via
+            # `.sql_name()`. Check both so the denylist is parser-shape-agnostic.
+            func_name = (
+                node.name.lower() if isinstance(node, exp.Anonymous) else node.sql_name().lower()
+            )
+            if func_name in _FORBIDDEN_FUNCTION_NAMES:
+                raise UnsafeSQLError(f"Forbidden function: {func_name}")
 
     cte_names = {
         cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE) if cte.alias_or_name

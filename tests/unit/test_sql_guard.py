@@ -30,6 +30,12 @@ UNSAFE_SQL = [
     ("ATTACH 'evil.db' AS evil", "Statement type"),
     ("SELECT * FROM read_csv_auto('/tmp/orders.csv')", "Table-valued functions"),
     ("SELECT read_file('/tmp/secret')", "Forbidden function"),
+    # read_csv / read_parquet parse to typed Func nodes (exp.ReadCSV /
+    # exp.ReadParquet) rather than exp.Anonymous, so an Anonymous-only name
+    # check missed them in projection position (the FROM-clause form is caught
+    # as a table-valued function). The guard must reject them everywhere.
+    ("SELECT read_csv('/tmp/orders.csv') AS v", "Forbidden function"),
+    ("SELECT read_parquet('s3://bucket/x.parquet') AS v", "Forbidden function"),
 ]
 
 

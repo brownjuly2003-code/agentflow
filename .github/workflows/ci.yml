@@ -97,6 +97,15 @@ jobs:
           # redis auto-construct line is env-gated), so the 90% gate keeps a
           # cushion on a mutmut target.
           python -m pytest tests/unit/test_rate_limiter.py -v --tb=short --cov=src.serving.api.rate_limiter --cov-report=term-missing --cov-fail-under=90
+      - name: Run auth manager coverage gate
+        run: |
+          # Security-critical auth manager (key match/verify, tenant isolation,
+          # rate-limit/failed-auth windows, rotation grace) and a mutmut target;
+          # the gate runs its dedicated unit files. Local module coverage is 94%
+          # so the 90% gate keeps a cushion. The remaining gap is the
+          # platform-divergent SIGHUP handler and bcrypt rotation paths covered
+          # by the integration/e2e auth suites.
+          python -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py -v --tb=short --cov=src.serving.api.auth.manager --cov-report=term-missing --cov-fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:

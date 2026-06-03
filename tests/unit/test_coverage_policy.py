@@ -105,3 +105,20 @@ def test_ci_has_scoped_rate_limiter_coverage_gate() -> None:
     assert "tests/unit/test_rate_limiter.py" in gate_step["run"]
     assert "--cov=src.serving.api.rate_limiter" in gate_step["run"]
     assert "--cov-fail-under=90" in gate_step["run"]
+
+
+def test_ci_has_scoped_auth_manager_coverage_gate() -> None:
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["test-unit"]["steps"]
+
+    gate_step = next(
+        (step for step in steps if step.get("name") == "Run auth manager coverage gate"),
+        None,
+    )
+
+    assert gate_step is not None
+    assert "tests/unit/test_auth_manager_pure_logic.py" in gate_step["run"]
+    assert "--cov=src.serving.api.auth.manager" in gate_step["run"]
+    assert "--cov-fail-under=90" in gate_step["run"]

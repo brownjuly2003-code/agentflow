@@ -14,10 +14,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from src.constants import DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
 from src.serving.api.auth.manager import (
+    _CURRENT_TENANT_ID,
     DEFAULT_RATE_LIMIT_RPM,
     AuthManager,
     TenantKey,
+    get_current_tenant_id,
     tenant_key_allowed_tables,
 )
 
@@ -31,6 +34,27 @@ def _key(**overrides: object) -> TenantKey:
     }
     base.update(overrides)
     return TenantKey(**base)  # type: ignore[arg-type]
+
+
+class FrozenClock:
+    def __init__(self, now: float = 1_000.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _FullRemainingLimiter:
+    """Stub limiter standing in for a Redis-backed limiter that fails open
+    (reports the full quota as remaining) while still having a live `_redis`
+    handle — the condition that triggers `AuthManager.check_rate_limit`'s
+    in-memory secondary window."""
+
+    def __init__(self) -> None:
+        self._redis = object()
+
+    async def check(self, key: str, rpm: int) -> tuple[bool, int, int]:
+        return True, rpm, 0
 
 
 @pytest.fixture
@@ -156,3 +180,83 @@ class TestMatchesKeyMaterial:
         # so an unrelated value must not match.
         item = _key(key=None, key_hash="not-a-valid-bcrypt-hash")
         assert manager._matches_key_material(item, "anything") is False
+
+
+class TestCurrentTenantId:
+    def test_returns_default_when_context_unset(self) -> None:
+        assert get_current_tenant_id(default="fallback-tenant") == "fallback-tenant"
+
+    def test_returns_context_value_when_set(self) -> None:
+        token = _CURRENT_TENANT_ID.set("tenant-x")
+        try:
+            assert get_current_tenant_id() == "tenant-x"
+        finally:
+            _CURRENT_TENANT_ID.reset(token)
+
+
+class TestInitConfigBranches:
+    def test_derives_api_db_path_from_pipeline_duckdb_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_USAGE_DB_PATH", raising=False)
+        monkeypatch.setenv("DUCKDB_PATH", "/data/pipeline.duckdb")
+        manager = AuthManager(api_keys_path=None, db_path="agentflow_api.duckdb")
+        assert manager.db_path.name == "pipeline_api.duckdb"
+
+    def test_falls_back_on_invalid_rotation_grace_period(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("AGENTFLOW_ROTATION_GRACE_PERIOD_SECONDS", "not-an-int")
+        manager = AuthManager(api_keys_path=None, db_path=tmp_path / "usage.duckdb")
+        assert manager.rotation_grace_period_seconds == DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
+
+    def test_load_with_env_only_config_has_no_keys(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_API_KEYS", raising=False)
+        manager = AuthManager(api_keys_path=None, db_path=tmp_path / "usage.duckdb")
+        manager.load()
+        assert manager.configured_key_count == 0
+
+
+class TestInMemoryRateLimiting:
+    def test_is_rate_limited_blocks_after_rpm_in_window(self, tmp_path: Path) -> None:
+        manager = AuthManager(
+            api_keys_path=None,
+            db_path=tmp_path / "usage.duckdb",
+            time_source=FrozenClock(1_000.0),
+        )
+        tenant_key = _key(rate_limit_rpm=2)
+
+        assert manager.is_rate_limited(tenant_key) is False
+        assert manager.is_rate_limited(tenant_key) is False
+        assert manager.is_rate_limited(tenant_key) is True
+
+    @pytest.mark.asyncio
+    async def test_check_rate_limit_applies_local_window_when_redis_reports_full(
+        self, tmp_path: Path
+    ) -> None:
+        manager = AuthManager(
+            api_keys_path=None,
+            db_path=tmp_path / "usage.duckdb",
+            time_source=FrozenClock(1_000.0),
+            rate_limiter=_FullRemainingLimiter(),
+        )
+        tenant_key = _key(rate_limit_rpm=2)
+
+        first = await manager.check_rate_limit(tenant_key)
+        second = await manager.check_rate_limit(tenant_key)
+        third = await manager.check_rate_limit(tenant_key)
+
+        assert first == (True, 1, 1_060)
+        assert second == (True, 0, 1_060)
+        assert third == (False, 0, 1_060)
+
+
+class TestEntityAllowAndLifecycle:
+    def test_is_entity_allowed_true_when_unrestricted(self, manager: AuthManager) -> None:
+        assert manager.is_entity_allowed(_key(allowed_entity_types=None), "user") is True
+
+    def test_shutdown_is_idempotent(self, manager: AuthManager) -> None:
+        manager.shutdown()
+        manager.shutdown()

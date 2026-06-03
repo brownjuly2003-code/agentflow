@@ -183,7 +183,8 @@ asyncio_mode = "auto"
 
 [tool.mutmut]
 paths_to_mutate = [
-    "src/serving/api/auth.py",
+    "src/serving/api/auth/manager.py",
+    "src/serving/api/auth/key_rotation.py",
     "src/serving/masking.py",
     "src/serving/semantic_layer/query_engine.py",
     "src/processing/outbox.py",

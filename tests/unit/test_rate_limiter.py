@@ -257,6 +257,54 @@ async def test_rate_limiter_fails_open_when_redis_is_unavailable(
     ]
 
 
+@pytest.mark.asyncio
+async def test_rate_limiter_in_memory_fallback_allows_then_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.serving.api.rate_limiter.redis", None)
+    limiter = RateLimiter(redis_client=None, time_source=FrozenClock(1_000.0))
+
+    first_allowed, first_remaining, first_reset = await limiter.check("tenant:key", 2)
+    second_allowed, second_remaining, _ = await limiter.check("tenant:key", 2)
+    third_allowed, third_remaining, third_reset = await limiter.check("tenant:key", 2)
+
+    assert (first_allowed, first_remaining, first_reset) == (True, 1, 1_060)
+    assert (second_allowed, second_remaining) == (True, 0)
+    assert (third_allowed, third_remaining, third_reset) == (False, 0, 1_060)
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_in_memory_fallback_expires_old_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.serving.api.rate_limiter.redis", None)
+    clock = FrozenClock(1_000.0)
+    limiter = RateLimiter(redis_client=None, time_source=clock)
+
+    await limiter.check("tenant:key", 2, window_seconds=60)
+    await limiter.check("tenant:key", 2, window_seconds=60)
+    clock.advance(61)
+    allowed, remaining, reset_at = await limiter.check("tenant:key", 2, window_seconds=60)
+
+    assert allowed is True
+    assert remaining == 1
+    assert reset_at == 1_121
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_in_memory_fallback_blocks_with_zero_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.serving.api.rate_limiter.redis", None)
+    limiter = RateLimiter(redis_client=None, time_source=FrozenClock(1_000.0))
+
+    allowed, remaining, reset_at = await limiter.check("tenant:key", 0, window_seconds=60)
+
+    assert allowed is False
+    assert remaining == 0
+    assert reset_at == 1_060
+
+
 def test_auth_middleware_adds_rate_limit_headers_on_success(tmp_path: Path) -> None:
     api_keys_path = tmp_path / "config" / "api_keys.yaml"
     db_path = tmp_path / "usage.duckdb"

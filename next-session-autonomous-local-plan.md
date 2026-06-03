@@ -113,16 +113,22 @@ Pick the first that applies; finish it before the next.
    do not repeat them.
    Typing a module often surfaces real latent bugs — fix them, don't suppress.
 5. **Coverage cadence** — add/raise a per-module 90% coverage gate where a
-   module is under-tested. Latest completed gate: `5a72476` pins
-   `src.serving.api.rate_limiter` (security-critical sliding-window limiter,
-   mutmut target) at 90% (local baseline raised 78%→98% by new in-memory
-   fail-open fallback tests in `tests/unit/test_rate_limiter.py`). Prior gates:
-   `6400a83` pins `src.serving.masking` (PII masker) at 90% (66%→99%);
-   `5fecb1b` pins `src.ingestion.producers.event_producer` at 90% (96.39%).
-   The remaining security-list module without a unit-only gate is the auth
-   manager (`src.serving.api.auth.manager`): it stays integration-covered and
-   its dedicated unit files do not reach 90% standalone, so a gate there needs
-   new tests first, not just a pin.
+   module is under-tested. **The audit mm F-3 security-module list is now
+   complete**: `a78d141` pins `src.serving.api.auth.manager` at 90% (82%→94%
+   via new pure-logic tests over its dedicated files), `5a72476` pins
+   `src.serving.api.rate_limiter` (78%→98%), `6400a83` pins `src.serving.masking`
+   (66%→99%); `sql_guard` is at 100% and `event_producer` (`5fecb1b`, 96.39%)
+   and `validators` / `freshness_monitor` were already gated. The auth-manager
+   gate runs its four dedicated unit files (`test_auth.py`,
+   `test_auth_manager_pure_logic.py`, `test_auth_manager_memory_bounds.py`,
+   `test_auth_hashed_key_guidance.py`). **Local-measurement gotcha**: the broken
+   local `_duckdb._sqltypes` native package (the Python313/Python312 shadow)
+   makes `pytest --cov=<duckdb-importing module>` error on *collection* locally
+   even though plain `coverage run -m pytest` and the CI gate (clean duckdb)
+   both work — measure auth/usage-table module coverage with
+   `python -m coverage run -m pytest <files>` + `coverage report`, not
+   pytest-cov, on this Windows host. No obvious next coverage target remains;
+   pick a new under-tested module only on real evidence.
 
 If only external/upstream/Docker-gated items remain (below), stop and record it
 — do not fabricate evidence or churn docs.

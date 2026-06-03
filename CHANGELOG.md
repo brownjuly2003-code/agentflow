@@ -81,6 +81,20 @@ All notable changes to AgentFlow are documented in this file.
   raising own-file coverage from 78% to 98% (only the optional `redis.from_url`
   auto-construct line stays uncovered, env-gated on the `redis` package). This
   extends the audit mm F-3 security-module coverage list beyond masking.
+- Added a per-module 90% coverage gate for `src.serving.api.auth.manager`, the
+  security-critical auth manager (key match/verify, tenant isolation, rate-limit
+  and failed-auth windows, rotation-grace) and a mutmut target, run over its
+  dedicated unit files and pinned by `tests/unit/test_coverage_policy.py`. New
+  pure-logic tests raise the module's coverage across those files from 82% to
+  94% (`get_current_tenant_id`, the `__init__` `DUCKDB_PATH` derivation and
+  invalid rotation-grace fallback, env-only `_load_config`, in-memory
+  `is_rate_limited`, the `check_rate_limit` redis-reports-full secondary window,
+  unrestricted `is_entity_allowed`, and `shutdown`); the remaining gap is the
+  platform-divergent SIGHUP handler and bcrypt rotation paths the integration /
+  e2e auth suites cover. This **completes the audit mm F-3 security-module
+  coverage list** — masking, rate limiter, and auth manager now have unit-only
+  90% gates alongside the existing `sql_guard` (100%) and `event_producer`
+  gates.
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

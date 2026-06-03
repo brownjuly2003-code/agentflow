@@ -105,6 +105,16 @@ All notable changes to AgentFlow are documented in this file.
   coverage from 58% to 93%, pinning the rotator logic at the unit layer
   alongside the existing HTTP-level `tests/integration/test_rotation.py`. This
   extends the audit security-critical mutmut-target set with a unit-only gate.
+- Added a per-module 90% coverage gate for `src.processing.outbox`, the
+  at-least-once delivery loop and a mutmut target, via `coverage run` +
+  `coverage report --include` (outbox imports duckdb). A new
+  `tests/unit/test_outbox_processor.py` raises own-file coverage from 58% to 92%
+  with an injected DuckDB connection and a stub / fake `confluent_kafka.Producer`,
+  covering pending/entry dispatch, the success / retry / poison-to-failed state
+  machine, exponential and Kafka-floor backoff, the mark-sent and schedule-retry
+  transactions (dead-letter replayed/failed and rollback-on-failure), payload
+  decoding, the producer adapter, and the `run_forever` error loop. The full
+  streaming path stays covered by `tests/integration/test_outbox.py`.
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

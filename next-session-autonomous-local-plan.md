@@ -130,11 +130,13 @@ Pick the first that applies; finish it before the next.
    pytest-cov, on this Windows host. The same `coverage run` mechanism now also
    gates `src.serving.api.auth.key_rotation` (`c65de9d`, 58%→93% via the new
    `tests/unit/test_key_rotation.py`), extending the security-critical
-   mutmut-target set. Remaining mutmut targets without a unit-only gate are
-   `src.processing.outbox` and `src.serving.semantic_layer.query_engine` (both
-   import duckdb → use the `coverage run` gate form if pursued). Pick a new
-   under-tested module only on real evidence (mutmut/security-critical
-   qualifies; arbitrary modules do not).
+   mutmut-target set. `src.processing.outbox` is now also gated (`4c15d0f`,
+   58%→92% via `tests/unit/test_outbox_processor.py`, `coverage run` form). The
+   last mutmut target without a unit-only gate is
+   `src.serving.semantic_layer.query_engine` (imports duckdb → `coverage run`
+   gate form; the query orchestration surface). Pick a new under-tested module
+   only on real evidence (mutmut/security-critical qualifies; arbitrary modules
+   do not).
 
 If only external/upstream/Docker-gated items remain (below), stop and record it
 — do not fabricate evidence or churn docs.

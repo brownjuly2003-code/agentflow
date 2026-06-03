@@ -42,6 +42,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
+  for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
+  slice had already been promoted, so the overrides were inverted into one
+  global default plus a single explicit relaxation for the PyFlink-gated
+  `src.processing.flink_jobs.*` package (no PEP-561 stubs; hot-path jobs gated
+  on upstream PR #23). A new untyped def in any non-relaxed module now fails
+  mypy instead of slipping through a module nobody pinned, closing the
+  ~30-override maintenance surface flagged by the 2026-06-03 audit (H-3).
+  `tests/unit/test_typing_policy.py` is rewritten to assert the inverted
+  invariant (global strict on, `flink_jobs` the sole relaxation, no redundant
+  per-module strict overrides). `mypy src` stays clean on 99 files.
 - `src.serving.api.alerts.dispatcher` is now a strict mypy slice
   (`disallow_untyped_defs = true`), completing strict typing across
   `src/serving/api`. The gaps were the three FastAPI app boundaries

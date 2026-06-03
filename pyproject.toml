@@ -206,228 +206,25 @@ mutate_only_covered_lines = true
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
+# Strict-by-default: every function under src/ must carry full type
+# annotations. The earlier per-module opt-in slices were inverted into this
+# global default once the whole tree (except the PyFlink-gated flink_jobs
+# package) was annotated, so a new untyped def in any non-relaxed module now
+# fails mypy instead of slipping through an unlisted module. The strict
+# invariant is gated by tests/unit/test_typing_policy.py.
+disallow_untyped_defs = true
 check_untyped_defs = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Sole strict relaxation: PyFlink lacks PEP-561 stubs and these hot-path
+# Flink jobs are gated on upstream PR #23, so relax the untyped-def
+# requirement and suppress the no-Any / import-untyped noise from pyflink.*
+# here while still catching real type bugs (attr-defined, arg-type, etc.).
+# Gated by tests/unit/test_typing_policy.py.
 module = "src.processing.flink_jobs.*"
-# PyFlink lacks PEP-561 stubs; suppress the no-Any/import-untyped noise from
-# pyflink.* while still catching real type bugs (attr-defined, arg-type, etc.).
+disallow_untyped_defs = false
 disable_error_code = ["import-untyped", "no-any-return", "no-untyped-call"]
-
-[[tool.mypy.overrides]]
-module = "src.quality.validators.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Event schemas are the data-contract boundary used by producers, validators,
-# and API-facing models; keep Pydantic validators fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.ingestion.schemas.events"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Synthetic producer drives the local/demo Kafka event stream and is covered by
-# a scoped CI coverage gate; keep serialization and delivery callbacks
-# annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.ingestion.producers.event_producer"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Security-critical: keep the API key / rate-limit / audit paths fully
-# annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.auth.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Rate limiting protects the auth/API hot path and emits client-visible
-# headers; keep the Redis/memory boundary fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.rate_limiter"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Security helpers enforce request-size limits and response headers; keep the
-# middleware factory boundary fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.security"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Versioning helpers set compatibility headers and response transforms; keep
-# the middleware factory boundary fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.versioning"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Analytics middleware records request telemetry and replays request bodies;
-# keep the middleware factory boundary fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.analytics"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# FastAPI app wiring owns lifespan resources, middleware order, and top-level
-# routes; keep those boundaries annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.main"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# QueryCache is the Redis/fallback boundary for cached entity and metric
-# lookups; keep the client injection and invalidation helpers annotated. Gated
-# by tests/unit/test_typing_policy.py.
-module = "src.serving.cache"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Quality monitors gate freshness / SLA / pipeline-health signals; keep them
-# fully annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.quality.monitors.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Semantic layer (catalog / NL→SQL / contracts) is the agent-facing query
-# surface; keep it fully annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.semantic_layer.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Query backends build/execute SQL (the H-C1/H-C2 injection-hardening
-# surface); keep them fully annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.backends.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Batch DAGs drive Iceberg maintenance + aggregate materialization; keep the
-# scheduled asset functions fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.orchestration.dags.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Dead-letter event replay is a delivery-correctness path (re-emits failed
-# events through the transactional outbox); keep it fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.processing.event_replayer"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Local end-to-end pipeline (generate→validate→enrich→DuckDB) is the
-# zero-infra demo path; keep it fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.processing.local_pipeline"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Transactional outbox is an at-least-once delivery-guarantee path; keep it
-# fully annotated. The DuckDB connection is reached through the `_connection`
-# property so use-after-close fails loud instead of on a None attribute. Gated
-# by tests/unit/test_typing_policy.py.
-module = "src.processing.outbox"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Request middleware (correlation logging + HTTP metrics + tracing) is the
-# per-request observability path; keep it fully annotated. First bounded slice
-# into src/serving/api. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.middleware.*"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Dead-letter router (list / detail / stats / replay / dismiss) drives the
-# operator-facing recovery surface over the same dead_letter_events table that
-# the strict-typed event_replayer / outbox slices manage; keep it fully
-# annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.deadletter"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Webhooks expose tenant-scoped callback registration and delivery logs; keep
-# this operator integration surface fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.webhooks"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Alerts expose tenant-scoped rule management, test dispatch, and history; keep
-# this operator integration surface fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.alerts"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Contract routes expose schema governance (version lookup, diff, and
-# validation); keep them fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.contracts"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Agent query routes are the LLM-facing query execution, entity lookup, metric,
-# and catalog discovery surface; keep them fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.agent_query"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Batch route fans out entity, metric, and query requests concurrently; keep
-# the wrapper fully annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.batch"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Search is the semantic discovery API over catalog/search-index results; keep
-# its response model boundary annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.search"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Lineage reconstructs tenant-scoped provenance chains; keep its response model
-# boundary annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.lineage"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# SLO routes aggregate tenant-scoped operational health budgets; keep route and
-# config boundaries annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.slo"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Stream routes emit tenant-scoped SSE payloads; keep fetch and generator
-# boundaries annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.stream"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Admin UI routes render operator-only status pages; keep route and context
-# builders annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.admin_ui"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Admin key-management and analytics endpoints expose operator-only control
-# plane data; keep route boundaries annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.routers.admin"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Webhook dispatcher signs and retries tenant-scoped deliveries; keep its
-# FastAPI app boundary annotated. Gated by tests/unit/test_typing_policy.py.
-module = "src.serving.api.webhook_dispatcher"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-# Alert dispatcher owns the tenant-scoped alert evaluation loop and the FastAPI
-# app-state wiring (config path + dispatcher lifecycle); keep the app
-# boundaries and dispatch helpers fully annotated. Gated by
-# tests/unit/test_typing_policy.py.
-module = "src.serving.api.alerts.dispatcher"
-disallow_untyped_defs = true
 
 [tool.agentflow.dependency-profiles.profiles.runtime]
 editable-installs = ["."]

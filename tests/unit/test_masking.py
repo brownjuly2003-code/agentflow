@@ -119,6 +119,305 @@ def test_masker_ignores_missing_fields():
     assert masked == payload
 
 
+def test_mask_query_results_masks_single_entity(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    rows, masked = masker.mask_query_results(
+        "SELECT email FROM users",
+        [{"email": "jane@example.com"}],
+        tenant="acme",
+        table_to_entity={"users": "user"},
+    )
+
+    assert masked is True
+    assert rows == [{"email": "j***@example.com"}]
+
+
+def test_mask_query_results_skips_when_multiple_entities(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+            order:
+              - field: user_id
+                strategy: full
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    rows, masked = masker.mask_query_results(
+        "SELECT u.email FROM users u JOIN orders o ON u.id = o.user_id",
+        [{"email": "jane@example.com"}],
+        tenant="acme",
+        table_to_entity={"users": "user", "orders": "order"},
+    )
+
+    assert masked is False
+    assert rows == [{"email": "jane@example.com"}]
+
+
+def test_mask_query_results_returns_unchanged_for_unmapped_table(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    rows, masked = masker.mask_query_results(
+        "SELECT email FROM analytics_events",
+        [{"email": "jane@example.com"}],
+        tenant="acme",
+        table_to_entity={"users": "user"},
+    )
+
+    assert masked is False
+    assert rows == [{"email": "jane@example.com"}]
+
+
+def test_mask_query_results_handles_unparseable_sql(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    rows, masked = masker.mask_query_results(
+        "SELECT (((",
+        [{"email": "jane@example.com"}],
+        tenant="acme",
+        table_to_entity={"users": "user"},
+    )
+
+    assert masked is False
+    assert rows == [{"email": "jane@example.com"}]
+
+
+def test_mask_query_results_reports_no_change_when_field_absent(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    rows, masked = masker.mask_query_results(
+        "SELECT status FROM users",
+        [{"status": "active"}],
+        tenant="acme",
+        table_to_entity={"users": "user"},
+    )
+
+    assert masked is False
+    assert rows == [{"status": "active"}]
+
+
+def test_mask_leaves_none_values_untouched(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"email": None}, tenant="acme")
+
+    assert masked == {"email": None}
+
+
+def test_mask_passes_through_unknown_strategy(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: tokenize
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"email": "jane@example.com"}, tenant="acme")
+
+    assert masked == {"email": "jane@example.com"}
+
+
+def test_mask_handles_empty_string_partial(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"email": ""}, tenant="acme")
+
+    assert masked == {"email": ""}
+
+
+def test_mask_email_with_empty_local_part(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"email": "@example.com"}, tenant="acme")
+
+    assert masked == {"email": "***@example.com"}
+
+
+def test_mask_single_token_name(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: full_name
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"full_name": "Madonna"}, tenant="acme")
+
+    assert masked == {"full_name": "M***"}
+
+
+def test_mask_partially_masks_numbered_street_address(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: address
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"address": "123 Main St, Springfield"}, tenant="acme")
+
+    assert masked == {"address": "123 *** St, ***"}
+
+
+def test_mask_partially_masks_single_part_address(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: address
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"address": "123 Main St"}, tenant="acme")
+
+    assert masked == {"address": "123 *** St"}
+
+
+def test_mask_partially_masks_address_without_leading_number(tmp_path: Path):
+    config_path = _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: address
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+    masker = PiiMasker(config_path)
+
+    masked = masker.mask("user", {"address": "Main Apt, Building 5"}, tenant="acme")
+
+    assert masked == {"address": "M*** A***, ***"}
+
+
+def test_mask_word_returns_empty_for_empty_input():
+    masker = PiiMasker(DEFAULT_CONFIG_PATH)
+
+    assert masker._mask_word("") == ""
+
+
 def test_entity_endpoint_masks_data_and_sets_header(monkeypatch):
     _reset_router_masker(monkeypatch, DEFAULT_CONFIG_PATH)
     client = _build_client(

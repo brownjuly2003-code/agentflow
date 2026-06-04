@@ -96,9 +96,7 @@ def test_container_attestation_workflow_runs_smoke_on_pull_request():
     changes_step = next(step for step in steps if step.get("id") == "changes")
     run_text = changes_step["run"]
     for tracked in ("Dockerfile", "pyproject", "requirements", "container-attestation"):
-        assert tracked in run_text, (
-            f"the change-detection step must inspect {tracked!r} paths"
-        )
+        assert tracked in run_text, f"the change-detection step must inspect {tracked!r} paths"
     assert "GITHUB_OUTPUT" in run_text, (
         "change detection must publish a step output the build steps key off"
     )

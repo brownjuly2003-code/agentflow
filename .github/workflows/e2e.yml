@@ -16,7 +16,7 @@ jobs:
       AGENTFLOW_E2E_OPS_KEY: af-prod-agent-ops-def456
       AGENTFLOW_E2E_RATE_LIMIT_KEY: af-prod-agent-rate-e2e000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v6
         with:

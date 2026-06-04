@@ -1,12 +1,12 @@
 name: Container Attestation
 
 "on":
+  # No `paths:` filter on pull_request: build-smoke is a required
+  # branch-protection check, so the job must COMPLETE on every PR.
+  # A paths filter would leave docker-free PRs stuck forever on
+  # "Expected - waiting for status". Path-gating happens inside the
+  # job via the `changes` step instead.
   pull_request:
-    paths:
-      - "Dockerfile*"
-      - "pyproject.toml"
-      - "requirements.txt"
-      - ".github/workflows/container-attestation.yml"
   workflow_dispatch:
     inputs:
       mode:
@@ -42,15 +42,39 @@ env:
 jobs:
   build-smoke:
     name: build-smoke
-    # Runs on every PR that touches the Dockerfile / pip surface or the
-    # workflow itself. Builds the image without pushing or signing so a
-    # broken Dockerfile fails the PR instead of landing silently.
+    # Runs on EVERY PR (required check). The `changes` step inspects the
+    # diff against the PR base: when the Dockerfile / pip surface or this
+    # workflow changed, the image is built without pushing or signing so a
+    # broken Dockerfile fails the PR instead of landing silently; otherwise
+    # the job completes immediately as a skip-success so the required check
+    # never blocks docker-free PRs.
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Detect container-relevant changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          changed="$(git diff --name-only "${base}...HEAD")"
+          printf 'Changed files:\n%s\n' "${changed}"
+          if printf '%s\n' "${changed}" | grep -E -q \
+            '^(Dockerfile|pyproject\.toml$|requirements\.txt$|\.github/workflows/container-attestation\.yml$)'; then
+            echo "docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip note (no container-relevant changes)
+        if: steps.changes.outputs.docker == 'false'
+        run: echo "No Dockerfile*/pyproject.toml/requirements.txt/workflow changes - smoke build skipped, required check passes."
       - uses: docker/setup-buildx-action@v4
+        if: steps.changes.outputs.docker == 'true'
       - name: Build API image (no push)
+        if: steps.changes.outputs.docker == 'true'
         id: smoke
         uses: docker/build-push-action@v7
         with:

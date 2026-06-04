@@ -76,11 +76,15 @@ def test_container_attestation_workflow_runs_smoke_on_pull_request():
     assert "pull_request" in workflow["on"], (
         "container-attestation must run on PR to catch broken Dockerfiles before merge"
     )
-    paths = workflow["on"]["pull_request"]["paths"]
-    for required_path in ("Dockerfile*", "pyproject.toml", "requirements.txt"):
-        assert required_path in paths, (
-            f"PR trigger must include {required_path!r} so deps and image changes are smoked"
-        )
+    # build-smoke is a required branch-protection check, so the workflow must
+    # trigger on EVERY pull request: a `paths:` filter here would leave
+    # non-Docker PRs stuck forever on "Expected — waiting for status" (the
+    # `contract` Lessons 1/4 trap). Path-gating lives INSIDE the job instead.
+    pr_trigger = workflow["on"]["pull_request"]
+    assert not (isinstance(pr_trigger, dict) and "paths" in pr_trigger), (
+        "pull_request must not be paths-filtered; a required check has to "
+        "complete on every PR — gate the docker build inside the job"
+    )
 
     smoke_job = workflow["jobs"]["build-smoke"]
     assert smoke_job["name"] == "build-smoke", (
@@ -88,12 +92,37 @@ def test_container_attestation_workflow_runs_smoke_on_pull_request():
     )
     assert "github.event_name == 'pull_request'" in smoke_job["if"]
 
+    steps = smoke_job["steps"]
+    changes_step = next(step for step in steps if step.get("id") == "changes")
+    run_text = changes_step["run"]
+    for tracked in ("Dockerfile", "pyproject", "requirements", "container-attestation"):
+        assert tracked in run_text, (
+            f"the change-detection step must inspect {tracked!r} paths"
+        )
+    assert "GITHUB_OUTPUT" in run_text, (
+        "change detection must publish a step output the build steps key off"
+    )
+
     build_step = next(
         step
-        for step in smoke_job["steps"]
+        for step in steps
         if isinstance(step.get("uses"), str)
         and step["uses"].startswith("docker/build-push-action@")
     )
+    assert build_step.get("if") == "steps.changes.outputs.docker == 'true'", (
+        "the docker build must be conditional so docker-free PRs complete "
+        "as an instant skip-success"
+    )
+    buildx_step = next(
+        step
+        for step in steps
+        if isinstance(step.get("uses"), str)
+        and step["uses"].startswith("docker/setup-buildx-action@")
+    )
+    assert buildx_step.get("if") == "steps.changes.outputs.docker == 'true'", (
+        "buildx setup is wasted work on docker-free PRs"
+    )
+
     inputs = build_step["with"]
     assert inputs["push"] is False, "PR smoke must not push to ghcr.io"
     assert inputs["file"] == "Dockerfile.api"

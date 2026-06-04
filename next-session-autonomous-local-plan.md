@@ -131,12 +131,19 @@ Pick the first that applies; finish it before the next.
    gates `src.serving.api.auth.key_rotation` (`c65de9d`, 58%→93% via the new
    `tests/unit/test_key_rotation.py`), extending the security-critical
    mutmut-target set. `src.processing.outbox` is now also gated (`4c15d0f`,
-   58%→92% via `tests/unit/test_outbox_processor.py`, `coverage run` form). The
-   last mutmut target without a unit-only gate is
-   `src.serving.semantic_layer.query_engine` (imports duckdb → `coverage run`
-   gate form; the query orchestration surface). Pick a new under-tested module
-   only on real evidence (mutmut/security-critical qualifies; arbitrary modules
-   do not).
+   58%→92% via `tests/unit/test_outbox_processor.py`, `coverage run` form).
+   **The mutmut-target gate list is now complete** (2026-06-04): the query
+   surface was the last gap, and `9cb291d` pins the whole
+   `src/serving/semantic_layer/query` package at 97% behind a 90% gate
+   (`coverage run` form, five dedicated unit files) after `02b4a3c` repointed
+   the mutmut target from the 5-line `query_engine.py` re-export shim to the
+   five real package modules (`test_mutmut_targets_define_real_logic` now
+   fails on any future pure re-export target). That coverage push also
+   surfaced and fixed a real latent bug: a literal 0x08 byte (an editing-tool
+   collapse of `\b`) inside the explain() fallback regex (`f7414d9`). Every
+   mutmut target now has a unit-only coverage gate. Pick a new under-tested
+   module only on real evidence (mutmut/security-critical qualifies; arbitrary
+   modules do not).
 
 If only external/upstream/Docker-gated items remain (below), stop and record it
 — do not fabricate evidence or churn docs.

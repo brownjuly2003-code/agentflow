@@ -6,6 +6,29 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Fixed
 
+- The `explain()` sqlglot-failure fallback regex in
+  `src/serving/semantic_layer/query/nl_queries.py` contained a literal 0x08
+  (backspace) byte where the author meant the two-character escape `\b`: the
+  pattern then required a backspace character before `FROM`/`JOIN`, never
+  matched, and the fallback silently returned an empty `tables_accessed`
+  (which also suppressed the full-table-scan warning). Same corruption family
+  as the mojibake box-drawing regex fixed earlier. The control byte is now a
+  real word-boundary escape, and a new
+  `test_query_package_sources_have_no_control_bytes` fails on any ASCII
+  control byte (other than line endings) anywhere in the query package
+  sources.
+- `[tool.mutmut].paths_to_mutate` pointed at
+  `src/serving/semantic_layer/query_engine.py` — a 5-line re-export shim left
+  behind by the query-engine package split — so local mutation runs over the
+  query surface mutated nothing real (the semantic flavor of the H-2 `auth.py`
+  path rot: the file exists, so the existence policy test passed). It now
+  targets the five substantive modules in `src/serving/semantic_layer/query/`
+  (engine, entity_queries, metric_queries, nl_queries, sql_builder);
+  `nl_queries` (the only `validate_nl_sql()` enforcement boundary) and
+  `sql_builder` (every entity/metric SQL string) joined the required
+  security-critical target set, and a new
+  `test_mutmut_targets_define_real_logic` AST policy check fails on any future
+  pure re-export target.
 - The NL→SQL guard (`validate_nl_sql`) now rejects DuckDB scan functions that
   `sqlglot` parses into typed `Func` nodes. `read_csv` / `read_parquet` parse to
   `exp.ReadCSV` / `exp.ReadParquet`, not `exp.Anonymous`, so the
@@ -115,6 +138,27 @@ All notable changes to AgentFlow are documented in this file.
   transactions (dead-letter replayed/failed and rollback-on-failure), payload
   decoding, the producer adapter, and the `run_forever` error loop. The full
   streaming path stays covered by `tests/integration/test_outbox.py`.
+- Added a per-package 90% coverage gate for `src/serving/semantic_layer/query`
+  (the NL→SQL orchestration surface and, since the mutmut repoint, a
+  mutation-target set), via `coverage run` + `coverage report --include` (the
+  engine imports duckdb). A new `tests/unit/test_query_package_logic.py` raises
+  package coverage from 64% to 97% with the minimal-host pattern: engine
+  lifecycle, sql_builder literal quoting / schema validation / tenant
+  qualification + caching, metric and entity error mapping plus the
+  quoted-literal (non-DuckDB backend) branches, historical entity lookup over
+  pipeline events and the table fallback, NL translation failure hints, cursor
+  encode/decode and pagination, unsafe-SQL rejection, and the explain engine
+  detection / regex fallback paths. The remaining gap is the OTel
+  span-recording branches the integration suites cover.
+- Dependabot Tier A wave 4 (2026-06-04): `actions/checkout` 4 → 6 (#33),
+  `docker/setup-buildx-action` 3 → 4 (#34), `aws-actions/configure-aws-credentials`
+  4 → 6 (#35), `schemathesis` 4.20.0 → 4.21.0 (#32), `pandas` `<3` → `<4` dev
+  upper bound (#36), `actions/attest-build-provenance` 2 → 4 (#31). The #31
+  bump required unpinning the workflow-policy tests from the exact action
+  major (`test_container_attestation_workflow.py` now matches the step by
+  action-name prefix, so the next major bump needs no manual test edit).
+  Resolver smoke (`pip install --dry-run -e ".[dev,cloud,contract]"`) green
+  after the wave.
 - Strict typing (`disallow_untyped_defs = true`) is now the global mypy default
   for `src/` rather than ~32 per-module opt-in overrides. Every prior strict
   slice had already been promoted, so the overrides were inverted into one

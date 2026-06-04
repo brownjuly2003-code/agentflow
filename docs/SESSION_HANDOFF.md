@@ -1,8 +1,37 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-03 (strict-typing cadence CLOSED via global inversion; H-6 NL→SQL guard bypass fixed; coverage floor landed; HEAD-drift refresh)
-**Verified code/state HEAD before this refresh:** `5936f8d` on `main` (even with
-`origin/main`). Session 2026-06-03 stack on top of the prior `8032e24` state:
+**Last updated:** 2026-06-04 (coverage cadence COMPLETE: every mutmut target
+unit-gated; query package gate + 0x08 regex fix + mutmut shim repoint;
+Dependabot wave 4 merged)
+**Verified code/state HEAD before this refresh:** `9361360` on `main` (even with
+`origin/main`). Session 2026-06-04 stack on top of the prior `5936f8d` state:
+`ccbf230` (F-6 handoff refresh), `6400a83` + `242fbdf` (PII masking 66%→99% +
+90% gate), `5a72476` + `d191694` (rate limiter 78%→98% + gate), `a78d141` +
+`e6914fa` + `6c779ee` (auth manager 82%→94% + gate; **gate gotcha:**
+duckdb-importing modules need `coverage run` + `coverage report --include`,
+not `pytest --cov` — pytest-cov instrumentation trips duckdb's lazy
+`_duckdb._sqltypes` import at collection time on CI too), `c65de9d` +
+`7d3a3c6` (key rotation 58%→93% + gate), `4c15d0f` + `8fa8a14` (outbox
+58%→92% + gate), `02b4a3c` (**mutmut repoint**: `paths_to_mutate` pointed at
+the 5-line `query_engine.py` re-export shim, so the query surface mutated
+nothing; now targets the five real `query/` package modules, with an AST
+policy test against future pure re-export targets), `f7414d9` (**real latent
+bug**: a literal 0x08 byte — a collapsed `\b` escape — inside the `explain()`
+fallback regex in `nl_queries.py` meant the regex never matched and
+`tables_accessed` came back empty on the sqlglot-failure path; fixed + a
+control-byte source guard), `9cb291d` (**query package coverage gate**: new
+`tests/unit/test_query_package_logic.py` lifts the package 64%→97% behind a
+90% CI gate over five dedicated unit files — **the coverage cadence is now
+complete; every mutmut target has a unit-only gate**), Dependabot wave 4
+merges `e342cb1`/#34, `223bd8a`/#33, `1ea1a77`/#35, `3cabb87`/#36 (pandas dev
+`<4`), `a6886be`/#32 (schemathesis 4.21.0), `ef3d2a3`/#31
+(attest-build-provenance v4; required unpinning
+`test_container_attestation_workflow.py` from the exact action major — it now
+matches by name prefix), and `9361360` (docs record). Six main workflows green
+on `9cb291d`, `ef3d2a3`, and `9361360` (Contract Tests path-filtered on the
+md-only docs commit, expected). Resolver smoke
+(`pip install --dry-run -e ".[dev,cloud,contract]"`) green after the wave.
+Earlier session 2026-06-03 stack on top of the prior `8032e24` state:
 `09cc0ea` (api main strict slice state), `af37432` (alerts dispatcher strict
 slice — closes the last src API untyped surface), `1480a32` (point mutmut
 `paths_to_mutate` at the real `auth/manager.py` + `auth/key_rotation.py`; the
@@ -56,9 +85,32 @@ All of `src/processing` except the PR-#23-gated `flink_jobs` is now
 strict-typed. Prior state-refresh HEAD `6866f68`; open-questions plan HEAD
 `34d99da`.
 **Branch state at refresh start:** `main...origin/main`; local `main` is even with `origin/main`.
-**Tracked files at refresh start:** `915` via `git ls-files` (+2 test files:
-`tests/unit/test_mutmut_policy.py`, `tests/unit/test_auth_manager_pure_logic.py`).
+**Tracked files at refresh start:** `918` via `git ls-files` (+3 test files
+since `915`: `tests/unit/test_key_rotation.py`,
+`tests/unit/test_outbox_processor.py`, `tests/unit/test_query_package_logic.py`).
 **Latest local commits before this state refresh:**
+- `9361360` docs: record query gate + 0x08 fix + mutmut repoint + Dependabot wave 4
+- `ef3d2a3` chore(deps,ci): bump actions/attest-build-provenance from 2 to 4 (#31)
+- `a6886be` chore(deps): bump schemathesis (#32)
+- `3cabb87` chore(deps): update pandas requirement from <3,>=2.2 to >=2.2,<4 (#36)
+- `1ea1a77` chore(deps,ci): bump aws-actions/configure-aws-credentials from 4 to 6 (#35)
+- `223bd8a` chore(deps,ci): bump actions/checkout from 4 to 6 (#33)
+- `e342cb1` chore(deps,ci): bump docker/setup-buildx-action from 3 to 4 (#34)
+- `9cb291d` test(semantic-layer): pin query package at 97% behind a 90% CI gate
+- `f7414d9` fix(semantic-layer): repair backspace-corrupted regex in explain table fallback
+- `02b4a3c` fix(mutmut): repoint query target from re-export shim to real query package
+- `8fa8a14` docs: record outbox coverage gate (4c15d0f, six green)
+- `4c15d0f` test(reliability): pin outbox dispatch at 92% behind a 90% CI gate
+- `7d3a3c6` docs: record key rotation coverage gate (c65de9d, six green)
+- `c65de9d` test(security): pin key rotation at 93% behind a 90% CI gate
+- `6c779ee` docs: record auth manager gate + F-3 completion (e6914fa, six green)
+- `e6914fa` fix(ci): use coverage run for auth manager gate to dodge duckdb-under-cov
+- `a78d141` test(security): pin auth manager at 94% behind a 90% CI gate
+- `d191694` docs: record rate limiter coverage gate (5a72476, six green)
+- `5a72476` test(security): pin rate limiter at 98% behind a 90% CI gate
+- `242fbdf` docs: record PII masking coverage gate (6400a83, six green)
+- `6400a83` test(security): pin PII masker at 99% behind a 90% CI gate
+- `ccbf230` docs(handoff): refresh to HEAD 5936f8d, close F-6 HEAD-drift
 - `5936f8d` test(auth): unit-cover pure security logic in auth manager
 - `f393cce` docs(state): record strict-typing inversion + mutmut target, close cadence
 - `6ae7936` test(security): pin sql_guard into mutmut targets + guard path rot

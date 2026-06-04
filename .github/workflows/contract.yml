@@ -1,6 +1,6 @@
 name: Contract Tests
 
-on:
+"on":
   push:
     paths:
       - "config/contracts/**"
@@ -19,39 +19,61 @@ on:
       - "infrastructure/terraform/**"
       - "sdk-ts/**"
       - "Dockerfile*"
+  # No `paths:` filter on pull_request: `contract` is a required
+  # branch-protection check, so the job must COMPLETE on every PR.
+  # A paths filter would leave contract-irrelevant PRs stuck forever on
+  # "Expected - waiting for status" (the Lessons 1/4 trap, closed for
+  # build-smoke in PR #37). Path-gating happens inside the job via the
+  # `changes` step instead.
   pull_request:
-    paths:
-      - "config/contracts/**"
-      - "scripts/generate_contracts.py"
-      - "src/**"
-      - "sdk/**"
-      - "docs/openapi.json"
-      - "docs/agent-tools/**"
-      - "scripts/export_openapi.py"
-      - "tests/contract/**"
-      - "tests/unit/test_contracts_in_sync.py"
-      - ".github/workflows/contract.yml"
-      - "pyproject.toml"
-      - "sdk/pyproject.toml"
-      - ".github/workflows/**"
-      - "infrastructure/terraform/**"
-      - "sdk-ts/**"
-      - "Dockerfile*"
   workflow_dispatch:
 
 jobs:
   contract:
+    name: contract
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Detect contract-relevant changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Non-PR event (${{ github.event_name }}): full suite runs."
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          changed="$(git diff --name-only "${base}...HEAD")"
+          printf 'Changed files:\n%s\n' "${changed}"
+          if printf '%s\n' "${changed}" | grep -E -q \
+            '^(config/contracts/|scripts/generate_contracts\.py$|src/|sdk/|docs/openapi\.json$|docs/agent-tools/|scripts/export_openapi\.py$|tests/contract/|tests/unit/test_contracts_in_sync\.py$|\.github/workflows/|infrastructure/terraform/|sdk-ts/|pyproject\.toml$|Dockerfile)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip note (no contract-relevant changes)
+        if: steps.changes.outputs.relevant == 'false'
+        run: echo "No contract-relevant changes - suite skipped, required check passes."
       - uses: actions/setup-python@v6
+        if: steps.changes.outputs.relevant == 'true'
         with:
           python-version: "3.11"
           cache: "pip"
       - run: python -m pip install --upgrade pip
+        if: steps.changes.outputs.relevant == 'true'
       - run: pip install -e ".[dev,cloud,contract]"
+        if: steps.changes.outputs.relevant == 'true'
       - run: pip install -e "./sdk"
+        if: steps.changes.outputs.relevant == 'true'
       - run: python scripts/generate_contracts.py --check
+        if: steps.changes.outputs.relevant == 'true'
       - run: python scripts/export_openapi.py --check
+        if: steps.changes.outputs.relevant == 'true'
       - run: mkdir -p .tmp
+        if: steps.changes.outputs.relevant == 'true'
       - run: python -m pytest tests/contract -v --tb=short
+        if: steps.changes.outputs.relevant == 'true'

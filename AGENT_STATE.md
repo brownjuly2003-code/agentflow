@@ -2,6 +2,50 @@
 
 Updated: 2026-06-04
 
+## 2026-06-04 session: F-5 closed + build-smoke promoted to required check (main)
+
+Two verified threads closed on `main`, both pushed with green evidence:
+
+- **F-5 (bandit baseline → inline nosec)** — `b6c5fb4`, six main workflows
+  green (15/15 check-runs; the CI run needed one same-SHA rerun after a
+  self-inflicted concurrency cancel, see lesson below). The baseline's single
+  accepted B310 finding (urlopen in `clickhouse_backend.py:70`) moved to an
+  inline `# nosec B310 - <reason>`; `.bandit-baseline.json` is now **empty**
+  and `test_bandit_baseline_carries_no_suppressed_findings` keeps it that way.
+  Inline-with-reason (same line, ` - ` separator — `test_inline_nosec_comments_include_reason`
+  enforces the format) is the only accepted suppression form; the line-keyed
+  baseline drift trap is retired. Docs record: `2bc3b15` (5/5 green,
+  Contract md-path-filtered as usual).
+- **build-smoke → required check** (operator-authorized boundary:
+  «всё что за мной сделай сам») — PR #37 squash `1d4614c` moved the
+  container-attestation `pull_request` paths filter inside the job (`changes`
+  step: `git diff` vs PR base; docker-free PRs complete as instant
+  skip-success). Real-build path validated green on PR #37 itself; skip path
+  validated on throwaway empty-diff PR #38 (buildx/build steps literally
+  `skipped`; PR closed unmerged, branch deleted). Then `build-smoke` was added
+  to the `main` required status checks — **13 contexts now**, GET-verified.
+  Policy test pins the always-run shape (no `paths:` on `pull_request`).
+  Docs record: `bfb07fb` (5/5 green). Do not re-add a paths filter there.
+
+Operational lessons recorded this session (details in the memory topic file):
+- **ci-main concurrency holds exactly one run** (`group: ci-${{ github.ref }}`,
+  cancel-in-progress): pushing while a prior main CI run is in flight cancels
+  it, and rerunning an old SHA while a newer run is in flight cancels the
+  newer one. Before any push/rerun: confirm `in_progress`+`queued` CI runs = 0,
+  and keep the check and the mutating action in SEPARATE tool calls.
+- **GitHub API reads flapped hard all session** (different replicas/paths
+  returning contradictory run states, two different `mergedAt` values for the
+  same PR, stale `updated_at` older than known events). Trust: the git
+  protocol for ref state, server-side gates (`gh pr merge --auto` only merges
+  on genuinely green required checks), and N consecutive consistent reads —
+  never a single read. `curl --http1.1 -H "Connection: close" --noproxy "*"`
+  helped; in poll loops guard against empty command output on transient
+  network failures (an empty string compares as "changed").
+- The scheduled autopilot left `.autopilot/BLOCKED.md` at 14:55 (codex CLI
+  unavailable in the scheduler environment PATH). The interactive session ran
+  independently of it. Fixing the scheduler env is a named boundary
+  (scheduler/env changes) — left untouched.
+
 ## Temporary infra note resolved (2026-06-01)
 
 - **iMac `julia@192.168.1.133` Lima VM `docker` was restarted on 2026-06-01 at ~17:39 EEST** after being stopped earlier that day to free RAM for an Auto_try_v2 feasibility test.
@@ -114,10 +158,10 @@ safe-local item is **F-4**, still gated on a real reason to touch
 - Project: AgentFlow, a Python 3.11 real-time data platform with FastAPI serving, ingestion/processing pipelines, Python SDK, TypeScript SDK, Docker, Helm, Kubernetes, and Terraform support.
 - Branch: `main...origin/main`
 - Backlog correction base HEAD: `3080275`
-- Verified local code/CI HEAD before this state-refresh commit: `9f11417c13702b63d2dd40e1070a99eeacb91b93` (`9f11417`) — all six required workflows green on this SHA
-- Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`. Full status no longer reports the old access-denied temp-directory warnings after `.gitignore` root-anchors the locked local temp directories.
-- State refresh scope: durable autonomous closeout docs and next-session plan only: `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `next-session-autonomous-local-plan.md`; no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
-- File count at refresh start: `git ls-files` reports 913 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
+- Verified local code/CI HEAD before this state-refresh commit: `bfb07fba8f55ee4686cedd4384a8e0c01eaa9731` (`bfb07fb`) — all five triggered workflows green on this md-only SHA (Contract path-filtered, expected); the last code SHAs `b6c5fb4` and `1d4614c` each have all six main workflows green.
+- Git status at refresh start: clean tracked-file status via `git status --short --branch --untracked-files=no`; branch is even with `origin/main`.
+- State refresh scope: durable autonomous closeout docs only (`AGENT_STATE.md`); no product code, deployment, Docker, Terraform, secrets, external accounts, paid APIs, production data, runtime databases, or AWS calls.
+- File count at refresh start: `git ls-files` reports 918 tracked files. Frontend bundle size, build artifact size, and i18n key count are not applicable to this state-only refresh.
 
 ## Available Runtime
 

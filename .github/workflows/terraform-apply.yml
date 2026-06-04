@@ -88,7 +88,7 @@ jobs:
             *) echo "Unsupported environment: ${{ inputs.environment }}" >&2; exit 1 ;;
           esac
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -135,7 +135,7 @@ jobs:
             *) echo "Unsupported environment: ${{ inputs.environment }}" >&2; exit 1 ;;
           esac
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}

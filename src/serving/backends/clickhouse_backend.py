@@ -10,14 +10,45 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+import sqlglot
+from sqlglot import exp
+
 from src.serving.backends import BackendExecutionError, BackendMissingTableError, ServingBackend
 
-# Matches a single-quoted SQL string literal with embedded `''` escapes.
-# We mask matches before running ClickHouse-translation regexes (H-C2 /
-# audit_kimi_25_05_26) so a `::FLOAT` substring living inside a literal
-# does not get scrubbed by the dialect rewrites below.
-_SQL_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
-_LITERAL_PLACEHOLDER_FMT = "\x00CH_LIT_{idx}\x00"
+# ClickHouse expresses filtered aggregation through -If combinators, not the
+# standard `<agg> FILTER (WHERE ...)` clause.
+_FILTERED_AGG_COMBINATORS: dict[type[exp.Expr], str] = {
+    exp.Count: "countIf",
+    exp.Sum: "sumIf",
+    exp.Avg: "avgIf",
+    exp.Min: "minIf",
+    exp.Max: "maxIf",
+}
+
+
+def _rewrite_for_clickhouse(node: exp.Expr) -> exp.Expr:
+    """AST rewrites the stock duckdb→clickhouse transpile does not cover.
+
+    - ClickHouse has no `<agg> FILTER (WHERE ...)` clause; rewrite the
+      aggregates the semantic layer uses to native -If combinators
+      (`COUNT(*) FILTER (WHERE c)` → `countIf(c)`). Unknown aggregates are
+      left untouched so ClickHouse rejects them loudly server-side.
+    - DuckDB `FLOAT` is a 4-byte float and would transpile to `Float32`;
+      widen to DOUBLE so the backend keeps its historical Float64
+      semantics for ratio metrics.
+    """
+    if isinstance(node, exp.Filter):
+        aggregate = node.this
+        condition = node.expression.this
+        combinator = _FILTERED_AGG_COMBINATORS.get(type(aggregate))
+        if combinator is None:
+            return node
+        if isinstance(aggregate, exp.Count):
+            return exp.func(combinator, condition)
+        return exp.func(combinator, aggregate.this, condition)
+    if isinstance(node, exp.DataType) and node.this == exp.DataType.Type.FLOAT:
+        return exp.DataType.build("DOUBLE")
+    return node
 
 
 class ClickHouseBackend(ServingBackend):
@@ -48,8 +79,8 @@ class ClickHouseBackend(ServingBackend):
         # verification when no context is passed).
         self._ssl_context = ssl.create_default_context() if secure else None
 
-    def _request(self, sql: str, *, expect_json: bool) -> str:
-        translated_sql = self._translate_sql(sql)
+    def _request(self, sql: str, *, expect_json: bool, translate: bool = True) -> str:
+        translated_sql = self._translate_sql(sql) if translate else sql
         url = f"{self._base_url}/?database={quote(self._database)}"
         if expect_json:
             url = f"{url}&default_format=JSON"
@@ -81,56 +112,23 @@ class ClickHouseBackend(ServingBackend):
             raise BackendExecutionError(str(exc.reason)) from exc
 
     def _translate_sql(self, sql: str) -> str:
-        # H-C2: extract string literals before running DuckDB→ClickHouse
-        # rewrites so a literal like `'price tag ::FLOAT'` is not corrupted
-        # by `::FLOAT` stripping or other bare-text regexes. The INTERVAL
-        # rewrite needs to see literals to match `INTERVAL '5 minutes'`,
-        # so we run it FIRST (against the raw SQL), then mask and apply
-        # the remaining substitutions, then restore the surviving literals.
-        translated = re.sub(
-            r"INTERVAL\s+'(\d+)\s+(minute|minutes|hour|hours|day|days)'",
-            lambda match: f"INTERVAL {match.group(1)} {match.group(2).rstrip('s').upper()}",
-            sql,
-            flags=re.IGNORECASE,
-        )
-        literals: list[str] = []
+        """Transpile DuckDB-flavored semantic-layer SQL to ClickHouse.
 
-        def _mask(match: re.Match[str]) -> str:
-            literals.append(match.group(0))
-            return _LITERAL_PLACEHOLDER_FMT.format(idx=len(literals) - 1)
-
-        translated = _SQL_STRING_LITERAL_RE.sub(_mask, translated)
-        translated = translated.replace("NOW()", "now()")
-        translated = translated.replace(" FALSE", " 0").replace(" TRUE", " 1")
-        translated = re.sub(
-            r"COUNT\(\*\)\s+FILTER\s+\(WHERE\s+(.+?)\)",
-            lambda match: f"countIf({match.group(1)})",
-            translated,
-            flags=re.IGNORECASE,
-        )
-        translated = re.sub(
-            r"countIf\((.+?)\)::FLOAT\b",
-            lambda match: f"CAST(countIf({match.group(1)}) AS Float64)",
-            translated,
-            flags=re.IGNORECASE,
-        )
-        translated = re.sub(r"::FLOAT\b", "", translated, flags=re.IGNORECASE)
-        translated = re.sub(r"\bNULLIF\(", "nullIf(", translated, flags=re.IGNORECASE)
-        translated = re.sub(r"\bCOUNT\(\*\)", "count()", translated, flags=re.IGNORECASE)
-        translated = re.sub(
-            r"CAST\((.+?)\s+AS\s+FLOAT\)",
-            lambda match: f"CAST({match.group(1)} AS Float64)",
-            translated,
-            flags=re.IGNORECASE,
-        )
-        translated = re.sub(
-            r"CAST\((.+?)\s+AS\s+TIMESTAMP\)",
-            lambda match: f"CAST({match.group(1)} AS DateTime)",
-            translated,
-            flags=re.IGNORECASE,
-        )
-        for idx, literal in enumerate(literals):
-            translated = translated.replace(_LITERAL_PLACEHOLDER_FMT.format(idx=idx), literal)
+        H-C2 (audit_kimi_25_05_26): a sqlglot parse → AST rewrite → generate
+        pipeline replaces the former regex chain, which could corrupt string
+        literals and silently mistranslate anything its patterns missed.
+        The parser preserves literals structurally; anything it cannot parse
+        fails loudly instead of going to the server half-rewritten.
+        """
+        try:
+            statements = sqlglot.parse(sql, read="duckdb")
+        except sqlglot.errors.ParseError as exc:
+            raise BackendExecutionError(f"SQL translation failed: {exc}") from exc
+        parsed = [statement for statement in statements if statement is not None]
+        if len(parsed) != 1:
+            raise BackendExecutionError(f"expected exactly one SQL statement, got {len(parsed)}")
+        rewritten = parsed[0].transform(_rewrite_for_clickhouse)
+        translated: str = rewritten.sql(dialect="clickhouse")
         return translated
 
     def execute(self, sql: str, params: list | None = None) -> list[dict]:
@@ -149,21 +147,31 @@ class ClickHouseBackend(ServingBackend):
 
     def table_columns(self, table_name: str) -> set[str]:
         try:
-            rows = self.execute(f"DESCRIBE TABLE {table_name}")
+            # Native ClickHouse introspection — bypasses the duckdb transpile.
+            payload = self._request(
+                f"DESCRIBE TABLE {table_name}", expect_json=True, translate=False
+            )
         except BackendMissingTableError:
             return set()
         except BackendExecutionError as exc:
             if "UNKNOWN_DATABASE" in str(exc):
                 return set()
             raise
+        rows: list[dict] = json.loads(payload).get("data", [])
         return {str(row["name"]) for row in rows if "name" in row}
 
     def explain(self, sql: str) -> list[tuple]:
-        raw = self._request(f"EXPLAIN {sql}", expect_json=False)
+        # EXPLAIN itself is ClickHouse syntax, but the wrapped query comes
+        # from the DuckDB-flavored semantic layer — transpile it first, then
+        # send the assembled statement untouched.
+        translated = self._translate_sql(sql)
+        raw = self._request(f"EXPLAIN {translated}", expect_json=False, translate=False)
         return [(line,) for line in raw.splitlines() if line.strip()]
 
     def initialize_demo_data(self) -> None:
-        self._request(f"CREATE DATABASE IF NOT EXISTS {self._database}", expect_json=False)
+        self._request(
+            f"CREATE DATABASE IF NOT EXISTS {self._database}", expect_json=False, translate=False
+        )
         self._request(
             f"""
             CREATE TABLE IF NOT EXISTS {self._database}.orders_v2 (
@@ -177,6 +185,7 @@ class ClickHouseBackend(ServingBackend):
             ORDER BY order_id
         """,
             expect_json=False,
+            translate=False,
         )
         self._request(
             f"""
@@ -191,6 +200,7 @@ class ClickHouseBackend(ServingBackend):
             ORDER BY product_id
         """,
             expect_json=False,
+            translate=False,
         )
         self._request(
             f"""
@@ -208,6 +218,7 @@ class ClickHouseBackend(ServingBackend):
             ORDER BY session_id
         """,
             expect_json=False,
+            translate=False,
         )
         self._request(
             f"""
@@ -222,6 +233,7 @@ class ClickHouseBackend(ServingBackend):
             ORDER BY user_id
         """,
             expect_json=False,
+            translate=False,
         )
         self._request(
             f"""
@@ -234,6 +246,7 @@ class ClickHouseBackend(ServingBackend):
             ORDER BY (tenant_id, topic, processed_at, event_id)
         """,
             expect_json=False,
+            translate=False,
         )
         self._request(
             f"""
@@ -241,9 +254,10 @@ class ClickHouseBackend(ServingBackend):
             ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT 'default'
             """,
             expect_json=False,
+            translate=False,
         )
 
-        existing_rows = self.scalar(f"SELECT count() AS value FROM {self._database}.orders_v2")  # nosec B608 - database name comes from trusted backend config
+        existing_rows = self.scalar(f"SELECT COUNT(*) AS value FROM {self._database}.orders_v2")  # nosec B608 - database name comes from trusted backend config
         if existing_rows is not None and int(existing_rows) > 0:
             return
 
@@ -269,6 +283,7 @@ class ClickHouseBackend(ServingBackend):
                 ]
             ),
             expect_json=False,
+            translate=False,
         )
         self._request(
             "\n".join(
@@ -285,6 +300,7 @@ class ClickHouseBackend(ServingBackend):
                 ]
             ),
             expect_json=False,
+            translate=False,
         )
         self._request(
             "\n".join(
@@ -298,6 +314,7 @@ class ClickHouseBackend(ServingBackend):
                 ]
             ),
             expect_json=False,
+            translate=False,
         )
         self._request(
             "\n".join(
@@ -312,6 +329,7 @@ class ClickHouseBackend(ServingBackend):
                 ]
             ),
             expect_json=False,
+            translate=False,
         )
         self._request(
             "\n".join(
@@ -330,6 +348,7 @@ class ClickHouseBackend(ServingBackend):
                 ]
             ),
             expect_json=False,
+            translate=False,
         )
 
     def health(self) -> dict:

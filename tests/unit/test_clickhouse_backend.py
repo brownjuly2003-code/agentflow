@@ -46,32 +46,67 @@ def _http_response(payload: bytes):
     return _Resp()
 
 
-def test_translate_sql_rewrites_now_filter_count_cast_and_intervals(backend):
+def test_translate_sql_transpiles_filter_clause_to_countif(backend):
+    # ClickHouse has no `<agg> FILTER (WHERE ...)` clause — the transpile
+    # must rewrite it to the native -If combinator (error_rate template).
     sql = (
-        "SELECT NOW(), CAST(x AS FLOAT)::FLOAT, COUNT(*) FILTER (WHERE flag = TRUE) "
-        "FROM t WHERE ts > NOW() - INTERVAL '5 minutes' AND alive = TRUE"
+        "SELECT CAST(COUNT(*) FILTER (WHERE topic = 'events.deadletter') AS FLOAT) "
+        "/ NULLIF(COUNT(*), 0) as value "
+        "FROM pipeline_events WHERE processed_at >= NOW() - INTERVAL '24 hours'"
     )
 
     translated = backend._translate_sql(sql)
 
-    assert "now()" in translated
-    assert "NOW()" not in translated
-    assert "countIf(flag = 1)" in translated
-    assert "CAST(x AS Float64)" in translated
-    assert "INTERVAL 5 MINUTE" in translated
-    # Boolean rewrites
-    assert "alive = 1" in translated
-    # Stand-alone ::FLOAT remains stripped
-    assert "::FLOAT" not in translated.upper().replace("FLOAT64", "")
+    assert "countIf(topic = 'events.deadletter')" in translated
+    assert "FILTER" not in translated
+    assert "nullIf(COUNT(*), 0)" in translated
+    assert "INTERVAL" in translated
 
 
-def test_translate_sql_rewrites_count_star_and_nullif(backend):
-    sql = "SELECT COUNT(*) AS n, NULLIF(value, 0) FROM t"
+def test_translate_sql_transpiles_sum_and_avg_filter_to_if_combinators(backend):
+    translated = backend._translate_sql(
+        "SELECT SUM(amount) FILTER (WHERE ok), AVG(amount) FILTER (WHERE ok) FROM t"
+    )
+
+    assert "sumIf(amount, ok)" in translated
+    assert "avgIf(amount, ok)" in translated
+    assert "FILTER" not in translated
+
+
+def test_translate_sql_widens_duckdb_float_to_float64(backend):
+    # DuckDB FLOAT is a 4-byte float and would transpile to Float32; the
+    # backend keeps its historical Float64 semantics for ratio metrics.
+    translated = backend._translate_sql("SELECT CAST(x AS FLOAT) FROM t")
+
+    assert "Float64" in translated
+    assert "Float32" not in translated
+
+
+def test_translate_sql_rejects_unparseable_sql(backend):
+    with pytest.raises(BackendExecutionError) as info:
+        backend._translate_sql("SELECT FROM WHERE")
+
+    assert "translation failed" in str(info.value)
+
+
+def test_translate_sql_rejects_multi_statement_sql(backend):
+    with pytest.raises(BackendExecutionError) as info:
+        backend._translate_sql("SELECT 1; SELECT 2")
+
+    assert "one SQL statement" in str(info.value)
+
+
+def test_translate_sql_keeps_nullif_and_case_when(backend):
+    sql = (
+        "SELECT CAST(SUM(CASE WHEN is_conversion THEN 1 ELSE 0 END) AS FLOAT) "
+        "/ NULLIF(COUNT(*), 0) as value FROM sessions_aggregated"
+    )
 
     translated = backend._translate_sql(sql)
 
-    assert "count()" in translated
-    assert "nullIf(value, 0)" in translated
+    assert "nullIf(COUNT(*), 0)" in translated
+    assert "CASE WHEN is_conversion THEN 1 ELSE 0 END" in translated
+    assert "Float64" in translated
 
 
 def test_request_sends_post_with_basic_auth_and_database(backend):
@@ -262,8 +297,10 @@ def test_insecure_backend_omits_ssl_context(backend):
 
 
 class TestTranslateSqlLiteralProtection:
-    """H-C2: string-literal masking before dialect rewrites — bare regexes
-    must not corrupt user data embedded in `'...'` literals."""
+    """H-C2: dialect rewrites must not corrupt user data embedded in `'...'`
+    string literals. The sqlglot transpile guarantees this structurally (the
+    parser knows what a literal is), unlike the regex chain it replaced —
+    these tests pin that property against regressions back to text rewrites."""
 
     def test_float_token_inside_literal_is_preserved(self, backend):
         sql = "SELECT 'price tag ::FLOAT cents' FROM t"
@@ -274,11 +311,6 @@ class TestTranslateSqlLiteralProtection:
         sql = "SELECT 'event=NOW() captured' AS note FROM t"
         translated = backend._translate_sql(sql)
         assert "'event=NOW() captured'" in translated
-        # The bare NOW() outside the literal would still be rewritten:
-        sql2 = "SELECT 'event=NOW() captured', NOW() FROM t"
-        translated2 = backend._translate_sql(sql2)
-        assert "'event=NOW() captured'" in translated2
-        assert "now()" in translated2
 
     def test_count_star_inside_literal_is_preserved(self, backend):
         sql = "SELECT 'metric=COUNT(*) total' AS lbl FROM t"
@@ -289,25 +321,75 @@ class TestTranslateSqlLiteralProtection:
         sql = "SELECT 'flag is TRUE always' AS note FROM t WHERE alive = TRUE"
         translated = backend._translate_sql(sql)
         assert "'flag is TRUE always'" in translated
-        assert "alive = 1" in translated
 
     def test_cast_inside_literal_is_preserved(self, backend):
         sql = "SELECT 'doc: CAST(x AS FLOAT)' AS note FROM t"
         translated = backend._translate_sql(sql)
         assert "'doc: CAST(x AS FLOAT)'" in translated
 
-    def test_escaped_quote_in_literal_does_not_break_masking(self, backend):
+    def test_escaped_quote_in_literal_is_preserved(self, backend):
         sql = "SELECT 'it''s ::FLOAT' AS note FROM t"
         translated = backend._translate_sql(sql)
         assert "'it''s ::FLOAT'" in translated
 
-    def test_interval_with_minutes_still_translates(self, backend):
-        # The INTERVAL rewrite runs BEFORE masking so quoted intervals still
-        # collapse to the bare ClickHouse INTERVAL N UNIT form.
-        sql = "SELECT * FROM t WHERE ts > NOW() - INTERVAL '15 minutes'"
+    def test_filter_token_inside_literal_is_preserved(self, backend):
+        # A literal containing the word FILTER must survive even though the
+        # FILTER-clause rewrite runs on the same statement.
+        sql = "SELECT 'mode=FILTER (WHERE x)' AS lbl, COUNT(*) FILTER (WHERE ok) AS n FROM t"
         translated = backend._translate_sql(sql)
-        assert "INTERVAL 15 MINUTE" in translated
-        assert "now()" in translated
+        assert "'mode=FILTER (WHERE x)'" in translated
+        assert "countIf(ok)" in translated
+
+
+def test_initialize_demo_data_sends_native_clickhouse_ddl_untranslated(backend):
+    """The demo DDL is already ClickHouse SQL (ENGINE = MergeTree, String /
+    UInt8 types) — it must bypass the duckdb→clickhouse transpile, which
+    would reject it at parse time."""
+    sent: list[str] = []
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        sent.append(req.data.decode("utf-8"))
+        # Non-empty count() so the seed INSERTs are skipped after the DDL.
+        return _http_response(b'{"data":[{"value":1}]}')
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        backend.initialize_demo_data()
+
+    create_statements = [sql for sql in sent if "CREATE TABLE" in sql]
+    assert create_statements, "demo init must issue CREATE TABLE statements"
+    for sql in create_statements:
+        assert "ENGINE = MergeTree()" in sql, "native DDL must reach ClickHouse untouched"
+
+
+def test_table_columns_sends_describe_untranslated(backend):
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["data"] = req.data
+        return _http_response(b'{"data":[{"name":"order_id","type":"String"}]}')
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        cols = backend.table_columns("orders_v2")
+
+    assert cols == {"order_id"}
+    assert captured["data"] == b"DESCRIBE TABLE orders_v2"
+
+
+def test_explain_translates_inner_sql_before_wrapping(backend):
+    """EXPLAIN itself is a ClickHouse wrapper, but the wrapped query comes
+    from the DuckDB-flavored semantic layer and must be transpiled."""
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["data"] = req.data.decode("utf-8")
+        return _http_response(b"Expression\n")
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        backend.explain("SELECT COUNT(*) FILTER (WHERE ok) AS n FROM t")
+
+    assert captured["data"].startswith("EXPLAIN ")
+    assert "countIf(ok)" in captured["data"]
+    assert "FILTER" not in captured["data"]
 
 
 def test_scalar_returns_first_value_or_none(backend):

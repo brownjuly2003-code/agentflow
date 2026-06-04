@@ -74,6 +74,20 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- The agent query endpoints (`/query`, `/query/explain`,
+  `/entity/{type}/{id}`, `/metrics/{name}`) were thinned (PR #42; audit
+  jgec H-4 / mm F-4): three hand-rolled nested `try/except TypeError`
+  cascades (~120 duplicated lines) that progressively dropped
+  `tenant_id`/`allowed_tables` for older engine signatures became shared
+  module-level helpers with pinned semantics (a `TypeError` only triggers
+  the next attempt when its message mentions a kwarg of the *current*
+  attempt — genuine engine TypeErrors propagate;
+  `tests/unit/test_agent_query_kwarg_fallback.py` pins all branches), and
+  the copy-pasted `as_of` validation, tenant resolution and entity-cache
+  gating moved into `_normalize_as_of`/`_as_of_iso_text`/
+  `_resolve_tenant_id`/`_tenant_context_required`. Behaviour-preserving:
+  HTTP status mapping, headers, response shapes and the committed OpenAPI
+  spec are unchanged (`export_openapi.py --check` green).
 - The ClickHouse serving backend now translates DuckDB-flavored
   semantic-layer SQL through a sqlglot parse → AST rewrite → generate
   pipeline instead of the former regex chain (PR #41; closes audit_kimi

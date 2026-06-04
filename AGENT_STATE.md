@@ -36,6 +36,27 @@ needed live-ClickHouse evidence.
   (30/30); broad no-Docker slice 750 passed (only the two known local
   .venv artifacts); `mypy src` clean on 99 files.
 
+On the second «продолжай + разрешаю все» the one remaining internal item was
+taken as well — **F-4 / jgec H-4, agent_query.py thinning** (PR #42 →
+squash `e594bda`):
+
+- The three nested try/except TypeError cascades (~120 duplicated lines,
+  progressive `tenant_id`/`allowed_tables` dropping for older engine
+  signatures and test fakes) became shared module-level helpers with the
+  exact original semantics (re-raise unless the message mentions a kwarg of
+  the CURRENT attempt); `tests/unit/test_agent_query_kwarg_fallback.py`
+  pins all branches (8 tests). `as_of` validation, tenant resolution and
+  the entity-cache gate (now a narrowed `(cache, key)` pair — a plain bool
+  flag does not narrow Optionals for mypy) are shared helpers too.
+- Behaviour-preserving evidence: committed OpenAPI unchanged
+  (`export_openapi.py --check`), mypy strict clean 99, broad unit 758
+  passed, tenant-isolation/query-explain/logical-correctness integration
+  suites (the legacy-signature stubs that exercise the fallbacks) 24
+  passed. **The audit backlog of internal code-level findings is now
+  empty** — everything left is externally gated (PR #23 Flink upstream,
+  M-C4 hash-format swap decision, Tier B / tasks 19-22, v1.5.0 feature
+  gate, scheduler env).
+
 ## 2026-06-04 session: F-5 closed + build-smoke promoted to required check + contract required-check trap closed (main)
 
 Three verified threads closed on `main`, each pushed with green evidence:

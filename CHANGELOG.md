@@ -74,6 +74,31 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- The ClickHouse serving backend now translates DuckDB-flavored
+  semantic-layer SQL through a sqlglot parse → AST rewrite → generate
+  pipeline instead of the former regex chain (PR #41; closes audit_kimi
+  H-C2 in full — the earlier literal-masking commit was the narrow fix).
+  String literals are preserved structurally by the parser, and
+  unparseable or multi-statement SQL now fails loudly as
+  `BackendExecutionError` instead of reaching the server half-rewritten.
+  Two AST rewrites sit on top of the stock duckdb→clickhouse transpile:
+  `<agg> FILTER (WHERE c)` becomes the native `countIf`/`sumIf`/`avgIf`/
+  `minIf`/`maxIf` combinators (ClickHouse has no FILTER clause), and
+  DuckDB `FLOAT` is widened to DOUBLE so ratio metrics keep the backend's
+  historical `Float64` semantics (the stock transpile would emit
+  `Float32`). Translation scope is now explicit: `execute`/`scalar`/
+  `explain` transpile; the native-ClickHouse demo DDL/INSERT seed and
+  `DESCRIBE TABLE` bypass translation, and `explain()` transpiles the
+  wrapped query before assembling the `EXPLAIN`. The missing piece that
+  kept H-C2 open — live-server evidence — is now permanent CI coverage:
+  `tests/integration/test_clickhouse_backend_live.py` runs every catalog
+  metric template plus seed-value, literal-round-trip, as-of-anchor,
+  EXPLAIN and entity-lookup forms against a real
+  `clickhouse/clickhouse-server:25.3` service container on the
+  test-integration job (gated on `CLICKHOUSE_LIVE_HOST`, skips cleanly
+  where no server is configured). Pre-merge the suite was also validated
+  against a disposable live ClickHouse 25.3: 13/13 passed with exact
+  seed values (`order_count=8`, `error_rate=0.2`).
 - `build-smoke` is now a required branch-protection check on `main` (PR #37 +
   a branch-protection contexts update). The container-attestation workflow's
   `pull_request` paths filter moved inside the job: a `changes` step diffs

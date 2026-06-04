@@ -1,6 +1,40 @@
 # Agent State
 
-Updated: 2026-06-04
+Updated: 2026-06-05
+
+## 2026-06-05 session: audit_kimi H-C2 closed in full (sqlglot transpile + live CH coverage)
+
+Operator unlocked the gated backlog («я разрешаю все, что необходимо для
+задачи»); the highest open code-level finding was taken: **H-C2** — the
+regex-chain DuckDB→ClickHouse translation in
+`ClickHouseBackend._translate_sql`, open since audit_kimi_25_05_26 because it
+needed live-ClickHouse evidence.
+
+- **PR #41 → squash `78f9eb7`** — `_translate_sql` is now sqlglot
+  parse → AST rewrite → generate (read=duckdb, write=clickhouse). AST
+  rewrites: `<agg> FILTER (WHERE c)` → `countIf`/`sumIf`/`avgIf`/`minIf`/
+  `maxIf` (ClickHouse has no FILTER clause); DuckDB `FLOAT` widened to
+  DOUBLE so ratio metrics keep Float64. Literals survive structurally;
+  unparseable / multi-statement SQL → `BackendExecutionError` (fail-loud).
+  Translation scope explicit: execute/scalar/explain transpile, demo
+  DDL/INSERT + DESCRIBE go `translate=False`, `explain()` transpiles the
+  wrapped query then sends the assembled EXPLAIN untouched.
+  sqlglot 30 gotcha: `Func` no longer subclasses `exp.Expression`
+  (hierarchy is `Func → Condition → Expr`) — annotate AST-transform
+  callbacks with `exp.Expr`.
+- **Live evidence, twice**: (1) pre-merge against a disposable
+  `clickhouse-server:25.3` container in the iMac's Lima Docker via ssh
+  tunnel — 13/13 passed incl. exact seed values (order_count=8,
+  error_rate=0.2); container and tunnel torn down after. The parked DV2
+  kind cluster was NOT touched. (2) permanently in CI: the
+  test-integration job now runs a `clickhouse/clickhouse-server:25.3`
+  service container wired to `tests/integration/test_clickhouse_backend_live.py`
+  (every catalog metric template + literal round-trip + as-of anchor +
+  EXPLAIN + entity lookup), env-gated on `CLICKHOUSE_LIVE_HOST` so the
+  suite skips cleanly where no server is configured.
+- Unit suite for the backend rewritten to pin transpile invariants
+  (30/30); broad no-Docker slice 750 passed (only the two known local
+  .venv artifacts); `mypy src` clean on 99 files.
 
 ## 2026-06-04 session: F-5 closed + build-smoke promoted to required check + contract required-check trap closed (main)
 

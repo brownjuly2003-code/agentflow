@@ -171,8 +171,18 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
 
 ## Known Open Threads (all gated)
 
-- **H-C2** full sqlglot ClickHouse transpile — needs live ClickHouse coverage
-  (Mac/Docker).
+- **H-C2** full sqlglot ClickHouse transpile — **CLOSED (2026-06-05, PR #41).**
+  `_translate_sql` is now sqlglot parse → AST rewrite (FILTER→-If
+  combinators, FLOAT→Float64) → generate; demo DDL / DESCRIBE bypass
+  translation (`translate=False`), `explain()` transpiles the wrapped query.
+  Live coverage is permanent: the CI test-integration job runs a
+  `clickhouse/clickhouse-server:25.3` service container and
+  `tests/integration/test_clickhouse_backend_live.py` (every catalog metric
+  template + literal round-trip + seed-value assertions), env-gated on
+  `CLICKHOUSE_LIVE_HOST` so the suite skips cleanly elsewhere. Pre-merge it
+  was also validated against a disposable live CH 25.3 via ssh tunnel
+  (13/13). Do not reintroduce text-level rewrites in `_translate_sql` — the
+  unit suite pins transpile invariants and literal preservation.
 - **M-C2 / M-C3** Flink hot-path — gated on upstream PR #23 (no Flink 2.x Kafka
   connector JAR yet).
 - **M-C4** full hashed-key-lookup rewrite — needs the bcrypt→argon2id

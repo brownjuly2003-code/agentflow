@@ -2,9 +2,9 @@
 
 Updated: 2026-06-04
 
-## 2026-06-04 session: F-5 closed + build-smoke promoted to required check (main)
+## 2026-06-04 session: F-5 closed + build-smoke promoted to required check + contract required-check trap closed (main)
 
-Two verified threads closed on `main`, both pushed with green evidence:
+Three verified threads closed on `main`, each pushed with green evidence:
 
 - **F-5 (bandit baseline → inline nosec)** — `b6c5fb4`, six main workflows
   green (15/15 check-runs; the CI run needed one same-SHA rerun after a
@@ -26,6 +26,22 @@ Two verified threads closed on `main`, both pushed with green evidence:
   to the `main` required status checks — **13 contexts now**, GET-verified.
   Policy test pins the always-run shape (no `paths:` on `pull_request`).
   Docs record: `bfb07fb` (5/5 green). Do not re-add a paths filter there.
+- **`contract` required-check trap closed** (PR #39 squash `f1e145c`) — the
+  s32 build-smoke closure had left a recorded precedent: `contract` was the
+  last required context still carrying a trigger-level `pull_request`
+  `paths:` filter (the original Lessons 1/4 trap; latent only because
+  docs-only changes land as direct pushes, never PRs). Same recipe as
+  PR #37: the filter moved inside the job (`changes` step diffs against the
+  PR base; suite steps conditional on `relevant == 'true'`, otherwise
+  instant skip-success; non-PR events always run the full suite; the `push`
+  trigger keeps its paths filter — pushes are not gated by the
+  required-check expectation). Both paths validated live: full suite green
+  on PR #39 itself, skip path green in 5s on throwaway empty-diff PR #40
+  (changes + skip note `success`, every suite step literally `skipped`;
+  closed unmerged, branch deleted). `tests/unit/test_contract_workflow.py`
+  pins the always-run shape. No branch-protection change was needed —
+  `contract` was already in the 13 required contexts. Do not re-add a
+  `paths:` filter to the contract `pull_request` trigger.
 
 Operational lessons recorded this session (details in the memory topic file):
 - **ci-main concurrency holds exactly one run** (`group: ci-${{ github.ref }}`,

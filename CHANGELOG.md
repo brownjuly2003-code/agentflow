@@ -88,6 +88,27 @@ All notable changes to AgentFlow are documented in this file.
   throwaway PR #38 (empty diff; buildx/build steps skipped). The workflow
   policy test now pins the always-run shape (no `paths:` on `pull_request`,
   conditional build steps, `GITHUB_OUTPUT` gating).
+- The `contract` required check itself now also completes on every PR
+  (PR #39) — it was the last required context still carrying the
+  trigger-level `pull_request` `paths:` filter (the original Lessons 1/4
+  trap, latent only because docs-only changes have so far landed as direct
+  pushes to `main`, never as PRs). Same recipe as `build-smoke`/PR #37: the
+  filter moved inside the job, where a `changes` step diffs against the PR
+  base and the suite steps (editable installs, `generate_contracts.py
+  --check`, `export_openapi.py --check`, `pytest tests/contract`) run only
+  when contract-relevant paths changed; contract-irrelevant PRs complete as
+  an instant skip-success. Push / `workflow_dispatch` events always run the
+  full suite, and the `push` trigger keeps its trigger-level paths filter
+  (pushes are not gated by the required-check expectation, and the filter
+  keeps docs-only pushes cheap). Validated live on both paths before
+  closing: the real suite ran green on PR #39 itself (workflow touched) and
+  the skip path completed green in 5s on throwaway empty-diff PR #40
+  (`changes` + skip note `success`, every suite step literally `skipped`;
+  closed unmerged). A new `tests/unit/test_contract_workflow.py` pins the
+  always-run shape (no `paths:` on `pull_request`, stable `contract` job
+  context, `GITHUB_OUTPUT` change detection, conditional suite steps, and
+  the preserved push-trigger filter). No required-contexts change was
+  needed — `contract` was already required; the hang trap is simply gone.
 - The bandit baseline (`.bandit-baseline.json`) is now empty: its single
   accepted finding (B310, the `urlopen` call in
   `src/serving/backends/clickhouse_backend.py`) moved to an inline

@@ -183,6 +183,16 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   PR #37, skip on throwaway PR #38) before `build-smoke` was added to the
   required contexts (now 13). Do not re-add a `paths:` filter to the
   container-attestation `pull_request` trigger — the policy test fails on it.
+- **`contract` required-check paths trap** — **CLOSED (2026-06-04, PR #39
+  `f1e145c`).** The last required context with a trigger-level
+  `pull_request` `paths:` filter; same inside-the-job recipe as PR #37.
+  Both paths validated live (full suite on PR #39, 5s skip-success on
+  throwaway empty-diff PR #40). `tests/unit/test_contract_workflow.py` pins
+  the shape: no `paths:` on `pull_request`, conditional suite steps, and the
+  push trigger KEEPS its paths filter (docs-only pushes stay cheap — a 5/5
+  green push on md-only commits remains normal). Every required context is
+  now always-run on PRs; chaos / load-test keep PR paths filters but are not
+  required, which is safe.
 - **Tier B A04/A05** + **tasks 19-22** — production CDC owners, real
   PMF/customer evidence, production-hardware benchmark, external pen-test:
   external evidence only.

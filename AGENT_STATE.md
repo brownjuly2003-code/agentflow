@@ -1,6 +1,6 @@
 # Agent State
 
-Updated: 2026-06-03
+Updated: 2026-06-04
 
 ## Temporary infra note resolved (2026-06-01)
 
@@ -98,6 +98,16 @@ HEAD drift). Gated / low-ROI: **F-4** (`agent_query.py` thinning — working-sur
 redesign, do only with a real reason to touch it), **F-5** (bandit B310 baseline
 `# nosec`, cosmetic). H-7/H-8/H-9 unchanged (root `p*.md` is untracked
 user-scratch; DV2 branch parked; Dependabot wait-for-upstream).
+**Update 2026-06-04: F-3 and F-6 were closed earlier this day (see the
+coverage-cadence completion above), and F-5 is now closed too** — `b6c5fb4`
+(six main workflows green) moved the baseline's single accepted B310 finding
+to an inline `# nosec B310 - <reason>` at the `urlopen` call site in
+`clickhouse_backend.py` and emptied `.bandit-baseline.json`; the new policy
+test `test_bandit_baseline_carries_no_suppressed_findings` keeps the baseline
+empty (inline-with-reason is the only accepted suppression form), which also
+retires the line-keyed-baseline drift trap. The only remaining audit-mm
+safe-local item is **F-4**, still gated on a real reason to touch
+`agent_query.py`.
 
 ## Current Project State
 

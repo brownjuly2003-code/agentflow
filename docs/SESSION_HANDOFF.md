@@ -2,9 +2,17 @@
 
 **Last updated:** 2026-06-04 (coverage cadence COMPLETE: every mutmut target
 unit-gated; query package gate + 0x08 regex fix + mutmut shim repoint;
-Dependabot wave 4 merged)
-**Verified code/state HEAD before this refresh:** `9361360` on `main` (even with
-`origin/main`). Session 2026-06-04 stack on top of the prior `5936f8d` state:
+Dependabot wave 4 merged; **audit mm F-5 closed** — bandit baseline emptied)
+**Verified code/state HEAD before this refresh:** `b6c5fb4` on `main` (even with
+`origin/main`). Six main workflows green on `b6c5fb4` (**F-5**: the baseline's
+single accepted B310 finding moved to an inline
+`# nosec B310 - <reason>` at the `urlopen` call in `clickhouse_backend.py`,
+matching the file's B608 convention; `.bandit-baseline.json` is now empty and
+a new policy test `test_bandit_baseline_carries_no_suppressed_findings` keeps
+it that way — this also retires the line-keyed-baseline drift trap where any
+line shift above the baselined call failed Security Scan on unrelated edits.
+Future accepted findings go inline with a reason, never into the baseline).
+Session 2026-06-04 stack on top of the prior `5936f8d` state:
 `ccbf230` (F-6 handoff refresh), `6400a83` + `242fbdf` (PII masking 66%→99% +
 90% gate), `5a72476` + `d191694` (rate limiter 78%→98% + gate), `a78d141` +
 `e6914fa` + `6c779ee` (auth manager 82%→94% + gate; **gate gotcha:**

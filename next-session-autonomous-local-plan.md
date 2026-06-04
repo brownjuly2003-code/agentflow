@@ -177,10 +177,12 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   connector JAR yet).
 - **M-C4** full hashed-key-lookup rewrite — needs the bcrypt→argon2id
   hash-format swap (the soft-limit warning is already shipped).
-- **build-smoke → required check** — needs a workflow change first (it is
-  path-filtered, so a bare promotion hangs every non-Docker PR like the
-  `contract` Lessons 1/4 trap); then a branch-protection change (named
-  boundary).
+- **build-smoke → required check** — **CLOSED (2026-06-04, PR #37 `1d4614c` +
+  protection flip).** The paths filter moved inside the job (`changes` step,
+  skip-success on docker-free PRs); both paths validated live (real build on
+  PR #37, skip on throwaway PR #38) before `build-smoke` was added to the
+  required contexts (now 13). Do not re-add a `paths:` filter to the
+  container-attestation `pull_request` trigger — the policy test fails on it.
 - **Tier B A04/A05** + **tasks 19-22** — production CDC owners, real
   PMF/customer evidence, production-hardware benchmark, external pen-test:
   external evidence only.

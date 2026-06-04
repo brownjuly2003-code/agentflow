@@ -2,9 +2,17 @@
 
 **Last updated:** 2026-06-04 (coverage cadence COMPLETE: every mutmut target
 unit-gated; query package gate + 0x08 regex fix + mutmut shim repoint;
-Dependabot wave 4 merged; **audit mm F-5 closed** — bandit baseline emptied)
-**Verified code/state HEAD before this refresh:** `b6c5fb4` on `main` (even with
-`origin/main`). Six main workflows green on `b6c5fb4` (**F-5**: the baseline's
+Dependabot wave 4 merged; **audit mm F-5 closed** — bandit baseline emptied;
+**build-smoke is now a required check** — PR #37 + protection flip)
+**Verified code/state HEAD before this refresh:** `1d4614c` on `main` (even with
+`origin/main`). `1d4614c` (PR #37 squash) made `build-smoke` complete on every
+PR: the `pull_request` paths filter moved inside the job (a `changes` step
+diffs against the PR base; docker-free PRs finish as an instant skip-success),
+the real-build path was validated green on PR #37 itself and the skip path on
+throwaway empty-diff PR #38 (closed unmerged), and `build-smoke` was then
+added to the `main` required status checks (13 contexts, GET-verified) under
+the operator's explicit boundary authorization. Earlier the same day,
+six main workflows went green on `b6c5fb4` (**F-5**: the baseline's
 single accepted B310 finding moved to an inline
 `# nosec B310 - <reason>` at the `urlopen` call in `clickhouse_backend.py`,
 matching the file's B608 convention; `.bandit-baseline.json` is now empty and

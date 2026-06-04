@@ -74,6 +74,20 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `build-smoke` is now a required branch-protection check on `main` (PR #37 +
+  a branch-protection contexts update). The container-attestation workflow's
+  `pull_request` paths filter moved inside the job: a `changes` step diffs
+  against the PR base and only runs buildx + the no-push image build when
+  `Dockerfile*` / root `pyproject.toml` / root `requirements.txt` / the
+  workflow itself changed; docker-free PRs complete as an instant
+  skip-success. This removes the "Expected — waiting for status" hang a
+  paths-filtered required check would inflict on non-Docker PRs (the
+  `contract` Lessons 1/4 trap) — the reason the promotion was deferred since
+  2026-05-30. Both paths were validated live before the flip: the real build
+  ran green on PR #37 (workflow touched) and the skip path completed green on
+  throwaway PR #38 (empty diff; buildx/build steps skipped). The workflow
+  policy test now pins the always-run shape (no `paths:` on `pull_request`,
+  conditional build steps, `GITHUB_OUTPUT` gating).
 - The bandit baseline (`.bandit-baseline.json`) is now empty: its single
   accepted finding (B310, the `urlopen` call in
   `src/serving/backends/clickhouse_backend.py`) moved to an inline

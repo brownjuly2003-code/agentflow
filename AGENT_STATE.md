@@ -1038,4 +1038,15 @@ Strict mypy slices now cover `src.quality.validators.*`, `src.ingestion.schemas.
 
 **Coverage cadence is complete as of 2026-06-04 (`9cb291d`):** every mutmut target now has a unit-only CI coverage gate, all pinned by `tests/unit/test_coverage_policy.py` — validators, freshness_monitor, event_producer, sql_guard (100%), masking (99%), rate_limiter (98%), auth manager (94%), key_rotation (93%), outbox (92%), and the `src/serving/semantic_layer/query` package (97%, per-package gate). duckdb-importing modules use the `coverage run` + `coverage report --include` gate form, not `pytest --cov` (collection break). The mutmut `paths_to_mutate` query target was repointed from the 5-line `query_engine.py` re-export shim to the five real `query/` package modules (`02b4a3c`); `tests/unit/test_mutmut_policy.py` now also fails on pure re-export targets. The coverage push surfaced and fixed a real latent bug: a literal 0x08 byte (a collapsed `\b` escape) inside the `explain()` fallback regex in `nl_queries.py` (`f7414d9`). Dependabot wave 4 (#31-#36) merged 2026-06-04; the attestation workflow-policy tests now match the action step by name prefix instead of exact major, so the next `attest-build-provenance` bump needs no manual test edit. Pick a new under-tested module only on real evidence.
 
-Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), build-smoke required-check (needs a workflow always-run change before the branch-protection boundary), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.
+Everything else is gated: H-C2 (live ClickHouse), M-C2/M-C3 (upstream PR #23), M-C4 full rewrite (hash-format swap), Tier B A04/A05, and tasks 19-22 (external evidence). Do not convert blocked external gates into completed work without real operator-provided evidence, and do not churn handoff docs only to bump HEAD/timestamps.
+
+**build-smoke → required check: CLOSED (2026-06-04).** Operator instruction
+("всё что за мной сделай сам") authorized the boundary. PR #37 (`1d4614c`)
+moved the container-attestation `pull_request` paths filter inside the
+`build-smoke` job (a `changes` step diffs against the PR base; docker-free
+PRs complete as an instant skip-success — no more "Expected — waiting"
+hang), both paths were validated live (real no-push build green on PR #37,
+skip-success green on throwaway empty-diff PR #38, closed unmerged), and
+`build-smoke` was then added to the required status checks (13 contexts,
+verified by GET). The policy test pins the always-run shape; do not re-add
+a `paths:` filter to that `pull_request` trigger.

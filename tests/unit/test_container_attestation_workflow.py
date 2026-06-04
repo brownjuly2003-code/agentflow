@@ -29,7 +29,9 @@ def test_container_attestation_workflow_emits_github_attestation_for_digest():
     workflow = _load_workflow()
     steps = workflow["jobs"]["attest-and-sign"]["steps"]
     attest = next(
-        step for step in steps if step.get("uses") == "actions/attest-build-provenance@v2"
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/attest-build-provenance@")
     )
 
     assert attest["with"]["subject-name"] == "${{ inputs.image_ref }}"
@@ -105,7 +107,9 @@ def test_container_attestation_workflow_signs_and_attests_pushed_digest():
     steps = workflow["jobs"]["build-push-sign-attest"]["steps"]
     steps_text = yaml.safe_dump(steps)
     attest = next(
-        step for step in steps if step.get("uses") == "actions/attest-build-provenance@v2"
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/attest-build-provenance@")
     )
 
     assert "cosign sign --yes ${IMAGE_REF}@${IMAGE_DIGEST}" in steps_text

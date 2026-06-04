@@ -5,6 +5,7 @@ Every response includes metadata that helps agents assess data reliability.
 """
 
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
@@ -38,6 +39,89 @@ def _get_pii_masker() -> PiiMasker:
     if _PII_MASKER is None or Path(_PII_MASKER.config_path) != Path(config_path):
         _PII_MASKER = PiiMasker(config_path)
     return _PII_MASKER
+
+
+# Engine call-signature compatibility (F-4): older engine implementations and
+# many test fakes predate the ``tenant_id`` / ``allowed_tables`` kwargs. The
+# helpers below replace three hand-rolled nested try/except TypeError cascades
+# that lived inside the route handlers: kwargs are dropped progressively, and
+# a TypeError only triggers the next attempt when its message mentions a kwarg
+# of the CURRENT attempt — anything else re-raises immediately so genuine
+# engine TypeErrors are never swallowed.
+_KWARG_DROP_ORDER = ("allowed_tables", "tenant_id")
+
+
+def _kwarg_fallback_attempts(optional_kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+    attempts = [dict(optional_kwargs)]
+    remaining = dict(optional_kwargs)
+    for name in _KWARG_DROP_ORDER:
+        if name in remaining:
+            remaining = {key: value for key, value in remaining.items() if key != name}
+            attempts.append(dict(remaining))
+    return attempts
+
+
+def _typeerror_mentions_attempt_kwarg(exc: TypeError, attempt_kwargs: dict[str, Any]) -> bool:
+    message = str(exc)
+    return any(name in message for name in attempt_kwargs)
+
+
+def _call_with_kwarg_fallback(
+    func: Callable[..., Any],
+    *args: Any,
+    optional_kwargs: dict[str, Any],
+    **fixed_kwargs: Any,
+) -> Any:
+    for attempt in _kwarg_fallback_attempts(optional_kwargs):
+        try:
+            return func(*args, **fixed_kwargs, **attempt)
+        except TypeError as exc:
+            if not _typeerror_mentions_attempt_kwarg(exc, attempt):
+                raise
+    raise RuntimeError("unreachable: the bare attempt either returns or re-raises")
+
+
+async def _call_in_threadpool_with_kwarg_fallback(
+    func: Callable[..., Any],
+    *args: Any,
+    optional_kwargs: dict[str, Any],
+    **fixed_kwargs: Any,
+) -> Any:
+    for attempt in _kwarg_fallback_attempts(optional_kwargs):
+        try:
+            return await run_in_threadpool(func, *args, **fixed_kwargs, **attempt)
+        except TypeError as exc:
+            if not _typeerror_mentions_attempt_kwarg(exc, attempt):
+                raise
+    raise RuntimeError("unreachable: the bare attempt either returns or re-raises")
+
+
+def _resolve_tenant_id(req: Request) -> str | None:
+    tenant_key = getattr(req.state, "tenant_key", None)
+    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+    return cast(str | None, tenant_id)
+
+
+def _tenant_context_required(engine: Any, tenant_id: str | None) -> bool:
+    return tenant_id is None and bool(
+        getattr(getattr(engine, "_tenant_router", None), "has_config", lambda: False)()
+    )
+
+
+def _normalize_as_of(as_of: datetime | None) -> datetime | None:
+    """Coerce a user-supplied as_of to aware-UTC and reject future anchors."""
+    if as_of is None:
+        return None
+    as_of = (as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)).astimezone(UTC)
+    if as_of > datetime.now(UTC):
+        raise HTTPException(status_code=422, detail="as_of cannot be in the future")
+    return as_of
+
+
+def _as_of_iso_text(as_of: datetime | None) -> str | None:
+    if as_of is None:
+        return None
+    return as_of.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _transform_payload_for_requested_version(
@@ -179,26 +263,15 @@ class MetricResponse(BaseModel):
 async def explain_query(request: ExplainRequest, req: Request) -> ExplainResponse:
     """Return the SQL plan for a natural language query without executing it."""
     engine = req.app.state.query_engine
-    tenant_key = getattr(req.state, "tenant_key", None)
-    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+    tenant_id = _resolve_tenant_id(req)
     allowed_tables = _allowed_tables_for_request(req)
 
     try:
-        try:
-            result = engine.explain(
-                request.question,
-                tenant_id=tenant_id,
-                allowed_tables=allowed_tables,
-            )
-        except TypeError as exc:
-            if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
-                raise
-            try:
-                result = engine.explain(request.question, tenant_id=tenant_id)
-            except TypeError as fallback_exc:
-                if "tenant_id" not in str(fallback_exc):
-                    raise
-                result = engine.explain(request.question)
+        result = _call_with_kwarg_fallback(
+            engine.explain,
+            request.question,
+            optional_kwargs={"tenant_id": tenant_id, "allowed_tables": allowed_tables},
+        )
     except HTTPException:
         raise
     except ValueError as e:
@@ -220,8 +293,7 @@ async def natural_language_query(
         POST /v1/query {"question": "Top 5 products by revenue today"}
     """
     engine = req.app.state.query_engine
-    tenant_key = getattr(req.state, "tenant_key", None)
-    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+    tenant_id = _resolve_tenant_id(req)
     allowed_tables = _allowed_tables_for_request(req)
 
     with tracer.start_as_current_span("query_engine.translate") as span:
@@ -230,67 +302,24 @@ async def natural_language_query(
             "query.engine",
             "claude" if os.getenv("ANTHROPIC_API_KEY") else "rule_based",
         )
+        optional_kwargs = {"tenant_id": tenant_id, "allowed_tables": allowed_tables}
         try:
             if hasattr(engine, "paginated_query"):
-                try:
-                    result = await run_in_threadpool(
-                        engine.paginated_query,
-                        request.question,
-                        limit=request.limit,
-                        cursor=request.cursor,
-                        context=request.context,
-                        tenant_id=tenant_id,
-                        allowed_tables=allowed_tables,
-                    )
-                except TypeError as exc:
-                    if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
-                        raise
-                    try:
-                        result = await run_in_threadpool(
-                            engine.paginated_query,
-                            request.question,
-                            limit=request.limit,
-                            cursor=request.cursor,
-                            context=request.context,
-                            tenant_id=tenant_id,
-                        )
-                    except TypeError as fallback_exc:
-                        if "tenant_id" not in str(fallback_exc):
-                            raise
-                        result = await run_in_threadpool(
-                            engine.paginated_query,
-                            request.question,
-                            limit=request.limit,
-                            cursor=request.cursor,
-                            context=request.context,
-                        )
+                result = await _call_in_threadpool_with_kwarg_fallback(
+                    engine.paginated_query,
+                    request.question,
+                    optional_kwargs=optional_kwargs,
+                    limit=request.limit,
+                    cursor=request.cursor,
+                    context=request.context,
+                )
             else:
-                try:
-                    result = await run_in_threadpool(
-                        engine.execute_nl_query,
-                        request.question,
-                        context=request.context,
-                        tenant_id=tenant_id,
-                        allowed_tables=allowed_tables,
-                    )
-                except TypeError as exc:
-                    if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
-                        raise
-                    try:
-                        result = await run_in_threadpool(
-                            engine.execute_nl_query,
-                            request.question,
-                            context=request.context,
-                            tenant_id=tenant_id,
-                        )
-                    except TypeError as fallback_exc:
-                        if "tenant_id" not in str(fallback_exc):
-                            raise
-                        result = await run_in_threadpool(
-                            engine.execute_nl_query,
-                            request.question,
-                            context=request.context,
-                        )
+                result = await _call_in_threadpool_with_kwarg_fallback(
+                    engine.execute_nl_query,
+                    request.question,
+                    optional_kwargs=optional_kwargs,
+                    context=request.context,
+                )
         except HTTPException:
             raise
         except ValueError as e:
@@ -369,34 +398,19 @@ async def get_entity(
             f"Available: {list(catalog.entities.keys())}",
         )
 
-    if as_of is not None:
-        as_of = (as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)).astimezone(UTC)
-        if as_of > datetime.now(UTC):
-            raise HTTPException(
-                status_code=422,
-                detail="as_of cannot be in the future",
-            )
-
-    tenant_key = getattr(req.state, "tenant_key", None)
-    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
-    tenant_context_required = (
-        tenant_id is None
-        and getattr(getattr(engine, "_tenant_router", None), "has_config", lambda: False)()
-    )
+    as_of = _normalize_as_of(as_of)
+    tenant_id = _resolve_tenant_id(req)
+    tenant_context_required = _tenant_context_required(engine, tenant_id)
     query_cache = getattr(req.app.state, "query_cache", None)
-    cache_key = (
-        cache_entity_key(tenant_id, entity_type, entity_id)
-        if as_of is None and query_cache is not None
-        else None
-    )
+    # (cache, key) pair, present only when the entity cache is usable for
+    # this request: latest-state lookup, cache configured, tenant resolved.
+    entity_cache: tuple[Any, str] | None = None
+    if as_of is None and query_cache is not None and not tenant_context_required:
+        entity_cache = (query_cache, cache_entity_key(tenant_id, entity_type, entity_id))
     try:
-        if (
-            as_of is None
-            and not tenant_context_required
-            and query_cache is not None
-            and cache_key is not None
-        ):
-            cached = await query_cache.get(cache_key)
+        if entity_cache is not None:
+            cache, cache_key = entity_cache
+            cached = await cache.get(cache_key)
             if cached is not None:
                 logger.debug("entity_cache_hit", key=cache_key)
                 cached_payload = cached.get("payload", cached)
@@ -409,39 +423,20 @@ async def get_entity(
                 )
                 return EntityResponse.model_validate(transformed_payload)
         if as_of is not None:
-            try:
-                result = await run_in_threadpool(
-                    engine.get_entity_at,
-                    entity_type,
-                    entity_id,
-                    as_of,
-                    tenant_id=tenant_id,
-                )
-            except TypeError as exc:
-                if "tenant_id" not in str(exc):
-                    raise
-                result = await run_in_threadpool(
-                    engine.get_entity_at,
-                    entity_type,
-                    entity_id,
-                    as_of,
-                )
+            result = await _call_in_threadpool_with_kwarg_fallback(
+                engine.get_entity_at,
+                entity_type,
+                entity_id,
+                as_of,
+                optional_kwargs={"tenant_id": tenant_id},
+            )
         else:
-            try:
-                result = await run_in_threadpool(
-                    engine.get_entity,
-                    entity_type,
-                    entity_id,
-                    tenant_id=tenant_id,
-                )
-            except TypeError as exc:
-                if "tenant_id" not in str(exc):
-                    raise
-                result = await run_in_threadpool(
-                    engine.get_entity,
-                    entity_type,
-                    entity_id,
-                )
+            result = await _call_in_threadpool_with_kwarg_fallback(
+                engine.get_entity,
+                entity_type,
+                entity_id,
+                optional_kwargs={"tenant_id": tenant_id},
+            )
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e)) from None
 
@@ -459,11 +454,7 @@ async def get_entity(
     pii_masked = masked_payload != payload
     if pii_masked:
         response.headers["X-PII-Masked"] = "true"
-    as_of_text = (
-        as_of.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        if as_of is not None
-        else None
-    )
+    as_of_text = _as_of_iso_text(as_of)
 
     response_payload = {
         "entity_type": entity_type,
@@ -477,13 +468,9 @@ async def get_entity(
             "freshness_seconds": None if as_of is not None else freshness,
         },
     }
-    if (
-        as_of is None
-        and not tenant_context_required
-        and query_cache is not None
-        and cache_key is not None
-    ):
-        await query_cache.set(
+    if entity_cache is not None:
+        cache, cache_key = entity_cache
+        await cache.set(
             cache_key,
             {
                 "payload": response_payload,
@@ -529,30 +516,15 @@ async def get_metric(
         )
     _ensure_metric_allowed(req, metric_name)
 
-    if as_of is not None:
-        as_of = (as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)).astimezone(UTC)
-        if as_of > datetime.now(UTC):
-            raise HTTPException(
-                status_code=422,
-                detail="as_of cannot be in the future",
-            )
-
-    as_of_text = (
-        as_of.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        if as_of is not None
-        else None
-    )
+    as_of = _normalize_as_of(as_of)
+    as_of_text = _as_of_iso_text(as_of)
     try:
         requested_version = resolve_request_version(req)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     latest_version = get_version_registry(req).latest().date
-    tenant_key = getattr(req.state, "tenant_key", None)
-    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
-    tenant_context_required = (
-        tenant_id is None
-        and getattr(getattr(engine, "_tenant_router", None), "has_config", lambda: False)()
-    )
+    tenant_id = _resolve_tenant_id(req)
+    tenant_context_required = _tenant_context_required(engine, tenant_id)
     query_cache = getattr(req.app.state, "query_cache", None)
     cache_key = (
         QueryCache.metric_key(
@@ -573,23 +545,13 @@ async def get_metric(
             return MetricResponse.model_validate(cached)
 
     try:
-        try:
-            result = await run_in_threadpool(
-                engine.get_metric,
-                metric_name,
-                window=window,
-                as_of=as_of,
-                tenant_id=tenant_id,
-            )
-        except TypeError as exc:
-            if "tenant_id" not in str(exc):
-                raise
-            result = await run_in_threadpool(
-                engine.get_metric,
-                metric_name,
-                window=window,
-                as_of=as_of,
-            )
+        result = await _call_in_threadpool_with_kwarg_fallback(
+            engine.get_metric,
+            metric_name,
+            optional_kwargs={"tenant_id": tenant_id},
+            window=window,
+            as_of=as_of,
+        )
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e)) from None
 

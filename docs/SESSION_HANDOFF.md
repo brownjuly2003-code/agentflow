@@ -1,11 +1,53 @@
 # AgentFlow — Session Handoff
 
-**Last updated:** 2026-06-04 (coverage cadence COMPLETE: every mutmut target
-unit-gated; query package gate + 0x08 regex fix + mutmut shim repoint;
-Dependabot wave 4 merged; **audit mm F-5 closed** — bandit baseline emptied;
-**build-smoke is now a required check** — PR #37 + protection flip)
-**Verified code/state HEAD before this refresh:** `1d4614c` on `main` (even with
-`origin/main`). `1d4614c` (PR #37 squash) made `build-smoke` complete on every
+**Last updated:** 2026-06-05 (**the internal audit backlog is now EMPTY** —
+sessions 33-34 closed the last three internal items; everything still open
+is externally gated)
+**Verified code/state HEAD at this refresh:** `36c703b` on `main` (even with
+`origin/main`; all check-runs green on every commit listed below).
+
+Sessions 33-34 stack (2026-06-04 → 2026-06-05), newest first:
+
+- `36c703b` / `bc59d08` / `4b752d9` — docs records for the three closures.
+- `e594bda` (**PR #42, audit jgec H-4 / mm F-4 closed**): agent_query.py
+  thinned — the three nested try/except TypeError cascades (~120 duplicated
+  lines progressively dropping `tenant_id`/`allowed_tables` for older engine
+  signatures) became shared module-level helpers with the exact original
+  semantics, pinned by `tests/unit/test_agent_query_kwarg_fallback.py`;
+  shared `as_of`/tenant/entity-cache helpers. Behaviour-preserving: committed
+  OpenAPI unchanged (`export_openapi.py --check`), tenant-isolation /
+  query-explain / logical-correctness suites green. Gotcha: a plain bool
+  flag built from a compound condition does NOT narrow Optionals for mypy —
+  use an inline `is not None` check or a narrowed `(cache, key)` tuple.
+- `78f9eb7` (**PR #41, audit_kimi H-C2 closed in full**): the ClickHouse
+  backend's regex-chain SQL translation became a sqlglot
+  parse → AST rewrite → generate pipeline (FILTER→-If combinators,
+  FLOAT→Float64; literals preserved structurally; unparseable SQL fails
+  loudly). Demo DDL / DESCRIBE bypass translation; `explain()` transpiles the
+  wrapped query. Live coverage is PERMANENT: the CI test-integration job runs
+  a `clickhouse/clickhouse-server:25.3` service container against
+  `tests/integration/test_clickhouse_backend_live.py` (every catalog metric
+  template + literal round-trip + seed-value assertions; 13/13 PASSED in the
+  PR run, verified in the job log — not skipped). The suite is env-gated on
+  `CLICKHOUSE_LIVE_HOST` and skips cleanly elsewhere. sqlglot-30 gotcha:
+  `Func` does not subclass `exp.Expression` (`Func → Condition → Expr`) —
+  annotate AST-transform callbacks with `exp.Expr`.
+- `f1e145c` (**PR #39 + throwaway #40**): the `contract` required check now
+  completes on every PR — the last required context with a trigger-level
+  `pull_request` `paths:` filter moved the gate inside the job (PR #37
+  recipe); both paths validated live; `tests/unit/test_contract_workflow.py`
+  pins the shape. All 13 required contexts are now always-run on PRs.
+
+**Externally gated (the ONLY open items):** PR #23 Flink upstream JAR,
+M-C4 bcrypt→argon2id hash-format swap (product decision), Tier B A04/A05 +
+tasks 19-22 (production CDC owners / PMF evidence / prod benchmark /
+pen-test), v1.5.0 (waits for real features), scheduler env fix (named
+boundary; `.autopilot/BLOCKED.md` from the scheduled autopilot is stale but
+left in place deliberately).
+
+— Prior handoff content below (state as of `1d4614c`, accurate as history) —
+
+`1d4614c` (PR #37 squash) made `build-smoke` complete on every
 PR: the `pull_request` paths filter moved inside the job (a `changes` step
 diffs against the PR base; docker-free PRs finish as an instant skip-success),
 the real-build path was validated green on PR #37 itself and the skip path on

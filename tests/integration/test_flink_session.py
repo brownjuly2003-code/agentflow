@@ -128,8 +128,7 @@ class _FakeCheckpointConfig:
         self.min_pause = None
         self.timeout = None
         self.max_concurrent = None
-        self.cleanup = None
-        self.storage = None
+        self.retention = None
 
     def set_checkpointing_mode(self, value):
         self.mode = value
@@ -143,23 +142,24 @@ class _FakeCheckpointConfig:
     def set_max_concurrent_checkpoints(self, value):
         self.max_concurrent = value
 
-    def enable_externalized_checkpoints(self, value):
-        self.cleanup = value
-
-    def set_checkpoint_storage(self, value):
-        self.storage = value
+    def set_externalized_checkpoint_retention(self, value):
+        self.retention = value
 
 
 class _FakeEnv:
     def __init__(self):
         self.interval = None
         self.config = _FakeCheckpointConfig()
+        self.configured = None
 
     def enable_checkpointing(self, value):
         self.interval = value
 
     def get_checkpoint_config(self):
         return self.config
+
+    def configure(self, configuration):
+        self.configured = configuration
 
 
 def test_checkpointing_configuration_uses_exactly_once(monkeypatch):
@@ -173,5 +173,14 @@ def test_checkpointing_configuration_uses_exactly_once(monkeypatch):
     assert env.config.min_pause == 30_000
     assert env.config.timeout == 120_000
     assert env.config.max_concurrent == 1
-    assert env.config.cleanup == "RETAIN_ON_CANCELLATION"
-    assert env.config.storage == "file:///var/lib/flink-checkpoints"
+    assert env.config.retention == "RETAIN_ON_CANCELLATION"
+    assert env.configured == {"execution.checkpointing.dir": "file:///var/lib/flink-checkpoints"}
+
+
+def test_checkpointing_configuration_defaults_to_tmp_directory(monkeypatch):
+    env = _FakeEnv()
+    monkeypatch.delenv("FLINK_CHECKPOINT_DIR", raising=False)
+
+    configure_checkpointing(env)
+
+    assert env.configured == {"execution.checkpointing.dir": "file:///tmp/flink-checkpoints"}

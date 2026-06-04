@@ -1,8 +1,8 @@
 FROM python:3.11-slim-bookworm
 
-ARG FLINK_VERSION=1.19.1
+ARG FLINK_VERSION=2.2.1
 ARG SCALA_VERSION=2.12
-ARG PYFLINK_KAFKA_JAR_VERSION=3.3.0-1.19
+ARG PYFLINK_KAFKA_JAR_VERSION=5.0.0-2.2
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates curl openjdk-17-jre-headless \
@@ -12,6 +12,7 @@ RUN apt-get update \
     && curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/${PYFLINK_KAFKA_JAR_VERSION}/flink-sql-connector-kafka-${PYFLINK_KAFKA_JAR_VERSION}.jar" -o "/opt/flink/lib/flink-sql-connector-kafka-${PYFLINK_KAFKA_JAR_VERSION}.jar" \
     && mkdir -p /opt/flink/plugins/s3-fs-hadoop \
     && ln -s "/opt/flink/opt/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" "/opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" \
+    && test -e "/opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" \
     && python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir "apache-flink==${FLINK_VERSION}" confluent-kafka pydantic structlog \
     && rm -rf /var/lib/apt/lists/* /tmp/flink.tgz

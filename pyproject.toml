@@ -30,7 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 flink = [
-    "apache-flink==1.19.1",
+    "apache-flink==2.2.1",
 ]
 cloud = [
     "boto3>=1.35,<2",
@@ -222,10 +222,10 @@ check_untyped_defs = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# Sole strict relaxation: PyFlink lacks PEP-561 stubs and these hot-path
-# Flink jobs are gated on upstream PR #23, so relax the untyped-def
-# requirement and suppress the no-Any / import-untyped noise from pyflink.*
-# here while still catching real type bugs (attr-defined, arg-type, etc.).
+# Sole strict relaxation: PyFlink lacks PEP-561 stubs (still true on
+# apache-flink 2.2.1), so relax the untyped-def requirement and suppress the
+# no-Any / import-untyped noise from pyflink.* here while still catching
+# real type bugs (attr-defined, arg-type, etc.).
 # Gated by tests/unit/test_typing_policy.py.
 module = "src.processing.flink_jobs.*"
 disallow_untyped_defs = false

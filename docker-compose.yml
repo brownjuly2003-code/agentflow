@@ -47,15 +47,15 @@ services:
 
   # ── Flink ─────────────────────────────────────────────────────
   flink-jobmanager:
-    image: flink:1.19-java11
+    image: flink:2.2.1-java17
     ports:
       - "8081:8081"
     command: jobmanager
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        state.backend: rocksdb
-        state.checkpoints.dir: s3://agentflow-lake/checkpoints
+        state.backend.type: rocksdb
+        execution.checkpointing.dir: s3://agentflow-lake/checkpoints
         s3.endpoint: http://minio:9000
         s3.access-key: minio
         s3.secret-key: minio123
@@ -71,7 +71,7 @@ services:
       retries: 5
 
   flink-taskmanager:
-    image: flink:1.19-java11
+    image: flink:2.2.1-java17
     depends_on:
       flink-jobmanager:
         condition: service_healthy
@@ -80,7 +80,7 @@ services:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
-        state.backend: rocksdb
+        state.backend.type: rocksdb
         s3.endpoint: http://minio:9000
         s3.access-key: minio
         s3.secret-key: minio123

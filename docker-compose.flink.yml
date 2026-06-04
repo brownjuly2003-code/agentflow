@@ -19,8 +19,8 @@ services:
       - /bin/bash
       - -lc
       - |
-        printf '%s\n' "$$FLINK_PROPERTIES" >> /opt/flink/conf/flink-conf.yaml
-        printf '%s\n' 'jobmanager.memory.process.size: 1600m' >> /opt/flink/conf/flink-conf.yaml
+        printf '%s\n' "$$FLINK_PROPERTIES" >> /opt/flink/conf/config.yaml
+        printf '%s\n' 'jobmanager.memory.process.size: 1600m' >> /opt/flink/conf/config.yaml
         exec /opt/flink/bin/jobmanager.sh start-foreground
     environment:
       PYTHONPATH: /opt/agentflow
@@ -34,8 +34,8 @@ services:
       - /bin/bash
       - -lc
       - |
-        printf '%s\n' "$$FLINK_PROPERTIES" >> /opt/flink/conf/flink-conf.yaml
-        printf '%s\n' 'taskmanager.memory.process.size: 1728m' >> /opt/flink/conf/flink-conf.yaml
+        printf '%s\n' "$$FLINK_PROPERTIES" >> /opt/flink/conf/config.yaml
+        printf '%s\n' 'taskmanager.memory.process.size: 1728m' >> /opt/flink/conf/config.yaml
         exec /opt/flink/bin/taskmanager.sh start-foreground
     environment:
       PYTHONPATH: /opt/agentflow

@@ -94,7 +94,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 |-----------|--------|-----------|-------------------|
 | Streaming | Kafka 3.7 (KRaft) | Pulsar | Ecosystem maturity, MSK managed service |
 | CDC capture | Debezium + Kafka Connect | Python-native connectors | Mature Postgres/MySQL CDC, built-in offsets/schema history, one ops model |
-| Processing | Flink 1.19 | Spark Structured Streaming | True event-time, lower latency, native watermarks |
+| Processing | Flink 2.2 | Spark Structured Streaming | True event-time, lower latency, native watermarks |
 | Storage | Iceberg 1.5 | Delta Lake | Vendor-neutral, hidden partitioning, time-travel |
 | Local query | DuckDB | SQLite | Columnar, fast analytics, Iceberg support |
 | Orchestration | Dagster | Airflow | Software-defined assets, better testing, type safety |

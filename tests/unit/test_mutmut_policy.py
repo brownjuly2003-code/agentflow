@@ -1,3 +1,4 @@
+import ast
 import tomllib
 from pathlib import Path
 
@@ -11,12 +12,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 #   - auth manager / key rotation: API-key issue / verify / rotation.
 #   - masking: PII redaction.
 #   - rate_limiter: API hot-path / abuse protection.
+#   - nl_queries: the only validate_nl_sql() enforcement boundary, plus the
+#     pagination SQL wrappers built around prevalidated NL SQL.
+#   - sql_builder: every entity/metric SQL string the engine executes is
+#     assembled here.
 REQUIRED_MUTATION_TARGETS = {
     "src/serving/semantic_layer/sql_guard.py",
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",
     "src/serving/masking.py",
     "src/serving/api/rate_limiter.py",
+    "src/serving/semantic_layer/query/nl_queries.py",
+    "src/serving/semantic_layer/query/sql_builder.py",
 }
 
 
@@ -40,3 +47,23 @@ def test_mutmut_covers_security_critical_modules() -> None:
     # test_coverage_policy.py).
     paths = set(_mutmut_paths())
     assert REQUIRED_MUTATION_TARGETS <= paths
+
+
+def test_mutmut_targets_define_real_logic() -> None:
+    # The semantic flavor of the H-2 path-rot bug: after the query-engine
+    # package split, paths_to_mutate kept pointing at
+    # src/serving/semantic_layer/query_engine.py — a 5-line re-export shim —
+    # so mutmut "covered" the query surface while mutating nothing real.
+    # The existence check above cannot catch this (the shim is a real file),
+    # so also require every target to define at least one function or class
+    # at module level; a pure re-export module has only imports/assignments.
+    shims = []
+    for path in _mutmut_paths():
+        tree = ast.parse((PROJECT_ROOT / path).read_text(encoding="utf-8"))
+        defines_logic = any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            for node in tree.body
+        )
+        if not defines_logic:
+            shims.append(path)
+    assert shims == []

@@ -95,7 +95,7 @@ jobs:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes ${IMAGE_REF}@${IMAGE_DIGEST}
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.IMAGE_REF }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -132,7 +132,7 @@ jobs:
           IMAGE_DIGEST: ${{ env.IMAGE_DIGEST }}
         run: cosign sign --yes ${IMAGE_REF}@${IMAGE_DIGEST}
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ inputs.image_ref }}
           subject-digest: ${{ inputs.image_digest }}

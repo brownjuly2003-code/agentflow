@@ -74,6 +74,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- The bandit baseline (`.bandit-baseline.json`) is now empty: its single
+  accepted finding (B310, the `urlopen` call in
+  `src/serving/backends/clickhouse_backend.py`) moved to an inline
+  `# nosec B310 - <reason>` at the call site, matching the file's existing
+  B608 suppression convention. Baseline entries are keyed by
+  `(test_id, filename, line_number)`, so any line shift above the baselined
+  call would have re-classified the accepted finding as new and failed
+  Security Scan on an unrelated edit. A new policy test
+  (`test_bandit_baseline_carries_no_suppressed_findings`) keeps the baseline
+  empty, and the existing nosec-reason test covers the new comment.
+  (audit mm F-5)
 - Added direct unit coverage for the pure, infra-free security logic in
   `src.serving.api.auth.manager` that the integration / e2e auth suites only
   exercised indirectly: `tenant_key_allowed_tables` (tenant table-allowlist

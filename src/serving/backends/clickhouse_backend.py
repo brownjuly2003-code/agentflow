@@ -67,7 +67,7 @@ class ClickHouseBackend(ServingBackend):
             urlopen_kwargs: dict = {"timeout": self._timeout_seconds}
             if self._ssl_context is not None:
                 urlopen_kwargs["context"] = self._ssl_context
-            with urlopen(request, **urlopen_kwargs) as response:
+            with urlopen(request, **urlopen_kwargs) as response:  # nosec B310 - scheme is fixed to http/https by trusted backend config; HTTPS verifies via the explicit ssl context above
                 decoded: str = response.read().decode("utf-8")
                 return decoded
         except HTTPError as exc:

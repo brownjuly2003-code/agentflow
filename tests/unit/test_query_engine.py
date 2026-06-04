@@ -88,6 +88,29 @@ def test_nl_query_plan_normalizer_source_has_no_mojibake() -> None:
     assert b"\xc3\xa2\xe2\x80\x9d" not in source
 
 
+def test_query_package_sources_have_no_control_bytes() -> None:
+    # A literal 0x08 (backspace) byte sat inside the explain() fallback regex
+    # in nl_queries.py where the author meant the two-character escape \b:
+    # the pattern then required a backspace character before FROM/JOIN, never
+    # matched, and the regex fallback silently returned no tables_accessed.
+    # Same corruption family as the mojibake box-drawing regex (c61a28c), so
+    # guard the whole package: no ASCII control bytes other than newline.
+    package_dir = (
+        Path(__file__).resolve().parents[2] / "src" / "serving" / "semantic_layer" / "query"
+    )
+    allowed = {0x0A}
+    offenders = {}
+    for source in package_dir.glob("*.py"):
+        # Tolerate CRLF line endings (a Windows checkout artifact, not file
+        # content) but still flag a stray CR inside a line.
+        data = source.read_bytes().replace(b"\r\n", b"\n")
+        bad = sorted({byte for byte in data if byte < 0x20} - allowed)
+        if bad:
+            offenders[source.name] = bad
+
+    assert offenders == {}
+
+
 def test_explain_extracts_row_estimate_from_box_drawing_plan(
     engine: QueryEngine,
     monkeypatch: pytest.MonkeyPatch,

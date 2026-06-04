@@ -281,7 +281,7 @@ class NLQueryMixin:
                 dict.fromkeys(
                     match.split(".")[-1]
                     for match in re.findall(
-                        r"(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
+                        r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
                         sql,
                         flags=re.IGNORECASE,
                     )

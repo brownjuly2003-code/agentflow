@@ -9,7 +9,9 @@ Submit with:
 
 import json
 import os
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
 from pyflink.common.serialization import SimpleStringSchema
@@ -31,7 +33,7 @@ CHECKPOINT_INTERVAL_MS = 30_000
 
 
 class ClickTimestampAssigner(TimestampAssigner):
-    def extract_timestamp(self, value, record_timestamp):
+    def extract_timestamp(self, value: str, record_timestamp: int) -> int:
         try:
             event = json.loads(value)
             ts = datetime.fromisoformat(event["timestamp"])
@@ -52,13 +54,13 @@ class SessionWindowFunction(KeyedProcessFunction):
     When the timer fires (no new event for 30 min), emit session summary.
     """
 
-    def open(self, runtime_context):
+    def open(self, runtime_context: Any) -> None:
         self.session_state = runtime_context.get_state(
             ValueStateDescriptor("session_data", Types.STRING())
         )
         self.timer_state = runtime_context.get_state(ValueStateDescriptor("timer_ts", Types.LONG()))
 
-    def process_element(self, value, ctx: KeyedProcessFunction.Context):
+    def process_element(self, value: str, ctx: KeyedProcessFunction.Context) -> None:
         event = json.loads(value)
         event_ts = ctx.timestamp()
 
@@ -106,7 +108,7 @@ class SessionWindowFunction(KeyedProcessFunction):
         ctx.timer_service().register_event_time_timer(new_timer)
         self.timer_state.update(new_timer)
 
-    def on_timer(self, timestamp, ctx: KeyedProcessFunction.OnTimerContext):
+    def on_timer(self, timestamp: int, ctx: KeyedProcessFunction.OnTimerContext) -> Iterator[str]:
         """Session gap expired — emit session summary."""
         current = self.session_state.value()
         if not current:
@@ -150,7 +152,7 @@ class SessionWindowFunction(KeyedProcessFunction):
         self.timer_state.clear()
 
 
-def build_pipeline():
+def build_pipeline() -> StreamExecutionEnvironment:
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(CHECKPOINT_INTERVAL_MS)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))

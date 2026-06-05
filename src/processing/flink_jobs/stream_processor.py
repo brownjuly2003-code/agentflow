@@ -9,7 +9,9 @@ This is the main entry point for the Flink cluster. Submit with:
 
 import json
 import os
+from collections.abc import Iterator
 from datetime import timedelta
+from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
 from pyflink.common.serialization import SimpleStringSchema
@@ -38,7 +40,7 @@ def _event_tenant(event: dict) -> str:
 class EventTimestampAssigner(TimestampAssigner):
     """Extracts event_time from the JSON payload for watermark generation."""
 
-    def extract_timestamp(self, value, record_timestamp):
+    def extract_timestamp(self, value: str, record_timestamp: int) -> int:
         try:
             event = json.loads(value)
             from datetime import UTC, datetime
@@ -72,7 +74,9 @@ class ValidateAndEnrich(ProcessFunction):
     Invalid events (schema or semantic errors) → dead letter topic.
     """
 
-    def process_element(self, value, ctx: ProcessFunction.Context):
+    def process_element(
+        self, value: str, ctx: ProcessFunction.Context
+    ) -> Iterator[tuple[str, str]]:
         from datetime import UTC, datetime
 
         from src.processing.transformations.enrichment import (
@@ -215,7 +219,7 @@ class DeduplicateByEventId(MapFunction):
     handles at-least-once delivery from Kafka producers.
     """
 
-    def open(self, runtime_context):
+    def open(self, runtime_context: Any) -> None:
         from pyflink.datastream.state import StateTtlConfig, ValueStateDescriptor
 
         ttl_config = (
@@ -228,14 +232,14 @@ class DeduplicateByEventId(MapFunction):
         state_desc.enable_time_to_live(ttl_config)
         self.seen_state = runtime_context.get_state(state_desc)
 
-    def map(self, value):
+    def map(self, value: tuple[str, str]) -> str | None:
         if self.seen_state.value():
             return None  # duplicate
         self.seen_state.update(True)
         return value[1]
 
 
-def build_pipeline():
+def build_pipeline() -> StreamExecutionEnvironment:
     env = StreamExecutionEnvironment.get_execution_environment()
 
     # Checkpointing for exactly-once

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
@@ -130,7 +130,7 @@ def build_session_pipeline(
         ) from exc
 
     class FlinkSessionAggregator(KeyedProcessFunction):
-        def open(self, runtime_context):
+        def open(self, runtime_context: Any) -> None:
             descriptor = MapStateDescriptor(
                 "session_state",
                 Types.STRING(),
@@ -144,7 +144,7 @@ def build_session_pipeline(
             # safe) and no entries leak between keys sharing this instance.
             self.aggregator = SessionAggregator()
 
-        def process_element(self, raw_event, ctx):
+        def process_element(self, raw_event: str, ctx: Any) -> Iterator[str]:
             event = json.loads(raw_event)
             user_id = str(event["user_id"])
 

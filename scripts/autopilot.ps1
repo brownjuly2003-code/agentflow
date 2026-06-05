@@ -18,14 +18,19 @@ $ErrorActionPreference = "Stop"
 # (2026-06-04 .autopilot/BLOCKED.md) while interactive runs worked. Prepend
 # the user-level CLI directories when present-but-missing so the scheduled
 # environment matches the interactive one.
-$UserCliPaths = @(
-    (Join-Path $env:APPDATA "npm"),
-    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"),
-    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\Scripts")
-)
+$UserCliPaths = @()
+if ($env:APPDATA) {
+    # codex (npm global prefix)
+    $UserCliPaths += (Join-Path $env:APPDATA "npm")
+}
+if ($env:LOCALAPPDATA) {
+    # python (per-user CPython install)
+    $UserCliPaths += (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313")
+    $UserCliPaths += (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\Scripts")
+}
 foreach ($userCliPath in $UserCliPaths) {
-    if ((Test-Path $userCliPath) -and (($env:Path -split ";") -notcontains $userCliPath)) {
-        $env:Path = "$userCliPath;$env:Path"
+    if ((Test-Path $userCliPath) -and (($env:Path -split [IO.Path]::PathSeparator) -notcontains $userCliPath)) {
+        $env:Path = "$userCliPath$([IO.Path]::PathSeparator)$env:Path"
     }
 }
 

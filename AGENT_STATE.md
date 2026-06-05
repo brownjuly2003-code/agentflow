@@ -2,6 +2,41 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 3): Flink hot-path findings M-C2/M-C3 closed (`b0ae299`)
+
+Immediately after the 2.2.1 bump unblocked them, the two remaining Flink
+code findings from `audit_kimi_25_05_26.md` were closed TDD on `main`:
+
+- **M-C3** (`stream_processor.py`): `ValidateAndEnrich` emits
+  `(event_id, payload)` tuples (`Types.TUPLE([STRING, STRING])`) and the
+  dedup `key_by` reads `pair[0]` — the second full-JSON parse per event
+  (which existed only to extract `event_id`) is gone.
+  `DeduplicateByEventId.map` unwraps the payload; sinks and the
+  dead-letter side output remain plain strings; dedup key semantics
+  unchanged (`event.get("event_id", "")`). Note the session jobs keep
+  their `key_by(json.loads(...))` on raw source strings deliberately —
+  there is no upstream operator there to piggyback the key on, so the
+  parse-for-key is structural (pickled-shuffle alternatives would cost
+  more than they save).
+- **M-C2** (`session_aggregation.py`): `FlinkSessionAggregator` builds one
+  `SessionAggregator` in `open()` and reuses it; `restore()` fully
+  replaces its internal dict each event (`{user: snapshot}` or `{}`), so
+  Flink keyed state stays the source of truth across recovery and keys
+  sharing the operator instance cannot leak into each other. New
+  `tests/unit/test_session_aggregation_flink.py` (fake-pyflink fixture in
+  the `test_stream_processor.py` style) pins construction count (red
+  before the fix), the restore-replace no-leak invariant, and the
+  session-close state round-trip. The JSON-in-MapState layout is
+  unchanged on purpose — checkpoint compatible; its per-event
+  serialization is inherent to the layout and out of scope.
+- Evidence: targeted flink suites 47 passed; broad no-Docker unit 761
+  passed (same two known `.venv` artifacts); mypy clean 99; ruff clean.
+  Live on the iMac (image rebuild hit the cached heavy layer, 1.5 s):
+  smoke v2 ran the real dedup pipeline on a 2.2.1 MiniCluster with the
+  REAL validators/enrichment — three clickstream events with one
+  duplicated `event_id` collapsed to two enriched outputs. Pushed to
+  `origin/main` (`b0ae299`) after the empty-queue check.
+
 ## 2026-06-05 session (part 2): Flink 1.19.1 → 2.2.1 — the PR #23 wait-for-upstream gate lifted and was closed (`a97b399`)
 
 Step-0 inventory on «продолжи» found the internal backlog still empty

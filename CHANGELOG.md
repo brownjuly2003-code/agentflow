@@ -376,6 +376,23 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Performance
 
+- The two Flink hot-path findings from `audit_kimi_25_05_26.md` are closed
+  now that the runtime is on 2.2.1 (they were gated on the PR #23 upstream
+  wait). M-C3: `ValidateAndEnrich` emits `(event_id, payload)` pairs and the
+  dedup `key_by` reads the key from the tuple, dropping the second
+  full-JSON parse per event that existed only to extract `event_id`
+  (`DeduplicateByEventId` unwraps the payload; sinks and the dead-letter
+  side output stay plain strings, dedup key semantics unchanged). M-C2:
+  `FlinkSessionAggregator` constructs one `SessionAggregator` per operator
+  instance in `open()` instead of one per element, with full-replace
+  `restore()` per event so Flink keyed state stays the single source of
+  truth and nothing leaks between keys
+  (`tests/unit/test_session_aggregation_flink.py` pins construction count,
+  the no-leak invariant, and the session-close state round-trip). Validated
+  live on a Flink 2.2.1 MiniCluster: the real dedup pipeline (actual
+  validators + enrichment) collapsed a duplicated `event_id` from three
+  events to two enriched outputs. The JSON-in-MapState layout is
+  deliberately unchanged (checkpoint compatible).
 - `scripts/perf/auth_bench.py` + `docs/perf/auth-bench-2026-05-26.md`
   — perf-baseline microbench closing two deferred Kimi audit findings.
   Measured `authenticate()` worst-case at production `bcrypt_rounds=12`:

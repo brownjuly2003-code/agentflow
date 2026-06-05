@@ -187,16 +187,21 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   was also validated against a disposable live CH 25.3 via ssh tunnel
   (13/13). Do not reintroduce text-level rewrites in `_translate_sql` — the
   unit suite pins transpile invariants and literal preservation.
-- **M-C2 / M-C3** Flink hot-path — **UNGATED (2026-06-05, `a97b399`)**: the
-  PR #23 wait-for-upstream condition was met (Maven Central now ships
-  `flink-sql-connector-kafka` `5.0.0-2.2`) and the whole project moved to
-  Flink 2.2.1 (pyproject `[flink]` extra, flink_jobs image, compose cluster
-  images `flink:2.2.1-java17`, `config.yaml` instead of `flink-conf.yaml`,
-  checkpoint API migration in `checkpointing.py`). Validated live in a
-  2.2.1 container on the iMac (imports, full graph build, checkpoint API
-  against a real env, TTL shim, MiniCluster round-trip). The actual
-  hot-path optimisation findings are now an ordinary local candidate —
-  validation is Docker-on-Mac/CI, not this Windows host.
+- **M-C2 / M-C3** Flink hot-path — **CLOSED (2026-06-05, `b0ae299`)**. The
+  PR #23 wait-for-upstream condition was met (Maven Central ships
+  `flink-sql-connector-kafka` `5.0.0-2.2`), the whole project moved to
+  Flink 2.2.1 (`a97b399`: pyproject `[flink]` extra, flink_jobs image,
+  compose cluster images `flink:2.2.1-java17`, `config.yaml` instead of
+  `flink-conf.yaml`, checkpoint API migration in `checkpointing.py`), and
+  the two hot-path findings were then fixed TDD: M-C3 — `ValidateAndEnrich`
+  emits `(event_id, payload)` so the dedup `key_by` no longer re-parses the
+  JSON; M-C2 — one `SessionAggregator` per operator built in `open()` with
+  full-replace `restore()` per event
+  (`tests/unit/test_session_aggregation_flink.py` pins the invariants).
+  Both validated live on a 2.2.1 MiniCluster (real validators/enrichment;
+  duplicate `event_id` collapsed 3→2 enriched outputs). Do not re-key the
+  session jobs off their raw-source `json.loads` — there is no upstream
+  operator to carry the key there, the parse-for-key is structural.
 - **M-C4** full hashed-key-lookup rewrite — needs the bcrypt→argon2id
   hash-format swap (the soft-limit warning is already shipped).
 - **build-smoke → required check** — **CLOSED (2026-06-04, PR #37 `1d4614c` +

@@ -15,6 +15,14 @@ External pen-test attestation status as of 2026-05-06: not present. Use
 `docs/operations/external-pen-test-attestation-handoff.md` for the checklist
 required before any third-party pen-test claim.
 
+Automated posture channel (2026-06-05): the repository now publishes an
+OpenSSF Scorecard result (`.github/workflows/scorecard.yml`) and carries a
+prepared OpenSSF Best Practices self-assessment
+(`docs/operations/openssf-security-posture.md`). Both are $0 posture signals —
+an automated heuristic score and a maintainer self-certification respectively —
+and are kept explicitly distinct from a third-party penetration test, which is
+still not present and not claimed.
+
 Threat model assumed by the current implementation:
 - untrusted external callers using `X-API-Key`
 - tenant isolation requirements across shared serving infrastructure

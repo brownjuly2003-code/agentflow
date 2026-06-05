@@ -659,6 +659,17 @@ Out-of-scope reason:
   a tester. Archived handoff:
   `docs/operations/external-pen-test-attestation-handoff.md`.
 
+$0 posture addendum (2026-06-05): the verified-free options were surveyed
+(`AGENT_STATE.md` s40). External free pen-test/attestation programs are not
+viable for a low-adoption portfolio repo (OSS-Fuzz/OSTIF/GitHub Security Lab
+are too selective; huntr yields no report at this adoption; openbugbounty is
+live-site-only; university clinics serve organizations, not OSS repos). The two
+actionable $0 artifacts — OpenSSF Scorecard
+(`.github/workflows/scorecard.yml`) and a prepared OpenSSF Best Practices
+self-assessment (`docs/operations/openssf-security-posture.md`) — are posture
+signals, NOT a third-party pen-test attestation. **Status therefore stays N/A;
+the third-party attestation claim is still NOT made.**
+
 Allowed files/directories:
 - `docs/security-audit.md`
 - `docs/operations/`

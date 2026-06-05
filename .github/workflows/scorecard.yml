@@ -1,0 +1,59 @@
+# OpenSSF Scorecard — automated supply-chain security posture assessment.
+#
+# This is the project's $0 third-party-defined security posture channel: the
+# OpenSSF/Google Scorecard heuristics assess this repository and publish a
+# citable score + SARIF. It is a POSTURE signal only — NOT a third-party
+# penetration-test attestation (backlog item 22 stays N/A / unclaimed). The
+# action runs on the default branch, weekly, and whenever a branch-protection
+# rule changes; it never gates pull requests.
+name: Scorecard supply-chain security
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "30 6 * * 1"
+  push:
+    branches: [main]
+
+# Least privilege at the top level; the analysis job opts into the two writes
+# it actually needs.
+permissions: read-all
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload the result SARIF to the code-scanning dashboard.
+      security-events: write
+      # Publish the result to the public OpenSSF registry (OIDC token).
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif

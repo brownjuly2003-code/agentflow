@@ -2,6 +2,72 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 11 / s40): backlog 20/22 — verified $0 options surveyed; OpenSSF Scorecard posture channel added (item 22 stays N/A / unclaimed)
+
+Operator: «20/22 - поищи варианты» → «реши сам». The backlog re-check (part 10
+state) confirmed terminally empty; the operator asked to search for any $0 path
+to the two remaining externally-gated items and then delegated the decision.
+
+**Research (web-verified 2026-06-05), two blocks:**
+
+- **Item 22 (external pen-test attestation) — no $0 path closes it to criteria.**
+  Free external programs surveyed and ruled out for a low-adoption portfolio
+  repo: **OSS-Fuzz** (bar = "significant user base and/or critical to global
+  infra"; also Rewards program sunsets 2026-05-01) — NOT viable; **OSTIF /
+  GitHub Security Lab** (curated, not open-application) — NOT viable;
+  **huntr** (AI/ML OSV bounty; funded by huntr+clients, pays via Stripe; CVE on
+  valid reports) — technically in-scope but yields no report at this adoption,
+  and is not an "attestation" — practically NOT viable; **openbugbounty** —
+  live-website-only — NOT applicable (no prod site); **university cyber
+  clinics** (Consortium) — serve under-resourced organizations, not OSS repos —
+  NOT viable. The two **actionable** $0 artifacts are **OpenSSF Scorecard**
+  (automated, free, any public repo → 0-10 score + SARIF + public registry) and
+  the **OpenSSF Best Practices badge** (free self-certification) — both POSTURE,
+  not third-party attestation.
+- **Item 20 (PMF/WTP) — no autonomous $0 path either.** Real download numbers
+  (verified, no-auth APIs): PyPI `agentflow-runtime` 433/mo, `agentflow-client`
+  453/mo, npm `@yuliaedomskikh/agentflow-client` 525/mo — but these are
+  CI/mirror/bot-inflated **interest proxies, NOT WTP signal** (the tracker
+  already says this). Free distribution channels exist (Show HN — must be
+  runnable; Product Hunt — free; DataTalks.Club / MLOps Community Slack;
+  dev.to; Ask HN; subreddits only value-first, not bare survey links), but WTP
+  evidence requires real human responses = the external gate itself, and real
+  customer outreach is a forbidden autonomous-mode action. **Left untouched —
+  N/A, no fabricated evidence.**
+
+**Built (the one in-scope, $0, non-fabricating, own-repo deliverable):**
+
+- **`.github/workflows/scorecard.yml`** — OpenSSF Scorecard
+  (`ossf/scorecard-action@v2.4.3`, Scorecard v5.3.0): runs on push to `main` +
+  weekly + `branch_protection_rule`; top-level `permissions: read-all`, analysis
+  job opts into only `security-events: write` + `id-token: write`;
+  `publish_results: true`; uploads SARIF to Code scanning
+  (`github/codeql-action/upload-sarif@v4`) + artifact. Action versions match
+  repo convention (checkout@v6, upload-artifact@v7). NOT added to required
+  status checks (no branch-protection change) — it is an assessment, never a PR
+  gate; it is a 7th independent workflow.
+- **`tests/unit/test_scorecard_workflow.py`** — 6 shape tests pinning triggers,
+  least-privilege permissions, pinned action + `publish_results: true`, SARIF
+  upload, and `persist-credentials: false` (matches the repo's
+  `test_*_workflow.py` convention). Green locally.
+- **`docs/operations/openssf-security-posture.md`** — NEW: documents the
+  Scorecard channel (how to read the public score, badge snippet for
+  `github.com/brownjuly2003-code/agentflow`, the `publish_results:false`
+  opt-out) AND a **prepared Best Practices self-assessment** (passing-level
+  criteria filled with repo evidence refs; public submission under the
+  maintainer's identity is left as the operator's one-click action — the
+  outward/identity boundary).
+- Docs updated honestly: `docs/security-audit.md` §1 (automated posture
+  channel, distinct from pen-test), `docs/release-readiness.md` (posture note,
+  N/A unchanged), `BACKLOG.md` item 22 ($0 posture addendum; **status stays
+  N/A, third-party attestation still NOT claimed**), `CHANGELOG.md`.
+
+**Gotcha:** the GitHub remote is `brownjuly2003-code/agentflow`, NOT
+`…/DE_project` (the local dir name) — Scorecard registry/badge URLs use the
+real repo path. Post-push: verify the new Scorecard workflow run is green
+(public-repo Code-scanning SARIF upload is available by default; if
+`upload-sarif` ever fails, the fallback is artifact-only).
+
 ## 2026-06-05 session (part 10): item 19 CLOSED with REAL production-CDC evidence — logical replication enabled on the live Neon source and a full Debezium capture succeeded
 
 Operator: «включай». The remaining wall from part 9 was cleared end to end —

@@ -6,6 +6,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Added
 
+- OpenSSF Scorecard $0 supply-chain security posture channel:
+  `.github/workflows/scorecard.yml` (`ossf/scorecard-action@v2.4.3`) runs on
+  push to `main`, weekly, and on branch-protection changes with top-level
+  `read-all` permissions and a least-privilege analysis job
+  (`security-events`/`id-token` writes only), publishes the public Scorecard
+  result, and uploads SARIF to Code scanning. Shape-pinned by
+  `tests/unit/test_scorecard_workflow.py`. A companion
+  `docs/operations/openssf-security-posture.md` documents the channel and
+  carries a prepared OpenSSF Best Practices self-assessment for operator
+  submission. These are posture signals only — explicitly NOT a third-party
+  penetration-test attestation; backlog item 22 stays N/A and unclaimed.
 - Backlog item 19 reopened with a real evidence channel: the production
   source is the operator-owned Neon Postgres backing VacancyRadar
   (`public.vacancies`), recorded with an honest solo-org decision record in

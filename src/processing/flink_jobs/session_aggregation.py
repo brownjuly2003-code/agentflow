@@ -137,19 +137,26 @@ def build_session_pipeline(
                 Types.STRING(),
             )
             self.state = runtime_context.get_map_state(descriptor)
+            # One aggregator per operator instance (audit M-C2): the object is
+            # reused across events instead of being constructed per element.
+            # restore() below fully replaces its internal dict each event, so
+            # Flink keyed state stays the single source of truth (recovery
+            # safe) and no entries leak between keys sharing this instance.
+            self.aggregator = SessionAggregator()
 
         def process_element(self, raw_event, ctx):
             event = json.loads(raw_event)
             user_id = str(event["user_id"])
-            aggregator = SessionAggregator()
 
             if self.state.contains(user_id):
-                aggregator.restore({user_id: json.loads(self.state.get(user_id))})
+                self.aggregator.restore({user_id: json.loads(self.state.get(user_id))})
+            else:
+                self.aggregator.restore({})
 
-            for session in aggregator.process_event(event):
+            for session in self.aggregator.process_event(event):
                 yield json.dumps(session)
 
-            self.state.put(user_id, json.dumps(aggregator.snapshot()[user_id]))
+            self.state.put(user_id, json.dumps(self.aggregator.snapshot()[user_id]))
 
     configure_checkpointing(env)
 

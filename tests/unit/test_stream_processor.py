@@ -242,6 +242,10 @@ def stream_processor(monkeypatch):
         def BOOLEAN():
             return "BOOLEAN"
 
+        @staticmethod
+        def TUPLE(field_types):
+            return ("TUPLE", tuple(field_types))
+
     class _WatermarkStrategy:
         def __init__(self, out_of_orderness=None):
             self.out_of_orderness = out_of_orderness
@@ -550,7 +554,8 @@ def test_process_element_normalizes_debezium_before_validation(stream_processor,
         }
     )
 
-    emitted = [json.loads(item) for item in processor.process_element(value, ctx)]
+    pairs = list(processor.process_element(value, ctx))
+    emitted = [json.loads(payload) for _, payload in pairs]
 
     assert ctx.outputs == []
     assert validated_events[0]["event_type"] == "order.created"
@@ -559,6 +564,7 @@ def test_process_element_normalizes_debezium_before_validation(stream_processor,
     assert emitted[0]["entity_id"] == "ORD-CDC-1"
     assert emitted[0]["_partition_key"] == "ORD-CDC-1"
     assert "enriched_by" not in emitted[0]
+    assert pairs[0][0] == emitted[0]["event_id"]
 
 
 def test_process_element_routes_semantic_errors_to_dlq(stream_processor, monkeypatch):
@@ -615,7 +621,7 @@ def test_process_element_ignores_semantic_warnings(stream_processor, monkeypatch
         }
     )
 
-    emitted = [json.loads(item) for item in processor.process_element(value, ctx)]
+    emitted = [json.loads(payload) for _, payload in processor.process_element(value, ctx)]
 
     assert ctx.outputs == []
     assert emitted[0]["enriched_by"] == "payment"
@@ -638,7 +644,9 @@ def test_process_element_enriches_order_and_sets_metadata(stream_processor, monk
         }
     )
 
-    emitted = [json.loads(item) for item in processor.process_element(value, ctx)]
+    pairs = list(processor.process_element(value, ctx))
+    assert [event_id for event_id, _ in pairs] == ["evt-3"]
+    emitted = [json.loads(payload) for _, payload in pairs]
     event = emitted[0]
     processing_time = datetime.fromisoformat(event["_enriched"]["processing_time"])
     original_time = datetime.fromisoformat("2026-04-17T09:30:00+00:00")
@@ -669,7 +677,10 @@ def test_process_element_uses_clickstream_enrichment(stream_processor, monkeypat
         }
     )
 
-    emitted = [json.loads(item) for item in processor.process_element(value, _FakeProcessContext())]
+    emitted = [
+        json.loads(payload)
+        for _, payload in processor.process_element(value, _FakeProcessContext())
+    ]
 
     assert calls == ["evt-4"]
     assert emitted[0]["enriched_by"] == "clickstream"
@@ -696,7 +707,10 @@ def test_process_element_uses_payment_enrichment(stream_processor, monkeypatch):
         }
     )
 
-    emitted = [json.loads(item) for item in processor.process_element(value, _FakeProcessContext())]
+    emitted = [
+        json.loads(payload)
+        for _, payload in processor.process_element(value, _FakeProcessContext())
+    ]
 
     assert calls == ["evt-5"]
     assert emitted[0]["enriched_by"] == "payment"
@@ -714,7 +728,10 @@ def test_process_element_uses_negative_latency_for_invalid_timestamp(stream_proc
         }
     )
 
-    emitted = [json.loads(item) for item in processor.process_element(value, _FakeProcessContext())]
+    emitted = [
+        json.loads(payload)
+        for _, payload in processor.process_element(value, _FakeProcessContext())
+    ]
 
     assert emitted[0]["_enriched"]["pipeline_latency_ms"] == -1
 
@@ -731,12 +748,12 @@ def test_open_initializes_ttl_state_for_deduplication(stream_processor):
     assert runtime_context.descriptors[0].ttl_config.update_type == "OnCreateAndWrite"
 
 
-def test_map_returns_value_for_first_seen_event(stream_processor):
+def test_map_returns_payload_for_first_seen_event(stream_processor):
     runtime_context = _FakeRuntimeContext()
     deduplicator = stream_processor.DeduplicateByEventId()
     deduplicator.open(runtime_context)
 
-    result = deduplicator.map("payload-1")
+    result = deduplicator.map(("evt-1", "payload-1"))
 
     assert result == "payload-1"
     assert deduplicator.seen_state.value() is True
@@ -747,8 +764,8 @@ def test_map_drops_duplicates_after_first_seen_event(stream_processor):
     deduplicator = stream_processor.DeduplicateByEventId()
     deduplicator.open(runtime_context)
 
-    deduplicator.map("payload-1")
-    result = deduplicator.map("payload-1")
+    deduplicator.map(("evt-1", "payload-1"))
+    result = deduplicator.map(("evt-1", "payload-1"))
 
     assert result is None
 
@@ -785,11 +802,13 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
         watermark_strategy.timestamp_assigner,
         stream_processor.EventTimestampAssigner,
     )
-    assert env.source_stream.output_type == stream_processor.Types.STRING()
+    assert env.source_stream.output_type == stream_processor.Types.TUPLE(
+        [stream_processor.Types.STRING(), stream_processor.Types.STRING()]
+    )
     assert isinstance(env.source_stream.process_function, stream_processor.ValidateAndEnrich)
     assert env.validated_stream.side_output_tag is stream_processor.DEAD_LETTER_TAG
-    assert env.validated_stream.key_by_fn(json.dumps({"event_id": "evt-7"})) == "evt-7"
-    assert env.validated_stream.key_by_fn(json.dumps({})) == ""
+    assert env.validated_stream.key_by_fn(("evt-7", "payload")) == "evt-7"
+    assert env.validated_stream.key_by_fn(("", "payload")) == ""
     assert isinstance(env.keyed_stream.map_function, stream_processor.DeduplicateByEventId)
     assert env.keyed_stream.output_type == stream_processor.Types.STRING()
     assert env.mapped_stream.filter_fn(None) is False

@@ -201,14 +201,18 @@ class ValidateAndEnrich(ProcessFunction):
             or event["event_id"]
         )
 
-        yield json.dumps(event)
+        # Emit (event_id, payload) so the dedup key_by downstream reads the
+        # key from the tuple instead of re-parsing the whole JSON payload a
+        # second time (audit M-C3).
+        yield event.get("event_id", ""), json.dumps(event)
 
 
 class DeduplicateByEventId(MapFunction):
     """Deduplicates events using a Flink keyed state with TTL.
 
-    Events with the same event_id within the TTL window are dropped.
-    This handles at-least-once delivery from Kafka producers.
+    Receives (event_id, payload) pairs keyed by event_id; pairs whose
+    event_id was already seen within the TTL window are dropped. This
+    handles at-least-once delivery from Kafka producers.
     """
 
     def open(self, runtime_context):
@@ -228,7 +232,7 @@ class DeduplicateByEventId(MapFunction):
         if self.seen_state.value():
             return None  # duplicate
         self.seen_state.update(True)
-        return value
+        return value[1]
 
 
 def build_pipeline():
@@ -268,8 +272,13 @@ def build_pipeline():
     # Main pipeline
     stream = env.from_source(source, watermark_strategy, "kafka-source")
 
-    # Validate + enrich (with dead letter side output)
-    validated = stream.process(ValidateAndEnrich(), output_type=Types.STRING())
+    # Validate + enrich (with dead letter side output); emits
+    # (event_id, payload) pairs so the dedup key is read from the tuple
+    # instead of a second full-JSON parse (audit M-C3).
+    validated = stream.process(
+        ValidateAndEnrich(),
+        output_type=Types.TUPLE([Types.STRING(), Types.STRING()]),
+    )
 
     # Dead letter sink
     dead_letter_sink = (
@@ -288,7 +297,7 @@ def build_pipeline():
 
     # Deduplicate by event_id
     deduped = (
-        validated.key_by(lambda x: json.loads(x).get("event_id", ""))
+        validated.key_by(lambda pair: pair[0])
         .map(DeduplicateByEventId(), output_type=Types.STRING())
         .filter(lambda x: x is not None)
     )

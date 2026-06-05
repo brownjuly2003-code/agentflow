@@ -42,12 +42,24 @@ project can produce to document its supply-chain security posture.
   posture score. To keep the result private, set `publish_results: false`
   (the SARIF still lands in Code scanning) and update the shape test.
 
-## 2. OpenSSF Best Practices badge (self-certification draft)
+## 2. OpenSSF Best Practices badge (SUBMITTED — live, in progress)
 
-Free at <https://www.bestpractices.dev/>. Submission is a **public
-self-attestation under the maintainer's identity** (GitHub login) — so the
-draft answers are prepared below and the actual submission is the operator's
-one-click action. Evidence references are repository-relative.
+**Submitted 2026-06-05.** Live entry: **<https://www.bestpractices.dev/en/projects/13107>**
+(project id `13107`, passing/Metal series, owned by the `brownjuly2003-code`
+GitHub account). Current self-certified status: **81% (in_progress)** —
+Quality 13/13, Security 15/16, Analysis 6/8, Basics 11/13, Change Control 7/9,
+Reporting 2/8.
+
+The remaining gap to a full passing badge is deliberate and honest: the
+unclaimed Reporting criteria are the *responsiveness* ones (timely responses to
+bug reports, enhancement requests, and vulnerability reports). A
+portfolio/demo project with no external user base has no real track record to
+self-certify those against, so they are left unmet rather than fabricated —
+the same discipline as item 22's pen-test attestation. They can be marked Met
+once the project has real report-response history.
+
+The criteria below are the self-assessment that was filed (every Met is backed
+by a real repository artifact). Evidence references are repository-relative.
 
 Passing-level criteria, grouped:
 

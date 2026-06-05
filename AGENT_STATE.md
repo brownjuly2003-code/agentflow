@@ -68,6 +68,20 @@ real repo path. Post-push: verify the new Scorecard workflow run is green
 (public-repo Code-scanning SARIF upload is available by default; if
 `upload-sarif` ever fails, the fallback is artifact-only).
 
+**Follow-up (operator request): OpenSSF Best Practices badge SUBMITTED.** Live
+entry <https://www.bestpractices.dev/en/projects/13107> (project id 13107,
+passing/Metal series), self-certified to **81% (in_progress)**: Quality 13/13,
+Security 15/16, Analysis 6/8, Basics 11/13, Change Control 7/9, Reporting 2/8.
+The remaining gap is honest — the unclaimed Reporting criteria are the
+*responsiveness* ones (timely replies to bug/enhancement/vulnerability
+reports), which a portfolio/demo with no external user base cannot truthfully
+self-certify, so they were left unmet rather than fabricated (same discipline
+as item 22). They can be marked Met once a real report-response history exists.
+Criteria were filed via the BadgeApp automation interface
+(`/projects/13107/passing/edit?<field>_status=Met&<field>_justification=...`)
+plus an atomic authenticated `fetch` PUT for the largest batch. Details of the
+account/login path are kept out of this tracked file by design.
+
 ## 2026-06-05 session (part 10): item 19 CLOSED with REAL production-CDC evidence — logical replication enabled on the live Neon source and a full Debezium capture succeeded
 
 Operator: «включай». The remaining wall from part 9 was cleared end to end —

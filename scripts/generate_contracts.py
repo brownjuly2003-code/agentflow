@@ -35,6 +35,36 @@ class ContractSpec:
     model: type[BaseModel]
     include_fields: tuple[str, ...]
     field_overrides: dict[str, dict[str, Any]]
+    # Event->metric lineage and the freshness promise for metric contracts.
+    # source_events must match the DataCatalog declaration —
+    # tests/unit/test_metric_contracts.py pins the two together.
+    source_events: tuple[str, ...] | None = None
+    source_table: str | None = None
+    freshness: dict[str, Any] | None = None
+
+
+ORDER_SOURCE_EVENTS = ("order.created", "order.updated", "order.cancelled")
+SESSION_SOURCE_EVENTS = ("click", "page_view", "add_to_cart")
+PIPELINE_SOURCE_EVENTS = (
+    "order.created",
+    "order.updated",
+    "order.cancelled",
+    "payment.initiated",
+    "payment.completed",
+    "payment.failed",
+    "click",
+    "page_view",
+    "add_to_cart",
+    "product.updated",
+)
+# The staleness budget a cached metric read is allowed to carry on production
+# defaults (event-driven invalidation at a 2 s dispatcher poll). Measured:
+# 1.97 s p95 end-to-end (docs/freshness-benchmark.md); the budget adds query
+# headroom on top of the poll bound rather than restating the measurement.
+METRIC_FRESHNESS = {
+    "p95_staleness_budget_seconds": 2.5,
+    "basis": "docs/freshness-benchmark.md (event_driven arm, production defaults)",
+}
 
 
 CONTRACT_SPECS = (
@@ -121,6 +151,119 @@ CONTRACT_SPECS = (
                 "unit": "USD",
             },
         },
+        source_events=ORDER_SOURCE_EVENTS,
+        source_table="orders_v2",
+        freshness=METRIC_FRESHNESS,
+    ),
+    ContractSpec(
+        path="metric.order_count.v1.yaml",
+        entity="metric.order_count",
+        version="1",
+        released="2026-06-06",
+        status="stable",
+        model=MetricResult,
+        include_fields=(
+            "value",
+            "unit",
+            "window",
+            "computed_at",
+        ),
+        field_overrides={
+            "value": {
+                "unit": "count",
+            },
+        },
+        source_events=ORDER_SOURCE_EVENTS,
+        source_table="orders_v2",
+        freshness=METRIC_FRESHNESS,
+    ),
+    ContractSpec(
+        path="metric.avg_order_value.v1.yaml",
+        entity="metric.avg_order_value",
+        version="1",
+        released="2026-06-06",
+        status="stable",
+        model=MetricResult,
+        include_fields=(
+            "value",
+            "unit",
+            "window",
+            "computed_at",
+        ),
+        field_overrides={
+            "value": {
+                "unit": "USD",
+            },
+        },
+        source_events=ORDER_SOURCE_EVENTS,
+        source_table="orders_v2",
+        freshness=METRIC_FRESHNESS,
+    ),
+    ContractSpec(
+        path="metric.conversion_rate.v1.yaml",
+        entity="metric.conversion_rate",
+        version="1",
+        released="2026-06-06",
+        status="stable",
+        model=MetricResult,
+        include_fields=(
+            "value",
+            "unit",
+            "window",
+            "computed_at",
+        ),
+        field_overrides={
+            "value": {
+                "unit": "ratio",
+            },
+        },
+        source_events=SESSION_SOURCE_EVENTS,
+        source_table="sessions_aggregated",
+        freshness=METRIC_FRESHNESS,
+    ),
+    ContractSpec(
+        path="metric.active_sessions.v1.yaml",
+        entity="metric.active_sessions",
+        version="1",
+        released="2026-06-06",
+        status="stable",
+        model=MetricResult,
+        include_fields=(
+            "value",
+            "unit",
+            "window",
+            "computed_at",
+        ),
+        field_overrides={
+            "value": {
+                "unit": "count",
+            },
+        },
+        source_events=SESSION_SOURCE_EVENTS,
+        source_table="sessions_aggregated",
+        freshness=METRIC_FRESHNESS,
+    ),
+    ContractSpec(
+        path="metric.error_rate.v1.yaml",
+        entity="metric.error_rate",
+        version="1",
+        released="2026-06-06",
+        status="stable",
+        model=MetricResult,
+        include_fields=(
+            "value",
+            "unit",
+            "window",
+            "computed_at",
+        ),
+        field_overrides={
+            "value": {
+                "unit": "ratio",
+            },
+        },
+        source_events=PIPELINE_SOURCE_EVENTS,
+        source_table="pipeline_events",
+        freshness=METRIC_FRESHNESS,
     ),
 )
 
@@ -182,7 +325,7 @@ def _field_payload(
 
 
 def _render_contract(spec: ContractSpec) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "entity": spec.entity,
         "version": spec.version,
         "released": spec.released,
@@ -197,6 +340,13 @@ def _render_contract(spec: ContractSpec) -> dict[str, Any]:
         ],
         "breaking_changes": [],
     }
+    if spec.source_events is not None:
+        payload["source_events"] = list(spec.source_events)
+    if spec.source_table is not None:
+        payload["source_table"] = spec.source_table
+    if spec.freshness is not None:
+        payload["freshness"] = dict(spec.freshness)
+    return payload
 
 
 def _dump_yaml(payload: dict[str, Any]) -> str:

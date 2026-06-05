@@ -74,6 +74,12 @@ class SchemaContract:
     fields: tuple[ContractField, ...]
     breaking_changes: tuple[dict[str, Any], ...]
     source_path: Path | None = None
+    # Metric contracts: event->metric lineage plus the staleness budget the
+    # serving layer promises (see docs/freshness-benchmark.md). Empty/None for
+    # entity contracts.
+    source_events: tuple[str, ...] = ()
+    source_table: str | None = None
+    freshness: dict[str, Any] | None = None
 
     def field_map(self) -> dict[str, ContractField]:
         return {field.name: field for field in self.fields}
@@ -87,7 +93,7 @@ class SchemaContract:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "entity": self.entity,
             "version": self.version,
             "released": self.released,
@@ -95,6 +101,13 @@ class SchemaContract:
             "fields": [field.to_dict() for field in self.fields],
             "breaking_changes": [dict(change) for change in self.breaking_changes],
         }
+        if self.source_events:
+            payload["source_events"] = list(self.source_events)
+        if self.source_table is not None:
+            payload["source_table"] = self.source_table
+        if self.freshness is not None:
+            payload["freshness"] = dict(self.freshness)
+        return payload
 
 
 class ContractRegistry:
@@ -247,6 +260,7 @@ class ContractRegistry:
             )
             for field in payload.get("fields", [])
         )
+        freshness = payload.get("freshness")
         return SchemaContract(
             entity=payload["entity"],
             version=_normalize_version(str(payload["version"])),
@@ -255,4 +269,7 @@ class ContractRegistry:
             fields=fields,
             breaking_changes=tuple(payload.get("breaking_changes", [])),
             source_path=path,
+            source_events=tuple(payload.get("source_events", ())),
+            source_table=payload.get("source_table"),
+            freshness=dict(freshness) if freshness else None,
         )

@@ -1,12 +1,12 @@
-entity: metric.revenue
+entity: metric.conversion_rate
 version: '1'
-released: '2026-04-11'
+released: '2026-06-06'
 status: stable
 fields:
 - name: value
   type: float
   required: true
-  unit: USD
+  unit: ratio
 - name: unit
   type: string
   required: true
@@ -18,10 +18,10 @@ fields:
   required: true
 breaking_changes: []
 source_events:
-- order.created
-- order.updated
-- order.cancelled
-source_table: orders_v2
+- click
+- page_view
+- add_to_cart
+source_table: sessions_aggregated
 freshness:
   p95_staleness_budget_seconds: 2.5
   basis: docs/freshness-benchmark.md (event_driven arm, production defaults)

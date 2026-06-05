@@ -1,12 +1,12 @@
-entity: metric.revenue
+entity: metric.order_count
 version: '1'
-released: '2026-04-11'
+released: '2026-06-06'
 status: stable
 fields:
 - name: value
   type: float
   required: true
-  unit: USD
+  unit: count
 - name: unit
   type: string
   required: true

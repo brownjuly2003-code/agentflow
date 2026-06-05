@@ -156,8 +156,8 @@ for _ in $(seq 1 90); do
   # The topic does not exist until the snapshot writes its first record, so
   # GetOffsetShell fails on early iterations; tolerate it under pipefail/set -e
   # and keep polling instead of dying on the first miss.
-  CAPTURED=$(docker exec "${KAFKA_CONTAINER}" kafka-run-class kafka.tools.GetOffsetShell \
-    --broker-list localhost:9092 --topic "${TOPIC}" --time -1 2>/dev/null \
+  CAPTURED=$(docker exec "${KAFKA_CONTAINER}" kafka-get-offsets \
+    --bootstrap-server localhost:9092 --topic "${TOPIC}" 2>/dev/null \
     | awk -F: '{sum += $3} END {print sum+0}' || true)
   CAPTURED=${CAPTURED:-0}
   echo "captured events: ${CAPTURED}/${ROW_COUNT}"

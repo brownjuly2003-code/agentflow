@@ -11,6 +11,7 @@ top-level permissions with the two writes the analysis job needs
 publish the public result and upload the SARIF to code scanning.
 """
 
+import re
 from pathlib import Path
 
 import yaml
@@ -66,7 +67,10 @@ def test_scorecard_runs_the_pinned_ossf_action_and_publishes_results():
         for step in job["steps"]
         if str(step.get("uses", "")).startswith("ossf/scorecard-action@")
     )
-    assert analysis["uses"] == "ossf/scorecard-action@v2.4.3"
+    # Commit-SHA pinned (the human-readable version rides in the inline
+    # comment, which YAML parsing drops); the repo-wide pin convention is
+    # enforced by test_workflow_action_pinning.py.
+    assert re.fullmatch(r"ossf/scorecard-action@[0-9a-f]{40}", analysis["uses"])
     assert analysis["with"]["results_file"] == "results.sarif"
     assert analysis["with"]["results_format"] == "sarif"
     # The public, citable artifact is the whole point for a portfolio repo.

@@ -87,6 +87,34 @@ All notable changes to AgentFlow are documented in this file.
   were healed at the root (pandas installed; `agentflow-client` reinstalled
   at 1.5.0), so the gate exit code is trustworthy.
 
+### Security
+
+- First OpenSSF Scorecard cycle acted on (score 5.8 at first publish; see
+  `docs/operations/openssf-security-posture.md` §4 for the fixed/accepted-open
+  split of the 163 Code-scanning findings):
+  - Every `uses:` in all 19 workflows (99 references, 20 unique actions) is
+    pinned to a full commit SHA with a trailing `# <version>` comment that
+    Dependabot's `github-actions` ecosystem keeps updating. The convention is
+    enforced by the new `tests/unit/test_workflow_action_pinning.py`;
+    per-workflow shape tests now assert action identity (prefix) instead of
+    mutable tags.
+  - Top-level `permissions: contents: read` added to the five workflows that
+    ran on the default token (`staging-deploy`, `e2e`, `contract`,
+    `cdc-production-capture`, `benchmark-arm`), and
+    `container-attestation.yml` no longer grants
+    `packages`/`id-token`/`attestations` writes at the top level — they moved
+    to the two operator-dispatched signing jobs, so the every-PR `build-smoke`
+    job runs read-only (pinned by a new shape test).
+  - All four Dockerfile `FROM` lines are digest-pinned to their current
+    manifest-list digests, and the Dependabot `docker` ecosystem now covers
+    every Dockerfile directory (`directories:` list) so the pins keep moving
+    with upstream tags.
+  - `warehouse/agentflow/dv2/loaders/x5_retail_hero/requirements.txt` floors
+    raised: `pydantic>=2.9` (GHSA-mr82-8j83-vxmv ReDoS range started at the
+    old 2.0 floor) and `tqdm>=4.66.3` (PYSEC-2017-74 and the 2024 CLI
+    injection both fall below it). Resolution-floor fixes only; runtime code
+    is unchanged.
+
 ## [1.5.0] - 2026-06-05
 
 ### Added

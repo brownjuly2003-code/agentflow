@@ -19,7 +19,7 @@ def test_trivy_job_generates_cyclonedx_sbom_artifact() -> None:
         None,
     )
     assert sbom_step is not None
-    assert sbom_step["uses"] == "aquasecurity/trivy-action@v0.36.0"
+    assert str(sbom_step["uses"]).startswith("aquasecurity/trivy-action@")
     assert sbom_step["with"] == {
         "image-ref": "agentflow-api:security-scan",
         "format": "cyclonedx",
@@ -31,7 +31,7 @@ def test_trivy_job_generates_cyclonedx_sbom_artifact() -> None:
         None,
     )
     assert upload_step is not None
-    assert upload_step["uses"] == "actions/upload-artifact@v7"
+    assert str(upload_step["uses"]).startswith("actions/upload-artifact@")
     assert upload_step["with"]["name"] == "agentflow-api-sbom-cyclonedx"
     assert upload_step["with"]["path"] == "agentflow-api.cdx.json"
     assert upload_step["with"]["if-no-files-found"] == "error"

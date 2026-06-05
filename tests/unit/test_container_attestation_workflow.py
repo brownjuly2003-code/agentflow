@@ -15,8 +15,8 @@ def test_container_attestation_workflow_signs_images_by_digest_only():
     job = workflow["jobs"]["attest-and-sign"]
     steps_text = yaml.safe_dump(job["steps"])
 
-    assert workflow["permissions"]["id-token"] == "write"
-    assert workflow["permissions"]["attestations"] == "write"
+    assert job["permissions"]["id-token"] == "write"
+    assert job["permissions"]["attestations"] == "write"
     assert workflow["on"]["workflow_dispatch"]["inputs"]["mode"]["required"] is True
     assert workflow["on"]["workflow_dispatch"]["inputs"]["image_digest"]["required"] is False
     assert "sha256:" in steps_text
@@ -45,10 +45,10 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
     workflow_text = yaml.safe_dump(workflow)
     steps_text = yaml.safe_dump(job["steps"])
 
-    assert workflow["permissions"]["packages"] == "write"
+    assert job["permissions"]["packages"] == "write"
     assert "ghcr.io/${{ github.repository_owner }}/agentflow-api" in workflow_text
-    assert "docker/login-action@v4" in steps_text
-    assert "docker/build-push-action@v7" in steps_text
+    assert "docker/login-action@" in steps_text
+    assert "docker/build-push-action@" in steps_text
     assert "Dockerfile.api" in steps_text
     assert "push: true" in steps_text
     assert "${{ github.sha }}" in steps_text
@@ -69,6 +69,23 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
     assert inputs["push"] is True
     assert "${{ env.IMAGE_REF }}:${{ github.sha }}" in inputs["tags"]
     assert "${{ env.IMAGE_REF }}:audit-${{ github.run_id }}" in inputs["tags"]
+
+
+def test_container_attestation_top_level_token_is_read_only():
+    # The write scopes (packages/id-token/attestations) live on the two
+    # operator-dispatched signing jobs only; the every-PR build-smoke job —
+    # and anything added later by default — runs with a read-only token
+    # (Scorecard Token-Permissions posture).
+    workflow = _load_workflow()
+    assert workflow["permissions"] == {"contents": "read"}
+    for job_name in ("build-push-sign-attest", "attest-and-sign"):
+        assert workflow["jobs"][job_name]["permissions"] == {
+            "contents": "read",
+            "packages": "write",
+            "id-token": "write",
+            "attestations": "write",
+        }
+    assert "permissions" not in workflow["jobs"]["build-smoke"]
 
 
 def test_container_attestation_workflow_runs_smoke_on_pull_request():

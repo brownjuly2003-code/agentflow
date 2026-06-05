@@ -153,9 +153,13 @@ fi
 echo "--- wait for snapshot to land in Kafka ---"
 CAPTURED=0
 for _ in $(seq 1 90); do
+  # The topic does not exist until the snapshot writes its first record, so
+  # GetOffsetShell fails on early iterations; tolerate it under pipefail/set -e
+  # and keep polling instead of dying on the first miss.
   CAPTURED=$(docker exec "${KAFKA_CONTAINER}" kafka-run-class kafka.tools.GetOffsetShell \
     --broker-list localhost:9092 --topic "${TOPIC}" --time -1 2>/dev/null \
-    | awk -F: '{sum += $3} END {print sum+0}')
+    | awk -F: '{sum += $3} END {print sum+0}' || true)
+  CAPTURED=${CAPTURED:-0}
   echo "captured events: ${CAPTURED}/${ROW_COUNT}"
   if [ "${CAPTURED}" -ge "${ROW_COUNT}" ]; then
     break
@@ -171,7 +175,8 @@ echo "--- sample event (redacted keys only) ---"
 SAMPLE_KEYS=$(docker exec "${KAFKA_CONTAINER}" kafka-console-consumer \
   --bootstrap-server localhost:9092 --topic "${TOPIC}" \
   --from-beginning --max-messages 1 --timeout-ms 30000 2>/dev/null \
-  | python3 -c 'import json,sys; e=json.loads(sys.stdin.read()); p=e.get("payload",e); a=p.get("after") or {}; print(sorted(a.keys()))')
+  | python3 -c 'import json,sys; e=json.loads(sys.stdin.read()); p=e.get("payload",e); a=p.get("after") or {}; print(sorted(a.keys()))' || true)
+SAMPLE_KEYS=${SAMPLE_KEYS:-"(sample consumer returned no message)"}
 echo "sample event field names: ${SAMPLE_KEYS}"
 
 CONNECTOR_STATUS=$(curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status")

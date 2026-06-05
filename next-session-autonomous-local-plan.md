@@ -175,30 +175,25 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
 
 ## Known Open Threads (all gated)
 
-- **item 19 production-CDC fixes pending merge to main — OPEN, needs working out
-  (2026-06-05).** Item 19 itself is **Done with real evidence**: logical
-  replication was enabled on the live operator-owned Neon `vradar` source
-  (`winter-grass-42791098`; `enable_logical_replication` False→True,
-  irreversible `wal_level=logical`) and the capture run **27028251460 succeeded**
-  — Debezium snapshotted **96234 events** into `cdc.prod.public.vacancies`,
-  captured a redacted 21-field sample, and tore down with **0 leftover slots**
-  (evidence: `.artifacts/cdc-production/capture-evidence.md`). BUT the five fixes
-  that made the never-before-run `cdc-production-capture.yml` pass live exist
-  **only on branch `cdc/item19-neon-api-verified` (pushed, NOT merged)**:
-  (1) Connect readiness waits for the Postgres plugin + registration retries
-  transient 5xx; (2) the mounted Neon secret file is made readable by the
-  Connect container's non-root uid; (3) snapshot-wait tolerates the topic not
-  existing yet under `pipefail`; (4) failure diagnostics; (5) **offset count via
-  `kafka-get-offsets --bootstrap-server`** — `kafka.tools.GetOffsetShell
-  --broker-list` is gone in Kafka 3.x/cp-7.7 and silently reported 0/95370
-  despite data being present. **`main` still carries the BROKEN workflow + the
-  pre-enable docs**, so production CDC is not reproducible from `main` yet. To
-  work out next: review the branch, open a PR, confirm CI green, merge to `main`
-  (that also lands the AGENT_STATE part-10 / BACKLOG / plan updates); decide if
-  the dispatch-only workflow stays as-is. The Neon API key (`agentflow-cdc-3`)
-  lives in `D:\TXT\NEON.txt`; logical replication is left **ENABLED** (intended
-  end state). The PR/merge to `main` is the operator gate — not done
-  autonomously.
+- **item 19 production CDC — CLOSED with real evidence, MERGED to main
+  (2026-06-05, PR #43, merge commit `ce72ba8`, all 13 required checks green;
+  branch deleted).** Logical replication was enabled on the live operator-owned
+  Neon `vradar` source (`winter-grass-42791098`; `enable_logical_replication`
+  False→True, irreversible `wal_level=logical`) and the capture run
+  **27028251460 succeeded** — Debezium snapshotted **96234 events** into
+  `cdc.prod.public.vacancies`, captured a redacted 21-field sample, and tore
+  down with **0 leftover slots** (evidence:
+  `.artifacts/cdc-production/capture-evidence.md`). Five fixes made the
+  never-before-run `cdc-production-capture.yml` pass and are now on `main`:
+  Connect readiness + registration retry (herder-not-ready 500 under `set -e`);
+  the mounted Neon secret file made readable by the Connect container's non-root
+  uid (umask 077 → "Could not read properties from file"); snapshot-wait
+  tolerant of the topic not existing yet under `pipefail`; failure diagnostics;
+  and the offset count via `kafka-get-offsets --bootstrap-server` (the
+  deprecated `kafka.tools.GetOffsetShell --broker-list` silently reported
+  0/95370 despite the data being present). The Neon API key (`agentflow-cdc-3`)
+  lives in `D:\TXT\NEON.txt` (not in the repo); logical replication is left
+  **ENABLED** (intended end state). **No open follow-up remains.**
 - **H-C2** full sqlglot ClickHouse transpile — **CLOSED (2026-06-05, PR #41).**
   `_translate_sql` is now sqlglot parse → AST rewrite (FILTER→-If
   combinators, FLOAT→Float64) → generate; demo DDL / DESCRIBE bypass

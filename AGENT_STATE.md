@@ -24,8 +24,8 @@ not just infra-ready.
   sample, wrote `.artifacts/cdc-production/capture-evidence.md`, and tore
   everything down — **leftover capture slots: 0** (prod left clean).
 - **The dispatch-only workflow had never succeeded before (0 prior runs); five
-  real bugs were fixed to make it work** (all on branch
-  `cdc/item19-neon-api-verified`, NOT yet merged to main): (1) `8307b9f` docs +
+  real bugs were fixed to make it work** (all merged to main via PR #43, merge
+  commit `ce72ba8`): (1) `8307b9f` docs +
   the verified API command; (2) `1bac8de` Connect readiness waits for the
   PostgresConnector plugin + connector registration retries transient 5xx
   (a single `curl -fsS PUT` was dying on the herder-not-ready 500 under
@@ -35,9 +35,9 @@ not just infra-ready.
   existing yet under pipefail; (5) `b3cb21c` diagnostics; (6) `a4178e6` count
   offsets with `kafka-get-offsets --bootstrap-server` — `kafka.tools.GetOffsetShell
   --broker-list` is gone in Kafka 3.x/cp-7.7 and silently reported 0/95370
-  despite the data being present. **These fixes are real and belong on main —
-  a PR/merge of `cdc/item19-neon-api-verified` is the open follow-up** (left as
-  an operator gate; the branch is pushed).
+  despite the data being present. **These fixes are MERGED to main (PR #43,
+  merge commit `ce72ba8`, all 13 required checks green; branch deleted)** —
+  production CDC is reproducible from main; no open follow-up remains.
 - The Neon personal API key (`agentflow-cdc-3`) is stored at `D:\TXT\NEON.txt`;
   two orphaned keys created while iterating the token capture were deleted via
   the API. Logical replication remains ENABLED (the intended end state).

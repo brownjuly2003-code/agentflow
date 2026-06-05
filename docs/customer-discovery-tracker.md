@@ -5,6 +5,14 @@
 **Script:** [Customer Discovery Questions](customer-discovery-questions.md)
 **Research baseline:** [v1.1 Interview Preparation Report](v1-1-interview-prep.md)
 
+Scope decision, 2026-06-05: backlog item 20 (Phase 1 PMF outreach and pricing
+evidence) is closed as not applicable by operator decision — AgentFlow has no
+active commercial sales motion, so missing replies, interviews, PMF scoring,
+and paying-customer signals are expected and no longer an active gate. PMF
+validation is still NOT claimed; everything below stays explicitly synthetic /
+modelled / non-evidence. Reopen only on real customer evidence or an
+operator-restarted sales motion.
+
 This tracker keeps the PMF work operational with a clear split between real
 external outreach and `Synthetic / Modeled only` planning material. Use it to
 record modelled assumptions, score synthetic segment rehearsals, and decide

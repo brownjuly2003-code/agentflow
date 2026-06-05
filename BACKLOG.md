@@ -518,10 +518,18 @@ Forbidden scope:
 
 ## 19. Record Production CDC Source Onboarding Decision Handoff
 
-Status: Blocked.
+Status: Not applicable unless explicitly reopened.
 
-Blocked reason:
-- External production CDC decisions are still absent after 2026-05-04 access triage: source owner, secret owner, source connection details, table scope, private network path, Kubernetes Secret owner, monitoring owner, and rollback owner. Handoff recorded in `docs/operations/cdc-production-onboarding.md`.
+Out-of-scope reason:
+- Operator decision on 2026-06-05: there is no production deployment and no
+  production Postgres/MySQL source in the current project plan, so the missing
+  external decision record (source owner, secret owner, connection details,
+  table scope, private network path, Kubernetes Secret owner, monitoring owner,
+  rollback owner) is expected, not a deficiency. The checked-in local/demo and
+  Kubernetes-shaped CDC path remains the project evidence. Production CDC
+  enablement is still NOT claimed. Reopen only if the operator provides a real
+  production source with named owners. Archived handoff:
+  `docs/operations/cdc-production-onboarding.md`.
 
 Allowed files/directories:
 - `docs/operations/cdc-production-onboarding.md`
@@ -545,10 +553,18 @@ Forbidden scope:
 
 ## 20. Prepare Phase 1 PMF Outreach And Pricing Evidence Handoff
 
-Status: Blocked (partial external outreach started).
+Status: Not applicable unless explicitly reopened.
 
-Blocked reason:
-- Real Phase 1 PMF evidence remains insufficient after the 2026-05-30 external-outreach restart. Two public-form contact submissions were accepted, but there are still no replies, scheduled calls, completed interviews, PMF score evidence, pricing/WTP evidence, LOI, invoice, procurement artifact, or first-paying-customer signals. Handoff recorded in `docs/customer-discovery-tracker.md` and `docs/pricing-validation-plan.md`.
+Out-of-scope reason:
+- Operator decision on 2026-06-05: AgentFlow is a portfolio/demo-stage project
+  without an active commercial sales motion, so the absence of replies, calls,
+  interviews, PMF scoring, pricing/WTP evidence, LOI, invoices, and
+  first-paying-customer signals is expected, not a deficiency. The 2026-05-30
+  public-form outreach record and the synthetic/modelled tracker content stay
+  as-is and are still explicitly marked non-evidence. PMF/pricing validation is
+  still NOT claimed. Reopen only if the operator provides real customer
+  evidence or restarts a real sales motion. Archived handoffs:
+  `docs/customer-discovery-tracker.md`, `docs/pricing-validation-plan.md`.
 
 Allowed files/directories:
 - `docs/customer-discovery-tracker.md`
@@ -574,10 +590,17 @@ Forbidden scope:
 
 ## 21. Define Public Benchmark Production-Hardware Plan
 
-Status: Blocked.
+Status: Not applicable unless explicitly reopened.
 
-Blocked reason:
-- Production-hardware benchmark plan is documented, but after 2026-05-04 access triage approved `c8g.4xlarge+` access, budget, operator-run results, fixture-safety confirmation, and publication approval are still absent. Handoff recorded in `docs/perf/public-production-hardware-benchmark-plan.md`.
+Out-of-scope reason:
+- Operator decision on 2026-06-05: there is no cloud budget or payment card
+  (same constraint that closed item 18), so approved `c8g.4xlarge+` access and
+  an operator-run production-hardware benchmark cannot exist in the current
+  plan. The checked-in single-node baseline remains the only and sufficient
+  release evidence; a production-hardware result is still NOT claimed. The
+  reproducible plan stays archived for the day hardware access appears. Reopen
+  only if the operator provides approved hardware access and budget. Archived
+  plan: `docs/perf/public-production-hardware-benchmark-plan.md`.
 
 Allowed files/directories:
 - `docs/perf/`
@@ -602,10 +625,18 @@ Forbidden scope:
 
 ## 22. Prepare External Pen-Test Attestation Handoff
 
-Status: Blocked.
+Status: Not applicable unless explicitly reopened.
 
-Blocked reason:
-- No external pen-test report or attestation is present after 2026-05-04 access triage. Handoff checklist recorded in `docs/operations/external-pen-test-attestation-handoff.md`; `docs/security-audit.md` keeps internal audit evidence distinct from third-party attestation.
+Out-of-scope reason:
+- Operator decision on 2026-06-05: there is no budget for a third-party
+  penetration test and no enterprise customer requiring one in the current
+  plan, so the missing external report/attestation is expected, not a
+  deficiency. Internal security audit evidence (`docs/security-audit.md`, CI
+  scans, audit-closure history) remains the project evidence and stays clearly
+  distinct from third-party attestation, which is still NOT claimed. Reopen
+  only if the operator provides a real pen-test report/attestation or engages
+  a tester. Archived handoff:
+  `docs/operations/external-pen-test-attestation-handoff.md`.
 
 Allowed files/directories:
 - `docs/security-audit.md`

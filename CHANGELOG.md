@@ -4,6 +4,22 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Backlog items 19-22 (production CDC onboarding, Phase 1 PMF/pricing
+  evidence, production-hardware benchmark, external pen-test attestation) are
+  closed as `Not applicable unless explicitly reopened` by the 2026-06-05
+  operator decision, following the 2026-05-30 AWS no-budget/no-card precedent
+  (item 18). Their acceptance criteria require external counterparties
+  (production source owners, real customers, cloud hardware budget, a
+  third-party tester) that do not exist in the current project plan and forbid
+  fabrication. The gated claims remain explicitly unmade: production CDC is
+  not enabled, PMF/pricing is not validated, no production-hardware results
+  exist, and no third-party attestation exists. Recorded across `BACKLOG.md`,
+  `docs/release-readiness.md`, and status banners on the archived handoff
+  documents; reopening requires real operator-provided evidence via
+  `docs/operations/external-gate-evidence-intake.md`.
+
 ### Added
 
 - The local autopilot gained a first-class Claude Code channel:

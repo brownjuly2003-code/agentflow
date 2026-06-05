@@ -2,6 +2,13 @@
 
 ## Status
 
+Closed as not applicable on 2026-06-05 by operator decision: no production
+deployment or production Postgres/MySQL source exists in the current project
+plan, so backlog item 19 is no longer an active gate. Production CDC enablement
+is still NOT claimed. This runbook is preserved as the archived approval
+checklist; reopen it only when the operator provides a real production source
+with named owners.
+
 Production CDC onboarding is not approved yet. This runbook defines the
 decision record and preflight checks required before attaching real Postgres or
 MySQL sources to AgentFlow.

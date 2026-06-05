@@ -2,6 +2,13 @@
 
 ## Status
 
+Closed as not applicable on 2026-06-05 by operator decision: no cloud budget or
+payment card exists (the same constraint that closed the AWS gate), so backlog
+item 21 is no longer an active gate. The checked-in single-node baseline is the
+only claimed release evidence; a production-hardware result is still NOT
+claimed. This plan is preserved as the archived reproducible procedure; reopen
+it only when the operator provides approved hardware access and budget.
+
 Status as of 2026-05-04: blocked on approved production-hardware access,
 budget, and operator-run evidence.
 

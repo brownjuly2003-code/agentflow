@@ -2,6 +2,50 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 7): backlog items 19-22 closed as not applicable by operator decision — the backlog is fully resolved
+
+Operator: «реши вопрос с 19-22 - у тебя права админа». Resolution follows the
+task-18 precedent (2026-05-30 AWS no-budget/no-card closure): the four
+remaining external gates are moved from `Blocked` (open-ended waiting) to
+`Not applicable unless explicitly reopened`, because their acceptance criteria
+require external counterparties that do not exist in the current project plan
+and explicitly forbid fabricating them:
+
+- **19 Production CDC onboarding** — no production deployment or production
+  Postgres/MySQL source exists; the owner/decision record cannot exist either.
+  Local/demo + Kubernetes-shaped CDC remains the project evidence; production
+  CDC enablement is NOT claimed.
+- **20 Phase 1 PMF / pricing evidence** — no active commercial sales motion;
+  replies/interviews/WTP/LOI/paying-customer signals cannot exist. Tracker
+  content stays synthetic/modelled and non-evidence; PMF validation is NOT
+  claimed.
+- **21 Production-hardware benchmark** — no cloud budget or payment card (the
+  exact task-18 constraint); `c8g.4xlarge+` access cannot exist. The
+  single-node baseline remains the only claimed evidence; production-hardware
+  results are NOT claimed.
+- **22 External pen-test attestation** — no third-party-test budget and no
+  enterprise customer requiring one. Internal audit evidence stays distinct;
+  third-party attestation is NOT claimed.
+
+Recorded in: `BACKLOG.md` (4 statuses), `docs/release-readiness.md` (status
+table, known limitations, gate-criticality row, checklist, verification
+snapshot, release verdict), status banners on the four archived handoffs
+(`docs/operations/cdc-production-onboarding.md`,
+`docs/customer-discovery-tracker.md` + `docs/pricing-validation-plan.md`,
+`docs/perf/public-production-hardware-benchmark-plan.md`,
+`docs/operations/external-pen-test-attestation-handoff.md`), and the closeout
+of `next-session-external-gates-operator-evidence-plan.md`. The invariant
+held throughout: closing-as-out-of-scope is an operator scope decision, not a
+claim that any gate evidence exists. Reopening any item requires real
+operator-provided inputs routed through
+`docs/operations/external-gate-evidence-intake.md`.
+
+**The backlog now has zero open items**: 0-17 and 23-24 Done, 18-22 Not
+applicable unless explicitly reopened. The autopilot's `BLOCKED.md`
+self-quiesce remains the correct resting state (no safe bounded local task);
+its unblock list shrinks to an operator-named task or a codex re-login if the
+codex/pi channels are ever wanted again.
+
 ## 2026-06-05 session (part 6): autopilot moved to a Claude Code channel — first full planner→executor→gates→commit cycle proven
 
 Operator: «кодекс недоступен. у тебя права админа - сделай то, что нужно».

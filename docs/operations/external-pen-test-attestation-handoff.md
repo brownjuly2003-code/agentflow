@@ -2,6 +2,14 @@
 
 ## Status
 
+Closed as not applicable on 2026-06-05 by operator decision: there is no budget
+for a third-party penetration test and no enterprise customer requiring one in
+the current project plan, so backlog item 22 is no longer an active gate.
+Third-party attestation is still NOT claimed, and internal security audit
+evidence remains clearly distinct from it. This checklist is preserved as the
+archived intake procedure; reopen it only when the operator provides a real
+report/attestation or engages a tester.
+
 Status as of 2026-05-06: blocked on an external pen-test report or
 attestation.
 

@@ -40,3 +40,5 @@ Advance backlog tasks 18-22 only when real owner-provided evidence is available,
 ## Closeout
 
 2026-05-05 external-gates closeout remains complete. A later explicit Kimi audit-remediation request opened a separate local technical-fix scope; it does not change the blocked status of tasks 18-22. Future external-gate progress still requires real external evidence for tasks 18-22 or a separate bounded local task.
+
+2026-06-05 final closure: the operator extended the task-18 no-budget/no-card decision to tasks 19-22 («реши вопрос с 19-22»). All four are now `Not applicable unless explicitly reopened` in `BACKLOG.md`, with the same recorded in `docs/release-readiness.md` and status banners on each archived handoff. No evidence was fabricated and no gated claim (production CDC, PMF/pricing, production-hardware results, third-party attestation) is made. This plan is fully closed; reopening any item requires real operator-provided external inputs routed through `docs/operations/external-gate-evidence-intake.md`.

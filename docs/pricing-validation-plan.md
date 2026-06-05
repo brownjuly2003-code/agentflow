@@ -10,6 +10,11 @@ price points, tiers, or sales collateral from this document alone.
 
 ## Current Pricing Evidence Handoff
 
+Closed as not applicable on 2026-06-05 by operator decision: backlog item 20 is
+no longer an active gate because AgentFlow has no active commercial sales
+motion. Validated pricing/WTP is still NOT claimed; this plan is preserved as
+the archived procedure and reopens only on real customer evidence.
+
 Status as of 2026-05-30: external outreach restarted; pricing evidence still
 blocked.
 

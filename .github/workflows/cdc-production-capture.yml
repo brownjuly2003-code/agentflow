@@ -85,7 +85,7 @@ jobs:
         run: bash scripts/capture_production_cdc.sh
       - name: Collect connect logs on failure
         if: failure()
-        run: docker logs kafka-connect --tail 200 || true
+        run: docker logs kafka-connect --tail 500 || true
       - name: Upload evidence artifacts
         if: always()
         uses: actions/upload-artifact@v7

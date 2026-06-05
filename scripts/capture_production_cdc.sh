@@ -164,10 +164,23 @@ for _ in $(seq 1 90); do
   if [ "${CAPTURED}" -ge "${ROW_COUNT}" ]; then
     break
   fi
+  # Bail out fast (with the trace) if the task died during snapshot instead of
+  # polling 0 for the whole window.
+  SNAP_STATE=$(curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status" 2>/dev/null \
+    | python3 -c 'import json,sys; s=json.load(sys.stdin); t=(s.get("tasks") or [{}])[0]; print(s["connector"]["state"], t.get("state","-"))' 2>/dev/null || echo "? ?")
+  if echo "${SNAP_STATE}" | grep -q "FAILED"; then
+    echo "connector/task FAILED during snapshot: ${SNAP_STATE}" >&2
+    break
+  fi
   sleep 10
 done
 if [ "${CAPTURED}" -lt "${ROW_COUNT}" ]; then
   echo "ERROR: captured ${CAPTURED} events, expected at least ${ROW_COUNT}" >&2
+  echo "--- connector status (diagnostic: task trace if FAILED) ---" >&2
+  curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status" 2>/dev/null || true
+  echo >&2
+  echo "--- topics present ---" >&2
+  docker exec "${KAFKA_CONTAINER}" kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null || true
   exit 1
 fi
 

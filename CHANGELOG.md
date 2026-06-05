@@ -89,9 +89,10 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Security
 
-- First OpenSSF Scorecard cycle acted on (score 5.8 at first publish; see
-  `docs/operations/openssf-security-posture.md` §4 for the fixed/accepted-open
-  split of the 163 Code-scanning findings):
+- First OpenSSF Scorecard cycle acted on — published score **5.8 → 7.0**,
+  open Code-scanning findings **163 → 53**, every remainder classified
+  accepted-open (see `docs/operations/openssf-security-posture.md` §4 for the
+  fixed/accepted-open split):
   - Every `uses:` in all 19 workflows (99 references, 20 unique actions) is
     pinned to a full commit SHA with a trailing `# <version>` comment that
     Dependabot's `github-actions` ecosystem keeps updating. The convention is

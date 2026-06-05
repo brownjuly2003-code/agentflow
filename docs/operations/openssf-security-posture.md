@@ -128,6 +128,14 @@ The first published run scored **5.8/10** and pushed **163 open findings**
 into Code scanning. Triage split them into *fixed* and *honestly
 accepted-open*; nothing was dismissed silently.
 
+**Verified outcome (post-merge, PR #45 → `b803c2d`):** the Scorecard run on
+the merge commit succeeded and the registry published **7.0/10** for
+`b803c2d`; open Code-scanning findings dropped **163 → 53**, and every
+remaining one is in the accepted-open classes below (46 pip + 1 npm
+bootstrap + 2 `downloadThenRun` false positives + the 4 heuristic
+singletons). Token-Permissions and Vulnerabilities are both 10/10;
+Pinned-Dependencies rose 0 → 4 (the pip subset is what's left).
+
 ### Fixed
 
 - **Pinned-Dependencies (GitHub actions, 99 refs):** every workflow `uses:`
@@ -155,6 +163,17 @@ accepted-open*; nothing was dismissed silently.
   installs); converting CI and the Dockerfiles to fully hash-locked compiled
   requirements is an architectural change out of scope for posture cleanup.
   These findings stay open by design.
+- **Pinned-Dependencies (npm bootstrap):** `publish-npm.yml` runs
+  `npm install -g npm@^11.5.1` — the floor npm version that supports OIDC
+  trusted publishing. A global self-install has no lockfile to carry
+  integrity hashes; the range is deliberate (any compatible npm ≥ 11.5.1),
+  and the channel is registry.npmjs.org over TLS in a tag-gated workflow.
+- **Pinned-Dependencies (`downloadThenRun`, 2 hits) — false positives:**
+  `scripts/capture_production_cdc.sh` pipes a Kafka Connect **status
+  response** into `python3 -c '<local literal>'` for JSON parsing. The
+  heuristic pattern-matches `curl | python` as fetch-then-execute, but the
+  downloaded bytes are stdin DATA; the executed code is a local literal. The
+  working evidence script is not contorted to appease the pattern.
 - **Code-Review / Contributors:** a single-maintainer portfolio repo cannot
   truthfully show second-person review or multi-org contributors.
 - **Maintained:** scores activity over a 90-day window relative to project

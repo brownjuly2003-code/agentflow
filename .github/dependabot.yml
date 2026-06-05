@@ -119,6 +119,22 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      # Container images track the CI-tested runtime line (python 3.11 in
+      # every ci.yml job and all Dockerfiles; the flink image additionally
+      # rides PyFlink/pemja support). Digest and patch updates flow; the
+      # interpreter line moves only through a deliberate, validated bump
+      # session (the Flink-2.2.1 precedent), not a Dependabot PR.
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      # The production-CDC evidence path (Debezium 3.5 plugin, capture
+      # script, kafka-get-offsets shape) is proven against cp-7.7.x; a
+      # Kafka-platform major needs its own validated session.
+      - dependency-name: "confluentinc/cp-kafka-connect-base"
+        update-types:
+          - "version-update:semver-major"
 
   # ── GitHub Actions: workflow pins ──────────────────────────────────
   - package-ecosystem: github-actions
@@ -140,6 +156,13 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # The operator-dispatched signing jobs (container-attestation.yml)
+      # were validated end-to-end with cosign-installer v3; take the v4
+      # major deliberately, paired with a real signing run.
+      - dependency-name: "sigstore/cosign-installer"
+        update-types:
+          - "version-update:semver-major"
 
   # ── Terraform: infrastructure modules ──────────────────────────────
   - package-ecosystem: terraform

@@ -59,10 +59,30 @@ fabrication.
   Publishing, no GH-release binaries to sign. Nothing dismissed silently.
 - Evidence: broad no-Docker unit **804 passed / 1 skipped**; YAML parse 19/19
   workflows + dependabot.yml; ruff check+format clean on the touched tests;
-  `git diff --check` clean. Branch `security/scorecard-posture-fixes`
-  (push/PR is the operator gate). Expect: next Scorecard run after merge
-  auto-closes the fixed alert classes; Pinned-Dependencies pip-subset and the
-  five heuristic checks stay open per §4.
+  `git diff --check` clean.
+- **Shipped end-to-end on operator «делай все, что считаешь нужным»: PR #45 →
+  squash `b803c2d`, PR wall 19 pass / 0 fail (build-smoke took the real-build
+  path — the digest pins survived an actual `docker build`), main wall 24/24
+  green. VERIFIED outcome: Scorecard re-ran on the merge commit, registry
+  published 7.0/10 (was 5.8) for `b803c2d`, open alerts 163 → 53 — all 53 in
+  the documented accepted-open classes (46 pip + 1 npm bootstrap + 2
+  `downloadThenRun` false positives + 4 heuristic singletons);
+  Token-Permissions and Vulnerabilities both 10/10, Pinned-Dependencies
+  0 → 4.** Dependabot instantly picked up the new config (docker
+  `directories:` + github_actions over SHA pins): 8 update runs, all
+  succeeded, and it opened **5 PRs** — 1 routine grouped patch (#47 vitest
+  4.1.8, merged after its wall) and **4 line-crossing bumps closed by
+  policy** (#46/#49 python image 3.11→3.14 — images track the CI-tested 3.11
+  line; #48 cp-kafka-connect-base 7.7→8.2 — the CDC evidence path is proven
+  on cp-7.7; #50 cosign-installer v3→v4 — signing jobs validated on v3). The
+  policy is durable, not ad-hoc: reasoned `ignore:` blocks added to
+  `dependabot.yml` (docker: python major+minor + cp-kafka-connect major;
+  github-actions: cosign-installer major), following the existing CVE-floor
+  ignore precedent. Deliberate line bumps remain available via their own
+  validated sessions (Flink-2.2.1-style).
+  Gotcha for future loops: `gh pr checks --watch` can die mid-wait on a
+  transient GraphQL EOF with exit 0 — always re-read the final state with a
+  fresh `gh pr checks` before acting on "watch completed".
 
 Operator: «20/22 - поищи варианты» → «реши сам». The backlog re-check (part 10
 state) confirmed terminally empty; the operator asked to search for any $0 path

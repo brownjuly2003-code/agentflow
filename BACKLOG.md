@@ -521,10 +521,10 @@ Forbidden scope:
 Status: **Done with real evidence (2026-06-05).** Logical replication was
 enabled on the live Neon source and a full Debezium capture succeeded
 (run 27028251460): 96234 events snapshotted into `cdc.prod.public.vacancies`,
-redacted sample, teardown with 0 leftover slots. **Open follow-up (needs working
-out): the five workflow fixes that made the dispatch workflow actually pass are
-on branch `cdc/item19-neon-api-verified` (pushed, NOT merged) — `main` still
-has the broken workflow.** PR/merge to `main` is the operator gate; details in
+redacted sample, teardown with 0 leftover slots. **Merged to `main` via PR #43
+(merge commit `ce72ba8`, all 13 required checks green; branch deleted)** — the
+five workflow fixes that made the dispatch workflow pass are on `main`, so
+production CDC is reproducible from `main`. No open follow-up remains. Details in
 `next-session-autonomous-local-plan.md` → Known Open Threads and AGENT_STATE
 part 10.
 

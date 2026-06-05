@@ -9,7 +9,9 @@ import httpx
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Rotate AgentFlow API keys without downtime.")
-    parser.add_argument("--base-url", default=os.getenv("AGENTFLOW_BASE_URL", "http://127.0.0.1:8000"))
+    parser.add_argument(
+        "--base-url", default=os.getenv("AGENTFLOW_BASE_URL", "http://127.0.0.1:8000")
+    )
     parser.add_argument("--key-id", required=True)
     parser.add_argument("--admin-key", default=os.getenv("AGENTFLOW_ADMIN_KEY"))
     parser.add_argument("--timeout", type=float, default=15.0)
@@ -45,10 +47,7 @@ def main() -> int:
                 payload = response.json()
                 print(f"Phase: {payload['phase']}")
                 print(f"Old key active until: {payload['old_key_active_until']}")
-                print(
-                    "Requests on old key last hour: "
-                    f"{payload['requests_on_old_key_last_hour']}"
-                )
+                print(f"Requests on old key last hour: {payload['requests_on_old_key_last_hour']}")
                 return 0
 
             if args.revoke_old:

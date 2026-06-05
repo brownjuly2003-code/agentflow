@@ -43,7 +43,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--spawn-rate", type=int, default=10)
     parser.add_argument("--run-time", default="60s")
     parser.add_argument("--burst", type=int, default=500)
-    parser.add_argument("--results-json", "--output", dest="results_json", default=str(RESULTS_PATH))
+    parser.add_argument(
+        "--results-json", "--output", dest="results_json", default=str(RESULTS_PATH)
+    )
     parser.add_argument("--report-path", default=str(REPORT_PATH))
     return parser.parse_args()
 
@@ -95,6 +97,7 @@ def read_readme_claims() -> dict[str, float] | None:
 
 def detect_total_memory_gb() -> float | None:
     if sys.platform == "win32":
+
         class MEMORYSTATUSEX(ctypes.Structure):
             _fields_ = [
                 ("dwLength", ctypes.c_ulong),
@@ -174,15 +177,12 @@ def maybe_seed_host_fixtures(host: str) -> None:
     try:
         seed_benchmark_fixtures(db_path)
     except duckdb.IOException as exc:
-        print(
-            "Skipping benchmark fixture seed for host run: "
-            f"{db_path} is unavailable ({exc})."
-        )
+        print(f"Skipping benchmark fixture seed for host run: {db_path} is unavailable ({exc}).")
 
 
 def ensure_locust_available() -> None:
     if importlib.util.find_spec("locust") is None:
-        raise RuntimeError("Locust is not installed. Run `pip install -e \".[load]\"` first.")
+        raise RuntimeError('Locust is not installed. Run `pip install -e ".[load]"` first.')
 
 
 def seed_benchmark_fixtures(db_path: Path) -> None:
@@ -300,9 +300,7 @@ def run_command(command: list[str], env: dict[str, str], label: str) -> None:
     if result.returncode == 0:
         return
 
-    output = "\n".join(
-        chunk for chunk in (result.stdout.strip(), result.stderr.strip()) if chunk
-    )
+    output = "\n".join(chunk for chunk in (result.stdout.strip(), result.stderr.strip()) if chunk)
     raise RuntimeError(f"{label} failed with exit code {result.returncode}.\n{output}")
 
 
@@ -430,13 +428,12 @@ def build_comparison_section(
     measured_p99 = float(aggregate["p99"])
     if claims is None:
         lines = [
-            "- README no longer carries a benchmark claim table, so this run is compared against the release gate instead of documentation copy.",
+            "- README no longer carries a benchmark claim table, so this run is "
+            "compared against the release gate instead of documentation copy.",
             f"- Measured aggregate: p50 {format_ms(measured_p50)}, p99 {format_ms(measured_p99)}.",
             "- Release gate for `/v1/entity/*`: p50 < 100 ms and p99 < 500 ms.",
         ]
-        entity_rows = [
-            row for row in endpoint_rows if str(row["name"]).startswith("/v1/entity/")
-        ]
+        entity_rows = [row for row in endpoint_rows if str(row["name"]).startswith("/v1/entity/")]
         if entity_rows:
             slowest_entity = max(entity_rows, key=lambda row: float(row["p99"]))
             endpoint_name = f"{slowest_entity['method']} {slowest_entity['name']}".strip()
@@ -583,7 +580,8 @@ def build_report(
             (
                 "- Benchmark comparability: this run is below canonical baseline "
                 f"({CANONICAL_USERS} users, spawn rate {CANONICAL_SPAWN_RATE}/s, "
-                f"duration {CANONICAL_RUN_TIME_SECONDS}s); compare against committed baselines cautiously."
+                f"duration {CANONICAL_RUN_TIME_SECONDS}s); compare against "
+                "committed baselines cautiously."
             )
             if is_below_canonical_baseline
             else (

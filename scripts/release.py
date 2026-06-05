@@ -99,11 +99,7 @@ def update_changelog(new_version: str) -> None:
     if index == -1:
         raise SystemExit(f"Could not find insertion point in {CHANGELOG_PATH}")
 
-    new_entry = (
-        f"{heading}\n\n"
-        "### Changed\n"
-        f"- Release {new_version}.\n\n"
-    )
+    new_entry = f"{heading}\n\n### Changed\n- Release {new_version}.\n\n"
     updated = changelog[:index] + new_entry + changelog[index:]
     CHANGELOG_PATH.write_text(updated, encoding="utf-8", newline="\n")
 

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 REGRESSION_THRESHOLD = 0.20
 IMPROVEMENT_THRESHOLD = 0.10
 
@@ -238,7 +237,9 @@ def render_report(
     ]
 
     for comparison in outcome.comparisons:
-        current_p95 = "missing" if comparison.current is None else f"{comparison.current.p95:.1f} ms"
+        current_p95 = (
+            "missing" if comparison.current is None else f"{comparison.current.p95:.1f} ms"
+        )
         delta = "-" if comparison.delta is None else _format_delta(comparison.delta)
         lines.append(
             f"| {comparison.endpoint} | {comparison.baseline.p95:.1f} ms | "

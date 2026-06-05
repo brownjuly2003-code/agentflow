@@ -12,7 +12,9 @@ from src.serving.api.auth import AuthManager, KeyCreateRequest
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate an API key and store only its bcrypt hash.")
+    parser = argparse.ArgumentParser(
+        description="Generate an API key and store only its bcrypt hash."
+    )
     parser.add_argument("--api-keys", default="config/api_keys.yaml")
     parser.add_argument("--security-config", default="config/security.yaml")
     parser.add_argument("--name", default="Rotated Key")

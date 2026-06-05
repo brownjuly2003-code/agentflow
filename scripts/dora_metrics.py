@@ -86,13 +86,15 @@ def _load_commits(repo_root: Path, branch: str, since: datetime) -> list[dict[st
     commits: list[dict[str, Any]] = []
     for line in output.splitlines():
         sha, parents_text, authored_at, committed_at, subject = line.split("\t", maxsplit=4)
-        commits.append({
-            "sha": sha,
-            "parents": [parent for parent in parents_text.split() if parent],
-            "authored_at": _parse_datetime(authored_at),
-            "committed_at": _parse_datetime(committed_at),
-            "subject": subject,
-        })
+        commits.append(
+            {
+                "sha": sha,
+                "parents": [parent for parent in parents_text.split() if parent],
+                "authored_at": _parse_datetime(authored_at),
+                "committed_at": _parse_datetime(committed_at),
+                "subject": subject,
+            }
+        )
     return commits
 
 
@@ -130,13 +132,15 @@ def _load_deployment_log(log_path: Path, branch: str, since: datetime) -> list[d
         event_time = _parse_datetime(str(recorded_at))
         if event_time < since:
             continue
-        events.append({
-            "sha": payload.get("sha"),
-            "recorded_at": event_time,
-            "status": str(payload.get("status", "unknown")),
-            "source": "deployment_log",
-            "html_url": payload.get("html_url"),
-        })
+        events.append(
+            {
+                "sha": payload.get("sha"),
+                "recorded_at": event_time,
+                "status": str(payload.get("status", "unknown")),
+                "source": "deployment_log",
+                "html_url": payload.get("html_url"),
+            }
+        )
     return sorted(events, key=lambda item: item["recorded_at"])
 
 
@@ -154,12 +158,14 @@ def _load_github_runs(
     page = 1
     try:
         while True:
-            query = urlencode({
-                "branch": branch,
-                "event": "push",
-                "per_page": 100,
-                "page": page,
-            })
+            query = urlencode(
+                {
+                    "branch": branch,
+                    "event": "push",
+                    "per_page": 100,
+                    "page": page,
+                }
+            )
             payload = _fetch_json(
                 f"{api_url}/repos/{repo_slug}/actions/workflows/ci.yml/runs?{query}",
                 token,
@@ -175,14 +181,16 @@ def _load_github_runs(
                 if updated_at < since:
                     should_continue = True
                     continue
-                runs.append({
-                    "sha": run.get("head_sha"),
-                    "created_at": created_at,
-                    "recorded_at": updated_at,
-                    "status": str(run.get("conclusion") or run.get("status") or "unknown"),
-                    "source": "github_actions",
-                    "html_url": run.get("html_url"),
-                })
+                runs.append(
+                    {
+                        "sha": run.get("head_sha"),
+                        "created_at": created_at,
+                        "recorded_at": updated_at,
+                        "status": str(run.get("conclusion") or run.get("status") or "unknown"),
+                        "source": "github_actions",
+                        "html_url": run.get("html_url"),
+                    }
+                )
 
             if should_continue:
                 break
@@ -275,7 +283,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--branch", default="main")
     parser.add_argument("--output")
-    parser.add_argument("--github-api-url", default=os.getenv("GITHUB_API_URL", "https://api.github.com"))
+    parser.add_argument(
+        "--github-api-url", default=os.getenv("GITHUB_API_URL", "https://api.github.com")
+    )
     parser.add_argument("--repo")
     return parser.parse_args()
 
@@ -316,10 +326,7 @@ def main() -> int:
     for deployment in deployments:
         deployment_time = deployment["recorded_at"]
         window_end = deployment_time + timedelta(hours=24)
-        if any(
-            deployment_time < commit["committed_at"] <= window_end
-            for commit in hotfix_commits
-        ):
+        if any(deployment_time < commit["committed_at"] <= window_end for commit in hotfix_commits):
             failed_deployments += 1
 
     weeks = args.days / 7

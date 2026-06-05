@@ -115,18 +115,9 @@ def render_mutmut_section(module_path: Path, tests: tuple[str, ...]) -> str:
     paths_block = f'    "{module_path.as_posix()}",'
     tests_block = "\n".join(f'    "{test_path}",' for test_path in tests)
     if module_path.parts and module_path.parts[0] == "agentflow":
-        also_copy_block = (
-            '    "agentflow",\n'
-            '    "config",\n'
-            '    "scripts",'
-        )
+        also_copy_block = '    "agentflow",\n    "config",\n    "scripts",'
     else:
-        also_copy_block = (
-            '    "src",\n'
-            '    "config",\n'
-            '    "sdk",\n'
-            '    "scripts",'
-        )
+        also_copy_block = '    "src",\n    "config",\n    "sdk",\n    "scripts",'
     return (
         "[tool.mutmut]\n"
         "paths_to_mutate = [\n"
@@ -257,9 +248,7 @@ def load_module_result(results_dir: Path, module_path: Path, target: ModuleTarge
         total_scored=total_scored,
         status_counts=status_counts,
         survived_mutants=sorted(
-            mutant_name
-            for mutant_name, status in status_by_key.items()
-            if status == "survived"
+            mutant_name for mutant_name, status in status_by_key.items() if status == "survived"
         ),
         problematic_mutants=sorted(
             f"{mutant_name}: {status}"
@@ -290,9 +279,7 @@ def write_overall_summary(results_dir: Path, results: list[ModuleResult]) -> dic
 
 def format_counts(status_counts: Counter[str]) -> str:
     parts = [
-        f"{status}={status_counts[status]}"
-        for status in STATUS_ORDER
-        if status_counts[status]
+        f"{status}={status_counts[status]}" for status in STATUS_ORDER if status_counts[status]
     ]
     return ", ".join(parts) if parts else "no mutation stats"
 

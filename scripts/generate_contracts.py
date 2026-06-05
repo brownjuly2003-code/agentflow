@@ -160,7 +160,9 @@ def _contract_type(annotation: Any) -> str:
     return "string"
 
 
-def _field_payload(model: type[BaseModel], field_name: str, overrides: dict[str, Any]) -> dict[str, Any]:
+def _field_payload(
+    model: type[BaseModel], field_name: str, overrides: dict[str, Any]
+) -> dict[str, Any]:
     field_info = model.model_fields[field_name]
     payload: dict[str, Any] = {
         "name": field_name,

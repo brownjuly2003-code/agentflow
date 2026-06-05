@@ -122,6 +122,14 @@ select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "PT"]
 ignore = ["S101", "S311"]
 
 [tool.ruff.lint.per-file-ignores]
+# Operational tooling: sys.path bootstrap before imports (E402) and
+# fixed-argv subprocess calls to git/npm/mutmut (S603/S607) are the
+# intentional script idiom, same as the tests/** allowance below.
+"scripts/**/*.py" = [
+    "E402",
+    "S603",
+    "S607",
+]
 "tests/**/*.py" = [
     "S603",
     "S607",

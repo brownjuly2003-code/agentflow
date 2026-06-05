@@ -120,13 +120,15 @@ def find_breaking_changes_without_version_bump(
         if has_version_bump(previous_schema, current_schema):
             continue
 
-        violations.append({
-            "path": path,
-            "entity": entity,
-            "base_version": previous_schema.get("version"),
-            "candidate_version": current_schema.get("version"),
-            "breaking_changes": report.breaking_changes,
-        })
+        violations.append(
+            {
+                "path": path,
+                "entity": entity,
+                "base_version": previous_schema.get("version"),
+                "candidate_version": current_schema.get("version"),
+                "breaking_changes": report.breaking_changes,
+            }
+        )
 
     return violations
 

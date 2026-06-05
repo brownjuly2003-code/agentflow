@@ -117,20 +117,24 @@ def _duckdb_sources(project_root: Path, pipeline_db_path: Path, usage_db_path: P
             continue
         _checkpoint_duckdb(db_path)
         seen_paths.add(db_path)
-        sources.append({
-            "path": db_path,
-            "archive_path": _restore_path(project_root, db_path, "data"),
-            "role": role,
-            "category": "duckdb",
-        })
+        sources.append(
+            {
+                "path": db_path,
+                "archive_path": _restore_path(project_root, db_path, "data"),
+                "role": role,
+                "category": "duckdb",
+            }
+        )
         wal_path = db_path.with_name(f"{db_path.name}.wal")
         if wal_path.exists():
-            sources.append({
-                "path": wal_path,
-                "archive_path": _restore_path(project_root, wal_path, "data"),
-                "role": role,
-                "category": "duckdb_wal",
-            })
+            sources.append(
+                {
+                    "path": wal_path,
+                    "archive_path": _restore_path(project_root, wal_path, "data"),
+                    "role": role,
+                    "category": "duckdb_wal",
+                }
+            )
     return sources
 
 
@@ -140,12 +144,14 @@ def _config_sources(project_root: Path) -> list[dict]:
         raise FileNotFoundError(f"Config directory not found: {config_dir}")
     items = []
     for file_path in sorted(path for path in config_dir.rglob("*") if path.is_file()):
-        items.append({
-            "path": file_path,
-            "archive_path": file_path.relative_to(project_root).as_posix(),
-            "role": None,
-            "category": "config",
-        })
+        items.append(
+            {
+                "path": file_path,
+                "archive_path": file_path.relative_to(project_root).as_posix(),
+                "role": None,
+                "category": "config",
+            }
+        )
     return items
 
 
@@ -213,8 +219,7 @@ def backup(
     duckdb_sources = _duckdb_sources(root, pipeline_db_path, usage_path)
     if not duckdb_sources:
         raise FileNotFoundError(
-            "No DuckDB files found to back up. "
-            f"Checked {pipeline_db_path} and {usage_path}."
+            f"No DuckDB files found to back up. Checked {pipeline_db_path} and {usage_path}."
         )
 
     config_sources = _config_sources(root)
@@ -249,12 +254,8 @@ def backup(
             duckdb_size_bytes=sum(
                 item.size_bytes for item in files if item.category.startswith("duckdb")
             ),
-            duckdb_files=[
-                item.archive_path for item in files if item.category == "duckdb"
-            ],
-            config_files=[
-                item.archive_path for item in files if item.category == "config"
-            ],
+            duckdb_files=[item.archive_path for item in files if item.category == "duckdb"],
+            config_files=[item.archive_path for item in files if item.category == "config"],
             files=files,
             rpo_target_seconds=rpo_target_seconds,
             rpo_achieved_seconds=_rpo_achieved_seconds(duckdb_sources),

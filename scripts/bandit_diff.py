@@ -25,9 +25,7 @@ def main() -> int:
     current = _load_report(current_path)
     baseline_keys = {_issue_key(issue) for issue in baseline.get("results", [])}
     new_findings = [
-        issue
-        for issue in current.get("results", [])
-        if _issue_key(issue) not in baseline_keys
+        issue for issue in current.get("results", []) if _issue_key(issue) not in baseline_keys
     ]
 
     if new_findings:

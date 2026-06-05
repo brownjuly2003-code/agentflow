@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -71,13 +71,12 @@ def build_report(pytest_json: dict[str, Any], source: Path) -> dict[str, Any]:
 
     summary = pytest_json.get("summary", {})
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "source": str(source),
         "status": "ok" if pytest_json.get("status") != "missing" else "missing",
         "exitcode": int(pytest_json.get("exitcode", 1)),
         "ci_mode": any(
-            bool((test_case.get("metadata") or {}).get("ci_mode"))
-            for test_case in raw_tests
+            bool((test_case.get("metadata") or {}).get("ci_mode")) for test_case in raw_tests
         ),
         "summary": {
             "collected": int(summary.get("collected", 0)),
@@ -141,7 +140,9 @@ def build_markdown(report: dict[str, Any]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build a compact chaos test report from pytest JSON.")
+    parser = argparse.ArgumentParser(
+        description="Build a compact chaos test report from pytest JSON."
+    )
     parser.add_argument(
         "--input",
         default="chaos-report.json",

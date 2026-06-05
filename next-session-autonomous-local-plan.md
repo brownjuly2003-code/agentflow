@@ -244,9 +244,20 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   — the runner suite executes the script under pwsh/ubuntu where APPDATA is
   undefined; run `tests/unit/test_autopilot_runner.py` after ANY
   autopilot.ps1 edit). Root scratch is gitignored (`5f4251d`) so the
-  clean-tree gate stays quiet. Remaining blocker is EXTERNAL: the codex CLI
-  token is invalidated (401) — after an interactive `codex login`, delete
-  `.autopilot/BLOCKED.md` and the hourly task resumes.
+  clean-tree gate stays quiet. **The autopilot no longer depends on codex
+  at all (2026-06-05, `aaee49d`)**: the whole OpenAI side died externally
+  (OAuth 401 token_invalidated; all four stored Platform keys 429 on
+  generation — note GET /models still answers 200, ping-probes lie), so the
+  scheduled task now runs `-Planner claude` (planner+executor via
+  `claude -p --dangerously-skip-permissions`). The full
+  planner→executor→gates→commit cycle is proven live (`3a216c0` was
+  planned, written and verified by the channel), and `3672f5c` fixed
+  Run-Gates to the canonical no-Docker slice (.venv-preferring,
+  SKIP_DOCKER_TESTS, tests/unit) after the first cycle exposed the bare
+  full-repo `python -m pytest` gate. On an empty backlog the planner
+  self-quiesces via BLOCKED.md — to wake the autopilot: provide a task,
+  delete `.autopilot/BLOCKED.md`, wait for the hourly tick. An interactive
+  `codex login` would only revive the optional codex/pi channels.
 
 ## Done When
 

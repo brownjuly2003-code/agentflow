@@ -4,6 +4,38 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- The local autopilot gained a first-class Claude Code channel:
+  `scripts/autopilot.ps1 -Planner claude` runs both the planner and the
+  executor through `claude -p --dangerously-skip-permissions` (stdin prompt,
+  output teed to the run log), and `Require-Command` checks `claude` instead
+  of `codex` for that mode. Added when both existing LLM channels died
+  externally on 2026-06-05: the codex ChatGPT OAuth token was invalidated
+  (401, interactive re-login unavailable), pi rides the same `openai-codex`
+  provider, and every stored OpenAI Platform API key returns 429
+  quota-exceeded on generation (GET /models still answers 200 — ping-style
+  probes lie about generation access). The scheduled
+  `AgentFlow Local Autopilot` task now passes `-Planner claude`; on an empty
+  backlog the planner writes `BLOCKED.md` and the hourly task self-quiesces
+  instead of burning the subscription. `pi`/`codex`/`auto` semantics are
+  untouched.
+
+### Fixed
+
+- The autopilot `Run-Gates` pytest step ran a bare full-repo
+  `python -m pytest` — on this host that is the documented broken Python313
+  shadow interpreter plus Docker-needing suites, so the first real
+  claude-channel cycle (planner picked a task, executor wrote a valid test)
+  died at the gate instead of committing. The gate now mirrors the canonical
+  local-verification-matrix slice: it prefers the repo `.venv` interpreter
+  when present and runs
+  `SKIP_DOCKER_TESTS='1' … -m pytest tests/unit -p no:schemathesis
+  --continue-on-collection-errors`; the runner test pins the command shape.
+  The two known local-`.venv` artifacts a hard gate would have tripped on
+  were healed at the root (pandas installed; `agentflow-client` reinstalled
+  at 1.5.0), so the gate exit code is trustworthy.
+
 ## [1.5.0] - 2026-06-05
 
 ### Added

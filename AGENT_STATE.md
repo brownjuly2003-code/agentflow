@@ -2,6 +2,60 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 6): autopilot moved to a Claude Code channel — first full planner→executor→gates→commit cycle proven
+
+Operator: «кодекс недоступен. у тебя права админа - сделай то, что нужно».
+The OpenAI side is dead end-to-end, verified empirically: the codex ChatGPT
+OAuth token is invalidated (401 `token_invalidated`; interactive re-login
+unavailable), `pi` rides the same `openai-codex` OAuth provider, and ALL
+FOUR keys in `D:\TXT\PlatformOpenaiKEY.txt` return 429 quota-exceeded on a
+1-token chat completion (no payment card to top up). **Probe lesson: the
+keys pass GET /v1/models with HTTP 200 — model-list pings lie about
+generation access; always probe with a real completion.** Two codex
+auth.json attempts that LOOKED promising and weren't: switching it to
+`auth_mode=apikey` (key has no quota) and the PS 5.1 `Set-Content -Encoding
+UTF8` BOM (codex-rs serde dies with `expected value at line 1 column 1` —
+rewrite the file BOM-less via `[IO.File]::WriteAllText`+UTF8Encoding(false)
+if auth.json is ever edited by hand; a backup of the OAuth-era file sits at
+`~/.codex/auth.json.bak_oauth_invalidated_20260605`).
+
+What shipped instead (`aaee49d` + `3a216c0` + `3672f5c`):
+
+- **`aaee49d` — `-Planner claude` channel**: planner AND executor run
+  through `claude -p --dangerously-skip-permissions` (stdin prompt, teed to
+  the run log); `Require-Command` checks `claude` instead of `codex` for
+  the mode; pi/codex/auto semantics untouched. The scheduled task now
+  passes `-Planner claude`. TDD: `test_autopilot_claude_planner_and_executor`
+  (claude shim writes the protocol artifacts; pi/codex shims exit 9).
+- **First REAL cycle (11:40 run)**: the claude planner read the state docs
+  and picked a legitimately bounded task (pin the claude planner-failure →
+  BLOCKED self-quiesce branch — coverage hardening on just-shipped code),
+  wrote the full protocol (NEXT_TASK/allowed-paths/commit-message,
+  `commit allowed: yes`), and the executor produced a valid 61-line test —
+  it even flagged an off-by-one in the planner's acceptance criteria
+  instead of fabricating a filler test. Its work passed the canonical
+  verification (suite 14/14, ruff clean) and was committed as `3a216c0`
+  with the protocol commit message.
+- **`3672f5c` — Run-Gates pytest fix**: that first cycle died at the gate,
+  which ran a bare full-repo `python -m pytest` (system Python = the broken
+  Python313 shadow; full repo needs Docker). The gate now prefers
+  `$RepoRoot\.venv\Scripts\python.exe` when present and runs the canonical
+  `SKIP_DOCKER_TESTS='1' … tests/unit -p no:schemathesis
+  --continue-on-collection-errors` slice; the runner test pins the shape.
+  Root-heal of the two known `.venv` artifacts (pandas installed,
+  `agentflow-client` reinstalled at 1.5.0 → `test_version` and
+  `test_x5_retail_hero_loader` both pass) so the hard gate exit code is
+  meaningful. Runner suite 14/14.
+- **Second cycle (11:55 run) — self-quiesce proven**: with the backlog
+  empty the planner refused doc-churn/fabricated work per its hard rules
+  and wrote `BLOCKED.md` (citing the external gates); tracked tree stayed
+  clean. The hourly task is now safely dormant: it exits 0 on the standing
+  BLOCKED marker and consumes no subscription. To wake the autopilot for a
+  new task: put the task in scope (e.g. BACKLOG/NEXT_TASK input), delete
+  `.autopilot/BLOCKED.md`, and let the next hourly tick run.
+- The bare `codex` CLI remains 401 until an interactive `codex login`
+  happens; nothing in the autopilot depends on it anymore.
+
 ## 2026-06-05 session (part 5): operator closed the externally-gated backlog — M-C4 argon2id rewrite, zero-relaxation typing, autopilot scheduler-env, v1.5.0 release
 
 Operator instruction: «у тебя права админа, закрывай внешне-гейтнутое» —

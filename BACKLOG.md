@@ -518,18 +518,22 @@ Forbidden scope:
 
 ## 19. Record Production CDC Source Onboarding Decision Handoff
 
-Status: Not applicable unless explicitly reopened.
+Status: Reopened 2026-06-05; capture channel ready, waiting on one operator
+click (enable Logical Replication on the Neon project).
 
-Out-of-scope reason:
-- Operator decision on 2026-06-05: there is no production deployment and no
-  production Postgres/MySQL source in the current project plan, so the missing
-  external decision record (source owner, secret owner, connection details,
-  table scope, private network path, Kubernetes Secret owner, monitoring owner,
-  rollback owner) is expected, not a deficiency. The checked-in local/demo and
-  Kubernetes-shaped CDC path remains the project evidence. Production CDC
-  enablement is still NOT claimed. Reopen only if the operator provides a real
-  production source with named owners. Archived handoff:
-  `docs/operations/cdc-production-onboarding.md`.
+Progress record:
+- A real production source exists in the operator's own estate: the Neon
+  Postgres project backing VacancyRadar (`public.vacancies`, ~95k live rows,
+  PG 17). Solo-org decision record (source/secret/monitoring/rollback owner =
+  operator) is filled in `docs/operations/cdc-production-onboarding.md`.
+- Evidence channel shipped: dispatch-only
+  `.github/workflows/cdc-production-capture.yml` + repository Actions secrets
+  + `scripts/capture_production_cdc.sh` (Debezium initial snapshot over TLS,
+  evidence artifact, unconditional teardown of connector/publication/slot).
+- Verified live 2026-06-05: `wal_level=replica` → the remaining step is the
+  operator enabling Logical Replication in the Neon Console (IRREVERSIBLE
+  `wal_level` flip + compute restart; VacancyRadar writers reconnect). After
+  that: dispatch the workflow, record evidence, mark Done.
 
 Allowed files/directories:
 - `docs/operations/cdc-production-onboarding.md`

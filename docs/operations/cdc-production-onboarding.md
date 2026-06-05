@@ -2,12 +2,44 @@
 
 ## Status
 
-Closed as not applicable on 2026-06-05 by operator decision: no production
-deployment or production Postgres/MySQL source exists in the current project
-plan, so backlog item 19 is no longer an active gate. Production CDC enablement
-is still NOT claimed. This runbook is preserved as the archived approval
-checklist; reopen it only when the operator provides a real production source
-with named owners.
+Reopened on 2026-06-05 (second operator decision, «давай сделаем то, что
+возможно»): a real production source DOES exist in the operator's own estate —
+the Neon Postgres project backing VacancyRadar (`public.vacancies`, ~95k live
+rows, PostgreSQL 17). The decision record below is filled with solo-org owners
+(a one-person organization is recorded honestly as such). Evidence channel:
+the dispatch-only `cdc-production-capture.yml` workflow + repository Actions
+secrets + `scripts/capture_production_cdc.sh` (initial-snapshot capture with
+unconditional teardown of connector, publication, and replication slot).
+
+Remaining external step before the first run: the operator must enable
+Logical Replication on the Neon project (Console → Project settings →
+Logical Replication → Enable, or via a Neon API key). The flip is
+IRREVERSIBLE (`wal_level` stays `logical`) and restarts project computes;
+VacancyRadar writers reconnect on their next run. Verified live on
+2026-06-05: `wal_level=replica`, 1 pre-existing managed replication slot
+(must not be touched; the capture script drops only its own
+`agentflow_prod_capture_slot`).
+
+## Decision record (2026-06-05, solo-org)
+
+- Source owner and escalation contact: Julia Edomskikh (operator).
+- Secret owner: Julia Edomskikh; connection material lives only in repository
+  Actions secrets (`CDC_NEON_HOSTNAME/USER/PASSWORD/DBNAME`) and the local
+  VacancyRadar `.env`.
+- Source engine and scope: Neon Postgres 17 (aarch64), database `neondb`,
+  approved table scope `public.vacancies` only.
+- Network path: public TLS endpoint (`sslmode=require`); no private network
+  exists or is claimed.
+- Kubernetes Secret owner: not applicable — the capture path runs in CI, not
+  in the Helm deployment; the Helm production secret mode remains documented
+  below for a future real cluster.
+- Monitoring owner: Julia Edomskikh; monitoring scope for the evidence run is
+  the workflow run log plus connector status captured into the evidence
+  artifact.
+- Rollback owner: Julia Edomskikh; rollback procedure is encoded in the
+  capture script teardown trap (delete connector, drop publication, drop
+  `agentflow_prod_capture_slot`, verify zero leftover capture slots) and
+  runs even when capture fails.
 
 Production CDC onboarding is not approved yet. This runbook defines the
 decision record and preflight checks required before attaching real Postgres or

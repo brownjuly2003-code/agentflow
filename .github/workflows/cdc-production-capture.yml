@@ -1,0 +1,89 @@
+name: Production CDC Capture
+
+# Operator-dispatched evidence run for backlog item 19: capture the real
+# production Neon Postgres table scope through the repo's own Debezium /
+# Kafka Connect path, write evidence artifacts, and tear down the
+# connector, publication, and replication slot. Connection secrets are
+# repository Actions secrets; the run fails fast unless the operator has
+# enabled logical replication on the Neon project first.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cdc-production-capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install postgres client
+        run: sudo apt-get update -q && sudo apt-get install -y -q postgresql-client
+      - name: Build Kafka Connect image
+        run: docker build -t agentflow-kafka-connect:local -f docker/kafka-connect/Dockerfile docker/kafka-connect
+      - name: Start Kafka (KRaft)
+        run: |
+          docker network create cdc-net
+          docker run -d --name kafka --network cdc-net -p 9092:9092 \
+            -e KAFKA_NODE_ID=1 \
+            -e KAFKA_PROCESS_ROLES=broker,controller \
+            -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:29093 \
+            -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092 \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092 \
+            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT \
+            -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+            -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+            -e CLUSTER_ID=agentflow-cdc-capture-1 \
+            confluentinc/cp-kafka:7.7.0
+      - name: Write connector secret properties
+        env:
+          CDC_NEON_HOSTNAME: ${{ secrets.CDC_NEON_HOSTNAME }}
+          CDC_NEON_USER: ${{ secrets.CDC_NEON_USER }}
+          CDC_NEON_PASSWORD: ${{ secrets.CDC_NEON_PASSWORD }}
+          CDC_NEON_DBNAME: ${{ secrets.CDC_NEON_DBNAME }}
+        run: |
+          mkdir -p /tmp/connect-secrets
+          umask 077
+          {
+            echo "hostname=${CDC_NEON_HOSTNAME}"
+            echo "user=${CDC_NEON_USER}"
+            echo "password=${CDC_NEON_PASSWORD}"
+            echo "dbname=${CDC_NEON_DBNAME}"
+          } > /tmp/connect-secrets/neon.properties
+      - name: Start Kafka Connect
+        run: |
+          docker run -d --name kafka-connect --network cdc-net -p 8083:8083 \
+            -v /tmp/connect-secrets:/opt/connect/secrets:ro \
+            -e CONNECT_BOOTSTRAP_SERVERS=kafka:29092 \
+            -e CONNECT_REST_ADVERTISED_HOST_NAME=kafka-connect \
+            -e CONNECT_REST_PORT=8083 \
+            -e CONNECT_GROUP_ID=agentflow-prod-capture \
+            -e CONNECT_CONFIG_STORAGE_TOPIC=connect-prod-capture-configs \
+            -e CONNECT_OFFSET_STORAGE_TOPIC=connect-prod-capture-offsets \
+            -e CONNECT_STATUS_STORAGE_TOPIC=connect-prod-capture-status \
+            -e CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR=1 \
+            -e CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR=1 \
+            -e CONNECT_STATUS_STORAGE_REPLICATION_FACTOR=1 \
+            -e CONNECT_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter \
+            -e CONNECT_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter \
+            -e CONNECT_PLUGIN_PATH=/usr/share/java \
+            -e CONNECT_CONFIG_PROVIDERS=file \
+            -e CONNECT_CONFIG_PROVIDERS_FILE_CLASS=org.apache.kafka.common.config.provider.FileConfigProvider \
+            agentflow-kafka-connect:local
+      - name: Run capture with teardown
+        env:
+          CDC_NEON_HOSTNAME: ${{ secrets.CDC_NEON_HOSTNAME }}
+          CDC_NEON_USER: ${{ secrets.CDC_NEON_USER }}
+          CDC_NEON_PASSWORD: ${{ secrets.CDC_NEON_PASSWORD }}
+          CDC_NEON_DBNAME: ${{ secrets.CDC_NEON_DBNAME }}
+        run: bash scripts/capture_production_cdc.sh
+      - name: Collect connect logs on failure
+        if: failure()
+        run: docker logs kafka-connect --tail 200 || true
+      - name: Upload evidence artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cdc-production-capture
+          path: .artifacts/cdc-production/capture-evidence.md
+          if-no-files-found: warn

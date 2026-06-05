@@ -6,6 +6,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Added
 
+- Backlog item 19 reopened with a real evidence channel: the production
+  source is the operator-owned Neon Postgres backing VacancyRadar
+  (`public.vacancies`), recorded with an honest solo-org decision record in
+  `docs/operations/cdc-production-onboarding.md`. New dispatch-only
+  `.github/workflows/cdc-production-capture.yml` builds the repo's Debezium
+  Kafka Connect image, reads connection material only from Actions secrets
+  via FileConfigProvider, snapshots the approved table scope over TLS, writes
+  an evidence artifact, and always tears down the connector, publication, and
+  replication slot (shape tests pin dispatch-only, secret sourcing, sslmode,
+  the teardown trap, and always-upload). The first run waits on the operator
+  enabling Logical Replication on the Neon project (irreversible
+  `wal_level` flip).
 - Backlog item 21 closed with real evidence under an operator-amended
   hardware class: `.github/workflows/benchmark-arm.yml` (dispatch-only) runs
   the canonical benchmark on the free GitHub-hosted arm64 runner for public

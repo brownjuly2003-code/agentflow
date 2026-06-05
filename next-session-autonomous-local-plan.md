@@ -227,9 +227,12 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   green push on md-only commits remains normal). Every required context is
   now always-run on PRs; chaos / load-test keep PR paths filters but are not
   required, which is safe.
-- **Tier B A04/A05** + **tasks 19-22** — production CDC owners, real
-  PMF/customer evidence, production-hardware benchmark, external pen-test:
-  external evidence only.
+- **Tier B A04/A05** + **tasks 19-22** — CLOSED as not applicable on
+  2026-06-05 by operator decision (`77300fc`), following the task-18
+  no-budget precedent: production CDC owners, real PMF/customer evidence,
+  production-hardware benchmark, and external pen-test cannot exist in the
+  current plan and are no longer open threads. Gated claims remain unmade;
+  reopen only on real operator-provided evidence.
 - **v1.5.0** — **RELEASED (2026-06-05, `c99d094` + tag `v1.5.0`,
   operator-authorized).** Feature trigger was the M-C4 argon2id closure plus
   the SDK version-header features. Same 10-file shape as the v1.4.0

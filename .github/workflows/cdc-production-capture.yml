@@ -43,13 +43,19 @@ jobs:
           CDC_NEON_DBNAME: ${{ secrets.CDC_NEON_DBNAME }}
         run: |
           mkdir -p /tmp/connect-secrets
-          umask 077
           {
             echo "hostname=${CDC_NEON_HOSTNAME}"
             echo "user=${CDC_NEON_USER}"
             echo "password=${CDC_NEON_PASSWORD}"
             echo "dbname=${CDC_NEON_DBNAME}"
           } > /tmp/connect-secrets/neon.properties
+          # Kafka Connect runs as a different (non-root) uid than the runner
+          # user, so the mounted dir must be traversable and the file readable
+          # by the container user — otherwise FileConfigProvider fails with
+          # "Could not read properties from file". The runner is ephemeral and
+          # single-job, and these values also live in this job's env.
+          chmod 0755 /tmp/connect-secrets
+          chmod 0644 /tmp/connect-secrets/neon.properties
       - name: Start Kafka Connect
         run: |
           docker run -d --name kafka-connect --network cdc-net -p 8083:8083 \
@@ -79,7 +85,7 @@ jobs:
         run: bash scripts/capture_production_cdc.sh
       - name: Collect connect logs on failure
         if: failure()
-        run: docker logs kafka-connect --tail 200 || true
+        run: docker logs kafka-connect --tail 500 || true
       - name: Upload evidence artifacts
         if: always()
         uses: actions/upload-artifact@v7

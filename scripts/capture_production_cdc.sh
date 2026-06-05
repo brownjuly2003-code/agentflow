@@ -56,8 +56,12 @@ teardown() {
 trap teardown EXIT
 
 wait_for_connect() {
-  for _ in $(seq 1 60); do
-    if curl -fsS "${CONNECT_URL}/connectors" >/dev/null; then
+  # The REST port answers GET /connectors before the herder can accept
+  # connector creation (a 500-on-PUT race during worker startup). Wait until
+  # the Postgres connector plugin is actually loaded — that signals the worker
+  # has finished its plugin scan and the herder is ready.
+  for _ in $(seq 1 90); do
+    if curl -fsS "${CONNECT_URL}/connector-plugins" 2>/dev/null | grep -q "PostgresConnector"; then
       return 0
     fi
     sleep 2
@@ -79,10 +83,7 @@ fi
 wait_for_connect
 
 echo "--- register connector ---"
-curl -fsS -X PUT \
-  -H "Content-Type: application/json" \
-  --data-binary @- \
-  "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/config" <<JSON
+cat > /tmp/connector_config.json <<JSON
 {
   "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
   "tasks.max": "1",
@@ -107,6 +108,29 @@ curl -fsS -X PUT \
 }
 JSON
 
+# Even after the plugin loads, the herder can briefly 500/503 a connector
+# create while it finishes rebalancing. Retry the PUT on any non-2xx instead
+# of letting `set -e` kill the run on the first transient failure.
+registered=0
+for _ in $(seq 1 30); do
+  REG_CODE=$(curl -s -o /tmp/connector_register_resp.json -w '%{http_code}' -X PUT \
+    -H "Content-Type: application/json" \
+    --data-binary @/tmp/connector_config.json \
+    "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/config" || echo "000")
+  if [ "${REG_CODE}" = "200" ] || [ "${REG_CODE}" = "201" ]; then
+    registered=1
+    echo "connector registered (HTTP ${REG_CODE})"
+    break
+  fi
+  echo "register attempt -> HTTP ${REG_CODE}; worker not ready, retrying"
+  sleep 5
+done
+if [ "${registered}" != "1" ]; then
+  echo "ERROR: connector registration failed after retries (last HTTP ${REG_CODE})" >&2
+  cat /tmp/connector_register_resp.json 2>/dev/null || true
+  exit 1
+fi
+
 echo "--- wait for RUNNING ---"
 STATE=""
 for _ in $(seq 1 60); do
@@ -129,17 +153,34 @@ fi
 echo "--- wait for snapshot to land in Kafka ---"
 CAPTURED=0
 for _ in $(seq 1 90); do
-  CAPTURED=$(docker exec "${KAFKA_CONTAINER}" kafka-run-class kafka.tools.GetOffsetShell \
-    --broker-list localhost:9092 --topic "${TOPIC}" --time -1 2>/dev/null \
-    | awk -F: '{sum += $3} END {print sum+0}')
+  # The topic does not exist until the snapshot writes its first record, so
+  # GetOffsetShell fails on early iterations; tolerate it under pipefail/set -e
+  # and keep polling instead of dying on the first miss.
+  CAPTURED=$(docker exec "${KAFKA_CONTAINER}" kafka-get-offsets \
+    --bootstrap-server localhost:9092 --topic "${TOPIC}" 2>/dev/null \
+    | awk -F: '{sum += $3} END {print sum+0}' || true)
+  CAPTURED=${CAPTURED:-0}
   echo "captured events: ${CAPTURED}/${ROW_COUNT}"
   if [ "${CAPTURED}" -ge "${ROW_COUNT}" ]; then
+    break
+  fi
+  # Bail out fast (with the trace) if the task died during snapshot instead of
+  # polling 0 for the whole window.
+  SNAP_STATE=$(curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status" 2>/dev/null \
+    | python3 -c 'import json,sys; s=json.load(sys.stdin); t=(s.get("tasks") or [{}])[0]; print(s["connector"]["state"], t.get("state","-"))' 2>/dev/null || echo "? ?")
+  if echo "${SNAP_STATE}" | grep -q "FAILED"; then
+    echo "connector/task FAILED during snapshot: ${SNAP_STATE}" >&2
     break
   fi
   sleep 10
 done
 if [ "${CAPTURED}" -lt "${ROW_COUNT}" ]; then
   echo "ERROR: captured ${CAPTURED} events, expected at least ${ROW_COUNT}" >&2
+  echo "--- connector status (diagnostic: task trace if FAILED) ---" >&2
+  curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status" 2>/dev/null || true
+  echo >&2
+  echo "--- topics present ---" >&2
+  docker exec "${KAFKA_CONTAINER}" kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null || true
   exit 1
 fi
 
@@ -147,7 +188,8 @@ echo "--- sample event (redacted keys only) ---"
 SAMPLE_KEYS=$(docker exec "${KAFKA_CONTAINER}" kafka-console-consumer \
   --bootstrap-server localhost:9092 --topic "${TOPIC}" \
   --from-beginning --max-messages 1 --timeout-ms 30000 2>/dev/null \
-  | python3 -c 'import json,sys; e=json.loads(sys.stdin.read()); p=e.get("payload",e); a=p.get("after") or {}; print(sorted(a.keys()))')
+  | python3 -c 'import json,sys; e=json.loads(sys.stdin.read()); p=e.get("payload",e); a=p.get("after") or {}; print(sorted(a.keys()))' || true)
+SAMPLE_KEYS=${SAMPLE_KEYS:-"(sample consumer returned no message)"}
 echo "sample event field names: ${SAMPLE_KEYS}"
 
 CONNECTOR_STATUS=$(curl -fsS "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/status")

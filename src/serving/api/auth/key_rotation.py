@@ -14,7 +14,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
-from src.serving.api.security import hash_api_key
+from src.serving.api.security import compute_key_lookup, hash_api_key
 from src.serving.duckdb_connection import connect_duckdb
 
 from .manager import ApiKeysConfig, AuthManager, KeyCreateRequest, TenantKey
@@ -70,7 +70,9 @@ class KeyRotator:
                 key_hash=hash_api_key(
                     key_value,
                     rounds=self._manager.security_policy.bcrypt_rounds,
+                    scheme=self._manager.security_policy.key_hashing,
                 ),
+                key_lookup=compute_key_lookup(key_value),
                 name=payload.name,
                 tenant=payload.tenant,
                 rate_limit_rpm=payload.rate_limit_rpm,
@@ -126,15 +128,19 @@ class KeyRotator:
             new_key_hash = hash_api_key(
                 new_key_value,
                 rounds=self._manager.security_policy.bcrypt_rounds,
+                scheme=self._manager.security_policy.key_hashing,
             )
             old_key_hash = item.key_hash
+            old_key_lookup = item.key_lookup
             if old_key_hash is None:
                 if item.key is None:
                     raise ValueError("Current key material is unavailable for rotation.")
                 old_key_hash = hash_api_key(
                     item.key,
                     rounds=self._manager.security_policy.bcrypt_rounds,
+                    scheme=self._manager.security_policy.key_hashing,
                 )
+                old_key_lookup = compute_key_lookup(item.key)
             expires_at = datetime.now(UTC) + timedelta(
                 seconds=self._manager.rotation_grace_period_seconds
             )
@@ -142,7 +148,9 @@ class KeyRotator:
                 update={
                     "key": new_key_value,
                     "key_hash": new_key_hash,
+                    "key_lookup": compute_key_lookup(new_key_value),
                     "previous_key_hash": old_key_hash,
+                    "previous_key_lookup": old_key_lookup,
                     "previous_key_active_until": expires_at,
                 }
             )
@@ -321,6 +329,7 @@ class KeyRotator:
         return item.model_copy(
             update={
                 "previous_key_hash": None,
+                "previous_key_lookup": None,
                 "previous_key_active_until": None,
             }
         )

@@ -1,5 +1,12 @@
 # AuthManager perf-baseline (M-C4 / M-C5 audit closure)
 
+> **M-C4 CLOSED 2026-06-05**: the deferred hash-format swap shipped —
+> argon2id + deterministic peppered `key_lookup` digest, O(1) candidate
+> resolution in `authenticate()`. N=20 hit-last cold went from ≈ 8.1 s
+> (table below) to ≈ 34 ms; misses from ≈ 8.2 s to ≈ 0.1 ms. The bcrypt
+> numbers below are retained as the historical baseline that motivated the
+> swap. See `docs/runbooks/auth-401-spike.md` for the operational guidance.
+
 **Date:** 2026-05-26
 **Machine:** Intel Ultra 5 125H, Windows 11, Python 3.13, `Cool Limited` power profile
 **Bench script:** [`scripts/perf/auth_bench.py`](../../scripts/perf/auth_bench.py)

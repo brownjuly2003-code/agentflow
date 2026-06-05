@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 
 import bcrypt
+from argon2 import PasswordHasher
+from argon2 import exceptions as argon2_exceptions
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -38,7 +42,11 @@ class RequestBodyTooLargeError(Exception):
 
 
 class SecurityPolicy(BaseModel):
-    key_hashing: str = "bcrypt"
+    # M-C4 (2026-06-05): argon2id replaced bcrypt as the default scheme for
+    # NEW key material so `authenticate()` can pair every hash with a
+    # deterministic peppered lookup digest (see `compute_key_lookup`) and
+    # resolve the candidate in O(1). Legacy bcrypt hashes keep verifying.
+    key_hashing: str = "argon2id"
     bcrypt_rounds: int = Field(default=12, ge=4)
     min_key_length: int = Field(default=32, ge=1)
     max_failed_auth_per_ip_per_hour: int = Field(default=10, ge=1)
@@ -56,11 +64,47 @@ def load_security_policy(config_path: Path | str | None = None) -> SecurityPolic
     return SecurityPolicy.model_validate(raw.get("security") or {})
 
 
-def hash_api_key(value: str, rounds: int) -> str:
-    return bcrypt.hashpw(value.encode("utf-8"), bcrypt.gensalt(rounds=rounds)).decode("utf-8")
+# OWASP password-storage cheat-sheet minimum for argon2id (m=19 MiB, t=2,
+# p=1). API keys are high-entropy (256-bit token_urlsafe material), so the
+# slow hash is defence-in-depth for a leaked config, not the primary barrier;
+# the moderate profile keeps the single indexed verify per cold auth cheap.
+_ARGON2_HASHER = PasswordHasher(time_cost=2, memory_cost=19_456, parallelism=1)
+
+# Deterministic lookup digests are domain-separated by an HMAC pepper so a
+# leaked api_keys.yaml cannot be joined against digests of the same key
+# material computed elsewhere. Production may override the pepper via env;
+# changing it invalidates stored `key_lookup` values (keys then fall back to
+# the O(n) verify scan until re-issued — see docs/runbooks/auth-401-spike.md).
+DEFAULT_KEY_LOOKUP_PEPPER = "agentflow-key-lookup-v1"
+
+
+def compute_key_lookup(value: str, pepper: str | None = None) -> str:
+    resolved = (
+        pepper
+        if pepper is not None
+        else os.getenv("AGENTFLOW_KEY_LOOKUP_PEPPER", DEFAULT_KEY_LOOKUP_PEPPER)
+    )
+    return hmac.new(resolved.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def hash_api_key(value: str, rounds: int, scheme: str = "argon2id") -> str:
+    if scheme == "argon2id":
+        return _ARGON2_HASHER.hash(value)
+    if scheme == "bcrypt":
+        return bcrypt.hashpw(value.encode("utf-8"), bcrypt.gensalt(rounds=rounds)).decode("utf-8")
+    raise ValueError(f"Unsupported key-hashing scheme: {scheme!r}")
 
 
 def verify_api_key(value: str, key_hash: str) -> bool:
+    if key_hash.startswith("$argon2"):
+        try:
+            return _ARGON2_HASHER.verify(key_hash, value)
+        except (
+            argon2_exceptions.VerifyMismatchError,
+            argon2_exceptions.VerificationError,
+            argon2_exceptions.InvalidHashError,
+        ):
+            return False
     try:
         return bcrypt.checkpw(value.encode("utf-8"), key_hash.encode("utf-8"))
     except ValueError:

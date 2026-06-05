@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover
 from src.serving.api.rate_limiter import RateLimiter
 from src.serving.api.security import (
     DEFAULT_SECURITY_CONFIG_PATH,
+    compute_key_lookup,
     load_security_policy,
     verify_api_key,
 )
@@ -50,7 +51,13 @@ class TenantKey(BaseModel):
     key_id: str | None = None
     key: str | None = None
     key_hash: str | None = None
+    # M-C4: deterministic peppered HMAC digest of the plaintext key. Lets
+    # `authenticate()` resolve the candidate hash in O(1) instead of paying
+    # one slow verify per configured hashed key. Optional: legacy entries
+    # without it stay on the O(n) fallback scan.
+    key_lookup: str | None = None
     previous_key_hash: str | None = None
+    previous_key_lookup: str | None = None
     previous_key_active_until: datetime | None = None
     name: str
     tenant: str
@@ -130,6 +137,12 @@ class AuthManager:
         self.keys_by_value: dict[str, TenantKey] = {}
         self._keys_by_id: dict[str, TenantKey] = {}
         self._hashed_keys: list[TenantKey] = []
+        # M-C4 O(1) indexes: lookup digest -> key entry (current / previous
+        # rotation slot). Only entries that persist a `key_lookup` /
+        # `previous_key_lookup` digest appear here; the rest stay on the
+        # legacy O(n) scan in `authenticate()`.
+        self._keys_by_lookup: dict[str, TenantKey] = {}
+        self._previous_keys_by_lookup: dict[str, TenantKey] = {}
         self._loaded_keys: list[TenantKey] = []
         self._runtime_plaintext_by_hash: dict[str, str] = {}
         self._rate_windows: dict[str, list[float]] = defaultdict(list)
@@ -180,6 +193,8 @@ class AuthManager:
             self.keys_by_value = {}
             self._keys_by_id = {}
             self._hashed_keys = []
+            self._keys_by_lookup = {}
+            self._previous_keys_by_lookup = {}
             self._key_rotator.cancel_rotation_cleanup_timers()
             for item in config.keys:
                 if item.key_id is not None:
@@ -190,12 +205,16 @@ class AuthManager:
                     )
                 if item.key_hash is not None:
                     self._hashed_keys.append(item)
+                    if item.key_lookup is not None:
+                        self._keys_by_lookup[item.key_lookup] = item
                     runtime_key = self._runtime_plaintext_by_hash.get(item.key_hash)
                     if runtime_key is not None:
                         self.keys_by_value[runtime_key] = item.model_copy(
                             update={"key": runtime_key, "matched_slot": "current"}
                         )
                 if self._key_rotator.is_previous_key_active(item):
+                    if item.previous_key_lookup is not None:
+                        self._previous_keys_by_lookup[item.previous_key_lookup] = item
                     self._key_rotator.schedule_rotation_cleanup(item)
             self._rate_windows = defaultdict(
                 list,
@@ -222,15 +241,15 @@ class AuthManager:
         )
 
         # M-C4: surface the documented hashed-key soft limit as a runtime
-        # signal. Past this count the cold-cache authenticate() worst case
-        # (one bcrypt verify per hashed key) crosses the POST load gate; warn
-        # so operators see it before the latency cliff rather than only in
-        # docs/runbooks/auth-401-spike.md.
-        hashed_key_count = len(self._hashed_keys)
-        if hashed_key_count > HASHED_KEY_SOFT_LIMIT:
+        # signal. Only UNINDEXED entries (no `key_lookup` digest) pay the
+        # cold-cache O(n) verify scan in authenticate(); indexed argon2id
+        # keys resolve in O(1) and are exempt. Warn before the latency cliff
+        # rather than only in docs/runbooks/auth-401-spike.md.
+        unindexed_count = sum(1 for item in self._hashed_keys if item.key_lookup is None)
+        if unindexed_count > HASHED_KEY_SOFT_LIMIT:
             auth_package.logger.warning(
                 "hashed_key_count_exceeds_guidance",
-                hashed_keys=hashed_key_count,
+                hashed_keys=unindexed_count,
                 soft_limit=HASHED_KEY_SOFT_LIMIT,
                 reason="cold_cache_bcrypt_latency",
                 guidance="docs/runbooks/auth-401-spike.md",
@@ -292,16 +311,39 @@ class AuthManager:
                 continue
             if secrets.compare_digest(runtime_key, api_key):
                 return item.model_copy(update={"key": api_key, "matched_slot": "current"})
+        # M-C4 O(1) path: resolve the candidate via the deterministic
+        # peppered lookup digest and pay exactly one slow verify. The verify
+        # still runs — the digest selects the candidate, the hash proves it.
+        lookup = compute_key_lookup(api_key)
+        indexed = self._keys_by_lookup.get(lookup)
+        if indexed is not None and indexed.key_hash is not None:
+            if verify_api_key(api_key, indexed.key_hash):
+                matched = indexed.model_copy(update={"key": api_key, "matched_slot": "current"})
+                self._runtime_plaintext_by_hash[indexed.key_hash] = api_key
+                self.keys_by_value[api_key] = matched
+                return matched
+        # Legacy fallback: only entries WITHOUT a lookup digest (pre-M-C4
+        # bcrypt config) still pay the O(n) verify scan.
         for item in self._hashed_keys:
-            if item.key_hash is None:
+            if item.key_hash is None or item.key_lookup is not None:
                 continue
             if verify_api_key(api_key, item.key_hash):
                 matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
                 self._runtime_plaintext_by_hash[item.key_hash] = api_key
                 self.keys_by_value[api_key] = matched
                 return matched
+        indexed_previous = self._previous_keys_by_lookup.get(lookup)
+        if (
+            indexed_previous is not None
+            and indexed_previous.previous_key_hash is not None
+            and self._key_rotator.is_previous_key_active(indexed_previous)
+            and verify_api_key(api_key, indexed_previous.previous_key_hash)
+        ):
+            return indexed_previous.model_copy(update={"key": api_key, "matched_slot": "previous"})
         for item in self._loaded_keys:
             if not self._key_rotator.is_previous_key_active(item) or item.previous_key_hash is None:
+                continue
+            if item.previous_key_lookup is not None:
                 continue
             if verify_api_key(api_key, item.previous_key_hash):
                 return item.model_copy(update={"key": api_key, "matched_slot": "previous"})

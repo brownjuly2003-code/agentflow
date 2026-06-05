@@ -4,6 +4,26 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **M-C4 closed — argon2id key hashing with an O(1) peppered lookup index.**
+  New API-key material is hashed with argon2id (OWASP m=19 MiB, t=2, p=1)
+  and stored alongside a deterministic `key_lookup` digest (HMAC-SHA256 of
+  the plaintext, pepper from `AGENTFLOW_KEY_LOOKUP_PEPPER`, default
+  `agentflow-key-lookup-v1`). `AuthManager.authenticate()` resolves the
+  candidate entry via the digest in O(1) and runs exactly one slow verify;
+  unknown keys miss the index and pay no slow verify at all. Measured against
+  the 2026-05-26 bcrypt baseline on the same hardware class: N=20 hit-last
+  cold ≈ 8.1 s → ≈ 34 ms, miss ≈ 8.2 s → ≈ 0.1 ms (the distinct-bogus-key
+  DoS amplification is gone). Legacy bcrypt entries keep verifying through
+  the old O(n) fallback scan; `create_key`/`rotate_key` write argon2id +
+  lookup digests (rotation also carries `previous_key_lookup` through the
+  grace window), and the `hashed_key_count_exceeds_guidance` soft-limit
+  warning now counts only unindexed legacy entries. The demo
+  `config/api_keys.yaml` entries are indexed; `config/security.yaml`
+  defaults `key_hashing` to `argon2id` (`bcrypt` remains selectable).
+  New dependency: `argon2-cffi`.
+
 ### Fixed
 
 - `tests/unit/test_auth_hashed_key_guidance.py` was order-dependent: it

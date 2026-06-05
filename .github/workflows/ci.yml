@@ -112,7 +112,7 @@ jobs:
           # instrumentation of a duckdb-importing module trips duckdb's lazy
           # `_duckdb._sqltypes` import at COLLECTION time, both locally and on CI
           # runners. `coverage run` imports duckdb normally and avoids the break.
-          python -m coverage run -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py -p no:schemathesis
+          python -m coverage run -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py tests/unit/test_auth_argon2_lookup.py -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/manager.py" --show-missing --fail-under=90
       - name: Run key rotation coverage gate
         run: |

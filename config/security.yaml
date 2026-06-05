@@ -1,5 +1,9 @@
 security:
-  key_hashing: bcrypt
+  # M-C4 (2026-06-05): argon2id for NEW key material, paired with a
+  # deterministic peppered lookup digest (key_lookup) for O(1) authenticate.
+  # Existing bcrypt hashes keep verifying; bcrypt_rounds only applies when
+  # key_hashing is explicitly set back to bcrypt.
+  key_hashing: argon2id
   bcrypt_rounds: 12
   min_key_length: 32
   max_failed_auth_per_ip_per_hour: 10

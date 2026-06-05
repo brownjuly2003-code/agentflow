@@ -142,33 +142,35 @@ plaintext keys (verified in security boundary work `1c24e58` / `e8b1237`).
   from naive uptime monitors; the postmortem should produce a synthetic auth
   probe alert if one is not already wired up.
 
-## Hashed-key sizing guidance (M-C4 perf-baseline)
+## Hashed-key sizing guidance (M-C4 — closed 2026-06-05)
 
-`AuthManager.authenticate()` iterates `_hashed_keys` linearly, calling
-`bcrypt.checkpw` on each. At production `bcrypt_rounds=12`, each verify
-costs ≈ 400 ms on a modern x86 CPU; the per-process steady state is
-saved by the plaintext cache at
-[`src/serving/api/auth/manager.py:284`](../../src/serving/api/auth/manager.py#L284)
-(first auth populates `keys_by_value` so subsequent auths take the
-microsecond `compare_digest` path).
+**The hash-format swap shipped**: new key material is hashed with argon2id
+and stored alongside a deterministic peppered lookup digest (`key_lookup` =
+HMAC-SHA256 over the plaintext, pepper from `AGENTFLOW_KEY_LOOKUP_PEPPER`,
+default `agentflow-key-lookup-v1`). `authenticate()` resolves the candidate
+via the digest in O(1) and runs exactly ONE slow verify; bogus keys miss the
+index and pay no slow verify at all. Measured on the dev baseline hardware
+(same class as the 2026-05-26 bench): N=20 indexed keys, hit-last cold ≈
+34 ms (was ≈ 8.1 s on bcrypt O(n)); miss ≈ 0.1 ms (was ≈ 8.2 s — the
+distinct-bogus-key DoS amplification is gone).
 
-The cold path is still O(N × 400 ms): every process restart and every
-SIGHUP reload pays the full cost on the first auth per key. **Soft cap:
-keep `_hashed_keys` ≤ 10 per AuthManager instance**.
+Operational notes:
 
-This soft cap is enforced as a runtime signal: `AuthManager.load()` logs a
-`hashed_key_count_exceeds_guidance` warning (with `hashed_keys` and
-`soft_limit` fields) whenever the configured count crosses
-`HASHED_KEY_SOFT_LIMIT`. Alert on that event name to catch a misconfiguration
-before the cold-start latency cliff shows up in the POST load gate.
-
-- N=5: hit-last p95 ≈ 1.9 s
-- N=20: hit-last p95 ≈ 8.1 s → exceeds the 1100 ms POST load gate
-  (`tests/load/thresholds.py`)
-
-If a tenant config legitimately needs > 10 hashed keys, file an issue
-referencing this section — the long-term fix is a hash-format swap
-(argon2id with a deterministic peppered prefix) so we can index the
-lookup, but bcrypt's self-salting precludes a same-format optimisation.
-
-Full bench: [`docs/perf/auth-bench-2026-05-26.md`](../perf/auth-bench-2026-05-26.md).
+- **Indexed keys** (entries with `key_lookup`, i.e. anything created or
+  rotated after 2026-06-05) are exempt from the soft cap — there is no
+  cold-start cliff for them.
+- **Legacy bcrypt entries without `key_lookup`** still pay the old O(n)
+  verify scan on a cold cache. The
+  `hashed_key_count_exceeds_guidance` warning (fields `hashed_keys`,
+  `soft_limit`) now counts ONLY those unindexed entries against
+  `HASHED_KEY_SOFT_LIMIT` (10). Alert on the event name as before; the fix
+  is to rotate the listed keys (rotation re-hashes to argon2id and writes
+  the lookup digest automatically).
+- **Pepper rotation**: changing `AGENTFLOW_KEY_LOOKUP_PEPPER` invalidates
+  every stored `key_lookup` — affected keys silently fall back to the O(n)
+  scan (still authenticate, slower cold). Re-issue or re-rotate keys after a
+  pepper change to restore O(1).
+- The historical bcrypt numbers (N=5 hit-last ≈ 1.9 s, N=20 ≈ 8.1 s at
+  `bcrypt_rounds=12`) remain in
+  [`docs/perf/auth-bench-2026-05-26.md`](../perf/auth-bench-2026-05-26.md)
+  for context.

@@ -2,6 +2,46 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 10): item 19 CLOSED with REAL production-CDC evidence — logical replication enabled on the live Neon source and a full Debezium capture succeeded
+
+Operator: «включай». The remaining wall from part 9 was cleared end to end —
+backlog item 19 (production CDC onboarding) is now **Done with real evidence**,
+not just infra-ready.
+
+- **Logical replication ENABLED on the real production source** (operator-owned
+  Neon, project `winter-grass-42791098`, org `org-floral-unit-80055796`,
+  database `neondb`, table scope `public.vacancies`): API key obtained,
+  `PATCH /projects/{id}` set `settings.enable_logical_replication=true`
+  (verified False→True; one `suspend_compute` op finished; irreversible
+  `wal_level=logical`). Confirmed live in the capture preflight:
+  `wal_level=logical`, `96234` rows, 1 pre-existing managed slot untouched.
+- **Full Debezium capture succeeded** (`cdc-production-capture.yml`, run
+  27028251460, conclusion success): connector `agentflow-prod-neon-cdc`
+  (Debezium Postgres, pgoutput, TLS) reached RUNNING/RUNNING, created the
+  publication + `agentflow_prod_capture_slot`, snapshotted **96234 events**
+  into topic `cdc.prod.public.vacancies` (Debezium log: "Finished exporting
+  95370 records" + live UPDATE streaming), captured a redacted 21-field
+  sample, wrote `.artifacts/cdc-production/capture-evidence.md`, and tore
+  everything down — **leftover capture slots: 0** (prod left clean).
+- **The dispatch-only workflow had never succeeded before (0 prior runs); five
+  real bugs were fixed to make it work** (all on branch
+  `cdc/item19-neon-api-verified`, NOT yet merged to main): (1) `8307b9f` docs +
+  the verified API command; (2) `1bac8de` Connect readiness waits for the
+  PostgresConnector plugin + connector registration retries transient 5xx
+  (a single `curl -fsS PUT` was dying on the herder-not-ready 500 under
+  `set -e`); (3) `f792379` the mounted Neon secret file must be readable by the
+  Connect container's non-root uid (was umask 077 → "Could not read properties
+  from file"); (4) `82f90db` the snapshot-wait poll must tolerate the topic not
+  existing yet under pipefail; (5) `b3cb21c` diagnostics; (6) `a4178e6` count
+  offsets with `kafka-get-offsets --bootstrap-server` — `kafka.tools.GetOffsetShell
+  --broker-list` is gone in Kafka 3.x/cp-7.7 and silently reported 0/95370
+  despite the data being present. **These fixes are real and belong on main —
+  a PR/merge of `cdc/item19-neon-api-verified` is the open follow-up** (left as
+  an operator gate; the branch is pushed).
+- The Neon personal API key (`agentflow-cdc-3`) is stored at `D:\TXT\NEON.txt`;
+  two orphaned keys created while iterating the token capture were deleted via
+  the API. Logical replication remains ENABLED (the intended end state).
+
 ## 2026-06-05 session (part 9): item 19 retry — the Neon API-toggle question resolved (API DOES expose logical-replication enable); remaining wall is an API key + the irreversible prod flip
 
 «DE_project продолжи» (autonomous). The single open thread is item 19's

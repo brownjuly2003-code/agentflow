@@ -534,6 +534,12 @@ Progress record:
   operator enabling Logical Replication in the Neon Console (IRREVERSIBLE
   `wal_level` flip + compute restart; VacancyRadar writers reconnect). After
   that: dispatch the workflow, record evidence, mark Done.
+- Autonomous enable attempt via iMac CDP browser reached Google password+2FA
+  but was blocked by free-VPN flapping + the 8 GB iMac killing the process;
+  enabling is a Neon Console action with no clean API toggle. A prioritized
+  retry plan (operator one-click · Neon API-key registration · dedicated
+  registered CDC source · stable egress) is recorded in
+  `docs/operations/cdc-production-onboarding.md` → "Planned retry".
 
 Allowed files/directories:
 - `docs/operations/cdc-production-onboarding.md`

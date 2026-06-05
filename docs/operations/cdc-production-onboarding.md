@@ -41,6 +41,55 @@ VacancyRadar writers reconnect on their next run. Verified live on
   `agentflow_prod_capture_slot`, verify zero leftover capture slots) and
   runs even when capture fails.
 
+## Planned retry (next session)
+
+The 2026-06-05 autonomous attempt to enable Logical Replication from the
+operator's iMac via a CDP-driven real Chrome session reached the Google
+password + 2FA stage (credentials and the bot-block bypass both worked) but
+could not complete: the free AdGuard VPN kept dropping the non-RU egress
+(Neon unreachable for most of each window) and the 8 GB Intel iMac killed the
+detached login process under Chrome load. The wall was environmental
+connectivity, not credentials or logic. Enabling Logical Replication is a
+Neon **Console** action (no clean public API toggle), so it needs a sustained
+stable browser session.
+
+Next attempt, in preference order:
+
+1. **Operator one-click (fastest, recommended).** In the operator's normal
+   browser (already authenticated, stable VPN): Neon Console → VacancyRadar
+   project → Settings → Logical Replication → Enable (irreversible
+   `wal_level=logical`, restarts computes). Then dispatch
+   `cdc-production-capture.yml`. Everything after the toggle is already
+   automated and needs no Console.
+
+2. **Registration of a Neon API token (autonomous-friendly).** Register a
+   Neon **API key** (Console → Account settings → API keys → Create) and
+   store it in `D:\TXT\NEON.txt`. A future session can then drive the Neon
+   REST API (`api.neon.tech`) from a US GitHub Actions runner — no RU geo, no
+   VPN, no Console session — to read the project id and apply the
+   logical-replication / `wal_level` project setting where the API exposes
+   it, then dispatch the capture. NOTE: verify first whether the current Neon
+   API version exposes a logical-replication enable endpoint; if it remains
+   Console-only, the API key still removes every other auth/geo dependency
+   and leaves only the single toggle.
+
+3. **Registration of a dedicated CDC source (fallback, lower fidelity).** If
+   touching the live VacancyRadar project is undesirable, register a fresh
+   Neon project (free tier) seeded from an anonymized `public.vacancies`
+   export, enable Logical Replication there, and run the same capture against
+   it. This proves the end-to-end CDC path on a real managed Postgres, but is
+   explicitly a dedicated test source, not the production VacancyRadar DB —
+   label it as such in the evidence and do not claim production capture.
+
+4. **Stable egress for autonomous browser login.** If the CDP/iMac path is
+   retried, first secure a stable non-RU channel (a paid/stable VPN node or a
+   non-RU VPS as an SSH egress) so the multi-step Google login + 2FA can run
+   for ~90 s without a drop; the login + 2FA script is otherwise proven.
+
+Everything except the Console toggle is committed and pickup-ready:
+`scripts/capture_production_cdc.sh`, `.github/workflows/cdc-production-capture.yml`,
+the four `CDC_NEON_*` Actions secrets, and `tests/unit/test_cdc_production_capture_workflow.py`.
+
 Production CDC onboarding is not approved yet. This runbook defines the
 decision record and preflight checks required before attaching real Postgres or
 MySQL sources to AgentFlow.

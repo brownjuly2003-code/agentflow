@@ -49,9 +49,17 @@ password + 2FA stage (credentials and the bot-block bypass both worked) but
 could not complete: the free AdGuard VPN kept dropping the non-RU egress
 (Neon unreachable for most of each window) and the 8 GB Intel iMac killed the
 detached login process under Chrome load. The wall was environmental
-connectivity, not credentials or logic. Enabling Logical Replication is a
-Neon **Console** action (no clean public API toggle), so it needs a sustained
-stable browser session.
+connectivity, not credentials or logic.
+
+**2026-06-05 follow-up — the option-2 API question is RESOLVED.** Enabling
+Logical Replication is NOT Console-only: the public Neon API exposes it as a
+first-class project setting (`settings.enable_logical_replication`, verified
+against the Neon API reference + TypeScript SDK). A single
+`PATCH https://console.neon.tech/api/v2/projects/{project_id}` performs the
+same irreversible `wal_level=logical` flip + compute restart as the Console
+button (exact command in option 2). So the only step that still strictly needs
+an authenticated Console browser session is *creating an API key* — the flip
+itself does not.
 
 Next attempt, in preference order:
 
@@ -62,16 +70,32 @@ Next attempt, in preference order:
    `cdc-production-capture.yml`. Everything after the toggle is already
    automated and needs no Console.
 
-2. **Registration of a Neon API token (autonomous-friendly).** Register a
-   Neon **API key** (Console → Account settings → API keys → Create) and
-   store it in `D:\TXT\NEON.txt`. A future session can then drive the Neon
-   REST API (`api.neon.tech`) from a US GitHub Actions runner — no RU geo, no
-   VPN, no Console session — to read the project id and apply the
-   logical-replication / `wal_level` project setting where the API exposes
-   it, then dispatch the capture. NOTE: verify first whether the current Neon
-   API version exposes a logical-replication enable endpoint; if it remains
-   Console-only, the API key still removes every other auth/geo dependency
-   and leaves only the single toggle.
+2. **Neon API key — the full API path is CONFIRMED (verified 2026-06-05).**
+   The original "verify first whether the API exposes the toggle" caveat is
+   resolved: it does, end to end. Register a Neon **API key** (Console →
+   Account settings → API keys → Create), store it in `D:\TXT\NEON.txt`, then
+   from any non-RU egress (e.g. a US GitHub Actions runner — no VPN/geo
+   dependency):
+
+   ```bash
+   # 1. find the VacancyRadar project_id (no Console needed once the key exists)
+   curl -s -H "Authorization: Bearer $NEON_API_KEY" \
+     https://console.neon.tech/api/v2/projects | jq '.projects[] | {id,name}'
+   # 2. flip the toggle — IRREVERSIBLE wal_level=logical + restarts all computes
+   curl -X PATCH "https://console.neon.tech/api/v2/projects/$PROJECT_ID" \
+     -H "Authorization: Bearer $NEON_API_KEY" -H 'Content-Type: application/json' \
+     -d '{"project":{"settings":{"enable_logical_replication":true}}}'
+   ```
+
+   Then dispatch `cdc-production-capture.yml` — zero Console interaction after
+   the flip. **Correction to the original note:** the API base is
+   `console.neon.tech/api/v2`, NOT `api.neon.tech` (the latter does not resolve
+   — it was an error here). The ONLY remaining manual step is creating the API
+   key, which needs exactly one authenticated Console session: there is no
+   stored Neon account password and no live Neon/Google session cookie in any
+   local browser profile (rechecked 2026-06-05), and autonomous Google/Neon
+   browser login is the environment-blocked path described above. Once the key
+   is in `D:\TXT\NEON.txt`, the whole enable + capture is one unattended run.
 
 3. **Registration of a dedicated CDC source (fallback, lower fidelity).** If
    touching the live VacancyRadar project is undesirable, register a fresh

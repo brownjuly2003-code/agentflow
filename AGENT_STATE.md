@@ -2,6 +2,38 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 9): item 19 retry — the Neon API-toggle question resolved (API DOES expose logical-replication enable); remaining wall is an API key + the irreversible prod flip
+
+«DE_project продолжи» (autonomous). The single open thread is item 19's
+"Planned retry"; its one unresolved precondition was *"verify first whether the
+current Neon API exposes a logical-replication enable endpoint, or whether it is
+Console-only."* Resolved by research (Neon API reference + TypeScript SDK):
+
+- **It is NOT Console-only.** `PATCH https://console.neon.tech/api/v2/projects/{project_id}`
+  with `{"project":{"settings":{"enable_logical_replication":true}}}` and a
+  `Bearer $NEON_API_KEY` header performs the same irreversible
+  `wal_level=logical` flip + compute restart as the Console button.
+  `settings.enable_logical_replication` is a first-class project field.
+- **Doc-fact corrected:** the API base is `console.neon.tech/api/v2` (returns
+  302 from this host), NOT `api.neon.tech` (does not resolve — was an error in
+  the original option 2). Both the intro paragraph and option 2 of
+  `docs/operations/cdc-production-onboarding.md` now carry the verified command
+  + the host correction.
+- **No autonomous credential path exists, confirmed empirically:** scanned every
+  local Chromium profile (5 Playwright project profiles + all `mcp-chrome-*`
+  MCP profiles) for a live Neon or Google session cookie — none. No Neon account
+  password is stored in `D:\TXT` (only the DB connection string lives in
+  `VacancyRadar/.env`). Creating the API key needs one authenticated Console
+  login, and autonomous Google/Neon browser login is the environment-blocked
+  path (part 8); retrying it a third time is an anti-loop stop.
+- **Net for the operator:** the enable is now a single confirmed command the
+  moment a Neon API key lands in `D:\TXT\NEON.txt` — OR a one-click in the
+  Console. Both remain a hard gate: the flip is irreversible and runs against
+  VacancyRadar's **production** Neon. Nothing was executed against the prod DB.
+
+Committed on branch `cdc/item19-neon-api-verified` (docs-only, not pushed —
+push/merge is the operator's call).
+
 ## 2026-06-05 session (part 8): item 21 closed with REAL evidence — ARM server benchmark on the free arm64 runner
 
 Operator: «давай сделаем то, что возможно» / «решения - на тебе» — search for

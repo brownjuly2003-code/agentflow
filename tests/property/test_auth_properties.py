@@ -26,9 +26,15 @@ def test_wrong_key_never_verifies(correct_key: str, wrong_key: str) -> None:
 
 
 @given(key=_KEY_STRATEGY)
-def test_hash_output_is_bcrypt_encoded_and_not_plaintext(key: str) -> None:
-    key_hash = hash_api_key(key, rounds=4)
+def test_hash_output_is_phc_encoded_and_not_plaintext(key: str) -> None:
+    # M-C4: the default scheme is argon2id; bcrypt stays selectable for
+    # legacy material. Either way the output is PHC-formatted, never the
+    # plaintext.
+    argon2_hash = hash_api_key(key, rounds=4)
+    bcrypt_hash = hash_api_key(key, rounds=4, scheme="bcrypt")
 
-    assert key_hash != key
-    assert key_hash.startswith("$2")
-    assert len(key_hash) > len(key)
+    assert argon2_hash != key
+    assert argon2_hash.startswith("$argon2id$")
+    assert bcrypt_hash != key
+    assert bcrypt_hash.startswith("$2")
+    assert len(argon2_hash) > len(key)

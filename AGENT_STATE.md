@@ -2,6 +2,43 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 8): item 21 closed with REAL evidence — ARM server benchmark on the free arm64 runner
+
+Operator: «давай сделаем то, что возможно» / «решения - на тебе» — search for
+real $0 evidence instead of the N/A closure where possible. Verified facts
+first: GitHub hosts free arm64 runners for public repositories
+(`ubuntu-24.04-arm`, GA 2025-08: Cobalt 100 / Neoverse-N2 / Armv9-A / 4 vCPU),
+and Neon supports logical replication with a documented Debezium path (for
+item 19, see below).
+
+- **Item 21 → Done (amended class)**: operator decision accepts the free
+  arm64 runner as the $0 ARM server class (honestly 4 vCPU, no `c8g.4xlarge`
+  claim; original plan stays preferred if budget appears). Shipped
+  `60e0f3d`: dispatch-only `.github/workflows/benchmark-arm.yml` running the
+  canonical `scripts/run_benchmark.py`, host-metadata step, artifact upload
+  (`if-no-files-found: error`), A06 target (`perf` profile), 4 shape tests.
+  Broad unit 789 passed; CI 16/16 on the commit. **Real run 27012731848:
+  success — 554 requests, 0 failures, aggregate p50 6 ms / p99 150 ms, all
+  entity gates passed with wide margin** (faster than the x64 baseline on
+  both percentiles; recorded side-by-side, not as a regression claim).
+  Evidence: `docs/perf/arm-server-benchmark-2026-06-05.md` + raw artifacts
+  in `docs/perf/arm-benchmark-2026-06-05/`.
+- **Item 19 prep (real production CDC from Neon)**: the real production
+  source exists — VacancyRadar's Neon Postgres (`public.vacancies`, ~95k
+  live rows, PG 17 on aarch64). Verified live: `wal_level=replica` → logical
+  replication must be enabled in the Neon Console/API first (IRREVERSIBLE
+  wal_level flip + compute restart; one pre-existing replication slot must
+  not be touched). **Blocker: no Neon API key exists anywhere**
+  (VacancyRadar/.env has only NEON_DATABASE_URL; D:\TXT and env are empty;
+  no neonctl auth) — enabling needs either the operator clicking
+  Settings → Logical Replication → Enable in the Neon Console, or a Neon
+  API key dropped into D:\TXT. Capture design ready: dispatch-only CI
+  workflow reusing the repo's Kafka/Connect images, Debezium connector to
+  Neon over TLS (publication on `public.vacancies`, initial snapshot =
+  real-data capture), evidence = connector RUNNING + topic counts + redacted
+  sample, then teardown (drop connector/publication/slot, verify slot count
+  back to baseline).
+
 ## 2026-06-05 session (part 7): backlog items 19-22 closed as not applicable by operator decision — the backlog is fully resolved
 
 Operator: «реши вопрос с 19-22 - у тебя права админа». Resolution follows the

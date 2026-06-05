@@ -4,6 +4,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Backlog item 21 closed with real evidence under an operator-amended
+  hardware class: `.github/workflows/benchmark-arm.yml` (dispatch-only) runs
+  the canonical benchmark on the free GitHub-hosted arm64 runner for public
+  repositories (`ubuntu-24.04-arm`, Neoverse-N2, 4 vCPU). First real run
+  (27012731848) recorded 554 requests / 0 failures, aggregate p50 6 ms /
+  p99 150 ms — every entity gate passed. Evidence in
+  `docs/perf/arm-server-benchmark-2026-06-05.md` plus raw artifacts; shape
+  tests pin dispatch-only/runner-label/artifact upload, and the job carries
+  an A06 dependency-profile target (`perf`). No `c8g.4xlarge` claim is made.
+
 ### Changed
 
 - Backlog items 19-22 (production CDC onboarding, Phase 1 PMF/pricing

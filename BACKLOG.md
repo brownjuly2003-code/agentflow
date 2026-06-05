@@ -590,19 +590,21 @@ Forbidden scope:
 
 ## 21. Define Public Benchmark Production-Hardware Plan
 
-Status: Reopened 2026-06-05 with an amended hardware class; in progress.
+Status: Done (2026-06-05, amended hardware class).
 
-Amendment (operator decision, 2026-06-05, «давай сделаем то, что возможно»):
-- The original `c8g.4xlarge+` class requires AWS budget/card that does not
-  exist (the item-18 constraint). The free GitHub-hosted arm64 runner for
-  public repositories (`ubuntu-24.04-arm`: Cobalt 100, Arm Neoverse N2,
-  Armv9-A, 4 vCPU) is accepted as the $0-budget production-hardware class —
-  real ARM server hardware of the same architecture generation as Graviton,
-  honestly recorded as 4 vCPU (not 16). `c8g.4xlarge+` remains the preferred
-  class if budget ever appears.
-- Evidence channel: `.github/workflows/benchmark-arm.yml`
-  (workflow_dispatch-only), uploading host metadata + report + results JSON
-  artifacts from a real run; results recorded into `docs/perf/`.
+Closure record:
+- Operator decision 2026-06-05 amended the hardware class: the free
+  GitHub-hosted arm64 runner for public repositories (`ubuntu-24.04-arm`:
+  Cobalt 100, Arm Neoverse-N2, Armv9-A, 4 vCPU) is the accepted $0-budget ARM
+  server class — honestly recorded as 4 vCPU, not 16; `c8g.4xlarge+` remains
+  preferred if budget ever appears and no `c8g` claim is made.
+- Real run executed and green: workflow `.github/workflows/benchmark-arm.yml`
+  (workflow_dispatch-only), run 27012731848 on commit `60e0f3d`, canonical
+  `scripts/run_benchmark.py` harness (50 users / 60s / synthetic fixtures).
+  Results: 554 requests, 0 failures, aggregate p50 6 ms / p99 150 ms; every
+  entity endpoint inside the release gate with wide margin.
+- Evidence: `docs/perf/arm-server-benchmark-2026-06-05.md` + raw run
+  artifacts in `docs/perf/arm-benchmark-2026-06-05/` + the Actions run URL.
 
 Allowed files/directories:
 - `docs/perf/`

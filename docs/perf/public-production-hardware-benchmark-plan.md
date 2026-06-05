@@ -2,12 +2,14 @@
 
 ## Status
 
-Closed as not applicable on 2026-06-05 by operator decision: no cloud budget or
-payment card exists (the same constraint that closed the AWS gate), so backlog
-item 21 is no longer an active gate. The checked-in single-node baseline is the
-only claimed release evidence; a production-hardware result is still NOT
-claimed. This plan is preserved as the archived reproducible procedure; reopen
-it only when the operator provides approved hardware access and budget.
+CLOSED DONE on 2026-06-05 with an operator-amended hardware class: the free
+GitHub-hosted arm64 runner for public repositories (`ubuntu-24.04-arm`,
+Neoverse-N2, 4 vCPU) was accepted as the $0-budget ARM server class, and a
+real benchmark run is recorded in
+[arm-server-benchmark-2026-06-05.md](arm-server-benchmark-2026-06-05.md)
+(run 27012731848, 0 failures, all gates passed). No `c8g.4xlarge` claim is
+made; the `c8g.4xlarge+` procedure below remains the preferred path if budget
+ever appears.
 
 Status as of 2026-05-04: blocked on approved production-hardware access,
 budget, and operator-run evidence.

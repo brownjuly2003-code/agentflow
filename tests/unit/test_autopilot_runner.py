@@ -934,3 +934,64 @@ def test_autopilot_claude_planner_and_executor(tmp_path):
     assert "RUN: pi planner" not in result.stdout
     assert "RUN: codex planner" not in result.stdout
     assert "Autopilot run finished." in result.stdout
+
+
+def test_autopilot_claude_planner_failure_blocks(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    # pi and codex must NOT run when -Planner claude is selected
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 9\n", "exit 9\n")
+    _write_shim(shim_dir, "codex", "@echo off\nexit /b 9\n", "exit 9\n")
+    # claude planner dies non-zero WITHOUT writing .autopilot/NEXT_TASK.md
+    _write_shim(shim_dir, "claude", "@echo off\nexit /b 1\n", "exit 1\n")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+            "-Planner",
+            "claude",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    blocked = repo / ".autopilot" / "BLOCKED.md"
+    assert blocked.exists(), result.stdout + result.stderr
+    assert "claude planner failed" in blocked.read_text(encoding="utf-8")
+    assert "RUN: pi planner" not in result.stdout
+    assert "RUN: codex planner" not in result.stdout

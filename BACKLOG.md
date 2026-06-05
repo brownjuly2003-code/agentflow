@@ -590,17 +590,19 @@ Forbidden scope:
 
 ## 21. Define Public Benchmark Production-Hardware Plan
 
-Status: Not applicable unless explicitly reopened.
+Status: Reopened 2026-06-05 with an amended hardware class; in progress.
 
-Out-of-scope reason:
-- Operator decision on 2026-06-05: there is no cloud budget or payment card
-  (same constraint that closed item 18), so approved `c8g.4xlarge+` access and
-  an operator-run production-hardware benchmark cannot exist in the current
-  plan. The checked-in single-node baseline remains the only and sufficient
-  release evidence; a production-hardware result is still NOT claimed. The
-  reproducible plan stays archived for the day hardware access appears. Reopen
-  only if the operator provides approved hardware access and budget. Archived
-  plan: `docs/perf/public-production-hardware-benchmark-plan.md`.
+Amendment (operator decision, 2026-06-05, «давай сделаем то, что возможно»):
+- The original `c8g.4xlarge+` class requires AWS budget/card that does not
+  exist (the item-18 constraint). The free GitHub-hosted arm64 runner for
+  public repositories (`ubuntu-24.04-arm`: Cobalt 100, Arm Neoverse N2,
+  Armv9-A, 4 vCPU) is accepted as the $0-budget production-hardware class —
+  real ARM server hardware of the same architecture generation as Graviton,
+  honestly recorded as 4 vCPU (not 16). `c8g.4xlarge+` remains the preferred
+  class if budget ever appears.
+- Evidence channel: `.github/workflows/benchmark-arm.yml`
+  (workflow_dispatch-only), uploading host metadata + report + results JSON
+  artifacts from a real run; results recorded into `docs/perf/`.
 
 Allowed files/directories:
 - `docs/perf/`

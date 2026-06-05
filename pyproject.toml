@@ -306,6 +306,13 @@ job = "perf-check"
 profile = "perf"
 
 [[tool.agentflow.dependency-profiles.targets]]
+name = "benchmark-arm.benchmark-arm"
+kind = "workflow"
+path = ".github/workflows/benchmark-arm.yml"
+job = "benchmark-arm"
+profile = "perf"
+
+[[tool.agentflow.dependency-profiles.targets]]
 name = "chaos.chaos-smoke"
 kind = "workflow"
 path = ".github/workflows/chaos.yml"

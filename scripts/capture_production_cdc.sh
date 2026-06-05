@@ -56,8 +56,12 @@ teardown() {
 trap teardown EXIT
 
 wait_for_connect() {
-  for _ in $(seq 1 60); do
-    if curl -fsS "${CONNECT_URL}/connectors" >/dev/null; then
+  # The REST port answers GET /connectors before the herder can accept
+  # connector creation (a 500-on-PUT race during worker startup). Wait until
+  # the Postgres connector plugin is actually loaded — that signals the worker
+  # has finished its plugin scan and the herder is ready.
+  for _ in $(seq 1 90); do
+    if curl -fsS "${CONNECT_URL}/connector-plugins" 2>/dev/null | grep -q "PostgresConnector"; then
       return 0
     fi
     sleep 2
@@ -79,10 +83,7 @@ fi
 wait_for_connect
 
 echo "--- register connector ---"
-curl -fsS -X PUT \
-  -H "Content-Type: application/json" \
-  --data-binary @- \
-  "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/config" <<JSON
+cat > /tmp/connector_config.json <<JSON
 {
   "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
   "tasks.max": "1",
@@ -106,6 +107,29 @@ curl -fsS -X PUT \
   "custom.metric.tags": "service=agentflow,source=neon-production"
 }
 JSON
+
+# Even after the plugin loads, the herder can briefly 500/503 a connector
+# create while it finishes rebalancing. Retry the PUT on any non-2xx instead
+# of letting `set -e` kill the run on the first transient failure.
+registered=0
+for _ in $(seq 1 30); do
+  REG_CODE=$(curl -s -o /tmp/connector_register_resp.json -w '%{http_code}' -X PUT \
+    -H "Content-Type: application/json" \
+    --data-binary @/tmp/connector_config.json \
+    "${CONNECT_URL}/connectors/${CONNECTOR_NAME}/config" || echo "000")
+  if [ "${REG_CODE}" = "200" ] || [ "${REG_CODE}" = "201" ]; then
+    registered=1
+    echo "connector registered (HTTP ${REG_CODE})"
+    break
+  fi
+  echo "register attempt -> HTTP ${REG_CODE}; worker not ready, retrying"
+  sleep 5
+done
+if [ "${registered}" != "1" ]; then
+  echo "ERROR: connector registration failed after retries (last HTTP ${REG_CODE})" >&2
+  cat /tmp/connector_register_resp.json 2>/dev/null || true
+  exit 1
+fi
 
 echo "--- wait for RUNNING ---"
 STATE=""

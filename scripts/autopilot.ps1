@@ -11,6 +11,24 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
+# Task Scheduler launches powershell with the machine PATH only, which lacks
+# the per-user install locations of two required CLIs: codex (%APPDATA%\npm)
+# and python (%LOCALAPPDATA%\Programs\Python\Python313). Scheduled runs died
+# at Require-Command with "Required command is unavailable: codex"
+# (2026-06-04 .autopilot/BLOCKED.md) while interactive runs worked. Prepend
+# the user-level CLI directories when present-but-missing so the scheduled
+# environment matches the interactive one.
+$UserCliPaths = @(
+    (Join-Path $env:APPDATA "npm"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\Scripts")
+)
+foreach ($userCliPath in $UserCliPaths) {
+    if ((Test-Path $userCliPath) -and (($env:Path -split ";") -notcontains $userCliPath)) {
+        $env:Path = "$userCliPath;$env:Path"
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 } else {

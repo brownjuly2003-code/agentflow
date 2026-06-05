@@ -256,7 +256,16 @@ function Run-Gates {
 
     if ($pythonTouched) {
         Require-Command "python" | Out-Null
-        Invoke-RepoCommand "python -m pytest -p no:schemathesis"
+        # Canonical no-Docker broad slice (docs/operations/
+        # local-verification-matrix.md): the bare full-repo pytest needs
+        # Docker services and an un-shadowed interpreter — the scheduled
+        # host guarantees neither (2026-06-05: the first real claude-channel
+        # cycle died here on the system-Python full run). Prefer the repo
+        # .venv interpreter when present; scope SKIP_DOCKER_TESTS to the
+        # gate invocation.
+        $venvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+        $gatePython = if (Test-Path $venvPython) { "& `"$venvPython`"" } else { "python" }
+        Invoke-RepoCommand "`$env:SKIP_DOCKER_TESTS='1'; $gatePython -m pytest tests/unit -p no:schemathesis --continue-on-collection-errors"
         if (Test-PythonModuleCommand "ruff") {
             if ($pythonGateFiles.Count -gt 0) {
                 $ruffTargets = Join-CommandArguments -Arguments $pythonGateFiles

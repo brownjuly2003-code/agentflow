@@ -528,8 +528,13 @@ def test_autopilot_runs_python_gates_for_warehouse_changes(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     python_calls = python_log.read_text(encoding="utf-8")
-    assert "-m pytest -p no:schemathesis" in python_calls
+    # The pytest gate must run the canonical no-Docker broad slice (the
+    # local-verification-matrix form), not a bare full-repo run: the full
+    # run needs Docker services, and the scheduled host environment does
+    # not guarantee them.
+    assert "-m pytest tests/unit -p no:schemathesis --continue-on-collection-errors" in python_calls
     assert "-m ruff check warehouse/example.py" in python_calls
+    assert "SKIP_DOCKER_TESTS='1'" in result.stdout
 
 
 def test_autopilot_defaults_to_codex_planner_without_running_pi(tmp_path):

@@ -850,3 +850,87 @@ def test_autopilot_exits_without_blocking_when_active_lock_exists(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "another autopilot run is active" in result.stdout
     assert not (autopilot_dir / "BLOCKED.md").exists()
+
+
+def test_autopilot_claude_planner_and_executor(tmp_path):
+    powershell = _powershell()
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / ".gitignore").write_text(".autopilot/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Autopilot Test",
+            "-c",
+            "user.email=autopilot@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    _ensure_windows_powershell_command(shim_dir, powershell)
+    # pi and codex must NOT run when -Planner claude is selected
+    _write_shim(shim_dir, "pi", "@echo off\nexit /b 9\n", "exit 9\n")
+    _write_shim(shim_dir, "codex", "@echo off\nexit /b 9\n", "exit 9\n")
+    _write_shim(
+        shim_dir,
+        "claude",
+        "\n".join(
+            [
+                "@echo off",
+                "if not exist .autopilot mkdir .autopilot",
+                "echo claude task> .autopilot\\NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot\\NEXT_TASK.md",
+                "echo docs/operations/> .autopilot\\allowed-paths.txt",
+                "echo claude commit> .autopilot\\commit-message.txt",
+                "exit /b 0",
+            ]
+        ),
+        "\n".join(
+            [
+                "mkdir -p .autopilot",
+                "echo claude task> .autopilot/NEXT_TASK.md",
+                "echo commit allowed: no>> .autopilot/NEXT_TASK.md",
+                "echo docs/operations/> .autopilot/allowed-paths.txt",
+                "echo claude commit> .autopilot/commit-message.txt",
+                "exit 0",
+            ]
+        ),
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [
+            powershell,
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PROJECT_ROOT / "scripts" / "autopilot.ps1"),
+            "-RepoRoot",
+            str(repo),
+            "-Planner",
+            "claude",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "RUN: claude planner" in result.stdout
+    assert "RUN: claude executor" in result.stdout
+    assert "RUN: pi planner" not in result.stdout
+    assert "RUN: codex planner" not in result.stdout
+    assert "Autopilot run finished." in result.stdout

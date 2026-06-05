@@ -3,7 +3,7 @@ param(
     [switch]$DryRun,
     [switch]$Commit,
     [switch]$ExitZeroOnBlocked,
-    [ValidateSet("auto", "pi", "codex")]
+    [ValidateSet("auto", "pi", "codex", "claude")]
     [string]$Planner = "codex",
     [string]$RepoRoot = ""
 )
@@ -410,6 +410,24 @@ function Invoke-PiPlanner {
     }
 }
 
+function Invoke-ClaudePlanner {
+    # Claude Code headless planner (subscription channel; added 2026-06-05
+    # when both the codex ChatGPT OAuth and every stored OpenAI API key lost
+    # generation access). --dangerously-skip-permissions is required for
+    # non-interactive file writes of the .autopilot/ protocol artifacts.
+    Write-Log "RUN: claude planner"
+    Push-Location $RepoRoot
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        Get-Content -Raw $PlannerPromptPath | claude -p --dangerously-skip-permissions 2>&1 | Tee-Object -FilePath $LogPath -Append
+        $script:PlannerExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        Pop-Location
+    }
+}
+
 function Invoke-CodexPlanner {
     Write-Log "RUN: codex planner"
     Push-Location $RepoRoot
@@ -427,7 +445,13 @@ function Invoke-CodexPlanner {
 function Invoke-Planner {
     Write-PlannerPrompt
 
-    if ($Planner -eq "pi") {
+    if ($Planner -eq "claude") {
+        Invoke-ClaudePlanner
+        $plannerExitCode = $script:PlannerExitCode
+        if ($plannerExitCode -ne 0) {
+            Stop-Blocked "claude planner failed with exit code $plannerExitCode"
+        }
+    } elseif ($Planner -eq "pi") {
         Invoke-PiPlanner
         $plannerExitCode = $script:PlannerExitCode
         if ($plannerExitCode -ne 0) {
@@ -469,15 +493,28 @@ function Invoke-Planner {
 
 function Invoke-Executor {
     Write-ExecutorPrompt
-    Write-Log "RUN: codex executor"
-    Push-Location $RepoRoot
-    try {
-        Get-Content -Raw $ExecutorPromptPath | codex exec -c 'approval_policy="never"' --cd $RepoRoot --sandbox danger-full-access -
-        if ($LASTEXITCODE -ne 0) {
-            Stop-Blocked "codex executor failed with exit code $LASTEXITCODE"
+    if ($Planner -eq "claude") {
+        Write-Log "RUN: claude executor"
+        Push-Location $RepoRoot
+        try {
+            Get-Content -Raw $ExecutorPromptPath | claude -p --dangerously-skip-permissions 2>&1 | Tee-Object -FilePath $LogPath -Append
+            if ($LASTEXITCODE -ne 0) {
+                Stop-Blocked "claude executor failed with exit code $LASTEXITCODE"
+            }
+        } finally {
+            Pop-Location
         }
-    } finally {
-        Pop-Location
+    } else {
+        Write-Log "RUN: codex executor"
+        Push-Location $RepoRoot
+        try {
+            Get-Content -Raw $ExecutorPromptPath | codex exec -c 'approval_policy="never"' --cd $RepoRoot --sandbox danger-full-access -
+            if ($LASTEXITCODE -ne 0) {
+                Stop-Blocked "codex executor failed with exit code $LASTEXITCODE"
+            }
+        } finally {
+            Pop-Location
+        }
     }
     if (Test-Path $BlockedPath) {
         Write-Log "Executor wrote BLOCKED.md."
@@ -532,7 +569,12 @@ Require-Command "git" | Out-Null
 if ($Planner -eq "pi" -or $Planner -eq "auto") {
     Require-Command "pi" | Out-Null
 }
-Require-Command "codex" | Out-Null
+if ($Planner -eq "claude") {
+    # The claude planner also executes via claude; codex is not needed.
+    Require-Command "claude" | Out-Null
+} else {
+    Require-Command "codex" | Out-Null
+}
 
 if ($DryRun) {
     Write-Log "Dry-run: repo=$RepoRoot"

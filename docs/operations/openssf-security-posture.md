@@ -121,3 +121,58 @@ knowledge confirmation, license SPDX id, and the public project URL field.
   and release-readiness wording stay authoritative.
 - **No third-party claim is made.** If a real pen-test report ever arrives,
   route it through `docs/operations/external-pen-test-attestation-handoff.md`.
+
+## 4. First Scorecard cycle — findings triaged (2026-06-06)
+
+The first published run scored **5.8/10** and pushed **163 open findings**
+into Code scanning. Triage split them into *fixed* and *honestly
+accepted-open*; nothing was dismissed silently.
+
+### Fixed
+
+- **Pinned-Dependencies (GitHub actions, 99 refs):** every workflow `uses:`
+  is pinned to a full commit SHA + `# <version>` comment (Dependabot keeps
+  the pins fresh; `tests/unit/test_workflow_action_pinning.py` enforces the
+  convention repo-wide).
+- **Pinned-Dependencies (container images, 4 Dockerfiles):** all `FROM`
+  lines carry the manifest-list digest of the tag they already used;
+  `.github/dependabot.yml` `docker` ecosystem covers every Dockerfile
+  directory so digests track upstream.
+- **Token-Permissions (6 findings):** the five workflows running on an
+  unrestricted default token got top-level `permissions: contents: read`;
+  `container-attestation.yml` moved its `packages`/`id-token`/`attestations`
+  writes from the workflow level down to the two operator-dispatched signing
+  jobs (the every-PR `build-smoke` job is read-only now).
+- **Vulnerabilities (2 OSV hits):** both came from resolution floors in the
+  X5 demo loader's `requirements.txt` (`pydantic>=2.0` admits the
+  GHSA-mr82-8j83-vxmv ReDoS range; `tqdm>=4.0` admits PYSEC-2017-74). Floors
+  raised to `pydantic>=2.9` / `tqdm>=4.66.3`.
+
+### Accepted-open (with reasons, not fabricated away)
+
+- **Pinned-Dependencies (pip):** `pip install -e .[extras]` of the repo's own
+  packages cannot be hash-pinned (`--require-hashes` rejects editable/local
+  installs); converting CI and the Dockerfiles to fully hash-locked compiled
+  requirements is an architectural change out of scope for posture cleanup.
+  These findings stay open by design.
+- **Code-Review / Contributors:** a single-maintainer portfolio repo cannot
+  truthfully show second-person review or multi-org contributors.
+- **Maintained:** scores activity over a 90-day window relative to project
+  age; it converges on its own with normal activity.
+- **CII-Best-Practices:** rises when the badge entry (project 13107, 81%
+  in_progress) reaches passing — gated on the honest Reporting criteria, see
+  §2.
+- **Fuzzing:** the run reports "no fuzzer integrations found" — Scorecard's
+  heuristic looks for OSS-Fuzz/ClusterFuzzLite-class integrations and does
+  not register the repo's real Hypothesis property suites
+  (`tests/property/`) or Schemathesis API fuzzing. The testing exists; only
+  the badge heuristic misses it. No OSS-Fuzz onboarding is claimed — the
+  2026-06-05 survey (BACKLOG item 22, $0 posture addendum) already ruled the
+  project below OSS-Fuzz's adoption bar.
+- **Branch-Protection (-1 inconclusive):** reading the full protection
+  config needs an admin-scoped PAT secret; granting one to a scheduled
+  workflow is worse for posture than an inconclusive sub-score.
+- **Signed-Releases (-1 inconclusive):** releases ship via PyPI/npm Trusted
+  Publishing (OIDC) with no GitHub-release binary artifacts to sign; the
+  container path carries cosign + build provenance instead
+  (`container-attestation.yml`).

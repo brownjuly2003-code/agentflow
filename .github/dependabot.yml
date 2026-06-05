@@ -99,9 +99,15 @@ updates:
           - minor
           - patch
 
-  # ── Docker: API image base ─────────────────────────────────────────
+  # ── Docker: all image bases (digest-pinned FROM lines) ─────────────
+  # Covers every Dockerfile so the sha256 digest pins keep moving with
+  # the upstream tags instead of going stale.
   - package-ecosystem: docker
-    directory: "/"
+    directories:
+      - "/"
+      - "/src/processing/flink_jobs"
+      - "/docker/kafka-connect"
+      - "/.devcontainer"
     schedule:
       interval: weekly
       day: monday

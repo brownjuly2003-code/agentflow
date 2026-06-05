@@ -1,8 +1,68 @@
 # Agent State
 
-Updated: 2026-06-05
+Updated: 2026-06-06
 
-## 2026-06-05 session (part 11 / s40): backlog 20/22 — verified $0 options surveyed; OpenSSF Scorecard posture channel added (item 22 stays N/A / unclaimed)
+## 2026-06-06 session (s41): first Scorecard cycle triaged — 163 Code-scanning findings split into fixed (actions SHA-pins, token scopes, Dockerfile digests, 2 OSV floors) and honestly accepted-open
+
+«DE_project продолжи» (autonomous). Step-0: tree clean, main==origin
+(`104cf4a`), 15/15 checks green, 0 PRs/issues, backlog terminally resolved
+(20/22 + two N/A). The one live signal was the s40 posture channel's own
+output: the first published Scorecard run scored **5.8/10** and pushed
+**163 open findings** into Code scanning — acting on them is the direct
+continuation of s40, and it restores the repo's step-0 invariant
+("0 code-scanning alerts") for everything that can be fixed without
+fabrication.
+
+- **Pinned-Dependencies / actions (the bulk):** all **99 `uses:` refs across
+  the 19 workflows (20 unique actions)** pinned to full commit SHAs with
+  trailing `# <version>` comments. Resolution method: one `git ls-remote
+  'refs/tags/*'` per action repo + annotated-tag deref (`^{}`), most-specific
+  tag chosen for the comment; 3 SHAs cross-verified against
+  `gh api .../commits/<tag>`. `pypa/gh-action-pypi-publish@release/v1`
+  resolved to the `v1.14.0` release commit. Dependabot's `github-actions`
+  ecosystem understands `@sha # vX.Y.Z` and keeps bumping both. NEW
+  `tests/unit/test_workflow_action_pinning.py` enforces the convention
+  repo-wide (40-hex + comment, `./` local actions exempt, green-on-empty
+  guarded); per-workflow shape tests switched from exact mutable tags to
+  action-identity prefixes (scorecard test asserts the 40-hex form).
+- **Token-Permissions (6):** top-level `permissions: contents: read` added to
+  `staging-deploy`/`e2e`/`contract`/`cdc-production-capture`/`benchmark-arm`
+  (none of them touch GITHUB_TOKEN — verified by grep);
+  `container-attestation.yml` top level narrowed to `contents: read` with the
+  `packages`/`id-token`/`attestations` writes moved down to the two
+  operator-dispatched signing jobs — the every-PR `build-smoke` required
+  check now runs on a read-only token. New shape test pins the whole split;
+  the old test's top-level write assertions updated to job-level.
+- **Vulnerabilities (2 OSV):** both were resolution FLOORS in
+  `warehouse/agentflow/dv2/loaders/x5_retail_hero/requirements.txt` — OSV
+  resolves the minimum satisfying version, so `pydantic>=2.0` admitted the
+  GHSA-mr82-8j83-vxmv ReDoS range ([2.0.0, 2.4.0)) and `tqdm>=4.0` admitted
+  PYSEC-2017-74 (<=4.9.0). Raised to `pydantic>=2.9` (matches the repo's
+  other pydantic floors) / `tqdm>=4.66.3` (also clears the 2024 CLI
+  injection). Floor-only change, no runtime code.
+- **Pinned-Dependencies / containers:** all 4 Dockerfile `FROM` lines
+  digest-pinned to their CURRENT manifest-list digests (resolved via registry
+  HTTP API — no local Docker, weak-machine rule). Note `python:3.11-slim` ≠
+  `…-bookworm` digests now (slim moved to trixie upstream) — the pin freezes
+  what CI already pulls today, zero behavior change. `dependabot.yml` docker
+  ecosystem switched to a `directories:` list covering all four Dockerfile
+  dirs so the digests keep moving with upstream tags.
+- **Accepted-open, documented in `docs/operations/openssf-security-posture.md`
+  §4 (new):** pip `-e` installs cannot be hash-pinned (architectural);
+  Code-Review 0/21 + Contributors = single-maintainer reality; Maintained =
+  repo younger than 90 days (converges alone); CII = badge in_progress gated
+  on honest Reporting criteria; Fuzzing — Scorecard does NOT register the
+  repo's real Hypothesis property suites (empirical: "no fuzzer integrations
+  found" despite `tests/property/`), OSS-Fuzz stays below adoption bar;
+  Branch-Protection/-1 needs an admin PAT secret (worse than the
+  inconclusive); Signed-Releases/-1 — releases ship via OIDC Trusted
+  Publishing, no GH-release binaries to sign. Nothing dismissed silently.
+- Evidence: broad no-Docker unit **804 passed / 1 skipped**; YAML parse 19/19
+  workflows + dependabot.yml; ruff check+format clean on the touched tests;
+  `git diff --check` clean. Branch `security/scorecard-posture-fixes`
+  (push/PR is the operator gate). Expect: next Scorecard run after merge
+  auto-closes the fixed alert classes; Pinned-Dependencies pip-subset and the
+  five heuristic checks stay open per §4.
 
 Operator: «20/22 - поищи варианты» → «реши сам». The backlog re-check (part 10
 state) confirmed terminally empty; the operator asked to search for any $0 path

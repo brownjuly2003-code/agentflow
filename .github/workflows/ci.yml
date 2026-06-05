@@ -17,8 +17,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -34,10 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 2
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -52,8 +52,8 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -144,7 +144,7 @@ jobs:
           python -m coverage run -m pytest tests/unit/test_query_engine.py tests/unit/test_query_engine_injection.py tests/unit/test_query_engine_mixin_contracts.py tests/unit/test_paginated_nl_query.py tests/unit/test_query_package_logic.py -p no:schemathesis
           python -m coverage report --include="*/serving/semantic_layer/query/*" --show-missing --fail-under=90
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
         with:
           files: coverage.xml
           use_oidc: true
@@ -180,8 +180,8 @@ jobs:
           CLICKHOUSE_PASSWORD: agentflow
           CLICKHOUSE_DB: agentflow
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -210,14 +210,14 @@ jobs:
     needs: lint
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -e ".[dev]"
-      - uses: azure/setup-helm@v5.0.0
-      - uses: helm/kind-action@v1.14.0
+      - uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+      - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           install_only: true
       - name: Prepare pytest temp directory
@@ -232,8 +232,8 @@ jobs:
       - test-integration
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -291,8 +291,8 @@ jobs:
   terraform-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hashicorp/setup-terraform@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "1.8.0"
       - name: Terraform fmt check

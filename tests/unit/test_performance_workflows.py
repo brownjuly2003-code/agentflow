@@ -37,7 +37,8 @@ def test_nightly_performance_workflow_archives_baseline_json():
     artifact_steps = [
         step
         for step in job["steps"]
-        if isinstance(step, dict) and step.get("uses") == "actions/upload-artifact@v7"
+        if isinstance(step, dict)
+        and str(step.get("uses", "")).startswith("actions/upload-artifact@")
     ]
 
     assert "scripts/run_benchmark.py" in step_commands

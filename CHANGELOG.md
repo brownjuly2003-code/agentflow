@@ -6,6 +6,21 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Fixed
 
+- `tests/unit/test_auth_hashed_key_guidance.py` was order-dependent: it
+  passed under `pytest tests/unit` but failed in a full-repo run. Any earlier
+  test importing `src.serving.api.main` executes the module-level
+  `configure_logging()` (`cache_logger_on_first_use=True`), and the first
+  emit through the module-level auth logger freezes the production processor
+  chain onto the lazy proxy — `structlog.testing.capture_logs()` then cannot
+  observe the `hashed_key_count_exceeds_guidance` warning (the warning still
+  emits; only the capture goes blind). An autouse fixture now re-points the
+  package logger at a fresh uncached proxy per test, making the file
+  order-independent. Found while reproducing the 2026-06-03 codex audit F-1
+  claim that the broad no-Docker full-repo pytest run is unreliable on this
+  host: on the canonical `.venv` the run completes with a normal summary and
+  leaves no orphan uvicorn child (the audit ran the shadow system Python),
+  and this order dependence was the only real defect it surfaced.
+
 - The `explain()` sqlglot-failure fallback regex in
   `src/serving/semantic_layer/query/nl_queries.py` contained a literal 0x08
   (backspace) byte where the author meant the two-character escape `\b`: the
@@ -74,6 +89,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- `scripts/` is now part of the CI Ruff gate (2026-06-03 codex audit F-2:
+  release/benchmark/backup/security tooling had drifted to 20 lint errors and
+  12 unformatted files that CI never checked). The 12 drifted scripts were
+  reformatted (no semantic changes), import order and `datetime.UTC` usages
+  auto-fixed, the two >100-char strings in `run_benchmark.py` split, and
+  `pyproject.toml` gained a `scripts/**` per-file-ignore for the intentional
+  script idioms only — E402 (`sys.path` bootstrap before imports) and
+  S603/S607 (fixed-argv `git`/`npm`/`mutmut` subprocess calls), mirroring the
+  existing `tests/**` allowance. The `lint` job runs `ruff check` and
+  `ruff format --check` over `src/ tests/ scripts/`, and the new
+  `tests/unit/test_lint_policy.py` pins the widened scope so the gap cannot
+  silently reopen.
 - The Flink runtime moved from 1.19.1 to 2.2.1 across the whole project:
   the `[flink]` extra (`apache-flink==2.2.1`), the flink_jobs runtime image
   (Flink 2.2.1 dist + `flink-sql-connector-kafka-5.0.0-2.2.jar`, with a new

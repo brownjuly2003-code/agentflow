@@ -2,6 +2,54 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 4): codex audit F-2 closed — `scripts/` under the Ruff CI gate (`f907b5e`); audit F-1 triaged — order-dependent auth test fixed
+
+Step-0 on «продолжи» found the tracked tree clean, 0 PRs/issues/TODOs and
+14/14 check-runs green on `fd09eb5`. The remaining non-gated work source was
+`audit_codex_03_06_26.md` (its F-3 was already covered by the s30e/s31
+coverage closures; F-4 conflicts with the pinned same-line
+`# nosec - reason` convention enforced by
+`test_inline_nosec_comments_include_reason`, so it was declined; F-5/F-6 are
+no-action notes). M-C4 was re-checked and stays gated: the
+`docs/perf/auth-bench-2026-05-26.md` product decision defers the
+bcrypt→argon2id rewrite until a real deployment exceeds 10 hashed keys or a
+SIGHUP-reload latency complaint exists — neither trigger has fired.
+
+- **F-2 closed (`f907b5e`, 15/15 check-runs green, contract triggered by
+  pyproject)**: `scripts/` joined the CI Ruff gate. `ruff format` on the 12
+  drifted scripts (semantics verified unchanged via diff review +
+  `py_compile` on all scripts), auto-fix I001/UP017, manual split of the two
+  long strings in `run_benchmark.py`, `scripts/**` per-file-ignores for the
+  intentional script idioms only (E402 sys.path bootstrap, S603/S607
+  fixed-argv subprocess — mirrors the `tests/**` allowance),
+  `ci.yml` lint steps widened to `src/ tests/ scripts/`, and the new
+  `tests/unit/test_lint_policy.py` pins the scope (TDD red→green). EOL note:
+  the scripts are historically CRLF in-index — the diff is content-only, no
+  EOL flips (`git diff --check` clean).
+- **F-1 triaged — NOT reproducible on the canonical `.venv`**: the audit's
+  broad-run repro used the bare `python` (the documented Python313 shadow
+  env). On `.venv` the full
+  `SKIP_DOCKER_TESTS=1 python -m pytest -q -p no:schemathesis
+  --continue-on-collection-errors` run completes with a normal summary and
+  **no orphan uvicorn child** (e2e local-API tests carry
+  `requires_docker` markers and skip cleanly — verified empirically both at
+  collection and per-test). No defensive conftest rewrite is needed; do not
+  re-open F-1 without a canonical-venv repro.
+- **Real defect the F-1 repro DID surface — order-dependent test, fixed**:
+  `test_auth_hashed_key_guidance.py` passed under `pytest tests/unit` but
+  failed in full-repo order (first seen as 2 failed/1043 passed). Mechanism:
+  suites that import `src.serving.api.main` run the module-level
+  `configure_logging()` (`cache_logger_on_first_use=True`); the first emit
+  through the module-level `auth` package logger freezes production
+  processors onto the lazy proxy, after which
+  `structlog.testing.capture_logs()` cannot see its events — the M-C4
+  guidance warning still emits (visible in captured stdlib output), only the
+  capture goes blind. Two-file repro: `tests/unit/test_cors.py` (imports
+  main) + the guidance file. Fix: autouse fixture re-points
+  `auth_package.logger` at a fresh `structlog.get_logger()` proxy per test
+  (monkeypatch), restoring order independence. Green in both orders; the
+  product code needed no change.
+
 ## 2026-06-05 session (part 3): Flink hot-path findings M-C2/M-C3 closed (`b0ae299`)
 
 Immediately after the 2.2.1 bump unblocked them, the two remaining Flink

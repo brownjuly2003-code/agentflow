@@ -4,6 +4,8 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-05
+
 ### Added
 
 - **M-C4 closed — argon2id key hashing with an O(1) peppered lookup index.**

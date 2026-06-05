@@ -1,6 +1,6 @@
 [project]
 name = "agentflow-runtime"
-version = "1.4.0"
+version = "1.5.0"
 description = "Real-time data platform serving context to AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -221,11 +221,10 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 # Strict-by-default: every function under src/ must carry full type
-# annotations. The earlier per-module opt-in slices were inverted into this
-# global default once the whole tree (except the PyFlink-gated flink_jobs
-# package) was annotated, so a new untyped def in any non-relaxed module now
-# fails mypy instead of slipping through an unlisted module. The strict
-# invariant is gated by tests/unit/test_typing_policy.py.
+# annotations, with ZERO per-module relaxations (the last one, the formerly
+# PyFlink-stub-gated flink_jobs package, was hand-annotated 2026-06-05). A
+# new untyped def anywhere in src/ now fails mypy. The strict invariant is
+# gated by tests/unit/test_typing_policy.py.
 disallow_untyped_defs = true
 check_untyped_defs = true
 ignore_missing_imports = true

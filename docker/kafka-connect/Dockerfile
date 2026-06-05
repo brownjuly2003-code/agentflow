@@ -1,4 +1,4 @@
-FROM confluentinc/cp-kafka-connect-base:7.7.0@sha256:f3bec615e0daf61f3b222719d4350b74ac6632e15bb0c27c3bcf25e45d0a8715
+FROM confluentinc/cp-kafka-connect-base:7.9.7@sha256:93b9afd3e7f8003381401464e4e4fa3dbe5e3766bcbc99de12afd41dc2904055
 
 ARG DEBEZIUM_VERSION=3.5.0.Final
 ARG DEBEZIUM_PLUGIN_DIR=/usr/share/java/debezium

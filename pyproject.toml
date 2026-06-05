@@ -42,6 +42,9 @@ llm = [
 ]
 load = [
     "locust>=2.29,<3",
+    # benchmark_freshness.py: production QueryCache semantics (TTL + key
+    # invalidation) without a Redis server on the benchmark host.
+    "fakeredis>=2.21,<3",
 ]
 integrations = [
     # langchain-core >=1.2.22 closes CVE-2026-26013 (SSRF via image_url) and

@@ -2,6 +2,76 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 5): operator closed the externally-gated backlog — M-C4 argon2id rewrite, zero-relaxation typing, autopilot scheduler-env, v1.5.0 release
+
+Operator instruction: «у тебя права админа, закрывай внешне-гейтнутое» —
+explicit authorization for the named boundaries (product decisions,
+scheduler/env, release/tag publish). What that closed:
+
+- **M-C4 — CLOSED for real (`99b7956`, 16/16 check-runs)**: argon2id is the
+  default hashing scheme for new key material (OWASP m=19 MiB t=2 p=1;
+  `config/security.yaml` `key_hashing: argon2id`, bcrypt selectable), paired
+  with a deterministic peppered lookup digest (`compute_key_lookup` =
+  HMAC-SHA256, pepper env `AGENTFLOW_KEY_LOOKUP_PEPPER`, default
+  `agentflow-key-lookup-v1`). `TenantKey.key_lookup`/`previous_key_lookup`
+  feed O(1) indexes built in `load()`; `authenticate()` resolves the
+  candidate via digest and runs exactly ONE slow verify; misses pay no slow
+  verify (bogus-key DoS amplification gone); unindexed legacy bcrypt entries
+  keep the O(n) fallback scan and are now the only thing the
+  `hashed_key_count_exceeds_guidance` warning counts. Rotation carries
+  `previous_key_lookup` through grace; create/rotate persist argon2id +
+  digests; demo `config/api_keys.yaml` entries indexed (plaintexts NOT in
+  the file — digests only). Measured: N=20 hit-last cold 8.1 s → ~34 ms,
+  miss 8.2 s → ~0.1 ms. New dep `argon2-cffi`; 17-test
+  `test_auth_argon2_lookup.py` joined the auth-manager coverage gate
+  (manager 95%). **Gotcha**: `tests/property/test_auth_properties.py`
+  pinned the bcrypt `$2` prefix and failed on CI (local broad runs cover
+  `tests/unit` only; the CI test-unit job runs unit+property together) —
+  forward-fixed in `5e41113` (PHC-shape property covering both schemes).
+  Run tests/property locally before pushing auth changes.
+- **flink_jobs strict typing — CLOSED (`7e14045`)**: the 15 untyped defs
+  were annotated by hand (PyFlink still has no PEP-561 stubs, but under
+  `ignore_missing_imports` its symbols are Any — stubless annotations need
+  nothing more). The sole mypy override fell out whole; strict typing now
+  has ZERO relaxations and `test_no_module_relaxes_untyped_defs` pins the
+  empty set. EOL gotcha re-confirmed: ruff format flipped
+  session_aggregator.py to CRLF — normalized byte-level.
+- **Autopilot scheduler-env — env part CLOSED (`83cd438` + `5506b29` +
+  `.gitignore` `5f4251d`)**: the 2026-06-04 BLOCKED.md root cause was codex
+  living in per-user `%APPDATA%\npm` which a Task Scheduler powershell may
+  not have on PATH; autopilot.ps1 now prepends user-level CLI dirs
+  (codex/python) idempotently. **Null-guard lesson (`5506b29`)**:
+  `tests/unit/test_autopilot_runner.py` runs the script under pwsh on
+  ubuntu where APPDATA/LOCALAPPDATA are undefined — `Join-Path $env:APPDATA`
+  threw and the suite failed on `5f4251d`; candidates are now built only
+  from env vars that exist (platform PathSeparator). Run the runner suite
+  after ANY autopilot.ps1 edit. Root scratch (`p[0-9].md` etc. + `Cl_cop/`)
+  is gitignored so the clean-tree gate stays quiet (codex audit F-6 path).
+  E2E verification: scheduled task manually triggered — env + clean-tree +
+  lock gates all passed and the codex planner LAUNCHED; it then failed
+  with **401 token_invalidated** (codex CLI auth expired,
+  [[reference_kimi_codex_auth_fragile]] signature). That is an external
+  credential: needs an interactive `codex login` by the operator, then
+  remove `.autopilot/BLOCKED.md`; the hourly task resumes on its own.
+- **v1.5.0 — RELEASED**: release commit `c99d094` (15/15 green) bumps
+  agentflow-runtime / agentflow-client / @yuliaedomskikh/agentflow-client
+  to 1.5.0 (same 10-file shape as the v1.4.0 precedent incl. helm
+  appVersion/tag and the two version-pin tests); tag `v1.5.0` pushed after
+  the green wall; publish-pypi runs on the tag (OIDC trusted publishing),
+  publish-npm runs both on the tag and via the belt-and-braces
+  workflow_dispatch (`release_version=1.5.0`). **Publish verdicts:
+  publish-pypi success, publish-npm (tag push) success; the duplicate
+  manual dispatch failed as expected on its dry-run against the
+  already-published version — harmless. Registry E2E verified directly:
+  PyPI agentflow-client 1.5.0, PyPI agentflow-runtime 1.5.0, npm
+  @yuliaedomskikh/agentflow-client dist-tag latest 1.5.0.**
+- **Tasks 19-22 (Tier B) — NOT closeable by authorization**: their
+  acceptance criteria require external artifacts (production CDC owners,
+  customer/PMF evidence, c8g.4xlarge benchmark results, third-party
+  pen-test attestation) and explicitly forbid fabricating them. They stay
+  blocked pending real external inputs; admin rights do not create
+  customers or hardware.
+
 ## 2026-06-05 session (part 4): codex audit F-2 closed — `scripts/` under the Ruff CI gate (`f907b5e`); audit F-1 triaged — order-dependent auth test fixed
 
 Step-0 on «продолжи» found the tracked tree clean, 0 PRs/issues/TODOs and

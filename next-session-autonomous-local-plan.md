@@ -202,8 +202,15 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   duplicate `event_id` collapsed 3→2 enriched outputs). Do not re-key the
   session jobs off their raw-source `json.loads` — there is no upstream
   operator to carry the key there, the parse-for-key is structural.
-- **M-C4** full hashed-key-lookup rewrite — needs the bcrypt→argon2id
-  hash-format swap (the soft-limit warning is already shipped).
+- **M-C4** full hashed-key-lookup rewrite — **CLOSED (2026-06-05,
+  `99b7956`, operator-authorized).** argon2id default scheme + deterministic
+  peppered `key_lookup` digest; `authenticate()` is O(1) with exactly one
+  slow verify on the indexed path (N=20 cold hit-last 8.1 s → ~34 ms, miss
+  ~0.1 ms). Legacy bcrypt entries keep the O(n) fallback and are the only
+  thing the soft-limit warning counts now. Run `tests/property` locally
+  before pushing auth changes — the CI test-unit job runs unit+property
+  together (the bcrypt-prefix property had to be forward-fixed in
+  `5e41113`).
 - **build-smoke → required check** — **CLOSED (2026-06-04, PR #37 `1d4614c` +
   protection flip).** The paths filter moved inside the job (`changes` step,
   skip-success on docker-free PRs); both paths validated live (real build on
@@ -223,8 +230,23 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
 - **Tier B A04/A05** + **tasks 19-22** — production CDC owners, real
   PMF/customer evidence, production-hardware benchmark, external pen-test:
   external evidence only.
-- **v1.5.0** — cut only when real feature changes accumulate (current
-  `[Unreleased]` is hardening + deps); tag publish is a named boundary.
+- **v1.5.0** — **RELEASED (2026-06-05, `c99d094` + tag `v1.5.0`,
+  operator-authorized).** Feature trigger was the M-C4 argon2id closure plus
+  the SDK version-header features. Same 10-file shape as the v1.4.0
+  precedent; publish-pypi (OIDC) and publish-npm (tag push) both succeeded
+  and the registries were E2E-verified at 1.5.0 (PyPI runtime+client, npm
+  dist-tag latest). The duplicate manual npm dispatch fails its dry-run
+  against an already-published version — don't re-dispatch after a
+  successful tag-push publish. Next release: same recipe, green wall
+  BEFORE tagging.
+- **Autopilot scheduler-env** — env part **CLOSED (2026-06-05, `83cd438` +
+  `5506b29`)**: user-level CLI dirs prepended in autopilot.ps1 (null-guarded
+  — the runner suite executes the script under pwsh/ubuntu where APPDATA is
+  undefined; run `tests/unit/test_autopilot_runner.py` after ANY
+  autopilot.ps1 edit). Root scratch is gitignored (`5f4251d`) so the
+  clean-tree gate stays quiet. Remaining blocker is EXTERNAL: the codex CLI
+  token is invalidated (401) — after an interactive `codex login`, delete
+  `.autopilot/BLOCKED.md` and the hourly task resumes.
 
 ## Done When
 

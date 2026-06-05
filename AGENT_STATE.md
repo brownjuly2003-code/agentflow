@@ -2,6 +2,73 @@
 
 Updated: 2026-06-06
 
+## 2026-06-06 session (s42): event→metric round — freshness MEASURED (1.08 s p50 / 1.97 s p95), lineage + 6 metric contracts landed, repositioning done. Branch `feat/event-metric-freshness`, PR GATED
+
+Operator round prompt: make «событие → живая метрика» a first-class measured
+property; directions A (freshness benchmark) > B (lineage) > C (metric
+contracts) > D (repositioning), no invented numbers, additive API only,
+package names untouched. All four landed as 4 commits on
+`feat/event-metric-freshness` (main untouched):
+
+1. **A `0cb37d3` — scripts/benchmark_freshness.py + docs/freshness-benchmark.md.**
+   Real write path (`local_pipeline._process_event`) → `GET /v1/metrics/revenue`
+   over localhost HTTP, 82 samples, 0 timeouts:
+   - event_driven (prod defaults, TTL 30 s + 2 s dispatcher poll): **p50 1.08 s / p95 1.97 s / max 2.06 s**
+   - fast_poll (dispatcher 0.25 s): **p50 210 ms** / p95 332 ms — freshness is a config knob
+   - ttl_only (invalidation off, TTL 5 s): p50 2.72 s ⇒ ~15-16 s p50 at the production TTL (linear U(0,TTL))
+   - no_cache floor: p50 52 ms (bounded by the 25 ms reader poll)
+   Methodology pinned in the report: in-process uvicorn (DuckDB is
+   single-writer-process), production `QueryCache` over fakeredis (new `[load]`
+   extra), authenticated tenant reads. Unit tests on the script's pure parts.
+2. **B `4a40e8b` — event→metric lineage.** `MetricDefinition.source_events/source_table`
+   for all 6 metrics, pinned against the real write path
+   (orders_v2 ← order.*, sessions_aggregated ← click/page_view/add_to_cart,
+   pipeline_events ← every event); exposed additively via `/v1/catalog`
+   (live main.py handler through `serialize_metrics`) and typed SDK
+   `CatalogMetric`. `tests/unit/test_catalog_lineage.py`.
+3. **C `68fb604` — contracts for all six metrics.** generate_contracts.py
+   gains 5 metric specs + lineage/freshness blocks (revenue regenerated
+   additively; order.v1/v2 byte-identical). Freshness block = **2.5 s p95
+   staleness budget** grounded in the measured 1.97 s p95, explicitly a
+   budget, not a restated measurement. Registry parses/serializes the new
+   keys additively. `tests/unit/test_metric_contracts.py` pins
+   contract↔catalog lineage equality + unit equality + version pickup
+   ('1' for all six). `generate_contracts.py --check` green.
+4. **D `22d530d` — repositioning.** README tagline/Why/Highlights +
+   docs/architecture.md Context + C4 consumer box: event-native metrics
+   layer; consumers = humans/dashboards/services/AI agents (agents are one
+   consumer, not the axis). Every claim links the benchmark or the
+   contract graph. Names/API untouched.
+
+**Findings (recorded, NOT silently fixed — each needs its own decision):**
+- **Zero-webhooks staleness gap:** `WebhookDispatcher.dispatch_new_events`
+  scans pipeline_events only for tenants with ≥1 active webhook → with none
+  registered the metric cache is NEVER event-invalidated and reads degrade
+  to pure TTL (30 s) staleness. The benchmark registers a sentinel webhook
+  (never-matching filter) to enable the scan; the caveat is documented in
+  docs/freshness-benchmark.md. Candidate fix: decouple the invalidation
+  scan from webhook registration (always scan when a query cache is
+  configured).
+- **Shared-router mutation on import:** `main.py:305` strips GET /catalog
+  from the shared agent_router at import time (so main's richer /v1/catalog
+  wins) → order-dependent router state for anything importing main;
+  `agent_query.get_catalog` is dead in production. Bit this session's tests
+  (404 only under full collection — chaos conftest imports main).
+- **Metric cache is tenant-scoped:** with config/tenants.yaml present,
+  unauthenticated reads resolve no tenant and bypass the metric cache
+  entirely (`_tenant_context_required`) — relevant for any future perf/
+  freshness claims: measure as an authenticated tenant.
+
+**Verification:** full no-Docker unit suite **827 passed, 0 failed**
+(216 s; was 804 in s41 — the round adds 22 tests and an sdk model field).
+Targeted suites green through the session (lineage 8, metric contracts 6,
+contracts-in-sync, sdk 86, k=catalog 16 under full collection); ruff
+check+format clean on every touched file; docs/openapi.json no drift.
+
+**GATED (ask explicitly):** push branch + PR to main (12 required checks
+run there). The two production-gap findings above are candidate follow-ups,
+not started.
+
 ## 2026-06-06 session (s41): first Scorecard cycle triaged — 163 Code-scanning findings split into fixed (actions SHA-pins, token scopes, Dockerfile digests, 2 OSV floors) and honestly accepted-open
 
 «DE_project продолжи» (autonomous). Step-0: tree clean, main==origin

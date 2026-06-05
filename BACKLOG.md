@@ -518,8 +518,15 @@ Forbidden scope:
 
 ## 19. Record Production CDC Source Onboarding Decision Handoff
 
-Status: Reopened 2026-06-05; capture channel ready, waiting on one operator
-click (enable Logical Replication on the Neon project).
+Status: **Done with real evidence (2026-06-05).** Logical replication was
+enabled on the live Neon source and a full Debezium capture succeeded
+(run 27028251460): 96234 events snapshotted into `cdc.prod.public.vacancies`,
+redacted sample, teardown with 0 leftover slots. **Open follow-up (needs working
+out): the five workflow fixes that made the dispatch workflow actually pass are
+on branch `cdc/item19-neon-api-verified` (pushed, NOT merged) — `main` still
+has the broken workflow.** PR/merge to `main` is the operator gate; details in
+`next-session-autonomous-local-plan.md` → Known Open Threads and AGENT_STATE
+part 10.
 
 Progress record:
 - A real production source exists in the operator's own estate: the Neon

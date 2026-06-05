@@ -2,6 +2,55 @@
 
 Updated: 2026-06-05
 
+## 2026-06-05 session (part 2): Flink 1.19.1 → 2.2.1 — the PR #23 wait-for-upstream gate lifted and was closed (`a97b399`)
+
+Step-0 inventory on «продолжи» found the internal backlog still empty
+(0 PRs / issues / TODOs / code-scanning alerts; 14/14 check-runs green on
+`2fbae11`), so the externally gated list was re-checked — and the PR #23
+re-open condition recorded in `docs/SESSION_HANDOFF.md` («re-open when
+`flink-sql-connector-kafka` releases a `-2.x` suffix JAR on Maven Central»)
+is now MET: Maven Central ships `4.0.x-2.0`, `5.0.0-2.1` and `5.0.0-2.2`.
+
+- **`a97b399` — Flink 2.2.1 bump, all surfaces in one commit**: `[flink]`
+  extra `apache-flink==2.2.1`; flink_jobs Dockerfile `FLINK_VERSION=2.2.1`
+  + `PYFLINK_KAFKA_JAR_VERSION=5.0.0-2.2` (+ `test -e` guard against a
+  dangling s3-fs-hadoop plugin symlink); compose cluster images
+  `flink:2.2.1-java17` with canonical 2.x keys (`state.backend.type`,
+  `execution.checkpointing.dir`); compose overlay appends FLINK_PROPERTIES
+  to `config.yaml` (2.x no longer reads `flink-conf.yaml`);
+  `docs/architecture.md` stack row.
+- **checkpointing.py migrated TDD** (red on the reshaped
+  `test_flink_session.py` fakes first): `ExternalizedCheckpointCleanup` →
+  `ExternalizedCheckpointRetention`, `enable_externalized_checkpoints` →
+  `set_externalized_checkpoint_retention`, removed
+  `set_checkpoint_storage` → `env.configure()` carrying
+  `execution.checkpointing.dir` (plain-dict fallback keeps the fakes
+  assertable without PyFlink).
+- **The handoff's API map was partially wrong — every point was verified
+  against the `release-2.2` sources before editing**: `pyflink.common.time.Time`
+  is NOT removed (the sitecustomize timedelta shim needed zero changes),
+  `set_checkpointing_mode` / `CheckpointingMode` survive, the binary dist
+  keeps the `scala_2.12` suffix (no 2.13 bump), and the Kafka builder
+  surface is unchanged. What IS gone: `set_checkpoint_storage`,
+  `enable_externalized_checkpoints`, and `flink-conf.yaml`.
+- **Live validation before push** (Lima Docker on iMac, throwaway
+  `flink22-smoke` branch + image, since `apache-flink` cannot install on
+  Windows — pemja has a `platform_system != "Windows"` marker): image
+  build green incl. the s3-jar guard; in-container smoke 5/5 — module
+  imports, full `stream_processor.build_pipeline()` graph (Kafka classes
+  from the 5.0.0-2.2 JAR + watermark shim + OutputTag), session pipeline
+  with `configure_checkpointing` against a real env, TTL shim, MiniCluster
+  `execute_and_collect` round-trip.
+- Local gates: mypy clean 99, ruff clean, broad no-Docker unit 758 passed
+  (only the two known `.venv` artifacts), YAML parse of both compose
+  files, `git diff --check`. Pushed to `origin/main` after confirming the
+  ci-main concurrency group was empty (two consistent reads, check and
+  push in separate calls).
+- **Unblocked downstream**: audit M-C2/M-C3 (Flink hot-path optimisations)
+  are no longer externally gated — they were waiting on this bump. The
+  flink_jobs strict-typing relaxation no longer cites PR #23 (PyFlink
+  still lacks PEP-561 stubs on 2.2.1, so the relaxation itself stays).
+
 ## 2026-06-05 session: audit_kimi H-C2 closed in full (sqlglot transpile + live CH coverage)
 
 Operator unlocked the gated backlog («я разрешаю все, что необходимо для

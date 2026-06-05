@@ -74,8 +74,10 @@ Pick the first that applies; finish it before the next.
 4. **Strict-typing cadence** (incremental, not load-bearing) — **CLOSED (2026-06-03, `25d9f6b`).** Strict typing is now the global mypy
    default (`disallow_untyped_defs = true`); the per-module slice cadence is
    complete and there is nothing left to promote. `src.processing.flink_jobs.*`
-   is the sole relaxation (PyFlink, gated on PR #23) and the only typing work
-   that remains. Do **not** re-add per-module `disallow_untyped_defs = true`
+   is the sole relaxation (PyFlink still lacks PEP-561 stubs on 2.2.1; the
+   former PR #23 gate closed with the 2026-06-05 Flink 2.2.1 bump) and the
+   only typing work that remains. Do **not** re-add per-module
+   `disallow_untyped_defs = true`
    overrides — `tests/unit/test_typing_policy.py` now fails on redundant ones.
    Historical slice list (reference only):
    `src.quality.validators.*`, `src.ingestion.schemas.events`,
@@ -97,8 +99,10 @@ Pick the first that applies; finish it before the next.
    inversion; `second-opinion-alerts-dispatcher.md` is now historical. Admin/main route typing needed `response_model=None` because
    FastAPI return annotations changed OpenAPI generation; keep
    `python scripts/export_openapi.py --check` in the local gate for remaining
-   FastAPI route slices. `src/processing/flink_jobs` remains gated by PR #23 /
-   Docker.
+   FastAPI route slices. `src/processing/flink_jobs` typing is no longer
+   PR #23-gated (the 2026-06-05 Flink 2.2.1 bump closed that gate) but stays
+   relaxed while PyFlink lacks PEP-561 stubs; runtime validation for it is
+   Docker-on-Mac/CI.
    After the cache slice, local non-gated strict candidates
    `src/processing/iceberg_sink.py`, `src/serving/db_pool.py`,
    `src/serving/masking.py`, `src/serving/semantic_layer/catalog.py`, and
@@ -183,8 +187,16 @@ If only external/upstream/Docker-gated items remain (below), stop and record it
   was also validated against a disposable live CH 25.3 via ssh tunnel
   (13/13). Do not reintroduce text-level rewrites in `_translate_sql` — the
   unit suite pins transpile invariants and literal preservation.
-- **M-C2 / M-C3** Flink hot-path — gated on upstream PR #23 (no Flink 2.x Kafka
-  connector JAR yet).
+- **M-C2 / M-C3** Flink hot-path — **UNGATED (2026-06-05, `a97b399`)**: the
+  PR #23 wait-for-upstream condition was met (Maven Central now ships
+  `flink-sql-connector-kafka` `5.0.0-2.2`) and the whole project moved to
+  Flink 2.2.1 (pyproject `[flink]` extra, flink_jobs image, compose cluster
+  images `flink:2.2.1-java17`, `config.yaml` instead of `flink-conf.yaml`,
+  checkpoint API migration in `checkpointing.py`). Validated live in a
+  2.2.1 container on the iMac (imports, full graph build, checkpoint API
+  against a real env, TTL shim, MiniCluster round-trip). The actual
+  hot-path optimisation findings are now an ordinary local candidate —
+  validation is Docker-on-Mac/CI, not this Windows host.
 - **M-C4** full hashed-key-lookup rewrite — needs the bcrypt→argon2id
   hash-format swap (the soft-limit warning is already shipped).
 - **build-smoke → required check** — **CLOSED (2026-06-04, PR #37 `1d4614c` +

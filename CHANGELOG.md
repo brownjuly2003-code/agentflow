@@ -74,6 +74,30 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- The Flink runtime moved from 1.19.1 to 2.2.1 across the whole project:
+  the `[flink]` extra (`apache-flink==2.2.1`), the flink_jobs runtime image
+  (Flink 2.2.1 dist + `flink-sql-connector-kafka-5.0.0-2.2.jar`, with a new
+  build-time `test -e` guard so a renamed s3-fs-hadoop jar fails the build
+  instead of leaving a dangling plugin symlink), and the docker-compose
+  cluster images (`flink:2.2.1-java17`). The PR #23 wait-for-upstream gate
+  has lifted — Maven Central now ships 2.x-suffixed Kafka connector JARs
+  (`5.0.0-2.2` pairs with Flink 2.2). `configure_checkpointing` migrated
+  off the APIs Flink 2.x removed: `ExternalizedCheckpointCleanup` →
+  `ExternalizedCheckpointRetention`, `enable_externalized_checkpoints` →
+  `set_externalized_checkpoint_retention`, and
+  `CheckpointConfig.set_checkpoint_storage` → `env.configure()` with the
+  `execution.checkpointing.dir` option (a plain-dict fallback keeps the
+  no-PyFlink test fakes assertable). The compose overlay now appends
+  `FLINK_PROPERTIES` to `config.yaml` (Flink 2.x no longer reads
+  `flink-conf.yaml` at all), and the base compose uses the canonical 2.x
+  keys (`state.backend.type`, `execution.checkpointing.dir`). The
+  `sitecustomize` timedelta shim is unchanged — `pyflink.common.time.Time`
+  and `Duration` both survive in 2.2. Validated live in a Flink 2.2.1
+  container (Lima Docker on the iMac): module imports, the full
+  stream-processor graph build (Kafka connector classes from the new JAR),
+  the session pipeline with the new checkpoint API against a real
+  environment, the TTL shim, and a MiniCluster execute round-trip all
+  passed.
 - The agent query endpoints (`/query`, `/query/explain`,
   `/entity/{type}/{id}`, `/metrics/{name}`) were thinned (PR #42; audit
   jgec H-4 / mm F-4): three hand-rolled nested `try/except TypeError`

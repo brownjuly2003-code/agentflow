@@ -203,22 +203,22 @@ class WebhookDispatcher:
         for webhook in webhooks:
             webhooks_by_tenant.setdefault(webhook.tenant, []).append(webhook)
 
-        for tenant in sorted(webhooks_by_tenant):
-            events = self._fetch_pipeline_events(tenant=tenant)
-            for event in events:
-                event_id = str(event.get("event_id") or "")
-                seen_key = _seen_event_key(event)
-                if (
-                    not event_id
-                    or event_id in self.seen_event_ids
-                    or seen_key in self.seen_event_ids
-                ):
-                    continue
-                self.seen_event_ids.add(seen_key)
+        # Scan ALL new pipeline events, not just tenants with registered
+        # webhooks: marking events seen is what drives metric-cache
+        # invalidation (main.py wraps this method and invalidates on growth),
+        # and that must work with zero webhooks registered. Delivery stays
+        # tenant-scoped below.
+        for event in self._fetch_pipeline_events():
+            event_id = str(event.get("event_id") or "")
+            seen_key = _seen_event_key(event)
+            if not event_id or event_id in self.seen_event_ids or seen_key in self.seen_event_ids:
+                continue
+            self.seen_event_ids.add(seen_key)
 
-                for webhook in webhooks_by_tenant[tenant]:
-                    if _matches_filters(event, webhook.filters):
-                        await self.deliver(webhook, event)
+            tenant = str(event.get("tenant_id") or "default")
+            for webhook in webhooks_by_tenant.get(tenant, []):
+                if _matches_filters(event, webhook.filters):
+                    await self.deliver(webhook, event)
 
     async def deliver(self, webhook: WebhookRegistration, event: dict) -> dict:
         conn = self.app.state.query_engine._conn

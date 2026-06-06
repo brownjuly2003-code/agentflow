@@ -602,6 +602,10 @@ async def get_catalog(req: Request) -> dict[str, object]:
                 "description": metric.description,
                 "unit": metric.unit,
                 "available_windows": metric.available_windows,
+                # Event->metric lineage: which event types move this metric,
+                # through which serving table (additive, contract-tested).
+                "source_events": metric.source_events,
+                "source_table": metric.source_table,
             }
             for name, metric in catalog.metrics.items()
         },

@@ -1,6 +1,6 @@
-entity: metric.revenue
+entity: metric.avg_order_value
 version: '1'
-released: '2026-04-11'
+released: '2026-06-06'
 status: stable
 fields:
 - name: value

@@ -29,6 +29,13 @@ class MetricDefinition:
     unit: str
     available_windows: list[str] = field(default_factory=lambda: ["5m", "15m", "1h", "6h", "24h"])
     contract_version: str | None = None
+    # Event->metric lineage: which pipeline event types move this metric and
+    # through which serving table. Mirrors the write path in
+    # src/processing/local_pipeline._process_event (orders_v2 <- order.*,
+    # sessions_aggregated <- clickstream, pipeline_events <- every event);
+    # tests/unit/test_catalog_lineage.py pins the mapping against the code.
+    source_events: list[str] = field(default_factory=list)
+    source_table: str | None = None
 
 
 class DataCatalog:
@@ -58,6 +65,8 @@ class DataCatalog:
                 ),
                 unit="USD",
                 contract_version=self.contract_registry.latest_contract_version("metric.revenue"),
+                source_events=["order.created", "order.updated", "order.cancelled"],
+                source_table="orders_v2",
             )
         )
 
@@ -74,6 +83,8 @@ class DataCatalog:
                 contract_version=self.contract_registry.latest_contract_version(
                     "metric.order_count"
                 ),
+                source_events=["order.created", "order.updated", "order.cancelled"],
+                source_table="orders_v2",
             )
         )
 
@@ -91,6 +102,8 @@ class DataCatalog:
                 contract_version=self.contract_registry.latest_contract_version(
                     "metric.avg_order_value"
                 ),
+                source_events=["order.created", "order.updated", "order.cancelled"],
+                source_table="orders_v2",
             )
         )
 
@@ -109,6 +122,8 @@ class DataCatalog:
                 contract_version=self.contract_registry.latest_contract_version(
                     "metric.conversion_rate"
                 ),
+                source_events=["click", "page_view", "add_to_cart"],
+                source_table="sessions_aggregated",
             )
         )
 
@@ -127,6 +142,8 @@ class DataCatalog:
                 contract_version=self.contract_registry.latest_contract_version(
                     "metric.active_sessions"
                 ),
+                source_events=["click", "page_view", "add_to_cart"],
+                source_table="sessions_aggregated",
             )
         )
 
@@ -145,6 +162,21 @@ class DataCatalog:
                 contract_version=self.contract_registry.latest_contract_version(
                     "metric.error_rate"
                 ),
+                # Every pipeline event lands in pipeline_events (validated or
+                # deadletter), so every event type moves this metric.
+                source_events=[
+                    "order.created",
+                    "order.updated",
+                    "order.cancelled",
+                    "payment.initiated",
+                    "payment.completed",
+                    "payment.failed",
+                    "click",
+                    "page_view",
+                    "add_to_cart",
+                    "product.updated",
+                ],
+                source_table="pipeline_events",
             )
         )
 
@@ -172,6 +204,8 @@ class DataCatalog:
                 "unit": metric.unit,
                 "available_windows": metric.available_windows,
                 "contract_version": metric.contract_version,
+                "source_events": metric.source_events,
+                "source_table": metric.source_table,
             }
             for name, metric in self.metrics.items()
         }

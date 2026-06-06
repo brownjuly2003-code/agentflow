@@ -1,6 +1,6 @@
 # AgentFlow
 
-> Real-time data platform for AI agents. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery.
+> Event-native metrics layer: business metrics that move when events happen — measured **1.1 s p50** event-to-metric freshness on production defaults. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery for people, dashboards, services, and AI agents alike.
 
 [![Release gate](https://img.shields.io/badge/release_gate-v1.4_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
@@ -9,17 +9,21 @@
 
 ## Why this exists
 
-Most agent demos work until they have to answer from live business state. Support, ops, and merch workflows need current orders, metrics, and health signals while the conversation is happening, not a stale warehouse snapshot and not a pile of one-off service adapters.
+BI on a replica answers yesterday's questions. Support, ops, and merch workflows need *current* orders, metrics, and health signals at the moment of decision — not a stale warehouse snapshot, not a pile of one-off service adapters, and not a cache that quietly serves 30-second-old numbers.
 
-AgentFlow turns that problem into one serving boundary:
+AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([docs/freshness-benchmark.md](docs/freshness-benchmark.md)). One serving boundary on top of that axis:
 
-- streaming ingestion for operational events
-- a semantic layer that exposes entities, metrics, and query endpoints
-- typed contracts so SDKs and callers know what shape to expect
+- streaming ingestion for operational events (validated, enriched, journaled)
+- a semantic layer that exposes entities, metrics, lineage, and query endpoints
+- typed, versioned contracts — each metric ships with its source events and a staleness budget
 - Python and TypeScript clients that speak the same API surface
+
+Consumers are whoever needs the number now: humans, dashboards, downstream services, and AI agents — agents are one consumer, not the product.
 
 ## Highlights
 
+- **Measured event-to-metric freshness**: an event entering the pipeline is reflected in `GET /v1/metrics/*` in **1.06 s p50 / 1.99 s p95** on production defaults (event-driven cache invalidation, no webhook registration required), tunable to **238 ms p50**; a plain TTL cache on the same pipeline sits at ~15 s p50. Reproducible: `python scripts/benchmark_freshness.py` → [docs/freshness-benchmark.md](docs/freshness-benchmark.md)
+- **Event→metric lineage as a contract**: all six metrics (`revenue`, `order_count`, `avg_order_value`, `conversion_rate`, `active_sessions`, `error_rate`) declare their source events and serving table in versioned contracts with a 2.5 s p95 staleness budget, exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
 - **Release line through `v1.4.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`), published via OIDC Trusted Publishers with SLSA provenance attestations on every artifact. Live registry table + re-verify recipe: [docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md)
 - **561 unit tests and the 842-test Windows no-Docker suite green locally**; CI runs 12 required status checks (lint, schema-check, test-unit, test-integration, helm-schema-live, perf-check, terraform-validate, bandit, safety, npm-audit, trivy, contract). Branch protection requires every one of them
 - **Sub-second entity lookups**: entity p50 `38-55 ms`, entity p99 `167 ms` on local hardware (–82% from the 2026-04-23 baseline after the PII masker + tenant qualification cache wins). CI runner thresholds are documented separately in [docs/perf/ci-hardware-gap-2026-05-24.md](docs/perf/ci-hardware-gap-2026-05-24.md)

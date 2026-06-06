@@ -1,12 +1,12 @@
-entity: metric.revenue
+entity: metric.error_rate
 version: '1'
-released: '2026-04-11'
+released: '2026-06-06'
 status: stable
 fields:
 - name: value
   type: float
   required: true
-  unit: USD
+  unit: ratio
 - name: unit
   type: string
   required: true
@@ -21,7 +21,14 @@ source_events:
 - order.created
 - order.updated
 - order.cancelled
-source_table: orders_v2
+- payment.initiated
+- payment.completed
+- payment.failed
+- click
+- page_view
+- add_to_cart
+- product.updated
+source_table: pipeline_events
 freshness:
   p95_staleness_budget_seconds: 2.5
   basis: docs/freshness-benchmark.md (event_driven arm, production defaults)

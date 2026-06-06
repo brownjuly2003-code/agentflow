@@ -37,10 +37,10 @@ class OrderEntity(AgentFlowModel):
         created_at = self.created_at
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=UTC)
-        self.is_overdue = (
-            self.status not in {"delivered", "cancelled"}
-            and created_at <= datetime.now(UTC) - timedelta(hours=24)
-        )
+        self.is_overdue = self.status not in {
+            "delivered",
+            "cancelled",
+        } and created_at <= datetime.now(UTC) - timedelta(hours=24)
         return self
 
 
@@ -134,6 +134,9 @@ class CatalogMetric(AgentFlowModel):
     unit: str
     available_windows: list[str]
     contract_version: str | None = None
+    # Event->metric lineage (additive, servers older than this field omit it).
+    source_events: list[str] = Field(default_factory=list)
+    source_table: str | None = None
 
 
 class CatalogStreamingSource(AgentFlowModel):

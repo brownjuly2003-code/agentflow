@@ -1,5 +1,45 @@
 # Backlog
 
+## 26. Remove Import-Time Shared-Router Mutation For /v1/catalog
+
+Status: **Done (2026-06-06, s43b).** Opened from AGENT_STATE s42 finding #2;
+operator go «продолжай» same day.
+
+Closure record:
+- The dead `agent_query.get_catalog` duplicate is deleted; main.py no longer
+  mutates `agent_router.routes` at import time. Main's richer `/v1/catalog`
+  is the single handler (a NOTE in agent_query.py pins the intent).
+- Regression test `test_agent_router_does_not_redefine_catalog` pins both
+  halves: no /catalog on the shared router + exactly one GET /v1/catalog on
+  the production app, owned by `src.serving.api.main`. The old
+  order-dependent `test_agent_router_catalog_copy_stays_consistent` (with its
+  404-escape-hatch) is replaced by it.
+- `docs/openapi.json`: zero drift after `scripts/export_openapi.py` —
+  production API surface unchanged.
+
+Context: `main.py` strips GET /catalog from the shared `agent_query.router`
+at import time so its own richer `/v1/catalog` handler wins. That makes
+router state order-dependent for anything importing main (bit the s42 tests:
+404 only under full collection because the chaos conftest imports main) and
+leaves `agent_query.get_catalog` dead in production — a stale duplicate of
+the catalog payload missing `contract_version` and the streaming/audit
+sources.
+
+Acceptance criteria:
+- No import-time mutation of the shared router in `main.py`.
+- A single /v1/catalog handler (main's richer one) owns the route; the dead
+  `agent_query.get_catalog` duplicate is removed.
+- A regression test pins that the agent router does not redefine /catalog.
+- Production OpenAPI unchanged (`docs/openapi.json` no drift); all required
+  CI checks stay green.
+
+Required verification:
+- Full no-Docker pytest suite green locally (incl. full-collection order).
+- `ruff check` / `ruff format --check` clean.
+
+Forbidden scope:
+- No API behavior change on `/v1/catalog`; no push without operator approval.
+
 ## 25. Decouple Metric Cache Invalidation From Webhook Registration
 
 Status: **Done (2026-06-06, s43).** Implemented directly on

@@ -2,6 +2,28 @@
 
 Updated: 2026-06-06
 
+## 2026-06-06 session (s43b): #25 MERGED to main (PR #53 `cb95ad0`), then BACKLOG #26 CLOSED — shared-router mutation removed. Branch `fix/catalog-router-no-import-mutation`, push GATED
+
+Operator approved the s42/s43 push («пуш») → PR #53 merged to main
+(`cb95ad0`, all required checks green twice — before and after
+update-branch over dependabot #51/#52; remote+local branches cleaned).
+Operator «продолжай» → opened and closed **#26** (the remaining s42
+finding):
+
+- `agent_query.get_catalog` (dead in production, stale payload subset)
+  DELETED; the import-time `agent_router.routes[:]` strip in `main.py`
+  REMOVED. Main's richer `/v1/catalog` is the single handler.
+- Regression test `test_agent_router_does_not_redefine_catalog`: no
+  /catalog on the shared router + exactly one GET /v1/catalog on the
+  production app owned by `src.serving.api.main`. Replaces the
+  order-dependent copy-consistency test that needed a 404 escape hatch.
+- `docs/openapi.json` regenerated: ZERO drift — API surface unchanged.
+- Verification: full suite **1125 passed, 0 failed**, 21 skipped, 8
+  errors (Docker-at-setup kafka, pre-existing); ruff check+format clean;
+  targeted lineage suite 8 passed.
+
+**GATED:** push `fix/catalog-router-no-import-mutation` + PR to main.
+
 ## 2026-06-06 session (s43): BACKLOG #25 CLOSED — invalidation decoupled from webhooks, benchmark re-run WITHOUT sentinel (1.06 s p50 / 1.99 s p95). Same branch `feat/event-metric-freshness`, PR still GATED
 
 «DE_project продолжи» (autonomous). Step-0: worktree had uncommitted s42

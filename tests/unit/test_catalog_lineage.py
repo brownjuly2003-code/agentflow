@@ -82,9 +82,8 @@ def test_serialize_metrics_exposes_lineage_fields():
 
 
 def test_catalog_endpoint_returns_lineage():
-    # The production /v1/catalog handler lives in main.py (importing main
-    # strips the shadowed GET /catalog route from the shared agent router),
-    # so pin the lineage payload on that handler, not on the agent-router copy.
+    # The production /v1/catalog handler lives in main.py — the single
+    # catalog handler since BACKLOG #26 removed the agent-router duplicate.
     from src.serving.api.main import catalog as production_catalog
 
     app = FastAPI()
@@ -101,20 +100,24 @@ def test_catalog_endpoint_returns_lineage():
     assert set(metrics["error_rate"]["source_events"]) == ALL_EVENT_TYPES
 
 
-def test_agent_router_catalog_copy_stays_consistent():
-    """agent_query.get_catalog survives only off-main builds; keep its payload
-    shape consistent with the production serializer all the same."""
-    app = FastAPI()
-    app.state.catalog = DataCatalog()
-    app.include_router(agent_router, prefix="/v1")
-    client = TestClient(app)
+def test_agent_router_does_not_redefine_catalog():
+    """Regression (BACKLOG #26): the agent router must not carry a /catalog
+    duplicate. A duplicate forces main.py to mutate the shared router at
+    import time, which makes route state order-dependent for every other
+    consumer of the router."""
+    assert not any(
+        getattr(route, "path", None) == "/catalog" and "GET" in getattr(route, "methods", set())
+        for route in agent_router.routes
+    )
 
-    response = client.get("/v1/catalog")
-    if response.status_code == 404:
-        # main.py was imported earlier in this process and stripped the
-        # shadowed route from the shared router — nothing left to compare.
-        return
+    # And the production app still serves the richer handler on /v1/catalog.
+    from src.serving.api.main import app as production_app
 
-    metrics = response.json()["metrics"]
-    assert set(metrics["revenue"]["source_events"]) == ORDER_EVENTS
-    assert metrics["revenue"]["source_table"] == "orders_v2"
+    catalog_routes = [
+        route
+        for route in production_app.routes
+        if getattr(route, "path", None) == "/v1/catalog"
+        and "GET" in getattr(route, "methods", set())
+    ]
+    assert len(catalog_routes) == 1
+    assert catalog_routes[0].endpoint.__module__ == "src.serving.api.main"

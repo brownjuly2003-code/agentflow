@@ -301,14 +301,9 @@ app.add_middleware(
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
-# Agent query routes
-agent_router.routes[:] = [
-    route
-    for route in agent_router.routes
-    if not (
-        getattr(route, "path", None) == "/catalog" and "GET" in getattr(route, "methods", set())
-    )
-]
+# Agent query routes. /v1/catalog is NOT among them: the single catalog
+# handler is main's richer one below (BACKLOG #26 removed the agent-router
+# duplicate and the import-time route stripping that hid it).
 app.include_router(agent_router, prefix="/v1")
 app.include_router(batch_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")

@@ -580,33 +580,8 @@ async def get_metric(
     return metric_response
 
 
-@router.get("/catalog")
-async def get_catalog(req: Request) -> dict[str, object]:
-    """List all available data assets — entities, metrics, and their schemas.
-
-    Agents should call this to discover what data is available
-    before constructing queries.
-    """
-    catalog = req.app.state.catalog
-    return {
-        "entities": {
-            name: {
-                "description": entity.description,
-                "fields": entity.fields,
-                "primary_key": entity.primary_key,
-            }
-            for name, entity in catalog.entities.items()
-        },
-        "metrics": {
-            name: {
-                "description": metric.description,
-                "unit": metric.unit,
-                "available_windows": metric.available_windows,
-                # Event->metric lineage: which event types move this metric,
-                # through which serving table (additive, contract-tested).
-                "source_events": metric.source_events,
-                "source_table": metric.source_table,
-            }
-            for name, metric in catalog.metrics.items()
-        },
-    }
+# NOTE: /catalog deliberately does NOT live on this router. The production
+# handler is main.py's richer /v1/catalog (contract_version + streaming/audit
+# sources); an earlier duplicate here forced main.py to strip it from the
+# shared router at import time, which made router state order-dependent
+# (BACKLOG #26). tests/unit/test_catalog_lineage.py pins the route's absence.

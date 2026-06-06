@@ -2,9 +2,32 @@
 
 ## 25. Decouple Metric Cache Invalidation From Webhook Registration
 
-Status: Open. Blocks the public freshness claim; resolve before the public
-presentation pack ships. Depends on branch `feat/event-metric-freshness`
-landing in main first.
+Status: **Done (2026-06-06, s43).** Implemented directly on
+`feat/event-metric-freshness` before the PR ships, so the branch lands with the
+freshness claim already free of the hidden precondition.
+
+Closure record:
+- `WebhookDispatcher.dispatch_new_events` now scans ALL new pipeline events
+  (single global fetch, the same shape `mark_existing_events_seen` already
+  used) and keeps delivery tenant-scoped via per-event tenant resolution —
+  the design the 2026-04-27 security-boundary audit explicitly allowed
+  ("load all and filter in Python"). Marking events seen is what drives the
+  metric-cache invalidation wrapper in `main.py`, so invalidation now works
+  with zero webhooks registered.
+- Regression tests in `tests/integration/test_webhooks.py`: zero-webhooks
+  tenant still gets `invalidate_metrics()` + events marked seen + nothing
+  delivered; a webhook-less tenant's events are scanned without cross-tenant
+  delivery.
+- `scripts/benchmark_freshness.py`: sentinel-webhook workaround REMOVED
+  (`register_sentinel_webhook` deleted); fresh canonical run without it:
+  **event_driven 1.06 s p50 / 1.99 s p95 / max 2.02 s** (30 iters, 0
+  timeouts) — inside the 2.5 s p95 contract budget, so
+  `config/contracts/metric.*.yaml` stay byte-identical
+  (`generate_contracts.py --check` green). fast_poll 238 ms p50.
+- `docs/freshness-benchmark.md` regenerated; the caveat is re-labeled as a
+  resolved-coupling history note. README + docs/architecture.md measured
+  numbers updated to the new canonical run (they cite the benchmark doc and
+  would otherwise drift).
 
 Context: finding #1 of the 2026-06-06 event-metric-freshness round (res.md,
 AGENT_STATE s42). The event-driven invalidation poller only scans tenants that

@@ -95,9 +95,12 @@ def test_build_report_lists_arms_and_the_webhook_caveat():
     assert "| ttl_only |" in report
     # The TTL extrapolation must anchor on the measured ttl_only arm.
     assert "Event-driven invalidation measured" in report
-    # The zero-webhooks staleness caveat is part of the public methodology.
-    assert "active webhook" in report
-    assert "sentinel webhook" in report
+    # The invalidation scan is decoupled from webhook registration
+    # (BACKLOG #25): the report must state the numbers hold with zero
+    # webhooks and keep the resolved-coupling history.
+    assert "regardless of webhook registration" in report
+    assert "zero webhooks registered" in report
+    assert "BACKLOG #25" in report
 
 
 def test_build_report_skips_extrapolation_without_samples():

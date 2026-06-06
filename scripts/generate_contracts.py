@@ -59,7 +59,7 @@ PIPELINE_SOURCE_EVENTS = (
 )
 # The staleness budget a cached metric read is allowed to carry on production
 # defaults (event-driven invalidation at a 2 s dispatcher poll). Measured:
-# 1.97 s p95 end-to-end (docs/freshness-benchmark.md); the budget adds query
+# 1.99 s p95 end-to-end (docs/freshness-benchmark.md); the budget adds query
 # headroom on top of the poll bound rather than restating the measurement.
 METRIC_FRESHNESS = {
     "p95_staleness_budget_seconds": 2.5,

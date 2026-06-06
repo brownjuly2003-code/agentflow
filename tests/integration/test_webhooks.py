@@ -356,6 +356,70 @@ class TestWebhooksAPI:
             ("http://agent.test/beta", "evt-beta-order"),
         ]
 
+    @pytest.mark.asyncio
+    async def test_zero_webhooks_still_get_event_driven_cache_invalidation(
+        self,
+        client,
+        httpx_mock,
+    ):
+        """Regression (BACKLOG #25): the invalidation scan must not depend on
+        webhook registration. With zero webhooks, new pipeline events still get
+        marked seen and the metric cache is still invalidated."""
+        _disable_auth(client)
+        _prepare_pipeline_events(client)
+        dispatcher = client.app.state.webhook_dispatcher
+        dispatcher.seen_event_ids.clear()
+
+        invalidations: list[bool] = []
+
+        class _RecordingCache:
+            async def invalidate_metrics(self) -> None:
+                invalidations.append(True)
+
+        previous_cache = client.app.state.query_cache
+        client.app.state.query_cache = _RecordingCache()
+        try:
+            # The lifespan-wrapped dispatch: scan -> invalidate on growth.
+            await dispatcher.dispatch_new_events()
+        finally:
+            client.app.state.query_cache = previous_cache
+
+        assert invalidations, "metric cache was not invalidated with zero webhooks"
+        assert {
+            "default:evt-order-1",
+            "default:evt-payment-1",
+            "default:evt-order-2",
+        } <= dispatcher.seen_event_ids
+        assert httpx_mock.requests == []
+
+    @pytest.mark.asyncio
+    async def test_webhookless_tenant_events_are_scanned_without_cross_delivery(
+        self,
+        client,
+        httpx_mock,
+    ):
+        """Only acme registers a webhook; beta's events must still be scanned
+        (so invalidation covers them) but never delivered cross-tenant."""
+        _set_auth(client, {"acme-key": "acme"})
+        _register(
+            client,
+            headers={"X-API-Key": "acme-key"},
+            url="http://agent.test/acme",
+            filters={"event_types": ["order"]},
+        )
+        _prepare_tenant_pipeline_events(client)
+        dispatcher = client.app.state.webhook_dispatcher
+        dispatcher.seen_event_ids.clear()
+
+        await dispatcher.dispatch_new_events()
+
+        assert "beta:evt-beta-order" in dispatcher.seen_event_ids
+        delivered = [
+            (request["url"], json.loads(request["content"].decode())["event_id"])
+            for request in httpx_mock.requests
+        ]
+        assert delivered == [("http://agent.test/acme", "evt-acme-order")]
+
     def test_webhook_registrations_survive_api_restart(self, tmp_path: Path):
         config_path = tmp_path / "webhooks.yaml"
         previous_path = getattr(app.state, "webhook_config_path", None)

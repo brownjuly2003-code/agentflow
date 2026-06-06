@@ -2,6 +2,50 @@
 
 Updated: 2026-06-06
 
+## 2026-06-06 session (s43): BACKLOG #25 CLOSED — invalidation decoupled from webhooks, benchmark re-run WITHOUT sentinel (1.06 s p50 / 1.99 s p95). Same branch `feat/event-metric-freshness`, PR still GATED
+
+«DE_project продолжи» (autonomous). Step-0: worktree had uncommitted s42
+leftovers (BACKLOG #25 spec + res.md) — committed as `baa3cd0`. The one open
+backlog item was #25 (the s42 zero-webhooks finding); implemented it directly
+on the gated branch so the PR ships the freshness claim without the hidden
+precondition:
+
+- **Fix:** `WebhookDispatcher.dispatch_new_events` scans ALL new pipeline
+  events (global fetch; `_fetch_pipeline_events(tenant=...)` kept for API
+  compat) and resolves the tenant per event for delivery — cross-tenant
+  delivery scoping preserved (the 2026-04-27 security audit explicitly
+  allowed the filter-in-Python design). Seen-growth → `invalidate_metrics()`
+  in the `main.py` wrapper now fires with zero webhooks registered.
+- **Regression tests (2):** zero webhooks → invalidation fired + events seen
+  + nothing delivered; webhook-less tenant scanned without cross-delivery.
+- **Benchmark:** `register_sentinel_webhook` deleted from
+  `scripts/benchmark_freshness.py`; fresh canonical run **without** the
+  workaround: event_driven **1.06 s p50 / 1.99 s p95 / max 2.02 s** (30
+  iters, 0 timeouts), fast_poll 238 ms p50, ttl_only 2.75 s p50 at TTL 5 s
+  (⇒ ~16.5 s at prod TTL), no_cache floor 78 ms. p95 inside the 2.5 s
+  contract budget → `config/contracts/*` byte-identical
+  (`generate_contracts.py --check` green). Report + current.json
+  regenerated; README/docs/architecture.md measured numbers synced to the
+  new canonical run (1.08/1.97 → 1.06/1.99, 210→238 ms) to avoid claim
+  drift against the linked report.
+- **Pre-existing (observed, not fixed):** during the no_cache arm the
+  dispatcher loop logs `'NoneType' object has no attribute
+  'invalidate_metrics'` warnings — the main.py wrapper assumes
+  `app.state.query_cache` is non-None; benign (caught per poll), existed
+  before this change whenever events arrived with the cache off.
+
+**Verification:** full suite **1125 passed, 0 failed**, 21 skipped, 8 errors
+— all 8 are Docker-at-setup in `tests/integration/test_kafka_pipeline.py`
+(daemon not running on this machine; pre-existing environmental, unrelated).
+Targeted webhooks+benchmark tests 19 passed, ruff check+format clean (282
+files), `generate_contracts.py --check` green, fresh benchmark artifacts
+(`docs/freshness-benchmark.md` + `.artifacts/freshness/current.json`)
+written by the canonical run.
+
+**GATED (unchanged):** push branch + PR to main (12 required checks run
+there). Remaining s42 finding (shared-router mutation on import,
+`main.py:305`) is still recorded-only, no backlog item.
+
 ## 2026-06-06 session (s42): event→metric round — freshness MEASURED (1.08 s p50 / 1.97 s p95), lineage + 6 metric contracts landed, repositioning done. Branch `feat/event-metric-freshness`, PR GATED
 
 Operator round prompt: make «событие → живая метрика» a first-class measured

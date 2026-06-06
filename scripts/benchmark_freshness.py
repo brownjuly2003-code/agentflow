@@ -396,12 +396,12 @@ def build_report(
             f"{poll_interval_ms} ms read granularity plus one query."
         ),
         (
-            "- Caveat (found by this benchmark): the dispatcher only scans for new "
-            "events for tenants that have at least one **active webhook** — with "
-            "zero webhooks registered the metric cache is never invalidated and "
-            "cached reads degrade to pure TTL staleness. The benchmark registers a "
-            "sentinel webhook whose filter matches nothing to enable the scan "
-            "without generating deliveries."
+            "- The dispatcher's invalidation scan covers every new pipeline event "
+            "regardless of webhook registration, so these numbers hold with zero "
+            "webhooks registered. (An earlier revision only scanned tenants with "
+            "at least one **active webhook** and this benchmark needed a sentinel "
+            "webhook to enable the scan; that coupling was found by this benchmark "
+            "and removed — BACKLOG #25.)"
         ),
         "",
         "## Reproduce",
@@ -429,38 +429,6 @@ def collect_system_info() -> dict[str, str]:
         "cpu_count": str(os.cpu_count() or 0),
         "python": platform.python_version(),
     }
-
-
-def register_sentinel_webhook(port: int) -> None:
-    """Register one active webhook with a filter no event matches.
-
-    The dispatcher's poll loop only scans pipeline_events for tenants that
-    have at least one active webhook (`dispatch_new_events` iterates
-    webhooks_by_tenant) — with zero webhooks registered, new events are never
-    seen and the metric cache is never invalidated, leaving reads on pure
-    TTL staleness. A sentinel webhook whose event_types filter matches
-    nothing turns the scan on without producing any deliveries.
-    """
-    body = json.dumps(
-        {
-            "url": "http://127.0.0.1:9/freshness-sentinel",
-            "filters": {"event_types": ["freshness.benchmark.nonmatch"]},
-        }
-    )
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    try:
-        connection.request(
-            "POST",
-            "/v1/webhooks",
-            body=body,
-            headers={"X-API-Key": API_KEY, "Content-Type": "application/json"},
-        )
-        response = connection.getresponse()
-        payload = response.read()
-        if response.status != 201:
-            raise RuntimeError(f"POST /v1/webhooks -> {response.status}: {payload[:200]!r}")
-    finally:
-        connection.close()
 
 
 def wait_for_api(port: int, timeout_seconds: float = 120.0) -> None:
@@ -532,7 +500,6 @@ def main() -> int:
         server_thread.start()
         try:
             wait_for_api(port)
-            register_sentinel_webhook(port)
             print(f"[api] ready on 127.0.0.1:{port}", flush=True)
 
             conn = duckdb.connect(str(db_path))

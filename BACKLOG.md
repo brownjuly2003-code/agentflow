@@ -1,5 +1,52 @@
 # Backlog
 
+## 25. Decouple Metric Cache Invalidation From Webhook Registration
+
+Status: Open. Blocks the public freshness claim; resolve before the public
+presentation pack ships. Depends on branch `feat/event-metric-freshness`
+landing in main first.
+
+Context: finding #1 of the 2026-06-06 event-metric-freshness round (res.md,
+AGENT_STATE s42). The event-driven invalidation poller only scans tenants that
+have at least one active webhook registered. A tenant with metric cache
+enabled but zero webhooks gets no event-driven invalidation at all — metrics
+silently degrade to plain TTL staleness (30 s at prod defaults). The measured
+headline claim (event → updated metric 1.08 s p50 / 1.97 s p95) was honestly
+benchmarked with a sentinel no-match webhook to force the scan, but the prod
+default must deliver the claim without that hidden precondition.
+
+Allowed files/directories:
+- `src/` (invalidation poller / query cache wiring)
+- `tests/unit/`, `tests/integration/`
+- `scripts/benchmark_freshness.py`
+- `docs/freshness-benchmark.md`
+- `config/contracts/metric.*.yaml` (only if measured numbers change)
+- `AGENT_STATE.md`
+- `BACKLOG.md`
+
+Acceptance criteria:
+- Event-driven invalidation scans new events for every tenant with metric
+  caching enabled, regardless of webhook registration (or an equivalent
+  design recorded as an ADR if a different mechanism is chosen).
+- A regression test pins "tenant with zero webhooks still gets event-driven
+  invalidation" so the coupling cannot silently return.
+- `scripts/benchmark_freshness.py` passes WITHOUT the sentinel webhook
+  workaround and stays within the contract freshness budget (2.5 s p95);
+  remove or re-label the sentinel-webhook note in
+  `docs/freshness-benchmark.md` accordingly.
+- Metric contracts' freshness block updated only if re-measured numbers
+  change; registry stays additive.
+- No API contract breakage; 12 required CI checks stay green.
+
+Required verification:
+- Full no-Docker pytest suite green locally.
+- `python scripts/benchmark_freshness.py` fresh run, artifacts updated.
+- `ruff check` / `ruff format --check` clean.
+
+Forbidden scope:
+- No package publishing, no push without operator approval, no API breaking
+  changes, no scheduler/env/secret operations.
+
 ## 24. Generate Synthetic External Gate Pack
 
 Status: Done.

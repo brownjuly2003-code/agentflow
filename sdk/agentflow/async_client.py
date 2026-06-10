@@ -55,20 +55,7 @@ def _normalize_as_of(as_of: datetime | str | None) -> str | None:
     return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-class _LegacyResilienceInitCompat(type):
-    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
-        retry_policy = kwargs.pop("retry_policy", None)
-        circuit_breaker = kwargs.pop("circuit_breaker", None)
-        client = super().__call__(*args, **kwargs)
-        if retry_policy is not None or circuit_breaker is not None:
-            client.configure_resilience(
-                retry_policy=retry_policy,
-                circuit_breaker=circuit_breaker,
-            )
-        return client
-
-
-class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
+class AsyncAgentFlowClient:
     def __init__(
         self,
         base_url: str,
@@ -76,6 +63,9 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         timeout: float = 10.0,
         contract_version: str | None = None,
         api_version: str | None = None,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
     ):
         headers = {"X-API-Key": api_key}
         if api_version is not None:
@@ -91,8 +81,8 @@ class AsyncAgentFlowClient(metaclass=_LegacyResilienceInitCompat):
         self._last_latest_version: str | None = None
         self._last_deprecated: str | None = None
         self._last_deprecation_warning: str | None = None
-        self.retry_policy = RetryPolicy()
-        self.circuit_breaker = CircuitBreaker()
+        self.retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
+        self.circuit_breaker = circuit_breaker if circuit_breaker is not None else CircuitBreaker()
 
     @property
     def last_server_version(self) -> str | None:

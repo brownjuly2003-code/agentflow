@@ -37,6 +37,40 @@ def test_default_resilience_is_applied():
     assert isinstance(client.circuit_breaker, CircuitBreaker)
 
 
+def test_constructor_injects_resilience():
+    # The legacy `retry_policy=`/`circuit_breaker=` constructor kwargs (once
+    # supported via a metaclass) are now plain keyword-only __init__ params.
+    retry_policy = RetryPolicy(max_attempts=7, jitter_factor=0.0)
+    circuit_breaker = CircuitBreaker(failure_threshold=3, reset_timeout_s=1.0)
+
+    client = AgentFlowClient(
+        "http://example.com",
+        "test-key",
+        retry_policy=retry_policy,
+        circuit_breaker=circuit_breaker,
+    )
+
+    assert client.retry_policy is retry_policy
+    assert client.circuit_breaker is circuit_breaker
+
+
+def test_async_constructor_injects_resilience():
+    from agentflow.async_client import AsyncAgentFlowClient
+
+    retry_policy = RetryPolicy(max_attempts=7, jitter_factor=0.0)
+    circuit_breaker = CircuitBreaker(failure_threshold=3, reset_timeout_s=1.0)
+
+    client = AsyncAgentFlowClient(
+        "http://example.com",
+        "test-key",
+        retry_policy=retry_policy,
+        circuit_breaker=circuit_breaker,
+    )
+
+    assert client.retry_policy is retry_policy
+    assert client.circuit_breaker is circuit_breaker
+
+
 def test_circuit_open_blocks_request(monkeypatch):
     calls = {"count": 0}
 

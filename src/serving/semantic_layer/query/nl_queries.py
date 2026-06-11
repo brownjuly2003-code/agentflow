@@ -129,11 +129,13 @@ class NLQueryMixin:
                 raise ValueError("Cursor does not match the requested query.")
 
         page_query = (
-            f"SELECT * FROM ({sql}) AS paginated_query "  # nosec B608 - sql is prevalidated by validate_nl_sql before pagination
+            # sql is prevalidated by validate_nl_sql before pagination
+            f"SELECT * FROM ({sql}) AS paginated_query "  # nosec B608
             f"LIMIT {limit + 1} OFFSET {offset}"
         )
         count_query = (
-            f"SELECT COUNT(*) FROM ("  # nosec B608 - sql is prevalidated by validate_nl_sql before pagination
+            # sql is prevalidated by validate_nl_sql before pagination
+            f"SELECT COUNT(*) FROM ("  # nosec B608
             f"SELECT 1 FROM ({sql}) AS count_query LIMIT 10001"
             f") AS bounded_count"
         )

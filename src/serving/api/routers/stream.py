@@ -41,7 +41,8 @@ async def fetch_recent_events(
         "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",
     ]
 
-    sql = f"SELECT {', '.join(select_columns)} FROM pipeline_events"  # nosec B608 - selected columns come from the schema allowlist
+    # selected columns come from the schema allowlist
+    sql = f"SELECT {', '.join(select_columns)} FROM pipeline_events"  # nosec B608
     where_clauses: list[str] = []
     params: list[str | int] = []
 

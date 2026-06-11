@@ -96,7 +96,8 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
 
         try:
             response = await call_next(request)
-        except Exception:  # nosec B110 - failure telemetry is best-effort before re-raising the original error
+        # failure telemetry is best-effort before re-raising the original error
+        except Exception:  # nosec B110
             # Record downstream failures before re-raising them through the client stack.
             _schedule_session_write(
                 request.app.state.auth_manager.db_path,

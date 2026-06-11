@@ -98,7 +98,8 @@ class ClickHouseBackend(ServingBackend):
             urlopen_kwargs: dict = {"timeout": self._timeout_seconds}
             if self._ssl_context is not None:
                 urlopen_kwargs["context"] = self._ssl_context
-            with urlopen(request, **urlopen_kwargs) as response:  # nosec B310 - scheme is fixed to http/https by trusted backend config; HTTPS verifies via the explicit ssl context above
+            # scheme is fixed to http/https by trusted backend config; HTTPS verifies via the explicit ssl context above
+            with urlopen(request, **urlopen_kwargs) as response:  # nosec B310
                 decoded: str = response.read().decode("utf-8")
                 return decoded
         except HTTPError as exc:
@@ -257,7 +258,8 @@ class ClickHouseBackend(ServingBackend):
             translate=False,
         )
 
-        existing_rows = self.scalar(f"SELECT COUNT(*) AS value FROM {self._database}.orders_v2")  # nosec B608 - database name comes from trusted backend config
+        # database name comes from trusted backend config
+        existing_rows = self.scalar(f"SELECT COUNT(*) AS value FROM {self._database}.orders_v2")  # nosec B608
         if existing_rows is not None and int(existing_rows) > 0:
             return
 
@@ -269,7 +271,8 @@ class ClickHouseBackend(ServingBackend):
         self._request(
             "\n".join(
                 [
-                    f"INSERT INTO {self._database}.products_current VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
+                    # demo seed data uses trusted config and generated timestamps
+                    f"INSERT INTO {self._database}.products_current VALUES",  # nosec B608
                     "('PROD-001', 'Wireless Headphones', 'electronics', 79.99, 1, 142),",
                     "('PROD-002', 'Running Shoes', 'footwear', 129.99, 1, 58),",
                     "('PROD-003', 'Coffee Maker', 'kitchen', 49.99, 1, 203),",
@@ -288,7 +291,8 @@ class ClickHouseBackend(ServingBackend):
         self._request(
             "\n".join(
                 [
-                    f"INSERT INTO {self._database}.orders_v2 VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
+                    # demo seed data uses trusted config and generated timestamps
+                    f"INSERT INTO {self._database}.orders_v2 VALUES",  # nosec B608
                     f"('ORD-20260404-1001', 'USR-10001', 'delivered', 159.98, 'USD', '{ts(timedelta(hours=2))}'),",
                     f"('ORD-20260404-1002', 'USR-10002', 'shipped', 129.99, 'USD', '{ts(timedelta(minutes=90))}'),",
                     f"('ORD-20260404-1003', 'USR-10001', 'confirmed', 249.97, 'USD', '{ts(timedelta(hours=1))}'),",
@@ -305,7 +309,8 @@ class ClickHouseBackend(ServingBackend):
         self._request(
             "\n".join(
                 [
-                    f"INSERT INTO {self._database}.users_enriched VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
+                    # demo seed data uses trusted config and generated timestamps
+                    f"INSERT INTO {self._database}.users_enriched VALUES",  # nosec B608
                     f"('USR-10001', 15, 2340.50, '{ts(timedelta(days=180))}', '{ts(timedelta(hours=1))}', 'electronics'),",
                     f"('USR-10002', 8, 890.20, '{ts(timedelta(days=90))}', '{ts(timedelta(minutes=20))}', 'footwear'),",
                     f"('USR-10003', 3, 210.00, '{ts(timedelta(days=30))}', '{ts(timedelta(minutes=5))}', 'electronics'),",
@@ -319,7 +324,8 @@ class ClickHouseBackend(ServingBackend):
         self._request(
             "\n".join(
                 [
-                    f"INSERT INTO {self._database}.sessions_aggregated VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
+                    # demo seed data uses trusted config and generated timestamps
+                    f"INSERT INTO {self._database}.sessions_aggregated VALUES",  # nosec B608
                     f"('SES-a1b2c3', 'USR-10001', '{ts(timedelta(hours=2))}', '{ts(timedelta(minutes=100))}', 1200, 14, 6, 'checkout', 1),",
                     f"('SES-d4e5f6', 'USR-10002', '{ts(timedelta(minutes=90))}', '{ts(timedelta(minutes=70))}', 1200, 8, 4, 'add_to_cart', 0),",
                     f"('SES-g7h8i9', NULL, '{ts(timedelta(minutes=60))}', '{ts(timedelta(minutes=58))}', 120, 2, 2, 'bounce', 0),",
@@ -334,7 +340,8 @@ class ClickHouseBackend(ServingBackend):
         self._request(
             "\n".join(
                 [
-                    f"INSERT INTO {self._database}.pipeline_events (event_id, topic, tenant_id, processed_at) VALUES",  # nosec B608 - demo seed data uses trusted config and generated timestamps
+                    # demo seed data uses trusted config and generated timestamps
+                    f"INSERT INTO {self._database}.pipeline_events (event_id, topic, tenant_id, processed_at) VALUES",  # nosec B608
                     f"('evt-001', 'events.validated', 'default', '{ts(timedelta(minutes=10))}'),",
                     f"('evt-002', 'events.validated', 'default', '{ts(timedelta(minutes=9))}'),",
                     f"('evt-003', 'events.validated', 'default', '{ts(timedelta(minutes=8))}'),",

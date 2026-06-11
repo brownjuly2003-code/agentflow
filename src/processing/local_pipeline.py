@@ -219,7 +219,8 @@ def _process_event(
         )
         conn.execute("COMMIT")
         return True, "ok"
-    except Exception:  # nosec B110 - rollback must preserve the original pipeline failure
+    # rollback must preserve the original pipeline failure
+    except Exception:  # nosec B110
         # Transaction rollback must happen before unexpected errors propagate.
         conn.execute("ROLLBACK")
         raise

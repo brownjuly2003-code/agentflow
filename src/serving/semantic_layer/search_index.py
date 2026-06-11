@@ -148,7 +148,8 @@ class SearchIndex:
     def _entity_documents(self, entity: EntityDefinition) -> list[SearchDocument]:
         try:
             rows = self.query_engine._conn.execute(
-                f"SELECT * FROM {entity.table}"  # nosec B608 - entity.table comes from the catalog definition
+                # entity.table comes from the catalog definition
+                f"SELECT * FROM {entity.table}"  # nosec B608
             ).fetchall()
             columns = [description[0] for description in self.query_engine._conn.description]
         except duckdb.Error:

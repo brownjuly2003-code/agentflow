@@ -99,7 +99,8 @@ def _fetch_matching_events(request: Request, entity_type: str, entity_id: str) -
 
     cursor = conn.execute(
         (
-            f"SELECT {', '.join(select_columns)} "  # nosec B608 - selected columns come from the schema allowlist
+            # selected columns come from the schema allowlist
+            f"SELECT {', '.join(select_columns)} "  # nosec B608
             "FROM pipeline_events "
             f"WHERE {' AND '.join(where_clauses)} ORDER BY {time_column} ASC"
         ),

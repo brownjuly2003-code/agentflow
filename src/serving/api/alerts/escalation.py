@@ -5,6 +5,9 @@ import uuid
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+import httpx
+import structlog
+
 from src.serving.api.webhook_dispatcher import _event_body, _signature
 
 from .evaluator import evaluate_rule
@@ -13,14 +16,14 @@ from .history import ensure_alert_history_table, log_alert_history
 if TYPE_CHECKING:
     from .dispatcher import AlertDispatcher, AlertRule
 
+logger = structlog.get_logger()
+
 
 async def dispatch_alert(
     dispatcher: AlertDispatcher,
     alert: AlertRule,
     now: datetime,
 ) -> tuple[AlertRule, bool, int]:
-    from src.serving.api import alert_dispatcher as compat
-
     from .dispatcher import next_escalation_step
 
     evaluation = evaluate_rule(dispatcher, alert, now)
@@ -60,7 +63,7 @@ async def dispatch_alert(
             alert.last_escalation_level = 0
             alert.last_condition_triggered = current_triggered
             alert.updated_at = now
-            compat.logger.warning(
+            logger.warning(
                 "alert_flapping_suppressed",
                 alert_id=alert.id,
                 alert_name=alert.name,
@@ -220,8 +223,6 @@ async def deliver(
     change_pct: float | None = None,
     webhook_url: str | None = None,
 ) -> dict:
-    from src.serving.api import alert_dispatcher as compat
-
     conn = dispatcher.app.state.query_engine._conn
     ensure_alert_history_table(conn)
     delivery_id = str(uuid.uuid4())
@@ -237,7 +238,7 @@ async def deliver(
     status_code: int | None = None
     error: str | None = None
 
-    async with compat.httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         for attempt in range(1, 4):
             attempts = attempt
             error = None
@@ -251,7 +252,7 @@ async def deliver(
                 success = 200 <= response.status_code < 300
                 if response.status_code < 500:
                     break
-            except (compat.httpx.TimeoutException, compat.httpx.TransportError) as exc:
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
                 status_code = None
                 success = False
                 error = str(exc)

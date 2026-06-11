@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import structlog
 from pydantic import BaseModel, Field, model_validator
 
 try:
@@ -18,6 +19,8 @@ except ImportError:  # pragma: no cover
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+
+logger = structlog.get_logger()
 
 DEFAULT_ALERTS_CONFIG_PATH = Path(os.getenv("AGENTFLOW_ALERTS_FILE", "config/alerts.yaml"))
 
@@ -123,10 +126,8 @@ def create_alert(
     webhook_url: str,
     cooldown_minutes: int,
 ) -> AlertRule:
-    from src.serving.api import alert_dispatcher as compat
-
     alerts = load_alerts(path)
-    now = compat.datetime.now(UTC)
+    now = datetime.now(UTC)
     rule = AlertRule(
         id=str(uuid.uuid4()),
         name=name,
@@ -158,15 +159,13 @@ def get_alert(path: Path, alert_id: str, tenant: str) -> AlertRule | None:
 
 
 def update_alert(path: Path, alert_id: str, tenant: str, updates: dict) -> AlertRule | None:
-    from src.serving.api import alert_dispatcher as compat
-
     alerts = load_alerts(path)
     for index, alert in enumerate(alerts):
         if alert.id != alert_id or alert.tenant != tenant or not alert.active:
             continue
         payload = alert.model_dump(mode="python")
         payload.update(updates)
-        payload["updated_at"] = compat.datetime.now(UTC)
+        payload["updated_at"] = datetime.now(UTC)
         updated = AlertRule.model_validate(payload)
         alerts[index] = updated
         save_alerts(path, alerts)
@@ -175,8 +174,6 @@ def update_alert(path: Path, alert_id: str, tenant: str, updates: dict) -> Alert
 
 
 def deactivate_alert(path: Path, alert_id: str, tenant: str) -> bool:
-    from src.serving.api import alert_dispatcher as compat
-
     alerts = load_alerts(path)
     changed = False
     for index, alert in enumerate(alerts):
@@ -184,7 +181,7 @@ def deactivate_alert(path: Path, alert_id: str, tenant: str) -> bool:
             continue
         payload = alert.model_dump(mode="python")
         payload["active"] = False
-        payload["updated_at"] = compat.datetime.now(UTC)
+        payload["updated_at"] = datetime.now(UTC)
         alerts[index] = AlertRule.model_validate(payload)
         changed = True
         break
@@ -253,23 +250,19 @@ class AlertDispatcher:
             pass
 
     async def run(self) -> None:
-        from src.serving.api import alert_dispatcher as compat
-
         while True:
             try:
                 await self.dispatch_alerts()
             except Exception as exc:
-                compat.logger.warning("alert_dispatcher_error", error=str(exc))
+                logger.warning("alert_dispatcher_error", error=str(exc))
             await asyncio.sleep(self.poll_interval_seconds)
 
     async def dispatch_alerts(self) -> int:
-        from src.serving.api import alert_dispatcher as compat
-
         from .escalation import dispatch_alert
 
         path = get_alert_config_path(self.app)
         alerts = load_alerts(path)
-        now = compat.datetime.now(UTC)
+        now = datetime.now(UTC)
         triggered = 0
         changed = False
         for index, alert in enumerate(alerts):
@@ -284,8 +277,6 @@ class AlertDispatcher:
         return triggered
 
     async def send_test_alert(self, alert: AlertRule) -> dict:
-        from src.serving.api import alert_dispatcher as compat
-
         from .escalation import deliver
 
         payload = {
@@ -295,7 +286,7 @@ class AlertDispatcher:
             "threshold": alert.threshold,
             "condition": alert.condition,
             "window": alert.window,
-            "triggered_at": compat.datetime.now(UTC).isoformat(),
+            "triggered_at": datetime.now(UTC).isoformat(),
             "tenant": alert.tenant,
             "test": True,
         }

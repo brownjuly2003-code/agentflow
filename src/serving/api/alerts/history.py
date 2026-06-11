@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import duckdb
@@ -81,8 +81,6 @@ def log_alert_history(
     error: str | None,
     payload: dict,
 ) -> None:
-    from src.serving.api import alert_dispatcher as compat
-
     ensure_alert_history_table(conn)
     conn.execute(
         """
@@ -110,6 +108,6 @@ def log_alert_history(
             success,
             error,
             json.dumps(payload, sort_keys=True),
-            compat.datetime.now(UTC),
+            datetime.now(UTC),
         ],
     )

@@ -46,10 +46,18 @@ def test_client_constructor_signature():
         "timeout",
         "contract_version",
         "api_version",
+        "retry_policy",
+        "circuit_breaker",
     )
     assert sig.parameters["timeout"].default == 10.0
     assert sig.parameters["contract_version"].default is None
     assert sig.parameters["api_version"].default is None
+    # retry_policy/circuit_breaker were injected via a metaclass before; they
+    # are now keyword-only __init__ params with None defaults (same contract).
+    assert sig.parameters["retry_policy"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["retry_policy"].default is None
+    assert sig.parameters["circuit_breaker"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["circuit_breaker"].default is None
 
 
 def test_async_client_constructor_signature():
@@ -62,10 +70,16 @@ def test_async_client_constructor_signature():
         "timeout",
         "contract_version",
         "api_version",
+        "retry_policy",
+        "circuit_breaker",
     )
     assert sig.parameters["timeout"].default == 10.0
     assert sig.parameters["contract_version"].default is None
     assert sig.parameters["api_version"].default is None
+    assert sig.parameters["retry_policy"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["retry_policy"].default is None
+    assert sig.parameters["circuit_breaker"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["circuit_breaker"].default is None
 
 
 def test_client_public_methods_exist():

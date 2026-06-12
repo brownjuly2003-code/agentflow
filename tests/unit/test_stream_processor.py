@@ -276,6 +276,18 @@ def stream_processor(monkeypatch):
 
     watermark_strategy.TimestampAssigner = _TimestampAssigner
 
+    time_module = types.ModuleType("pyflink.common.time")
+
+    class _Duration:
+        def __init__(self, millis):
+            self.millis = millis
+
+        @classmethod
+        def of_seconds(cls, seconds):
+            return cls(seconds * 1000)
+
+    time_module.Duration = _Duration
+
     datastream = types.ModuleType("pyflink.datastream")
     datastream.__path__ = []
     datastream.StreamExecutionEnvironment = _FakeExecutionEnvironment
@@ -402,6 +414,7 @@ def stream_processor(monkeypatch):
     state.ValueStateDescriptor = _ValueStateDescriptor
 
     common.serialization = serialization
+    common.time = time_module
     common.watermark_strategy = watermark_strategy
     datastream.connectors = connectors
     connectors.kafka = kafka
@@ -414,6 +427,7 @@ def stream_processor(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyflink", pyflink)
     monkeypatch.setitem(sys.modules, "pyflink.common", common)
     monkeypatch.setitem(sys.modules, "pyflink.common.serialization", serialization)
+    monkeypatch.setitem(sys.modules, "pyflink.common.time", time_module)
     monkeypatch.setitem(sys.modules, "pyflink.common.watermark_strategy", watermark_strategy)
     monkeypatch.setitem(sys.modules, "pyflink.datastream", datastream)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors", connectors)
@@ -797,7 +811,7 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
     assert source["group_id"] == "agentflow-stream-processor"
     assert source["starting_offsets"] == "earliest"
     assert name == "kafka-source"
-    assert watermark_strategy.out_of_orderness == timedelta(seconds=5)
+    assert watermark_strategy.out_of_orderness.millis == 5000
     assert isinstance(
         watermark_strategy.timestamp_assigner,
         stream_processor.EventTimestampAssigner,

@@ -10,11 +10,12 @@ Submit with:
 import json
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
 from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.time import Duration
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import (
@@ -170,7 +171,7 @@ def build_pipeline() -> StreamExecutionEnvironment:
     )
 
     watermark_strategy = WatermarkStrategy.for_bounded_out_of_orderness(
-        timedelta(seconds=WATERMARK_OUT_OF_ORDERNESS_SECONDS)
+        Duration.of_seconds(WATERMARK_OUT_OF_ORDERNESS_SECONDS)
     ).with_timestamp_assigner(ClickTimestampAssigner())
 
     stream = env.from_source(source, watermark_strategy, "clicks-source")

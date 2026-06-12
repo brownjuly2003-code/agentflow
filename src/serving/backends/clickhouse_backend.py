@@ -52,6 +52,34 @@ def _rewrite_for_clickhouse(node: exp.Expr) -> exp.Expr:
 
 
 class ClickHouseBackend(ServingBackend):
+    """HTTP-based ClickHouse serving backend.
+
+    Query-parameter binding is intentionally *not* used on this path (A-3,
+    audit_codex_03_06_26). Unlike ``DuckDBBackend``, which binds positional
+    ``?`` placeholders, the semantic layer's ClickHouse branch inlines values
+    as quoted literals via ``SQLBuilderMixin._quote_literal`` and calls
+    ``execute(sql)`` with no ``params`` (see ``EntityQueryMixin`` /
+    ``MetricQueryMixin``: ``use_query_params`` is false whenever the active
+    backend is not DuckDB). Injection safety is therefore enforced
+    structurally rather than by binding:
+
+    * Values are wrapped as single-quoted literals (``'`` doubled to ``''``)
+      and then re-escaped to ClickHouse's own rules by ``_translate_sql`` — the
+      sqlglot ``duckdb`` → ``clickhouse`` round-trip parses each literal
+      structurally and regenerates it (e.g. a lone backslash becomes ``\\``),
+      so a payload cannot break out of its literal even though ClickHouse
+      honours backslash escapes that DuckDB does not. Multi-statement or
+      unparseable SQL is rejected before it ever reaches the server.
+    * Identifiers (table / column / schema names) come from the catalog
+      allowlist and ``_quote_identifier`` — never from request data.
+
+    ``params`` is accepted only for interface symmetry with ``ServingBackend``
+    and is a documented no-op; the ClickHouse query path never supplies it.
+    The injection-neutralisation property is pinned by
+    ``tests/unit/test_clickhouse_backend.py::TestTranslateSqlInjectionSafety``
+    and ``tests/unit/test_query_engine_injection.py`` (ClickHouse path).
+    """
+
     name = "clickhouse"
 
     def __init__(
@@ -132,6 +160,9 @@ class ClickHouseBackend(ServingBackend):
         return translated
 
     def execute(self, sql: str, params: list | None = None) -> list[dict]:
+        # `params` is a documented no-op on this backend (see the class
+        # docstring): the ClickHouse query path inlines values as literals that
+        # `_translate_sql` re-escapes structurally, rather than binding `?`.
         del params
         payload = self._request(sql, expect_json=True)
         data = json.loads(payload)

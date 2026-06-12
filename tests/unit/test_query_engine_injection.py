@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
+import sqlglot
+from sqlglot import exp
 
+from src.serving.backends.clickhouse_backend import ClickHouseBackend
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 
@@ -100,3 +103,51 @@ def test_get_metric_passes_as_of_anchor_as_query_params() -> None:
     assert sql.count("CAST(? AS TIMESTAMP)") == 2
     assert "NOW()" not in sql
     assert params == [expected_anchor, expected_anchor]
+
+
+class _EmptyClickHouseResponse:
+    """Minimal urlopen() context-manager stand-in returning an empty result."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_: object) -> bool:
+        return False
+
+    def read(self) -> bytes:
+        return b'{"data":[]}'
+
+
+@pytest.mark.parametrize("payload", ATTACK_VECTORS)
+def test_get_entity_clickhouse_path_keeps_payload_inert(payload: str) -> None:
+    """A-3: the non-DuckDB (ClickHouse) backend does not bind params — the
+    engine inlines the value via `_quote_literal` and `ClickHouseBackend.
+    _translate_sql` re-escapes it. Assert the SQL actually sent over HTTP is a
+    single inert SELECT: no statement split, UNION, OR, or DDL/DML smuggled out
+    of the string literal. Complements the DuckDB-binding tests above."""
+    engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
+    engine._tenant_router = Mock()
+    engine._tenant_router.has_config.return_value = False
+    engine._tenant_router.get_duckdb_schema.return_value = None
+    ch_backend = ClickHouseBackend(host="ch", port=8123, user="u", password="p", database="db")
+    engine._backend = ch_backend
+    # name != the duckdb backend's name → use_query_params is False (inline path)
+    engine._backend_name = ch_backend.name
+
+    sent: list[str] = []
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        sent.append(req.data.decode("utf-8"))
+        return _EmptyClickHouseResponse()
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        result = engine.get_entity("order", payload)
+
+    assert result is None
+    assert len(sent) == 1, f"expected exactly one query, got {sent!r}"
+    statements = [s for s in sqlglot.parse(sent[0], dialect="clickhouse") if s is not None]
+    assert len(statements) == 1, f"payload split the statement: {sent[0]!r}"
+    stmt = statements[0]
+    assert isinstance(stmt, exp.Select)
+    injected = list(stmt.find_all(exp.Or, exp.Union, exp.Drop, exp.Delete, exp.Insert, exp.Alter))
+    assert not injected, f"injection leaked {[type(n).__name__ for n in injected]}: {sent[0]!r}"

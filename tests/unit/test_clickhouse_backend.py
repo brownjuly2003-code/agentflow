@@ -14,9 +14,28 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 import pytest
+import sqlglot
+from sqlglot import exp
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError
 from src.serving.backends.clickhouse_backend import ClickHouseBackend
+
+# Injection payloads shared with the DuckDB-path coverage in
+# tests/unit/test_query_engine_injection.py. Includes the backslash vectors
+# ClickHouse treats as escapes (but DuckDB does not), which is the specific
+# risk of the inline-literal ClickHouse path (A-3).
+CLICKHOUSE_ATTACK_VECTORS = [
+    "'; DROP TABLE orders_v2; --",
+    "' OR '1'='1",
+    "'; DELETE FROM users WHERE '1'='1",
+    "\\'; DROP TABLE orders_v2; --",
+    "ORD' UNION SELECT * FROM api_keys --",
+    "'); ATTACH 'evil.db' AS evil; --",
+    "ORD\x00'; DROP TABLE --",
+    "ORD' AND (SELECT COUNT(*) FROM api_keys) > 0 --",
+    "\\",
+    "x\\' OR 1=1 --",
+]
 
 
 @pytest.fixture
@@ -339,6 +358,42 @@ class TestTranslateSqlLiteralProtection:
         translated = backend._translate_sql(sql)
         assert "'mode=FILTER (WHERE x)'" in translated
         assert "countIf(ok)" in translated
+
+
+class TestTranslateSqlInjectionSafety:
+    """A-3 (audit_codex_03_06_26): the ClickHouse path inlines values via
+    `_quote_literal` instead of binding `?` params. Prove a malicious value
+    cannot break out of its string literal once `_translate_sql` re-escapes it
+    for ClickHouse — `TestTranslateSqlLiteralProtection` above pins data
+    *fidelity* (legit tokens survive); this pins *security* (attacks stay
+    inert), and specifically covers the backslash vectors ClickHouse honours
+    as escapes but DuckDB does not."""
+
+    @pytest.mark.parametrize("payload", CLICKHOUSE_ATTACK_VECTORS)
+    def test_quoted_value_cannot_escape_its_literal(self, backend, payload):
+        # Mirror the semantic layer's ClickHouse branch: a single-quoted
+        # literal (`'` doubled to `''`) inlined into the WHERE clause.
+        quoted = "'" + str(payload).replace("'", "''") + "'"
+        sql = f'SELECT * FROM "orders_v2" WHERE "order_id" = {quoted} LIMIT 1'
+
+        translated = backend._translate_sql(sql)
+
+        # Re-parse the emitted ClickHouse SQL: the payload must remain inert
+        # data, i.e. exactly one plain SELECT whose WHERE is a single equality,
+        # with none of the structures an injection would introduce.
+        statements = [s for s in sqlglot.parse(translated, dialect="clickhouse") if s is not None]
+        assert len(statements) == 1, f"payload split the statement: {translated!r}"
+        stmt = statements[0]
+        assert isinstance(stmt, exp.Select), f"not a plain SELECT: {translated!r}"
+        injected = list(
+            stmt.find_all(exp.Or, exp.Union, exp.Drop, exp.Delete, exp.Insert, exp.Alter)
+        )
+        assert not injected, (
+            f"injection leaked {[type(n).__name__ for n in injected]}: {translated!r}"
+        )
+        where = stmt.find(exp.Where)
+        assert where is not None, f"WHERE clause vanished: {translated!r}"
+        assert isinstance(where.this, exp.EQ), f"WHERE is not a simple equality: {translated!r}"
 
 
 def test_initialize_demo_data_sends_native_clickhouse_ddl_untranslated(backend):

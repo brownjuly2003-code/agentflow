@@ -15,6 +15,7 @@ from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
 from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.time import Duration
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import (
@@ -270,7 +271,7 @@ def build_pipeline() -> StreamExecutionEnvironment:
     )
 
     watermark_strategy = WatermarkStrategy.for_bounded_out_of_orderness(
-        timedelta(seconds=5)
+        Duration.of_seconds(5)
     ).with_timestamp_assigner(EventTimestampAssigner())
 
     # Main pipeline

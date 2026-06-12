@@ -27,30 +27,3 @@ ENV PYFLINK_CLIENT_EXECUTABLE=/usr/local/bin/python
 ENV PYTHONPATH=/opt/agentflow
 
 COPY . /opt/agentflow/src
-
-RUN cat <<'PY' > /opt/agentflow/sitecustomize.py
-from datetime import timedelta as _timedelta
-
-try:
-    from pyflink.common import WatermarkStrategy
-    from pyflink.common.time import Duration, Time
-    from pyflink.datastream.state import StateTtlConfig
-except Exception:
-    pass
-else:
-    _original_watermark = WatermarkStrategy.for_bounded_out_of_orderness
-    _original_ttl_builder = StateTtlConfig.new_builder
-
-    def _patched_watermark(max_out_of_orderness):
-        if isinstance(max_out_of_orderness, _timedelta):
-            max_out_of_orderness = Duration.of_millis(int(max_out_of_orderness.total_seconds() * 1000))
-        return _original_watermark(max_out_of_orderness)
-
-    def _patched_ttl_builder(ttl):
-        if isinstance(ttl, _timedelta):
-            ttl = Time.milliseconds(int(ttl.total_seconds() * 1000))
-        return _original_ttl_builder(ttl)
-
-    WatermarkStrategy.for_bounded_out_of_orderness = staticmethod(_patched_watermark)
-    StateTtlConfig.new_builder = staticmethod(_patched_ttl_builder)
-PY

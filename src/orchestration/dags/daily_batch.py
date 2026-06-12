@@ -144,7 +144,8 @@ def daily_quality_report(context: AssetExecutionContext) -> dict[str, Any]:
     ]:
         try:
             row = conn.execute(
-                f"SELECT COUNT(*) FROM {table}"  # nosec B608 - table comes from the fixed health-check allowlist
+                # table comes from the fixed health-check allowlist
+                f"SELECT COUNT(*) FROM {table}"  # nosec B608
             ).fetchone()
             checks[table] = {"rows": row[0] if row else 0, "status": "ok"}
         except duckdb.Error as e:

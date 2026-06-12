@@ -9,7 +9,9 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from src.serving.api import alert_dispatcher
+from src.serving.api.alerts import dispatcher as alerts_dispatcher
+from src.serving.api.alerts import escalation as alerts_escalation
+from src.serving.api.alerts import history as alerts_history
 from src.serving.api.main import app
 
 
@@ -64,7 +66,8 @@ class _LoggerSpy:
 @pytest.fixture
 def freeze_time(monkeypatch) -> _Clock:
     clock = _Clock()
-    monkeypatch.setattr(alert_dispatcher, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(alerts_dispatcher, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(alerts_history, "datetime", _FrozenDateTime)
     return clock
 
 
@@ -82,7 +85,7 @@ def httpx_mock(monkeypatch) -> _HTTPXMock:
         async def __aexit__(self, *args) -> None:
             pass
 
-    monkeypatch.setattr(alert_dispatcher.httpx, "AsyncClient", _AsyncClient)
+    monkeypatch.setattr(alerts_escalation.httpx, "AsyncClient", _AsyncClient)
     return mock
 
 
@@ -341,7 +344,7 @@ class TestAlertNoiseReduction:
         )
         logger = _LoggerSpy()
         metric = {"value": 0.021}
-        monkeypatch.setattr(alert_dispatcher, "logger", logger)
+        monkeypatch.setattr(alerts_escalation, "logger", logger)
         monkeypatch.setattr(
             client.app.state.query_engine,
             "get_metric",

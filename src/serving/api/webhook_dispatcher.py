@@ -311,7 +311,8 @@ class WebhookDispatcher:
             order_by = "created_at"
         else:
             order_by = "event_id"
-        sql = "SELECT * FROM pipeline_events"  # nosec B608 - order_by is chosen from a fixed column allowlist
+        # order_by is chosen from a fixed column allowlist
+        sql = "SELECT * FROM pipeline_events"  # nosec B608
         params: list[str] = []
         if tenant is not None and "tenant_id" in columns:
             sql = f"{sql} WHERE COALESCE(tenant_id, 'default') = ?"

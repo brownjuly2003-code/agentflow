@@ -167,7 +167,17 @@ def test_checked_in_bandit_baseline_has_no_new_findings(tmp_path):
     assert diff.returncode == 0, diff.stdout + diff.stderr
 
 
-def test_inline_nosec_comments_include_reason():
+def test_nosec_comments_carry_reason():
+    """Every ``# nosec`` suppression must carry a human rationale so the
+    decision stays auditable.
+
+    The rationale may be inline (``# nosec CODE - reason``) or on the comment
+    line directly above the suppressed statement. The above-line form is
+    preferred: bandit parses any text after the code on the ``# nosec`` line as
+    further test ids and floods the scan log with "Test in comment: <word> is
+    not a test name or id" warnings, so keeping the reason off that line keeps
+    the security log readable while preserving the rationale.
+    """
     repo_root = Path(__file__).resolve().parents[2]
     offenders = []
 
@@ -177,7 +187,14 @@ def test_inline_nosec_comments_include_reason():
             if "# nosec" not in line:
                 continue
             _, _, suffix = line.partition("# nosec")
-            if " - " not in suffix:
+            has_inline_reason = " - " in suffix
+            previous = lines[line_number - 2].strip() if line_number >= 2 else ""
+            has_reason_above = (
+                previous.startswith("#")
+                and not previous.startswith("# nosec")
+                and len(previous.lstrip("#").strip()) >= 3
+            )
+            if not (has_inline_reason or has_reason_above):
                 offenders.append(f"{path.relative_to(repo_root)}:{line_number}")
 
     assert offenders == []

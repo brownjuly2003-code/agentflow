@@ -1,9 +1,12 @@
+"""Backwards-compatible re-export of the alerts public API.
+
+Historical import path ``src.serving.api.alert_dispatcher`` kept for
+``main.py``/routers. The clock, logger, and HTTP client live in their
+defining modules (``alerts.dispatcher``/``alerts.escalation``/``alerts.history``)
+and are patched there in tests — this module no longer tunnels them.
+"""
+
 from __future__ import annotations
-
-from datetime import datetime
-
-import httpx
-import structlog
 
 from src.serving.api.alerts import (
     DEFAULT_ALERTS_CONFIG_PATH,
@@ -25,8 +28,6 @@ from src.serving.api.alerts import (
     update_alert,
 )
 
-logger = structlog.get_logger()
-
 __all__ = [
     "DEFAULT_ALERTS_CONFIG_PATH",
     "AlertConfig",
@@ -35,17 +36,14 @@ __all__ = [
     "AlertFlapDetection",
     "AlertRule",
     "create_alert",
-    "datetime",
     "deactivate_alert",
     "ensure_alert_dispatcher",
     "ensure_alert_history_table",
     "get_alert",
     "get_alert_config_path",
     "get_alert_history",
-    "httpx",
     "list_alerts",
     "load_alerts",
-    "logger",
     "save_alerts",
     "update_alert",
 ]

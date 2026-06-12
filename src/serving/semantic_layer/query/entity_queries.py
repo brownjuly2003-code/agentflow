@@ -27,7 +27,8 @@ class EntityQueryMixin:
         table_name = self._qualify_table(entity_def.table, tenant_id)
         use_query_params = self._backend_name == self._duckdb_backend.name
         sql = (
-            f"SELECT * FROM {table_name} "  # nosec B608 - table and primary-key identifiers come from the catalog allowlist
+            # table and primary-key identifiers come from the catalog allowlist
+            f"SELECT * FROM {table_name} "  # nosec B608
             f"WHERE {self._quote_identifier(entity_def.primary_key)} = "
         )
         if use_query_params:
@@ -128,7 +129,8 @@ class EntityQueryMixin:
 
                 try:
                     sql = (
-                        "SELECT entity_data, "  # nosec B608 - pipeline table and time column come from validated internal metadata
+                        # pipeline table and time column come from validated internal metadata
+                        "SELECT entity_data, "  # nosec B608
                         f"{time_column} AS event_time "
                         f"FROM {pipeline_table} "
                         f"WHERE {' AND '.join(filters)} "
@@ -190,7 +192,8 @@ class EntityQueryMixin:
 
         try:
             sql = (
-                f"SELECT * FROM {table_name} "  # nosec B608 - table and primary-key identifiers come from the catalog allowlist
+                # table and primary-key identifiers come from the catalog allowlist
+                f"SELECT * FROM {table_name} "  # nosec B608
                 f"WHERE {self._quote_identifier(entity_def.primary_key)} = "
             )
             if use_query_params:

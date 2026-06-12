@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import os
 import platform
 import socket
@@ -31,6 +32,47 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if "requires_docker" in item.keywords:
             item.add_marker(skip_marker)
+
+
+# --- Local uvicorn lifecycle backstop (C-5) ----------------------------------
+# The e2e session fixture tears its uvicorn child down on the normal path, but
+# an abrupt pytest exit (KeyboardInterrupt, crash, IDE stop, broad-suite error)
+# would orphan it. The orphan keeps holding agentflow-api.log and breaks the
+# next run's temp cleanup with PermissionError [WinError 32]. Track every
+# spawned process and reap it from both pytest_sessionfinish and an atexit hook
+# so neither a clean nor a dirty shutdown can leave one behind.
+_LOCAL_API_PROCESSES: set[subprocess.Popen[str]] = set()
+
+
+def _terminate_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _reap_local_api_processes() -> None:
+    for process in list(_LOCAL_API_PROCESSES):
+        # Best-effort cleanup must never raise during interpreter shutdown.
+        try:
+            _terminate_process(process)
+        except Exception:  # noqa: BLE001, S110
+            pass
+        _LOCAL_API_PROCESSES.discard(process)
+
+
+atexit.register(_reap_local_api_processes)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    _reap_local_api_processes()
 
 
 def _free_port() -> int:
@@ -199,16 +241,13 @@ def _start_local_api(tmp_path: Path) -> dict[str, object]:
         stderr=subprocess.STDOUT,
         text=True,
     )
+    _LOCAL_API_PROCESSES.add(process)
 
     try:
         _wait_for_ready(base_url, DEFAULT_STARTUP_TIMEOUT)
     except Exception:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
+        _terminate_process(process)
+        _LOCAL_API_PROCESSES.discard(process)
         log_file.close()
         raise RuntimeError(
             f"AgentFlow API failed to start.\nLast log lines:\n{_tail(log_path)}"
@@ -271,12 +310,8 @@ def e2e_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
             process = started["process"]
             log_file = started["log_file"]
             assert isinstance(process, subprocess.Popen)
-            process.terminate()
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=10)
+            _terminate_process(process)
+            _LOCAL_API_PROCESSES.discard(process)
             assert hasattr(log_file, "close")
             log_file.close()
 

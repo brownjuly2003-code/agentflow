@@ -172,7 +172,8 @@ class OutboxProcessor:
                 [event_id],
             )
             self._connection.execute("COMMIT")
-        except Exception:  # nosec B110 - rollback must preserve the original replay failure
+        # rollback must preserve the original replay failure
+        except Exception:  # nosec B110
             # Transaction rollback must happen before unexpected errors propagate.
             self._connection.execute("ROLLBACK")
             raise
@@ -217,7 +218,8 @@ class OutboxProcessor:
                     [event_id],
                 )
             self._connection.execute("COMMIT")
-        except Exception:  # nosec B110 - rollback must preserve the original retry scheduling failure
+        # rollback must preserve the original retry scheduling failure
+        except Exception:  # nosec B110
             # Transaction rollback must happen before unexpected errors propagate.
             self._connection.execute("ROLLBACK")
             raise

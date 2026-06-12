@@ -90,7 +90,8 @@ class DuckDBBackend(ServingBackend):
             return set()
         try:
             with self.read_connection() as conn:
-                conn.execute(f"SELECT * FROM {table_name} LIMIT 0")  # nosec B608 - identifier validated above
+                # identifier validated above
+                conn.execute(f"SELECT * FROM {table_name} LIMIT 0")  # nosec B608
                 return {desc[0] for desc in conn.description}
         except duckdb.CatalogException:
             return set()
@@ -111,7 +112,8 @@ class DuckDBBackend(ServingBackend):
             raise BackendExecutionError("EXPLAIN only supports a single SELECT statement")
         try:
             with self.read_connection() as conn:
-                return conn.execute(f"EXPLAIN {sql}").fetchall()  # nosec B608 - statement validated above
+                # statement validated above
+                return conn.execute(f"EXPLAIN {sql}").fetchall()  # nosec B608
         except duckdb.CatalogException as exc:
             raise BackendMissingTableError(str(exc)) from exc
         except duckdb.Error as exc:

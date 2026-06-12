@@ -10,7 +10,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api import alert_dispatcher
+from src.serving.api.alerts import escalation as alerts_escalation
 from src.serving.api.auth import TenantKey
 from src.serving.api.main import app
 
@@ -54,7 +54,7 @@ def httpx_mock(monkeypatch) -> _HTTPXMock:
         async def __aexit__(self, *args) -> None:
             pass
 
-    monkeypatch.setattr(alert_dispatcher.httpx, "AsyncClient", _AsyncClient)
+    monkeypatch.setattr(alerts_escalation.httpx, "AsyncClient", _AsyncClient)
     return mock
 
 

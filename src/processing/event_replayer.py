@@ -130,7 +130,8 @@ class EventReplayer:
                 ],
             )
             self._conn.execute("COMMIT")
-        except Exception:  # nosec B110 - rollback must preserve the original replay failure
+        # rollback must preserve the original replay failure
+        except Exception:  # nosec B110
             # Transaction rollback must happen before unexpected errors propagate.
             self._conn.execute("ROLLBACK")
             raise

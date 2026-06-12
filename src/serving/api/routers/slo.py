@@ -105,7 +105,8 @@ def _measurement_value(
             return None
         row = conn.execute(
             (
-                "SELECT quantile_cont(latency_ms, 0.95) "  # nosec B608 - time_column is chosen from the fixed pipeline_events allowlist
+                # time_column is chosen from the fixed pipeline_events allowlist
+                "SELECT quantile_cont(latency_ms, 0.95) "  # nosec B608
                 "FROM pipeline_events "
                 f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL) "
                 f"{tenant_sql} "
@@ -118,7 +119,8 @@ def _measurement_value(
     if definition.measurement == "freshness_seconds":
         row = conn.execute(
             (
-                f"SELECT MAX({time_column}) "  # nosec B608 - time_column is chosen from the fixed pipeline_events allowlist
+                # time_column is chosen from the fixed pipeline_events allowlist
+                f"SELECT MAX({time_column}) "  # nosec B608
                 "FROM pipeline_events "
                 f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
                 f"{tenant_sql}"
@@ -137,7 +139,8 @@ def _measurement_value(
         if "status_code" in columns:
             row = conn.execute(
                 (
-                    "SELECT "  # nosec B608 - time_column is chosen from the fixed pipeline_events allowlist
+                    # time_column is chosen from the fixed pipeline_events allowlist
+                    "SELECT "  # nosec B608
                     "COUNT(*) FILTER (WHERE status_code IS NOT NULL), "
                     "COUNT(*) FILTER (WHERE status_code >= 500) "
                     "FROM pipeline_events "
@@ -153,7 +156,8 @@ def _measurement_value(
 
         row = conn.execute(
             (
-                "SELECT COUNT(*), "  # nosec B608 - time_column is chosen from the fixed pipeline_events allowlist
+                # time_column is chosen from the fixed pipeline_events allowlist
+                "SELECT COUNT(*), "  # nosec B608
                 "COUNT(*) FILTER (WHERE topic = 'events.deadletter') "
                 "FROM pipeline_events "
                 f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"

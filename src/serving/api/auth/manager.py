@@ -319,8 +319,7 @@ class AuthManager:
         if indexed is not None and indexed.key_hash is not None:
             if verify_api_key(api_key, indexed.key_hash):
                 matched = indexed.model_copy(update={"key": api_key, "matched_slot": "current"})
-                self._runtime_plaintext_by_hash[indexed.key_hash] = api_key
-                self.keys_by_value[api_key] = matched
+                self._remember_runtime_key(api_key, matched)
                 return matched
         # Legacy fallback: only entries WITHOUT a lookup digest (pre-M-C4
         # bcrypt config) still pay the O(n) verify scan.
@@ -329,8 +328,7 @@ class AuthManager:
                 continue
             if verify_api_key(api_key, item.key_hash):
                 matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
-                self._runtime_plaintext_by_hash[item.key_hash] = api_key
-                self.keys_by_value[api_key] = matched
+                self._remember_runtime_key(api_key, matched)
                 return matched
         indexed_previous = self._previous_keys_by_lookup.get(lookup)
         if (
@@ -348,6 +346,20 @@ class AuthManager:
             if verify_api_key(api_key, item.previous_key_hash):
                 return item.model_copy(update={"key": api_key, "matched_slot": "previous"})
         return None
+
+    def _remember_runtime_key(self, api_key: str, matched: TenantKey) -> None:
+        # C-4: cache the plaintext->key binding so repeat lookups skip the slow
+        # verify. Held under `_config_lock` because load()/reload() rebuilds
+        # `keys_by_value` and `_runtime_plaintext_by_hash` wholesale; without
+        # the lock a concurrent reload can land between these two writes and
+        # drop a just-cached entry, leaving the two maps inconsistent. The slow
+        # verify in authenticate() runs OUTSIDE this lock, so a SIGHUP reload is
+        # never serialized behind a bcrypt/argon2 verification.
+        if matched.key_hash is None:
+            return
+        with self._config_lock:
+            self._runtime_plaintext_by_hash[matched.key_hash] = api_key
+            self.keys_by_value[api_key] = matched
 
     @property
     def configured_key_count(self) -> int:

@@ -21,8 +21,12 @@ satellite source-system fan-out:
 
 - `rv.bv_customer_mdm__{msk,spb,ekb,dxb,ala}` — five branch-scoped views,
   PII stays in branch, RBAC-friendly
-- `rv.bv_order_canonical` — UNION ALL of header + pricing across all five
-  branches with `argMax` SCD2 collapse
+- `rv.bv_order_canonical_mat` — materialized snapshot of the
+  `bv_order_canonical` view (UNION ALL of header + pricing across all five
+  branches with `argMax` SCD2 collapse). At X5 scale (8M orders) the live
+  view exceeds the demo host's per-query memory cap when re-computed inside
+  each mart, so marts read the staged materialization instead; it is rebuilt
+  per branch by `business_vault/load_bv_order_canonical_mat.sh`.
 
 ## Tests
 

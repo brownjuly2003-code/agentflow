@@ -21,7 +21,7 @@ SELECT
     round(sum(toFloat64(tax_amount)) /
           nullIf(sum(toFloat64(subtotal_amount)), 0),
           4)                                          AS effective_tax_rate
-FROM {{ source('rv', 'bv_order_canonical') }}
+FROM {{ source('rv', 'bv_order_canonical_mat') }}
 WHERE order_date IS NOT NULL
   AND subtotal_amount IS NOT NULL
 GROUP BY branch, month

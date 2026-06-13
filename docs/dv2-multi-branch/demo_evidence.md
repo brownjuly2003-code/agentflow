@@ -4,6 +4,13 @@ Captured against the running `hq-demo` cluster on the iMac demo host
 (192.168.1.133) on 2026-05-23. Every block is reproducible from
 `infrastructure/dv2/bootstrap.sh`.
 
+> **2026-06-07 — scale numbers refreshed at real X5 volume.** Sections 5-7
+> now show the cluster loaded with the X5 Retail Hero dataset (8.06M orders /
+> 45.8M line items, branch-sharded 40/25/15/10/10). Sections 1-4 and 8
+> (topology, pinning, storage, MDM conflict-resolution mechanics) are
+> volume-independent and stand as captured on the synthetic seed. Serving
+> latency at X5 is benchmarked in [`load-test-baseline.md`](load-test-baseline.md).
+
 ## 1. Cluster topology — `kubectl get nodes --show-labels`
 
 ```
@@ -64,18 +71,19 @@ GROUP BY branch ORDER BY pct DESC;
 ```
 
 ```
-┌─branch─┬─orders─┬─pct─┐
-│ msk    │   4000 │  40 │
-│ spb    │   2500 │  25 │
-│ ekb    │   1500 │  15 │
-│ dxb    │   1000 │  10 │
-│ ala    │   1000 │  10 │
-└────────┴────────┴─────┘
+┌─branch─┬──orders─┬──pct─┐
+│ msk    │ 3225691 │   40 │
+│ spb    │ 2016191 │   25 │
+│ ekb    │ 1202248 │ 14.9 │
+│ dxb    │  814336 │ 10.1 │
+│ ala    │  796767 │  9.9 │
+└────────┴─────────┴──────┘
 ```
 
-The 40/25/15/10/10 split lines up with the consistent-hashing distribution
-that the X5 Retail Hero loader (`warehouse/agentflow/dv2/loaders/x5_retail_hero/`)
-applies to real transactions when seeded against the production-volume CSVs.
+(X5 capture, 2026-06-07.) The 40/25/15/10/10 split is the consistent-hashing
+distribution that the X5 Retail Hero loader
+(`warehouse/agentflow/dv2/loaders/x5_retail_hero/`) applies to the real
+transactions — 8,055,233 orders land within 0.1 pp of the design split.
 
 ## 6. Latency floor — multi-branch aggregation
 
@@ -84,23 +92,26 @@ WHERE query LIKE '%hub_order%' ORDER BY event_time DESC LIMIT 3`:
 
 ```
 ┌─query_duration_ms─┬─read_rows─┐
-│                 3 │     10000 │
-│                 4 │     10001 │
-│                 4 │     10000 │
+│              1110 │   8055234 │
 └───────────────────┴───────────┘
 ```
 
-3–4 ms for a multi-branch GROUP BY over 10K hub rows on a kind-on-Lima
-single-CPU container — well inside BI-acceptable budgets, with headroom for
-hash-join expansion via satellites.
+(X5 capture, 2026-06-07.) 1.1 s for a multi-branch GROUP BY over **8.06M hub
+rows** (with a per-row `splitByString`) on the 2-vCPU kind-on-Lima container —
+the raw-vault scan path. Serving queries do not pay this: the materialized
+marts answer the same business questions at **p99 20–197 ms** under
+concurrency — full sweep in [`load-test-baseline.md`](load-test-baseline.md).
 
 ## 7. Line items reach
 
 ```sql
-SELECT count() FROM rv.lnk_order_product;  -- 24938
+SELECT count() FROM rv.lnk_order_product;  -- 45811505
 ```
 
-Matches the seed's 2.5× average line items per order.
+(X5 capture, 2026-06-07.) 45.8M line items across 8.06M orders — the real
+X5 Retail Hero basket profile (~5.7 line items per order), loaded by the
+backpressure-throttled bulk loader in 2h16m with the cluster cold-restart-safe
+throughout (98 active parts, 3.48 GiB on disk post-load).
 
 ## 8. Business Vault — populated views with MDM conflict resolution
 

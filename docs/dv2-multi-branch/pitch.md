@@ -60,9 +60,11 @@ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password 
 ```
 
 > «40/25/15/10/10 — точное распределение, которое X5-loader делает через
-> consistent hashing на `store_id`. Запрос — 3 миллисекунды на 10K строк
-> в kind-кластере на iMac 2017. Production-движок даёт тот же план — мы
-> просто меняем железо».
+> consistent hashing на `store_id`. Это 8 миллионов реальных заказов X5 —
+> скан всего hub'а с разбором record_source идёт ~1.1 секунды на 2-vCPU
+> kind-кластере на iMac 2017, а serving-запросы ходят в материализованные
+> марты за 20-200 ms p99 (см. load-test-baseline.md). Production-движок
+> даёт тот же план — мы просто меняем железо».
 
 ## 01:25 — Business Vault: MDM
 

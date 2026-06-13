@@ -68,3 +68,32 @@ def test_clickhouse_connect_passes_credentials(monkeypatch):
         },
         {"query": "SELECT 1"},
     ]
+
+
+def test_parts_throttle_waits_until_merges_catch_up(monkeypatch):
+    from warehouse.agentflow.dv2.loaders.x5_retail_hero.loader import PartsThrottle
+
+    class _FakeClient:
+        def __init__(self, counts):
+            self.counts = list(counts)
+
+        def execute(self, query, params):
+            assert "system.parts" in query
+            assert params == {"database": "rv"}
+            return [(self.counts.pop(0),)]
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "warehouse.agentflow.dv2.loaders.x5_retail_hero.loader.time.sleep",
+        sleeps.append,
+    )
+
+    # Above budget twice, then merges catch up.
+    throttle = PartsThrottle(_FakeClient([900, 700, 300]), "rv", max_active_parts=400)
+    throttle.wait_if_needed()
+    assert len(sleeps) == 2
+
+    # Disabled throttle (0) and dry-run (client=None) never query or sleep.
+    PartsThrottle(_FakeClient([]), "rv", max_active_parts=0).wait_if_needed()
+    PartsThrottle(None, "rv", max_active_parts=400).wait_if_needed()
+    assert len(sleeps) == 2

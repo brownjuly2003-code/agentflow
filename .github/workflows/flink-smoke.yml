@@ -1,0 +1,82 @@
+name: Flink Smoke
+
+# Streaming-verification gap closer: builds the PyFlink job image and submits
+# stream_processor.py to a throwaway local Flink cluster, asserting the job is
+# accepted (graph builds + JobID assigned). This guards the watermark/Duration
+# regression class (T-2) that only surfaces at job-submission time and is
+# invisible to the no-Docker unit suite.
+#
+# Not a required gate (intentionally): it spins a full Kafka+MinIO+Flink stack,
+# so it is heavier and slower than the unit lanes. Promote to required only
+# after a stretch of stable runs.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flink-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flink-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_FILES: "-f docker-compose.yml -f docker-compose.flink.yml"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Submit stream_processor.py to a local Flink cluster
+        run: |
+          set -euo pipefail
+          marker="Job has been submitted with JobID"
+          # Brings up the dependency graph (kafka, kafka-init, minio, minio-init,
+          # flink-jobmanager, flink-taskmanager) and builds the PyFlink image.
+          docker compose $COMPOSE_FILES up -d --build flink-job-runner
+
+          echo "Waiting up to 10 min for '$marker' in flink-job-runner logs..."
+          deadline=$((SECONDS + 600))
+          while (( SECONDS < deadline )); do
+            logs="$(docker compose $COMPOSE_FILES logs flink-job-runner 2>/dev/null || true)"
+            if grep -q "$marker" <<<"$logs"; then
+              echo "SMOKE PASS: job submitted to the cluster."
+              grep "$marker" <<<"$logs" || true
+              exit 0
+            fi
+            cid="$(docker compose $COMPOSE_FILES ps -q flink-job-runner 2>/dev/null || true)"
+            if [ -n "$cid" ]; then
+              state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
+              if [ "$state" = "exited" ]; then
+                echo "flink-job-runner exited before submitting a job:"
+                echo "$logs" | tail -50
+                exit 1
+              fi
+            fi
+            sleep 5
+          done
+          echo "SMOKE FAIL: '$marker' not observed within timeout."
+          exit 1
+
+      - name: Collect Flink logs on failure
+        if: failure()
+        run: |
+          docker compose $COMPOSE_FILES logs --tail=800 > flink-smoke-logs.txt || true
+
+      - name: Upload Flink logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flink-smoke-logs
+          path: flink-smoke-logs.txt
+          if-no-files-found: warn
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose $COMPOSE_FILES down -v

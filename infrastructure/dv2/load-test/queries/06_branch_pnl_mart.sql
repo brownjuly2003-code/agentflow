@@ -1,0 +1,1 @@
+SELECT branch, sum(orders) AS orders, sum(gross_revenue) AS gross_revenue, round(sum(tax_collected) / nullIf(sum(net_revenue), 0), 4) AS effective_tax_rate FROM marts.branch_pnl GROUP BY branch ORDER BY gross_revenue DESC FORMAT Null

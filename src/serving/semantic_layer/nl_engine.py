@@ -19,6 +19,18 @@ logger = structlog.get_logger()
 _ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 
+def _sql_str_literal(value: str) -> str:
+    """Render ``value`` as a SQL string literal with single quotes doubled.
+
+    Defense-in-depth for the rule-based fallback (audit A-4). The extraction
+    regexes already exclude quote characters from the interpolated tokens, but
+    quoting at the splice point keeps these sites inert even if a future edit
+    loosens a pattern — the surface the report flagged as "one careless edit
+    away from a hole". Mirrors ``SQLBuilderMixin._quote_literal`` for ``str``.
+    """
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _build_schema_prompt(catalog: DataCatalog) -> str:
     """Build a schema description for the LLM from the catalog."""
     lines = ["Available tables and columns:\n"]
@@ -106,8 +118,8 @@ def _rule_based_translate(question: str) -> str | None:
     order_match = re.search(r"order\s+(ORD-[\w-]+)", question, re.IGNORECASE)
     if order_match:
         oid = order_match.group(1)
-        # order IDs are regex-validated before interpolation
-        return f"SELECT * FROM orders_v2 WHERE order_id = '{oid}'"  # nosec B608
+        # order IDs are regex-validated and quoted before interpolation
+        return f"SELECT * FROM orders_v2 WHERE order_id = {_sql_str_literal(oid)}"  # nosec B608
 
     if "revenue" in q or "total sales" in q:
         window = _extract_window(q)
@@ -116,7 +128,7 @@ def _rule_based_translate(question: str) -> str | None:
             f"SELECT SUM(total_amount) as revenue "  # nosec B608
             f"FROM orders_v2 "
             f"WHERE status != 'cancelled' "
-            f"AND created_at >= NOW() - INTERVAL '{window}'"
+            f"AND created_at >= NOW() - INTERVAL {_sql_str_literal(window)}"
         )
 
     if "average order" in q or "avg order" in q or "aov" in q:
@@ -126,7 +138,7 @@ def _rule_based_translate(question: str) -> str | None:
             f"SELECT AVG(total_amount) as avg_order_value "  # nosec B608
             f"FROM orders_v2 "
             f"WHERE status != 'cancelled' "
-            f"AND created_at >= NOW() - INTERVAL '{window}'"
+            f"AND created_at >= NOW() - INTERVAL {_sql_str_literal(window)}"
         )
 
     if "top" in q and "product" in q:
@@ -152,15 +164,15 @@ def _rule_based_translate(question: str) -> str | None:
             f"ROUND(COUNT(*) FILTER (WHERE is_conversion)::FLOAT "
             f"/ NULLIF(COUNT(*), 0) * 100, 2) as conversion_pct "
             f"FROM sessions_aggregated "
-            f"WHERE started_at >= NOW() - INTERVAL '{window}'"
+            f"WHERE started_at >= NOW() - INTERVAL {_sql_str_literal(window)}"
         )
 
     if "user" in q:
         user_match = re.search(r"(USR-\d+)", question)
         if user_match:
             uid = user_match.group(1)
-            # user IDs are regex-validated before interpolation
-            return f"SELECT * FROM users_enriched WHERE user_id = '{uid}'"  # nosec B608
+            # user IDs are regex-validated and quoted before interpolation
+            return f"SELECT * FROM users_enriched WHERE user_id = {_sql_str_literal(uid)}"  # nosec B608
 
     if "out of stock" in q or "stock" in q:
         return (

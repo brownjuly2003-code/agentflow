@@ -37,50 +37,64 @@ def test_sql_injection_checks_are_not_globally_suppressed() -> None:
 # A-4: the dynamic-SQL surface is safe *today* — identifiers are regex-bound,
 # NL->SQL passes sqlglot validation in `sql_guard`, and table allowlists apply —
 # but only because every call site validated its input. The report flags it as
-# "one careless edit away from a hole". This ratchet pins the set of files
-# allowed to carry an inline `# nosec B608` (interpolated SQL) suppression: a
-# NEW file introducing interpolated SQL fails here and forces a review (route it
-# through `sql_guard` / parameter binding / `_quote_identifier`/`_quote_literal`
-# instead, or extend the allowlist deliberately). Shrinking the set is also a
-# deliberate event — bind a site, then drop the file from the allowlist.
-_ALLOWED_B608_FILES = frozenset(
-    {
-        "src/orchestration/dags/daily_batch.py",
-        "src/serving/api/routers/lineage.py",
-        "src/serving/api/routers/slo.py",
-        "src/serving/api/routers/stream.py",
-        "src/serving/api/webhook_dispatcher.py",
-        "src/serving/backends/clickhouse_backend.py",
-        "src/serving/backends/duckdb_backend.py",
-        "src/serving/semantic_layer/nl_engine.py",
-        "src/serving/semantic_layer/query/entity_queries.py",
-        "src/serving/semantic_layer/query/nl_queries.py",
-        "src/serving/semantic_layer/search_index.py",
-    }
-)
+# "one careless edit away from a hole". This ratchet pins the EXACT COUNT of
+# inline `# nosec B608` (interpolated SQL) suppressions per file: a NEW file, OR
+# a new site inside an already-listed file, fails here and forces a review
+# (route the query through `sql_guard` / parameter binding / `_quote_identifier`
+# / `_quote_literal` instead, or bump the count deliberately). Shrinking a count
+# is also a deliberate event — bind a site, then lower (or drop) the entry.
+# Each site's safety rationale is documented in docs/security-audit.md, and the
+# per-line justification comment is enforced by
+# test_bandit_diff.test_nosec_comments_carry_reason.
+_ALLOWED_B608_SITES = {
+    "src/orchestration/dags/daily_batch.py": 1,
+    "src/serving/api/routers/lineage.py": 1,
+    "src/serving/api/routers/slo.py": 4,
+    "src/serving/api/routers/stream.py": 1,
+    "src/serving/api/webhook_dispatcher.py": 1,
+    "src/serving/backends/clickhouse_backend.py": 6,
+    "src/serving/backends/duckdb_backend.py": 2,
+    "src/serving/semantic_layer/nl_engine.py": 6,
+    "src/serving/semantic_layer/query/entity_queries.py": 3,
+    "src/serving/semantic_layer/query/nl_queries.py": 2,
+    "src/serving/semantic_layer/search_index.py": 1,
+}
 
 
-def _src_files_with_b608() -> set[str]:
-    found: set[str] = set()
+def _b608_counts_by_file() -> dict[str, int]:
+    counts: dict[str, int] = {}
     for path in (ROOT / "src").rglob("*.py"):
-        if "# nosec B608" in path.read_text(encoding="utf-8"):
-            found.add(path.relative_to(ROOT).as_posix())
-    return found
+        n = path.read_text(encoding="utf-8").count("# nosec B608")
+        if n:
+            counts[path.relative_to(ROOT).as_posix()] = n
+    return counts
 
 
 def test_interpolated_sql_nosec_surface_is_pinned() -> None:
-    found = _src_files_with_b608()
+    found = _b608_counts_by_file()
 
-    new_sites = sorted(found - _ALLOWED_B608_FILES)
+    new_sites = sorted(set(found) - set(_ALLOWED_B608_SITES))
     assert not new_sites, (
         "New `# nosec B608` interpolated-SQL site(s) introduced in "
         f"{new_sites}. Route the query through sql_guard / parameter binding / "
         "_quote_identifier/_quote_literal, or add the file to "
-        "_ALLOWED_B608_FILES with explicit review (A-4)."
+        "_ALLOWED_B608_SITES with explicit review (A-4)."
     )
 
-    bound_sites = sorted(_ALLOWED_B608_FILES - found)
+    bound_sites = sorted(set(_ALLOWED_B608_SITES) - set(found))
     assert not bound_sites, (
         f"{bound_sites} no longer carry `# nosec B608` — the dynamic-SQL surface "
-        "shrank. Remove them from _ALLOWED_B608_FILES to keep the ratchet tight."
+        "shrank. Remove them from _ALLOWED_B608_SITES to keep the ratchet tight."
+    )
+
+    drifted = {
+        path: (found[path], expected)
+        for path, expected in _ALLOWED_B608_SITES.items()
+        if path in found and found[path] != expected
+    }
+    assert not drifted, (
+        "Interpolated-SQL `# nosec B608` count changed (file: (found, pinned)): "
+        f"{drifted}. A new site inside an already-listed file must be reviewed "
+        "for injection safety (docs/security-audit.md) and the count bumped "
+        "deliberately, or the value bound so the count drops."
     )

@@ -73,7 +73,35 @@ Second, the NL-to-SQL surface validates translated SQL with `sqlglot`. The valid
 
 The repository also documents intentional `# nosec B608` suppressions only on trusted identifier paths where identifiers come from internal catalog/config allowlists rather than user-controlled input.
 
-Evidence: `src/serving/semantic_layer/sql_guard.py`, `src/serving/semantic_layer/query/sql_builder.py`, `tests/unit/test_query_engine_injection.py`, `tests/unit/test_sql_guard.py`
+### 5.1 Interpolated-SQL site inventory (A-4)
+
+Audit finding A-4 flagged the dynamic-SQL surface as "one careless edit away from a hole". Every `# nosec B608` suppression in `src/` was reviewed and is **safe by construction**:
+
+- Interpolated **identifiers** come from a fixed in-code allowlist, the semantic catalog, trusted backend config, live schema introspection (`PRAGMA table_info`), `_IDENTIFIER_RE`, or `sqlglot` validation.
+- Interpolated **values** are either bound as `?` parameters, fixed literals, integers, or regex-extracted tokens that exclude SQL metacharacters and are additionally quoted via `_quote_literal` / `_sql_str_literal`.
+
+No site interpolates unbound, unquoted request data. There are **no Class-A (migratable value-interpolation) sites remaining**: the hot entity/metric paths already bind values (`use_query_params` on DuckDB, `_quote_literal` elsewhere) and the operational routers already pass values through `?`. The remaining suppressions are Class-B (identifiers / structural fragments that cannot be parameterized).
+
+The number of suppressions per file is pinned by `test_interpolated_sql_nosec_surface_is_pinned` — a new site (even inside an already-listed file) or a new file fails CI and forces a review. Each suppression's per-line rationale comment is enforced by `test_nosec_comments_carry_reason`.
+
+| Site | Interpolated | Why safe (Class B — safe by construction) |
+|------|--------------|--------------------------------------------|
+| `semantic_layer/nl_engine.py:110,163` | `oid`, `uid` (values) | regex `ORD-[\w-]+` / `USR-\d+` exclude quotes; additionally quoted via `_sql_str_literal`; covered by `test_nl_engine_injection.py` |
+| `semantic_layer/nl_engine.py:116,126,149` | `window` (value) | `_extract_window` numeric allowlist (`\d+ <unit>` or constant); quoted via `_sql_str_literal` |
+| `semantic_layer/nl_engine.py:139` | `limit` (value) | parsed `int()` from the question text |
+| `api/routers/lineage.py:103` | `select_columns`, `time_column` (identifiers) | column names are in-code literals gated by `PRAGMA table_info`; values bound as `?` |
+| `api/routers/slo.py:109,123,143,160` | `time_column` (identifier) | fixed allowlist `processed_at`/`created_at`; window/tenant bound via `CAST(? AS INTERVAL)` / `?` |
+| `api/routers/stream.py:45` | `select_columns` (identifiers) | in-code literals gated by `PRAGMA table_info`; filters bound as `?` |
+| `api/webhook_dispatcher.py:315` | `order_by` (identifier) | fixed allowlist `processed_at`/`created_at`/`event_id`; tenant bound as `?` |
+| `backends/clickhouse_backend.py:293,306,326,344,359,375` | `self._database` + fixed table names | database from trusted backend config; table names and VALUES are in-code literals (demo seed) |
+| `backends/duckdb_backend.py:94` | `table_name` (identifier) | guarded by `_IDENTIFIER_RE.match` (bare identifier or `schema.identifier`) |
+| `backends/duckdb_backend.py:116` | `sql` (full statement) | `sqlglot.parse` must yield exactly one `exp.Select` before `EXPLAIN` |
+| `semantic_layer/query/entity_queries.py:31,133,196` | table / primary_key / entity_type | identifiers via `_quote_identifier` from catalog; values via `_quote_literal` or `?` (`use_query_params` on DuckDB) |
+| `semantic_layer/query/nl_queries.py:133,138` | `sql` subquery, `limit`/`offset` | `sql` prevalidated by `validate_nl_sql` (sqlglot single SELECT); `limit` bounded 1..1000, `offset` decoded int |
+| `semantic_layer/search_index.py:152` | `entity.table` (identifier) | table name from the semantic catalog `EntityDefinition`, not request data |
+| `orchestration/dags/daily_batch.py:148` | `table` (identifier) | iterates a fixed in-code health-check list |
+
+Evidence: `src/serving/semantic_layer/sql_guard.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/nl_engine.py`, `tests/unit/test_query_engine_injection.py`, `tests/unit/test_sql_guard.py`, `tests/unit/test_nl_engine_injection.py`, `tests/unit/test_security_tooling_policy.py`
 
 ## 6. Rate Limiting and Abuse Protection
 

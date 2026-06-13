@@ -26,7 +26,7 @@ dependencies = [
     "pydantic-settings>=2.5,<3",
     "pyyaml>=6,<7",
     "sqlglot>=30,<31",
-    "structlog>=24.4,<26",
+    "structlog>=24.4,<27",
 ]
 
 [project.optional-dependencies]
@@ -59,7 +59,7 @@ integrations = [
     "llama-index-core>=0.12,<1",
 ]
 contract = [
-    "schemathesis==4.21.0",
+    "schemathesis==4.21.1",
 ]
 dev = [
     "bandit>=1.9,<2",

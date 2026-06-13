@@ -5,10 +5,10 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
 
 from src.serving.api.routers.agent_query import (
     _allowed_tables_for_request,
+    _call_in_threadpool_with_kwarg_fallback,
     _ensure_metric_allowed,
     _get_pii_masker,
 )
@@ -85,25 +85,14 @@ async def _execute_entity_item(item: BatchItem, req: Request) -> dict[str, Any]:
             f"API key '{tenant_key.name}' cannot access entity type '{entity_type}'."
         )
 
-    try:
-        result = await run_in_threadpool(
-            _run_engine_call,
-            req.app.state.query_engine,
-            "get_entity",
-            entity_type,
-            entity_id,
-            tenant_id=tenant_id,
-        )
-    except TypeError as exc:
-        if "tenant_id" not in str(exc):
-            raise
-        result = await run_in_threadpool(
-            _run_engine_call,
-            req.app.state.query_engine,
-            "get_entity",
-            entity_type,
-            entity_id,
-        )
+    result = await _call_in_threadpool_with_kwarg_fallback(
+        _run_engine_call,
+        req.app.state.query_engine,
+        "get_entity",
+        entity_type,
+        entity_id,
+        optional_kwargs={"tenant_id": tenant_id},
+    )
     if result is None:
         raise LookupError(f"{entity_type}/{entity_id} not found")
 
@@ -127,25 +116,14 @@ async def _execute_metric_item(item: BatchItem, req: Request) -> dict[str, Any]:
         )
     _ensure_metric_allowed(req, metric_name)
 
-    try:
-        result = await run_in_threadpool(
-            _run_engine_call,
-            req.app.state.query_engine,
-            "get_metric",
-            metric_name,
-            window,
-            tenant_id=tenant_id,
-        )
-    except TypeError as exc:
-        if "tenant_id" not in str(exc):
-            raise
-        result = await run_in_threadpool(
-            _run_engine_call,
-            req.app.state.query_engine,
-            "get_metric",
-            metric_name,
-            window,
-        )
+    result = await _call_in_threadpool_with_kwarg_fallback(
+        _run_engine_call,
+        req.app.state.query_engine,
+        "get_metric",
+        metric_name,
+        window,
+        optional_kwargs={"tenant_id": tenant_id},
+    )
     return dict(result)
 
 
@@ -160,38 +138,14 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
     tenant_key = getattr(req.state, "tenant_key", None)
     tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
     allowed_tables = _allowed_tables_for_request(req)
-    try:
-        result = await run_in_threadpool(
-            _run_engine_call,
-            req.app.state.query_engine,
-            "execute_nl_query",
-            question,
-            context=context,
-            tenant_id=tenant_id,
-            allowed_tables=allowed_tables,
-        )
-    except TypeError as exc:
-        if "tenant_id" not in str(exc) and "allowed_tables" not in str(exc):
-            raise
-        try:
-            result = await run_in_threadpool(
-                _run_engine_call,
-                req.app.state.query_engine,
-                "execute_nl_query",
-                question,
-                context=context,
-                tenant_id=tenant_id,
-            )
-        except TypeError as fallback_exc:
-            if "tenant_id" not in str(fallback_exc):
-                raise
-            result = await run_in_threadpool(
-                _run_engine_call,
-                req.app.state.query_engine,
-                "execute_nl_query",
-                question,
-                context=context,
-            )
+    result = await _call_in_threadpool_with_kwarg_fallback(
+        _run_engine_call,
+        req.app.state.query_engine,
+        "execute_nl_query",
+        question,
+        optional_kwargs={"tenant_id": tenant_id, "allowed_tables": allowed_tables},
+        context=context,
+    )
     table_to_entity = {
         entity.table: name for name, entity in req.app.state.catalog.entities.items()
     }

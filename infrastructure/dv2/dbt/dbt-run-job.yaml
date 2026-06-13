@@ -64,7 +64,9 @@ spec:
                     schema: marts
                     secure: false
                     verify: false
-                    threads: 2
+                    # 1 on the 8 GB demo host: two concurrent X5-scale mart
+                    # builds blow the ClickHouse pod's 4.5 GiB total budget.
+                    threads: 1
                 target: dev
               PROF
               # Skip `dbt debug` — its `git --help` probe fails on python:3.11-slim

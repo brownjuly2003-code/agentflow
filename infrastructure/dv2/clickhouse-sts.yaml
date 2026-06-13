@@ -1,3 +1,106 @@
+# Merge throttling for the 8 GB demo host (option A of the 2026-06-02
+# hardware-ceiling finding): merges stay ON during bulk loads, but only 2
+# background threads with a bounded merge size, so concurrent merges fit the
+# 5Gi pod. Insert backpressure (loader --max-active-parts) keeps the part
+# count cold-start-safe; the raised parts_to_* bounds stop ClickHouse from
+# throwing before that backpressure engages. Lives in config.d, so unlike the
+# 2026-06-02 live ALTERs it survives a cluster rebuild.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-merge-throttle
+  namespace: dv2
+data:
+  merge-throttle.xml: |
+    <clickhouse>
+      <!-- Cache caps for the 5Gi pod: defaults (mark cache alone is 5 GB)
+           let one full scan of the 45.8M-row X5 tables pin the pod at its
+           4.5 GiB total-memory cap, after which OvercommitTracker kills
+           every later query (seen on the 2026-06-06 dbt mart runs). -->
+      <mark_cache_size>268435456</mark_cache_size>
+      <index_mark_cache_size>67108864</index_mark_cache_size>
+      <uncompressed_cache_size>268435456</uncompressed_cache_size>
+      <!-- X5-scale INSERT SELECTs exposed THREE false-kill modes of the
+           global memory accounting (2026-06-06/07, bv_order_canonical_mat
+           load):
+           (1) the cgroup reader counts reclaimable page cache (file=1.9 GiB
+           idle on this pod) toward "used" — false kill;
+           (2) with correction ON and use_cgroup=0 the worker imports
+           jemalloc stats.resident into the global tracker — and under
+           rapid alloc/purge churn that counter is GARBAGE: sampled
+           274→4241→956 MiB inside 6 s while OS VmRSS never exceeded
+           1.06 GiB. OvercommitTracker then kills queries holding <100 MiB
+           ("total 4.50 GiB" with real RSS ~1 GiB);
+           (3) with correction OFF the tracker can drift up across
+           spill-heavy queries (alloc/dealloc accounting mismatch) — but
+           the drift sources are now mostly gone (dirty_decay_ms:0 in
+           MALLOC_CONF below) and the staged loader restarts the pod per
+           branch, which resets the tracker.
+           (2) is strictly worse than (3): garbage import is fast and
+           unbounded, drift is slow and bounded by the per-branch restart.
+           So: correction OFF, cgroup OFF.
+           FINAL RESOLUTION (2026-06-07): none of the toggles fully help —
+           the hard-limit check compares the worker-maintained RSS field
+           directly ("current RSS: 4.54 GiB" kills with tracked at 3.59 GiB
+           and real VmRSS ~1 GiB), and correction OFF re-enables accounting
+           drift (+2.7 GiB inside one query). On this stack (Lima VM +
+           jemalloc + CH 25.5) the SERVER-level memory accounting is
+           unusable, while real memory is provably fine: across every
+           sampled failure VmRSS never exceeded 1.06 GiB. So the
+           server-level limit is effectively disabled (100 GiB) and safety
+           is delegated to the two honest layers: the per-query
+           max_memory_usage cap (per-query accounting tracked sane
+           87-880 MiB throughout) and the 5Gi cgroup pod limit as the
+           physical backstop. Demo-host setting; do not copy to multi-GB
+           production hosts without revisiting. -->
+      <memory_worker_correct_memory_tracker>0</memory_worker_correct_memory_tracker>
+      <memory_worker_use_cgroup>0</memory_worker_use_cgroup>
+      <memory_worker_period_ms>100</memory_worker_period_ms>
+      <!-- The explicit value alone is not enough: at startup ClickHouse
+           clamps max_server_memory_usage to ratio x detected RAM (cgroup
+           5Gi x 0.9 = 4.5 GiB, exactly the false-kill threshold above).
+           Raising the ratio disables the clamp. -->
+      <max_server_memory_usage_to_ram_ratio>20</max_server_memory_usage_to_ram_ratio>
+      <max_server_memory_usage>107374182400</max_server_memory_usage>
+      <background_pool_size>2</background_pool_size>
+      <merge_tree>
+        <max_bytes_to_merge_at_max_space_in_pool>1610612736</max_bytes_to_merge_at_max_space_in_pool>
+        <parts_to_delay_insert>2000</parts_to_delay_insert>
+        <parts_to_throw_insert>5000</parts_to_throw_insert>
+        <!-- Defaults (8 / 20) assume a 16-thread pool; with pool_size=2 the
+             server fails its startup sanityCheck (BAD_ARGUMENTS) unless these
+             fit inside background_pool_size * concurrency_ratio. -->
+        <number_of_free_entries_in_pool_to_lower_max_size_of_merge>1</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+        <number_of_free_entries_in_pool_to_execute_mutation>2</number_of_free_entries_in_pool_to_execute_mutation>
+        <number_of_free_entries_in_pool_to_execute_optimize_entire_partition>2</number_of_free_entries_in_pool_to_execute_optimize_entire_partition>
+      </merge_tree>
+    </clickhouse>
+---
+# Query-level memory protection for the 8 GB demo host: the bv_order_canonical
+# argMax view aggregates 8M+ order keys; at X5 volume a single in-memory
+# GROUP BY (let alone two dbt threads) exceeds the pod budget
+# (MEMORY_LIMIT_EXCEEDED seen on the first real-volume dbt run, 2026-06-06).
+# Spilling to disk keeps mart builds slow-but-bounded instead of OOM.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-query-spill
+  namespace: dv2
+data:
+  query-spill.xml: |
+    <clickhouse>
+      <profiles>
+        <default>
+          <max_bytes_before_external_group_by>805306368</max_bytes_before_external_group_by>
+          <max_bytes_before_external_sort>805306368</max_bytes_before_external_sort>
+          <!-- 3 GiB: returns_velocity needs >2.5 GiB even alone; with
+               threads=1 a single query at this cap + capped caches + merge
+               headroom still fits the 4.5 GiB server budget. -->
+          <max_memory_usage>3221225472</max_memory_usage>
+        </default>
+      </profiles>
+    </clickhouse>
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -23,6 +126,27 @@ spec:
             - containerPort: 8123
             - containerPort: 9000
           env:
+            # X5-scale spill-heavy queries cycle GiBs of short-lived buffers
+            # through jemalloc. With a muzzy-decay stage (ClickHouse's
+            # compiled default), purged pages are advised MADV_FREE — they
+            # stay in VmRSS until the kernel feels pressure, so the server's
+            # RSS-based hard memory check kills healthy queries: observed a
+            # stage query at 87 MiB tracked killed at "RSS 4.71 GiB" while
+            # jemalloc.allocated was 0.4 GiB. muzzy_decay_ms:0 collapses the
+            # muzzy stage: dirty pages return via MADV_DONTNEED within 1s and
+            # VmRSS tells the truth. background_thread keeps decay running
+            # even when allocation stalls; narenas:2 caps per-arena retention.
+            # dirty_decay_ms:0 (2026-06-07): 1000ms was not enough — X5
+            # aggregation hash-table churn frees GiBs/s, and within the decay
+            # window the dirty backlog (counted in jemalloc resident, which
+            # the memory worker reports as RSS) hit the 4.5 GiB kill threshold
+            # while honest OS RSS stayed under 1 GiB (observed: query tracked
+            # 1.69 GiB, kill said "RSS 4.51 GiB", /proc RSS ~0.9 GiB). Zero
+            # decay purges dirty pages synchronously at free — resident
+            # tracks allocated, at some madvise syscall cost (fine for the
+            # batch-load profile of this host).
+            - name: MALLOC_CONF
+              value: background_thread:true,narenas:2,dirty_decay_ms:0,muzzy_decay_ms:0
             - name: CLICKHOUSE_DB
               value: rv
             - name: CLICKHOUSE_USER
@@ -38,13 +162,31 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: "1"
-              memory: 1500Mi
+              # 1500Mi -> 3Gi -> 5Gi (2026-06-02). 3Gi still OOM'd (Code 241) on
+              # the 45.8M X5 lnk_order_product merge (CH self-caps at 0.9x limit).
+              # VM now has 6 GiB RAM + 16 GiB swap; PG/MinIO are idle during the
+              # bulk load, so the pod claims 5Gi (CH max ~4.5 GiB) and merge size
+              # is capped per-table so individual merges stay within budget.
+              memory: 5Gi
           volumeMounts:
             - name: data
               mountPath: /var/lib/clickhouse
+            - name: merge-throttle
+              mountPath: /etc/clickhouse-server/config.d/merge-throttle.xml
+              subPath: merge-throttle.xml
+            - name: query-spill
+              mountPath: /etc/clickhouse-server/users.d/query-spill.xml
+              subPath: query-spill.xml
+      volumes:
+        - name: merge-throttle
+          configMap:
+            name: clickhouse-merge-throttle
+        - name: query-spill
+          configMap:
+            name: clickhouse-query-spill
   volumeClaimTemplates:
     - metadata:
         name: data

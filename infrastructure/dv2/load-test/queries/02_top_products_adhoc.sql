@@ -1,0 +1,1 @@
+SELECT o.branch AS branch, lp.product_hk AS product_hk, count() AS lines FROM rv.lnk_order_product AS lp INNER JOIN (SELECT order_hk, splitByString('__', record_source)[2] AS branch FROM rv.hub_order) AS o ON lp.order_hk = o.order_hk GROUP BY o.branch, lp.product_hk ORDER BY lines DESC LIMIT 10 FORMAT Null

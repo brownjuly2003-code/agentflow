@@ -1,0 +1,1 @@
+SELECT branch, sum(orders) AS total_orders, sum(returned_orders) AS total_returned, round(sum(returned_orders) / nullIf(sum(orders), 0), 4) AS return_rate FROM marts.returns_velocity GROUP BY branch ORDER BY return_rate DESC FORMAT Null

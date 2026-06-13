@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +42,53 @@ REQUIRED_CSVS = ("clients.csv", "products.csv", "purchases.csv")
 LOGGER = logging.getLogger("x5_retail_hero_loader")
 
 
+class PartsThrottle:
+    """Backpressure on the active-part count so merges keep up with inserts.
+
+    The 2026-06-02 full load ran with merges OFF and accumulated tens of
+    thousands of parts — more than an 8 GB host can even cold-start on
+    (part-metadata load OOMs before the server serves a query). Keeping
+    merges ON but pausing inserts whenever the active-part count crosses a
+    bound keeps the part set small enough to survive a cold start at any
+    moment during the load.
+    """
+
+    def __init__(
+        self,
+        client: Client | None,
+        database: str,
+        max_active_parts: int,
+        poll_seconds: float = 15.0,
+    ) -> None:
+        self.client = client
+        self.database = database
+        self.max_active_parts = max_active_parts
+        self.poll_seconds = poll_seconds
+
+    def wait_if_needed(self) -> None:
+        if self.client is None or self.max_active_parts <= 0:
+            return
+        while True:
+            active = self._active_parts()
+            if active <= self.max_active_parts:
+                return
+            LOGGER.info(
+                "throttle: %s active parts in %s > %s budget, waiting %.0fs for merges",
+                active,
+                self.database,
+                self.max_active_parts,
+                self.poll_seconds,
+            )
+            time.sleep(self.poll_seconds)
+
+    def _active_parts(self) -> int:
+        result = self.client.execute(
+            "SELECT count() FROM system.parts WHERE database = %(database)s AND active",
+            {"database": self.database},
+        )
+        return int(result[0][0])
+
+
 @click.command()
 @click.option("--csv-dir", required=True, type=click.Path(file_okay=False, path_type=Path))
 @click.option("--clickhouse-host", default="localhost", show_default=True)
@@ -55,6 +103,16 @@ LOGGER = logging.getLogger("x5_retail_hero_loader")
     default=None,
     help="UTC timestamp override, for example 2026-05-23T10:15:30Z.",
 )
+@click.option(
+    "--max-active-parts",
+    default=0,
+    show_default=True,
+    type=int,
+    help=(
+        "Pause inserts while the database has more active parts than this "
+        "(0 disables). Keeps merges able to catch up on small hosts."
+    ),
+)
 def cli(
     csv_dir: Path,
     clickhouse_host: str,
@@ -65,6 +123,7 @@ def cli(
     batch_size: int,
     dry_run: bool,
     load_ts: str | None,
+    max_active_parts: int,
 ) -> None:
     _configure_logging()
     csv_paths = _validate_csvs(csv_dir)
@@ -74,6 +133,7 @@ def cli(
         if dry_run
         else _connect(clickhouse_host, clickhouse_port, clickhouse_user, clickhouse_password)
     )
+    throttle = PartsThrottle(client, clickhouse_database, max_active_parts)
 
     client_lookup: dict[str, dict[str, Any]] = {}
 
@@ -84,6 +144,7 @@ def cli(
         client,
         clickhouse_database,
         dry_run,
+        throttle,
     )
     client_lookup.update(
         _process_clients(
@@ -93,6 +154,7 @@ def cli(
             client,
             clickhouse_database,
             dry_run,
+            throttle,
         )
     )
 
@@ -111,6 +173,7 @@ def cli(
         client,
         clickhouse_database,
         dry_run,
+        throttle,
     )
 
 
@@ -183,6 +246,7 @@ def _process_products(
     client: Client | None,
     database: str,
     dry_run: bool,
+    throttle: PartsThrottle,
 ) -> None:
     totals: dict[str, int] = defaultdict(int)
     try:
@@ -190,6 +254,7 @@ def _process_products(
         for chunk in tqdm(reader, desc="products.csv", unit="chunk"):
             mapped = map_products_chunk(chunk, load_ts)
             _emit_mapped_rows(mapped, client, database, dry_run, totals)
+            throttle.wait_if_needed()
     except (KeyError, ValueError, FileNotFoundError, pd.errors.EmptyDataError) as exc:
         raise click.ClickException(f"Unable to process {products_path}: {exc}") from exc
 
@@ -203,6 +268,7 @@ def _process_clients(
     client: Client | None,
     database: str,
     dry_run: bool,
+    throttle: PartsThrottle,
 ) -> dict[str, dict[str, Any]]:
     totals: dict[str, int] = defaultdict(int)
     client_lookup: dict[str, dict[str, Any]] = {}
@@ -212,6 +278,7 @@ def _process_clients(
             mapped, chunk_lookup = map_clients_chunk(chunk, load_ts)
             client_lookup.update(chunk_lookup)
             _emit_mapped_rows(mapped, client, database, dry_run, totals)
+            throttle.wait_if_needed()
     except (KeyError, ValueError, FileNotFoundError, pd.errors.EmptyDataError) as exc:
         raise click.ClickException(f"Unable to process {clients_path}: {exc}") from exc
 
@@ -229,6 +296,7 @@ def _process_purchases(
     client: Client | None,
     database: str,
     dry_run: bool,
+    throttle: PartsThrottle,
 ) -> None:
     totals: dict[str, int] = defaultdict(int)
     try:
@@ -242,6 +310,7 @@ def _process_purchases(
                 seen_customer_personal,
             )
             _emit_mapped_rows(mapped, client, database, dry_run, totals)
+            throttle.wait_if_needed()
     except (KeyError, ValueError, FileNotFoundError, pd.errors.EmptyDataError) as exc:
         raise click.ClickException(f"Unable to process {purchases_path}: {exc}") from exc
 

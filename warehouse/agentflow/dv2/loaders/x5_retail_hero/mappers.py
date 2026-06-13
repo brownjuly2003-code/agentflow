@@ -20,10 +20,8 @@ try:
         LinkOrderCustomer,
         LinkOrderProduct,
         LinkOrderStore,
-        SatCustomerPersonal,
-        SatLinkOrderProduct,
         SatOrderHeader,
-        SatProductCatalog,
+        SatOrderPricing,
     )
 except ImportError:
     from branch_distributor import normalize_store_id
@@ -35,10 +33,8 @@ except ImportError:
         LinkOrderCustomer,
         LinkOrderProduct,
         LinkOrderStore,
-        SatCustomerPersonal,
-        SatLinkOrderProduct,
         SatOrderHeader,
-        SatProductCatalog,
+        SatOrderPricing,
     )
 
 
@@ -51,7 +47,17 @@ TABLE_HUB_ORDER = "hub_order"
 TABLE_LNK_ORDER_CUSTOMER = "lnk_order_customer"
 TABLE_LNK_ORDER_PRODUCT = "lnk_order_product"
 TABLE_LNK_ORDER_STORE = "lnk_order_store"
-TABLE_SAT_PRODUCT_CATALOG = f"sat_product_catalog__{SOURCE_SYSTEM}__{PRODUCT_BRANCH}"
+
+# Per-branch VAT/sales-tax used to synthesize a pricing satellite from the X5
+# gross purchase_sum (RU 20%, UAE 5%, KZ 12%), matching the synthetic seed.
+BRANCH_TAX_RATE = {
+    "msk": Decimal("0.20"),
+    "spb": Decimal("0.20"),
+    "ekb": Decimal("0.20"),
+    "dxb": Decimal("0.05"),
+    "ala": Decimal("0.12"),
+}
+_CENTS = Decimal("0.01")
 
 MappedRows = dict[str, list[BaseModel]]
 ClientLookup = dict[str, dict[str, Any]]
@@ -95,28 +101,12 @@ def map_products_chunk(products: pd.DataFrame, load_ts: datetime) -> MappedRows:
         product_hk = md5_digest(sku)
         source = record_source(PRODUCT_BRANCH)
         mapped[TABLE_HUB_PRODUCT].append(
-            HubProduct(product_hk=product_hk, sku=sku, load_ts=load_ts, record_source=source)
+            HubProduct(product_hk=product_hk, product_bk=sku, load_ts=load_ts, record_source=source)
         )
-
-        attrs = {
-            "brand_id": _nullable_string(row.get("brand_id")),
-            "is_own_trademark": _nullable_bool(row.get("is_own_trademark")),
-            "level_1": _nullable_string(row.get("level_1")),
-            "level_2": _nullable_string(row.get("level_2")),
-            "level_3": _nullable_string(row.get("level_3")),
-            "level_4": _nullable_string(row.get("level_4")),
-            "netto": _nullable_decimal(row.get("netto")),
-            "segment_id": _nullable_string(row.get("segment_id")),
-        }
-        mapped[TABLE_SAT_PRODUCT_CATALOG].append(
-            SatProductCatalog(
-                product_hk=product_hk,
-                load_ts=load_ts,
-                hash_diff=hash_diff(attrs),
-                record_source=source,
-                **attrs,
-            )
-        )
+        # X5 product attributes (level_*, brand_id, netto) do not match the
+        # deployed sat_product_catalog DDL (product_name/brand/category/...), and
+        # the catalog satellite is not on the branch_pnl path, so it is not
+        # emitted. See docs: X5 is wired through to the financial P&L mart only.
 
     return dict(mapped)
 
@@ -154,25 +144,30 @@ def map_clients_chunk(
     return dict(mapped), lookup
 
 
-def map_customer_personal(
-    customer_bk: str,
-    branch_code: str,
-    attrs: Mapping[str, Any],
-    load_ts: datetime,
-) -> SatCustomerPersonal:
-    satellite_attrs = {
-        "age": attrs.get("age"),
-        "gender": attrs.get("gender"),
-        "first_issue_date": attrs.get("first_issue_date"),
-        "first_redeem_date": attrs.get("first_redeem_date"),
+def _synthesize_pricing(
+    total_amount: Decimal | None, branch_code: str
+) -> dict[str, Decimal | None]:
+    """Derive a pricing satellite from the X5 gross purchase_sum.
+
+    total_amount is the gross (tax-inclusive) sum; subtotal is backed out with
+    the branch tax rate, tax is the remainder, discount/shipping are zero.
+    """
+    if total_amount is None:
+        return {
+            "subtotal_amount": None,
+            "discount_amount": None,
+            "tax_amount": None,
+            "shipping_cost": None,
+        }
+    rate = BRANCH_TAX_RATE.get(branch_code, Decimal("0.20"))
+    subtotal = (total_amount / (Decimal("1") + rate)).quantize(_CENTS)
+    tax = (total_amount - subtotal).quantize(_CENTS)
+    return {
+        "subtotal_amount": subtotal,
+        "discount_amount": Decimal("0.00"),
+        "tax_amount": tax,
+        "shipping_cost": Decimal("0.00"),
     }
-    return SatCustomerPersonal(
-        customer_hk=md5_digest(customer_bk),
-        load_ts=load_ts,
-        hash_diff=hash_diff(satellite_attrs),
-        record_source=record_source(branch_code),
-        **satellite_attrs,
-    )
 
 
 def map_purchases_chunk(
@@ -269,13 +264,12 @@ def map_purchases_chunk(
             seen_order_store_links.add(order_store_hk)
 
         if order_hk not in seen_order_headers:
+            total_amount = _nullable_decimal(row.get("purchase_sum"))
             header_attrs = {
-                "express_points_received": _nullable_decimal(row.get("express_points_received")),
-                "express_points_spent": _nullable_decimal(row.get("express_points_spent")),
-                "purchase_sum": _nullable_decimal(row.get("purchase_sum")),
-                "regular_points_received": _nullable_decimal(row.get("regular_points_received")),
-                "regular_points_spent": _nullable_decimal(row.get("regular_points_spent")),
-                "transaction_datetime": _nullable_datetime(row.get("transaction_datetime")),
+                "order_date": _nullable_datetime(row.get("transaction_datetime")),
+                "channel": "retail",
+                "order_status": "completed",
+                "total_amount": total_amount,
             }
             mapped[_sat_order_header_table(branch_code)].append(
                 SatOrderHeader(
@@ -286,32 +280,23 @@ def map_purchases_chunk(
                     **header_attrs,
                 )
             )
+            pricing_attrs = _synthesize_pricing(total_amount, branch_code)
+            mapped[_sat_order_pricing_table(branch_code)].append(
+                SatOrderPricing(
+                    order_hk=order_hk,
+                    load_ts=load_ts,
+                    hash_diff=hash_diff(pricing_attrs),
+                    record_source=source,
+                    **pricing_attrs,
+                )
+            )
             seen_order_headers.add(order_hk)
 
-        line_attrs = {
-            "product_quantity": _nullable_decimal(row.get("product_quantity")),
-            "trn_sum_from_iss": _nullable_decimal(row.get("trn_sum_from_iss")),
-        }
-        mapped[_sat_lnk_order_product_table(branch_code)].append(
-            SatLinkOrderProduct(
-                link_hk=order_product_hk,
-                load_ts=load_ts,
-                hash_diff=hash_diff(line_attrs),
-                record_source=source,
-                **line_attrs,
-            )
-        )
-
-        client_attrs = client_lookup.get(customer_bk)
-        customer_personal_key = (customer_bk, branch_code)
-        if client_attrs and (
-            seen_customer_personal is None or customer_personal_key not in seen_customer_personal
-        ):
-            mapped[_sat_customer_personal_table(branch_code)].append(
-                map_customer_personal(customer_bk, branch_code, client_attrs, load_ts)
-            )
-            if seen_customer_personal is not None:
-                seen_customer_personal.add(customer_personal_key)
+        # X5 has no product line attributes matching sat_lnk_order_product
+        # (qty/unit_price/discount_pct/line_total) and no customer PII matching
+        # sat_customer_personal (first_name/email); neither is on the branch_pnl
+        # path, so they are intentionally not emitted. The lnk_order_product
+        # link itself (above) carries the order<->product relationship.
 
     return dict(mapped)
 
@@ -320,16 +305,12 @@ def rows_to_dicts(rows: list[BaseModel]) -> list[dict[str, Any]]:
     return [row.model_dump(mode="python") for row in rows]
 
 
-def _sat_customer_personal_table(branch_code: str) -> str:
-    return f"sat_customer_personal__{SOURCE_SYSTEM}__{branch_code}"
-
-
 def _sat_order_header_table(branch_code: str) -> str:
     return f"sat_order_header__{SOURCE_SYSTEM}__{branch_code}"
 
 
-def _sat_lnk_order_product_table(branch_code: str) -> str:
-    return f"sat_lnk_order_product__{SOURCE_SYSTEM}__{branch_code}"
+def _sat_order_pricing_table(branch_code: str) -> str:
+    return f"sat_order_pricing__{SOURCE_SYSTEM}__{branch_code}"
 
 
 def _resolve_branch(store_id: Any, store_branch_map: Mapping[Any, str]) -> str:

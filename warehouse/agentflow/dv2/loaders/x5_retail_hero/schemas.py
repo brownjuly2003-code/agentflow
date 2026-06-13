@@ -22,7 +22,7 @@ class HubCustomer(VaultRow):
 
 class HubProduct(VaultRow):
     product_hk: Hash16
-    sku: str
+    product_bk: str
     load_ts: datetime
     record_source: str
 
@@ -92,16 +92,29 @@ class SatProductCatalog(VaultRow):
 
 
 class SatOrderHeader(VaultRow):
+    # Aligned to the deployed rv.sat_order_header__* DDL (order_date / channel /
+    # order_status / total_amount) so X5 orders are visible to bv_order_canonical.
     order_hk: Hash16
     load_ts: datetime
     hash_diff: Hash16
     record_source: str
-    transaction_datetime: datetime | None
-    purchase_sum: Decimal | None
-    regular_points_received: Decimal | None
-    express_points_received: Decimal | None
-    regular_points_spent: Decimal | None
-    express_points_spent: Decimal | None
+    order_date: datetime | None
+    channel: str | None
+    order_status: str | None
+    total_amount: Decimal | None
+
+
+class SatOrderPricing(VaultRow):
+    # Synthesized from the X5 purchase_sum (gross) with per-branch tax rates so
+    # bv_order_canonical / branch_pnl have a non-null subtotal_amount.
+    order_hk: Hash16
+    load_ts: datetime
+    hash_diff: Hash16
+    record_source: str
+    subtotal_amount: Decimal | None
+    discount_amount: Decimal | None
+    tax_amount: Decimal | None
+    shipping_cost: Decimal | None
 
 
 class SatLinkOrderProduct(VaultRow):

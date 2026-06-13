@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentFlow — движение данных</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap&subset=cyrillic" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF8;
+    --surface:#FFFFFF;
+    --text:#1C2024;
+    --text-2:rgba(28,32,36,.62);
+    --text-3:rgba(28,32,36,.40);
+    --line:rgba(28,32,36,.08);
+    --line-soft:rgba(28,32,36,.05);
+    --accent:#2563EB;          /* производственный hot-path */
+    --green:#059669;           /* локальный демо-путь */
+    --amber:#D97706;           /* DLQ / ошибки */
+    --ctl:rgba(28,32,36,.38);  /* фоновые / управляющие */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:'Inter','Segoe UI',system-ui,sans-serif;font-size:16px;line-height:1.5;}
+  ::selection{background:rgba(37,99,235,.14)}
+
+  #viewport{width:100%;overflow-x:hidden;}
+  #stage{transform-origin:top left;position:relative;}
+  #canvas{position:relative;width:2360px;height:1500px;}
+  #wires{position:absolute;inset:0;width:2360px;height:1500px;pointer-events:none;z-index:1;}
+  .node,.lane-h,.hdr,.band,.foot{position:absolute;z-index:2;}
+
+  /* ── header ─────────────────────────────────────────── */
+  .hdr{left:40px;top:26px;width:2280px;display:flex;align-items:flex-start;
+    justify-content:space-between;gap:48px;}
+  .hdr h1{margin:0;font-size:31px;font-weight:400;letter-spacing:-.01em;line-height:1.15;}
+  .hdr h1 b{font-weight:600}
+  .hdr .sub{margin:6px 0 0;font-size:14px;color:var(--text-2);max-width:980px;}
+  .meta{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .meta span{font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:11px;color:var(--text-2);
+    background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:3px 8px;}
+
+  .legend{flex:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;
+    padding:14px 18px;display:grid;grid-template-columns:auto auto;gap:7px 26px;
+    box-shadow:0 1px 3px rgba(28,32,36,.05);}
+  .legend div{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-2);
+    white-space:nowrap;}
+  .legend svg{flex:none}
+
+  /* ── lanes ──────────────────────────────────────────── */
+  .lane-h{top:156px;font-size:11.5px;font-weight:600;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--text-3);padding-bottom:6px;
+    border-bottom:1px solid var(--line);}
+
+  /* ── nodes ──────────────────────────────────────────── */
+  .node{background:var(--surface);border:1px solid var(--line);border-radius:8px;
+    padding:14px 16px 13px;box-shadow:0 1px 3px rgba(28,32,36,.05);
+    transition:box-shadow .18s ease,border-color .18s ease;}
+  .node.hot{border-top:3px solid var(--accent);padding-top:12px;}
+  .node.loc{border-top:3px solid var(--green);padding-top:12px;}
+  .node:hover{box-shadow:0 4px 10px -2px rgba(28,32,36,.10),0 2px 4px -2px rgba(28,32,36,.07);
+    border-color:rgba(28,32,36,.16);}
+  .n-title{font-size:15px;font-weight:600;line-height:1.25;display:flex;
+    align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .chip{font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:10.5px;font-weight:500;
+    color:var(--text-2);background:rgba(28,32,36,.045);border-radius:4px;
+    padding:1px 6px;white-space:nowrap;}
+  .n-sub{font-size:12px;color:var(--text-2);margin-top:2px;}
+  .node ul{margin:9px 0 0;padding:0;list-style:none;}
+  .node li{font-size:12.8px;color:var(--text);line-height:1.42;padding:3px 0 3px 14px;
+    position:relative;}
+  .node li+li{border-top:1px solid var(--line-soft);}
+  .node li::before{content:"";position:absolute;left:1px;top:.72em;width:5px;height:5px;
+    border-radius:1px;background:rgba(28,32,36,.28);}
+  .node li b{font-weight:500}
+  .node li .mut{color:var(--text-2)}
+  .mono,.node li code{font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:11px;
+    color:var(--text-2);background:none;}
+  .paths{margin-top:9px;padding-top:8px;border-top:1px solid var(--line-soft);
+    font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:10.5px;color:var(--text-3);
+    line-height:1.5;word-break:break-all;}
+  .topics{margin-top:9px;display:flex;flex-direction:column;gap:4px;}
+  .topics span{font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:11.5px;padding:4px 9px;
+    border-radius:4px;background:rgba(37,99,235,.06);color:var(--text);
+    border:1px solid rgba(37,99,235,.14);}
+  .topics span.dlq{background:rgba(217,119,6,.07);border-color:rgba(217,119,6,.22);}
+  .kpi-line{margin-top:9px;font-size:12px;color:var(--text-2);}
+  .kpi-line b{font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:12px;font-weight:500;
+    color:var(--text);font-variant-numeric:tabular-nums;}
+
+  /* ── bottom bands ───────────────────────────────────── */
+  .band{background:var(--surface);border:1px solid var(--line);border-radius:8px;
+    padding:14px 18px;box-shadow:0 1px 3px rgba(28,32,36,.05);}
+  .band .n-title{font-size:14px}
+  .band ul{margin:8px 0 0;padding:0;list-style:none;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 22px;}
+  .band li{font-size:12.4px;line-height:1.4;padding:3px 0 3px 13px;position:relative;}
+  .band li::before{content:"";position:absolute;left:0;top:.7em;width:5px;height:5px;
+    border-radius:1px;background:rgba(28,32,36,.28);}
+
+  /* DV2 mini-flow */
+  .dv2-flow{display:flex;align-items:stretch;gap:0;margin-top:10px;}
+  .mini{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:6px;
+    padding:9px 12px;}
+  .mini .t{font-size:12.8px;font-weight:600;}
+  .mini .t .chip{font-size:10px}
+  .mini .d{font-size:11.6px;color:var(--text-2);margin-top:3px;line-height:1.45;}
+  .dv2-arrow{flex:none;width:34px;display:flex;align-items:center;justify-content:center;}
+  .dv2-notes{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .dv2-notes span{font-size:11.5px;color:var(--text-2);background:var(--bg);
+    border:1px solid var(--line);border-radius:4px;padding:3px 9px;}
+  .dv2-notes span b{font-weight:500;color:var(--text)}
+
+  .foot{left:40px;top:1456px;width:2280px;font-size:11.5px;color:var(--text-3);
+    display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;}
+  .foot .mono{font-size:11px}
+
+  /* ── edges ──────────────────────────────────────────── */
+  path.edge{fill:none;transition:opacity .15s ease;}
+  .e-hot{stroke:var(--accent);stroke-width:2.2;}
+  .e-loc{stroke:var(--green);stroke-width:2;}
+  .e-dlq{stroke:var(--amber);stroke-width:1.8;stroke-dasharray:7 5;}
+  .e-ctl{stroke:var(--ctl);stroke-width:1.6;stroke-dasharray:6 5;}
+  .e-bat{stroke:rgba(28,32,36,.45);stroke-width:1.8;stroke-dasharray:2 6;stroke-linecap:round;}
+  text.elabel{font-family:'JetBrains Mono','Cascadia Mono',Consolas,monospace;font-size:11px;fill:var(--text-2);
+    paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;}
+  text.elabel.lab-hot{fill:#1D4FBF}
+  text.elabel.lab-loc{fill:#047857}
+  text.elabel.lab-dlq{fill:#B45309}
+  #wires.focus path.edge{opacity:.13}
+  #wires.focus path.edge.hl{opacity:1;stroke-width:2.6;}
+  #wires.focus text.elabel{opacity:.13}
+  #wires.focus text.elabel.hl{opacity:1}
+
+  /* ── mobile stub ────────────────────────────────────── */
+  #mobile-stub{display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);
+    color:var(--text);align-items:center;justify-content:center;text-align:center;padding:40px;}
+</style>
+</head>
+<body>
+
+<div id="viewport"><div id="stage"><div id="canvas">
+  <svg id="wires" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="m-hot" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0.6 L9.4 5 L0 9.4 Z" fill="#2563EB"/></marker>
+      <marker id="m-loc" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0.6 L9.4 5 L0 9.4 Z" fill="#059669"/></marker>
+      <marker id="m-dlq" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0.6 L9.4 5 L0 9.4 Z" fill="#D97706"/></marker>
+      <marker id="m-ctl" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.4" markerHeight="6.4" orient="auto-start-reverse">
+        <path d="M0 0.6 L9.4 5 L0 9.4 Z" fill="rgba(28,32,36,.45)"/></marker>
+      <marker id="m-bat" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.4" markerHeight="6.4" orient="auto-start-reverse">
+        <path d="M0 0.6 L9.4 5 L0 9.4 Z" fill="rgba(28,32,36,.5)"/></marker>
+    </defs>
+    <g id="edges-g"></g><g id="labels-g"></g>
+  </svg>
+
+  <div class="hdr">
+    <div>
+      <h1><b>AgentFlow</b> — движение данных</h1>
+      <p class="sub">Real-time платформа, отдающая AI-агентам живой бизнес-контекст:
+        источники → Kafka → Flink → Iceberg / DuckDB → семантический слой → FastAPI → SDK.
+        Все технологии и версии — из <span class="mono">pyproject.toml</span> и
+        <span class="mono">docker-compose*.yml</span>.</p>
+      <div class="meta">
+        <span>agentflow-runtime v1.4.0</span><span>Python ≥ 3.11</span>
+        <span>commit 7e289c0</span><span>2026-06-06</span>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="foot">
+    <span>Сверено с кодом: каждый блок ссылается на реальные модули репозитория (src/…, infrastructure/…, warehouse/…).</span>
+    <span class="mono">AgentFlow · docs/dataflow.html</span>
+  </div>
+</div></div></div>
+
+<div id="mobile-stub"><p style="font-size:18px;line-height:1.6;">
+  Откройте страницу на десктопе<br>для корректного отображения схемы.</p></div>
+
+<script>
+"use strict";
+const W=2360,H=1500;
+
+/* ── лейны ─────────────────────────────────────────────── */
+const LANES=[
+  {x:40,  w:300,t:"Источники"},
+  {x:404, w:280,t:"Транспорт"},
+  {x:748, w:320,t:"Обработка и качество"},
+  {x:1132,w:300,t:"Хранение"},
+  {x:1496,w:360,t:"Семантика и API"},
+  {x:1920,w:400,t:"Потребители"},
+];
+
+/* ── узлы ──────────────────────────────────────────────── */
+const NODES=[
+{id:"apps",x:40,y:178,w:300,cls:"hot",title:"Операционные события",
+ sub:"orders · payments · clicks",
+ items:[
+  "продюсер <b>confluent-kafka</b> <span class='chip'>2.5</span> — идемпотентная отправка батчами",
+  "схемы событий <b>Pydantic v2</b> <span class='chip'>2.9</span>",
+  "маршрутизация тенантов — <code>tenant_router.py</code>"],
+ paths:"src/ingestion/producers/event_producer.py · src/ingestion/schemas/"},
+
+{id:"cdc",x:40,y:402,w:300,cls:"hot",title:"OLTP-источники → CDC",
+ sub:"захват изменений из боевых БД",
+ items:[
+  "<b>PostgreSQL</b> <span class='chip'>16</span> · <b>MySQL</b> <span class='chip'>8.4</span>",
+  "<b>Debezium</b> на <b>Kafka Connect</b> — source-capture <span class='mut'>(Helm-чарт: NetworkPolicy, PDB)</span>",
+  "нормализатор → единый CDC-контракт <span class='chip'>ADR-0005</span>"],
+ paths:"src/ingestion/cdc/normalizer.py · connectors/{postgres,mysql}_cdc.py · docker-compose.cdc.yml"},
+
+{id:"gen",x:40,y:648,w:300,cls:"loc",title:"Синтетический генератор",
+ sub:"локальный демо-путь без инфраструктуры",
+ items:[
+  "<code>local_pipeline.py</code> — реалистичные e-commerce события",
+  "тот же код валидации и обогащения, что и в проде"],
+ paths:"src/processing/local_pipeline.py"},
+
+{id:"kafka",x:404,y:240,w:280,cls:"hot",title:"Apache Kafka",chip:"CP 7.7",
+ sub:"шина событий",
+ topics:["events.raw","events.validated","events.served","events.deadletter"],
+ items:[
+  "<b>Schema Registry</b> <span class='chip'>7.7</span> <span class='mut'>(prod-контур)</span>",
+  "<b>Kafka UI</b> <span class='chip'>0.7.2</span> — наблюдение за топиками"],
+ paths:"docker-compose{,.prod,.cdc}.yml"},
+
+{id:"flink",x:748,y:178,w:320,cls:"hot",title:"Apache Flink",chip:"1.19 · PyFlink",
+ sub:"потоковая обработка",
+ items:[
+  "<code>stream_processor.py</code> — валидация → обогащение → дедуп → маршрутизация",
+  "сессионные окна — <code>session_aggregation.py</code>",
+  "<b>exactly-once</b> чекпоинты — <code>checkpointing.py</code>",
+  "образ <code>flink:1.19-java11</code> + свой Dockerfile"],
+ kpi:"p50 пайплайна Kafka → Iceberg ≈ <b>220 ms</b>",
+ paths:"src/processing/flink_jobs/ · docker-compose.flink.yml"},
+
+{id:"quality",x:748,y:452,w:320,cls:"hot",title:"Контроль качества",
+ sub:"общий код обоих путей — прод и демо",
+ items:[
+  "<code>schema_validator.py</code> — структурная валидация (Pydantic)",
+  "<code>semantic_validator.py</code> — бизнес-правила",
+  "обогащение per-type — <code>enrichment.py</code> <span class='mut'>(order sizing, click class, payment risk)</span>",
+  "невалидные события → DLQ <code>events.deadletter</code>",
+  "<code>freshness_monitor.py</code> · <code>metrics_collector.py</code> → Prometheus"],
+ paths:"src/quality/{validators,monitors}/ · src/processing/transformations/"},
+
+{id:"outbox",x:748,y:772,w:320,cls:"",title:"Outbox + Replay",
+ sub:"гарантированная доставка и переигрывание",
+ items:[
+  "<code>outbox.py</code> — ретраи доставки из DuckDB-outbox в Kafka",
+  "<code>event_replayer.py</code> — replay из DLQ через <code>/v1/deadletter</code>"],
+ paths:"src/processing/{outbox,event_replayer}.py"},
+
+{id:"iceberg",x:1132,y:178,w:300,cls:"hot",title:"Apache Iceberg",chip:"pyiceberg 0.7",
+ sub:"lakehouse — производственные таблицы",
+ items:[
+  "sink валидированных событий — <code>iceberg_sink.py</code>",
+  "каталог: <b>REST</b> <span class='chip'>tabulario 0.6.0</span> dev · <b>AWS Glue</b> prod",
+  "объектное хранилище <b>MinIO</b> (S3 API)",
+  "снапшоты · time-travel · компакция"],
+ paths:"src/processing/iceberg_sink.py · docker-compose.iceberg.yml"},
+
+{id:"duckdb",x:1132,y:452,w:300,cls:"hot",title:"DuckDB",chip:"≥ 1.1",
+ sub:"serving-БД по умолчанию",
+ items:[
+  "<b>DuckDBPool</b> — общие read-курсоры, сериализованные записи",
+  "таблицы <code>orders_v2</code>, <code>users_enriched</code>, outbox",
+  "backend-абстракция — <code>duckdb_backend.py</code>"],
+ paths:"src/serving/{db_pool,duckdb_connection}.py · backends/"},
+
+{id:"ch",x:1132,y:676,w:300,cls:"",title:"ClickHouse",chip:"24.8",
+ sub:"опциональный read-backend",
+ items:[
+  "высокая конкурентность чтения <span class='mut'>(prod-compose)</span>",
+  "транспиляция диалекта — <b>sqlglot</b> <span class='chip'>30</span>"],
+ paths:"src/serving/backends/clickhouse_backend.py"},
+
+{id:"redis",x:1132,y:854,w:300,cls:"",title:"Redis",chip:"7.4",
+ sub:"кэш горячего пути",
+ items:[
+  "<b>QueryCache</b> метрик — инвалидация по новым событиям",
+  "TTL-фоллбек при недоступности — graceful degradation"],
+ paths:"src/serving/cache.py"},
+
+{id:"sem",x:1496,y:178,w:360,cls:"hot",title:"Семантический слой",
+ sub:"сущности · метрики · контракты",
+ items:[
+  "каталог сущностей и метрик — <code>catalog.py</code>",
+  "типизированные контракты — <code>contract_registry.py</code> · реестр типов сущностей",
+  "<b>NL → SQL</b>: <code>nl_engine.py</code> + <b>sql_guard</b> — AST-валидация sqlglot, fail-closed",
+  "поисковый индекс — <code>search_index.py</code> · эволюция схем",
+  "PII-маскирование — <code>masking.py</code>"],
+ paths:"src/serving/semantic_layer/ · src/serving/masking.py"},
+
+{id:"api",x:1496,y:560,w:360,cls:"hot",title:"FastAPI + Uvicorn",chip:"0.111 / 0.30",
+ sub:"одна serving-граница для агентов",
+ items:[
+  "middleware: <b>auth</b> (bcrypt, fail-closed) · rate-limiter · версионирование · тенант-изоляция на каждом чтении",
+  "core: <code>/v1/entity·metrics·query·catalog·health</code>",
+  "discovery: <code>/v1/search·contracts·lineage·changelog</code>",
+  "ops: <code>/v1/batch·stream(SSE)·deadletter·webhooks·alerts·slo</code> + admin/UI",
+  "фон: <b>WebhookDispatcher</b> (HMAC <code>X-AgentFlow-Signature</code>) · <b>AlertDispatcher</b> · <b>OutboxProcessor</b>",
+  "<code>audit_publisher.py</code> → топик <code>events.served</code>"],
+ kpi:"entity p50 <b>38–55 ms</b> · p99 <b>167 ms</b> (локальный бенч)",
+ paths:"src/serving/api/{main.py,middleware/,routers/,auth/}"},
+
+{id:"pysdk",x:1920,y:178,w:400,cls:"",title:"Python SDK",chip:"PyPI · agentflow-client",
+ sub:"sync + async клиенты (httpx)",
+ items:[
+  "retry-политики · circuit breaker · батчинг · пагинация",
+  "contract pinning · idempotency-keys · исторические чтения <code>as_of</code>"],
+ paths:"sdk/agentflow/"},
+
+{id:"tssdk",x:1920,y:392,w:400,cls:"",title:"TypeScript SDK",chip:"npm · @yuliaedomskikh/agentflow-client",
+ sub:"паритет поверхности API",
+ items:["те же контракты и ретраи · vitest + typecheck в CI"],
+ paths:"sdk-ts/"},
+
+{id:"int",x:1920,y:556,w:400,cls:"",title:"Интеграции агентов",
+ sub:"подключение к LLM-стекам",
+ items:[
+  "<b>LangChain</b> · <b>LlamaIndex</b> — готовые адаптеры",
+  "<b>Anthropic SDK</b> <span class='mut'>(extra llm)</span> — примеры агентов"],
+ paths:"integrations/agentflow_integrations/ · examples/"},
+
+{id:"ext",x:1920,y:732,w:400,cls:"",title:"Внешние подписчики",
+ sub:"push-каналы наружу",
+ items:[
+  "подписанные webhook-коллбеки (HMAC-SHA256)",
+  "алерты по порогам метрик · SSE-поток <code>/v1/stream/events</code>"],
+ paths:"src/serving/api/{webhook_dispatcher,alert_dispatcher}.py"},
+];
+
+/* ── нижние полосы ─────────────────────────────────────── */
+const BANDS=[
+{x:40,w:640,y:1024,title:"Поставка и контроль",chip:"CI · IaC",
+ items:[
+  "Docker Compose ×7 — base / flink / iceberg / cdc / e2e / chaos / prod",
+  "Helm + Kubernetes (kind) · Terraform · Fly.io демо",
+  "12 обязательных чеков: ruff · mypy-слайсы · unit/integration · perf-gate · bandit · safety · npm-audit · trivy · helm-schema · contract",
+  "contract-тесты <b>schemathesis</b> 4.20 · нагрузка <b>locust</b> 2.29 · property-тесты hypothesis",
+  "релизы PyPI + npm: OIDC Trusted Publishers, SLSA-provenance"]},
+{x:724,w:560,y:1024,title:"Оркестрация (batch)",chip:"Dagster 1.13",
+ items:[
+  "<code>daily_batch.py</code>: материализация <code>users_enriched</code> из <code>orders_v2</code>",
+  "проверки качества батча — <b>pandera</b> 0.20",
+  "отчёт качества: null-rate, доля DLQ",
+  "Iceberg: компакция + expiry снапшотов (prod)"]},
+{x:1324,w:996,y:1024,title:"Наблюдаемость",chip:"метрики · трейсы · логи",
+ items:[
+  "<b>prometheus-client</b> → <b>Prometheus</b> 2.54 → <b>Grafana</b> 11.2",
+  "<b>OpenTelemetry</b> 1.41 (FastAPI + httpx) → OTLP gRPC → <b>Jaeger</b> 1.55",
+  "структурные JSON-логи — <b>structlog</b>",
+  "freshness- и pipeline-метрики из src/quality/monitors/",
+  "SLO-отчёт — <code>/v1/slo</code> · скраббинг секретов в логах"]},
+];
+
+/* DV2 demo lane */
+const DV2={x:40,w:2280,y:1226,title:"Контур DV2.0 — Data Vault 2.0 на реальных данных X5",
+ chip:"демо · kind-кластер · хост 8 GB",
+ flow:[
+  {t:"X5 Retail Hero CSV",c:"45.8M строк",d:"clients · products · purchases (4.5 GB), Kaggle-датасет"},
+  {t:"loader.py",c:"pandas + clickhouse-driver",d:"чанки 50K · PartsThrottle (--max-active-parts) — backpressure по system.parts"},
+  {t:"ClickHouse",c:"25.5 · k8s",d:"Raw Vault: хабы · линки · сателлиты (ReplacingMergeTree, ветки __1c__/__bitrix__); merge-throttle в config.d"},
+  {t:"Business Vault",c:"SQL-вьюхи",d:"bv_order_canonical (argMax-дедуп) · bv_customer_mdm × 5 веток"},
+  {t:"dbt marts",c:"Job в k8s",d:"branch_pnl · customer_360 · returns_velocity + dbt docs lineage"},
+  {t:"Проверка",c:"p99-гейты",d:"load-test Job (clickhouse-benchmark) · 3 demo-скринкаста"}],
+ notes:[
+  "<b>Postgres OLTP →</b> MaterializedPostgreSQL — CDC-фан-аут по веткам",
+  "<b>Argo Workflows</b> — оркестрация загрузок",
+  "<b>MinIO</b> — cold-offload CronJob",
+  "DDL: warehouse/agentflow/dv2/ · инфраструктура: infrastructure/dv2/"]};
+
+/* ── рёбра ─────────────────────────────────────────────── */
+/* side: R/L/T/B; off — смещение якоря от центра стороны, px */
+const EDGES=[
+ {f:"apps",ff:"R",t:"kafka",tf:"L",toff:-90,type:"hot",label:"events.raw",at:.46},
+ {f:"cdc",ff:"R",t:"kafka",tf:"L",toff:-20,type:"hot",label:"CDC",at:.45},
+ {f:"kafka",ff:"R",foff:-105,t:"flink",tf:"L",type:"hot",label:"consume: events.raw",at:.5},
+ {f:"flink",ff:"B",t:"quality",tf:"T",type:"hot"},
+ {f:"quality",ff:"L",foff:-30,t:"kafka",tf:"R",toff:-12,type:"hot",label:"events.validated",at:.55},
+ {f:"quality",ff:"L",foff:38,t:"kafka",tf:"R",toff:62,type:"dlq",label:"events.deadletter",at:.55},
+ {f:"kafka",ff:"R",foff:-55,t:"iceberg",tf:"L",type:"hot",label:"iceberg_sink: validated",at:.5,
+  wp:"gap-flink-quality"},
+ {f:"gen",ff:"R",t:"quality",tf:"L",toff:96,type:"loc",label:"общий код качества",at:.45},
+ {f:"quality",ff:"R",foff:55,t:"duckdb",tf:"L",toff:-30,type:"loc",label:"локально: запись + pyiceberg",at:.4},
+ {f:"duckdb",ff:"L",foff:55,t:"outbox",tf:"R",toff:-18,type:"ctl",label:"outbox-строки",at:.5},
+ {f:"outbox",ff:"T",foff:-70,t:"kafka",tf:"B",toff:40,type:"ctl",label:"ретраи доставки",at:.45,
+  wp:[[712,742]]},
+ {f:"kafka",ff:"B",foff:-40,t:"outbox",tf:"T",toff:30,type:"dlq",label:"DLQ → replay",at:.5,
+  wp:[[610,742]]},
+ {f:"iceberg",ff:"R",t:"sem",tf:"L",toff:-78,type:"ctl",label:"lakehouse-чтения · health",at:.5},
+ {f:"duckdb",ff:"R",foff:-25,t:"sem",tf:"L",toff:30,type:"hot",label:"serving по умолчанию",at:.5},
+ {f:"ch",ff:"R",t:"sem",tf:"L",toff:108,type:"hot",dash:1,label:"опционально",at:.5},
+ {f:"redis",ff:"R",t:"api",tf:"L",toff:60,type:"ctl",both:1,label:"кэш метрик · инвалидация",at:.5},
+ {f:"sem",ff:"B",t:"api",tf:"T",type:"hot"},
+ {f:"api",ff:"R",foff:-120,t:"pysdk",tf:"L",type:"hot"},
+ {f:"api",ff:"R",foff:-60,t:"tssdk",tf:"L",type:"hot"},
+ {f:"api",ff:"R",foff:5,t:"int",tf:"L",type:"hot"},
+ {f:"api",ff:"R",foff:80,t:"ext",tf:"L",type:"ctl"},
+ {f:"band1",ff:"T",foff:160,t:"duckdb",tf:"R",toff:62,type:"bat",label:"daily batch",at:.72,
+  wp:[[1464,990],[1464,560]]},
+ {f:"api",ff:"B",foff:60,t:"band2",tf:"T",foff:0,type:"ctl",dash:1,label:"метрики · трейсы · логи",at:.5},
+];
+
+/* ── рендер ────────────────────────────────────────────── */
+const canvas=document.getElementById("canvas");
+function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;
+  if(html!=null)e.innerHTML=html;return e;}
+
+LANES.forEach(l=>{const h=el("div","lane-h",l.t);h.style.left=l.x+"px";
+  h.style.width=l.w+"px";canvas.appendChild(h);});
+
+const nodeEl={};
+NODES.forEach(n=>{
+  const d=el("div","node"+(n.cls?" "+n.cls:""));
+  d.style.left=n.x+"px";d.style.top=n.y+"px";d.style.width=n.w+"px";d.dataset.id=n.id;
+  let h=`<div class="n-title">${n.title}${n.chip?` <span class="chip">${n.chip}</span>`:""}</div>`;
+  if(n.sub)h+=`<div class="n-sub">${n.sub}</div>`;
+  if(n.topics)h+=`<div class="topics">${n.topics.map(t=>
+    `<span class="${t.includes("deadletter")?"dlq":""}">${t}</span>`).join("")}</div>`;
+  if(n.items)h+=`<ul>${n.items.map(i=>`<li>${i}</li>`).join("")}</ul>`;
+  if(n.kpi)h+=`<div class="kpi-line">${n.kpi}</div>`;
+  if(n.paths)h+=`<div class="paths">${n.paths}</div>`;
+  d.innerHTML=h;canvas.appendChild(d);nodeEl[n.id]=d;
+});
+
+BANDS.forEach((b,i)=>{
+  const d=el("div","band");d.dataset.id="band"+i;
+  d.style.left=b.x+"px";d.style.top=b.y+"px";d.style.width=b.w+"px";
+  d.innerHTML=`<div class="n-title">${b.title} <span class="chip">${b.chip}</span></div>
+    <ul>${b.items.map(i2=>`<li>${i2}</li>`).join("")}</ul>`;
+  canvas.appendChild(d);nodeEl["band"+i]=d;
+});
+
+(function(){
+  const d=el("div","band");d.style.left=DV2.x+"px";d.style.top=DV2.y+"px";d.style.width=DV2.w+"px";
+  const arrow=`<div class="dv2-arrow"><svg width="22" height="12" viewBox="0 0 22 12">
+    <path d="M0 6 H17" stroke="rgba(28,32,36,.4)" stroke-width="1.6" fill="none"/>
+    <path d="M14 1.5 L21 6 L14 10.5 Z" fill="rgba(28,32,36,.4)"/></svg></div>`;
+  d.innerHTML=`<div class="n-title">${DV2.title} <span class="chip">${DV2.chip}</span></div>
+    <div class="dv2-flow">${DV2.flow.map(m=>
+      `<div class="mini"><div class="t">${m.t} <span class="chip">${m.c}</span></div>
+       <div class="d">${m.d}</div></div>`).join(arrow)}</div>
+    <div class="dv2-notes">${DV2.notes.map(n2=>`<span>${n2}</span>`).join("")}</div>`;
+  canvas.appendChild(d);
+})();
+
+/* легенда */
+(function(){
+  const sw=(cls)=>`<svg width="34" height="8" viewBox="0 0 34 8"><path d="M1 4 H33" class="edge ${cls}"/></svg>`;
+  document.getElementById("legend").innerHTML=
+    `<div>${sw("e-hot")} производственный поток</div>
+     <div>${sw("e-loc")} локальный демо-путь</div>
+     <div>${sw("e-dlq")} DLQ / ошибки</div>
+     <div>${sw("e-ctl")} фоновые / управляющие</div>
+     <div>${sw("e-bat")} batch (Dagster)</div>`;
+})();
+
+/* ── рёбра после layout ────────────────────────────────── */
+const NS="http://www.w3.org/2000/svg";
+const edgesG=document.getElementById("edges-g"),labelsG=document.getElementById("labels-g");
+const adj={};  // nodeId -> [pathEl,...]
+
+function anchor(elm,side,off){
+  off=off||0;
+  const x=elm.offsetLeft,y=elm.offsetTop,w=elm.offsetWidth,h=elm.offsetHeight;
+  switch(side){
+    case "R":return[x+w,y+h/2+off];
+    case "L":return[x,y+h/2+off];
+    case "T":return[x+w/2+off,y];
+    case "B":return[x+w/2+off,y+h];
+  }
+}
+function dirVec(side){return side==="R"?[1,0]:side==="L"?[-1,0]:side==="T"?[0,-1]:[0,1];}
+
+function buildPath(p1,s1,p2,s2,wp){
+  const d1=dirVec(s1),d2=dirVec(s2);
+  if(wp&&wp.length){               // сглаженная ломаная через waypoints
+    const pts=[p1,...wp,p2],r=14;let d=`M${pts[0][0]} ${pts[0][1]}`;
+    for(let i=1;i<pts.length-1;i++){
+      const a=pts[i-1],b=pts[i],c=pts[i+1];
+      const v1=[b[0]-a[0],b[1]-a[1]],v2=[c[0]-b[0],c[1]-b[1]];
+      const l1=Math.hypot(...v1)||1,l2=Math.hypot(...v2)||1;
+      const t1=[b[0]-v1[0]/l1*Math.min(r,l1/2),b[1]-v1[1]/l1*Math.min(r,l1/2)];
+      const t2=[b[0]+v2[0]/l2*Math.min(r,l2/2),b[1]+v2[1]/l2*Math.min(r,l2/2)];
+      d+=` L${t1[0]} ${t1[1]} Q${b[0]} ${b[1]} ${t2[0]} ${t2[1]}`;
+    }
+    d+=` L${p2[0]} ${p2[1]}`;return d;
+  }
+  const dist=Math.hypot(p2[0]-p1[0],p2[1]-p1[1]);
+  const k=Math.max(36,Math.min(140,dist*.42));
+  const c1=[p1[0]+d1[0]*k,p1[1]+d1[1]*k],c2=[p2[0]+d2[0]*k,p2[1]+d2[1]*k];
+  return `M${p1[0]} ${p1[1]} C${c1[0]} ${c1[1]} ${c2[0]} ${c2[1]} ${p2[0]} ${p2[1]}`;
+}
+
+function drawEdges(){
+  edgesG.innerHTML="";labelsG.innerHTML="";
+  for(const k in adj)delete adj[k];
+  EDGES.forEach(e=>{
+    const a=nodeEl[e.f],b=nodeEl[e.t];if(!a||!b)return;
+    const p1=anchor(a,e.ff,e.foff),p2=anchor(b,e.tf,e.toff);
+    let wp=e.wp;
+    if(wp==="gap-flink-quality"){
+      const f=nodeEl["flink"],q=nodeEl["quality"];
+      const gy=Math.round((f.offsetTop+f.offsetHeight+q.offsetTop)/2);
+      wp=[[716,gy],[1098,gy]];
+    }
+    const path=document.createElementNS(NS,"path");
+    path.setAttribute("d",buildPath(p1,e.ff,p2,e.tf,wp));
+    path.setAttribute("class","edge e-"+e.type);
+    if(e.dash)path.setAttribute("stroke-dasharray","8 6");
+    path.setAttribute("marker-end",`url(#m-${e.type})`);
+    if(e.both)path.setAttribute("marker-start",`url(#m-${e.type})`);
+    edgesG.appendChild(path);
+    (adj[e.f]=adj[e.f]||[]).push(path);(adj[e.t]=adj[e.t]||[]).push(path);
+    if(e.label){
+      const pt=path.getPointAtLength(path.getTotalLength()*(e.at??.5));
+      const tx=document.createElementNS(NS,"text");
+      tx.setAttribute("x",pt.x);tx.setAttribute("y",pt.y-7);
+      tx.setAttribute("text-anchor","middle");
+      tx.setAttribute("class","elabel lab-"+e.type);
+      tx.textContent=e.label;labelsG.appendChild(tx);
+      (adj[e.f]=adj[e.f]||[]).push(tx);(adj[e.t]=adj[e.t]||[]).push(tx);
+    }
+  });
+}
+
+/* hover-подсветка связанных рёбер */
+const wires=document.getElementById("wires");
+document.querySelectorAll(".node,.band").forEach(d=>{
+  d.addEventListener("mouseenter",()=>{
+    const list=adj[d.dataset.id];if(!list||!list.length)return;
+    wires.classList.add("focus");list.forEach(p=>p.classList.add("hl"));
+  });
+  d.addEventListener("mouseleave",()=>{
+    wires.classList.remove("focus");
+    wires.querySelectorAll(".hl").forEach(p=>p.classList.remove("hl"));
+  });
+});
+
+/* ── масштабирование под viewport ──────────────────────── */
+const stage=document.getElementById("stage"),vp=document.getElementById("viewport");
+function fit(){
+  const s=Math.min(Math.max((window.innerWidth-20)/W,.35),1.25);
+  stage.style.transform=`scale(${s})`;vp.style.height=H*s+"px";
+}
+function boot(){drawEdges();fit();}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(boot);
+window.addEventListener("load",boot);
+window.addEventListener("resize",fit);
+
+/* mobile stub */
+document.addEventListener("DOMContentLoaded",()=>{
+  if(window.innerWidth<900){
+    document.getElementById("mobile-stub").style.display="flex";
+    document.body.style.overflow="hidden";
+  }
+});
+</script>
+</body>
+</html>

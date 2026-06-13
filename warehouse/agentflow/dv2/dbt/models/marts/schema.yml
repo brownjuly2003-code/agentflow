@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: customer_360
-    description: "One row per (customer, branch). Joins MDM customer profile with order aggregates from bv_order_canonical."
+    description: "One row per (customer, branch). Joins MDM customer profile with order aggregates from bv_order_canonical_mat."
     columns:
       - name: customer_hk
         description: "MD5 of customer business key (16 byte raw)."

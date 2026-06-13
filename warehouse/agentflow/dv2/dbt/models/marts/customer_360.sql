@@ -1,8 +1,15 @@
+{#
+  customer_bk first in the sort key: the mart's serving pattern is a point
+  lookup by business key (load-test 03_customer360_point). At X5 scale the
+  old (branch, customer_hk) key meant every bk lookup full-scanned the mart:
+  p99 250-470 ms vs the 200 ms point budget.
+#}
 {{
     config(
         materialized='table',
         engine='MergeTree()',
-        order_by='(branch, customer_hk)'
+        order_by='(customer_bk, branch)',
+        settings={'index_granularity': 1024}
     )
 }}
 
@@ -38,7 +45,7 @@ order_agg AS (
         countIf(order_status = 'returned')           AS returned_orders,
         sumIf(toFloat64(total_amount),
               order_status = 'returned')             AS returned_value
-    FROM {{ source('rv', 'bv_order_canonical') }}
+    FROM {{ source('rv', 'bv_order_canonical_mat') }}
     WHERE customer_hk != toFixedString('', 16)
     GROUP BY customer_hk, branch
 )

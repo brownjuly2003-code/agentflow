@@ -18,7 +18,7 @@ SELECT
           order_status = 'returned')                    AS returned_value,
     sumIf(toFloat64(tax_amount),
           order_status = 'returned')                    AS returned_tax_unrecovered
-FROM {{ source('rv', 'bv_order_canonical') }}
+FROM {{ source('rv', 'bv_order_canonical_mat') }}
 WHERE order_date IS NOT NULL
   AND channel IS NOT NULL
 GROUP BY branch, channel, week

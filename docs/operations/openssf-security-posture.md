@@ -1,7 +1,7 @@
 # OpenSSF Security Posture ($0 Channel)
 
 **Added:** 2026-06-05
-**Cost:** $0 (no card, no budget, no third party engaged)
+**Cost:** $0 (free, self-service posture artifacts; no third-party engagement)
 **Scope of this document:** the two free, self-service OpenSSF artifacts this
 project can produce to document its supply-chain security posture.
 

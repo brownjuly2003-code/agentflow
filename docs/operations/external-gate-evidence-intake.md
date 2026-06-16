@@ -37,7 +37,7 @@ modeled evidence, or historical CI runs sufficient to close a gate.
 
 | Item | Source handoff |
 |------|----------------|
-| AWS OIDC Terraform apply readiness | Not active: archived optional path only; current project has no AWS budget or foreign-card/payment path |
+| AWS OIDC Terraform apply readiness | Not active: archived optional path only; a managed-AWS production deployment is a deliberate non-goal for this pre-production portfolio project |
 | Production CDC source onboarding | [Production CDC Source Onboarding](cdc-production-onboarding.md) |
 | External immutable audit retention | [Immutable Retention Evidence Handoff](immutable-retention-evidence-handoff.md) |
 | Phase 1 PMF and pricing evidence | [Customer Discovery Tracker](../customer-discovery-tracker.md) and [Pricing Validation Plan](../pricing-validation-plan.md) |
@@ -49,10 +49,10 @@ modeled evidence, or historical CI runs sufficient to close a gate.
 
 Source handoff: [AWS OIDC Setup For Terraform Apply](aws-oidc-setup.md).
 
-Current status as of 2026-05-30: not an active gate. The operator has no AWS
-budget and no foreign payment card for AWS signup. Do not ask for AWS evidence,
+Current status as of 2026-05-30: not an active gate. A managed-AWS production
+deployment is a deliberate non-goal for this pre-production portfolio project. Do not ask for AWS evidence,
 run AWS readiness probes, or score the project down for missing Terraform apply
-unless the operator explicitly reopens AWS with budget/account/payment details.
+unless the operator explicitly reopens AWS with an account and approval.
 
 ### Required Owner-Provided Fields
 

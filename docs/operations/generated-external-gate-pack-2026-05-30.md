@@ -31,7 +31,7 @@ decision for this project is:
 | Field | Generated decision |
 |-------|--------------------|
 | Cloud spend | Not approved |
-| Foreign-card dependency | Avoided |
+| Paid managed-cloud dependency | Avoided |
 | Terraform apply | Not planned |
 | Release posture | Local/CI evidence only; no AWS production claim |
 | Reopen condition | Operator explicitly reintroduces AWS with budget, account owner, role ARN, tfvars owner, and apply approval |

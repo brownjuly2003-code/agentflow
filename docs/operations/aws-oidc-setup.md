@@ -4,7 +4,7 @@
 
 This archived optional guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml` if AWS is ever explicitly reintroduced.
 
-Current project decision as of 2026-05-30: AWS/Terraform apply is out of scope because the operator has no foreign payment card for AWS signup and no AWS budget. Do not treat missing AWS apply evidence as a project deficiency, active blocker, or autonomous follow-up. Reopen this path only if the operator explicitly provides budget, account/payment path, and approval to reintroduce AWS.
+Current project decision as of 2026-05-30: a managed-AWS / Terraform-apply production deployment is out of scope for this pre-production portfolio project — a deliberate non-goal, with the stack validated end-to-end on a local/kind demo instead. Do not treat missing AWS apply evidence as a project deficiency, active blocker, or autonomous follow-up. Reopen this path only if the operator explicitly provides an AWS account and approval to reintroduce it.
 
 For the DV2/X5 demo, use the already documented S3-compatible cold-tier path with HF Datasets or Backblaze B2 for derived/anonymized parquet. Do not require AWS/S3 for that dataset.
 
@@ -79,7 +79,7 @@ If AWS is explicitly reintroduced later, the operator packet to unblock review i
   redacted CloudTrail `AssumeRoleWithWebIdentity` proof.
 
 Do not enable the workflow or run a real Terraform apply unless the operator
-first reopens AWS with budget/account/payment path and then provides all
+first reopens AWS with an account and approval and then provides all
 external inputs:
 
 - AWS account owner and bootstrap operator.

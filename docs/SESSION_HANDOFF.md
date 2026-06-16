@@ -357,7 +357,7 @@ Use the copy-paste kickoff prompt and the work-selection priority order in
 — that file is the canonical uninterrupted-session starter. Short form:
 
 ```text
-D:\DE_project. Работай автономно и без перерыва, решения принимай сам. Восстанови состояние из AGENT_STATE.md, docs/SESSION_HANDOFF.md, docs/operations/local-verification-matrix.md, AUTOPILOT.md, BACKLOG.md и next-session-autonomous-local-plan.md (не опирайся на неполный chat compact). Бери следующий безопасный атомарный пункт по приоритету из плана, TDD-фикс, no-Docker верификация, коммит явными pathspec, push origin main после чистого статуса + git diff --check, жди CI зелёным перед следующим коммитом. НЕ запускай Docker тут (Mac/CI). Внешнее/AWS не трогай (нет карты/бюджета). Не спрашивай "что дальше" пока есть безопасный пункт; не стекай однотипные мелкие коммиты. Стоп только на named boundary или когда безопасных локальных пунктов нет.
+D:\DE_project. Работай автономно и без перерыва, решения принимай сам. Восстанови состояние из AGENT_STATE.md, docs/SESSION_HANDOFF.md, docs/operations/local-verification-matrix.md, AUTOPILOT.md, BACKLOG.md и next-session-autonomous-local-plan.md (не опирайся на неполный chat compact). Бери следующий безопасный атомарный пункт по приоритету из плана, TDD-фикс, no-Docker верификация, коммит явными pathspec, push origin main после чистого статуса + git diff --check, жди CI зелёным перед следующим коммитом. НЕ запускай Docker тут (Mac/CI). Внешнее/AWS не трогай (управляемый прод вне scope портфолио-проекта). Не спрашивай "что дальше" пока есть безопасный пункт; не стекай однотипные мелкие коммиты. Стоп только на named boundary или когда безопасных локальных пунктов нет.
 ```
 
 Continuation rules:
@@ -546,10 +546,10 @@ benchmark report shape, and external pen-test attestation rehearsal. Treat that
 pack as generated planning material only. It does not close real external
 evidence gates.
 
-**AWS/Terraform boundary:** the operator has no foreign payment card for AWS
-signup and no AWS budget. Treat AWS/Terraform apply as explicitly out of scope,
+**AWS/Terraform boundary:** a managed-AWS production deployment is a deliberate
+non-goal for this pre-production portfolio project. Treat AWS/Terraform apply as explicitly out of scope,
 not as a recurring project deficiency or active blocker, unless the operator
-later provides a budget, AWS account/payment path, and explicit reintroduction.
+later provides an AWS account and explicit reintroduction.
 For the DV2/X5 demo, use the documented S3-compatible cold tier with HF Datasets
 or Backblaze B2 for derived/anonymized parquet; do not propose AWS as required
 storage for that dataset.
@@ -665,8 +665,8 @@ back online.
     `version` attribute, and there are no `aws_s3_bucket_object`
     references. This is historical validation only. The AWS `plan` / `apply`
     jobs remain disabled and are not an active gate under the 2026-05-30
-    no-budget/no-card decision. Revisit only if the operator explicitly
-    reintroduces AWS with budget, account/payment path, `AWS_TERRAFORM_ROLE_ARN`,
+    out-of-scope decision. Revisit only if the operator explicitly
+    reintroduces AWS with an account, `AWS_TERRAFORM_ROLE_ARN`,
     tfvars, and approval to remove the `if: false` guard.
 
 - **Before pushing a new `agentflow-api` container image to production

@@ -6,9 +6,9 @@ the 2026-06-05 operator decision that amended the hardware class.
 ## Hardware Class Decision
 
 The original plan targeted `c8g.4xlarge+` (AWS Graviton4, 16 vCPU), which
-requires a cloud budget and payment card that do not exist (the item-18
-constraint). The operator accepted the free GitHub-hosted arm64 runner for
-public repositories as the $0-budget ARM server class:
+requires paid production-grade cloud hardware that is out of scope for this
+pre-production portfolio project (the item-18 constraint). The operator accepted
+the free GitHub-hosted arm64 runner for public repositories as the $0 ARM server class:
 
 - Runner label: `ubuntu-24.04-arm`
 - CPU: Arm **Neoverse-N2** (Cobalt 100), Armv9-A, **4 vCPU** — honestly

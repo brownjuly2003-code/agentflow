@@ -127,7 +127,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 - [Release Readiness](docs/release-readiness.md) - checked release evidence through `v1.1.0` and current external-gate handoffs
 - [Customer Discovery Tracker](docs/customer-discovery-tracker.md) - synthetic/modelled PMF planning surface and real-evidence gap
 - [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions, evidence gates, and current real-evidence gap
-- [AWS OIDC Setup](docs/operations/aws-oidc-setup.md) - archived optional Terraform apply path; currently out of scope because there is no AWS budget or foreign-card/payment path
+- [AWS OIDC Setup](docs/operations/aws-oidc-setup.md) - archived optional Terraform apply path; out of scope for this portfolio project (a paid managed-cloud deployment adds recurring cost without demonstrating new engineering capability)
 - [Immutable Retention Evidence Handoff](docs/operations/immutable-retention-evidence-handoff.md) - external audit-retention evidence checklist
 - [Production CDC Source Onboarding](docs/operations/cdc-production-onboarding.md) - production CDC decision record and no-go gates
 - [External Gate Evidence Intake Checklist](docs/operations/external-gate-evidence-intake.md) - required owner evidence before blocked external gates can close
@@ -200,9 +200,11 @@ thresholds are intentionally divergent and documented in
 
 **Remaining external gates** require inputs outside this repository. AWS is not
 one of them for the current plan: Terraform apply is intentionally out of scope
-because there is no AWS budget or foreign-card/payment path, and the DV2/X5 demo
-uses the documented HF Datasets/Backblaze-compatible cold-tier path for
-derived/anonymized parquet.
+for this portfolio project — provisioning a paid managed-AWS environment adds
+recurring cloud cost without demonstrating new engineering capability, so the
+Helm / Terraform / k8s artifacts are validated on a local kind cluster in CI
+instead. The DV2/X5 demo uses the documented HF Datasets/Backblaze-compatible
+cold-tier path for derived/anonymized parquet.
 
 - Production CDC source onboarding (hostnames, credentials, owners,
   private network path) — runbook ready in

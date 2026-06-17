@@ -12,8 +12,7 @@
 **Bench script:** [`scripts/perf/auth_bench.py`](../../scripts/perf/auth_bench.py)
 **Audit findings closed:** M-C5 (not a bottleneck); M-C4 (mitigated, action item added)
 
-The 2026-05-25 Kimi audit
-([`audit_kimi_25_05_26.md`](../../audit_kimi_25_05_26.md)) deferred two
+An internal 2026-05-25 audit deferred two
 medium-priority findings pending a perf measurement: M-C4 (O(n) hashed
 key lookup in `authenticate()`) and M-C5 (O(n) rate-window trim in
 `is_rate_limited()`). This document records the measurement and the

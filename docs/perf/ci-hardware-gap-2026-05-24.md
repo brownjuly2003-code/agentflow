@@ -47,7 +47,7 @@ moving the runner.
 |--------|----------------------|------|---------|
 | msgspec swap on response serialization | < 20 ms | Pydantic v2 migration churn across the SDK + envelope shapes | Skip — too small relative to the 400-600 ms CI gap |
 | Async DuckDB pool wrapper | 0 ms on p99 single-request; possibly +RPS | Adds an executor pool to a 1-thread DuckDB engine — concurrency wins, not latency | Skip until concurrency is the bottleneck |
-| Paid larger GH runner (`ubuntu-latest-8-cores`) | 200-400 ms expected | $0.064/min vs $0; ~2x faster | **Recommended once budget approved**; gated on platform owner |
+| Larger GH runner (`ubuntu-latest-8-cores`) | 200-400 ms expected | Paid tier; ~2x faster | **Optional**; gated on platform owner |
 | Self-hosted runner | 300-500 ms expected | Maintenance, security boundary | **Recommended for long term** but heavier setup |
 | Accept divergent thresholds + raise edge gates | 0 ms latency; closes flakes | Documented split between local SLO + CI gate | **Adopted for now** |
 

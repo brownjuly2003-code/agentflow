@@ -2,14 +2,13 @@
 
 ## Status
 
-CLOSED DONE on 2026-06-05 with an operator-amended hardware class: the free
-GitHub-hosted arm64 runner for public repositories (`ubuntu-24.04-arm`,
-Neoverse-N2, 4 vCPU) was accepted as the $0-budget ARM server class, and a
-real benchmark run is recorded in
+Done on 2026-06-05 using the GitHub-hosted arm64 runner for public
+repositories (`ubuntu-24.04-arm`, Neoverse-N2, 4 vCPU) as the available ARM
+server class, with a real benchmark run recorded in
 [arm-server-benchmark-2026-06-05.md](arm-server-benchmark-2026-06-05.md)
 (run 27012731848, 0 failures, all gates passed). No `c8g.4xlarge` claim is
-made; the `c8g.4xlarge+` procedure below remains the preferred path if budget
-ever appears.
+made; the `c8g.4xlarge+` procedure below remains the preferred path if
+production-grade hardware becomes available.
 
 Status as of 2026-05-04: blocked on approved production-hardware access,
 budget, and operator-run evidence.
@@ -52,9 +51,9 @@ single-node development numbers.
 
 ## Prerequisites
 
-Before a public benchmark run, an operator must provide:
+Before a public benchmark run, the following must be in place:
 
-- Approved cloud or dedicated hardware budget.
+- Provisioned cloud or dedicated benchmark hardware.
 - Instance class, region, OS image, and lifecycle owner.
 - Benchmark API target and data seed plan.
 - Confirmation that no production data, credentials, or customer records are

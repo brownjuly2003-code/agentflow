@@ -1,14 +1,13 @@
 # ARM Server Benchmark — 2026-06-05
 
-First real benchmark run on ARM server hardware, closing backlog item 21 under
-the 2026-06-05 operator decision that amended the hardware class.
+First real benchmark run on ARM server hardware.
 
 ## Hardware Class Decision
 
-The original plan targeted `c8g.4xlarge+` (AWS Graviton4, 16 vCPU), which
-requires paid production-grade cloud hardware that is out of scope for this
-pre-production portfolio project (the item-18 constraint). The operator accepted
-the free GitHub-hosted arm64 runner for public repositories as the $0 ARM server class:
+The original plan targeted `c8g.4xlarge+` (AWS Graviton4, 16 vCPU);
+provisioning production-grade managed cloud hardware is out of scope for this
+pre-production portfolio project. This run uses the GitHub-hosted arm64 runner
+for public repositories as the available ARM server class:
 
 - Runner label: `ubuntu-24.04-arm`
 - CPU: Arm **Neoverse-N2** (Cobalt 100), Armv9-A, **4 vCPU** — honestly
@@ -17,8 +16,8 @@ the free GitHub-hosted arm64 runner for public repositories as the $0 ARM server
 - RAM: 15.6 GB
 - OS: Linux 6.17.0-1015-azure aarch64, Python 3.11.15
 
-`c8g.4xlarge+` remains the preferred class if budget ever appears; the
-original plan is preserved in
+`c8g.4xlarge+` remains the preferred class if production-grade hardware
+becomes available; the original plan is preserved in
 [public-production-hardware-benchmark-plan.md](public-production-hardware-benchmark-plan.md).
 
 ## Run Provenance

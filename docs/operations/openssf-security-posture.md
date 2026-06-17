@@ -186,7 +186,7 @@ Pinned-Dependencies rose 0 → 4 (the pip subset is what's left).
   not register the repo's real Hypothesis property suites
   (`tests/property/`) or Schemathesis API fuzzing. The testing exists; only
   the badge heuristic misses it. No OSS-Fuzz onboarding is claimed — the
-  2026-06-05 survey (BACKLOG item 22, $0 posture addendum) already ruled the
+  2026-06-05 posture survey already ruled the
   project below OSS-Fuzz's adoption bar.
 - **Branch-Protection (-1 inconclusive):** reading the full protection
   config needs an admin-scoped PAT secret; granting one to a scheduled

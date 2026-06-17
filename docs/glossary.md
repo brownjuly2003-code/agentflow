@@ -38,7 +38,7 @@ Average легко маскирует проблему. Если почти вс
 Baseline - это зафиксированная точка сравнения. Она нужна, чтобы сравнивать новые прогоны не с ощущением "кажется стало лучше", а с конкретным числом, сохранённым в репозитории.
 
 ### Как в AgentFlow
-Историческая линия собрана в [audit-history.md](audit-history.md): там видно, что ранний baseline был около `26 000 ms` по entity p50, а после исправлений v8-v12 путь стал работать в диапазоне `43-55 ms`. Текущий baseline закреплён в [benchmark-baseline.json](benchmark-baseline.json), а gate сравнения реализован в [scripts/check_performance.py](../scripts/check_performance.py).
+Исторически ранний baseline был около `26 000 ms` по entity p50, а после исправлений v8-v12 путь стал работать в диапазоне `43-55 ms`. Текущий baseline закреплён в [benchmark-baseline.json](benchmark-baseline.json), а gate сравнения реализован в [scripts/check_performance.py](../scripts/check_performance.py).
 
 ### Почему это важно
 Такой baseline делает performance claim проверяемым. Он также защищает от самообмана: если исторически было `43 ms`, а текущий checked-in baseline уже `55 ms`, это надо честно сказать в документации, а не продолжать цитировать старое красивое число как будто ничего не изменилось.

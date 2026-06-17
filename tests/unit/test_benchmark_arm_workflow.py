@@ -1,9 +1,9 @@
 """Shape tests for .github/workflows/benchmark-arm.yml.
 
-Backlog item 21 evidence channel: an operator-dispatched benchmark on the free
+Evidence channel: a dispatch-only benchmark on the
 GitHub-hosted arm64 runner for public repositories (ubuntu-24.04-arm), the
-$0-budget production-hardware class approved by the 2026-06-05 operator
-decision. The workflow must stay dispatch-only (it is real load work, not a PR
+available ARM server class for this project. The workflow must stay
+dispatch-only (it is real load work, not a PR
 gate), must run on the arm64 runner label, and must upload the three evidence
 artifacts (host metadata, report, results JSON) so docs/perf/ records can be
 verified against a real run.

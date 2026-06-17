@@ -114,31 +114,21 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 
 ## Documentation
 
-- [Session Handoff](docs/SESSION_HANDOFF.md) - **start here when picking up the project cold** — current HEAD, open Dependabot PRs, externally user-gated items, recent lessons (Contract Tests path filter, Dependabot cascade conflicts)
-- [Interactive Technical Walkthrough](docs/index.md) - MkDocs Material guide with Mermaid architecture, API, SDK, deployment, observability, and troubleshooting pages
-- [Architecture](docs/architecture.md) - system context, data flow, failure modes
-- [Operational Runbook](docs/runbook.md) - local stack, CDC capture, and maintenance commands
-- [On-Call Runbooks](docs/runbooks/README.md) - production-incident playbooks (API 5xx, auth break, CDC lag, Load Test regression, release rollback)
-- [API Reference](docs/api-reference.md) - endpoint-by-endpoint examples for curl, Python, and TypeScript
-- [Security Audit](docs/security-audit.md) - threat model, controls, and evidence
-- [Competitive Analysis](docs/competitive-analysis.md) - positioning and trade-offs
-- [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) - Debezium/Kafka Connect rollout decisions and implementation trail
-- [Glossary](docs/glossary.md) - interview-ready explanations of the core technical terms
-- [Release Readiness](docs/release-readiness.md) - checked release evidence through `v1.1.0` and current external-gate handoffs
-- [Customer Discovery Tracker](docs/customer-discovery-tracker.md) - synthetic/modelled PMF planning surface and real-evidence gap
-- [Pricing Validation Plan](docs/pricing-validation-plan.md) - pricing/WTP questions, evidence gates, and current real-evidence gap
-- [AWS OIDC Setup](docs/operations/aws-oidc-setup.md) - archived optional Terraform apply path; out of scope for this portfolio project (a paid managed-cloud deployment adds recurring cost without demonstrating new engineering capability)
-- [Immutable Retention Evidence Handoff](docs/operations/immutable-retention-evidence-handoff.md) - external audit-retention evidence checklist
-- [Production CDC Source Onboarding](docs/operations/cdc-production-onboarding.md) - production CDC decision record and no-go gates
-- [External Gate Evidence Intake Checklist](docs/operations/external-gate-evidence-intake.md) - required owner evidence before blocked external gates can close
-- [Public Production-Hardware Benchmark Plan](docs/perf/public-production-hardware-benchmark-plan.md) - benchmark evidence plan for `c8g.4xlarge+`
-- [External Pen-Test Attestation Handoff](docs/operations/external-pen-test-attestation-handoff.md) - third-party pen-test evidence checklist
-- [Audit History](docs/audit-history.md) - baseline-to-release remediation trail
-- [Publication Checklist](docs/publication-checklist.md) - final GitHub publishing checklist
-- [Fly.io Demo Deploy](deploy/fly/README.md) - minimal hosted demo instructions
-- [DV2.0 Multi-Branch Extension](docs/dv2-multi-branch/SESSION_HANDOFF.md) - Data Vault 2.0 model for mid-market e-com with 5 locations / 3 jurisdictions; [schema](docs/dv2-multi-branch/schema_dv2.md), [end-to-end flow](docs/dv2-multi-branch/architecture.md), [live demo evidence](docs/dv2-multi-branch/demo_evidence.md), [k8s manifests](infrastructure/dv2/README.md)
-- [Contributing](CONTRIBUTING.md) - development and PR expectations
-- [Changelog](CHANGELOG.md) - project release notes
+**Core**
+- [Architecture](docs/architecture.md) — system context, data flow, failure modes
+- [API Reference](docs/api-reference.md) — endpoint-by-endpoint curl / Python / TypeScript examples
+- [Operational Runbook](docs/runbook.md) + [On-Call Runbooks](docs/runbooks/README.md) — local stack, CDC capture, and production-incident playbooks
+- [Security Audit](docs/security-audit.md) — threat model, controls, and evidence
+- [Glossary](docs/glossary.md) — interview-ready explanations of the core technical terms
+- [Interactive Technical Walkthrough](docs/index.md) — MkDocs Material guide (Mermaid architecture, SDK, deployment, observability)
+
+**Deep dives**
+- [DV2.0 Multi-Branch Extension](docs/dv2-multi-branch/SESSION_HANDOFF.md) — Data Vault 2.0 model for mid-market e-com (5 locations / 3 jurisdictions): [schema](docs/dv2-multi-branch/schema_dv2.md), [end-to-end flow](docs/dv2-multi-branch/architecture.md), [demo evidence](docs/dv2-multi-branch/demo_evidence.md)
+- [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) — Debezium/Kafka Connect rollout and implementation trail
+- [Competitive Analysis](docs/competitive-analysis.md) · [Release Readiness](docs/release-readiness.md) · [Audit History](docs/audit-history.md)
+- [Fly.io Demo Deploy](deploy/fly/README.md) — minimal hosted demo
+- [Session Handoff](docs/SESSION_HANDOFF.md) — pick-up-cold state, open items, recent lessons
+- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 ## Development
 

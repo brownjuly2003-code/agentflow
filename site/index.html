@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgentFlow - Real-time data for AI agents</title>
-  <meta name="description" content="Real-time data platform for AI agents. Fresh operational context, dual SDKs, contract-aware schemas, and a simple serving layer.">
-  <meta property="og:title" content="AgentFlow - Real-time data for AI agents">
-  <meta property="og:description" content="Fresh operational context for support, ops, and merch agents.">
+  <title>AgentFlow — Event-native metrics that move when events happen</title>
+  <meta name="description" content="Event-native metrics layer: business metrics that update when events happen, with measured ~1 s event-to-metric freshness, live entity lookups, typed contracts, and Python + TypeScript SDKs.">
+  <meta property="og:title" content="AgentFlow — Event-native metrics that move when events happen">
+  <meta property="og:description" content="Business metrics that move when events happen — measured ~1 s event-to-metric freshness for people, dashboards, services, and AI agents alike.">
   <meta property="og:image" content="/og-image.png">
   <meta property="og:type" content="website">
   <link rel="icon" href="logo.svg" type="image/svg+xml">
@@ -30,12 +30,15 @@
     <section class="hero">
       <div class="shell hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">Agent data serving platform</p>
-          <h1>Real-time data platform for AI agents</h1>
+          <p class="eyebrow">Event-native metrics layer</p>
+          <h1>Business metrics that move when events happen.</h1>
           <p class="hero-text">
-            Fresh business context for support, ops, and merch workflows.
-            Query live entities, metrics, and natural-language questions without
-            building one-off agent APIs around your warehouse.
+            Every metric declares which events move it, and the serving layer
+            keeps reads fresh by invalidating its cache when events arrive —
+            a measured 1.1&nbsp;s p50 event-to-metric freshness. Query live
+            entities and metrics over typed contracts, from Python or
+            TypeScript. Consumers are whoever needs the number now: people,
+            dashboards, services, and AI agents.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="../docs/api-reference.md">View docs</a>
@@ -74,10 +77,11 @@ print(order.status)</code></pre>
     <section class="section">
       <div class="shell narrow">
         <p class="section-kicker">Problem</p>
-        <h2>Your agent is only as useful as the context behind it.</h2>
+        <h2>A decision is only as good as the number behind it.</h2>
         <p class="section-text">
-          Most agent stacks still answer from stale warehouse snapshots, ad hoc
-          service calls, or brittle prompt glue. That breaks down fastest in
+          BI on a replica answers yesterday's questions, and most workflows still
+          read from stale warehouse snapshots, ad hoc service calls, or a cache
+          that quietly serves 30-second-old numbers. That breaks down fastest in
           support, operations, and merchandising, where a six-hour-old answer is
           often worse than no answer at all. AgentFlow turns live operational
           data into a serving layer with typed entities, metrics, query endpoints,
@@ -240,10 +244,10 @@ print(client.get_metric("revenue", "24h").value)</code></pre>
             <strong>Repository</strong>
             <span>Repository, setup, CI workflows, local demo path</span>
           </a>
-          <div class="link-card muted-card" aria-disabled="true">
-            <strong>Discord</strong>
-            <span>Community link not published in this repository snapshot</span>
-          </div>
+          <a class="link-card" href="https://github.com/brownjuly2003-code/agentflow/blob/main/docs/freshness-benchmark.md">
+            <strong>Freshness benchmark</strong>
+            <span>How the ~1 s event-to-metric number is measured and reproduced</span>
+          </a>
         </div>
       </div>
     </section>

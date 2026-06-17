@@ -241,7 +241,7 @@ def test_open_metric_request_without_tenant_context_fails_closed_when_tenant_tab
 ):
     # Empty in-memory keys; we want the request to reach the per-route
     # tenant-context check in sql_builder, so explicitly bypass the
-    # middleware fail-closed (Codex audit p2_1 #5).
+    # middleware fail-closed (audit p2_1 #5).
     manager = client.app.state.auth_manager
     manager.keys_by_value = {}
     manager._hashed_keys = []

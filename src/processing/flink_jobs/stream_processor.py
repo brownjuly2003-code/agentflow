@@ -50,7 +50,7 @@ class EventTimestampAssigner(TimestampAssigner):
 
             if is_debezium_event(event):
                 # Best-effort topic for tenant resolution: Debezium value-only
-                # deserializer drops the Kafka topic name (Codex review P1).
+                # deserializer drops the Kafka topic name (review P1).
                 # Wrappers should populate `event["topic"]` before this point;
                 # without it we still fall back to source.name → 'default'.
                 event = normalize_debezium_event(event, topic=event.get("topic"))

@@ -15,7 +15,7 @@ KIND_CLUSTER_NAME = "agentflow-a05-test"
 def _default_open_auth(request, monkeypatch):
     """Integration tests historically ran without an api_keys.yaml and relied
     on middleware to passthrough when keys were unconfigured. After the
-    fail-closed default (Codex audit p2_1 #5 / p2_2 #1), every TestClient
+    fail-closed default (audit p2_1 #5 / p2_2 #1), every TestClient
     that does not explicitly configure keys now returns 503. To keep the
     legacy behaviour for tests that do not exercise auth, set
     ``AGENTFLOW_AUTH_DISABLED=true`` here. Tests that intentionally probe

@@ -13,7 +13,7 @@ from src.serving.backends import BackendExecutionError, BackendMissingTableError
 from src.serving.db_pool import DuckDBPool
 from src.serving.duckdb_connection import connect_duckdb
 
-# Strict identifier validation for f-string SQL paths (H-C1 / audit_kimi_25_05_26).
+# Strict identifier validation for f-string SQL paths (H-C1 / audit-2026-05).
 # Accepts either a bare DuckDB identifier (`name` or `schema.name`) or a
 # double-quoted identifier (`"name"` / `"schema"."name"`), the form produced
 # by `SQLBuilderMixin._quote_identifier` for tenant-scoped tables. Inside

@@ -266,7 +266,7 @@ class NLQueryMixin:
         plan = "\n".join(row[1] if len(row) > 1 else str(row[0]) for row in explain_rows)
         normalized_plan = re.sub(r"[\u2500-\u257f]", " ", plan)
         # Use sqlglot AST so tenant-quoted SQL still resolves to the
-        # leaf table name (Codex review P2). Regex with FROM/JOIN +
+        # leaf table name (review P2). Regex with FROM/JOIN +
         # bare identifier returned an empty list for quoted identifiers
         # like "acme"."orders_v2", dropping tables_accessed for tenant
         # explain calls.

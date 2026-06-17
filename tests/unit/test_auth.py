@@ -228,7 +228,7 @@ def test_admin_can_create_list_and_revoke_keys(api_keys_path: Path, db_path: Pat
 
     assert created.status_code == 201
     # Plaintext key material is intentionally NOT returned by the list
-    # endpoint (Codex audit p2_1 #7); we identify the new entry by key_id.
+    # endpoint (audit p2_1 #7); we identify the new entry by key_id.
     assert all("key" not in item for item in listed.json()["keys"])
     assert any(item["key_id"] == new_key_id for item in listed.json()["keys"])
     assert deleted.status_code == 204

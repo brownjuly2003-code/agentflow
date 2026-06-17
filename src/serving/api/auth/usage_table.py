@@ -1,6 +1,6 @@
 """Per-tenant API-usage table — DuckDB schema + read/write helpers.
 
-Extracted from `middleware.py` per Kimi audit L-C4 (2026-05-25): DB
+Extracted from `middleware.py` per audit L-C4 (2026-05-25): DB
 schema management and INSERT/SELECT helpers don't belong alongside the
 ASGI middleware. Imported lazily from `AuthManager` to avoid an import
 cycle with `manager.py`.
@@ -124,7 +124,7 @@ def record_usage(manager: AuthManager, tenant_key: TenantKey, endpoint: str) -> 
             conn.close()
 
     # Audit publish is intentionally outside the DB retry loop: a publish
-    # failure must not trigger another INSERT (H-C3 / audit_kimi_25_05_26).
+    # failure must not trigger another INSERT (H-C3 / audit-2026-05).
     if inserted:
         try:
             manager.audit_publisher.publish(payload)

@@ -3,8 +3,8 @@
 **Status (verified 2026-05-30 via live registry queries):** v1.1.0,
 v1.2.0, v1.3.0, and v1.4.0 are all published on the three registries.
 v1.4.0 is a maintenance release bundling documentation
-(`docs/SESSION_HANDOFF.md`, `docs/runbooks/` on-call playbooks,
-`SECURITY.md`, issue/PR templates), CI hardening (`contract.yml`
+(`docs/runbooks/` on-call playbooks, `SECURITY.md`, issue/PR
+templates), CI hardening (`contract.yml`
 paths broadening, `dora.yml` ref fix), repo hygiene
 (`.github/dependabot.yml` + `.editorconfig`, auto-merge enabled),
 type-stub adoption (`types-PyYAML` + `types-redis` → 18 import-untyped
@@ -64,9 +64,9 @@ python -c "from importlib.metadata import version; print(version('agentflow-runt
 
 `git log --oneline 8fa99e6..e58693b` shows the changes. The high-level shape:
 
-- **Public repo and release docs:** top-level `SESSION_HANDOFF.md`,
-  refreshed README/release status, on-call runbooks, `SECURITY.md`,
-  issue/PR templates, and release rollback guidance.
+- **Public repo and release docs:** refreshed README/release status,
+  on-call runbooks, `SECURITY.md`, issue/PR templates, and release
+  rollback guidance.
 - **CI and repo hygiene:** `contract.yml` trigger broadening, DORA workflow
   ref hardening, Dependabot configuration, `.editorconfig`, and auto-merge
   readiness documentation.
@@ -114,13 +114,13 @@ shows the changes. The high-level shape:
   layer, cold-tier S3 offload, MaterializedPostgreSQL CDC (single-DB
   + per-branch fan-out variants), asciinema cast + voice-over MP4 +
   web-UI screencast.
-- **Audit follow-up sprint** (Codex p1–p9 + Opus 8.2/10): tenant
+- **Audit follow-up sprint**: tenant
   isolation across the control plane, SQL guard centralization in
   `nl_queries._prepare_nl_sql()`, entity allowlist enforcement, auth
   fail-closed + entropy + scopes, NetworkPolicy + PodDisruptionBudget
   + securityContext (off-by-default), Helm values JSON schema contract
   + live validation on kind.
-- **SDK alignment** (Codex p8 F1–F10): `api_version=` + capture of
+- **SDK alignment** (F1–F10): `api_version=` + capture of
   `X-AgentFlow-{Version,Latest-Version,Deprecated}` headers, async-
   parity for `contract_version=`, `as_of=` on entity/metric methods,
   `EntityMeta`/`MetricMeta` typed envelopes, 8 new typed public methods

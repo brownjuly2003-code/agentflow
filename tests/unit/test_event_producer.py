@@ -1,7 +1,7 @@
 """Unit tests for the synthetic event producer.
 
 Closes the coverage gap on `src/ingestion/producers/event_producer.py`
-flagged in Codex audit p5. We exercise the four generators, the Decimal
+flagged in audit p5. We exercise the four generators, the Decimal
 JSON encoder, and the producer loop control path without a live Kafka
 broker (Producer is mocked via patch).
 """

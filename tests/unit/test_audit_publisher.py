@@ -55,7 +55,7 @@ def test_auth_usage_writes_configured_append_only_audit_path(monkeypatch, tmp_pa
 
 class _BoomPublisher:
     """Audit publisher that always raises — to assert publish failure does
-    not trigger a duplicate api_usage INSERT (H-C3 / audit_kimi_25_05_26)."""
+    not trigger a duplicate api_usage INSERT (H-C3 / audit-2026-05)."""
 
     def __init__(self) -> None:
         self.calls = 0

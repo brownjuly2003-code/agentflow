@@ -14,8 +14,8 @@ onboarding is still gated on the inputs listed in
 authoritative response plan for when that gate opens.
 
 The DV2 multi-branch demo cluster (Lima VM + kind, `hq-demo`) is **not** in
-scope here — it has no on-call. Use `docs/dv2-multi-branch/SESSION_HANDOFF.md`
-for that environment.
+scope here — it has no on-call. It is documented separately under
+`docs/dv2-multi-branch/`.
 
 ## Runbooks
 

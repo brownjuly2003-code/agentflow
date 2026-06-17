@@ -93,8 +93,11 @@ integrations/agentflow_integrations/**/*.py[cod]
 agentflow_bench_debug*.duckdb*
 agentflow_demo_api.duckdb*
 
-# Local autopilot runtime state.
+# Local autopilot tooling + runtime state (kept locally, not published).
 .autopilot/
+/scripts/autopilot.ps1
+/scripts/install-autopilot-task.ps1
+/tests/unit/test_autopilot_runner.py
 
 # Local scratch notes at the repo root (audit prompts/results). Ignored so
 # the clean-tree gate and git status stay quiet without touching the files.

@@ -91,7 +91,6 @@ hardening already in place — useful context when assessing severity:
 
 - [docs/security-audit.md](docs/security-audit.md) — threat model and
   control surface.
-- [docs/audit-history.md](docs/audit-history.md) — remediation trail.
 - [docs/runbooks/auth-401-spike.md](docs/runbooks/auth-401-spike.md) —
   fail-closed auth behavior, recovery, and emergency bypass rules.
 - [docs/runbooks/release-rollback.md](docs/runbooks/release-rollback.md)

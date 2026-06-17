@@ -1,11 +1,10 @@
 name: ARM Benchmark
 
-# Operator-dispatched benchmark on real ARM server hardware (backlog item 21).
-# Runs on the free GitHub-hosted arm64 runner for public repositories
+# Dispatch-only benchmark on real ARM server hardware.
+# Runs on the GitHub-hosted arm64 runner for public repositories
 # (ubuntu-24.04-arm: Cobalt 100, Arm Neoverse N2, Armv9-A, 4 vCPU) — the
-# $0-budget production-hardware class approved by the 2026-06-05 operator
-# decision. Not a required check; evidence is recorded into docs/perf/ from
-# the uploaded artifacts.
+# available ARM server class for this project. Not a required check; evidence
+# is recorded into docs/perf/ from the uploaded artifacts.
 
 on:
   workflow_dispatch:

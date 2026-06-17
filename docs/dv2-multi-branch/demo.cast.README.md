@@ -75,8 +75,8 @@ the running cluster:
 | 5a | `kubectl create job --from=cronjob/dv2-cold-offload-msk` | job created, succeeds in ~8 s |
 | 5b | `mc ls -r local/cold-tier` | parquet files in MinIO for all 5 branches |
 
-The recording was made on hq-demo at the state reflected in
-[`SESSION_HANDOFF.md`](./SESSION_HANDOFF.md) § Current cluster state.
+The recording was made on the `hq-demo` cluster in the multi-branch state
+described by the DV2 docs in this directory.
 
 ## Regenerating
 

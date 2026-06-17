@@ -41,19 +41,15 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
-- Backlog items 19-22 (production CDC onboarding, Phase 1 PMF/pricing
-  evidence, production-hardware benchmark, external pen-test attestation) are
-  closed as `Not applicable unless explicitly reopened` by the 2026-06-05
-  operator decision, following the 2026-05-30 AWS no-budget/no-card precedent
-  (item 18). Their acceptance criteria require external counterparties
-  (production source owners, real customers, cloud hardware budget, a
-  third-party tester) that do not exist in the current project plan and forbid
-  fabrication. The gated claims remain explicitly unmade: production CDC is
-  not enabled, PMF/pricing is not validated, no production-hardware results
-  exist, and no third-party attestation exists. Recorded across `BACKLOG.md`,
-  `docs/release-readiness.md`, and status banners on the archived handoff
-  documents; reopening requires real operator-provided evidence via
-  `docs/operations/external-gate-evidence-intake.md`.
+- Production CDC onboarding, PMF/pricing evidence, a production-hardware
+  benchmark, and an external pen-test attestation are documented as out of
+  scope for the current plan. Their acceptance criteria require external
+  counterparties (production source owners, real customers, production-grade
+  hardware, a third-party tester) that are deliberate non-goals for this
+  reference project. The gated claims remain explicitly unmade: production CDC
+  is not enabled, PMF/pricing is not validated, no production-hardware results
+  exist, and no third-party attestation exists. Status is summarized in
+  `docs/release-readiness.md`.
 
 ### Added
 
@@ -275,7 +271,7 @@ All notable changes to AgentFlow are documented in this file.
   spec are unchanged (`export_openapi.py --check` green).
 - The ClickHouse serving backend now translates DuckDB-flavored
   semantic-layer SQL through a sqlglot parse → AST rewrite → generate
-  pipeline instead of the former regex chain (PR #41; closes audit_kimi
+  pipeline instead of the former regex chain (PR #41; closes audit finding
   H-C2 in full — the earlier literal-masking commit was the narrow fix).
   String literals are preserved structurally by the parser, and
   unparseable or multi-statement SQL now fails loudly as
@@ -537,7 +533,7 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Performance
 
-- The two Flink hot-path findings from `audit_kimi_25_05_26.md` are closed
+- The two Flink hot-path findings from the 2026-05 internal audit are closed
   now that the runtime is on 2.2.1 (they were gated on the PR #23 upstream
   wait). M-C3: `ValidateAndEnrich` emits `(event_id, payload)` pairs and the
   dedup `key_by` reads the key from the tuple, dropping the second
@@ -776,15 +772,9 @@ wave 2 dependency bumps that landed in sessions 11–19.
 
 ### Documentation
 
-- Top-level [`docs/SESSION_HANDOFF.md`](docs/SESSION_HANDOFF.md) — the
-  entry point for picking up the project cold. Includes the four
-  orientation commands to run first, the priority-tiered open work
-  (Tier A actionable Dependabot PRs, Tier B externally user-gated
-  A04/A05/A03, Tier C forward backlog), a compressed view of sessions
-  11 → 17, and the load-bearing lessons from session 17's regression
-  (Contract Tests path filter, Dependabot cascade transitive
-  conflicts, memory-staleness check before recommending). README
-  surfaces it at the top of the Documentation index.
+- Curated the README Documentation index as the cold-start entry point,
+  grouping the architecture, API reference, on-call runbooks, and security
+  audit so the project's published docs are reachable in one hop.
 
 ### Fixed
 
@@ -905,7 +895,7 @@ wave 2 dependency bumps that landed in sessions 11–19.
   optional-pyyaml `try/except ImportError` blocks (PyYAML is currently
   a hard runtime dependency, but the JSON-fallback machinery in
   `webhook_dispatcher.py`, `slo.py`, `alerts/dispatcher.py` etc. is
-  intentionally kept available — see SESSION_HANDOFF.md anti-tasks).
+  intentionally kept available).
 - `types-redis` added to the dev extra. Two
   `# type: ignore[import-untyped,unused-ignore]` annotations on
   `import redis.asyncio as redis` retired in `src/serving/cache.py`

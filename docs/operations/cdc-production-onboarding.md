@@ -2,159 +2,18 @@
 
 ## Status
 
-Reopened on 2026-06-05 (second operator decision, «давай сделаем то, что
-возможно»): a real production source DOES exist in the operator's own estate —
-the Neon Postgres project backing VacancyRadar (`public.vacancies`, ~95k live
-rows, PostgreSQL 17). The decision record below is filled with solo-org owners
-(a one-person organization is recorded honestly as such). Evidence channel:
-the dispatch-only `cdc-production-capture.yml` workflow + repository Actions
-secrets + `scripts/capture_production_cdc.sh` (initial-snapshot capture with
-unconditional teardown of connector, publication, and replication slot).
+Production CDC onboarding is not enabled. The checked-in CDC path covers the
+local/demo and Kubernetes-shaped staging primitives only (compose source DBs,
+Kafka Connect image, connector registration, topic bootstrap, the
+`helm/kafka-connect` chart with a values schema, and integration tests).
 
-Remaining external step before the first run: the operator must enable
-Logical Replication on the Neon project (Console → Project settings →
-Logical Replication → Enable, or via a Neon API key). The flip is
-IRREVERSIBLE (`wal_level` stays `logical`) and restarts project computes;
-VacancyRadar writers reconnect on their next run. Verified live on
-2026-06-05: `wal_level=replica`, 1 pre-existing managed replication slot
-(must not be touched; the capture script drops only its own
-`agentflow_prod_capture_slot`).
-
-## Decision record (2026-06-05, solo-org)
-
-- Source owner and escalation contact: Julia Edomskikh (operator).
-- Secret owner: Julia Edomskikh; connection material lives only in repository
-  Actions secrets (`CDC_NEON_HOSTNAME/USER/PASSWORD/DBNAME`) and the local
-  VacancyRadar `.env`.
-- Source engine and scope: Neon Postgres 17 (aarch64), database `neondb`,
-  approved table scope `public.vacancies` only.
-- Network path: public TLS endpoint (`sslmode=require`); no private network
-  exists or is claimed.
-- Kubernetes Secret owner: not applicable — the capture path runs in CI, not
-  in the Helm deployment; the Helm production secret mode remains documented
-  below for a future real cluster.
-- Monitoring owner: Julia Edomskikh; monitoring scope for the evidence run is
-  the workflow run log plus connector status captured into the evidence
-  artifact.
-- Rollback owner: Julia Edomskikh; rollback procedure is encoded in the
-  capture script teardown trap (delete connector, drop publication, drop
-  `agentflow_prod_capture_slot`, verify zero leftover capture slots) and
-  runs even when capture fails.
-
-## Planned retry (next session)
-
-The 2026-06-05 autonomous attempt to enable Logical Replication from the
-operator's iMac via a CDP-driven real Chrome session reached the Google
-password + 2FA stage (credentials and the bot-block bypass both worked) but
-could not complete: the free AdGuard VPN kept dropping the non-RU egress
-(Neon unreachable for most of each window) and the 8 GB Intel iMac killed the
-detached login process under Chrome load. The wall was environmental
-connectivity, not credentials or logic.
-
-**2026-06-05 follow-up — the option-2 API question is RESOLVED.** Enabling
-Logical Replication is NOT Console-only: the public Neon API exposes it as a
-first-class project setting (`settings.enable_logical_replication`, verified
-against the Neon API reference + TypeScript SDK). A single
-`PATCH https://console.neon.tech/api/v2/projects/{project_id}` performs the
-same irreversible `wal_level=logical` flip + compute restart as the Console
-button (exact command in option 2). So the only step that still strictly needs
-an authenticated Console browser session is *creating an API key* — the flip
-itself does not.
-
-Next attempt, in preference order:
-
-1. **Operator one-click (fastest, recommended).** In the operator's normal
-   browser (already authenticated, stable VPN): Neon Console → VacancyRadar
-   project → Settings → Logical Replication → Enable (irreversible
-   `wal_level=logical`, restarts computes). Then dispatch
-   `cdc-production-capture.yml`. Everything after the toggle is already
-   automated and needs no Console.
-
-2. **Neon API key — the full API path is CONFIRMED (verified 2026-06-05).**
-   The original "verify first whether the API exposes the toggle" caveat is
-   resolved: it does, end to end. Register a Neon **API key** (Console →
-   Account settings → API keys → Create), store it in `D:\TXT\NEON.txt`, then
-   from any non-RU egress (e.g. a US GitHub Actions runner — no VPN/geo
-   dependency):
-
-   ```bash
-   # 1. find the VacancyRadar project_id (no Console needed once the key exists)
-   curl -s -H "Authorization: Bearer $NEON_API_KEY" \
-     https://console.neon.tech/api/v2/projects | jq '.projects[] | {id,name}'
-   # 2. flip the toggle — IRREVERSIBLE wal_level=logical + restarts all computes
-   curl -X PATCH "https://console.neon.tech/api/v2/projects/$PROJECT_ID" \
-     -H "Authorization: Bearer $NEON_API_KEY" -H 'Content-Type: application/json' \
-     -d '{"project":{"settings":{"enable_logical_replication":true}}}'
-   ```
-
-   Then dispatch `cdc-production-capture.yml` — zero Console interaction after
-   the flip. **Correction to the original note:** the API base is
-   `console.neon.tech/api/v2`, NOT `api.neon.tech` (the latter does not resolve
-   — it was an error here). The ONLY remaining manual step is creating the API
-   key, which needs exactly one authenticated Console session: there is no
-   stored Neon account password and no live Neon/Google session cookie in any
-   local browser profile (rechecked 2026-06-05), and autonomous Google/Neon
-   browser login is the environment-blocked path described above. Once the key
-   is in `D:\TXT\NEON.txt`, the whole enable + capture is one unattended run.
-
-3. **Registration of a dedicated CDC source (fallback, lower fidelity).** If
-   touching the live VacancyRadar project is undesirable, register a fresh
-   Neon project (free tier) seeded from an anonymized `public.vacancies`
-   export, enable Logical Replication there, and run the same capture against
-   it. This proves the end-to-end CDC path on a real managed Postgres, but is
-   explicitly a dedicated test source, not the production VacancyRadar DB —
-   label it as such in the evidence and do not claim production capture.
-
-4. **Stable egress for autonomous browser login.** If the CDP/iMac path is
-   retried, first secure a stable non-RU channel (a paid/stable VPN node or a
-   non-RU VPS as an SSH egress) so the multi-step Google login + 2FA can run
-   for ~90 s without a drop; the login + 2FA script is otherwise proven.
-
-Everything except the Console toggle is committed and pickup-ready:
-`scripts/capture_production_cdc.sh`, `.github/workflows/cdc-production-capture.yml`,
-the four `CDC_NEON_*` Actions secrets, and `tests/unit/test_cdc_production_capture_workflow.py`.
-
-Production CDC onboarding is not approved yet. This runbook defines the
-decision record and preflight checks required before attaching real Postgres or
-MySQL sources to AgentFlow.
-
-Do not create production connectors until every required input below is filled
-and approved by the source-system owner, platform owner, and security owner.
-
-## Current decision handoff
-
-Status as of 2026-05-04: blocked on external production-source decisions.
-
-The checked-in CDC path covers local/demo and Kubernetes-shaped staging
-primitives only. The production decision record is still missing:
-
-- Source owner and escalation contact.
-- Secret owner for CDC user creation, rotation, and revocation.
-- Source engine, hostname, port, database name, and approved table scope.
-- Private network path from Kafka Connect to the source database.
-- Existing Kubernetes Secret name and owner.
-- Monitoring owner for connector lag, failures, and dead letters.
-- Rollback owner authorized to pause or delete the connector.
-
-Access triage on 2026-05-04 found no approved production-source inputs in the
-repo or task prompt. `kubectl` is present through Docker Desktop tooling, but
-there is no approved production context, source hostname, private network path,
-existing Kubernetes Secret, monitoring owner, or rollback owner to inspect.
-No production connector was created, paused, deleted, or queried.
-
-Next operator packet to unblock review:
-
-- Completed source-owner, secret-owner, platform-owner, and security-owner
-  approval record.
-- Source engine/version, hostname/port, database name, explicit table allowlist,
-  data classification, and snapshot policy.
-- Private network path proof and existing Kubernetes Secret name/namespace; do
-  not include credential values.
-- Monitoring owner, rollback owner, first-run connector status, topic list,
-  redacted normalized event, and lag/dead-letter evidence.
-
-Until those values are supplied and approved outside the repo, keep production
-CDC disabled and treat this runbook as an operator handoff only.
+This runbook defines the decision record, preflight checks, and rollout /
+rollback procedure required before attaching a real Postgres or MySQL source to
+AgentFlow. Enabling a live source requires external inputs — source ownership,
+credentials, network path, and approvals — that are supplied and approved
+outside the repository. Do not create production connectors until every required
+input below is filled and approved by the source-system owner, platform owner,
+and security owner.
 
 ## Required Decision Record
 

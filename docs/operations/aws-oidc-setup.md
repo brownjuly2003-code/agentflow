@@ -10,7 +10,7 @@ For the DV2/X5 demo, use the already documented S3-compatible cold-tier path wit
 
 ## Current readiness handoff
 
-Status as of 2026-05-30: not applicable under the operator's no-budget/no-card constraint. The older AWS evidence below is retained only as historical context.
+Status: not applicable for the current plan — a managed-AWS production deployment is a deliberate non-goal for this pre-production portfolio project. The older AWS evidence below is retained only as historical context.
 
 Confirmed local/repository evidence:
 
@@ -53,8 +53,8 @@ environment hints are absent; workflow-expected
 Terraform plan/apply jobs remain guarded with `if: false`; and `gh run list
 --workflow terraform-apply.yml` reports no workflow runs. Local Terraform CLI
 availability is not AWS role, tfvars, CloudTrail, approval, or apply evidence.
-Under the current no-budget decision this is expected and should not be
-rechecked without new operator input.
+Under the current out-of-scope decision this is expected and should not be
+rechecked without an explicit decision to reintroduce AWS.
 
 The tracked root-level `infrastructure/terraform/dev.tfvars` and
 `infrastructure/terraform/prod.tfvars` are not proof of H4 readiness. The

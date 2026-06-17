@@ -122,6 +122,9 @@ agentflow_demo_api.duckdb*
 /second-opinion-*.md
 /.pi/
 /.workflow/
+/res/
+docs/dv2-multi-branch/kimi_research.md
+docs/release-readiness-archive/
 docs/codex-tasks/
 docs/plans/codex-archive/
 docs/lessons/

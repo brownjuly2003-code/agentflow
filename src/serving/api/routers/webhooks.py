@@ -46,7 +46,7 @@ async def list_my_webhooks(request: Request) -> dict[str, object]:
     webhooks = list_webhooks(get_webhook_config_path(request.app), _tenant(request))
     # Exclude `secret` from list/read responses. Plaintext signing material
     # is returned only once on POST. Listing it again would let any tenant
-    # API key recover signing secrets after creation (Codex audit p2_2 #7).
+    # API key recover signing secrets after creation (audit p2_2 #7).
     return {
         "webhooks": [webhook.model_dump(mode="json", exclude={"secret"}) for webhook in webhooks]
     }

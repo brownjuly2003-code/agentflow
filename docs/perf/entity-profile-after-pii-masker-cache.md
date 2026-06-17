@@ -17,7 +17,7 @@
 
 All 2000 requests succeeded, zero failures. Same machine, same stack config, same fixture row (`ORD-20260404-1001`), same parameters (iterations=2000, concurrency=16, warmup=20).
 
-## Why the win is larger than Codex predicted
+## Why the win is larger than predicted
 
 `entity-profile-2026-04-24.md` estimated a 10–15 % p99 reduction (~90–140 ms) based on the flamegraph share of `_get_pii_masker()` + `PiiMasker.__init__` (~35 % CPU). The observed delta is **−61 %** (~575 ms). Two likely reasons the flamegraph underestimated the cost:
 

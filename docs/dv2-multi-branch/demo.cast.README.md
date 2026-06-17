@@ -11,7 +11,7 @@ Use it as one of three things:
    shows every beat producing real output, no narration needed.
 2. **Base track for voice-over** — already built. See
    [`demo_voiced.mp4`](./demo_voiced.mp4) (~92 s, h264 + AAC, 3.2 MB):
-   cast slowed to match a Russian TTS narration of [`pitch.md`](./pitch.md).
+   cast slowed to match a Russian TTS narration of the demo.
    Reproducible via [`demo_voiced.build.sh`](./demo_voiced.build.sh)
    from [`demo_voiced.narration.txt`](./demo_voiced.narration.txt).
    Web-UI counterpart: [`demo_webui.mp4`](./demo_webui.mp4) (~60 s,
@@ -63,7 +63,7 @@ review (what the cast captures, line for line).
 
 ## What's recorded
 
-The 6 beats from [`pitch.md`](./pitch.md) executed end-to-end against
+The 6 demo beats executed end-to-end against
 the running cluster:
 
 | Beat | Command | Live output |
@@ -82,13 +82,13 @@ described by the DV2 docs in this directory.
 
 ```bash
 # On the iMac (asciinema already installed at ~/Library/Python/3.9/bin/asciinema)
-scp docs/dv2-multi-branch/demo_runner.sh julia@192.168.1.133:/tmp/
-ssh julia@192.168.1.133 \
+scp docs/dv2-multi-branch/demo_runner.sh <user>@<mac-host>:/tmp/
+ssh <user>@<mac-host> \
   'export PATH=$HOME/Library/Python/3.9/bin:$HOME/lima/bin:$HOME/bin:$PATH && \
    TERM=xterm-256color asciinema rec --cols 130 --rows 35 \
      -t "DV2.0 multi-branch live demo" \
      -c "bash /tmp/demo_runner.sh" /tmp/demo.cast'
-scp julia@192.168.1.133:/tmp/demo.cast docs/dv2-multi-branch/demo.cast
+scp <user>@<mac-host>:/tmp/demo.cast docs/dv2-multi-branch/demo.cast
 ```
 
 After regeneration: `kubectl delete job -n dv2 $(kubectl get jobs -n dv2 -o name | grep cold-demo)`

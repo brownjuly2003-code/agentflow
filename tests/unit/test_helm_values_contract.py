@@ -120,7 +120,7 @@ def test_helm_template_uses_existing_secret_without_rendering_api_key_material()
 
 def test_staging_overrides_use_structured_api_keys_with_explicit_ids():
     # The tracked values-staging.yaml carries placeholders (no plaintext keys —
-    # see Codex audit p2_2 #5 / p9 #4). The structured contract is enforced by
+    # see audit p2_2 #5 / p9 #4). The structured contract is enforced by
     # values-staging.yaml.example, which represents the schema operators must
     # populate from a secrets manager before deploying.
     values = _load_yaml(PROJECT_ROOT / "k8s" / "staging" / "values-staging.yaml.example")

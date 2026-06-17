@@ -2,10 +2,6 @@
 
 Before publishing AgentFlow changes or pushing a release tag:
 
-Status snapshot (2026-05-01): content, security, link, SDK publish preflight,
-live `v1.1.0` PyPI/npm registry publishing, npm Trusted Publishing setup, and
-the GitHub Release record are complete.
-
 ## Content
 
 - [x] `README.md` is publication-ready
@@ -13,7 +9,7 @@ the GitHub Release record are complete.
 - [x] `CHANGELOG.md` includes the current release or `[Unreleased]` entry
 - [x] `CONTRIBUTING.md` is present
 - [x] `.env.example` contains placeholders only
-- [x] `docs/glossary.md` is ready for interview prep
+- [x] `docs/glossary.md` explains the core technical terms
 
 ## Security
 
@@ -39,19 +35,19 @@ the GitHub Release record are complete.
 
 Capture notes:
 
-- Captured on 2026-04-30 from the local demo API on `http://127.0.0.1:8000` and static landing server on `http://127.0.0.1:8002`.
+- Captured from the local demo API on `http://127.0.0.1:8000` and the static landing server on `http://127.0.0.1:8002`.
 - Swagger UI loaded from `/docs`; Playwright used `bypassCSP` so the FastAPI CDN assets render in the screenshot.
 - Benchmark terminal screenshot uses a short local screenshot run: `python scripts/run_benchmark.py --host http://localhost:8000 --users 5 --spawn-rate 2 --run-time 10s --report-path .tmp\benchmark-screenshot.md --results-json .tmp\benchmark-screenshot.json`.
 
 ## Repo settings after push
 
 - [x] Fill the repository description in the GitHub About section
-- [x] Add topics: `data-engineering`, `real-time`, `ai-agents`, `fastapi`, `duckdb`, `kafka`, `flink`
+- [x] Add topics (`data-engineering`, `streaming`, `real-time`, `kafka`, `flink`, `iceberg`, `fastapi`, `duckdb`, `python`, `typescript`)
 - [x] Create or update the approved `vX.Y.Z` GitHub Release using notes from `CHANGELOG.md`
 
 ## SDK registry release
 
-Clear state: GitHub source releases and registry publishes are separate. A `vX.Y.Z` tag can publish runtime + SDK packages, while `sdk-vX.Y.Z` remains the standalone SDK release path created by `scripts/release.py`.
+GitHub source releases and registry publishes are separate. A `vX.Y.Z` tag can publish runtime + SDK packages, while `sdk-vX.Y.Z` remains the standalone SDK release path created by `scripts/release.py`.
 
 - [x] On a clean venv, verify both install orders resolve the same package identities:
 
@@ -91,61 +87,12 @@ python scripts/check_release_artifacts.py dist/* sdk/dist/*
 - [x] If `sdk/dist/` already contains older artifacts, clear it before `python -m build sdk/` so `twine check` only validates the current release
 - [x] Stop after the rehearsal when you only need proof; the real publish event is pushing the approved release tag
 - [x] On the approved release commit, push the commit and release tag, then confirm green runs for `Publish TypeScript SDK` and `Publish Python Packages`
-- [x] Confirm registry visibility for `agentflow-runtime`, `agentflow-client`,
-  and the legacy npm package `@uedomskikh/agentflow-client` 1.1.0
-- [x] Switch future TypeScript SDK publishing to the new npm account scope:
-  `@yuliaedomskikh/agentflow-client`. `sdk-ts/package.json`,
-  `sdk-ts/package-lock.json`, the Vercel AI template, SDK README, and current
-  TypeScript import examples use the new package name.
-- [x] First-publish the new npm package under the new account:
-  `@yuliaedomskikh/agentflow-client@1.1.0` is public and owned by
-  `yuliaedomskikh <yulia.edomskikh@gmail.com>`.
-- [x] Create and secure the new npm account for email
-  `yulia.edomskikh@gmail.com`. Completed on 2026-05-01 for npm user
-  `yuliaedomskikh`: signup email verification succeeded, 2FA was configured, and
-  the new recovery-code set was saved in the local untracked secret note without
-  printing values.
-- [x] Clean the local secret notes of obsolete standalone 16-character npm
-  recovery-code candidates. The local untracked secret notes now contain zero
-  such legacy candidates.
-- [x] Before any further npm OTP-gated operation, apply the active
-  `npm-recovery-codes` skill. Run its reserve check without printing secrets and
-  do not consume a recovery code if fewer than two usable codes would remain
-  after the operation. Recovery codes can be the normal npm second factor at
-  login, but each accepted code is single-use. The current handoff records 4
-  usable 64-character npm recovery codes after the accepted setup/readback codes
-  were removed; at least 2 must remain unused after any planned operation.
-- [x] Create and verify npm Trusted Publishing for the new package
-  `@yuliaedomskikh/agentflow-client`: GitHub owner `brownjuly2003-code`,
-  repository `agentflow`, workflow filename `publish-npm.yml`, no environment
-  name. `npm trust github` created trust id
-  `693e8f2f-c592-4fd0-8942-232356bb5e9a`, and the npm package settings UI shows
-  Trusted Publisher `brownjuly2003-code/agentflow` with workflow
-  `publish-npm.yml` and no environment. CLI readback from a `yuliaedomskikh`
-  owner-auth session on 2026-05-01 returned provider `github`, repository
-  `brownjuly2003-code/agentflow`, workflow `publish-npm.yml`, and no
-  environment:
-
-```bash
-npm trust list @yuliaedomskikh/agentflow-client \
-  --json \
-  --registry https://registry.npmjs.org/
-```
-
-- [ ] Revoke the legacy `NPM_TOKEN` only after a successful trusted-publish
-  workflow run for `@yuliaedomskikh/agentflow-client` and accepted evidence
-  intake. The green `publish-npm.yml` run on `2c72387` is not sufficient proof:
-  it published the legacy `@uedomskikh/agentflow-client` package and still used
-  `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`. Required revocation evidence is
-  defined in `docs/operations/external-gate-evidence-intake.md`: trusted-publish
-  run URL, repository secret audit, npm token audit, recovery-code reserve
-  confirmation, and review owner.
-
-Do not open the literal masked URL `https://www.npmjs.com/auth/cli/***`. npm
-11 redacts the real web-auth URL in terminal output and debug logs.
+- [x] Confirm registry visibility for `agentflow-runtime`, `agentflow-client`, and `@yuliaedomskikh/agentflow-client`
+- [x] TypeScript SDK publishing targets the `@yuliaedomskikh/agentflow-client` scope. `sdk-ts/package.json`, `sdk-ts/package-lock.json`, the Vercel AI template, SDK README, and the TypeScript import examples use that package name.
+- [x] npm Trusted Publishing (GitHub Actions OIDC) is configured for `@yuliaedomskikh/agentflow-client`: owner `brownjuly2003-code`, repository `agentflow`, workflow `publish-npm.yml`, no environment. `publish-npm.yml` publishes via OIDC with no long-lived token on the production publish step.
 
 ## Verification after publish
 
-- [x] Clone a fresh copy and run `make demo` or the same `Makefile` recipe where `make` is unavailable. Verified from fresh origin clone `0bf1181` on 2026-04-30: seed pipeline, seed benchmark fixtures, start API with `AGENTFLOW_AUTH_DISABLED=true`, then `/docs`, `/v1/entity/order/ORD-20260404-1001`, and `/v1/query` all returned `200`. This Windows host lacks `make` and reused the already-running Redis on `localhost:6379` because the port was occupied.
-- [x] Run `python -m pytest tests/unit tests/integration tests/sdk -q` from the fresh clone. Windows-safe local command with `-p no:schemathesis -p no:metadata -p no:cacheprovider` and project-local temp paths passed with `657 passed, 4 skipped in 225.71s`.
-- [x] Re-check README links from the fresh clone (`README links OK`).
+- [x] Clone a fresh copy and run `make demo` (or the same `Makefile` recipe where `make` is unavailable): the seed pipeline, seed benchmark fixtures, and API start, then `/docs`, `/v1/entity/order/ORD-20260404-1001`, and `/v1/query` return `200`.
+- [x] Run `python -m pytest tests/unit tests/integration tests/sdk -q` from the fresh clone.
+- [x] Re-check README links from the fresh clone.

@@ -100,7 +100,7 @@ def normalize_debezium_event(event: dict[str, Any], topic: str | None = None) ->
     # wrapper populated it, then `source.database`/`source.schema` (Postgres
     # WAL exposes the database name; useful when topic is not propagated),
     # then `source.name` (connector name — last resort, often non-tenant).
-    # See Codex review P1: Debezium value-only deserializer drops topic, so
+    # See review P1: Debezium value-only deserializer drops topic, so
     # without an explicit topic argument all events fall to `default`.
     tenant_hint = topic or event.get("topic") or _topic_from_source(source) or source.get("name")
     tenant = _tenant_from_topic(tenant_hint)

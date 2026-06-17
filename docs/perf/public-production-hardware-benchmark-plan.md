@@ -65,8 +65,8 @@ Before a public benchmark run, the following must be in place:
 ## Operator Runbook
 
 Run from a clean checkout on the benchmark host after installing the normal
-project prerequisites. These commands are examples for the operator-run record;
-do not run them from guarded autopilot.
+project prerequisites. These commands are examples for a manual, operator-run
+benchmark record.
 
 ```bash
 git rev-parse --short HEAD

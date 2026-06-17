@@ -1,6 +1,6 @@
 """Shape tests for the CI lint gate scope.
 
-The 2026-06-03 codex audit (F-2) found `scripts/` drifting outside the Ruff
+The 2026-06-03 audit (F-2) found `scripts/` drifting outside the Ruff
 gate: 20 lint errors and 12 unformatted files in release/benchmark/security
 tooling that CI never checked. The lint job must cover `scripts/` alongside
 `src/` and `tests/` so operational tooling cannot silently rot again.

@@ -4,7 +4,7 @@
 
 Multi-source / multi-branch e-com одежды/обуви. 5 локаций (MSK / SPB / EKB / DXB / ALA). Источники: 1С (УТ), Битрикс24, Excel-логистика, XML-обмен сайта, API маркетплейсов (ВБ/Озон).
 
-Naming convention взяты с реальных данных X5 Retail Hero, Lenta BigTarget и Магнит engineering blog (см. `kimi_magnit_research.md`). DDL-шаблоны — адаптация Celestinfo + Tampere DV2.0 automation patterns под ClickHouse.
+Naming convention основана на публичных данных и engineering-материалах крупных ритейлеров (X5 Retail Hero, Lenta BigTarget, Магнит). DDL-шаблоны — адаптация Celestinfo + Tampere DV2.0 automation patterns под ClickHouse.
 
 ## Naming conventions
 

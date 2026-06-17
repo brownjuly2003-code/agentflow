@@ -75,7 +75,7 @@ All notable changes to AgentFlow are documented in this file.
   shadow interpreter plus Docker-needing suites, so the first real
   claude-channel cycle (planner picked a task, executor wrote a valid test)
   died at the gate instead of committing. The gate now mirrors the canonical
-  local-verification-matrix slice: it prefers the repo `.venv` interpreter
+  local no-Docker verification slice: it prefers the repo `.venv` interpreter
   when present and runs
   `SKIP_DOCKER_TESTS='1' … -m pytest tests/unit -p no:schemathesis
   --continue-on-collection-errors`; the runner test pins the command shape.
@@ -145,7 +145,7 @@ All notable changes to AgentFlow are documented in this file.
   observe the `hashed_key_count_exceeds_guidance` warning (the warning still
   emits; only the capture goes blind). An autouse fixture now re-points the
   package logger at a fresh uncached proxy per test, making the file
-  order-independent. Found while reproducing the 2026-06-03 codex audit F-1
+  order-independent. Found while reproducing the 2026-06-03 audit F-1
   claim that the broad no-Docker full-repo pytest run is unreliable on this
   host: on the canonical `.venv` the run completes with a normal summary and
   leaves no orphan uvicorn child (the audit ran the shadow system Python),
@@ -219,7 +219,7 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
-- `scripts/` is now part of the CI Ruff gate (2026-06-03 codex audit F-2:
+- `scripts/` is now part of the CI Ruff gate (2026-06-03 audit F-2:
   release/benchmark/backup/security tooling had drifted to 20 lint errors and
   12 unformatted files that CI never checked). The 12 drifted scripts were
   reformatted (no semantic changes), import order and `datetime.UTC` usages
@@ -524,7 +524,7 @@ All notable changes to AgentFlow are documented in this file.
 - New module `src/serving/api/auth/usage_table.py` holds
   `ensure_usage_table` / `record_usage` / `usage_by_tenant`, which used
   to live alongside the ASGI middleware in
-  `src/serving/api/auth/middleware.py`. Closes Kimi audit L-C4
+  `src/serving/api/auth/middleware.py`. Closes audit L-C4
   ("DB utilities don't belong in a middleware file"). Public callers
   go through `AuthManager.*` shim methods unchanged; the only direct
   importer was `tests/unit/test_audit_publisher.py`, repointed to the
@@ -551,7 +551,7 @@ All notable changes to AgentFlow are documented in this file.
   events to two enriched outputs. The JSON-in-MapState layout is
   deliberately unchanged (checkpoint compatible).
 - `scripts/perf/auth_bench.py` + `docs/perf/auth-bench-2026-05-26.md`
-  — perf-baseline microbench closing two deferred Kimi audit findings.
+  — perf-baseline microbench closing two deferred audit findings.
   Measured `authenticate()` worst-case at production `bcrypt_rounds=12`:
   N=5 hit-last p95 = 1.9 s, N=20 hit-last p95 = 8.1 s (exceeds the
   1100 ms POST load gate). M-C4 stays partial-deferred — steady-state
@@ -610,7 +610,7 @@ All notable changes to AgentFlow are documented in this file.
     counter branch and the `/metrics` exposure round trip.
 - 6 new unit tests in `tests/unit/test_cdc_connector_configs.py`
   exercise `src.ingestion.connectors.{mysql_cdc,postgres_cdc}`
-  pure-Python config builders. Closes Kimi audit R4: both files
+  pure-Python config builders. Closes audit R4: both files
   went from 0% to 100% combined (line+branch) unit coverage; total
   `src.ingestion` rose 82% → ~85%. Tests pin the operational knobs
   the `cdc-lag` runbook depends on (snapshot mode, heartbeat
@@ -622,7 +622,7 @@ All notable changes to AgentFlow are documented in this file.
 - `.github/workflows/contract.yml` now triggers on
   `infrastructure/terraform/**`, `sdk-ts/**`, and `Dockerfile*`
   paths in addition to the existing src/sdk/pyproject/workflows
-  set. Closes Kimi audit R2 and removes the last remaining
+  set. Closes audit R2 and removes the last remaining
   `--admin merge` workaround from session 18 for changes outside
   the Python tree.
 - `.github/workflows/ci.yml` main coverage gate
@@ -642,7 +642,7 @@ All notable changes to AgentFlow are documented in this file.
   `build-push-sign-attest` + `attest-and-sign` jobs are gated
   behind `github.event_name == 'workflow_dispatch'` so a PR can
   never accidentally fire the ghcr.io push / cosign sign path.
-  Closes Kimi audit R6. A new
+  Closes audit R6. A new
   `test_container_attestation_workflow_runs_smoke_on_pull_request`
   unit test asserts the trigger paths, the PR-event gate, and
   push/load shape. Local Docker Desktop 29.4.0 smoke verified the
@@ -656,7 +656,7 @@ All notable changes to AgentFlow are documented in this file.
   `int()` / `float()`) fixed with `cast()` at the JSON boundary.
   mypy is now clean on all 98 source files including
   `checkpointing`, `session_aggregation`, `session_aggregator`,
-  `stream_processor`. Closes Kimi audit R7.
+  `stream_processor`. Closes audit R7.
 
 ### Fixed
 
@@ -671,7 +671,7 @@ All notable changes to AgentFlow are documented in this file.
   fails. The DuckDB insert is now retried in isolation; the audit
   publish runs exactly once after a successful insert and a publish
   failure is logged as `audit_publish_failed` instead of re-driving
-  the retry loop. Closes Kimi audit H-C3. Two regression tests in
+  the retry loop. Closes audit H-C3. Two regression tests in
   `tests/unit/test_audit_publisher.py` pin the contract:
   `test_record_usage_no_duplicate_insert_when_publish_raises` and
   `test_record_usage_skips_publish_when_all_inserts_fail`.
@@ -681,7 +681,7 @@ All notable changes to AgentFlow are documented in this file.
   warning (`search_index_initial_rebuild_failed`) instead of
   aborting startup. The 60-second periodic rebuilder (which already
   catches its own exceptions) is still scheduled, so the search
-  surface can recover without a process restart. Closes Kimi audit
+  surface can recover without a process restart. Closes audit
   M-C1. Regression test:
   `tests/unit/test_lifespan_search_resilience.py::test_lifespan_survives_search_rebuild_failure`.
 
@@ -694,7 +694,7 @@ All notable changes to AgentFlow are documented in this file.
   literals (including `''`-escaped quotes) are masked with sentinel
   placeholders and restored after the rewrites. The `INTERVAL '...'`
   rewrite still runs first against raw SQL so quoted intervals
-  continue to collapse. Closes part of Kimi audit H-C2 (literal
+  continue to collapse. Closes part of audit H-C2 (literal
   corruption vector). Seven regression tests in
   `tests/unit/test_clickhouse_backend.py::TestTranslateSqlLiteralProtection`
   pin the contract against `::FLOAT`, `NOW()`, `COUNT(*)`, `TRUE`,
@@ -703,7 +703,7 @@ All notable changes to AgentFlow are documented in this file.
   against the system trust store explicitly via
   `ssl.create_default_context()` plumbed through to `urlopen`. Insecure
   HTTP backends (default for local-compose) omit the context kwarg so
-  Python's `http.client` path is unchanged. Closes part of Kimi audit
+  Python's `http.client` path is unchanged. Closes part of audit
   H-C2 (no explicit HTTPS validation). Two regression tests cover the
   secure (CERT_REQUIRED + check_hostname True) and insecure (`None`
   context) paths.
@@ -722,7 +722,7 @@ All notable changes to AgentFlow are documented in this file.
   rather than a 500. The latter parses its input through `sqlglot`
   (DuckDB dialect) and rejects multi-statement or non-`SELECT`
   payloads with `BackendExecutionError` before the `EXPLAIN` wrapper
-  runs. Closes Kimi audit H-C1. 13 new regression tests in
+  runs. Closes audit H-C1. 13 new regression tests in
   `tests/unit/test_duckdb_backend_sql_hardening.py` pin both paths
   against an injection corpus (semicolons, comments, UNION,
   numeric-prefix names, dot-pathology, whitespace) plus
@@ -733,7 +733,7 @@ All notable changes to AgentFlow are documented in this file.
   prior hard-coded `223345` would collide on the replication stream the
   moment a second instance came up against the same source. Default
   preserved as `DEFAULT_MYSQL_SERVER_ID = 223345` so existing
-  deployments are unchanged. Closes Kimi audit L-C2. Regression test
+  deployments are unchanged. Closes audit L-C2. Regression test
   `test_mysql_server_id_overridable_via_env` covers env override,
   invalid-int fallback, and unset-env fallback.
 - `_CONNECT_SECRET_KEY` in `src/ingestion/connectors/{mysql,postgres}_cdc.py`
@@ -742,13 +742,13 @@ All notable changes to AgentFlow are documented in this file.
   `FileConfigProvider` `${file:/path:<key>}` syntax, not a credential).
   The previous `"pass" + "word"` concatenation was security through
   obscurity — bytecode collapses the expression and string scanners
-  still see the result. Closes Kimi audit L-C1.
+  still see the result. Closes audit L-C1.
 - Redundant `event_type == prefix` clauses dropped from
   `src/quality/validators/{schema,semantic}_validator.py`. Python's
   `str.startswith(prefix)` already returns True for the exact-equality
   case (`"order.".startswith("order.")`), so the `or event_type == prefix`
   branch could never fire when the prefix was a non-empty string.
-  Closes Kimi audit L-C3.
+  Closes audit L-C3.
 - `AuthManager` no longer grows its `_rate_windows`,
   `_failed_auth_windows`, and `_runtime_plaintext_by_hash` dictionaries
   unbounded. A new `_sweep_expired_windows()` helper drops entries
@@ -758,7 +758,7 @@ All notable changes to AgentFlow are documented in this file.
   is cheap and bounds growth between reloads). `load()` also purges
   cached plaintext-by-hash entries for hashes that no longer appear in
   the live `_hashed_keys` list, so a revoked/rotated key's plaintext
-  cannot remain pinned in memory across reloads. Closes Kimi audit
+  cannot remain pinned in memory across reloads. Closes audit
   H-C4. Regression tests in
   `tests/unit/test_auth_manager_memory_bounds.py` cover the sweep on
   load, the sweep on clear, the plaintext cache purge, and idempotency
@@ -1015,16 +1015,12 @@ wave 2 dependency bumps that landed in sessions 11–19.
 - Prepared npm publishing for Trusted Publishing through GitHub Actions OIDC:
   the TypeScript SDK publish workflow now requires npm CLI 11.5.1+ and no
   longer passes `NPM_TOKEN` to the production `npm publish` step.
-- Recorded the npm Trusted Publishing handoff: the new package was first
-  published as `@yuliaedomskikh/agentflow-client@1.1.0`, Trusted Publisher
-  setup succeeded for `brownjuly2003-code/agentflow` with workflow
-  `publish-npm.yml`, CLI `npm trust list` readback is complete, and future
-  recovery-code use must keep a two-code reserve through the
-  `npm-recovery-codes` skill.
-- Documented the completed replacement npm account bootstrap for
-  `yulia.edomskikh@gmail.com`, the saved 2FA recovery-code reserve, and the
-  switch of future TypeScript SDK publishing to
-  `@yuliaedomskikh/agentflow-client`.
+- Recorded the npm Trusted Publishing handoff: the package
+  `@yuliaedomskikh/agentflow-client@1.1.0` was first published and Trusted
+  Publisher setup succeeded for `brownjuly2003-code/agentflow` with workflow
+  `publish-npm.yml`; CLI `npm trust list` readback is complete.
+- Switched future TypeScript SDK publishing to the
+  `@yuliaedomskikh/agentflow-client` npm scope.
 - Clarified that legacy `NPM_TOKEN` revocation remains blocked until a
   successful trusted-publish workflow run for `@yuliaedomskikh/agentflow-client`
   and accepted external-gate intake evidence exist.
@@ -1048,11 +1044,10 @@ wave 2 dependency bumps that landed in sessions 11–19.
 
 ### Security (audit follow-up sprint 2026-04-27/28)
 
-Two external audits delivered against `4a13d36` (Claude Opus + Codex p1–p9,
-archived under `docs/audits/2026-04-27/`). Six commits closed all
-P0/P1/P2 findings.
+Two internal security audits were delivered against `4a13d36`. Six commits
+closed all P0/P1/P2 findings.
 
-**Tenant isolation across the control plane (Codex p1 R3/R5, p2_1 #1-3,
+**Tenant isolation across the control plane (audit p1 R3/R5, p2_1 #1-3,
 p3 #4):** `pipeline_events` and `dead_letter_events` got a
 `tenant_id VARCHAR DEFAULT 'default'` column with backwards-compatible
 `ALTER TABLE ADD COLUMN IF NOT EXISTS` migration in init paths. Writers
@@ -1064,23 +1059,23 @@ normalizer accepts an explicit `topic=` argument and falls back through
 now scope to `request.state.tenant_id`. Cross-tenant regression tests
 added.
 
-**SQL guard centralization (Codex p2_1 #4, p2_2 #4, p3 #1):** new
+**SQL guard centralization (audit p2_1 #4, p2_2 #4, p3 #1):** new
 `_prepare_nl_sql()` helper in `nl_queries.py` is the only path that
 validates translated SQL via `validate_nl_sql()`; called from
 `execute_nl_query`, `paginated_query`, and `explain` before tenant
 scoping and pagination wrapping. Closes the bypass on `/v1/query`
 (paginated) and `/v1/query/explain`. PII masking and explain
 `tables_accessed` rewritten on `sqlglot` AST so tenant-quoted SQL like
-`"acme"."users_enriched"` is correctly extracted (Codex p3 #3).
+`"acme"."users_enriched"` is correctly extracted (audit p3 #3).
 
-**Entity allowlist enforcement (Codex p2_1 #4, p3 #2):** new
+**Entity allowlist enforcement (audit p2_1 #4, p3 #2):** new
 `tenant_key_allowed_tables()` helper in `auth/manager.py`. Applied to
 NL query / explain / paginated query, batch query/metric items,
 `/v1/search` (intersection with tenant key allowlist + post-filter so
 metric documents are not silently dropped for scoped keys), and
 `/v1/metrics/{metric}`.
 
-**Auth fail-closed + entropy + scopes (Codex p2_1 #5, p2_2 #1-3):**
+**Auth fail-closed + entropy + scopes (audit p2_1 #5, p2_2 #1-3):**
 auth middleware now fails closed with `503` when no API keys are
 configured; opt out with `AGENTFLOW_AUTH_DISABLED=true` for local dev
 or `app.state.auth_disabled = True` for tests. Failed-auth throttling
@@ -1089,7 +1084,7 @@ immediate peer is in `AGENTFLOW_TRUSTED_PROXIES`. Generated API keys
 now use `secrets.token_urlsafe(32)` (256-bit) instead of
 `secrets.token_hex(4)` (32-bit).
 
-**Secret hygiene (Codex p2_2 #5/8, p9 #4-5):** rotated active webhook
+**Secret hygiene (audit p2_2 #5/8, p9 #4-5):** rotated active webhook
 signing secret in `config/webhooks.yaml`, replaced tracked plaintext
 API keys in `k8s/staging/values-staging.yaml` with placeholders +
 `.yaml.example` schema reference, env-driven
@@ -1115,7 +1110,7 @@ capabilities, and applies `RuntimeDefault` seccomp; a memory `emptyDir`
 mounts at `/tmp` for Python tempfile / httpx caches. NetworkPolicy is
 off by default (enable per cluster).
 
-**Supply chain (Codex p9):** committed `sdk-ts/package-lock.json`
+**Supply chain (audit p9):** committed `sdk-ts/package-lock.json`
 (closes ENOLOCK on `npm audit`); `publish-npm.yml` switched to
 `npm ci` + `npm test` + `npm audit` before publish. New `npm-audit` job
 added to `security.yml`. `aquasecurity/trivy-action` pinned from
@@ -1132,7 +1127,7 @@ SQL injection via dynamic partition keys), `langchain-core>=1.2.22`
 bypass), `langsmith>=0.7.31`. Both `pyproject.toml` and
 `integrations/pyproject.toml`.
 
-**OpenAPI drift gate (Codex p4 #5):** `scripts/export_openapi.py`
+**OpenAPI drift gate (audit p4 #5):** `scripts/export_openapi.py`
 gained a `--check` mode that diffs the regenerated `docs/openapi.json`
 and `docs/agent-tools/*.json` against committed copies. Wired into
 `contract.yml`; `docs/agent-tools/**` and `scripts/export_openapi.py`
@@ -1149,7 +1144,7 @@ branch gate; the job was removed
 and DORA metrics fall back to the GitHub Actions API source
 already wired into `scripts/dora_metrics.py`.
 
-**Python SDK alignment with server v1 contract (Codex p8 F1–F10):**
+**Python SDK alignment with server v1 contract (audit p8 F1–F10):**
 `api_version=` parameter and `X-AgentFlow-Version` header on sync and
 async clients; capture of server version + deprecation headers into
 `client.last_server_version` / `last_deprecation_warning`. Async
@@ -1171,7 +1166,7 @@ re-exported from `agentflow.__init__.__all__`. New
 `sdk/agentflow/py.typed` marker; Hatch include rule keeps it in the
 wheel/sdist.
 
-**Test coverage gaps (Codex p5):** new unit suites covering
+**Test coverage gaps (audit p5):** new unit suites covering
 previously zero-coverage modules — `tests/unit/test_clickhouse_backend.py`
 (14 tests: SQL translation, basic-auth POST, UNKNOWN_TABLE mapping,
 URLError mapping, table_columns fallbacks, EXPLAIN, scalar, https
@@ -1189,9 +1184,9 @@ not exercise auth (sets `AGENTFLOW_AUTH_DISABLED=true`); opt out with
 the new `requires_auth_enforcement` marker.
 `app.state.auth_disabled = False` is reset on every lifespan startup
 so the test bypass flag does not leak across `TestClient` instances
-(closes Codex review P2 on auth/middleware persistence).
+(closes review P2 on auth/middleware persistence).
 
-**Documentation hygiene (Codex p6):** TypeScript SDK examples now
+**Documentation hygiene (audit p6):** TypeScript SDK examples now
 import from `"@yuliaedomskikh/agentflow-client"` (was `"agentflow"`); placeholder
 `https://api.agentflow.dev` examples replaced with
 `http://localhost:8000`; clone URL points at
@@ -1211,9 +1206,8 @@ reset on lifespan startup so the test bypass flag does not leak across
 `670 passed, 4 skipped` on
 `pytest tests/unit tests/integration tests/sdk tests/contract`.
 
-**Audits archived:** the two source audits and the two CX task specs
-that drove the impl are kept under `docs/audits/2026-04-27/` with a
-README that maps findings to the six closing commits.
+**Audit closure:** two internal security audits drove the work; their
+findings map to the six closing commits.
 
 ### Added
 
@@ -1350,8 +1344,6 @@ See [docs/migration/v1.1.md](docs/migration/v1.1.md) for upgrade instructions fr
 
 ### Documentation
 
-- v1.1 sprint task briefs under `docs/codex-tasks/2026-04-22/`
-  (T01-T10, self-contained one-PR ТЗ). (f448626)
 - `docs/operations/aws-oidc-setup.md`, `docs/operations/chaos-runbook.md`,
   `docs/operations/codecov-setup.md`.
 - `docs/contracts/how-to-add-entity.md`.

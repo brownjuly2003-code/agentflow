@@ -1,4 +1,4 @@
-"""Regression tests for H-C4 (audit_kimi_25_05_26): AuthManager's
+"""Regression tests for H-C4 (audit-2026-05): AuthManager's
 ``_rate_windows`` / ``_failed_auth_windows`` / ``_runtime_plaintext_by_hash``
 dicts must not grow unbounded across the lifetime of the process. Stale
 entries (windows fully aged out, hashes for revoked keys) should be

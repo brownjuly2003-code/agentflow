@@ -1,7 +1,7 @@
 """Unit tests for the FreshnessMonitor.
 
 Closes the 0% coverage gap on `src/quality/monitors/freshness_monitor.py`
-flagged in Codex audit p5. We mock confluent_kafka.Consumer and the message
+flagged in audit p5. We mock confluent_kafka.Consumer and the message
 shape so we can exercise `_process_message` paths without a live broker.
 """
 

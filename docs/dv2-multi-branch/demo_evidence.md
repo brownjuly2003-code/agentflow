@@ -1,7 +1,7 @@
 # DV2.0 Multi-Branch — Live Demo Evidence
 
 Captured against the running `hq-demo` cluster on the iMac demo host
-(192.168.1.133) on 2026-05-23. Every block is reproducible from
+(<mac-host>) on 2026-05-23. Every block is reproducible from
 `infrastructure/dv2/bootstrap.sh`.
 
 > **2026-06-07 — scale numbers refreshed at real X5 volume.** Sections 5-7
@@ -318,7 +318,7 @@ or a streaming CDC writer) preserves the rest of the model untouched.
 ## 11. How to re-run on the same cluster
 
 ```bash
-ssh julia@192.168.1.133
+ssh <user>@<mac-host>
 export PATH=$HOME/lima/bin:$HOME/bin:$PATH
 kubectl exec -it -n dv2 clickhouse-0 -- clickhouse-client \
   --user default --password demo --database rv

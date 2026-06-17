@@ -1,4 +1,4 @@
-"""Regression tests for M-C1 (audit_kimi_25_05_26): the initial
+"""Regression tests for M-C1 (audit-2026-05): the initial
 ``SearchIndex.rebuild()`` call in the API lifespan must not be allowed to
 crash the boot sequence. A degraded search surface is preferable to a
 fully-down API."""

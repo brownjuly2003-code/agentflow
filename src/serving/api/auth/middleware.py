@@ -35,7 +35,7 @@ class AuthMiddleware:
             # Fail closed unless the operator explicitly opted into open mode
             # for local development. Previous behaviour silently exposed every
             # non-admin route when the api_keys file was missing/empty
-            # (Codex audit p2_1 #5, p2_2 #1).
+            # (audit p2_1 #5, p2_2 #1).
             if os.getenv("AGENTFLOW_AUTH_DISABLED", "").strip().lower() in {
                 "1",
                 "true",
@@ -216,7 +216,7 @@ def _entity_type_from_path(path: str) -> str | None:
 def _client_ip(request: Request) -> str:
     # Honour X-Forwarded-For only when the immediate peer is a trusted proxy.
     # Without this gate any client could rotate failed-auth windows by spoofing
-    # the header (Codex audit p2_2 #2).
+    # the header (audit p2_2 #2).
     trusted = _trusted_proxies()
     peer_host = request.client.host if request.client is not None else None
     if trusted and peer_host in trusted:

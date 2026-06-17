@@ -6,7 +6,7 @@ Accepted - 2026-04-23
 
 ## Context
 
-AgentFlow already ships a Debezium-based PostgreSQL connector configuration in `src/ingestion/connectors/postgres_cdc.py`, but the v1.1 backlog task `docs/codex-tasks/2026-04-22/T09-cdc-connectors.md` had drifted toward a separate Python-native WAL/binlog implementation.
+AgentFlow already ships a Debezium-based PostgreSQL connector configuration in `src/ingestion/connectors/postgres_cdc.py`, but an earlier v1.1 backlog task had drifted toward a separate Python-native WAL/binlog implementation.
 
 Leaving both directions open creates architectural debt:
 

@@ -74,7 +74,7 @@ async def search(
             # both metric and entity matches, then drop entity rows that are
             # outside the key allowlist below. Treating the allowlist as an
             # entity_types filter would silently exclude every metric document
-            # for scoped keys (Codex review P2 on /v1/search).
+            # for scoped keys (review P2 on /v1/search).
             search_entity_types: list[str] | None = None
         else:
             search_entity_types = [t for t in normalized_entity_types if t in allowed]

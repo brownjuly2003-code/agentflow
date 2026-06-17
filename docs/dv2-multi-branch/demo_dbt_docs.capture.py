@@ -11,7 +11,7 @@ Cluster side (iMac):
   kubectl -n dv2 port-forward pod/dbt-docs-serve 8080:8080
 
 Windows side:
-  ssh -fN -L 8080:localhost:8080 julia@192.168.1.133
+  ssh -fN -L 8080:localhost:8080 <user>@<mac-host>
 
 Then (from repo root):
   python docs/dv2-multi-branch/demo_dbt_docs.capture.py

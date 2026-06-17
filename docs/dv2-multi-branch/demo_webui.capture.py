@@ -5,7 +5,7 @@ Prereqs:
   python -m playwright install chromium
 
 Tunnels (run before invoking this script):
-  ssh -fN -L 2746:localhost:2746 -L 9001:localhost:9001 julia@192.168.1.133
+  ssh -fN -L 2746:localhost:2746 -L 9001:localhost:9001 <user>@<mac-host>
   # On the iMac side, kubectl port-forward into argo-server and minio.
 
 Argo auth-mode must be "server" for the screencast to bypass token entry:

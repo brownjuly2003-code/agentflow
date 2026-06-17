@@ -79,8 +79,8 @@ if the symptom is upstream of Kafka Connect.
    disk — this is its own Sev 1 if the source DB is in danger.
 5. **DV2 demo cluster?** If the alert came from the Lima/iMac demo cluster,
    the connector is `MaterializedPostgreSQL` (ClickHouse-side), not Kafka
-   Connect. See `infrastructure/dv2/clickhouse/cdc_setup.sql` and
-   `docs/dv2-multi-branch/SESSION_HANDOFF.md` § "Session 5 fan-out pitfalls".
+   Connect. See `infrastructure/dv2/clickhouse/cdc_setup.sql` and the
+   per-branch CDC fan-out notes in `docs/dv2-multi-branch/`.
    That cluster does **not** have on-call — escalate to demo owner instead of
    following the production mitigation steps below.
 

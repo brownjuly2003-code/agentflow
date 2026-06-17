@@ -35,7 +35,7 @@ class KeyRotator:
         for item in sorted_keys:
             # Plaintext key material is intentionally NOT exposed here. It is
             # returned only once at create/rotate time. Listing it would let
-            # anyone with admin access recover active tenant keys (Codex audit
+            # anyone with admin access recover active tenant keys (audit
             # p2_1 #7).
             items.append(
                 {
@@ -277,7 +277,7 @@ class KeyRotator:
         name_slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
         # 256 bits of random material (token_urlsafe(32) -> 43 chars).
         # token_hex(4) gave only 32 bits — feasible to brute-force when the
-        # tenant/name slug is known (Codex audit p2_2 #3).
+        # tenant/name slug is known (audit p2_2 #3).
         while True:
             candidate = f"af-prod-{tenant_slug}-{name_slug}-{secrets.token_urlsafe(32)}"
             if candidate not in self._manager.keys_by_value:

@@ -1,4 +1,4 @@
-"""Regression tests for H-C1 (audit_kimi_25_05_26): f-string SQL paths in
+"""Regression tests for H-C1 (audit-2026-05): f-string SQL paths in
 ``DuckDBBackend.table_columns`` and ``DuckDBBackend.explain`` must reject
 non-identifier table names and non-SELECT explain inputs respectively, so a
 caller cannot smuggle ``"; DROP TABLE ..."`` style payloads through the

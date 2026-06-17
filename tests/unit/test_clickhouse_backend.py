@@ -1,7 +1,7 @@
 """Unit tests for the ClickHouse serving backend.
 
 Closes the 0% line-coverage gap on `src/serving/backends/clickhouse_backend.py`
-flagged in Codex audit p5. We mock `urllib.request.urlopen` so we never need
+flagged in audit p5. We mock `urllib.request.urlopen` so we never need
 a real ClickHouse server — the goal is to verify SQL translation, HTTP error
 mapping, and the health/missing-table paths.
 """
@@ -290,7 +290,7 @@ def test_secure_flag_switches_scheme_to_https():
 
 
 def test_secure_backend_builds_ssl_context_with_trust_store():
-    """H-C2 / audit_kimi_25_05_26: HTTPS targets must validate the server
+    """H-C2 / audit-2026-05: HTTPS targets must validate the server
     cert against the system trust store explicitly, not rely on urllib's
     default-no-context behaviour."""
     secure_backend = ClickHouseBackend(

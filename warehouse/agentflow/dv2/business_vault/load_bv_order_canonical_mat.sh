@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Staged loader for rv.bv_order_canonical_mat (plan B of the X5-scale dbt OOM,
-# see SESSION_HANDOFF_2026-06-02.md). Per branch, the canonical-order SELECT
+# Staged loader for rv.bv_order_canonical_mat (plan B of the X5-scale dbt OOM).
+# Per branch, the canonical-order SELECT
 # is decomposed into SERIAL stage queries, each materializing one small
 # MergeTree helper table (pure GROUP BY, disk-spillable, no joins), and a
 # final streaming merge join (`full_sorting_merge`) over the pre-sorted
@@ -37,7 +37,7 @@ ch() {  # pipe stdin SQL into the cluster clickhouse-client
     kubectl exec -i -n dv2 clickhouse-0 -- \
       clickhouse-client --user default --password demo --multiquery
   else
-    ssh julia@192.168.1.133 'export PATH=$HOME/lima/bin:$HOME/bin:$PATH; \
+    ssh <user>@<mac-host> 'export PATH=$HOME/lima/bin:$HOME/bin:$PATH; \
       kubectl exec -i -n dv2 clickhouse-0 -- \
       clickhouse-client --user default --password demo --multiquery'
   fi
@@ -49,7 +49,7 @@ purge() { echo "SYSTEM JEMALLOC PURGE;" | ch; sleep 5; }
 
 kc() {  # kubectl, local or via the iMac
   if command -v kubectl >/dev/null 2>&1; then kubectl "$@"; else
-    ssh julia@192.168.1.133 "export PATH=\$HOME/lima/bin:\$HOME/bin:\$PATH; kubectl $*"
+    ssh <user>@<mac-host> "export PATH=\$HOME/lima/bin:\$HOME/bin:\$PATH; kubectl $*"
   fi
 }
 

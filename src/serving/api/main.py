@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Reset the auth-disabled bypass flag on every lifespan startup. This is a
     # process-wide attribute and tests may toggle it; without an explicit
     # reset a later TestClient lifespan with no configured keys would silently
-    # bypass fail-closed (Codex review P2 on auth/middleware).
+    # bypass fail-closed (review P2 on auth/middleware).
     app.state.auth_disabled = False
 
     app.state.version_registry = ApiVersionRegistry()
@@ -128,7 +128,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Search rebuild must not block API startup: catalogue/query backend
     # transient failures should leave the rest of the surface online with
     # degraded search rather than crash the lifespan (M-C1 /
-    # audit_kimi_25_05_26).
+    # audit-2026-05).
     try:
         app.state.search_index.rebuild()
     except Exception:

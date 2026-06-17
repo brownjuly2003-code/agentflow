@@ -72,7 +72,7 @@ node_modules/
 # Mutation testing output
 mutants/
 
-# Session notes (root-level temp .md created during Codex/Claude sessions).
+# Local working notes (root-level temp .md created during dev sessions).
 # NOTE: BCG_audit.md was removed from this list on 2026-04-19 -
 # it was a release artifact, not a session note.
 /codex_res.md
@@ -96,9 +96,8 @@ agentflow_demo_api.duckdb*
 # Local autopilot runtime state.
 .autopilot/
 
-# Operator scratch notes at the repo root (user-owned audit prompts/results;
-# codex audit F-6). Ignored so the autopilot clean-tree gate and git status
-# stay quiet without touching the files themselves.
+# Local scratch notes at the repo root (audit prompts/results). Ignored so
+# the clean-tree gate and git status stay quiet without touching the files.
 /p[0-9].md
 /p[0-9]_res*.md
 /p_res*.md
@@ -123,7 +122,11 @@ agentflow_demo_api.duckdb*
 /.pi/
 /.workflow/
 /res/
-docs/dv2-multi-branch/kimi_research.md
+docs/dv2-multi-branch/kimi_*.md
+docs/dv2-multi-branch/RECORDING_DAY.md
+docs/dv2-multi-branch/pitch.md
+docs/dv2-multi-branch/brief.md
+docs/operations/local-verification-matrix.md
 docs/release-readiness-archive/
 docs/codex-tasks/
 docs/plans/codex-archive/

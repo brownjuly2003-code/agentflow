@@ -84,7 +84,7 @@ async def register_alert(payload: AlertCreateRequest, request: Request) -> dict[
 @router.get("")
 async def list_my_alerts(request: Request) -> dict[str, object]:
     alerts = list_alerts(get_alert_config_path(request.app), _tenant(request))
-    # Exclude signing `secret` from list responses (Codex audit p2_2 #7).
+    # Exclude signing `secret` from list responses (audit p2_2 #7).
     return {"alerts": [alert.model_dump(mode="json", exclude={"secret"}) for alert in alerts]}
 
 
@@ -105,7 +105,7 @@ async def modify_alert(
     updated = update_alert(path, alert_id, _tenant(request), updates)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
-    # Exclude signing `secret` from update responses (Codex audit p2_2 #7).
+    # Exclude signing `secret` from update responses (audit p2_2 #7).
     return updated.model_dump(mode="json", exclude={"secret"})
 
 

@@ -143,7 +143,7 @@ class ClickHouseBackend(ServingBackend):
     def _translate_sql(self, sql: str) -> str:
         """Transpile DuckDB-flavored semantic-layer SQL to ClickHouse.
 
-        H-C2 (audit_kimi_25_05_26): a sqlglot parse → AST rewrite → generate
+        H-C2 (audit-2026-05): a sqlglot parse → AST rewrite → generate
         pipeline replaces the former regex chain, which could corrupt string
         literals and silently mistranslate anything its patterns missed.
         The parser preserves literals structurally; anything it cannot parse

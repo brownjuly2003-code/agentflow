@@ -733,3 +733,83 @@ satellites:
       - {name: purchase_price, type: "Decimal(18, 2)"}
       - {name: min_order_qty, type: UInt32}
       - {name: lead_time_days, type: UInt16}
+  - name: sat_order_header__1c__msk
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__spb
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: spb
+    record_source: 1c__spb
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__ekb
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: ekb
+    record_source: 1c__ekb
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__dxb
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: dxb
+    record_source: 1c__dxb
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__ala
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: ala
+    record_source: 1c__ala
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}

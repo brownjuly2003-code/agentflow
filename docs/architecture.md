@@ -57,7 +57,7 @@ Same pipeline logic, no infrastructure dependencies:
 3. **Enrich**: Domain enrichment per event type (order sizing, click classification, payment risk)
 4. **Store**: Validated events written to DuckDB for serving and to Iceberg via PyIceberg
 5. **Serve**: Agent API reads from DuckDB while `/v1/health` reports Iceberg row counts
-6. **Catalog**: Development uses the local REST catalog from `docker-compose.iceberg.yml`; production uses AWS Glue
+6. **Catalog**: Development uses a MinIO-backed REST catalog from `docker-compose.iceberg.yml` (writing to the same `agentflow-lake` S3 object store as the Flink stack); production uses AWS Glue
 
 Both paths use the **same validator and enrichment code** (`src/quality/`, `src/processing/transformations/`).
 

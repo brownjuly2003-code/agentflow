@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,23 @@ from pyiceberg.types import (
     StringType,
     TimestampType,
 )
+
+# Matches ${VAR} and ${VAR:-default} so config values can reference the
+# environment (e.g. S3 credentials) with a local fallback. A value without
+# "${" is returned untouched.
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+
+def _expand_env(value: Any) -> Any:
+    if not isinstance(value, str) or "${" not in value:
+        return value
+
+    def _replace(match: re.Match[str]) -> str:
+        name, default = match.group(1), match.group(2)
+        return os.environ.get(name, default if default is not None else "")
+
+    return _ENV_REF.sub(_replace, value)
+
 
 ORDERS_SCHEMA = Schema(
     NestedField(field_id=1, name="event_id", field_type=StringType(), required=True),
@@ -103,13 +121,16 @@ class IcebergSink:
         catalog_type = self._config["catalog_type"]
         catalog_properties = {
             "type": catalog_type,
-            "uri": self._resolve_catalog_uri(self._config["catalog_uri"]),
+            "uri": self._resolve_catalog_uri(_expand_env(self._config["catalog_uri"])),
             "warehouse": self._resolve_warehouse(
-                self._config["warehouse"],
+                _expand_env(self._config["warehouse"]),
                 catalog_type,
             ),
         }
-        catalog_properties.update(self._config.get("catalog_properties", {}))
+        extra_properties = self._config.get("catalog_properties", {})
+        catalog_properties.update(
+            {key: _expand_env(value) for key, value in extra_properties.items()}
+        )
         self.catalog = load_catalog(
             self._config.get("catalog_name", "agentflow"),
             **catalog_properties,

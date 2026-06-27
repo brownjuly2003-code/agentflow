@@ -1,8 +1,18 @@
 iceberg:
+  catalog_name: agentflow
   catalog_type: rest
-  catalog_uri: http://localhost:8181
-  warehouse: /tmp/warehouse
+  catalog_uri: ${AGENTFLOW_ICEBERG_URI:-http://localhost:8181}
+  # Object-store backed (MinIO/S3), matching docker-compose.iceberg.yml and the
+  # agentflow-lake bucket used by the Flink stack — not an ephemeral local dir.
+  warehouse: ${AGENTFLOW_ICEBERG_WAREHOUSE:-s3://agentflow-lake/warehouse}
   namespace: agentflow
+  # FileIO credentials for the PyIceberg client. Env-overridable; defaults match
+  # the local MinIO compose. Production injects real S3/Glue credentials here.
+  catalog_properties:
+    s3.endpoint: ${AGENTFLOW_S3_ENDPOINT:-http://localhost:9000}
+    s3.access-key-id: ${AGENTFLOW_S3_ACCESS_KEY:-minio}
+    s3.secret-access-key: ${AGENTFLOW_S3_SECRET_KEY:-minio123}
+    s3.region: ${AGENTFLOW_S3_REGION:-us-east-1}
   tables:
     - name: orders
       partition_by: [days(created_at)]

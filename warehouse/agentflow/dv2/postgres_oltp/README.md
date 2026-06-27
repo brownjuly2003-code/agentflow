@@ -31,6 +31,37 @@ validation parses every statement with sqlglot and checks each inserted column
 exists in the committed vault DDL (`tests/unit/test_dv2_postgres_ingestion.py`);
 a live apply + `bv_order_canonical` query is the single-node Mac smoke.
 
+## PostgreSQL-native push freshness (LISTEN/NOTIFY)
+
+With both the OLTP hot tier and the raw vault on PostgreSQL, freshness no longer
+needs a replication slot, a WAL consumer, or a second engine. An
+`AFTER INSERT/UPDATE` trigger on each `ops_<branch>` table issues `pg_notify` on
+the `dv2_vault_refresh` channel; a listener LISTENs and runs the idempotent
+promotion the moment a change lands — **event driven, not polled**.
+
+| File | Where it runs | What it does |
+| ---- | ------------- | ------------ |
+| `freshness_listen_notify.sql` | PostgreSQL | `rv.notify_oltp_change()` + one idempotent `AFTER INSERT/UPDATE` trigger per OLTP table. The payload carries `branch` / `source_table` / `op` / `emitted_at` (`clock_timestamp()` at emit, so the lag is the real emit instant, not the transaction start). |
+| `freshness_listener.py`       | host (psycopg) | LISTENs on `dv2_vault_refresh`, runs `promote_to_raw_vault_pg.sql` per change, and reports the emit → vault-visible lag. The pure core (`parse_notification` / `lag_ms` / `process_notifications`) is driver-agnostic and no-Docker tested; psycopg is guarded like `pg_vault_writer`. |
+
+```bash
+# single-node Mac demo, after dv2/postgres/apply.sh + seed.sql + this file
+psql -v ON_ERROR_STOP=1 -f freshness_listen_notify.sql
+python -m warehouse.agentflow.dv2.postgres_oltp.freshness_listener \
+    --dsn "postgresql://agentflow:...@localhost/agentflow" --stop-after 1
+# ... then INSERT one row into ops_msk.orders elsewhere; the listener promotes
+# it and prints e.g.  promoted branch=msk table=orders op=INSERT lag=8.4ms
+```
+
+This is the PostgreSQL-native equivalent of the ClickHouse
+`MaterializedPostgreSQL` push-CDC below: the same "push, not poll" property, but
+the whole mechanism is a NOTIFY plus an in-database `INSERT ... SELECT`, because
+the vault lives in the same PostgreSQL instance. No-Docker tests parse the
+trigger SQL and drive the listener with fake notifications
+(`tests/unit/test_dv2_freshness_listen_notify.py`); a live trigger → NOTIFY →
+promote → `bv_order_canonical` round-trip with a measured lag is the single-node
+Mac smoke.
+
 ## Legacy: ClickHouse-bridge promotion (vault-on-ClickHouse era)
 
 The files below are kept for reference from when the raw vault was on

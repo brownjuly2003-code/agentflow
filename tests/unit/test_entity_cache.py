@@ -28,8 +28,8 @@ class FakeRedis:
     async def get(self, key: str):
         return self.data.get(key)
 
-    async def setex(self, key: str, ttl, value: str) -> None:
-        self.set_calls.append((key, ttl, value))
+    async def set(self, key: str, value: str, ex=None) -> None:
+        self.set_calls.append((key, ex, value))
         self.data[key] = value
 
     async def delete(self, *keys: str) -> None:
@@ -101,7 +101,7 @@ def test_entity_endpoint_returns_miss_then_hit_header_and_populates_cache() -> N
     assert engine.calls == [("order", "ORD-20260401-0001", None, "acme")]
     key, ttl, cached_payload = redis_client.set_calls[0]
     assert key == cache_key
-    assert int(ttl.total_seconds()) == ENTITY_TTL_SECONDS
+    assert ttl == ENTITY_TTL_SECONDS
     assert json.loads(cached_payload)["payload"]["entity_id"] == "ORD-20260401-0001"
 
 

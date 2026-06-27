@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import duckdb
@@ -25,28 +26,30 @@ def _write_iceberg_config(
     catalog_uri: str | None = None,
     warehouse: str | None = None,
     namespace: str = "agentflow",
+    catalog_properties: dict[str, str] | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     catalog_path = path.parent.parent / "catalog.db"
     resolved_catalog_uri = catalog_uri or f"sqlite:///{catalog_path.as_posix()}"
     resolved_warehouse = warehouse or "../warehouse"
+    iceberg_config: dict[str, Any] = {
+        "catalog_type": catalog_type,
+        "catalog_uri": resolved_catalog_uri,
+        "warehouse": resolved_warehouse,
+        "namespace": namespace,
+        "tables": [
+            {"name": "orders", "partition_by": ["days(created_at)"]},
+            {"name": "payments", "partition_by": ["days(created_at)"]},
+            {"name": "clickstream", "partition_by": ["hours(created_at)"]},
+            {"name": "inventory", "partition_by": ["days(created_at)"]},
+            {"name": "dead_letter", "partition_by": ["days(received_at)"]},
+        ],
+    }
+    if catalog_properties is not None:
+        iceberg_config["catalog_properties"] = catalog_properties
     path.write_text(
         yaml.safe_dump(
-            {
-                "iceberg": {
-                    "catalog_type": catalog_type,
-                    "catalog_uri": resolved_catalog_uri,
-                    "warehouse": resolved_warehouse,
-                    "namespace": namespace,
-                    "tables": [
-                        {"name": "orders", "partition_by": ["days(created_at)"]},
-                        {"name": "payments", "partition_by": ["days(created_at)"]},
-                        {"name": "clickstream", "partition_by": ["hours(created_at)"]},
-                        {"name": "inventory", "partition_by": ["days(created_at)"]},
-                        {"name": "dead_letter", "partition_by": ["days(received_at)"]},
-                    ],
-                }
-            },
+            {"iceberg": iceberg_config},
             sort_keys=False,
         ),
         encoding="utf-8",
@@ -247,8 +250,14 @@ def test_repo_default_config_writes_to_rest_catalog(
         tmp_path / "config" / "rest.yaml",
         catalog_type="rest",
         catalog_uri="http://localhost:8181",
-        warehouse="/tmp/warehouse",  # noqa: S108
+        warehouse="s3://agentflow-lake/warehouse",
         namespace=namespace,
+        catalog_properties={
+            "s3.endpoint": "http://localhost:9000",
+            "s3.access-key-id": "minio",
+            "s3.secret-access-key": "minio123",
+            "s3.region": "us-east-1",
+        },
     )
 
     _wait_for_catalog(rest_config)

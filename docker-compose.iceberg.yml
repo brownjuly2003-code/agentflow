@@ -1,8 +1,52 @@
+# Focused Iceberg REST catalog stack, backed by MinIO (S3) instead of an
+# ephemeral local directory. Mirrors the object-store wiring in
+# docker-compose.yml (same image tags, bucket, credentials) so the PyIceberg
+# sink writes table data/metadata to the real object store the rest of the
+# stack already uses. Consumed by tests/integration/test_iceberg_sink.py.
 services:
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # One-shot bucket provisioner. Retries the alias instead of gating on the
+  # MinIO healthcheck so the stack comes up regardless of whether the server
+  # image ships curl.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      - minio
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 minio minio123; do
+          echo "waiting for minio..."; sleep 1;
+        done
+        mc mb local/agentflow-lake --ignore-existing
+        echo "MinIO bucket ready."
+
   iceberg-rest:
     image: tabulario/iceberg-rest:0.6.0
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
     ports:
       - "8181:8181"
     environment:
-      CATALOG_WAREHOUSE: /tmp/warehouse
-      CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
+      CATALOG_WAREHOUSE: s3://agentflow-lake/warehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio123
+      AWS_REGION: us-east-1

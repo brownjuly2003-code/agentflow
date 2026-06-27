@@ -18,6 +18,7 @@ ClickHouse smokes.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -360,3 +361,82 @@ def test_reference_load_writes_all_tables(monkeypatch):
     # the renamed hub and an identity satellite both landed.
     assert "rv.hub_supplier (supplier_hk, supplier_bk" in statements
     assert "rv.sat_product_reference__ref__global" in statements
+
+
+# --- PostgreSQL-native OLTP -> vault promotion -------------------------------
+
+OLTP_DIR = PG_DIR.parent / "postgres_oltp"
+PROMOTION = OLTP_DIR / "promote_to_raw_vault_pg.sql"
+
+# ClickHouse tells that must not survive the PostgreSQL-native promotion.
+_CH_PROMOTION_TOKENS = ("now64", "oltp_live", "fixedstring", "materializedpostgresql", "engine =")
+
+
+def _ddl_file_for(table: str) -> str:
+    if table.startswith("hub_"):
+        return "01_hubs.sql"
+    if table.startswith("lnk_"):
+        return "02_links.sql"
+    return f"satellites/{table}.sql"
+
+
+def _promotion_inserts() -> list[tuple[str, list[str]]]:
+    inserts: list[tuple[str, list[str]]] = []
+    for stmt in sqlglot.parse(PROMOTION.read_text(encoding="utf-8"), dialect="postgres"):
+        if isinstance(stmt, exp.Insert):
+            table = stmt.this.find(exp.Table)
+            columns = [c.name for c in stmt.this.expressions]
+            assert table is not None
+            inserts.append((table.name, columns))
+    return inserts
+
+
+def test_promotion_parses_under_postgres():
+    stmts = sqlglot.parse(PROMOTION.read_text(encoding="utf-8"), dialect="postgres")
+    # 10 INSERTs (5 per branch) wrapped in BEGIN/COMMIT.
+    assert sum(isinstance(s, exp.Insert) for s in stmts) == 10
+
+
+def _promotion_sql_without_comments() -> str:
+    # The header comment documents the ClickHouse originals on purpose, so the
+    # "no CH constructs" / idempotency checks run on comment-stripped SQL.
+    return re.sub(r"--[^\n]*", "", PROMOTION.read_text(encoding="utf-8"))
+
+
+def test_promotion_has_no_clickhouse_constructs():
+    body = _promotion_sql_without_comments().lower()
+    for token in _CH_PROMOTION_TOKENS:
+        assert token not in body, f"promotion still contains ClickHouse token {token!r}"
+
+
+def test_promotion_reads_oltp_schemas_directly_not_a_bridge():
+    body = _promotion_sql_without_comments()
+    assert "ops_msk." in body
+    assert "ops_dxb." in body
+    # bridge is gone: the vault and OLTP share one PostgreSQL engine.
+    assert "oltp_live" not in body
+
+
+def test_promotion_hash_keys_are_bytea_md5():
+    body = PROMOTION.read_text(encoding="utf-8")
+    # decode(md5(...), 'hex') yields the 16-byte BYTEA that joins with the vault.
+    assert "decode(md5(" in body
+    assert "pg_ops__msk" in body
+    assert "pg_ops__dxb" in body
+    # one transaction so localtimestamp is a single stable load_ts.
+    assert "BEGIN;" in body
+    assert "COMMIT;" in body
+
+
+@pytest.mark.parametrize(("table", "columns"), _promotion_inserts())
+def test_promotion_targets_existing_postgres_columns(table, columns):
+    ddl_columns = _columns_for(table, _ddl_file_for(table))
+    missing = set(columns) - ddl_columns
+    assert not missing, f"{table}: promotion columns absent from DDL: {missing}"
+
+
+def test_promotion_is_idempotent_per_table_kind():
+    body = _promotion_sql_without_comments().lower()
+    # hubs/links are idempotent on their primary key; satellites on (hk, hash_diff).
+    assert body.count("on conflict do nothing") == 6  # 2 hub_customer + 2 hub_order + 2 lnk
+    assert body.count("where not exists") == 4  # 2 personal + 2 header satellites

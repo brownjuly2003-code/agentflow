@@ -6,6 +6,31 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Added
 
+- **DV2 raw vault migrated from ClickHouse to PostgreSQL** with a cloud
+  supplier / product reference (`warehouse/agentflow/dv2/`). Hubs, links, and
+  satellites are emitted in a PostgreSQL dialect (`argMax` → `DISTINCT ON`,
+  `splitByString` → `split_part`); both ingestion feeds (the X5 loader and the
+  reference loader) repoint to a shared, parameterized `pg_vault_writer`; and
+  OLTP → vault promotion runs as an in-database `INSERT … SELECT` now that OLTP
+  and the vault share one engine. The ClickHouse dialect regenerates
+  byte-for-byte and is retained for optional mart-serving. Each generated
+  `INSERT` is parsed by `sqlglot` in `tests/unit/test_dv2_postgres_ingestion.py`
+  to assert every interpolated column exists in the committed DDL. (#91)
+- **PyIceberg sink backed by a real MinIO object store** — the REST catalog
+  now writes through `S3FileIO` to `s3://agentflow-lake/warehouse` (the same
+  bucket the Flink path uses) instead of an ephemeral `/tmp/warehouse`
+  `HadoopFileIO`. A self-contained `docker-compose.iceberg.yml` (MinIO +
+  bucket-init + REST catalog) and env-overridable credentials in
+  `config/iceberg.yaml` make the local catalog object-store-backed; a no-Docker
+  guard asserts an `s3://` warehouse never triggers a local `mkdir`. (#92)
+- **Event-driven OLTP → vault freshness via PostgreSQL `LISTEN`/`NOTIFY`** —
+  `AFTER INSERT/UPDATE` triggers on each `ops_<branch>` table emit
+  `pg_notify('dv2_vault_refresh', …)`, and a guarded listener runs an
+  idempotent promote on each event (push, not polling), the PostgreSQL
+  equivalent of the ClickHouse `MaterializedPostgreSQL` CDC path. Lag is
+  observed on the server clock (`db_now`) to stay free of host/container
+  clock skew. The driver-agnostic core is covered no-Docker by
+  `tests/unit/test_dv2_freshness_listen_notify.py`. (#93)
 - OpenSSF Scorecard $0 supply-chain security posture channel:
   `.github/workflows/scorecard.yml` (`ossf/scorecard-action@v2.4.3`) runs on
   push to `main`, weekly, and on branch-protection changes with top-level
@@ -41,6 +66,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
+- Dependency maintenance batch (consolidated from eight Dependabot PRs): the
+  Docker `python` base digest, `cp-kafka-connect-base` 7.9.7 → 7.9.8,
+  `apache-flink` 2.2.1 → 2.3.0 (validated by the Flink smoke job), and the SDK
+  `vitest` / `schemathesis` bumps, plus the GitHub Pages action major bumps
+  (`checkout` v7, `configure-pages` v6, `upload-pages-artifact` v5,
+  `deploy-pages` v5) — all SHA-pinned and validated on `main` by the Deploy
+  Pages and Flink Smoke runs. (#94)
 - Production CDC onboarding, PMF/pricing evidence, a production-hardware
   benchmark, and an external pen-test attestation are documented as out of
   scope for the current plan. Their acceptance criteria require external

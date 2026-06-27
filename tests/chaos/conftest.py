@@ -158,9 +158,9 @@ class AsyncRespRedisClient:
     async def get(self, key: str):
         return await self._command("GET", key)
 
-    async def setex(self, key: str, ttl, value: str):
-        seconds = int(ttl.total_seconds()) if hasattr(ttl, "total_seconds") else int(ttl)
-        await self._command("SETEX", key, str(seconds), value)
+    async def set(self, key: str, value: str, ex=None):
+        seconds = int(ex.total_seconds()) if hasattr(ex, "total_seconds") else int(ex)
+        await self._command("SET", key, value, "EX", str(seconds))
 
     async def keys(self, pattern: str):
         return await self._command("KEYS", pattern)

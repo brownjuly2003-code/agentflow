@@ -306,7 +306,7 @@ def test_metric_cache_is_scoped_by_requested_version(
         async def get(self, key: str):
             return self.data.get(key)
 
-        async def setex(self, key: str, ttl, value: str) -> None:
+        async def set(self, key: str, value: str, ex=None) -> None:
             self.data[key] = value
 
         async def keys(self, pattern: str):

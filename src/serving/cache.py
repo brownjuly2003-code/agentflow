@@ -2,7 +2,6 @@
 
 import inspect
 import json
-from datetime import timedelta
 from typing import Any, cast
 
 import structlog
@@ -68,10 +67,10 @@ class QueryCache:
             )
             return
         try:
-            await self._redis.setex(
+            await self._redis.set(
                 key,
-                timedelta(seconds=ttl),
                 json.dumps(jsonable_encoder(value)),
+                ex=ttl,
             )
         except Exception as exc:
             logger.warning(

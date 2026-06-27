@@ -1,3 +1,14 @@
+# Supplemental runtime pins — NOT the full dependency set.
+#
+# The source of truth for installing AgentFlow is pyproject.toml
+# ([project.dependencies] + the optional-dependency extras). Install the
+# project itself with `pip install .` (or `.[dev,cloud,...]`); this file does
+# not stand alone.
+#
+# It pins the OpenTelemetry observability stack explicitly so the e2e,
+# mutation, and staging-deploy workflows install a consistent OTel floor on
+# top of the package install (`pip install -r requirements.txt`), and so the
+# security.yml Safety scan resolves it alongside pyproject's runtime deps.
 opentelemetry-sdk>=1.41,<2
 opentelemetry-exporter-otlp-proto-grpc>=1.41,<2
 opentelemetry-instrumentation-fastapi>=0.62b0,<1

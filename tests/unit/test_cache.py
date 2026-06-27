@@ -18,7 +18,7 @@ class FakeRedis:
         self.deleted: list[tuple[str, ...]] = []
         self.set_calls: list[tuple[str, object, str]] = []
         self.raise_on_get: Exception | None = None
-        self.raise_on_setex: Exception | None = None
+        self.raise_on_set: Exception | None = None
         self.raise_on_keys: Exception | None = None
         self.closed = False
 
@@ -27,10 +27,10 @@ class FakeRedis:
             raise self.raise_on_get
         return self.data.get(key)
 
-    async def setex(self, key: str, ttl, value: str):
-        if self.raise_on_setex is not None:
-            raise self.raise_on_setex
-        self.set_calls.append((key, ttl, value))
+    async def set(self, key: str, value: str, ex=None):
+        if self.raise_on_set is not None:
+            raise self.raise_on_set
+        self.set_calls.append((key, ex, value))
         self.data[key] = value
 
     async def keys(self, pattern: str):
@@ -139,7 +139,7 @@ async def test_query_cache_set_serializes_payload_with_ttl():
 
     key, ttl, value = redis_client.set_calls[0]
     assert key == "metric:revenue:1h:now"
-    assert int(ttl.total_seconds()) == 45
+    assert ttl == 45
     assert json.loads(value) == {"value": 99.0}
 
 
@@ -215,7 +215,7 @@ def test_metric_endpoint_warns_and_serves_uncached_when_redis_is_unavailable(mon
     monkeypatch.setattr(cache_module, "logger", logger)
     redis_client = FakeRedis()
     redis_client.raise_on_get = RuntimeError("redis down")
-    redis_client.raise_on_setex = RuntimeError("redis down")
+    redis_client.raise_on_set = RuntimeError("redis down")
     engine = EngineStub()
     client = _build_client(QueryCache(redis_client=redis_client), engine)
 

@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 flink = [
-    "apache-flink==2.2.1",
+    "apache-flink==2.3.0",
 ]
 cloud = [
     "boto3>=1.35,<2",
@@ -59,7 +59,7 @@ integrations = [
     "llama-index-core>=0.12,<1",
 ]
 contract = [
-    "schemathesis==4.21.1",
+    "schemathesis==4.21.10",
 ]
 dev = [
     "bandit>=1.9,<2",

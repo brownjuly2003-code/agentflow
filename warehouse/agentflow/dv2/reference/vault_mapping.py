@@ -286,3 +286,32 @@ _ALL_TABLES: tuple[str, ...] = (
     TABLE_SAT_MARKING_GS1,
     TABLE_SAT_SOURCING,
 )
+
+
+# The shared :class:`HubRow` / :class:`LinkRow` carry generic ``hk``/``bk`` /
+# ``link_hk``/``left_hk``/``right_hk`` fields, but the raw-vault DDL names hub
+# and link columns per entity (``hub_supplier.supplier_hk``,
+# ``lnk_product_supplier.product_hk``/``supplier_hk``, ...). This maps each such
+# table's row fields, *in field order*, to its destination column names so the
+# PostgreSQL loader inserts into the right columns. Satellites already use the
+# real column names (their models are entity-specific), so they are identity and
+# omitted. Used by ``reference.load_postgres`` via ``write_mapped``.
+VAULT_DB_COLUMNS: dict[str, list[str]] = {
+    TABLE_HUB_SUPPLIER: ["supplier_hk", "supplier_bk", "load_ts", "record_source"],
+    TABLE_HUB_PRODUCT: ["product_hk", "product_bk", "load_ts", "record_source"],
+    TABLE_HUB_MARKING_CODE: ["marking_code_hk", "marking_code_bk", "load_ts", "record_source"],
+    TABLE_LNK_PRODUCT_SUPPLIER: [
+        "link_hk",
+        "product_hk",
+        "supplier_hk",
+        "load_ts",
+        "record_source",
+    ],
+    TABLE_LNK_PRODUCT_MARKING: [
+        "link_hk",
+        "product_hk",
+        "marking_code_hk",
+        "load_ts",
+        "record_source",
+    ],
+}

@@ -70,6 +70,23 @@ Outputs under `reference/build/` (git-ignored):
 Determinism: a given `--seed` reproduces the dataset exactly. `--dry-run`
 summarises counts without writing.
 
+## Load into the PostgreSQL raw vault
+
+The reference is storage-neutral, so the same mapping lands directly in the
+PostgreSQL vault (`dv2/postgres/`) — no Parquet round-trip needed. Apply the
+vault DDL first (`dv2/postgres/apply.sh`), then:
+
+```bash
+# from repo root, after dv2/postgres/apply.sh
+python -m warehouse.agentflow.dv2.reference.load_postgres \
+    --postgres-dsn postgresql://agentflow@localhost:5432/agentflow
+```
+
+Inserts are idempotent (`ON CONFLICT DO NOTHING`) and share the
+`PostgresVaultWriter` with the X5 loader, so the reference and X5 feeds populate
+the same vault without colliding. `--dry-run` maps and prints per-table counts
+without connecting.
+
 ## Publish to the Hub (gated)
 
 Publishing `dataset/` to `<hf-account>/agentflow-supplier-reference` is a

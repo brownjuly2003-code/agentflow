@@ -1,0 +1,21 @@
+/*
+Purpose: {{ purpose }}
+Sources: {{ sources | join(', ') }}.
+Branch context: {{ branch_context }}.
+SCD2: {{ 'yes' if scd2 else 'no' }}.
+Anonymization: {{ anonymization }}.
+record_source value: {{ record_source }}
+record_source format: {source_system}__{branch_code}.
+Dialect: postgresql (raw vault on PostgreSQL; see dv2/postgres/README.md).
+*/
+CREATE TABLE IF NOT EXISTS rv.{{ name }} (
+    {{ parent_hk }} BYTEA NOT NULL,
+    load_ts       TIMESTAMP(3) NOT NULL DEFAULT now(),
+    hash_diff     BYTEA NOT NULL,
+    record_source TEXT NOT NULL DEFAULT '{{ record_source }}',
+{% for attr in attributes %}
+    {{ "%-15s"|format(attr.name) }} {{ attr.type | pg_type }},
+{% endfor %}
+    is_deleted    SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ({{ parent_hk }}, load_ts)
+);

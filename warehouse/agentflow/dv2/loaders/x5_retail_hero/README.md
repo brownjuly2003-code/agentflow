@@ -1,6 +1,9 @@
 # X5 Retail Hero DV2.0 Loader
 
-Loads the Kaggle `mvyurchenko/x5-retail-hero` CSV files into the AgentFlow DV2.0 raw vault tables in ClickHouse.
+Loads the Kaggle `mvyurchenko/x5-retail-hero` CSV files into the AgentFlow DV2.0
+raw vault. The vault now lives on **PostgreSQL** (`--target postgres`, see
+`warehouse/agentflow/dv2/postgres/`); ClickHouse (`--target clickhouse`, the
+default) is retained as the legacy backend.
 
 Download the dataset with Kaggle CLI:
 
@@ -14,7 +17,14 @@ Expected files:
 - `products.csv`
 - `purchases.csv`
 
-Run:
+Run against the PostgreSQL vault (apply `dv2/postgres/` DDL first):
+
+```bash
+python loader.py --csv-dir /path/to/x5 --target postgres \
+  --postgres-dsn postgresql://agentflow@localhost:5432/agentflow --batch-size 100000
+```
+
+Run against the legacy ClickHouse backend:
 
 ```bash
 python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-port 9000 --clickhouse-user default --clickhouse-password demo --batch-size 100000
@@ -34,7 +44,7 @@ python loader.py --csv-dir /path/to/x5 --clickhouse-host localhost --clickhouse-
 
 ## Schema Assumptions
 
-The loader assumes the DV2.0 DDL has already been applied, normally via `warehouse/agentflow/dv2/__init.sql`, and that tables live in the `rv` database unless `--clickhouse-database` is provided.
+The loader assumes the DV2.0 DDL has already been applied. For PostgreSQL apply `dv2/postgres/apply.sh` (tables in the `rv` schema); for ClickHouse apply `warehouse/agentflow/dv2/__init.sql` (tables in the `rv` database unless `--clickhouse-database` is provided). Idempotency on PostgreSQL is enforced by `INSERT ... ON CONFLICT DO NOTHING`; on ClickHouse it relies on the `ReplacingMergeTree`/merge engines.
 
 Satellite idempotency is handled by the raw vault table engines. The loader always inserts mapped rows and relies on the expected `ReplacingMergeTree` or equivalent merge behavior for repeated hub/link keys and unchanged satellite `hk + hash_diff` pairs.
 

@@ -182,6 +182,13 @@ ignore = ["S101", "S311"]
 "src/serving/semantic_layer/search_index.py" = [
     "S608",
 ]
+# Raw-vault INSERT builder: table/column names are internal constants (vault
+# table names + pydantic model fields / the curated VAULT_DB_COLUMNS map), and
+# every value is parameter-bound (%s). Safe-by-construction interpolation of
+# identifiers, which placeholders cannot carry.
+"warehouse/agentflow/dv2/loaders/pg_vault_writer.py" = [
+    "S608",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

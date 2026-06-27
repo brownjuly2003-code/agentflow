@@ -1,11 +1,44 @@
-# DV2.0 Postgres OLTP — hot tier seed + CDC bridge
+# DV2.0 Postgres OLTP — hot tier seed + vault promotion
 
 Closes the hot tier of the DV2.0 multi-branch flow described in
-`docs/dv2-multi-branch/architecture.md`. Three SQL files, applied in
-order, populate Postgres OLTP with per-branch operational data, expose
-it to ClickHouse via the `PostgreSQL()` table engine, and promote it
-into `rv.*` using the same idempotent hash pattern the synthetic seed
-uses.
+`docs/dv2-multi-branch/architecture.md`: per-branch operational data in
+Postgres OLTP (`ops_<branch>` schemas), promoted into the `rv.*` raw vault
+with the same idempotent hash pattern the synthetic seed uses.
+
+## PostgreSQL-native promotion (current)
+
+The raw vault now lives on **PostgreSQL** (see `dv2/postgres/README.md`), the
+same engine as this OLTP hot tier. So the ClickHouse `PostgreSQL()` bridge that
+the older promotion needed **collapses**: promotion is a plain in-database
+`INSERT ... SELECT` straight from `ops_<branch>` into `rv.*` — no bridge, no
+second engine.
+
+| File | Where it runs | What it does |
+| ---- | ------------- | ------------ |
+| `seed.sql`                     | PostgreSQL | Creates `ops_msk` / `ops_dxb` schemas (`customers` + `orders`), seeds 50 + 200 (MSK) and 20 + 80 (DXB). Idempotent via `ON CONFLICT DO NOTHING`. |
+| `promote_to_raw_vault_pg.sql`  | PostgreSQL | `INSERT ... SELECT` from `ops_<branch>.{customers,orders}` into `rv.hub_customer`, `rv.hub_order`, `rv.lnk_order_customer`, `rv.sat_customer_personal__1c__{msk,dxb}`, `rv.sat_order_header__bitrix__{msk,dxb}`. Hash keys are `decode(md5(...), 'hex')` (BYTEA, join-identical to the X5 / reference feeds); `record_source = pg_ops__<branch>`. One transaction → one stable `load_ts`. |
+
+```bash
+# single-node Mac demo, after dv2/postgres/apply.sh
+PGHOST=localhost PGUSER=agentflow PGDATABASE=agentflow psql -v ON_ERROR_STOP=1 -f seed.sql
+PGHOST=localhost PGUSER=agentflow PGDATABASE=agentflow psql -v ON_ERROR_STOP=1 -f promote_to_raw_vault_pg.sql
+```
+
+Idempotency: hubs/links collide on their BYTEA primary key
+(`ON CONFLICT DO NOTHING`); satellites insert a version only when the
+`(hash key, hash_diff)` pair is absent, so a re-run is a no-op. No-Docker
+validation parses every statement with sqlglot and checks each inserted column
+exists in the committed vault DDL (`tests/unit/test_dv2_postgres_ingestion.py`);
+a live apply + `bv_order_canonical` query is the single-node Mac smoke.
+
+## Legacy: ClickHouse-bridge promotion (vault-on-ClickHouse era)
+
+The files below are kept for reference from when the raw vault was on
+ClickHouse. They reach Postgres OLTP through the ClickHouse `PostgreSQL()` /
+`MaterializedPostgreSQL()` table engines and promote into a **ClickHouse** `rv.*`.
+With the vault on PostgreSQL they are no longer the active path — ClickHouse is
+retained only as an optional flat-mart serving backend, which is fed from the
+vault, not from this OLTP bridge.
 
 ## Layout
 

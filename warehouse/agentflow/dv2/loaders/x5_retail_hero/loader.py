@@ -21,6 +21,8 @@ except ModuleNotFoundError:
     ClickHouseError = Exception  # type: ignore[misc, assignment]
 
 try:
+    from ..pg_vault_writer import PostgresVaultWriter
+    from ..pg_vault_writer import connect as connect_postgres
     from .branch_distributor import distribute_stores_to_branches
     from .mappers import (
         map_clients_chunk,
@@ -29,6 +31,9 @@ try:
         rows_to_dicts,
     )
 except ImportError:
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from branch_distributor import distribute_stores_to_branches
     from mappers import (
         map_clients_chunk,
@@ -36,6 +41,13 @@ except ImportError:
         map_purchases_chunk,
         rows_to_dicts,
     )
+    from pg_vault_writer import PostgresVaultWriter
+    from pg_vault_writer import connect as connect_postgres
+
+
+CLICKHOUSE_TARGET = "clickhouse"
+POSTGRES_TARGET = "postgres"
+TARGETS = (CLICKHOUSE_TARGET, POSTGRES_TARGET)
 
 
 REQUIRED_CSVS = ("clients.csv", "products.csv", "purchases.csv")
@@ -89,6 +101,55 @@ class PartsThrottle:
         return int(result[0][0])
 
 
+class _DryRunSink:
+    """Map-only sink: rows are counted by the caller but never persisted."""
+
+    mode = "mapped"
+
+    def write(self, table: str, rows: list[BaseModel]) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+class _ClickHouseSink:
+    """Insert mapped rows into the ClickHouse ``rv`` database (legacy backend)."""
+
+    mode = "inserted"
+
+    def __init__(self, client: Client, database: str) -> None:
+        self._client = client
+        self._database = database
+
+    def write(self, table: str, rows: list[BaseModel]) -> None:
+        _insert_rows(self._client, _qualified_table(self._database, table), rows)
+
+    def close(self) -> None:
+        return None
+
+
+class _PostgresSink:
+    """Insert mapped rows into the PostgreSQL ``rv`` schema (the DV2 raw vault).
+
+    The vault moved off ClickHouse onto PostgreSQL (see dv2/postgres/README.md);
+    this sink is what actually feeds it. Writes are buffered into the connection
+    and committed once on :meth:`close`.
+    """
+
+    mode = "inserted"
+
+    def __init__(self, writer: PostgresVaultWriter) -> None:
+        self._writer = writer
+
+    def write(self, table: str, rows: list[BaseModel]) -> None:
+        self._writer.write(table, rows)
+
+    def close(self) -> None:
+        self._writer.commit()
+        self._writer.close()
+
+
 @click.command()
 @click.option("--csv-dir", required=True, type=click.Path(file_okay=False, path_type=Path))
 @click.option("--clickhouse-host", default="localhost", show_default=True)
@@ -110,8 +171,22 @@ class PartsThrottle:
     type=int,
     help=(
         "Pause inserts while the database has more active parts than this "
-        "(0 disables). Keeps merges able to catch up on small hosts."
+        "(0 disables). Keeps merges able to catch up on small hosts. "
+        "ClickHouse target only."
     ),
+)
+@click.option(
+    "--target",
+    default=CLICKHOUSE_TARGET,
+    show_default=True,
+    type=click.Choice(TARGETS),
+    help="Where to load the raw vault: the PostgreSQL vault or legacy ClickHouse.",
+)
+@click.option(
+    "--postgres-dsn",
+    default="postgresql://agentflow@localhost:5432/agentflow",
+    show_default=True,
+    help="PostgreSQL DSN used when --target=postgres.",
 )
 def cli(
     csv_dir: Path,
@@ -124,57 +199,79 @@ def cli(
     dry_run: bool,
     load_ts: str | None,
     max_active_parts: int,
+    target: str,
+    postgres_dsn: str,
 ) -> None:
     _configure_logging()
     csv_paths = _validate_csvs(csv_dir)
     current_load_ts = _parse_load_ts(load_ts)
-    client = (
-        None
-        if dry_run
-        else _connect(clickhouse_host, clickhouse_port, clickhouse_user, clickhouse_password)
+    sink, throttle = _open_sink(
+        target=target,
+        dry_run=dry_run,
+        clickhouse_host=clickhouse_host,
+        clickhouse_port=clickhouse_port,
+        clickhouse_database=clickhouse_database,
+        clickhouse_user=clickhouse_user,
+        clickhouse_password=clickhouse_password,
+        postgres_dsn=postgres_dsn,
+        max_active_parts=max_active_parts,
     )
-    throttle = PartsThrottle(client, clickhouse_database, max_active_parts)
 
     client_lookup: dict[str, dict[str, Any]] = {}
+    try:
+        _process_products(csv_paths["products.csv"], batch_size, current_load_ts, sink, throttle)
+        client_lookup.update(
+            _process_clients(csv_paths["clients.csv"], batch_size, current_load_ts, sink, throttle)
+        )
 
-    _process_products(
-        csv_paths["products.csv"],
-        batch_size,
-        current_load_ts,
-        client,
-        clickhouse_database,
-        dry_run,
-        throttle,
-    )
-    client_lookup.update(
-        _process_clients(
-            csv_paths["clients.csv"],
+        LOGGER.info("Building stable branch map from purchases.csv store_id values")
+        store_branch_map = _build_store_branch_map(csv_paths["purchases.csv"], batch_size)
+        LOGGER.info("Mapped %s stores to branches", len(store_branch_map))
+
+        seen_customer_personal: set[tuple[str, str]] = set()
+        _process_purchases(
+            csv_paths["purchases.csv"],
             batch_size,
             current_load_ts,
-            client,
-            clickhouse_database,
-            dry_run,
+            store_branch_map,
+            client_lookup,
+            seen_customer_personal,
+            sink,
             throttle,
         )
-    )
+    finally:
+        sink.close()
 
-    LOGGER.info("Building stable branch map from purchases.csv store_id values")
-    store_branch_map = _build_store_branch_map(csv_paths["purchases.csv"], batch_size)
-    LOGGER.info("Mapped %s stores to branches", len(store_branch_map))
 
-    seen_customer_personal: set[tuple[str, str]] = set()
-    _process_purchases(
-        csv_paths["purchases.csv"],
-        batch_size,
-        current_load_ts,
-        store_branch_map,
-        client_lookup,
-        seen_customer_personal,
-        client,
-        clickhouse_database,
-        dry_run,
-        throttle,
-    )
+def _open_sink(
+    *,
+    target: str,
+    dry_run: bool,
+    clickhouse_host: str,
+    clickhouse_port: int,
+    clickhouse_database: str,
+    clickhouse_user: str,
+    clickhouse_password: str,
+    postgres_dsn: str,
+    max_active_parts: int,
+) -> tuple[Any, PartsThrottle]:
+    """Build the row sink and its (ClickHouse-only) part-count throttle.
+
+    A dry run never connects. The throttle queries ClickHouse ``system.parts``,
+    so the PostgreSQL and dry-run paths get an inert ``PartsThrottle(None, ...)``.
+    """
+    if dry_run:
+        return _DryRunSink(), PartsThrottle(None, clickhouse_database, max_active_parts)
+    if target == CLICKHOUSE_TARGET:
+        client = _connect(clickhouse_host, clickhouse_port, clickhouse_user, clickhouse_password)
+        return (
+            _ClickHouseSink(client, clickhouse_database),
+            PartsThrottle(client, clickhouse_database, max_active_parts),
+        )
+    if target == POSTGRES_TARGET:
+        writer = PostgresVaultWriter(connect_postgres(postgres_dsn))
+        return _PostgresSink(writer), PartsThrottle(None, clickhouse_database, max_active_parts)
+    raise click.ClickException(f"unknown target: {target}")
 
 
 def _configure_logging() -> None:
@@ -243,9 +340,7 @@ def _process_products(
     products_path: Path,
     batch_size: int,
     load_ts: datetime,
-    client: Client | None,
-    database: str,
-    dry_run: bool,
+    sink: Any,
     throttle: PartsThrottle,
 ) -> None:
     totals: dict[str, int] = defaultdict(int)
@@ -253,21 +348,19 @@ def _process_products(
         reader = pd.read_csv(products_path, chunksize=batch_size, low_memory=False)
         for chunk in tqdm(reader, desc="products.csv", unit="chunk"):
             mapped = map_products_chunk(chunk, load_ts)
-            _emit_mapped_rows(mapped, client, database, dry_run, totals)
+            _emit_mapped_rows(mapped, sink, totals)
             throttle.wait_if_needed()
     except (KeyError, ValueError, FileNotFoundError, pd.errors.EmptyDataError) as exc:
         raise click.ClickException(f"Unable to process {products_path}: {exc}") from exc
 
-    _log_totals("products.csv", totals, dry_run)
+    _log_totals("products.csv", totals, sink.mode)
 
 
 def _process_clients(
     clients_path: Path,
     batch_size: int,
     load_ts: datetime,
-    client: Client | None,
-    database: str,
-    dry_run: bool,
+    sink: Any,
     throttle: PartsThrottle,
 ) -> dict[str, dict[str, Any]]:
     totals: dict[str, int] = defaultdict(int)
@@ -277,12 +370,12 @@ def _process_clients(
         for chunk in tqdm(reader, desc="clients.csv", unit="chunk"):
             mapped, chunk_lookup = map_clients_chunk(chunk, load_ts)
             client_lookup.update(chunk_lookup)
-            _emit_mapped_rows(mapped, client, database, dry_run, totals)
+            _emit_mapped_rows(mapped, sink, totals)
             throttle.wait_if_needed()
     except (KeyError, ValueError, FileNotFoundError, pd.errors.EmptyDataError) as exc:
         raise click.ClickException(f"Unable to process {clients_path}: {exc}") from exc
 
-    _log_totals("clients.csv", totals, dry_run)
+    _log_totals("clients.csv", totals, sink.mode)
     return client_lookup
 
 
@@ -293,9 +386,7 @@ def _process_purchases(
     store_branch_map: dict[Any, str],
     client_lookup: dict[str, dict[str, Any]],
     seen_customer_personal: set[tuple[str, str]],
-    client: Client | None,
-    database: str,
-    dry_run: bool,
+    sink: Any,
     throttle: PartsThrottle,
 ) -> None:
     totals: dict[str, int] = defaultdict(int)
@@ -309,28 +400,24 @@ def _process_purchases(
                 client_lookup,
                 seen_customer_personal,
             )
-            _emit_mapped_rows(mapped, client, database, dry_run, totals)
+            _emit_mapped_rows(mapped, sink, totals)
             throttle.wait_if_needed()
     except (KeyError, ValueError, FileNotFoundError, pd.errors.EmptyDataError) as exc:
         raise click.ClickException(f"Unable to process {purchases_path}: {exc}") from exc
 
-    _log_totals("purchases.csv", totals, dry_run)
+    _log_totals("purchases.csv", totals, sink.mode)
 
 
 def _emit_mapped_rows(
     mapped: dict[str, list[BaseModel]],
-    client: Client | None,
-    database: str,
-    dry_run: bool,
+    sink: Any,
     totals: dict[str, int],
 ) -> None:
     for table, rows in mapped.items():
         if not rows:
             continue
         totals[table] += len(rows)
-        if dry_run:
-            continue
-        _insert_rows(client, _qualified_table(database, table), rows)
+        sink.write(table, rows)
 
 
 def _insert_rows(client: Client | None, table: str, rows: list[BaseModel]) -> None:
@@ -357,8 +444,7 @@ def _qualified_table(database: str, table: str) -> str:
     return f"{database}.{table}"
 
 
-def _log_totals(filename: str, totals: dict[str, int], dry_run: bool) -> None:
-    mode = "mapped" if dry_run else "inserted"
+def _log_totals(filename: str, totals: dict[str, int], mode: str) -> None:
     for table in sorted(totals):
         LOGGER.info("%s %s %s rows into %s", filename, mode, totals[table], table)
 

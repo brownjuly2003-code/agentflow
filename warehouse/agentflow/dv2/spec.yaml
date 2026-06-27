@@ -36,6 +36,9 @@ sources:
   ozon:
     label: Ozon API
     entities: [customer, product, order]
+  ref:
+    label: Cloud supplier/product reference (Hugging Face Dataset)
+    entities: [supplier, product, marking_code]
 satellites:
   - name: sat_customer_personal__1c__msk
     hub: hub_customer
@@ -658,3 +661,155 @@ satellites:
       - {name: valid_to, type: Nullable(DateTime64(3))}
       - {name: supplier_priority, type: UInt16}
       - {name: purchase_price, type: "Nullable(Decimal(18, 2))"}
+  - name: sat_supplier_profile__ref__global
+    hub: hub_supplier
+    parent_hk: supplier_hk
+    source_system: ref
+    branch_code: global
+    record_source: ref__global
+    purpose: Supplier master data from the cloud supplier reference (HF Dataset).
+    sources: [ref]
+    branch_context: global supplier reference context
+    scd2: true
+    anonymization: hot commercial reference
+    attributes:
+      - {name: supplier_name, type: String}
+      - {name: tax_country_code, type: FixedString(2)}
+      - {name: supplier_status, type: LowCardinality(String)}
+      - {name: gln, type: String}
+  - name: sat_product_reference__ref__global
+    hub: hub_product
+    parent_hk: product_hk
+    source_system: ref
+    branch_code: global
+    record_source: ref__global
+    purpose: Product catalog, packaging and customs reference (HF Dataset).
+    sources: [ref]
+    branch_context: global product reference context
+    scd2: true
+    anonymization: hot non-PII reference
+    attributes:
+      - {name: product_name, type: String}
+      - {name: brand, type: LowCardinality(String)}
+      - {name: category, type: LowCardinality(String)}
+      - {name: tnved_code, type: Nullable(String)}
+      - {name: gpc_brick_code, type: Nullable(String)}
+      - {name: gross_weight_g, type: UInt32}
+      - {name: net_weight_g, type: UInt32}
+      - {name: length_mm, type: UInt32}
+      - {name: width_mm, type: UInt32}
+      - {name: height_mm, type: UInt32}
+      - {name: units_per_pack, type: UInt16}
+      - {name: pack_type, type: LowCardinality(String)}
+  - name: sat_marking_code_gs1__ref__global
+    hub: hub_marking_code
+    parent_hk: marking_code_hk
+    source_system: ref
+    branch_code: global
+    record_source: ref__global
+    purpose: GS1 GTIN attributes from the cloud product reference (HF Dataset).
+    sources: [ref]
+    branch_context: global traceability reference context
+    scd2: true
+    anonymization: hot non-PII reference
+    attributes:
+      - {name: gs1_gtin, type: String}
+      - {name: marking_status, type: LowCardinality(String)}
+  - name: sat_lnk_product_supplier__ref__global
+    hub: lnk_product_supplier
+    parent_hk: link_hk
+    source_system: ref
+    branch_code: global
+    record_source: ref__global
+    purpose: Product-supplier sourcing terms from the cloud reference (HF Dataset).
+    sources: [ref]
+    branch_context: global sourcing reference effectivity
+    scd2: true
+    anonymization: hot commercial reference
+    attributes:
+      - {name: valid_from, type: DateTime64(3)}
+      - {name: valid_to, type: Nullable(DateTime64(3))}
+      - {name: supplier_priority, type: UInt16}
+      - {name: purchase_price, type: "Decimal(18, 2)"}
+      - {name: min_order_qty, type: UInt32}
+      - {name: lead_time_days, type: UInt16}
+  - name: sat_order_header__1c__msk
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: msk
+    record_source: 1c__msk
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__spb
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: spb
+    record_source: 1c__spb
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__ekb
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: ekb
+    record_source: 1c__ekb
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__dxb
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: dxb
+    record_source: 1c__dxb
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}
+  - name: sat_order_header__1c__ala
+    hub: hub_order
+    parent_hk: order_hk
+    source_system: 1c
+    branch_code: ala
+    record_source: 1c__ala
+    purpose: Order header from 1C / X5 Retail Hero ingest.
+    sources: ["1c (X5 Retail Hero)"]
+    branch_context: per-branch order state
+    scd2: true
+    anonymization: hot
+    attributes:
+      - {name: order_date, type: DateTime64(3)}
+      - {name: channel, type: LowCardinality(String)}
+      - {name: order_status, type: LowCardinality(String)}
+      - {name: total_amount, type: "Decimal(18, 2)"}

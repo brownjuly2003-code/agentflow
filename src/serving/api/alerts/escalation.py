@@ -79,10 +79,6 @@ async def dispatch_alert(
         return alert, True, 0
 
     if current_triggered and alert.fired_at is None:
-        alert.fired_at = now
-        alert.resolved_at = None
-        alert.state = "firing"
-        alert.last_escalation_level = 1
         payload = {
             "alert_id": alert.id,
             "alert_name": alert.name,
@@ -101,7 +97,7 @@ async def dispatch_alert(
             payload["previous_value"] = evaluation["previous_value"]
         if evaluation["change_pct"] is not None:
             payload["change_pct"] = evaluation["change_pct"]
-        await deliver(
+        result = await deliver(
             dispatcher,
             alert,
             payload,
@@ -111,6 +107,17 @@ async def dispatch_alert(
             change_pct=evaluation["change_pct"],
             webhook_url=alert.escalation[0].webhook_url,
         )
+        if not result.get("success"):
+            # Delivery failed: do NOT advance fired state, so the next evaluation
+            # tick re-attempts the page instead of recording the alert as fired
+            # and going silent until cooldown. (audit_28_06_26.md #4)
+            alert.last_condition_triggered = True
+            alert.updated_at = now
+            return alert, True, 0
+        alert.fired_at = now
+        alert.resolved_at = None
+        alert.state = "firing"
+        alert.last_escalation_level = 1
         alert.last_triggered_at = now
         alert.last_condition_triggered = True
         alert.updated_at = now
@@ -139,7 +146,7 @@ async def dispatch_alert(
                 payload["previous_value"] = evaluation["previous_value"]
             if evaluation["change_pct"] is not None:
                 payload["change_pct"] = evaluation["change_pct"]
-            await deliver(
+            result = await deliver(
                 dispatcher,
                 alert,
                 payload,
@@ -153,14 +160,17 @@ async def dispatch_alert(
                 change_pct=evaluation["change_pct"],
                 webhook_url=next_step.webhook_url,
             )
-            alert.last_triggered_at = now
-            alert.last_escalation_level = max(
-                alert.last_escalation_level,
-                next_step.level,
-            )
-            alert.updated_at = now
-            triggered += 1
-            alert_changed = True
+            if result.get("success"):
+                alert.last_triggered_at = now
+                alert.last_escalation_level = max(
+                    alert.last_escalation_level,
+                    next_step.level,
+                )
+                alert.updated_at = now
+                triggered += 1
+                alert_changed = True
+            # else: leave last_escalation_level unchanged so the next evaluation
+            # tick re-attempts this escalation step. (audit_28_06_26.md #4)
         alert.state = "sustained"
         alert.last_condition_triggered = True
         return alert, alert_changed, triggered

@@ -136,10 +136,30 @@ def test_business_vault_uses_postgres_collapse():
     assert "distinct on (order_hk)" in body
     assert "split_part(record_source, '__', 2)" in body
     assert "case when" in body
-    # the five LEFT JOINs that make the reconstruction join-heavy
-    assert body.count("left join") == 5
-    parsed = sqlglot.parse_one(bv, dialect="postgres")
-    assert parsed is not None
+    # 5 LEFT JOINs in bv_order_canonical + 8 across the customer MDM views
+    # (msk/spb/ekb: personal+loyalty = 2 each; dxb/ala: personal only = 1 each).
+    assert body.count("left join") == 13
+    parsed = sqlglot.parse(bv, dialect="postgres")
+    assert parsed, "03_business_vault.sql produced no statements"
+
+
+def test_customer_mdm_views_admit_all_source_conventions():
+    """audit_28_06_26 #12: the customer MDM views must select hub rows by
+    branch via split_part(record_source, '__', 2), NOT by a hard-coded
+    record_source = '1c__<branch>' filter that silently drops OLTP/X5-promoted
+    customers (record_source pg_ops__/x5__). Proven live on PG: the buggy filter
+    returns 1 of 2 seeded customers, the split_part filter returns both."""
+    body = _strip_comments((PG_DIR / "03_business_vault.sql").read_text(encoding="utf-8")).lower()
+    branches = ("msk", "spb", "ekb", "dxb", "ala")
+    for branch in branches:
+        assert f"view rv.bv_customer_mdm__{branch}" in body, f"missing PG view for {branch}"
+        assert f"split_part(record_source, '__', 2) = '{branch}'" in body, (
+            f"bv_customer_mdm__{branch} must admit hubs by branch, not by source convention"
+        )
+    # the regressed pattern must never reappear in any customer MDM hub filter.
+    assert "record_source = '1c__" not in body, (
+        "hard-coded record_source = '1c__<branch>' filter reintroduces audit #12"
+    )
 
 
 def test_hubs_and_links_have_bytea_primary_keys():

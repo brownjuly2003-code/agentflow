@@ -122,6 +122,37 @@ class TestProcessPending:
         assert processor.process_pending() == 0
         assert spy.calls == []
 
+    @pytest.mark.asyncio
+    async def test_process_pending_async_dispatches_and_marks_sent(
+        self, conn: duckdb.DuckDBPyConnection
+    ) -> None:
+        # run_forever uses the async variant (audit #1): it offloads the blocking
+        # Kafka produce to a thread but keeps DuckDB on the loop.
+        spy = _SpyProducer()
+        processor = _processor(conn, spy)
+        _insert_outbox(conn, outbox_id="o1", event_id="evt-1")
+        _insert_outbox(conn, outbox_id="o2", event_id="evt-2")
+
+        processed = await processor.process_pending_async()
+
+        assert processed == 2
+        assert {topic for topic, _ in spy.calls} == {TOPIC}
+        assert _status(conn, "o1")[0] == "sent"
+        assert _status(conn, "o2")[0] == "sent"
+
+    @pytest.mark.asyncio
+    async def test_process_pending_async_schedules_retry_on_kafka_error(
+        self, conn: duckdb.DuckDBPyConnection
+    ) -> None:
+        producer = _RaisingProducer(RuntimeError("KafkaError{code=_MSG_TIMED_OUT}"))
+        processor = _processor(conn, producer)
+        _insert_outbox(conn, outbox_id="o1")
+
+        processed = await processor.process_pending_async()
+
+        assert processed == 0
+        assert _status(conn, "o1")[0] == "pending"  # rescheduled, not marked sent
+
 
 class TestProcessEntry:
     def test_dispatches_single_entry(self, conn: duckdb.DuckDBPyConnection) -> None:

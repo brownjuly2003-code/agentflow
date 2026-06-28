@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import httpx
 import structlog
 
+from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 from src.serving.api.webhook_dispatcher import _event_body, _signature
 
 from .evaluator import evaluate_rule
@@ -238,13 +239,47 @@ async def deliver(
     status_code: int | None = None
     error: str | None = None
 
+    target_url = webhook_url or alert.webhook_url
+    # Re-validate at delivery time (DNS rebinding): a name public at registration
+    # could now resolve to an internal address. (audit_28_06_26.md #2)
+    try:
+        await asyncio.to_thread(validate_public_url, target_url)
+    except UnsafeEgressURLError as exc:
+        error = f"unsafe egress URL: {exc}"
+        log_alert_history(
+            conn,
+            delivery_id=delivery_id,
+            alert=alert,
+            metric=alert.metric,
+            current_value=current_value,
+            previous_value=previous_value,
+            change_pct=change_pct,
+            threshold=alert.threshold,
+            condition=alert.condition,
+            window=alert.window,
+            event_type=event_type,
+            status_code=None,
+            success=False,
+            error=error,
+            payload=payload,
+        )
+        return {
+            "delivery_id": delivery_id,
+            "alert_id": alert.id,
+            "event_type": event_type,
+            "success": False,
+            "status_code": None,
+            "error": error,
+            "attempts": 0,
+        }
+
     async with httpx.AsyncClient(timeout=5.0) as client:
         for attempt in range(1, 4):
             attempts = attempt
             error = None
             try:
                 response = await client.post(
-                    webhook_url or alert.webhook_url,
+                    target_url,
                     content=body,
                     headers=headers,
                 )

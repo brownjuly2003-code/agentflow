@@ -9,6 +9,7 @@ from typing import cast
 import structlog
 from fastapi import Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS, FAILED_AUTH_WINDOW_SECONDS
 from src.serving.api.metrics import AUTH_FAILURES
@@ -106,7 +107,10 @@ class AuthMiddleware:
             )
 
         manager.clear_failed_auth(client_ip)
-        manager.record_usage(tenant_key, path)
+        # record_usage opens a DuckDB connection, writes, and retries with a
+        # blocking sleep; running it inline froze the event loop on every
+        # authenticated request. Offload to a worker thread. (audit_28_06_26.md #13)
+        await run_in_threadpool(manager.record_usage, tenant_key, path)
         is_allowed, remaining, reset_at = await manager.check_rate_limit(tenant_key)
         rate_limit_headers = {
             "X-RateLimit-Limit": str(tenant_key.rate_limit_rpm),

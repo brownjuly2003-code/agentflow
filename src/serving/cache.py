@@ -106,8 +106,20 @@ class QueryCache:
                 error="redis package not installed",
             )
             return
+        # SCAN (cursor-based, non-blocking) instead of KEYS, which is O(keyspace)
+        # and blocks single-threaded Redis for all clients on every call — and
+        # this runs roughly every 2s under steady ingestion. (audit_28_06_26.md #15)
         try:
-            keys = await self._redis.keys("metric:*")
+            cursor = 0
+            while True:
+                cursor, keys = await self._redis.scan(cursor, match="metric:*", count=500)
+                if keys:
+                    normalized_keys = [
+                        key.decode() if isinstance(key, bytes) else key for key in keys
+                    ]
+                    await self._redis.delete(*normalized_keys)
+                if cursor == 0:
+                    break
         except Exception as exc:
             logger.warning(
                 "query_cache_unavailable",
@@ -115,9 +127,6 @@ class QueryCache:
                 error=str(exc),
             )
             return
-        normalized_keys = [key.decode() if isinstance(key, bytes) else key for key in keys]
-        if normalized_keys:
-            await self._redis.delete(*normalized_keys)
 
     async def close(self) -> None:
         if self._redis is None:

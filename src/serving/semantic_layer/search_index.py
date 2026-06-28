@@ -8,6 +8,7 @@ from typing import Literal
 
 import duckdb
 import structlog
+from starlette.concurrency import run_in_threadpool
 
 from src.serving.semantic_layer.catalog import DataCatalog, EntityDefinition, MetricDefinition
 from src.serving.semantic_layer.query_engine import QueryEngine
@@ -77,7 +78,11 @@ class SearchIndex:
         while True:
             try:
                 await asyncio.sleep(interval_seconds)
-                self.rebuild()
+                # rebuild() full-scans and re-tokenizes every entity table and
+                # runs a live metric query per metric; running it inline froze
+                # the event loop for the whole scan every interval. Offload it to
+                # a worker thread. (audit_28_06_26.md #16)
+                await run_in_threadpool(self.rebuild)
             except asyncio.CancelledError:
                 raise
             except Exception:

@@ -13,12 +13,15 @@
 --   concat(a, '|', b)             -> a || '|' || b
 --   FROM oltp_live.<branch>_<tbl> -> FROM ops_<branch>.<tbl> (no bridge)
 --
--- Idempotency: hubs/links collide on their BYTEA primary key
--- (ON CONFLICT DO NOTHING); satellites insert a version only when the
--- (hash key, hash_diff) pair is not already present, so a re-run is a no-op.
--- hash_diff mirrors the ClickHouse pull variant: a constant per-entity tag (the
--- `PostgreSQL()` snapshot is treated as append-only — no change/tombstone
--- capture), so each OLTP entity lands exactly one satellite version.
+-- SCD2 change capture: hubs/links collide on their BYTEA primary key
+-- (ON CONFLICT DO NOTHING). Satellites compute hash_diff over the *descriptive*
+-- columns (status/amount/date/channel for the order header; name/email/phone for
+-- the customer) and insert a new version only when that hash_diff differs from
+-- the *current* (latest load_ts) version for the hash key. So a re-run with no
+-- change is a no-op, but a changed order (e.g. pending -> shipped) or customer
+-- correctly lands a new satellite version — which the LISTEN/NOTIFY freshness
+-- listener that runs this promotion then surfaces. (A constant per-entity tag,
+-- the old behaviour, silently dropped every UPDATE — see audit_28_06_26.md #9.)
 --
 -- record_source = pg_ops__<branch> so the business vault's
 -- split_part(record_source, '__', 2) extracts the branch.
@@ -41,7 +44,7 @@ INSERT INTO rv.sat_customer_personal__1c__msk
 SELECT
     decode(md5(c.customer_id), 'hex'),
     localtimestamp(3),
-    decode(md5(c.customer_id || '|pg-oltp|v1'), 'hex'),
+    decode(md5(concat_ws('|', c.first_name, c.last_name, coalesce(c.email, ''), coalesce(c.phone, ''))), 'hex'),
     'pg_ops__msk',
     c.first_name,
     c.last_name,
@@ -54,7 +57,11 @@ FROM ops_msk.customers c
 WHERE NOT EXISTS (
     SELECT 1 FROM rv.sat_customer_personal__1c__msk e
     WHERE e.customer_hk = decode(md5(c.customer_id), 'hex')
-      AND e.hash_diff = decode(md5(c.customer_id || '|pg-oltp|v1'), 'hex')
+      AND e.hash_diff = decode(md5(concat_ws('|', c.first_name, c.last_name, coalesce(c.email, ''), coalesce(c.phone, ''))), 'hex')
+      AND e.load_ts = (
+          SELECT max(e2.load_ts) FROM rv.sat_customer_personal__1c__msk e2
+          WHERE e2.customer_hk = e.customer_hk
+      )
 );
 
 -- ============ MSK: hub order + header satellite + order<->customer link ============
@@ -69,7 +76,7 @@ INSERT INTO rv.sat_order_header__bitrix__msk
 SELECT
     decode(md5(o.order_id), 'hex'),
     localtimestamp(3),
-    decode(md5(o.order_id || '|pg-hdr|v1'), 'hex'),
+    decode(md5(concat_ws('|', o.order_date::timestamp(3)::text, o.channel, o.order_status, o.total_amount::text)), 'hex'),
     'pg_ops__msk',
     o.order_date::timestamp(3),
     o.channel,
@@ -80,7 +87,11 @@ FROM ops_msk.orders o
 WHERE NOT EXISTS (
     SELECT 1 FROM rv.sat_order_header__bitrix__msk e
     WHERE e.order_hk = decode(md5(o.order_id), 'hex')
-      AND e.hash_diff = decode(md5(o.order_id || '|pg-hdr|v1'), 'hex')
+      AND e.hash_diff = decode(md5(concat_ws('|', o.order_date::timestamp(3)::text, o.channel, o.order_status, o.total_amount::text)), 'hex')
+      AND e.load_ts = (
+          SELECT max(e2.load_ts) FROM rv.sat_order_header__bitrix__msk e2
+          WHERE e2.order_hk = e.order_hk
+      )
 );
 
 INSERT INTO rv.lnk_order_customer (link_hk, order_hk, customer_hk, load_ts, record_source)
@@ -105,7 +116,7 @@ INSERT INTO rv.sat_customer_personal__1c__dxb
 SELECT
     decode(md5(c.customer_id), 'hex'),
     localtimestamp(3),
-    decode(md5(c.customer_id || '|pg-oltp|v1'), 'hex'),
+    decode(md5(concat_ws('|', c.first_name, c.last_name, coalesce(c.email, ''), coalesce(c.phone, ''))), 'hex'),
     'pg_ops__dxb',
     c.first_name,
     c.last_name,
@@ -118,7 +129,11 @@ FROM ops_dxb.customers c
 WHERE NOT EXISTS (
     SELECT 1 FROM rv.sat_customer_personal__1c__dxb e
     WHERE e.customer_hk = decode(md5(c.customer_id), 'hex')
-      AND e.hash_diff = decode(md5(c.customer_id || '|pg-oltp|v1'), 'hex')
+      AND e.hash_diff = decode(md5(concat_ws('|', c.first_name, c.last_name, coalesce(c.email, ''), coalesce(c.phone, ''))), 'hex')
+      AND e.load_ts = (
+          SELECT max(e2.load_ts) FROM rv.sat_customer_personal__1c__dxb e2
+          WHERE e2.customer_hk = e.customer_hk
+      )
 );
 
 -- ============ DXB: hub order + header satellite + order<->customer link ============
@@ -133,7 +148,7 @@ INSERT INTO rv.sat_order_header__bitrix__dxb
 SELECT
     decode(md5(o.order_id), 'hex'),
     localtimestamp(3),
-    decode(md5(o.order_id || '|pg-hdr|v1'), 'hex'),
+    decode(md5(concat_ws('|', o.order_date::timestamp(3)::text, o.channel, o.order_status, o.total_amount::text)), 'hex'),
     'pg_ops__dxb',
     o.order_date::timestamp(3),
     o.channel,
@@ -144,7 +159,11 @@ FROM ops_dxb.orders o
 WHERE NOT EXISTS (
     SELECT 1 FROM rv.sat_order_header__bitrix__dxb e
     WHERE e.order_hk = decode(md5(o.order_id), 'hex')
-      AND e.hash_diff = decode(md5(o.order_id || '|pg-hdr|v1'), 'hex')
+      AND e.hash_diff = decode(md5(concat_ws('|', o.order_date::timestamp(3)::text, o.channel, o.order_status, o.total_amount::text)), 'hex')
+      AND e.load_ts = (
+          SELECT max(e2.load_ts) FROM rv.sat_order_header__bitrix__dxb e2
+          WHERE e2.order_hk = e.order_hk
+      )
 );
 
 INSERT INTO rv.lnk_order_customer (link_hk, order_hk, customer_hk, load_ts, record_source)

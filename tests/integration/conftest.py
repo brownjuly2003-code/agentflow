@@ -28,6 +28,27 @@ def _default_open_auth(request, monkeypatch):
     monkeypatch.setenv("AGENTFLOW_AUTH_DISABLED", "true")
 
 
+@pytest.fixture(autouse=True)
+def _resolve_reserved_test_hosts(monkeypatch):
+    """Let the SSRF egress guard accept the reserved ``.test`` hostnames the
+    webhook/alert suites use (agent.test, example.test) with a mocked httpx
+    client. RFC 6761 ``.test`` names do not resolve, so the guard
+    (audit_28_06_26.md #2) would reject them with 400/failed-delivery before the
+    mock. We map only ``.test`` to a public IP; every other host uses the real
+    resolver, so loopback/private rejection still holds. The guard's own logic
+    is unit-tested in test_egress_guard.py."""
+    import socket
+
+    real_getaddrinfo = socket.getaddrinfo
+
+    def _fake_getaddrinfo(host, *args, **kwargs):
+        if isinstance(host, str) and host.endswith(".test"):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))]
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+
 def pytest_configure(config):
     config.addinivalue_line("markers", "kind: marks tests requiring a kind cluster")
     config.addinivalue_line(

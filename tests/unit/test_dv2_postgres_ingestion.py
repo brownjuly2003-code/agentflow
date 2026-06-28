@@ -30,7 +30,11 @@ from sqlglot import exp
 
 import warehouse.agentflow.dv2.loaders.pg_vault_writer as pgw
 from warehouse.agentflow.dv2.loaders import pg_vault_writer
-from warehouse.agentflow.dv2.loaders.pg_vault_writer import PostgresVaultWriter, build_insert_sql
+from warehouse.agentflow.dv2.loaders.pg_vault_writer import (
+    PostgresVaultWriter,
+    build_insert_sql,
+    satellite_hash_key,
+)
 from warehouse.agentflow.dv2.loaders.x5_retail_hero import loader
 from warehouse.agentflow.dv2.loaders.x5_retail_hero import schemas as x5
 from warehouse.agentflow.dv2.reference import load_postgres
@@ -114,6 +118,55 @@ def test_build_insert_sql_is_idempotent_and_schema_qualified():
 def test_build_insert_sql_rejects_no_columns():
     with pytest.raises(ValueError):
         build_insert_sql("hub_customer", [])
+
+
+def test_satellite_hash_key_classifies_table_kind():
+    # hubs carry one *_hk but no hash_diff -> collide-on-PK (None)
+    assert satellite_hash_key(["customer_hk", "customer_bk", "load_ts", "record_source"]) is None
+    # links carry several *_hk but no hash_diff -> collide-on-PK (None)
+    assert (
+        satellite_hash_key(["link_hk", "order_hk", "customer_hk", "load_ts", "record_source"])
+        is None
+    )
+    # satellites carry hash_diff and exactly one *_hk -> insert-on-change key
+    assert (
+        satellite_hash_key(["order_hk", "load_ts", "hash_diff", "record_source", "order_status"])
+        == "order_hk"
+    )
+
+
+def test_build_insert_sql_satellite_is_insert_on_change():
+    """Regression guard for audit_28_06_26.md #10.
+
+    Satellites must gate on hash_diff vs the latest version, not blindly insert a
+    new (hk, load_ts) row every re-run (storage bloat). Mirrors the SCD2 gate in
+    promote_to_raw_vault_pg.sql.
+    """
+    columns = ["order_hk", "load_ts", "hash_diff", "record_source", "order_status", "total_amount"]
+    sql = build_insert_sql("sat_order_header__1c__msk", columns)
+
+    assert "VALUES" not in sql  # not a blind insert
+    assert sql.startswith("INSERT INTO rv.sat_order_header__1c__msk (")
+    assert "SELECT %s, %s, %s, %s, %s, %s WHERE NOT EXISTS (" in sql
+    assert "e.order_hk = %s AND e.hash_diff = %s" in sql
+    assert (
+        "SELECT max(e2.load_ts) FROM rv.sat_order_header__1c__msk e2 "
+        "WHERE e2.order_hk = e.order_hk" in sql
+    )
+    assert sql.endswith("ON CONFLICT DO NOTHING")  # exact (hk, load_ts) dup backstop
+    # column placeholders + two trailing gate placeholders (hash key, hash_diff)
+    assert sql.count("%s") == len(columns) + 2
+    parsed = sqlglot.parse_one(sql.replace("%s", "?"), dialect="postgres")
+    assert parsed is not None
+
+
+def test_build_insert_sql_satellite_requires_single_hash_key():
+    # hash_diff present but no *_hk
+    with pytest.raises(ValueError, match="exactly one"):
+        build_insert_sql("sat_broken", ["load_ts", "hash_diff", "record_source"])
+    # hash_diff present with two *_hk is ambiguous
+    with pytest.raises(ValueError, match="exactly one"):
+        build_insert_sql("sat_broken", ["order_hk", "customer_hk", "load_ts", "hash_diff"])
 
 
 # --- inserted columns exist in the committed PostgreSQL DDL -------------------
@@ -277,6 +330,32 @@ def test_writer_write_mapped_applies_per_table_overrides():
     statements = " ".join(sql for sql, _ in conn.cur.calls)
     assert "rv.hub_supplier (supplier_hk, supplier_bk" in statements
     assert "rv.lnk_product_supplier (link_hk, product_hk, supplier_hk" in statements
+
+
+def test_writer_satellite_appends_insert_on_change_gate_params():
+    # A satellite write must (a) emit the insert-on-change SQL and (b) append the
+    # hash key and hash_diff as the two trailing gate params for each row.
+    conn = _FakeConnection()
+    rows = map_reference(
+        build_reference(n_suppliers=2, n_products=4, seed=1), datetime(2026, 6, 26)
+    )
+    sat_rows = rows["sat_supplier_profile__ref__global"]
+    assert sat_rows  # sanity: the reference produced supplier-profile satellite rows
+    written = PostgresVaultWriter(conn).write("sat_supplier_profile__ref__global", sat_rows)
+
+    assert written == len(sat_rows)
+    sql, params = conn.cur.calls[0]
+    assert "WHERE NOT EXISTS (" in sql
+    assert "e.supplier_hk = %s AND e.hash_diff = %s" in sql
+
+    field_order = list(sat_rows[0].model_dump().keys())
+    hk_pos = field_order.index("supplier_hk")
+    hd_pos = field_order.index("hash_diff")
+    first = params[0]
+    # value tuple = all model fields, then (hash key, hash_diff) again for the gate
+    assert len(first) == len(field_order) + 2
+    assert first[-2] == first[hk_pos] == sat_rows[0].supplier_hk
+    assert first[-1] == first[hd_pos] == sat_rows[0].hash_diff
 
 
 # --- connect guard -----------------------------------------------------------

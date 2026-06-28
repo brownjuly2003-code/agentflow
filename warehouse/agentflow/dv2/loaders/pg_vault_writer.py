@@ -3,9 +3,21 @@
 Both ingestion feeds — the X5 retail loader and the supplier reference — map
 their source data into the same pydantic raw-vault row models keyed by target
 table name (``dict[str, list[BaseModel]]``). This module is the single PG sink
-they share: it renders one parametrised ``INSERT ... ON CONFLICT DO NOTHING``
-per table (idempotent, matching the PostgreSQL DDL in ``dv2/postgres/``) and
-streams rows through ``executemany`` in batches.
+they share: it renders one parametrised, idempotent ``INSERT`` per table
+(matching the PostgreSQL DDL in ``dv2/postgres/``) and streams rows through
+``executemany`` in batches.
+
+Idempotency follows the table kind, exactly like the in-database promotion in
+``postgres_oltp/promote_to_raw_vault_pg.sql``:
+
+* **hubs / links** collide on their BYTEA primary key — ``ON CONFLICT DO
+  NOTHING`` makes a re-load a no-op.
+* **satellites** are SCD2 *insert-on-change*: a new ``(hk, load_ts)`` version
+  lands only when its ``hash_diff`` differs from the *current* (latest
+  ``load_ts``) version for that hash key. Without this gate a re-run with a new
+  ``load_ts`` but unchanged data inserts a duplicate version every time
+  (storage bloat — see ``audit_28_06_26.md`` #10); the descriptive ``hash_diff``
+  both loaders already compute is what makes the change-detection correct.
 
 The driver import is guarded exactly the way the X5 loader guards
 ``clickhouse_driver``: psycopg is only needed for a live load (a single-node Mac
@@ -32,22 +44,58 @@ DEFAULT_SCHEMA = "rv"
 DEFAULT_BATCH_SIZE = 1000
 
 
+def satellite_hash_key(columns: Sequence[str]) -> str | None:
+    """Return a satellite's hash-key column, or ``None`` for a hub/link.
+
+    A satellite is identified structurally, without the loader needing a table
+    registry: it is the only raw-vault shape carrying a ``hash_diff`` column, and
+    it hangs off exactly one hub via a single ``*_hk`` hash key. Hubs carry a
+    ``*_hk`` but no ``hash_diff``; links carry several ``*_hk`` but no
+    ``hash_diff`` — both return ``None`` and keep collide-on-PK semantics.
+    """
+    if "hash_diff" not in columns:
+        return None
+    hash_keys = [name for name in columns if name.endswith("_hk")]
+    if len(hash_keys) != 1:
+        raise ValueError(
+            f"satellite columns must carry exactly one *_hk hash key, found {hash_keys}"
+        )
+    return hash_keys[0]
+
+
 def build_insert_sql(table: str, columns: Sequence[str], schema: str = DEFAULT_SCHEMA) -> str:
     """Render an idempotent parametrised INSERT for one raw-vault table.
 
-    ``ON CONFLICT DO NOTHING`` (no conflict target) makes the load idempotent
-    for every table shape — hubs/links collide on their BYTEA primary key,
-    satellites on ``(hk, load_ts)`` — without the loader needing to know each
-    table's key. Columns are listed explicitly so the row order is pinned and a
-    DDL default (e.g. ``is_deleted``) is left to PostgreSQL.
+    Hubs/links get ``VALUES (...) ON CONFLICT DO NOTHING`` (collide on their
+    BYTEA primary key). Satellites get an SCD2 *insert-on-change* form: the row
+    is materialised only when ``hash_diff`` differs from the current (latest
+    ``load_ts``) version for the hash key, mirroring the in-database promotion in
+    ``promote_to_raw_vault_pg.sql``; ``ON CONFLICT DO NOTHING`` still backstops
+    an exact ``(hk, load_ts)`` duplicate. Satellite SQL appends two extra
+    placeholders (the hash key and ``hash_diff``) for the gate — see
+    :meth:`PostgresVaultWriter.write`. Columns are listed explicitly so the row
+    order is pinned and a DDL default (e.g. ``is_deleted``) is left to
+    PostgreSQL.
     """
     if not columns:
         raise ValueError(f"no columns to insert into {schema}.{table}")
     column_sql = ", ".join(columns)
     placeholders = ", ".join(["%s"] * len(columns))
+    hash_key = satellite_hash_key(columns)
+    if hash_key is None:
+        return (
+            f"INSERT INTO {schema}.{table} ({column_sql}) "
+            f"VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+        )
     return (
         f"INSERT INTO {schema}.{table} ({column_sql}) "
-        f"VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+        f"SELECT {placeholders} "
+        f"WHERE NOT EXISTS ("
+        f"SELECT 1 FROM {schema}.{table} e "
+        f"WHERE e.{hash_key} = %s AND e.hash_diff = %s "
+        f"AND e.load_ts = (SELECT max(e2.load_ts) FROM {schema}.{table} e2 "
+        f"WHERE e2.{hash_key} = e.{hash_key})"
+        f") ON CONFLICT DO NOTHING"
     )
 
 
@@ -101,6 +149,8 @@ class PostgresVaultWriter:
         No-op (returns 0) for an empty batch. Hash-key columns are Python
         ``bytes`` and land in ``BYTEA`` unchanged; ``Decimal`` / ``datetime`` /
         ``date`` / ``bool`` / ``None`` adapt through psycopg's standard typing.
+        The return value counts rows *sent*, not rows materialised — a satellite
+        row suppressed by the insert-on-change gate is still counted as sent.
 
         ``columns`` overrides the destination column names (same length and
         order as the row's model fields). The X5 loader's models already carry
@@ -119,7 +169,17 @@ class PostgresVaultWriter:
                 f"{len(insert_columns)} names, expected {len(field_order)}"
             )
         sql = build_insert_sql(table, insert_columns, self.schema)
-        params = [tuple(record[name] for name in field_order) for record in dumped]
+        rows_values = [tuple(record[name] for name in field_order) for record in dumped]
+        hash_key = satellite_hash_key(insert_columns)
+        if hash_key is None:
+            params = rows_values
+        else:
+            # The insert-on-change gate references the hash key and hash_diff
+            # again (two trailing placeholders); destination columns are pinned
+            # positionally to the row values, so reuse those positions.
+            hk_idx = insert_columns.index(hash_key)
+            hd_idx = insert_columns.index("hash_diff")
+            params = [(*values, values[hk_idx], values[hd_idx]) for values in rows_values]
 
         cursor = self._connection.cursor()
         try:

@@ -107,4 +107,7 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result["data"] == [{"order_id": "ORD-1"}]
     assert result["row_count"] == 1
-    backend.execute.assert_called_once_with("SELECT * FROM orders_v2")
+    # execute_nl_query wraps the validated SQL in a bounded LIMIT (audit #8).
+    backend.execute.assert_called_once_with(
+        "SELECT * FROM (SELECT * FROM orders_v2) AS bounded_nl_query LIMIT 1000"
+    )

@@ -420,6 +420,47 @@ class TestWebhooksAPI:
         ]
         assert delivered == [("http://agent.test/acme", "evt-acme-order")]
 
+    @pytest.mark.asyncio
+    async def test_failed_delivery_is_requeued_and_redriven(self, client, httpx_mock):
+        """audit_28_06_26.md #3: a delivery that fails every inline attempt is not
+        silently dropped — it is left pending in the durable queue and re-driven
+        once the endpoint recovers."""
+        _disable_auth(client)
+        _register(
+            client,
+            filters={"event_types": ["order"], "entity_ids": ["ORD-1"], "min_amount": 100},
+        )
+        _prepare_pipeline_events(client)
+        dispatcher = client.app.state.webhook_dispatcher
+        dispatcher.seen_event_ids.clear()
+        conn = client.app.state.query_engine._conn
+        webhook_dispatcher.ensure_webhook_delivery_queue_table(conn)
+        conn.execute("DELETE FROM webhook_delivery_queue")
+
+        # endpoint down: every attempt of the inline burst returns 5xx
+        httpx_mock.add_response(status_code=500)
+        httpx_mock.add_response(status_code=500)
+        httpx_mock.add_response(status_code=500)
+        await dispatcher.dispatch_new_events()
+
+        row = conn.execute(
+            "SELECT status FROM webhook_delivery_queue WHERE event_id = 'evt-order-1'"
+        ).fetchone()
+        assert row is not None  # durably queued, not dropped
+        assert row[0] == "pending"
+
+        # endpoint recovers; the re-drive pass delivers it
+        httpx_mock.requests.clear()
+        conn.execute("UPDATE webhook_delivery_queue SET next_attempt_at = NULL")
+        await dispatcher.process_delivery_queue()
+
+        assert len(httpx_mock.requests) >= 1
+        assert json.loads(httpx_mock.requests[0]["content"].decode())["event_id"] == "evt-order-1"
+        status = conn.execute(
+            "SELECT status FROM webhook_delivery_queue WHERE event_id = 'evt-order-1'"
+        ).fetchone()[0]
+        assert status == "delivered"
+
     def test_webhook_registrations_survive_api_restart(self, tmp_path: Path):
         config_path = tmp_path / "webhooks.yaml"
         previous_path = getattr(app.state, "webhook_config_path", None)

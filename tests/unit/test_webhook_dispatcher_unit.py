@@ -9,11 +9,12 @@ logic at the unit layer so a filter or signature regression fails fast.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -236,5 +237,193 @@ def test_delivery_logs_roundtrip() -> None:
         assert logs[0]["success"] is True
         # unrelated webhook id sees nothing
         assert get_delivery_logs(conn, "wh-other") == []
+    finally:
+        conn.close()
+
+
+# --- durable delivery queue / re-drive (audit_28_06_26.md #3) -----------------
+
+
+def _event(event_id: str = "e1", tenant: str = "default") -> dict:
+    return {
+        "event_id": event_id,
+        "tenant_id": tenant,
+        "event_type": "order.created",
+        "order_id": "ORD-1",
+    }
+
+
+def _queue_row(conn: duckdb.DuckDBPyConnection, webhook_id: str, event_id: str):
+    return conn.execute(
+        "SELECT status, attempts, next_attempt_at FROM webhook_delivery_queue "
+        "WHERE webhook_id = ? AND event_id = ?",
+        [webhook_id, event_id],
+    ).fetchone()
+
+
+def test_enqueue_delivery_is_idempotent_on_webhook_event() -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+        webhook = SimpleNamespace(id="wh-1")
+        dispatcher._enqueue_delivery(webhook, _event("e1"))
+        dispatcher._enqueue_delivery(webhook, _event("e1"))  # re-scan: no duplicate
+        assert conn.execute("SELECT count(*) FROM webhook_delivery_queue").fetchone()[0] == 1
+        status, attempts, _ = _queue_row(conn, "wh-1", "e1")
+        assert status == "pending"
+        assert attempts == 0
+    finally:
+        conn.close()
+
+
+def test_record_outcome_success_marks_delivered() -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+        dispatcher._enqueue_delivery(SimpleNamespace(id="wh-1"), _event("e1"))
+        dispatcher._record_delivery_outcome("wh-1", "e1", {"success": True, "status_code": 200})
+        assert _queue_row(conn, "wh-1", "e1")[0] == "delivered"
+    finally:
+        conn.close()
+
+
+def test_record_outcome_failure_reschedules_then_dies_at_max() -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+        dispatcher.max_delivery_attempts = 2
+        dispatcher.backoff_seconds = [10.0]
+        dispatcher._enqueue_delivery(SimpleNamespace(id="wh-1"), _event("e1"))
+
+        dispatcher._record_delivery_outcome("wh-1", "e1", {"success": False, "status_code": 500})
+        status, attempts, next_at = _queue_row(conn, "wh-1", "e1")
+        assert (status, attempts) == ("pending", 1)
+        assert next_at is not None  # scheduled for re-drive
+
+        dispatcher._record_delivery_outcome("wh-1", "e1", {"success": False, "status_code": 500})
+        status, attempts, next_at = _queue_row(conn, "wh-1", "e1")
+        assert (status, attempts) == ("dead", 2)
+        assert next_at is None  # parked, no longer re-driven
+    finally:
+        conn.close()
+
+
+def test_process_delivery_queue_redrives_due_pending(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        config_path = tmp_path / "webhooks.yaml"
+        created = create_webhook(
+            config_path, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
+        )
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        dispatcher = WebhookDispatcher(app)
+        dispatcher._enqueue_delivery(SimpleNamespace(id=created.id), _event("e1", tenant="acme"))
+        dispatcher._record_delivery_outcome(
+            created.id, "e1", {"success": False, "status_code": 500}
+        )
+        conn.execute("UPDATE webhook_delivery_queue SET next_attempt_at = NULL")  # force due
+
+        attempted: list[str] = []
+
+        async def _fake_deliver_body(webhook, *, body, event_id, event_type):
+            attempted.append(event_id)
+            return {"success": True, "status_code": 200}
+
+        dispatcher._deliver_body = _fake_deliver_body
+        asyncio.run(dispatcher.process_delivery_queue())
+
+        assert attempted == ["e1"]
+        assert _queue_row(conn, created.id, "e1")[0] == "delivered"
+    finally:
+        conn.close()
+
+
+def test_process_delivery_queue_parks_dead_when_webhook_removed(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        config_path = tmp_path / "webhooks.yaml"  # no webhook registered -> lookup returns None
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        dispatcher = WebhookDispatcher(app)
+        dispatcher._enqueue_delivery(SimpleNamespace(id="ghost"), _event("e1", tenant="acme"))
+
+        attempted: list[int] = []
+
+        async def _fake_deliver_body(*args, **kwargs):
+            attempted.append(1)
+            return {"success": True}
+
+        dispatcher._deliver_body = _fake_deliver_body
+        asyncio.run(dispatcher.process_delivery_queue())
+
+        assert attempted == []  # a removed webhook is never posted to
+        assert _queue_row(conn, "ghost", "e1")[0] == "dead"
+    finally:
+        conn.close()
+
+
+def test_process_delivery_queue_skips_not_due(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        config_path = tmp_path / "webhooks.yaml"
+        created = create_webhook(
+            config_path, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
+        )
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        dispatcher = WebhookDispatcher(app)
+        dispatcher._enqueue_delivery(SimpleNamespace(id=created.id), _event("e1", tenant="acme"))
+        conn.execute(
+            "UPDATE webhook_delivery_queue SET next_attempt_at = ?",
+            [datetime.now(UTC) + timedelta(hours=1)],  # due in the future
+        )
+
+        attempted: list[int] = []
+
+        async def _fake_deliver_body(*args, **kwargs):
+            attempted.append(1)
+            return {"success": True}
+
+        dispatcher._deliver_body = _fake_deliver_body
+        asyncio.run(dispatcher.process_delivery_queue())
+
+        assert attempted == []
+        assert _queue_row(conn, created.id, "e1")[0] == "pending"
+    finally:
+        conn.close()
+
+
+def test_pending_delivery_survives_a_new_dispatcher_instance(tmp_path: Path) -> None:
+    """The core #3 guarantee: a failed delivery left pending in the durable queue
+    is re-driven by a *fresh* dispatcher (i.e. after a process restart) — the
+    in-memory seen-set cannot do this."""
+    conn = duckdb.connect(":memory:")
+    try:
+        config_path = tmp_path / "webhooks.yaml"
+        created = create_webhook(
+            config_path, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
+        )
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+
+        first = WebhookDispatcher(app)
+        first._enqueue_delivery(SimpleNamespace(id=created.id), _event("e1", tenant="acme"))
+        first._record_delivery_outcome(created.id, "e1", {"success": False, "status_code": 503})
+        conn.execute("UPDATE webhook_delivery_queue SET next_attempt_at = NULL")
+        del first  # simulate process exit; only the durable row remains
+
+        reborn = WebhookDispatcher(app)
+        attempted: list[str] = []
+
+        async def _fake_deliver_body(webhook, *, body, event_id, event_type):
+            attempted.append(event_id)
+            return {"success": True, "status_code": 200}
+
+        reborn._deliver_body = _fake_deliver_body
+        asyncio.run(reborn.process_delivery_queue())
+
+        assert attempted == ["e1"]
+        assert _queue_row(conn, created.id, "e1")[0] == "delivered"
     finally:
         conn.close()

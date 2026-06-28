@@ -332,7 +332,7 @@ async def test_outbox_run_forever_propagates_unexpected_processing_errors(
         def __init__(self) -> None:
             self.closed = False
 
-        def process_pending(self) -> int:
+        async def process_pending_async(self) -> int:
             raise RuntimeError("unexpected processor bug")
 
         def close(self) -> None:

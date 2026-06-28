@@ -1,9 +1,11 @@
+import asyncio
 from datetime import UTC, datetime
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import AnyHttpUrl, BaseModel, Field
 
+from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 from src.serving.api.webhook_dispatcher import (
     WebhookDispatcher,
     WebhookFilters,
@@ -32,6 +34,10 @@ def _tenant(request: Request) -> str:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def register_webhook(payload: WebhookCreateRequest, request: Request) -> dict[str, object]:
+    try:
+        await asyncio.to_thread(validate_public_url, str(payload.url))
+    except UnsafeEgressURLError as exc:
+        raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {exc}") from exc
     registration = create_webhook(
         get_webhook_config_path(request.app),
         url=str(payload.url),

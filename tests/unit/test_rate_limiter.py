@@ -237,7 +237,7 @@ async def test_rate_limiter_persists_counts_across_instances() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rate_limiter_fails_open_when_redis_is_unavailable(
+async def test_rate_limiter_fails_closed_to_local_cap_when_redis_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     logger = LoggerSpy()
@@ -247,14 +247,22 @@ async def test_rate_limiter_fails_open_when_redis_is_unavailable(
 
     monkeypatch.setattr("src.serving.api.rate_limiter.logger", logger)
 
+    # A Redis outage must NOT disable limiting fleet-wide (the old fail-open
+    # behaviour returned remaining==limit). It falls back to a per-process cap:
+    # the request is allowed but counted. (audit_28_06_26.md #7)
     allowed, remaining, reset_at = await limiter.check("tenant:key", 2)
-
     assert allowed is True
-    assert remaining == 2
+    assert remaining == 1  # counted locally, not the full limit
     assert reset_at == 1_060
     assert logger.warning_calls == [
         ("rate_limiter_unavailable", {"operation": "check", "error": "redis down"})
     ]
+
+    # The local cap is actually enforced: over the limit of 2, the next call is denied.
+    await limiter.check("tenant:key", 2)
+    allowed_over, remaining_over, _ = await limiter.check("tenant:key", 2)
+    assert allowed_over is False
+    assert remaining_over == 0
 
 
 @pytest.mark.asyncio

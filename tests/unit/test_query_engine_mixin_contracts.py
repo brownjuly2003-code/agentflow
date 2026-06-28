@@ -88,4 +88,8 @@ def test_execute_nl_query_runs_against_minimal_host_contract(host: _MinimalQuery
 
     assert result["data"] == [{"order_id": "ORD-1"}]
     assert result["sql"] == "SELECT * FROM orders_v2"
-    host._backend.execute.assert_called_once_with("SELECT * FROM orders_v2")
+    # the executed SQL is wrapped in a bounded LIMIT (audit #8); result["sql"]
+    # still reports the logical query.
+    host._backend.execute.assert_called_once_with(
+        "SELECT * FROM (SELECT * FROM orders_v2) AS bounded_nl_query LIMIT 1000"
+    )

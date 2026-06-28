@@ -437,6 +437,34 @@ def test_promotion_targets_existing_postgres_columns(table, columns):
 
 def test_promotion_is_idempotent_per_table_kind():
     body = _promotion_sql_without_comments().lower()
-    # hubs/links are idempotent on their primary key; satellites on (hk, hash_diff).
+    # hubs/links are idempotent on their primary key; satellites are SCD2:
+    # a new version lands only when hash_diff differs from the latest version.
     assert body.count("on conflict do nothing") == 6  # 2 hub_customer + 2 hub_order + 2 lnk
     assert body.count("where not exists") == 4  # 2 personal + 2 header satellites
+    # the SCD2 gate compares against the current (latest load_ts) version — one
+    # max(load_ts) subquery per satellite, else a re-run on changed data is lost.
+    assert body.count("select max(e2.load_ts)") == 4
+
+
+def test_promotion_satellites_capture_scd2_change_not_a_constant_tag():
+    """Regression guard for audit_28_06_26.md #9.
+
+    The promotion used a constant per-entity hash_diff (``md5(id || '|tag|v1')``),
+    so the ``NOT EXISTS (… AND hash_diff = …)`` gate matched the unchanged row and
+    silently dropped every UPDATE (e.g. order pending -> shipped). hash_diff must
+    instead be derived from the descriptive columns so a changed row produces a
+    new satellite version.
+    """
+    body = _promotion_sql_without_comments()
+    # the old constant tags must be gone entirely
+    assert "|pg-hdr|v1" not in body
+    assert "|pg-oltp|v1" not in body
+    # order-header hash_diff covers status + amount + date + channel (each appears
+    # twice per satellite: in the inserted column and in the NOT EXISTS gate; ×2 branches)
+    order_hd = "concat_ws('|', o.order_date::timestamp(3)::text, o.channel, o.order_status, o.total_amount::text)"
+    assert body.count(order_hd) == 4
+    # customer-personal hash_diff covers name + contact
+    customer_hd = (
+        "concat_ws('|', c.first_name, c.last_name, coalesce(c.email, ''), coalesce(c.phone, ''))"
+    )
+    assert body.count(customer_hd) == 4

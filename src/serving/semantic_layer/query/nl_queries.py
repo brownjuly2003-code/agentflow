@@ -19,6 +19,12 @@ from .sql_guard import UnsafeSQLError, validate_nl_sql
 
 tracer = trace.get_tracer("agentflow.query_engine")
 
+# Hard row cap for the un-paginated NL execution path (used by /v1/batch). The
+# paginated /v1/query path bounds itself via LIMIT; execute_nl_query did not, so
+# a batch item like "SELECT * FROM orders_v2" could stream a whole table into
+# memory. Matches the paginated max page size. (audit_28_06_26.md #8)
+_MAX_NL_QUERY_ROWS = 1000
+
 
 class UnsafeNLQueryError(HTTPException, ValueError):
     def __init__(self, detail: str) -> None:
@@ -217,7 +223,13 @@ class NLQueryMixin:
                     )
                     if resolved_tenant_id is not None:
                         span.set_attribute("tenant_id", resolved_tenant_id)
-                data = self._backend.execute(sql)
+                bounded_sql = (
+                    # sql is prevalidated by validate_nl_sql; bound the row count
+                    # so an un-paginated NL item can't stream a whole table.
+                    f"SELECT * FROM ({sql}) AS bounded_nl_query "  # nosec B608
+                    f"LIMIT {_MAX_NL_QUERY_ROWS}"
+                )
+                data = self._backend.execute(bounded_sql)
                 if span is not None and span.is_recording():
                     span.set_attribute("row_count", len(data))
         except BackendExecutionError as e:

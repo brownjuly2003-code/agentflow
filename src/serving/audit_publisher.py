@@ -24,10 +24,20 @@ class HashChainedFileAuditPublisher:
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
         self._lock = threading.Lock()
+        self._cached_hash: str | None = None
+        self._cached_sequence: int | None = None  # None until the tail is read once
 
     def publish(self, payload: Mapping[str, object]) -> None:
         with self._lock:
-            previous_hash, sequence = _last_hash_and_sequence(self._path)
+            if self._cached_sequence is None:
+                # Read the tail once per process to resume the chain. Subsequent
+                # writes use the in-memory head — this is the only writer and the
+                # log is append-only under the lock — instead of re-reading the
+                # whole growing file every call, which was O(file) per request
+                # and O(n^2) over the log's lifetime. (audit_28_06_26.md #14)
+                self._cached_hash, self._cached_sequence = _last_hash_and_sequence(self._path)
+            previous_hash = self._cached_hash
+            sequence = self._cached_sequence
             record: dict[str, object] = {
                 "sequence": sequence + 1,
                 "previous_hash": previous_hash,
@@ -38,6 +48,8 @@ class HashChainedFileAuditPublisher:
             with self._path.open("a", encoding="utf-8", newline="\n") as handle:
                 handle.write(json.dumps(record, sort_keys=True, default=str))
                 handle.write("\n")
+            self._cached_hash = str(record["hash"])
+            self._cached_sequence = sequence + 1
 
 
 def build_audit_publisher_from_env() -> AuditPublisher:

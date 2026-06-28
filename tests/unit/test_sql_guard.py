@@ -41,6 +41,17 @@ UNSAFE_SQL = [
     ("WITH x AS (DELETE FROM orders_v2 RETURNING id) SELECT * FROM x", "Forbidden node"),
     # Unparseable SQL must fail closed instead of falling through the guard.
     ("SELECT * FROM (((", "Unparseable"),
+    # Schema/catalog-qualified table names are a cross-tenant read vector: the
+    # leaf-name allow-list below and _scope_sql's skip-if-qualified branch both
+    # miss them, so victim_schema.orders_v2 would execute against another
+    # tenant's schema. The guard must reject any qualifier. (audit_28_06_26.md #5)
+    ("SELECT * FROM acme.orders_v2", "Schema-qualified"),
+    ('SELECT * FROM "acme"."orders_v2"', "Schema-qualified"),
+    (
+        "SELECT o.* FROM orders_v2 o JOIN victim.users_enriched u ON o.user_id = u.id",
+        "Schema-qualified",
+    ),
+    ("SELECT * FROM cat.acme.orders_v2", "Schema-qualified"),
 ]
 
 
@@ -96,4 +107,7 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result["data"] == [{"order_id": "ORD-1"}]
     assert result["row_count"] == 1
-    backend.execute.assert_called_once_with("SELECT * FROM orders_v2")
+    # execute_nl_query wraps the validated SQL in a bounded LIMIT (audit #8).
+    backend.execute.assert_called_once_with(
+        "SELECT * FROM (SELECT * FROM orders_v2) AS bounded_nl_query LIMIT 1000"
+    )

@@ -101,12 +101,16 @@ class SQLBuilderMixin:
             table_name = table.name
             if (
                 not table_name
-                or table.db
-                or table.catalog
                 or table_name.lower() not in known_tables
                 or table_name.lower() in cte_names
             ):
                 continue
+            # Force the known table into the caller's tenant schema even if it
+            # arrived already schema-qualified — defense-in-depth so a qualified
+            # name can never read another tenant. validate_nl_sql already rejects
+            # qualified NL SQL; this re-scopes (instead of skipping) any that
+            # reaches here through another caller. (audit_28_06_26.md #5)
+            table.set("catalog", None)
             table.set("db", exp.to_identifier(schema, quoted=True))
             table.set("this", exp.to_identifier(table_name, quoted=True))
 

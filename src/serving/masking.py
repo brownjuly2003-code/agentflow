@@ -46,10 +46,15 @@ class PiiMasker:
         entity_types = {
             table_to_entity[table_name] for table_name in tables if table_name in table_to_entity
         }
-        if len(entity_types) != 1:
+        if not entity_types:
             return [dict(row) for row in rows], False
-        entity_type = next(iter(entity_types))
-        masked_rows = [self.mask(entity_type, row, tenant) for row in rows]
+        # Apply every matched entity's masking rules. A multi-entity JOIN must not
+        # bypass masking — returning the rows unmasked leaked cleartext PII
+        # (e.g. users_enriched JOIN orders_v2). Mask the union of all matched
+        # entities rather than failing open. (audit_28_06_26.md #6)
+        masked_rows = [dict(row) for row in rows]
+        for entity_type in entity_types:
+            masked_rows = [self.mask(entity_type, row, tenant) for row in masked_rows]
         return masked_rows, masked_rows != rows
 
     def _extract_table_names(self, sql: str) -> set[str]:

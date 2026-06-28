@@ -17,6 +17,8 @@ import structlog
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
+
 try:
     import yaml
 except ImportError:  # pragma: no cover
@@ -239,6 +241,36 @@ class WebhookDispatcher:
         success = False
         status_code: int | None = None
         error: str | None = None
+
+        # Re-validate at delivery time too (not only at registration): a hostname
+        # that resolved to a public IP when the webhook was created could now
+        # point at an internal address (DNS rebinding). Fail the delivery instead
+        # of fetching an internal target. (audit_28_06_26.md #2)
+        try:
+            await asyncio.to_thread(validate_public_url, webhook.url)
+        except UnsafeEgressURLError as exc:
+            error = f"unsafe egress URL: {exc}"
+            _log_delivery(
+                conn,
+                delivery_id=delivery_id,
+                webhook_id=webhook.id,
+                event_id=event_id,
+                event_type=event_type,
+                attempt=0,
+                status_code=None,
+                success=False,
+                error=error,
+            )
+            return {
+                "delivery_id": delivery_id,
+                "webhook_id": webhook.id,
+                "event_id": event_id,
+                "event_type": event_type,
+                "success": False,
+                "status_code": None,
+                "error": error,
+                "attempts": 0,
+            }
 
         async with httpx.AsyncClient(timeout=5.0) as client:
             for attempt in range(1, 4):

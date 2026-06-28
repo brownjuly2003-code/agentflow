@@ -89,7 +89,9 @@ def test_seeded_metrics_return_plausible_values(backend):
     order_count = backend.scalar(
         catalog.metrics["order_count"].sql_template.format(window="24 hours")
     )
-    assert int(order_count) == 8
+    # order_count now excludes cancelled orders (aligned with revenue/avg;
+    # audit_28_06_26.md #M4): 8 seeded - 1 cancelled = 7.
+    assert int(order_count) == 7
 
     error_rate = backend.scalar(
         catalog.metrics["error_rate"].sql_template.format(window="24 hours")

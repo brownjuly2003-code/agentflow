@@ -56,7 +56,7 @@ class DataCatalog:
         self.register_metric(
             MetricDefinition(
                 name="revenue",
-                description="Total revenue from completed orders",
+                description="Total revenue from non-cancelled orders",
                 sql_template=(
                     "SELECT SUM(total_amount) as value "
                     "FROM orders_v2 "
@@ -73,11 +73,16 @@ class DataCatalog:
         self.register_metric(
             MetricDefinition(
                 name="order_count",
-                description="Number of orders placed",
+                description="Number of non-cancelled orders",
                 sql_template=(
+                    # status filter aligned with revenue / avg_order_value so the
+                    # three metrics are mutually consistent (avg = revenue/count);
+                    # previously order_count counted cancelled orders too, so the
+                    # identity did not hold. (audit_28_06_26.md #M4)
                     "SELECT COUNT(*) as value "
                     "FROM orders_v2 "
-                    "WHERE created_at >= NOW() - INTERVAL '{window}'"
+                    "WHERE status != 'cancelled' "
+                    "AND created_at >= NOW() - INTERVAL '{window}'"
                 ),
                 unit="count",
                 contract_version=self.contract_registry.latest_contract_version(
@@ -130,12 +135,17 @@ class DataCatalog:
         self.register_metric(
             MetricDefinition(
                 name="active_sessions",
-                description="Currently active user sessions",
+                description="Active user sessions (started in last 30 min, not ended)",
                 sql_template=(
+                    # Sessions that started recently and have not ended. The old
+                    # 'ended_at IS NULL OR ended_at >= ...' counted every session
+                    # ever, because the demo write path never sets ended_at, so
+                    # 'ended_at IS NULL' was always true. Anchor on started_at so
+                    # the count is actually time-bounded. (audit_28_06_26.md #11)
                     "SELECT COUNT(*) as value "
                     "FROM sessions_aggregated "
-                    "WHERE ended_at IS NULL "
-                    "OR ended_at >= NOW() - INTERVAL '30 minutes'"
+                    "WHERE started_at >= NOW() - INTERVAL '30 minutes' "
+                    "AND ended_at IS NULL"
                 ),
                 unit="count",
                 available_windows=["now"],

@@ -39,6 +39,13 @@ class FakeRedis:
         prefix = pattern[:-1] if pattern.endswith("*") else pattern
         return [key for key in self.data if key.startswith(prefix)]
 
+    async def scan(self, cursor: int, match: str = "*", count: int = 100):
+        # Single-batch fake: returns all matching keys with a terminal cursor 0.
+        if self.raise_on_keys is not None:
+            raise self.raise_on_keys
+        prefix = match[:-1] if match.endswith("*") else match
+        return 0, [key for key in self.data if key.startswith(prefix)]
+
     async def delete(self, *keys: str):
         self.deleted.append(keys)
         for key in keys:

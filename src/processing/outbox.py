@@ -77,7 +77,7 @@ class OutboxProcessor:
             while True:
                 await asyncio.sleep(2)
                 try:
-                    self.process_pending()
+                    await self.process_pending_async()
                 except duckdb.Error as exc:
                     logger.warning(
                         "outbox_processing_failed",
@@ -106,6 +106,63 @@ class OutboxProcessor:
             if self._process_row(row):
                 processed += 1
         return processed
+
+    async def process_pending_async(self, limit: int = 100) -> int:
+        """Async variant used by run_forever.
+
+        DuckDB reads/updates stay on the event loop (the connection may be shared
+        with the query engine, so it must not be touched from a worker thread),
+        but the blocking Kafka produce+flush(10) is offloaded so a slow or
+        unreachable broker can't freeze the whole event loop. (audit_28_06_26.md #1)
+        """
+        rows = self._connection.execute(
+            """
+            SELECT id, event_id, payload, topic, retry_count
+            FROM outbox
+            WHERE status = 'pending'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+            ORDER BY created_at
+            LIMIT ?
+            """,
+            [datetime.now(UTC), limit],
+        ).fetchall()
+        processed = 0
+        for row in rows:
+            if await self._process_row_async(row):
+                processed += 1
+        return processed
+
+    async def _process_row_async(self, row: tuple[Any, ...]) -> bool:
+        outbox_id, event_id, payload, topic, retry_count = row
+        decoded_payload = self._decode_payload(payload)
+        try:
+            await asyncio.to_thread(self._producer, topic, decoded_payload)
+        except (BufferError, ConnectionError, TimeoutError, KafkaException, RuntimeError) as exc:
+            error_message = str(exc)
+            if isinstance(exc, RuntimeError) and not (
+                error_message.startswith("KafkaError{")
+                or "Kafka message(s) were not delivered" in error_message
+            ):
+                raise
+            next_retry_count = int(retry_count or 0) + 1
+            logger.warning(
+                "outbox_delivery_retry_scheduled",
+                outbox_id=outbox_id,
+                event_id=event_id,
+                topic=topic,
+                retry_count=next_retry_count,
+                error=error_message,
+                exc_info=True,
+            )
+            self._schedule_retry(
+                outbox_id=outbox_id,
+                event_id=event_id,
+                retry_count=next_retry_count,
+                error_message=error_message,
+            )
+            return False
+        self._mark_sent(outbox_id=outbox_id, event_id=event_id)
+        return True
 
     def process_entry(self, outbox_id: str) -> bool:
         row = self._connection.execute(

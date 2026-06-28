@@ -1,3 +1,4 @@
+import asyncio
 from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -13,6 +14,7 @@ from src.serving.api.alert_dispatcher import (
     list_alerts,
     update_alert,
 )
+from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 
 router = APIRouter(prefix="/v1/alerts", tags=["alerts"])
 
@@ -66,6 +68,10 @@ def _validate_metric_request(request: Request, metric: str, window: str) -> None
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def register_alert(payload: AlertCreateRequest, request: Request) -> dict[str, object]:
     _validate_metric_request(request, payload.metric, payload.window)
+    try:
+        await asyncio.to_thread(validate_public_url, str(payload.webhook_url))
+    except UnsafeEgressURLError as exc:
+        raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {exc}") from exc
     rule = create_alert(
         get_alert_config_path(request.app),
         name=payload.name,
@@ -101,6 +107,11 @@ async def modify_alert(
     next_metric = updates.get("metric", existing.metric)
     next_window = updates.get("window", existing.window)
     _validate_metric_request(request, next_metric, next_window)
+    if "webhook_url" in updates:
+        try:
+            await asyncio.to_thread(validate_public_url, str(updates["webhook_url"]))
+        except UnsafeEgressURLError as exc:
+            raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {exc}") from exc
 
     updated = update_alert(path, alert_id, _tenant(request), updates)
     if updated is None:

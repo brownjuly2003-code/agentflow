@@ -34,6 +34,21 @@ class RateLimiter:
         self._time_source = time_source
         self._windows: dict[str, list[float]] = defaultdict(list)
 
+    def _check_local(
+        self, key: str, limit: int, window_seconds: int, now: float
+    ) -> tuple[bool, int, int]:
+        """Per-process sliding-window check (no Redis). Used both when Redis is
+        unconfigured and as the fail-closed fallback when Redis errors."""
+        cutoff = now - window_seconds
+        window = [stamp for stamp in self._windows[key] if stamp > cutoff]
+        self._windows[key] = window
+        if len(window) >= limit:
+            reset_at = int(window[0] + window_seconds) if window else int(now + window_seconds)
+            return False, 0, reset_at
+        window.append(now)
+        reset_at = int(window[0] + window_seconds)
+        return True, max(0, limit - len(window)), reset_at
+
     async def check(
         self,
         key: str,
@@ -43,16 +58,7 @@ class RateLimiter:
         now = self._time_source()
         reset_at = int(now + window_seconds)
         if self._redis is None:
-            cutoff = now - window_seconds
-            window = [stamp for stamp in self._windows[key] if stamp > cutoff]
-            self._windows[key] = window
-            if len(window) >= limit:
-                if window:
-                    reset_at = int(window[0] + window_seconds)
-                return False, 0, reset_at
-            window.append(now)
-            reset_at = int(window[0] + window_seconds)
-            return True, max(0, limit - len(window)), reset_at
+            return self._check_local(key, limit, window_seconds, now)
 
         try:
             pipeline = self._redis.pipeline()
@@ -68,7 +74,11 @@ class RateLimiter:
                 operation="check",
                 error=str(exc),
             )
-            return True, limit, reset_at
+            # Fail closed to a per-process cap instead of fail-open: a Redis
+            # outage must not silently disable rate limiting fleet-wide, which
+            # would open a brute-force / DoS-amplification window on the
+            # expensive NL->SQL and entity paths. (audit_28_06_26.md #7)
+            return self._check_local(key, limit, window_seconds, now)
 
         count = int(results[2])
         oldest_entry = results[4]

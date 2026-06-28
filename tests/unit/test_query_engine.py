@@ -69,6 +69,17 @@ def test_scope_sql_leaves_comments_untouched(engine: QueryEngine) -> None:
     assert ("users_enriched", "tenant_a") in _tables(scoped)
 
 
+def test_scope_sql_rescopes_foreign_schema_qualified_table(engine: QueryEngine) -> None:
+    # Defense-in-depth (audit_28_06_26.md #5): even if a schema-qualified known
+    # table reaches _scope_sql (validate_nl_sql rejects it on the NL path), it
+    # must be forced into the caller's tenant schema, never executed against the
+    # named foreign schema — otherwise tenant_a reads victim's data.
+    scoped = engine._scope_sql("SELECT * FROM victim.orders_v2", tenant_id="tenant_a")
+
+    assert ("orders_v2", "tenant_a") in _tables(scoped)
+    assert ("orders_v2", "victim") not in _tables(scoped)
+
+
 def test_query_package_exports_query_engine() -> None:
     from src.serving.semantic_layer.query import QueryEngine as PackageQueryEngine
 

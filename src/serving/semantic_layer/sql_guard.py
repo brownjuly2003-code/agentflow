@@ -65,6 +65,13 @@ def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
             raise UnsafeSQLError(f"Forbidden node: {type(node).__name__}")
         if isinstance(node, exp.Table) and not node.name:
             raise UnsafeSQLError("Table-valued functions not allowed")
+        if isinstance(node, exp.Table) and (node.db or node.catalog):
+            # NL SQL must use bare table names so _scope_sql can re-prefix them
+            # with the caller's tenant schema. A schema/catalog qualifier
+            # (e.g. victim_schema.orders_v2) would otherwise slip past the
+            # leaf-name allow-list below AND past _scope_sql's skip-if-qualified
+            # branch, reading another tenant's data. (audit_28_06_26.md #5)
+            raise UnsafeSQLError(f"Schema-qualified table names are not allowed: {node.sql()}")
         if isinstance(node, exp.Func):
             # sqlglot models some DuckDB scan functions as typed Func nodes
             # (read_csv -> exp.ReadCSV, read_parquet -> exp.ReadParquet) rather

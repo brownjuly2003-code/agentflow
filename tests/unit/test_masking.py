@@ -145,7 +145,10 @@ def test_mask_query_results_masks_single_entity(tmp_path: Path):
     assert rows == [{"email": "j***@example.com"}]
 
 
-def test_mask_query_results_skips_when_multiple_entities(tmp_path: Path):
+def test_mask_query_results_masks_union_when_multiple_entities(tmp_path: Path):
+    """A multi-entity JOIN must mask the union of all matched entities, not fail
+    open. The old behaviour returned cleartext PII for any query touching !=1
+    entity table — a reproduced cross-entity leak (audit_28_06_26.md #6)."""
     config_path = _write_pii_config(
         tmp_path / "pii_fields.yaml",
         """
@@ -164,14 +167,16 @@ def test_mask_query_results_skips_when_multiple_entities(tmp_path: Path):
     masker = PiiMasker(config_path)
 
     rows, masked = masker.mask_query_results(
-        "SELECT u.email FROM users u JOIN orders o ON u.id = o.user_id",
-        [{"email": "jane@example.com"}],
+        "SELECT u.email, o.user_id FROM users u JOIN orders o ON u.id = o.user_id",
+        [{"email": "jane@example.com", "user_id": "U-123"}],
         tenant="acme",
         table_to_entity={"users": "user", "orders": "order"},
     )
 
-    assert masked is False
-    assert rows == [{"email": "jane@example.com"}]
+    assert masked is True
+    # both entities' rules are applied: user.email (partial) AND order.user_id (full)
+    assert rows[0]["email"] == "j***@example.com"
+    assert rows[0]["user_id"] != "U-123"
 
 
 def test_mask_query_results_returns_unchanged_for_unmapped_table(tmp_path: Path):

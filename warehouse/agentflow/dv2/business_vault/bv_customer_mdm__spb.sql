@@ -2,6 +2,9 @@
 Purpose: Canonical customer record for the SPB branch.
 Layer:   Business Vault.
 Branch:  spb (RU jurisdiction; same conflict policy as MSK).
+Hub admission: splitByString('__', record_source)[2] = 'spb' (source-agnostic:
+         1c__/pg_ops__/x5__ all integrated, not only 1C; audit_28_06_26 #12;
+         mirrors the PostgreSQL port's split_part(record_source,'__',2)).
 */
 CREATE OR REPLACE VIEW rv.bv_customer_mdm__spb AS
 WITH
@@ -32,7 +35,7 @@ WITH
     spb_hub AS (
         SELECT customer_hk, customer_bk
         FROM rv.hub_customer
-        WHERE record_source = '1c__spb'
+        WHERE splitByString('__', record_source)[2] = 'spb'
     )
 SELECT
     h.customer_hk                                  AS customer_hk,

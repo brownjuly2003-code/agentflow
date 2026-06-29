@@ -2,6 +2,9 @@
 Purpose: Canonical customer record for the EKB branch.
 Layer:   Business Vault.
 Branch:  ekb (RU jurisdiction; same conflict policy as MSK).
+Hub admission: splitByString('__', record_source)[2] = 'ekb' (source-agnostic:
+         1c__/pg_ops__/x5__ all integrated, not only 1C; audit_28_06_26 #12;
+         mirrors the PostgreSQL port's split_part(record_source,'__',2)).
 */
 CREATE OR REPLACE VIEW rv.bv_customer_mdm__ekb AS
 WITH
@@ -32,7 +35,7 @@ WITH
     ekb_hub AS (
         SELECT customer_hk, customer_bk
         FROM rv.hub_customer
-        WHERE record_source = '1c__ekb'
+        WHERE splitByString('__', record_source)[2] = 'ekb'
     )
 SELECT
     h.customer_hk                                  AS customer_hk,

@@ -8,6 +8,11 @@ Conflict policy:
   - Loyalty (segment/points/last_visit) — Bitrix wins (live CRM state).
   - If a customer exists only in Bitrix, PII columns are NULL but the row
     is still returned so loyalty-only customers stay visible.
+Hub admission: splitByString('__', record_source)[2] = 'msk', so a customer
+         promoted under ANY source convention (1c__msk, pg_ops__msk, x5__msk,
+         ...) is integrated, not only 1C. The old record_source = '1c__msk'
+         filter silently dropped OLTP/X5-promoted customers (audit_28_06_26 #12);
+         this mirrors the PostgreSQL port's split_part(record_source,'__',2).
 */
 CREATE OR REPLACE VIEW rv.bv_customer_mdm__msk AS
 WITH
@@ -38,7 +43,7 @@ WITH
     msk_hub AS (
         SELECT customer_hk, customer_bk, record_source AS hub_record_source
         FROM rv.hub_customer
-        WHERE record_source = '1c__msk'
+        WHERE splitByString('__', record_source)[2] = 'msk'
     )
 SELECT
     h.customer_hk                                  AS customer_hk,

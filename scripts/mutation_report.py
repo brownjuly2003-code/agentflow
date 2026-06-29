@@ -30,20 +30,23 @@ class ModuleTarget:
 # (a) copy the module so it imports as a top-level package and (b) pair it with a
 # NARROW test that does not pull the duckdb-backed engine import chain. So
 # retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard,
-# masking, rate_limiter, sql_builder and nl_queries mutate as serving.* (from
-# src/serving) against duckdb-free tests. Each duckdb-free test also avoids
-# fixtures and calls the module's methods directly: under mutate_only_covered_lines
-# a fixture-built object left every method line uncovered, so only __init__ got
-# mutated. rate_limiter additionally imports `from src.constants import ...`; its
-# test registers a tiny src.constants stub before importing the module, because
-# the serving workspace copies src/serving -> top-level `serving` without `src`.
-# sql_builder and nl_queries live under the query package whose __init__ imports
-# the duckdb-backed QueryEngine, so their tests also stub
-# serving.semantic_layer.query.{engine,contracts} (and the src.* helpers) before
-# import. The only remaining declared-but-not-live serving surface is auth
-# (manager / key_rotation), whose tests still need the duckdb engine; it stays
-# declared-only in the [tool.mutmut] policy until it gets duckdb-free unit tests
-# of its own.
+# masking, rate_limiter, sql_builder, nl_queries and auth/manager mutate as
+# serving.* (from src/serving) against duckdb-free tests. Each duckdb-free test
+# also avoids fixtures and calls the module's methods directly: under
+# mutate_only_covered_lines a fixture-built object left every method line
+# uncovered, so only __init__ got mutated. rate_limiter additionally imports
+# `from src.constants import ...`; its test registers a tiny src.constants stub
+# before importing the module, because the serving workspace copies src/serving
+# -> top-level `serving` without `src`. sql_builder and nl_queries live under the
+# query package whose __init__ imports the duckdb-backed QueryEngine, so their
+# tests also stub serving.semantic_layer.query.{engine,contracts} (and the src.*
+# helpers) before import. auth/manager imports as the auth package whose __init__
+# imports duckdb plus the key_rotation/usage_table chain, but manager.py itself
+# never calls duckdb (all usage-table I/O lives in usage_table.py), so its test
+# swaps in a fake top-level `duckdb` module and mutates manager duckdb-free. The
+# only remaining declared-but-not-live serving surface is auth/key_rotation,
+# which uses the duckdb connection directly; it stays declared-only in the
+# [tool.mutmut] policy until it gets a duckdb-free unit test of its own.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
@@ -68,6 +71,10 @@ MODULE_TARGETS = {
     Path("serving/semantic_layer/query/nl_queries.py"): ModuleTarget(
         threshold=0.90,
         tests=("tests/unit/test_nl_queries_mutation.py",),
+    ),
+    Path("serving/api/auth/manager.py"): ModuleTarget(
+        threshold=0.90,
+        tests=("tests/unit/test_auth_manager_mutation.py",),
     ),
 }
 

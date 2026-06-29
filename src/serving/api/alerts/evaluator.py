@@ -31,12 +31,27 @@ def evaluate_rule(
         )
         previous_value = float(previous_metric["value"])
         if previous_value == 0:
-            change_pct = 0.0 if current_value == 0 else 100.0
+            # A change from a zero baseline is a mathematically undefined
+            # (unbounded) ratio. Report it as undefined rather than a misleading
+            # flat 100% sentinel, and fire by direction: any rise satisfies an
+            # "above" rule (threshold >= 0), any fall a "below" rule. The old
+            # 100% sentinel silently under-reported spikes from zero, so an
+            # "above" rule with threshold > 100 never fired. (audit_28_06_26.md §5)
+            if current_value == 0:
+                change_pct = 0.0
+                triggered = (
+                    0.0 >= alert.threshold if alert.threshold >= 0 else 0.0 <= alert.threshold
+                )
+            else:
+                change_pct = None
+                triggered = current_value > 0 if alert.threshold >= 0 else current_value < 0
         else:
             change_pct = ((current_value - previous_value) / abs(previous_value)) * 100.0
-        triggered = (
-            change_pct >= alert.threshold if alert.threshold >= 0 else change_pct <= alert.threshold
-        )
+            triggered = (
+                change_pct >= alert.threshold
+                if alert.threshold >= 0
+                else change_pct <= alert.threshold
+            )
 
     return {
         "triggered": triggered,

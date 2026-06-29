@@ -49,12 +49,20 @@ import sys
 import types
 
 
-def _src_package_available() -> bool:
-    try:
-        import src  # noqa: F401
+def _in_mutation_workspace() -> bool:
+    # mutmut's mutants/ workspace copies src/serving to a TOP-LEVEL `serving`
+    # package (scripts/mutation_report.py prepare_workspace); ordinary pytest has
+    # no top-level `serving` (only src.serving), so its presence cleanly marks the
+    # harness. The old `import src` probe did not: the editable-installed repo keeps
+    # the real `src` importable even inside the workspace, so the stubs were skipped
+    # there and the real duckdb-backed engine import crashed mutmut's
+    # coverage-instrumented stats pass on py3.11 (duckdb's lazy `_duckdb._sqltypes`
+    # import breaks under coverage tracing -- see .github/workflows/ci.yml).
+    import importlib.util
 
-        return True
-    except ModuleNotFoundError:
+    try:
+        return importlib.util.find_spec("serving") is not None
+    except (ImportError, ValueError):
         return False
 
 
@@ -113,7 +121,7 @@ def _install_harness_stubs() -> None:
     contracts_stub.NLQueryHost = object
 
 
-if not _src_package_available():
+if _in_mutation_workspace():
     _install_harness_stubs()
 
 try:  # mutation-harness workspace exposes it as a top-level package

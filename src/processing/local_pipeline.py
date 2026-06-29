@@ -360,6 +360,14 @@ def _generate_random_event() -> tuple[str, dict]:
     return topic, json.loads(event.model_dump_json())
 
 
+def _format_rate(total: float, elapsed: float) -> str:
+    # Guard against a zero elapsed window: on coarse-resolution monotonic clocks
+    # (e.g. Windows) the first 100-event progress tick of a --burst run can land
+    # within a single clock tick (elapsed == 0.0), which would raise
+    # ZeroDivisionError in the progress log. (audit_28_06_26.md §5 low)
+    return f"{total / max(elapsed, 0.001):.0f} evt/s"
+
+
 def run(events_per_second: int = 10, burst: int = 0) -> None:
     """Run the local pipeline."""
     configure_logging()
@@ -424,7 +432,7 @@ def run(events_per_second: int = 10, burst: int = 0) -> None:
                     total=total,
                     valid=valid,
                     invalid=invalid,
-                    rate=f"{total / elapsed:.0f} evt/s",
+                    rate=_format_rate(total, elapsed),
                 )
 
             if burst == 0:
@@ -441,7 +449,7 @@ def run(events_per_second: int = 10, burst: int = 0) -> None:
             valid=valid,
             invalid=invalid,
             duration_s=round(elapsed, 1),
-            avg_rate=f"{total / max(elapsed, 0.001):.0f} evt/s",
+            avg_rate=_format_rate(total, elapsed),
         )
 
 

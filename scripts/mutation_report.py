@@ -23,18 +23,25 @@ class ModuleTarget:
     tests: tuple[str, ...]
 
 
-# The CI mutation gate runs exactly these module/test pairs. It is deliberately
-# limited to the duckdb-free SDK surface: every serving module in the
-# [tool.mutmut] policy (pyproject.toml) transitively imports duckdb, and
-# duckdb's compiled subpackage (_duckdb._sqltypes) fails to import inside
-# mutmut's mutants/ workspace ("'_duckdb' is not a package"), crashing the run
-# with every mutant left "not checked". This is a mutmut x duckdb harness
-# limitation (reproduced on Linux), not a missing test. Adding serving targets
-# needs isolated mutant execution (subprocess/spawn) or a different tool.
+# The CI mutation gate runs exactly these module/test pairs. Each module is
+# mutated under a TOP-LEVEL package name (no "src." prefix): mutmut's trampoline
+# asserts the module name does not start with "src." and crashes otherwise --
+# that, not duckdb, was the real blocker for the serving modules. The fix is to
+# (a) copy the module so it imports as a top-level package and (b) pair it with a
+# NARROW test that does not pull the duckdb-backed engine import chain. So
+# retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard mutates
+# as serving.semantic_layer.sql_guard (from src/serving) against a duckdb-free
+# test. Serving modules whose tests still need the duckdb engine (the
+# query/masking/auth surfaces) remain harder to isolate and stay declared-only in
+# the [tool.mutmut] policy until they get duckdb-free unit tests of their own.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
         tests=("tests/sdk/test_retry.py",),
+    ),
+    Path("serving/semantic_layer/sql_guard.py"): ModuleTarget(
+        threshold=0.90,
+        tests=("tests/unit/test_sql_guard_mutation.py",),
     ),
 }
 
@@ -124,6 +131,8 @@ def render_mutmut_section(module_path: Path, tests: tuple[str, ...]) -> str:
     tests_block = "\n".join(f'    "{test_path}",' for test_path in tests)
     if module_path.parts and module_path.parts[0] == "agentflow":
         also_copy_block = '    "agentflow",\n    "config",\n    "scripts",'
+    elif module_path.parts and module_path.parts[0] == "serving":
+        also_copy_block = '    "serving",\n    "config",\n    "scripts",'
     else:
         also_copy_block = '    "src",\n    "config",\n    "sdk",\n    "scripts",'
     return (
@@ -161,12 +170,19 @@ def copy_or_link(source: Path, destination: Path) -> None:
 
 def prepare_workspace(workspace: Path, module_path: Path, target: ModuleTarget) -> None:
     is_agentflow_target = bool(module_path.parts) and module_path.parts[0] == "agentflow"
+    is_serving_target = bool(module_path.parts) and module_path.parts[0] == "serving"
     for name in WORKSPACE_LINKS:
         if is_agentflow_target and name == "sdk":
+            continue
+        # The serving target imports as a top-level `serving` package copied from
+        # src/serving below; copying `src` too would shadow it with src.serving.
+        if is_serving_target and name == "src":
             continue
         copy_or_link(ROOT / name, workspace / name)
     if is_agentflow_target:
         copy_or_link(ROOT / "sdk" / "agentflow", workspace / "agentflow")
+    if is_serving_target:
+        copy_or_link(ROOT / "src" / "serving", workspace / "serving")
     (workspace / "pyproject.toml").write_text(
         build_workspace_pyproject(module_path, target),
         encoding="utf-8",

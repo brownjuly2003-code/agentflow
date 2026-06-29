@@ -206,14 +206,15 @@ asyncio_mode = "auto"
 # security-critical surfaces). It is a superset of what the CI gate actually
 # mutates: scripts/mutation_report.py drives the gate from its own
 # MODULE_TARGETS, which now mutates sdk/agentflow/retry.py,
-# src/serving/semantic_layer/sql_guard.py AND src/serving/masking.py live. The
-# serving modules are mutated as a top-level `serving` package against duckdb-free
-# narrow tests: mutmut's trampoline rejects a module name starting with `src.`,
-# which (not duckdb) was the real blocker. The remaining serving modules below
-# stay declared-only for now -- their unit tests pull the duckdb-backed query
-# engine, so mutating them in isolation needs a duckdb-free test per module (the
-# pattern sql_guard and masking now use); the blocker is the test import chain,
-# not the module. See scripts/mutation_report.py.
+# src/serving/semantic_layer/sql_guard.py, src/serving/masking.py AND
+# src/serving/api/rate_limiter.py live. The serving modules are mutated as a
+# top-level `serving` package against duckdb-free narrow tests: mutmut's
+# trampoline rejects a module name starting with `src.`, which (not duckdb) was
+# the real blocker. The remaining serving modules below stay declared-only for
+# now -- their unit tests pull the duckdb-backed query engine, so mutating them
+# in isolation needs a duckdb-free test per module (the pattern sql_guard,
+# masking and rate_limiter now use); the blocker is the test import chain, not
+# the module. See scripts/mutation_report.py.
 paths_to_mutate = [
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",

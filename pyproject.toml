@@ -201,6 +201,18 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.mutmut]
+# This list is the *declared* mutation-target policy, enforced by
+# tests/unit/test_mutmut_policy.py (paths exist, define real logic, cover the
+# security-critical surfaces). It is NOT what the CI mutation gate actually
+# mutates: scripts/mutation_report.py drives the gate from its own
+# MODULE_TARGETS and currently mutates only the duckdb-free
+# sdk/agentflow/retry.py. The serving modules below cannot be mutation-tested
+# with the current harness -- they transitively import duckdb, whose compiled
+# subpackage (_duckdb._sqltypes) fails to import inside mutmut's mutants/
+# workspace and crashes the run (reproduced on Linux, so it is a mutmut x
+# duckdb limitation, not platform-specific). Extending the gate needs isolated
+# mutant execution (subprocess/spawn) or a different mutation tool. See
+# scripts/mutation_report.py.
 paths_to_mutate = [
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",

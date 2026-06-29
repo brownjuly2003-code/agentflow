@@ -16,6 +16,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 #     pagination SQL wrappers built around prevalidated NL SQL.
 #   - sql_builder: every entity/metric SQL string the engine executes is
 #     assembled here.
+# NOTE: these are the *declared* targets (intent). Actual mutation execution is
+# gated by scripts/mutation_report.py (MODULE_TARGETS), which currently runs only
+# the duckdb-free retry.py -- the serving modules below break mutmut's mutants/
+# workspace via duckdb (see that script's note). These assertions guard the
+# declared policy, not live mutation coverage.
 REQUIRED_MUTATION_TARGETS = {
     "src/serving/semantic_layer/sql_guard.py",
     "src/serving/api/auth/manager.py",

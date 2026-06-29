@@ -23,6 +23,14 @@ class ModuleTarget:
     tests: tuple[str, ...]
 
 
+# The CI mutation gate runs exactly these module/test pairs. It is deliberately
+# limited to the duckdb-free SDK surface: every serving module in the
+# [tool.mutmut] policy (pyproject.toml) transitively imports duckdb, and
+# duckdb's compiled subpackage (_duckdb._sqltypes) fails to import inside
+# mutmut's mutants/ workspace ("'_duckdb' is not a package"), crashing the run
+# with every mutant left "not checked". This is a mutmut x duckdb harness
+# limitation (reproduced on Linux), not a missing test. Adding serving targets
+# needs isolated mutant execution (subprocess/spawn) or a different tool.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,

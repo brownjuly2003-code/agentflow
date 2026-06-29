@@ -29,11 +29,11 @@ class ModuleTarget:
 # that, not duckdb, was the real blocker for the serving modules. The fix is to
 # (a) copy the module so it imports as a top-level package and (b) pair it with a
 # NARROW test that does not pull the duckdb-backed engine import chain. So
-# retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard mutates
-# as serving.semantic_layer.sql_guard (from src/serving) against a duckdb-free
-# test. Serving modules whose tests still need the duckdb engine (the
-# query/masking/auth surfaces) remain harder to isolate and stay declared-only in
-# the [tool.mutmut] policy until they get duckdb-free unit tests of their own.
+# retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard and
+# masking mutate as serving.* packages (from src/serving) against duckdb-free
+# tests. Serving modules whose tests still need the duckdb engine (the query and
+# auth surfaces) remain harder to isolate and stay declared-only in the
+# [tool.mutmut] policy until they get duckdb-free unit tests of their own.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
@@ -42,6 +42,14 @@ MODULE_TARGETS = {
     Path("serving/semantic_layer/sql_guard.py"): ModuleTarget(
         threshold=0.90,
         tests=("tests/unit/test_sql_guard_mutation.py",),
+    ),
+    Path("serving/masking.py"): ModuleTarget(
+        # Lower than sql_guard's 0.90: masking is a much larger surface (config
+        # loading + every redaction strategy), and the narrow duckdb-free test
+        # scores ~0.84 -- enough to catch redaction-logic regressions without
+        # chasing equivalent config-init mutants.
+        threshold=0.80,
+        tests=("tests/unit/test_masking_mutation.py",),
     ),
 }
 

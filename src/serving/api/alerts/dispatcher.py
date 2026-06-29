@@ -218,7 +218,13 @@ def next_escalation_step(
         if step.level > alert.last_escalation_level and elapsed_minutes >= step.after_minutes
     ]
     if due_steps:
-        return due_steps[-1]
+        # Advance exactly one level per evaluation tick — the lowest level above
+        # the current one — so every intermediate escalation target is paged.
+        # Returning the highest due step (due_steps[-1]) silently skipped the
+        # on-call recipients of intervening levels whenever two or more became
+        # due between ticks (sparse polling, restart catch-up).
+        # (audit_28_06_26.md §5 medium: escalation skips intermediate levels)
+        return min(due_steps, key=lambda step: step.level)
     if (
         len(alert.escalation) == 1
         and alert.last_escalation_level == alert.escalation[0].level

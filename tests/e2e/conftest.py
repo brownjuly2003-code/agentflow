@@ -115,6 +115,11 @@ def _write_compose_override(path: Path, host_port: int) -> None:
         '      AGENTFLOW_RATE_LIMIT_RPM: "120"',
         "      AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb",
         "      AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml",
+        # Trust the configured callback host so the SSRF egress guard permits
+        # the webhook delivery to the host gateway (it resolves to a private
+        # address). Tracks _compose_callback_host(): host.docker.internal on
+        # Linux, host.lima.internal on macOS, or an explicit override.
+        f'      AGENTFLOW_EGRESS_ALLOWED_HOSTS: "{_compose_callback_host()}"',
         '      OTEL_SDK_DISABLED: "true"',
         "    ports:",
         f'      - "127.0.0.1:{host_port}:8000"',
@@ -220,6 +225,9 @@ def _start_local_api(tmp_path: Path) -> dict[str, object]:
         "AGENTFLOW_USAGE_DB_PATH": str(tmp_path / "agentflow_usage.duckdb"),
         "AGENTFLOW_WEBHOOKS_FILE": str(tmp_path / "webhooks.yaml"),
         "DUCKDB_PATH": str(tmp_path / "agentflow.duckdb"),
+        # Local mode delivers the webhook callback to 127.0.0.1 (receiver shares
+        # this host); allowlist it so the SSRF egress guard permits the loopback.
+        "AGENTFLOW_EGRESS_ALLOWED_HOSTS": "127.0.0.1",
         "PYTHONUNBUFFERED": "1",
     }
 

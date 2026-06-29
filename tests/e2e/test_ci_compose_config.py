@@ -101,6 +101,20 @@ def test_compose_override_uses_native_host_dns_on_darwin(tmp_path, monkeypatch):
     assert "extra_hosts" not in override["services"]["agentflow-api"]
 
 
+def test_compose_override_allowlists_callback_host_for_egress_guard(tmp_path, monkeypatch):
+    conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
+    monkeypatch.delenv("AGENTFLOW_E2E_CALLBACK_HOST", raising=False)
+    monkeypatch.setattr(conftest_module.platform, "system", lambda: "Linux")
+
+    override_path = tmp_path / "docker-compose.e2e.override.yml"
+    conftest_module._write_compose_override(override_path, 18080)
+
+    override = yaml.safe_load(override_path.read_text(encoding="utf-8"))
+    environment = override["services"]["agentflow-api"]["environment"]
+
+    assert environment["AGENTFLOW_EGRESS_ALLOWED_HOSTS"] == "host.docker.internal"
+
+
 def test_compose_callback_host_uses_linux_docker_alias(monkeypatch):
     conftest_module = _load_module(PROJECT_ROOT / "tests" / "e2e" / "conftest.py", "e2e_conftest")
     monkeypatch.delenv("AGENTFLOW_E2E_CALLBACK_HOST", raising=False)

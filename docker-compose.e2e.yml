@@ -86,6 +86,11 @@ services:
       AGENTFLOW_RATE_LIMIT_RPM: ${AGENTFLOW_RATE_LIMIT_RPM:-120}
       AGENTFLOW_USAGE_DB_PATH: /app/data/agentflow_api_usage.duckdb
       AGENTFLOW_WEBHOOKS_FILE: /app/data/e2e-webhooks.yaml
+      # The e2e webhook callback is delivered to the host gateway, which the
+      # SSRF egress guard rejects as a private address. Trust exactly that
+      # configured callback host (default host.docker.internal) — the guard
+      # stays fully active for every other target.
+      AGENTFLOW_EGRESS_ALLOWED_HOSTS: ${AGENTFLOW_E2E_CALLBACK_HOST:-host.docker.internal}
       DUCKDB_PATH: /app/data/agentflow.duckdb
       REDIS_URL: redis://redis:6379/0
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092

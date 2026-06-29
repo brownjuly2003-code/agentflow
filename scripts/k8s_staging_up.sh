@@ -208,11 +208,17 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/helm/agentflow" \
   --debug
 
 echo "==> Enabling host loopback relay for webhook callbacks..."
+# The relay listens on 127.0.0.1 inside the pod and forwards to the host
+# gateway, so the E2E webhook callback URL is http://127.0.0.1:<port>/callback.
+# The SSRF egress guard rejects 127.0.0.1 as loopback by default; allowlist
+# exactly the relay loopback here (ephemeral staging only) so the webhook
+# delivery test passes without weakening the guard for real targets.
 kubectl set env "deployment/$RELEASE_NAME" \
   --namespace "$NAMESPACE" \
   HOST_LOOPBACK_PROXY_TARGET="$HOST_LOOPBACK_PROXY_TARGET" \
   HOST_LOOPBACK_PROXY_RANGE_START="$HOST_LOOPBACK_PROXY_RANGE_START" \
-  HOST_LOOPBACK_PROXY_RANGE_END="$HOST_LOOPBACK_PROXY_RANGE_END"
+  HOST_LOOPBACK_PROXY_RANGE_END="$HOST_LOOPBACK_PROXY_RANGE_END" \
+  AGENTFLOW_EGRESS_ALLOWED_HOSTS="127.0.0.1"
 
 kubectl patch deployment "$RELEASE_NAME" \
   --namespace "$NAMESPACE" \

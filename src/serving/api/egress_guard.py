@@ -10,15 +10,33 @@ resolving exclusively to public unicast addresses. It is applied both at
 registration time (reject early, 4xx) and immediately before each delivery
 (narrowing the DNS-rebinding window — a name that resolved public at creation
 could later point at an internal IP).
+
+``AGENTFLOW_EGRESS_ALLOWED_HOSTS`` is an opt-in escape hatch (default empty, so
+production keeps the full guard): a comma-separated allowlist of exact
+hostnames a controlled deployment trusts even though they resolve to a
+private/loopback address — e.g. the ``host.docker.internal`` gateway the e2e
+compose stack delivers to, or the ``127.0.0.1`` relay the staging kind cluster
+stands up. It never relaxes the guard for tenant traffic, only for hosts the
+operator explicitly listed.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import os
 import socket
 from urllib.parse import urlsplit
 
 _ALLOWED_SCHEMES = {"http", "https"}
+_ALLOWLIST_ENV = "AGENTFLOW_EGRESS_ALLOWED_HOSTS"
+
+
+def _allowed_hosts() -> frozenset[str]:
+    """Return the operator-configured opt-in allowlist (exact hostnames,
+    lower-cased). Read per call so deployments can set it via the environment
+    without an import-time freeze; empty by default."""
+    raw = os.getenv(_ALLOWLIST_ENV, "")
+    return frozenset(host.strip().lower() for host in raw.split(",") if host.strip())
 
 
 class UnsafeEgressURLError(ValueError):
@@ -53,6 +71,11 @@ def validate_public_url(url: str) -> None:
     host = parts.hostname
     if not host:
         raise UnsafeEgressURLError("missing host")
+    if host.lower() in _allowed_hosts():
+        # Operator explicitly trusts this host (controlled test/relay target).
+        # The scheme check above still applies; only the public-address check
+        # is waived.
+        return
     port = parts.port or (443 if scheme == "https" else 80)
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)

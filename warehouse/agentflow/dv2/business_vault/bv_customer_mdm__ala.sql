@@ -2,6 +2,9 @@
 Purpose: Canonical customer record for the ALA branch.
 Layer:   Business Vault.
 Branch:  ala (KZ jurisdiction; Bitrix loyalty not wired in ALA).
+Hub admission: splitByString('__', record_source)[2] = 'ala' (source-agnostic:
+         1c__/pg_ops__/x5__ all integrated, not only 1C; audit_28_06_26 #12;
+         mirrors the PostgreSQL port's split_part(record_source,'__',2)).
 */
 CREATE OR REPLACE VIEW rv.bv_customer_mdm__ala AS
 WITH
@@ -21,7 +24,7 @@ WITH
     ala_hub AS (
         SELECT customer_hk, customer_bk
         FROM rv.hub_customer
-        WHERE record_source = '1c__ala'
+        WHERE splitByString('__', record_source)[2] = 'ala'
     )
 SELECT
     h.customer_hk                AS customer_hk,

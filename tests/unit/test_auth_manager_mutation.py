@@ -617,6 +617,278 @@ class TestInitConfigBranches:
         m.load()
         assert m.configured_key_count == 0
 
+
+# --------------------------------------------------------------------------- #
+# Full __init__ state: pin every index / window / config assignment so a mutant
+# that drops or swaps one is killed (not merely executed).
+# --------------------------------------------------------------------------- #
+
+
+class TestInitState:
+    def test_construction_initializes_empty_indexes_and_windows(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_ADMIN_KEY", raising=False)
+        monkeypatch.delenv("AGENTFLOW_ROTATION_GRACE_PERIOD_SECONDS", raising=False)
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        clock = FrozenClock(1_234.0)
+        m = _build_manager(time_source=clock)
+        assert m.api_keys_path is None
+        assert str(m.db_path) == "usage.duckdb"
+        assert m.admin_key is None
+        assert m.time_source is clock
+        assert m.keys_by_value == {}
+        assert m._keys_by_id == {}
+        assert m._hashed_keys == []
+        assert m._keys_by_lookup == {}
+        assert m._previous_keys_by_lookup == {}
+        assert m._loaded_keys == []
+        assert m._runtime_plaintext_by_hash == {}
+        assert dict(m._rate_windows) == {}
+        assert dict(m._failed_auth_windows) == {}
+        assert m.rotation_grace_period_seconds == DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
+        assert m.security_policy is not None
+        assert m.rate_limiter is not None
+        assert m.audit_publisher is not None
+        assert m._key_rotator._manager is m
+
+    def test_admin_key_param_overrides_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AGENTFLOW_ADMIN_KEY", "from-env")
+        m = _build_manager(admin_key="explicit")
+        assert m.admin_key == "explicit"
+
+    def test_admin_key_falls_back_to_env_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AGENTFLOW_ADMIN_KEY", "from-env")
+        m = _build_manager(admin_key=None)
+        assert m.admin_key == "from-env"
+
+    def test_injected_rate_limiter_is_used_verbatim(self) -> None:
+        limiter = _FullRemainingLimiter()
+        m = _build_manager(rate_limiter=limiter)
+        assert m.rate_limiter is limiter
+
+    def test_default_rate_limiter_has_redis_handle_disabled_without_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        m = _build_manager()
+        assert m.rate_limiter._redis is None
+
+    def test_neutral_db_path_is_not_rewritten_even_with_pipeline_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_USAGE_DB_PATH", raising=False)
+        monkeypatch.setenv("DUCKDB_PATH", "/data/pipeline.duckdb")
+        # db_path != the magic "agentflow_api.duckdb" -> the derivation guard is
+        # False and the path is left untouched.
+        m = _build_manager(db_path="custom.duckdb")
+        assert str(m.db_path) == "custom.duckdb"
+
+    def test_usage_db_path_env_blocks_derivation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AGENTFLOW_USAGE_DB_PATH", "/explicit.duckdb")
+        monkeypatch.setenv("DUCKDB_PATH", "/data/pipeline.duckdb")
+        # AGENTFLOW_USAGE_DB_PATH is set -> `is None` guard is False -> the magic
+        # name is NOT rewritten despite DUCKDB_PATH being present.
+        m = _build_manager(db_path="agentflow_api.duckdb")
+        assert str(m.db_path) == "agentflow_api.duckdb"
+
+
+# --------------------------------------------------------------------------- #
+# load(): rebuild the value / id / hash / lookup indexes from a populated config
+# and prune the runtime plaintext cache. Empty-config load is covered above; this
+# exercises and pins the per-key loop body and the cache-GC.
+# --------------------------------------------------------------------------- #
+
+
+class TestLoadRebuildsIndexes:
+    _CONFIG_YAML = (
+        "keys:\n"
+        "  - key_id: id-plain\n"
+        "    key: plain1\n"
+        "    name: n1\n"
+        "    tenant: t1\n"
+        "    created_at: 2026-01-01\n"
+        "  - key_id: id-hash\n"
+        "    key_hash: hash2\n"
+        "    key_lookup: lookup2\n"
+        "    name: n2\n"
+        "    tenant: t2\n"
+        "    created_at: 2026-01-01\n"
+    )
+
+    def test_load_indexes_plaintext_and_hashed_keys(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_API_KEYS", raising=False)
+        keys_file = tmp_path / "api_keys.yaml"  # type: ignore[operator]
+        keys_file.write_text(self._CONFIG_YAML, encoding="utf-8")
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+
+        assert m.configured_key_count == 2
+        # plaintext key -> keys_by_value with a current-slot copy
+        assert "plain1" in m.keys_by_value
+        assert m.keys_by_value["plain1"].matched_slot == "current"
+        assert m.keys_by_value["plain1"].tenant == "t1"
+        # both ids indexed
+        assert set(m._keys_by_id) == {"id-plain", "id-hash"}
+        # only the hashed entry lands in _hashed_keys and the lookup index
+        assert [k.key_hash for k in m._hashed_keys] == ["hash2"]
+        assert "lookup2" in m._keys_by_lookup
+        assert m._keys_by_lookup["lookup2"].key_id == "id-hash"
+
+    def test_load_rebuilds_runtime_cache_for_live_hash_and_prunes_stale(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_API_KEYS", raising=False)
+        keys_file = tmp_path / "api_keys.yaml"  # type: ignore[operator]
+        keys_file.write_text(self._CONFIG_YAML, encoding="utf-8")
+        m = _build_manager(api_keys_path=keys_file)
+        # A live hash (present in config) keeps its cached plaintext and is
+        # re-indexed into keys_by_value; a stale hash (gone from config) is GC'd.
+        m._runtime_plaintext_by_hash = {"hash2": "runtime-plain", "stale-hash": "x"}
+        m.load()
+        assert m._runtime_plaintext_by_hash == {"hash2": "runtime-plain"}
+        assert "runtime-plain" in m.keys_by_value
+        assert m.keys_by_value["runtime-plain"].key_hash == "hash2"
+
+
+# --------------------------------------------------------------------------- #
+# authenticate(): previous-key (rotation grace) resolution paths.
+# --------------------------------------------------------------------------- #
+
+
+class TestAuthenticatePreviousKey:
+    def test_indexed_previous_key_resolves_to_previous_slot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        m = _build_manager()
+        entry = _key(key=None, key_hash="cur", key_lookup="cur-lk")
+        entry = entry.model_copy(
+            update={"previous_key_hash": "prev-hash", "previous_key_lookup": "prev-lk"}
+        )
+        m._previous_keys_by_lookup = {"prev-lk": entry}
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "prev-lk")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: True)
+        monkeypatch.setattr(manager_module, "verify_api_key", lambda value, h: h == "prev-hash")
+        out = m.authenticate("old-key")
+        assert out is not None
+        assert out.matched_slot == "previous"
+        assert out.key == "old-key"
+
+    def test_indexed_previous_inactive_does_not_match(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        m = _build_manager()
+        entry = _key(key=None, key_hash="cur", key_lookup="cur-lk")
+        entry = entry.model_copy(
+            update={"previous_key_hash": "prev-hash", "previous_key_lookup": "prev-lk"}
+        )
+        m._previous_keys_by_lookup = {"prev-lk": entry}
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "prev-lk")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: False)
+        monkeypatch.setattr(manager_module, "verify_api_key", lambda value, h: True)
+        assert m.authenticate("old-key") is None
+
+    def test_legacy_previous_scan_matches_unindexed_previous_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        m = _build_manager()
+        entry = _key(key=None, key_hash="cur")
+        entry = entry.model_copy(
+            update={"previous_key_hash": "prev-hash", "previous_key_lookup": None}
+        )
+        m._loaded_keys = [entry]
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: True)
+        monkeypatch.setattr(manager_module, "verify_api_key", lambda value, h: h == "prev-hash")
+        out = m.authenticate("old-key")
+        assert out is not None
+        assert out.matched_slot == "previous"
+
+    def test_legacy_previous_scan_skips_indexed_entries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # An entry WITH a previous_key_lookup must be skipped by the legacy scan
+        # (it is handled by the indexed path), not re-verified here.
+        m = _build_manager()
+        entry = _key(key=None, key_hash="cur")
+        entry = entry.model_copy(
+            update={"previous_key_hash": "prev-hash", "previous_key_lookup": "has-lk"}
+        )
+        m._loaded_keys = [entry]
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: True)
+        seen: list[str] = []
+
+        def _verify(value: str, h: str) -> bool:
+            seen.append(h)
+            return True
+
+        monkeypatch.setattr(manager_module, "verify_api_key", _verify)
+        assert m.authenticate("old-key") is None
+        assert "prev-hash" not in seen  # indexed entry skipped by the scan
+
+
+# --------------------------------------------------------------------------- #
+# Extra pins: legacy-key field population, sweep boundary, rate-limit boundary.
+# --------------------------------------------------------------------------- #
+
+
+class TestLegacyEnvKeyFields:
+    def test_constructed_key_populates_every_field(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        m = _build_manager()
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "thekey:TheName")
+        [k] = m._legacy_env_keys()
+        assert k.key == "thekey"
+        assert k.name == "TheName"
+        assert k.tenant == "default"
+        assert k.rate_limit_rpm == DEFAULT_RATE_LIMIT_RPM
+        assert k.allowed_entity_types is None
+        assert isinstance(k.created_at, date)
+        # key_id is generated from tenant+name slugs.
+        assert k.key_id is not None
+        assert k.key_id.startswith("default-thename-")
+
+    def test_name_is_stripped_before_id_generation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        m = _build_manager()
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "  spacedkey : Spaced Name ")
+        [k] = m._legacy_env_keys()
+        assert k.key == "spacedkey"
+        assert k.name == "Spaced Name"
+        assert k.key_id is not None
+        assert k.key_id.startswith("default-spaced-name-")
+
+
+class TestSweepBoundary:
+    def test_rate_stamp_exactly_at_cutoff_is_dropped(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock)
+        # stamp == now - window == cutoff; kept only if stamp > cutoff -> dropped.
+        m._rate_windows["k"] = [1_000.0 - DEFAULT_RATE_LIMIT_WINDOW_SECONDS]
+        m._sweep_expired_windows()
+        assert "k" not in m._rate_windows
+
+    def test_failed_auth_stamp_just_inside_window_is_kept(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock)
+        inside = 1_000.0 - FAILED_AUTH_WINDOW_SECONDS + 1.0
+        m._failed_auth_windows["ip"] = [inside]
+        m._sweep_expired_windows()
+        assert m._failed_auth_windows["ip"] == [inside]
+
+
+class TestRateLimitBoundary:
+    def test_is_rate_limited_allows_exactly_up_to_rpm(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock)
+        tenant_key = _key(rate_limit_rpm=3)
+        # len(window) >= rpm blocks; the 4th call (window already 3) trips.
+        assert m.is_rate_limited(tenant_key) is False
+        assert m.is_rate_limited(tenant_key) is False
+        assert m.is_rate_limited(tenant_key) is False
+        assert m.is_rate_limited(tenant_key) is True
+
     def test_shutdown_is_idempotent(self) -> None:
         m = _build_manager()
         m.shutdown()

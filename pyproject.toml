@@ -216,10 +216,11 @@ asyncio_mode = "auto"
 # survivors are equivalent mutants (structured-logging args, model_copy updates
 # equal to their defaults, redis-url strings masked by the `_redis = None`
 # override, the env-only-dead write path) -- every behaviour-reachable mutant,
-# including every auth-bypass and throttle off-by-one, is killed. The remaining
-# declared serving surface -- auth/key_rotation -- stays declared-only until it
-# gets a duckdb-free test of its own (the pattern the live modules use); the
-# blocker is the test import chain, not the module. See scripts/mutation_report.py.
+# including every auth-bypass and throttle off-by-one, is killed. auth/key_rotation
+# is now live too (0.90, via a duckdb-free test that stubs its three duckdb-querying
+# usage-stat methods and its two while-True uniqueness loops out of coverage), so
+# the declared set now equals the live set -- there is no declared-but-not-live
+# serving surface left. See scripts/mutation_report.py.
 paths_to_mutate = [
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",

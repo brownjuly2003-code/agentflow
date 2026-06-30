@@ -172,25 +172,34 @@ def ensure_webhook_delivery_queue_table(conn: duckdb.DuckDBPyConnection) -> None
     survive a process restart. ``body`` stores the canonical payload so a
     delivery can be replayed without re-reading ``pipeline_events``.
     """
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS webhook_delivery_queue (
-            webhook_id VARCHAR NOT NULL,
-            event_id VARCHAR NOT NULL,
-            tenant VARCHAR,
-            event_type VARCHAR,
-            body VARCHAR,
-            status VARCHAR NOT NULL DEFAULT 'pending',
-            attempts INTEGER NOT NULL DEFAULT 0,
-            next_attempt_at TIMESTAMP,
-            last_status_code INTEGER,
-            last_error VARCHAR,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (webhook_id, event_id)
+    # Serialize the lazy DDL behind the shared catalog lock, exactly like the
+    # three #123-locked ``ensure_*`` siblings: the dispatcher creates this table
+    # on the shared serving connection from the event loop while an offloaded
+    # read handler runs its own ``ensure_*`` on a worker thread, and concurrent
+    # CREATE on a cold DuckDB catalog conflicts across *different* tables too.
+    # Omitting the lock here left the cross-table "Catalog write-write conflict"
+    # the #123 fix set out to remove still reachable on a cold restart.
+    # (audit_30 D2/A2 follow-up residual)
+    with catalog_ddl_lock:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS webhook_delivery_queue (
+                webhook_id VARCHAR NOT NULL,
+                event_id VARCHAR NOT NULL,
+                tenant VARCHAR,
+                event_type VARCHAR,
+                body VARCHAR,
+                status VARCHAR NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at TIMESTAMP,
+                last_status_code INTEGER,
+                last_error VARCHAR,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (webhook_id, event_id)
+            )
+            """
         )
-        """
-    )
 
 
 class WebhookDispatcher:

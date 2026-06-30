@@ -12,14 +12,23 @@ import src.serving.api.webhook_dispatcher as webhook_module
 from src.db_concurrency import catalog_ddl_lock
 from src.processing.event_replayer import ensure_dead_letter_table
 from src.serving.api.alerts.history import ensure_alert_history_table
-from src.serving.api.webhook_dispatcher import ensure_webhook_deliveries_table
+from src.serving.api.webhook_dispatcher import (
+    ensure_webhook_deliveries_table,
+    ensure_webhook_delivery_queue_table,
+)
 
 Ensurer = Callable[[duckdb.DuckDBPyConnection], None]
 
+# ``ensure_webhook_delivery_queue_table`` is the dispatcher's own lazy CREATE
+# (run on the shared serving connection from the event loop). It was left out of
+# the #123 lock and so still raced the offloaded read-handler DDL across tables;
+# include it here so both the same-table and cross-table hammers cover it.
+# (audit_30 D2/A2 follow-up residual)
 _ENSURERS: list[Ensurer] = [
     ensure_dead_letter_table,
     ensure_alert_history_table,
     ensure_webhook_deliveries_table,
+    ensure_webhook_delivery_queue_table,
 ]
 
 
@@ -73,8 +82,9 @@ def test_ensure_tables_concurrency_safe_across_tables_cold_db() -> None:
 
 
 def test_catalog_ddl_lock_is_a_single_shared_instance() -> None:
-    # All three helpers must guard DDL with the *same* lock instance, or the
-    # cross-table conflict resurfaces. Pins against a future per-module lock.
+    # Every ensure_* helper (across all three modules) must guard DDL with the
+    # *same* lock instance, or the cross-table conflict resurfaces. Pins against a
+    # future per-module lock.
     assert (
         event_replayer_module.catalog_ddl_lock
         is history_module.catalog_ddl_lock

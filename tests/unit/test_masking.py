@@ -193,6 +193,36 @@ def test_mask_query_results_masks_derived_pii_column(tmp_path: Path):
     assert rows == [{"e": "a***@example.com"}]
 
 
+def test_mask_query_results_masks_pii_renamed_through_subquery(tmp_path: Path):
+    # An inner rename hides the PII source name from the outer projection, so the
+    # one-level lineage resolver saw only the renamed output column and returned
+    # cleartext (the D2 fix's subquery/CTE-alias bypass). True lineage traces the
+    # output column back to `email` through the subquery/CTE. (audit_30 D2 follow-up)
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    for sql, out_col in (
+        ("SELECT contact FROM (SELECT email AS contact FROM users_enriched) t", "contact"),
+        (
+            "WITH t AS (SELECT email AS contact FROM users_enriched) SELECT contact FROM t",
+            "contact",
+        ),
+        (
+            "SELECT outer_c FROM (SELECT inner_c AS outer_c "
+            "FROM (SELECT email AS inner_c FROM users_enriched) a) b",
+            "outer_c",
+        ),
+    ):
+        rows, masked = masker.mask_query_results(
+            sql,
+            [{out_col: "alice@example.com"}],
+            tenant="acme",
+            table_to_entity={"users_enriched": "user"},
+        )
+
+        assert masked is True, sql
+        assert rows == [{out_col: "a***@example.com"}], sql
+
+
 def test_mask_query_results_masks_select_star_by_name(tmp_path: Path):
     # SELECT * has no resolvable projection lineage; masking falls back to
     # matching rule fields against the (canonical) output column names.

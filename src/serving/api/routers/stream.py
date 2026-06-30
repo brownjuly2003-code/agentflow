@@ -5,9 +5,11 @@ import json
 from collections.abc import AsyncIterator
 from datetime import datetime
 
+import duckdb
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from opentelemetry import trace
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/v1/stream", tags=["stream"])
 tracer = trace.get_tracer("agentflow.api")
@@ -19,9 +21,38 @@ async def fetch_recent_events(
     entity_id: str | None = None,
     limit: int = 10,
 ) -> list[dict[str, object]]:
-    """Fetch recent pipeline events from DuckDB with optional filters."""
-    conn = request.app.state.query_engine._conn
-    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    """Fetch recent pipeline events from DuckDB with optional filters.
+
+    Offloaded to a worker thread: the SSE generator calls this once per second
+    per open stream, so running the scan inline would block the event loop (and
+    every other tenant on the worker) for the scan's duration. (audit_30 A2)
+    """
+    return await run_in_threadpool(_fetch_recent_events_sync, request, event_type, entity_id, limit)
+
+
+def _fetch_recent_events_sync(
+    request: Request,
+    event_type: str | None,
+    entity_id: str | None,
+    limit: int,
+) -> list[dict[str, object]]:
+    # Use a dedicated cursor (not the shared connection object) so concurrent
+    # streams running on different worker threads don't collide on it.
+    cursor = request.app.state.query_engine._conn.cursor()
+    try:
+        return _fetch_recent_events_with_cursor(cursor, request, event_type, entity_id, limit)
+    finally:
+        cursor.close()
+
+
+def _fetch_recent_events_with_cursor(
+    cursor: duckdb.DuckDBPyConnection,
+    request: Request,
+    event_type: str | None,
+    entity_id: str | None,
+    limit: int,
+) -> list[dict[str, object]]:
+    columns = {row[1] for row in cursor.execute("PRAGMA table_info('pipeline_events')").fetchall()}
     time_column = "processed_at" if "processed_at" in columns else "created_at"
     tenant_id = getattr(request.state, "tenant_id", None)
     if tenant_id is not None and "tenant_id" not in columns and tenant_id != "default":
@@ -80,8 +111,8 @@ async def fetch_recent_events(
     sql = f"{sql} ORDER BY {time_column} DESC LIMIT ?"
     params.append(limit)
 
-    rows = conn.execute(sql, params).fetchall()
-    result_columns = [description[0] for description in conn.description]
+    rows = cursor.execute(sql, params).fetchall()
+    result_columns = [description[0] for description in cursor.description]
     return [dict(zip(result_columns, row, strict=False)) for row in rows]
 
 

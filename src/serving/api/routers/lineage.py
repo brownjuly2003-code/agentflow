@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/v1/lineage", tags=["lineage"])
 
@@ -66,48 +67,57 @@ def _quality_score(rows: list[dict], *, default: float | None = None) -> float |
 
 
 def _fetch_matching_events(request: Request, entity_type: str, entity_id: str) -> list[dict]:
-    conn = request.app.state.query_engine._conn
-    columns = {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
-    if "entity_id" not in columns:
-        return []
+    # Runs on a worker thread (get_lineage offloads it) so the full-scan can't
+    # block the event loop and starve every other tenant on the worker. Use a
+    # dedicated cursor rather than the shared connection object so concurrent
+    # reads don't collide on it. (audit_30_06_26.md A2)
+    cursor = request.app.state.query_engine._conn.cursor()
+    try:
+        columns = {
+            row[1] for row in cursor.execute("PRAGMA table_info('pipeline_events')").fetchall()
+        }
+        if "entity_id" not in columns:
+            return []
 
-    tenant_id = getattr(request.state, "tenant_id", None)
-    if tenant_id is not None and "tenant_id" not in columns and tenant_id != "default":
-        return []
-    time_column = "processed_at" if "processed_at" in columns else "created_at"
-    select_columns = [
-        "event_id",
-        "topic",
-        f"{time_column} AS processed_at",
-        (
-            "COALESCE(tenant_id, 'default') AS tenant_id"
-            if "tenant_id" in columns
-            else "'default' AS tenant_id"
-        ),
-        "event_type" if "event_type" in columns else "NULL AS event_type",
-        "entity_id",
-        "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",
-    ]
-    where_clauses = ["entity_id = ?"]
-    params: list[object] = [entity_id]
-    if "entity_type" in columns:
-        where_clauses.append("entity_type = ?")
-        params.append(entity_type)
-    if tenant_id is not None and "tenant_id" in columns:
-        where_clauses.append("COALESCE(tenant_id, 'default') = ?")
-        params.append(str(tenant_id))
+        tenant_id = getattr(request.state, "tenant_id", None)
+        if tenant_id is not None and "tenant_id" not in columns and tenant_id != "default":
+            return []
+        time_column = "processed_at" if "processed_at" in columns else "created_at"
+        select_columns = [
+            "event_id",
+            "topic",
+            f"{time_column} AS processed_at",
+            (
+                "COALESCE(tenant_id, 'default') AS tenant_id"
+                if "tenant_id" in columns
+                else "'default' AS tenant_id"
+            ),
+            "event_type" if "event_type" in columns else "NULL AS event_type",
+            "entity_id",
+            "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",
+        ]
+        where_clauses = ["entity_id = ?"]
+        params: list[object] = [entity_id]
+        if "entity_type" in columns:
+            where_clauses.append("entity_type = ?")
+            params.append(entity_type)
+        if tenant_id is not None and "tenant_id" in columns:
+            where_clauses.append("COALESCE(tenant_id, 'default') = ?")
+            params.append(str(tenant_id))
 
-    cursor = conn.execute(
-        (
-            # selected columns come from the schema allowlist
-            f"SELECT {', '.join(select_columns)} "  # nosec B608
-            "FROM pipeline_events "
-            f"WHERE {' AND '.join(where_clauses)} ORDER BY {time_column} ASC"
-        ),
-        params,
-    )
-    result_columns = [description[0] for description in cursor.description]
-    return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
+        cursor.execute(
+            (
+                # selected columns come from the schema allowlist
+                f"SELECT {', '.join(select_columns)} "  # nosec B608
+                "FROM pipeline_events "
+                f"WHERE {' AND '.join(where_clauses)} ORDER BY {time_column} ASC"
+            ),
+            params,
+        )
+        result_columns = [description[0] for description in cursor.description]
+        return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
 
 
 @router.get(
@@ -137,7 +147,7 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request) -> Lin
             detail=f"API key '{tenant_key.name}' cannot access entity type '{entity_type}'.",
         )
 
-    rows = _fetch_matching_events(request, entity_type, entity_id)
+    rows = await run_in_threadpool(_fetch_matching_events, request, entity_type, entity_id)
     if not rows:
         raise HTTPException(
             status_code=404,

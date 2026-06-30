@@ -113,6 +113,57 @@ async def test_escalation_level_not_advanced_on_delivery_failure(
     assert triggered == 0
 
 
+@pytest.mark.asyncio
+async def test_resolved_does_not_advance_state_on_delivery_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The condition cleared (triggered=False) but the resolved page fails to
+    # deliver. Pre-fix the alert was forced to state="resolved"/fired_at=None
+    # regardless, so the resolved notification was lost for good and the receiver
+    # kept the incident open. Now fired_at stays set so the next tick re-attempts.
+    # (audit_30_06_26.md C1)
+    _patch_eval(monkeypatch, triggered=False)
+    _patch_deliver(monkeypatch, success=False)
+
+    fired = datetime(2026, 6, 28, 11, 0, tzinfo=UTC)  # 60 min before _NOW
+    alert = _alert(
+        fired_at=fired,
+        state="firing",
+        last_escalation_level=1,
+        last_condition_triggered=True,
+    )
+
+    result, changed, triggered = await escalation.dispatch_alert(None, alert, _NOW)
+
+    assert result.fired_at == fired  # not cleared
+    assert result.state != "resolved"
+    assert triggered == 0
+
+
+@pytest.mark.asyncio
+async def test_resolved_advances_state_on_delivery_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Happy path still resolves: when the resolved page delivers, the alert
+    # advances to resolved and clears fired_at.
+    _patch_eval(monkeypatch, triggered=False)
+    _patch_deliver(monkeypatch, success=True)
+
+    fired = datetime(2026, 6, 28, 11, 0, tzinfo=UTC)
+    alert = _alert(
+        fired_at=fired,
+        state="firing",
+        last_escalation_level=1,
+        last_condition_triggered=True,
+    )
+
+    result, changed, triggered = await escalation.dispatch_alert(None, alert, _NOW)
+
+    assert result.fired_at is None
+    assert result.state == "resolved"
+    assert triggered == 1
+
+
 # --- next_escalation_step: no intermediate-level skip (audit_28_06_26.md §5 medium) ---
 
 _FIRED = datetime(2026, 6, 28, 11, 0, tzinfo=UTC)  # 60 min before _NOW

@@ -194,8 +194,9 @@ async def dispatch_alert(
                 continue
             if step.webhook_url not in notified_urls:
                 notified_urls.append(step.webhook_url)
+        all_delivered = True
         for webhook_url in notified_urls or [alert.webhook_url]:
-            await deliver(
+            result = await deliver(
                 dispatcher,
                 alert,
                 payload,
@@ -205,7 +206,20 @@ async def dispatch_alert(
                 change_pct=evaluation["change_pct"],
                 webhook_url=webhook_url,
             )
-            triggered += 1
+            if result.get("success"):
+                triggered += 1
+            else:
+                all_delivered = False
+        if not all_delivered:
+            # A resolved notification failed to deliver: do NOT clear fired_at or
+            # advance to the "resolved" state this tick, so the next evaluation
+            # tick re-attempts. Otherwise the resolved page is lost for good and
+            # the receiver keeps treating the incident as open — the same silent
+            # loss the firing/escalation paths were hardened against.
+            # (audit_30_06_26.md C1; mirrors audit_28_06_26.md #4)
+            alert.last_condition_triggered = False
+            alert.updated_at = now
+            return alert, True, triggered
         alert.state = "resolved"
         alert.resolved_at = now
         alert.fired_at = None

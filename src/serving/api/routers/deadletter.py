@@ -77,7 +77,13 @@ def _read_cursor(request: Request) -> duckdb.DuckDBPyConnection:
     different worker threads from colliding on the connection. (audit_30_06_26.md A2)
     """
     cursor = cast(duckdb.DuckDBPyConnection, request.app.state.query_engine._conn).cursor()
-    ensure_dead_letter_table(cursor)
+    try:
+        ensure_dead_letter_table(cursor)
+    except Exception:
+        # Don't leak the freshly-opened cursor if the lazy DDL fails before the
+        # handler's own try/finally takes over.
+        cursor.close()
+        raise
     return cursor
 
 

@@ -6,34 +6,40 @@ from typing import TYPE_CHECKING
 
 import duckdb
 
+from src.db_concurrency import catalog_ddl_lock
+
 if TYPE_CHECKING:
     from .dispatcher import AlertRule
 
 
 def ensure_alert_history_table(conn: duckdb.DuckDBPyConnection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS alert_history (
-            delivery_id VARCHAR,
-            alert_id VARCHAR,
-            alert_name VARCHAR,
-            metric VARCHAR,
-            current_value DOUBLE,
-            previous_value DOUBLE,
-            change_pct DOUBLE,
-            threshold DOUBLE,
-            condition VARCHAR,
-            metric_window VARCHAR,
-            tenant VARCHAR,
-            event_type VARCHAR,
-            status_code INTEGER,
-            success BOOLEAN,
-            error TEXT,
-            payload JSON,
-            triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    # Serialize the lazy DDL: the offloaded read handler calls this on a worker
+    # thread, and concurrent CREATE on a cold DuckDB catalog conflicts (across
+    # tables too). (audit_30 A2 follow-up: #120 offload race)
+    with catalog_ddl_lock:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS alert_history (
+                delivery_id VARCHAR,
+                alert_id VARCHAR,
+                alert_name VARCHAR,
+                metric VARCHAR,
+                current_value DOUBLE,
+                previous_value DOUBLE,
+                change_pct DOUBLE,
+                threshold DOUBLE,
+                condition VARCHAR,
+                metric_window VARCHAR,
+                tenant VARCHAR,
+                event_type VARCHAR,
+                status_code INTEGER,
+                success BOOLEAN,
+                error TEXT,
+                payload JSON,
+                triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
 
 
 def get_alert_history(conn: duckdb.DuckDBPyConnection, alert_id: str) -> list[dict]:

@@ -230,15 +230,6 @@ def _build_manager(
     return manager
 
 
-@pytest.fixture
-def manager(tmp_path: object, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
-    mgr = _build_manager(tmp_path, monkeypatch)
-    try:
-        yield mgr
-    finally:
-        mgr.shutdown()
-
-
 def _tk(**overrides: object) -> TenantKey:
     base: dict[str, object] = {
         "key": "plain-key",
@@ -266,8 +257,9 @@ def _assert_hash_uses_policy(calls: list, manager: AuthManager) -> None:
 
 class TestCreateKey:
     def test_create_key_populates_every_field_and_persists_without_plaintext(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
         gen_calls: list = []
         id_calls: list = []
@@ -319,8 +311,9 @@ class TestCreateKey:
         assert "key" not in entry  # never persist plaintext for a hashed key
 
     def test_create_key_validates_generated_key_length(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # create_key must run validate_generated_key on the generated key; a
         # mutant that validates None instead would let a too-short key through.
         rotator = manager._key_rotator
@@ -340,8 +333,9 @@ class TestCreateKey:
 
 class TestRotateKey:
     def test_rotate_plaintext_key_hashes_old_material_and_opens_grace(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
         gen_calls: list = []
         hash_calls: list = []
@@ -406,8 +400,9 @@ class TestRotateKey:
             manager.shutdown()
 
     def test_rotate_validates_generated_key_length(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # rotate_key must validate the freshly generated key; a mutant validating
         # None would let a too-short rotated key through.
         rotator = manager._key_rotator
@@ -419,16 +414,18 @@ class TestRotateKey:
             manager.rotate_key(SEED_KEY_ID)
 
     def test_rotate_unknown_key_id_raises_with_that_id(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         monkeypatch.setattr(manager._key_rotator, "generate_key", lambda tenant, name: "x" * 50)
         # The KeyError must name the missing id (a KeyError(None) mutant is killed).
         with pytest.raises(KeyError, match="does-not-exist"):
             manager.rotate_key("does-not-exist")
 
     def test_rotate_twice_rejects_overlap(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
         monkeypatch.setattr(
             rotator, "generate_key", lambda tenant, name: "af-prod-acme-rotation-agent-" + "y" * 43
@@ -447,17 +444,26 @@ class TestRotateKey:
 
 
 class TestRevokeKey:
-    def test_revoke_known_plaintext_removes_it(self, manager: AuthManager) -> None:
+    def test_revoke_known_plaintext_removes_it(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         assert manager.revoke_key("rotation-acme-key") is True
         assert "rotation-acme-key" not in manager.keys_by_value
         assert manager.configured_key_count == 0
 
-    def test_revoke_unknown_returns_false(self, manager: AuthManager) -> None:
+    def test_revoke_unknown_returns_false(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # remaining == all keys -> nothing matched -> False, config untouched.
         assert manager.revoke_key("not-a-real-key") is False
         assert manager.configured_key_count == 1
 
-    def test_revoke_clears_cached_material_for_the_removed_key(self, manager: AuthManager) -> None:
+    def test_revoke_clears_cached_material_for_the_removed_key(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # Revoking a key must not leave its plaintext lingering in the runtime
         # cache. (revoke_key's own value/hash prune is belt-and-suspenders that
         # load()'s live-hash reprune subsumes -- those filter clauses are
@@ -467,7 +473,10 @@ class TestRevokeKey:
         assert manager.configured_key_count == 0
         assert manager._runtime_plaintext_by_hash == {}
 
-    def test_revoke_cancels_the_removed_keys_cleanup_timer(self, manager: AuthManager) -> None:
+    def test_revoke_cancels_the_removed_keys_cleanup_timer(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # A revoked key with a scheduled rotation-cleanup timer must have that
         # timer cancelled by id (kills the `is None` branch flip and the
         # cancel(None) arg mutant).
@@ -485,8 +494,9 @@ class TestRevokeKey:
 
 class TestRevokeOldKey:
     def test_revoke_old_key_ends_grace_and_cancels_timer(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
         monkeypatch.setattr(
             rotator, "generate_key", lambda tenant, name: "af-prod-acme-rotation-agent-" + "y" * 43
@@ -504,11 +514,17 @@ class TestRevokeOldKey:
         assert rotator.rotation_phase(stored) == "idle"
         assert timer.cancelled is True  # cancel(key_id), not cancel(None)
 
-    def test_revoke_old_key_without_rotation_returns_false(self, manager: AuthManager) -> None:
+    def test_revoke_old_key_without_rotation_returns_false(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # previous_key_hash is None -> the early `return False` branch.
         assert manager.revoke_old_key(SEED_KEY_ID) is False
 
-    def test_revoke_old_key_unknown_raises_with_that_id(self, manager: AuthManager) -> None:
+    def test_revoke_old_key_unknown_raises_with_that_id(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         with pytest.raises(KeyError, match="does-not-exist"):
             manager.revoke_old_key("does-not-exist")
 
@@ -520,8 +536,9 @@ class TestRevokeOldKey:
 
 class TestGetRotationStatus:
     def test_status_idle_uses_key_id_for_usage(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # old_key_usage_last_hour must be called with the requested key_id (a
         # mutant passing None is killed because the stub keys off the id).
         monkeypatch.setattr(
@@ -535,8 +552,9 @@ class TestGetRotationStatus:
         assert status["requests_on_old_key_last_hour"] == 7
 
     def test_status_grace_period_serialises_active_until(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
         monkeypatch.setattr(
             rotator, "generate_key", lambda tenant, name: "af-prod-acme-rotation-agent-" + "y" * 43
@@ -550,7 +568,10 @@ class TestGetRotationStatus:
         assert status["phase"] == "grace_period"
         assert status["old_key_active_until"] == expires_at.isoformat()
 
-    def test_status_unknown_raises_with_that_id(self, manager: AuthManager) -> None:
+    def test_status_unknown_raises_with_that_id(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         with pytest.raises(KeyError, match="does-not-exist"):
             manager.get_rotation_status("does-not-exist")
 
@@ -620,8 +641,9 @@ class TestListKeysWithUsage:
             manager.shutdown()
 
     def test_listing_falls_back_to_keys_by_value_when_loaded_keys_empty(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # When _loaded_keys is falsy the source is list(keys_by_value.values());
         # a mutant that calls list(None) raises here (kills the fallback mutant).
         rotator = manager._key_rotator
@@ -639,29 +661,42 @@ class TestListKeysWithUsage:
 
 
 class TestPreviousKeyActive:
-    def test_inactive_when_no_previous_hash(self, manager: AuthManager) -> None:
+    def test_inactive_when_no_previous_hash(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(previous_key_active_until=datetime.now(UTC) + timedelta(hours=1))
         assert manager._key_rotator.is_previous_key_active(item) is False
 
-    def test_inactive_when_no_active_until(self, manager: AuthManager) -> None:
+    def test_inactive_when_no_active_until(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(previous_key_hash="prev")
         assert manager._key_rotator.is_previous_key_active(item) is False
 
-    def test_inactive_when_expired(self, manager: AuthManager) -> None:
+    def test_inactive_when_expired(self, tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(
             previous_key_hash="prev",
             previous_key_active_until=datetime.now(UTC) - timedelta(hours=1),
         )
         assert manager._key_rotator.is_previous_key_active(item) is False
 
-    def test_active_when_hash_and_future_until(self, manager: AuthManager) -> None:
+    def test_active_when_hash_and_future_until(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(
             previous_key_hash="prev",
             previous_key_active_until=datetime.now(UTC) + timedelta(hours=1),
         )
         assert manager._key_rotator.is_previous_key_active(item) is True
 
-    def test_rotation_phase_reflects_active_state(self, manager: AuthManager) -> None:
+    def test_rotation_phase_reflects_active_state(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         active = _tk(
             previous_key_hash="prev",
             previous_key_active_until=datetime.now(UTC) + timedelta(hours=1),
@@ -672,7 +707,10 @@ class TestPreviousKeyActive:
 
 
 class TestClearPreviousKey:
-    def test_clears_all_three_previous_fields(self, manager: AuthManager) -> None:
+    def test_clears_all_three_previous_fields(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(
             key_hash="cur",
             previous_key_hash="prev",
@@ -688,7 +726,10 @@ class TestClearPreviousKey:
 
 
 class TestCleanupExpiredRotations:
-    def test_clears_only_expired_previous_keys(self, manager: AuthManager) -> None:
+    def test_clears_only_expired_previous_keys(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         expired = _tk(
             key_id="x-1",
             key_hash="c1",
@@ -707,7 +748,10 @@ class TestCleanupExpiredRotations:
         assert config.keys[0].previous_key_hash is None  # expired cleared
         assert config.keys[1].previous_key_hash == "p2"  # live untouched
 
-    def test_returns_false_when_nothing_expired(self, manager: AuthManager) -> None:
+    def test_returns_false_when_nothing_expired(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         live = _tk(
             key_id="x-2",
             key_hash="c2",
@@ -725,8 +769,9 @@ class TestCleanupExpiredRotations:
 
 class TestEnsureKeyIds:
     def test_assigns_ids_to_idless_entries_accumulating_existing(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # generate_key_id is stubbed (its real `while True` loop must stay
         # uncovered) but RECORDS args: each id-less entry is generated with its
         # own tenant/name and an existing-id set that grows as ids are assigned.
@@ -751,8 +796,9 @@ class TestEnsureKeyIds:
         assert id_calls[1] == ("t2", "n2", {"keep-id", "gen-1"})
 
     def test_returns_false_when_all_have_ids(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         called = {"n": 0}
 
         def _boom(*_a: object, **_k: object) -> str:
@@ -766,11 +812,17 @@ class TestEnsureKeyIds:
 
 
 class TestFindKeyIndex:
-    def test_returns_matching_index(self, manager: AuthManager) -> None:
+    def test_returns_matching_index(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         config = ApiKeysConfig(keys=[_tk(key_id="a", key_hash="h"), _tk(key_id="b", key_hash="h")])
         assert manager._key_rotator.find_key_index(config, "b") == 1
 
-    def test_returns_none_when_absent(self, manager: AuthManager) -> None:
+    def test_returns_none_when_absent(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         config = ApiKeysConfig(keys=[_tk(key_id="a", key_hash="h")])
         assert manager._key_rotator.find_key_index(config, "missing") is None
 
@@ -781,7 +833,8 @@ class TestFindKeyIndex:
 
 
 class TestScheduleRotationCleanup:
-    def test_noop_without_key_id(self, manager: AuthManager) -> None:
+    def test_noop_without_key_id(self, tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(
             key_id=None,
             key_hash="h",
@@ -790,12 +843,18 @@ class TestScheduleRotationCleanup:
         manager._key_rotator.schedule_rotation_cleanup(item)
         assert manager._rotation_cleanup_timers == {}
 
-    def test_noop_without_active_until(self, manager: AuthManager) -> None:
+    def test_noop_without_active_until(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(key_id="k-1", key_hash="h", previous_key_active_until=None)
         manager._key_rotator.schedule_rotation_cleanup(item)
         assert manager._rotation_cleanup_timers == {}
 
-    def test_noop_when_already_expired(self, manager: AuthManager) -> None:
+    def test_noop_when_already_expired(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(
             key_id="k-1",
             key_hash="h",
@@ -804,7 +863,10 @@ class TestScheduleRotationCleanup:
         manager._key_rotator.schedule_rotation_cleanup(item)
         assert manager._rotation_cleanup_timers == {}
 
-    def test_schedules_timer_wired_to_expire_with_key_id_arg(self, manager: AuthManager) -> None:
+    def test_schedules_timer_wired_to_expire_with_key_id_arg(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(
             key_id="k-1",
             key_hash="h",
@@ -820,7 +882,10 @@ class TestScheduleRotationCleanup:
         assert timer.function == manager._key_rotator.expire_previous_key
         assert timer.args == ("k-1",)
 
-    def test_reschedule_cancels_only_the_same_keys_prior_timer(self, manager: AuthManager) -> None:
+    def test_reschedule_cancels_only_the_same_keys_prior_timer(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # schedule_rotation_cleanup cancels the existing timer for THIS key BEFORE
         # scheduling the new one -- cancel(item.key_id), not cancel(None). A
         # cancel(None) mutant would fall through to the cancel-ALL branch and also
@@ -842,7 +907,10 @@ class TestScheduleRotationCleanup:
 
 
 class TestCancelRotationCleanupTimers:
-    def test_cancels_single_named_timer(self, manager: AuthManager) -> None:
+    def test_cancels_single_named_timer(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         t1, t2 = _FakeTimer(1, None), _FakeTimer(1, None)
         manager._rotation_cleanup_timers = {"a": t1, "b": t2}
         manager._key_rotator.cancel_rotation_cleanup_timers("a")
@@ -851,11 +919,17 @@ class TestCancelRotationCleanupTimers:
         assert "b" in manager._rotation_cleanup_timers  # untouched
         assert t2.cancelled is False
 
-    def test_unknown_named_timer_is_noop(self, manager: AuthManager) -> None:
+    def test_unknown_named_timer_is_noop(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         manager._rotation_cleanup_timers = {}
         manager._key_rotator.cancel_rotation_cleanup_timers("missing")  # pop(None) must not raise
 
-    def test_cancels_all_when_no_id(self, manager: AuthManager) -> None:
+    def test_cancels_all_when_no_id(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         t1, t2 = _FakeTimer(1, None), _FakeTimer(1, None)
         manager._rotation_cleanup_timers = {"a": t1, "b": t2}
         manager._key_rotator.cancel_rotation_cleanup_timers()
@@ -870,13 +944,17 @@ class TestCancelRotationCleanupTimers:
 
 
 class TestExpirePreviousKey:
-    def test_unknown_id_is_silently_swallowed(self, manager: AuthManager) -> None:
+    def test_unknown_id_is_silently_swallowed(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # revoke_old_key raises KeyError for an unknown id; expire swallows it.
         manager._key_rotator.expire_previous_key("does-not-exist")
 
     def test_revokes_old_after_rotation(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
         monkeypatch.setattr(
             rotator, "generate_key", lambda tenant, name: "af-prod-acme-rotation-agent-" + "y" * 43
@@ -889,8 +967,9 @@ class TestExpirePreviousKey:
         assert rotator.rotation_phase(manager._keys_by_id[SEED_KEY_ID]) == "idle"
 
     def test_unexpected_error_is_logged_not_raised(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         rotator = manager._key_rotator
 
         def _boom(_key_id: str) -> bool:
@@ -918,15 +997,20 @@ class TestExpirePreviousKey:
 
 
 class TestValidateGeneratedKey:
-    def test_none_does_not_raise(self, manager: AuthManager) -> None:
+    def test_none_does_not_raise(self, tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         manager._key_rotator.validate_generated_key(None)
 
-    def test_short_key_raises(self, manager: AuthManager) -> None:
+    def test_short_key_raises(self, tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         manager.security_policy.min_key_length = 20
         with pytest.raises(ValueError, match="below min_key_length"):
             manager._key_rotator.validate_generated_key("x" * 19)
 
-    def test_exactly_min_length_is_allowed(self, manager: AuthManager) -> None:
+    def test_exactly_min_length_is_allowed(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         # len < min raises; len == min must pass (pins the strict `<`).
         manager.security_policy.min_key_length = 20
         manager._key_rotator.validate_generated_key("x" * 20)
@@ -939,8 +1023,9 @@ class TestValidateGeneratedKey:
 
 class TestStoragePayload:
     def test_hashed_entry_drops_plaintext_and_json_serialises_dates(
-        self, manager: AuthManager
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(key="plain", key_hash="the-hash")
         payload = manager._key_rotator._storage_payload(item)
         assert payload["key_hash"] == "the-hash"
@@ -950,7 +1035,10 @@ class TestStoragePayload:
         assert payload["created_at"] == "2026-01-01"
         assert isinstance(payload["created_at"], str)
 
-    def test_plaintext_only_entry_keeps_key(self, manager: AuthManager) -> None:
+    def test_plaintext_only_entry_keeps_key(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         item = _tk(key="plain", key_hash=None)
         payload = manager._key_rotator._storage_payload(item)
         assert payload["key"] == "plain"
@@ -963,7 +1051,8 @@ class TestStoragePayload:
 
 
 class TestWriteConfig:
-    def test_without_path_raises(self, manager: AuthManager) -> None:
+    def test_without_path_raises(self, tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         manager.api_keys_path = None
         # Anchored so an XX-wrapped / re-cased message mutant is killed.
         with pytest.raises(
@@ -972,7 +1061,10 @@ class TestWriteConfig:
         ):
             manager._key_rotator.write_config(ApiKeysConfig(keys=[]))
 
-    def test_writes_block_yaml_in_field_order_without_plaintext(self, manager: AuthManager) -> None:
+    def test_writes_block_yaml_in_field_order_without_plaintext(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         import yaml
 
         config = ApiKeysConfig(keys=[_tk(key="plain", key_hash="h", key_id="id-1")])
@@ -991,10 +1083,11 @@ class TestWriteConfig:
         assert "key" not in entry
 
     def test_creates_missing_parent_directories(
-        self, manager: AuthManager, tmp_path: object
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # parents=True must create the full chain; a parents=False/dropped mutant
         # raises FileNotFoundError on the missing intermediate dir.
+        manager = _build_manager(tmp_path, monkeypatch)
         deep = tmp_path / "newa" / "newb" / "api_keys.yaml"  # type: ignore[operator]
         manager.api_keys_path = deep
         manager._key_rotator.write_config(ApiKeysConfig(keys=[_tk(key="p", key_id="id-1")]))
@@ -1008,8 +1101,9 @@ class TestWriteConfig:
 
 class TestRotateAllKeys:
     def test_rotates_every_keyed_entry_and_skips_idless(
-        self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
         monkeypatch.setattr(
             manager,
             "list_keys_with_usage",

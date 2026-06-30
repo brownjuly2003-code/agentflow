@@ -23,6 +23,15 @@ AnalyticsMiddleware = Callable[
     Awaitable[Response],
 ]
 
+# Analytics runs before the route's Pydantic validation, so cap the persisted
+# query text defensively at the same bound /v1/query enforces (1000 chars).
+_MAX_QUERY_TEXT_CHARS = 1000
+
+# Auth/throttle outcomes whose requests must never be recorded: the analytics
+# middleware sits OUTSIDE AuthMiddleware, so recording these would let
+# unauthenticated/rejected traffic drive un-throttled DB writes. (audit_30 S1)
+_UNRECORDED_STATUS_CODES = frozenset({401, 403, 429, 503})
+
 
 def ensure_analytics_table(db_path: Path | str) -> None:
     for attempt in range(10):
@@ -98,22 +107,35 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
             response = await call_next(request)
         # failure telemetry is best-effort before re-raising the original error
         except Exception:  # nosec B110
-            # Record downstream failures before re-raising them through the client stack.
-            _schedule_session_write(
-                request.app.state.auth_manager.db_path,
-                request_id,
-                _build_session_record(
-                    request=request,
-                    request_id=request_id,
-                    status_code=500,
-                    duration_ms=(time.perf_counter() - started_at) * 1000,
-                    cache_hit=False,
-                    body=body,
-                ),
-            )
+            # Record downstream failures before re-raising — but only for an
+            # authenticated request, so an unauthenticated error can't drive an
+            # un-throttled DB write/thread spawn. (audit_30_06_26.md S1)
+            if getattr(request.state, "tenant_key", None) is not None:
+                _schedule_session_write(
+                    request.app.state.auth_manager.db_path,
+                    request_id,
+                    _build_session_record(
+                        request=request,
+                        request_id=request_id,
+                        status_code=500,
+                        duration_ms=(time.perf_counter() - started_at) * 1000,
+                        cache_hit=False,
+                        body=body,
+                    ),
+                )
             raise
 
         response.headers["X-Request-Id"] = request_id
+        # Record analytics only for authenticated, non-rejected requests. This
+        # middleware runs OUTSIDE AuthMiddleware, so without this gate an
+        # unauthenticated/failed/throttled request would spawn a DB-writing
+        # thread and persist an attacker-controlled body with neither auth nor
+        # rate-limiting in front of it — a remote DoS. (audit_30_06_26.md S1)
+        if (
+            getattr(request.state, "tenant_key", None) is None
+            or response.status_code in _UNRECORDED_STATUS_CODES
+        ):
+            return response
         background = response.background
         if background is None:
             background = BackgroundTasks()
@@ -520,7 +542,9 @@ def _build_session_record(
                 payload = {}
             question = payload.get("question")
             if isinstance(question, str):
-                query_text = question
+                # Truncate: analytics runs before the route validates the body,
+                # so an oversized question would otherwise be persisted verbatim.
+                query_text = question[:_MAX_QUERY_TEXT_CHARS]
 
     return {
         "request_id": request_id,

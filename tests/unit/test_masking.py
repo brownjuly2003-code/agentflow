@@ -223,6 +223,33 @@ def test_mask_query_results_masks_pii_renamed_through_subquery(tmp_path: Path):
         assert rows == [{out_col: "a***@example.com"}], sql
 
 
+def test_mask_query_results_masks_pii_renamed_above_inner_select_star(tmp_path: Path):
+    # A SELECT * *below* an inner rename defeats both #123 lineage paths: lineage
+    # walks past the renamed `email` node to the bare `*` leaf and returned a
+    # plain frozenset({'*'}) — not the unresolved sentinel (that only fires on a
+    # lineage *exception*) — so `email` was never in the source set and the
+    # column failed open as cleartext; the shallow scan sees only the outer alias.
+    # A `*` leaf means the column could carry any source column (incl. PII), so it
+    # must fail closed. (audit_30 D2 follow-up: SELECT*-blinded inner-rename bypass
+    # of #123 — distinct from the subquery/CTE renames above, which keep a
+    # resolvable lineage leaf.)
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    for sql in (
+        "SELECT c FROM (SELECT email AS c FROM (SELECT * FROM users_enriched) z) t",
+        "WITH z AS (SELECT * FROM users_enriched), y AS (SELECT email AS c FROM z) SELECT c FROM y",
+    ):
+        rows, masked = masker.mask_query_results(
+            sql,
+            [{"c": "alice@example.com"}],
+            tenant="acme",
+            table_to_entity={"users_enriched": "user"},
+        )
+
+        assert masked is True, sql
+        assert rows == [{"c": "a***@example.com"}], sql
+
+
 def test_mask_query_results_masks_select_star_by_name(tmp_path: Path):
     # SELECT * has no resolvable projection lineage; masking falls back to
     # matching rule fields against the (canonical) output column names.

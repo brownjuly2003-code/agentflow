@@ -178,7 +178,22 @@ class PiiMasker:
                 continue
             seen.add(id(node))
             if not node.downstream and node.name:
-                sources.add(node.name.split(".")[-1])
+                bare = node.name.split(".")[-1]
+                if bare == "*":
+                    # Lineage terminates at an unexpanded ``SELECT *`` (no schema
+                    # to expand it), so this output column could carry *any*
+                    # column of that table — including PII. The #123 deep|shallow
+                    # union only catches a star one level *above* the rename (the
+                    # shallow scan still names the column); a star *below* an inner
+                    # rename leaves the rename invisible to both — the lineage leaf
+                    # is the bare ``*``, the shallow scan sees only the outer alias.
+                    # A literal ``*`` source would never match a rule field, so it
+                    # fails open. Treat it as unresolved and fail closed instead.
+                    # (audit_30 D2 follow-up: SELECT*-blinded inner-rename bypass of
+                    # the #123 lineage fix — e.g.
+                    # ``SELECT c FROM (SELECT email AS c FROM (SELECT * FROM users))``)
+                    return _UNRESOLVED_SOURCES
+                sources.add(bare)
             stack.extend(node.downstream)
         return frozenset(sources)
 

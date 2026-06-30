@@ -9,7 +9,7 @@ tenant-schema qualification is a cross-tenant read (audit_28_06_26.md #5), exact
 the kind of code a mutation gate should pin.
 
 Three design rules, shared with test_rate_limiter_mutation.py /
-test_masking_mutation.py / test_sql_guard_mutation.py (see fable_handoff.md
+test_pii_policy_mutation.py / test_sql_guard_mutation.py (see fable_handoff.md
 cont.16-19):
 
 1. **duckdb-free.** The ordinary query-engine tests build a QueryEngine, which

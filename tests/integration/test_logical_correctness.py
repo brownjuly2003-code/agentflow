@@ -13,13 +13,14 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from pyiceberg.exceptions import ServiceUnavailableError
 
-import src.serving.api.routers.agent_query as agent_query_module
+import src.serving.pii_policy as pii_policy_module
 from src.processing import local_pipeline as local_pipeline_module
 from src.processing.event_replayer import EventReplayer, ensure_dead_letter_table
 from src.serving.api.main import app
 from src.serving.api.routers.agent_query import router as agent_router
 from src.serving.api.routers.batch import router as batch_router
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.serving.semantic_layer.query.nl_queries import _prepare_nl_sql
 
 pytestmark = pytest.mark.integration
 
@@ -117,16 +118,20 @@ class _MaskingEngineStub:
         question: str,
         context: dict | None = None,
         tenant_id: str | None = None,
+        allowed_tables: set[str] | None = None,
     ) -> dict:
+        sql = "SELECT user_id, email, full_name FROM users_enriched WHERE user_id = 'USR-1'"
+        # Run the real deny-gate exactly as the production engine does in
+        # _prepare_nl_sql, so a PII query is rejected before any rows are produced.
+        _prepare_nl_sql(
+            sql,
+            {"users_enriched"},
+            table_to_entity={"users_enriched": "user"},
+            tenant_id=tenant_id,
+        )
         return {
-            "data": [
-                {
-                    "user_id": "USR-1",
-                    "email": "jane@example.com",
-                    "full_name": "Jane Doe",
-                }
-            ],
-            "sql": "SELECT user_id, email, full_name FROM users_enriched WHERE user_id = 'USR-1'",
+            "data": [{"user_id": "USR-1", "email": "jane@example.com", "full_name": "Jane Doe"}],
+            "sql": sql,
             "row_count": 1,
             "execution_time_ms": 1,
             "freshness_seconds": None,
@@ -136,7 +141,7 @@ class _MaskingEngineStub:
 def _build_masking_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     config_path = _write_masking_config(tmp_path / "config" / "pii_fields.yaml")
     monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(config_path))
-    monkeypatch.setattr(agent_query_module, "_PII_MASKER", None, raising=False)
+    monkeypatch.setattr(pii_policy_module, "_POLICY", None, raising=False)
 
     test_app = FastAPI()
     test_app.state.catalog = DataCatalog()
@@ -153,17 +158,32 @@ def _build_masking_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Te
     return TestClient(test_app)
 
 
-def test_nl_query_results_are_masked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_nl_query_touching_pii_is_denied(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # The query translates to SQL that reads email/full_name; the deny-gate rejects
+    # it before any rows are produced (no masking, no PII in the response).
     with _build_masking_client(monkeypatch, tmp_path) as client:
         response = client.post("/v1/query", json={"question": "show user USR-1"})
 
+    assert response.status_code == 403
+    assert "unsafe query" in response.json()["detail"].lower()
+    assert "X-PII-Masked" not in response.headers
+
+
+def test_entity_lookup_redacts_pii_end_to_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    with _build_masking_client(monkeypatch, tmp_path) as client:
+        response = client.get("/v1/entity/user/USR-1")
+
     assert response.status_code == 200
     assert response.headers["X-PII-Masked"] == "true"
-    assert response.json()["answer"][0]["email"] == "j***@example.com"
-    assert response.json()["answer"][0]["full_name"] == "J*** D***"
+    data = response.json()["data"]
+    assert data["email"] == "[REDACTED]"
+    assert data["full_name"] == "[REDACTED]"
+    assert data["user_id"] == "USR-1"  # non-PII field preserved
 
 
-def test_batch_masks_entity_and_query_results(
+def test_batch_redacts_entity_and_denies_pii_query(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -188,10 +208,13 @@ def test_batch_masks_entity_and_query_results(
 
     assert response.status_code == 200
     payload = response.json()["results"]
-    assert payload[0]["data"]["email"] == "j***@example.com"
-    assert payload[0]["data"]["full_name"] == "J*** D***"
-    assert payload[1]["data"]["answer"][0]["email"] == "j***@example.com"
-    assert payload[1]["data"]["answer"][0]["full_name"] == "J*** D***"
+    # Entity item: PII fields redacted, non-PII preserved.
+    assert payload[0]["status"] == "ok"
+    assert payload[0]["data"]["email"] == "[REDACTED]"
+    assert payload[0]["data"]["full_name"] == "[REDACTED]"
+    # Query item: the PII-reading query is denied; per-item isolation -> error.
+    assert payload[1]["status"] == "error"
+    assert "unsafe query" in (payload[1]["error"] or "").lower()
 
 
 def test_local_pipeline_falls_back_to_duckdb_when_iceberg_init_fails(

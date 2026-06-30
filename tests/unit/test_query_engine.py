@@ -166,7 +166,9 @@ def test_explain_extracts_row_estimate_from_box_drawing_plan(
     monkeypatch.setattr(
         engine,
         "_translate_question_to_sql",
-        lambda question, tenant_id=None: "SELECT * FROM orders_v2",
+        # Non-PII projection: SELECT * over orders_v2 (PII col shipping_address) is
+        # now rejected by the deny-gate.
+        lambda question, tenant_id=None: "SELECT order_id FROM orders_v2",
     )
     monkeypatch.setattr(
         engine._backend,

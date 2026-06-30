@@ -30,7 +30,7 @@ class ModuleTarget:
 # (a) copy the module so it imports as a top-level package and (b) pair it with a
 # NARROW test that does not pull the duckdb-backed engine import chain. So
 # retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard,
-# masking, rate_limiter, sql_builder, nl_queries, auth/manager and
+# pii_policy, rate_limiter, sql_builder, nl_queries, auth/manager and
 # auth/key_rotation mutate as serving.* (from src/serving) against duckdb-free
 # tests. Each duckdb-free test
 # also avoids fixtures and calls the module's methods directly: under
@@ -60,9 +60,9 @@ MODULE_TARGETS = {
         threshold=0.90,
         tests=("tests/unit/test_sql_guard_mutation.py",),
     ),
-    Path("serving/masking.py"): ModuleTarget(
+    Path("serving/pii_policy.py"): ModuleTarget(
         threshold=0.90,
-        tests=("tests/unit/test_masking_mutation.py",),
+        tests=("tests/unit/test_pii_policy_mutation.py",),
     ),
     Path("serving/api/rate_limiter.py"): ModuleTarget(
         threshold=0.90,

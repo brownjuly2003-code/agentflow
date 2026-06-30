@@ -8,7 +8,7 @@ its fail-closed Redis fallback is a real DoS / brute-force exposure
 (audit_28_06_26.md #7), exactly the kind of code a mutation gate should pin.
 
 Three design rules, the first two shared with test_sql_guard_mutation.py and
-test_masking_mutation.py (see the masking/sql_guard entries in fable_handoff.md
+test_pii_policy_mutation.py (see the pii_policy/sql_guard entries in fable_handoff.md
 cont.16-17):
 
 1. **duckdb-free.** The ordinary tests/unit/test_rate_limiter.py builds the auth

@@ -4,6 +4,20 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **PII protection is now a bounded deny-gate, not post-hoc masking.** The
+  SQL-lineage result masker (`src/serving/masking.py`) is replaced by
+  `src/serving/pii_policy.py` plus an `assert_no_pii_access` gate in `sql_guard`:
+  a non-exempt NL query that reads a PII column — or a `SELECT *` / `table.*` over
+  a PII-bearing table — is rejected before execution, so PII never leaves the
+  warehouse; direct `/entity/{type}/{id}` reads redact the declared PII fields to a
+  constant `[REDACTED]` sentinel. PII-exempt tenants are unchanged, and the
+  `X-PII-Masked` response header is retained on entity reads. The replaced masker
+  had been bypassed three times; the deny-gate is bounded (a finite, declared PII
+  surface) and verifiable, with the deny logic added to the `sql_guard` mutation
+  target and `pii_policy` mutated in its place.
+
 ### Added
 
 - **DV2 raw vault migrated from ClickHouse to PostgreSQL** with a cloud

@@ -131,17 +131,13 @@ class _LegacyEngine:
         return self._query
 
 
-class _IdentityMasker:
-    """No-op PII masker so the executors' masking calls are exercised without
-    coupling the unit test to the live ``config/pii_fields.yaml``."""
+class _IdentityPolicy:
+    """No-op PII policy so the entity executor's redaction call is exercised
+    without coupling the unit test to the live ``config/pii_fields.yaml``. The
+    query path no longer touches the policy — its deny-gate runs in the engine."""
 
-    def mask(self, entity_type: str, payload: dict[str, Any], tenant: str) -> dict[str, Any]:
-        return payload
-
-    def mask_query_results(
-        self, sql: str, data: Any, tenant: str, table_to_entity: dict[str, str]
-    ) -> tuple[Any, bool]:
-        return data, False
+    def redact_entity(self, entity_type: str, data: dict[str, Any], tenant: str) -> dict[str, Any]:
+        return data
 
 
 def _make_req(
@@ -166,8 +162,8 @@ def _make_req(
 
 
 @pytest.fixture(autouse=True)
-def _identity_masker(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(batch_module, "_get_pii_masker", lambda: _IdentityMasker())
+def _identity_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batch_module, "get_pii_policy", lambda: _IdentityPolicy())
     # _execute_query_item delegates table-allowlist resolution to agent_query;
     # pin it here so the unit test exercises only batch.py's orchestration.
     monkeypatch.setattr(

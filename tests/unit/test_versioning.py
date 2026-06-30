@@ -7,7 +7,7 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-import src.serving.api.routers.agent_query as agent_query_module
+import src.serving.pii_policy as pii_policy_module
 from src.serving.api.versioning import ApiVersionRegistry, ResponseTransformer
 from src.serving.cache import QueryCache
 
@@ -144,7 +144,7 @@ def _build_client(
     monkeypatch.setenv("AGENTFLOW_TENANTS_FILE", str(tenants_path))
     monkeypatch.setenv("AGENTFLOW_API_VERSIONS_FILE", str(versions_path))
     monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(pii_path))
-    monkeypatch.setattr(agent_query_module, "_PII_MASKER", None, raising=False)
+    monkeypatch.setattr(pii_policy_module, "_POLICY", None, raising=False)
 
     main_module = importlib.import_module("src.serving.api.main")
     main_module = importlib.reload(main_module)
@@ -348,7 +348,7 @@ def test_older_versions_hide_new_pii_header(
 
     assert response.status_code == 200
     assert "X-PII-Masked" not in response.headers
-    assert response.json()["data"]["user_id"] == "***"
+    assert response.json()["data"]["user_id"] == "[REDACTED]"
 
 
 def test_deprecated_versions_emit_warning_header(

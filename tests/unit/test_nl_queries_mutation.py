@@ -110,6 +110,14 @@ def _install_harness_stubs() -> None:
     sys.modules["src.serving.semantic_layer.sql_guard"] = _real_sql_guard
     semantic_pkg.sql_guard = _real_sql_guard
 
+    # nl_queries imports `from src.serving.pii_policy import get_pii_policy` for the
+    # deny-gate. Point that src-name at the REAL top-level pii_policy (yaml-only,
+    # duckdb-free) so the gate runs against the genuine policy + config.
+    import serving.pii_policy as _real_pii_policy
+
+    sys.modules["src.serving.pii_policy"] = _real_pii_policy
+    serving_pkg.pii_policy = _real_pii_policy
+
     # Neuter the query package __init__ (`from .engine import QueryEngine`) and
     # the contracts module; both pull duckdb via the QueryEngine import chain and
     # neither contributes runtime behaviour to nl_queries.
@@ -283,19 +291,54 @@ def test_default_allowed_tables_includes_catalog_and_pipeline_events():
 
 def test_prepare_nl_sql_returns_validated_sql_unchanged():
     sql = "SELECT id FROM orders"
-    assert nlq_module._prepare_nl_sql(sql, {"orders"}) == sql
+    assert (
+        nlq_module._prepare_nl_sql(
+            sql, {"orders"}, table_to_entity={"orders": "order"}, tenant_id="acme"
+        )
+        == sql
+    )
 
 
 def test_prepare_nl_sql_wraps_unsafe_sql_as_403():
     with pytest.raises(UnsafeNLQueryError) as exc_info:
-        nlq_module._prepare_nl_sql("DROP TABLE orders", {"orders"})
+        nlq_module._prepare_nl_sql(
+            "DROP TABLE orders", {"orders"}, table_to_entity={}, tenant_id="acme"
+        )
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail.startswith("NL-to-SQL produced unsafe query:")
 
 
 def test_prepare_nl_sql_rejects_unknown_table():
     with pytest.raises(UnsafeNLQueryError):
-        nlq_module._prepare_nl_sql("SELECT id FROM secret_table", {"orders"})
+        nlq_module._prepare_nl_sql(
+            "SELECT id FROM secret_table", {"orders"}, table_to_entity={}, tenant_id="acme"
+        )
+
+
+def test_prepare_nl_sql_denies_pii_column_for_nonexempt_tenant():
+    # The deny-gate runs after validate_nl_sql: a non-exempt tenant reading a PII
+    # column is rejected before execution (order -> shipping_address per config).
+    with pytest.raises(UnsafeNLQueryError, match="PII column"):
+        nlq_module._prepare_nl_sql(
+            "SELECT shipping_address FROM orders",
+            {"orders"},
+            table_to_entity={"orders": "order"},
+            tenant_id="acme",
+        )
+
+
+def test_prepare_nl_sql_exempt_tenant_skips_pii_deny():
+    # An exempt tenant bypasses the deny-gate (pins the `not is_exempt` guard).
+    sql = "SELECT shipping_address FROM orders"
+    assert (
+        nlq_module._prepare_nl_sql(
+            sql,
+            {"orders"},
+            table_to_entity={"orders": "order"},
+            tenant_id="internal-analytics",
+        )
+        == sql
+    )
 
 
 def test_unsafe_nl_query_error_is_403():

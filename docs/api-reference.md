@@ -18,7 +18,7 @@ Common response headers:
 - `X-AgentFlow-Version`, `X-AgentFlow-Latest-Version`, `X-AgentFlow-Deprecated`
 - `X-AgentFlow-Deprecation-Warning` when a pinned version is deprecated
 - `X-Cache` on metric requests
-- `X-PII-Masked` when masking was applied
+- `X-PII-Masked` when PII was withheld from an entity read (fields redacted)
 
 The Python SDK stores the latest version headers on `last_server_version`, `last_latest_version`, `last_deprecated`, and `last_deprecation_warning` after each request.
 

@@ -84,12 +84,12 @@ jobs:
           # Security-critical NL->SQL allowlist/denylist guard; local module
           # coverage is 100%, so the 90% gate keeps a 10pp regression cushion.
           python -m pytest tests/unit/test_sql_guard.py -v --tb=short --cov=src.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
-      - name: Run PII masking coverage gate
+      - name: Run PII policy coverage gate
         run: |
-          # Security-critical PII masker (email/phone/address/name + query-result
-          # masking); local module coverage is 99%, so the 90% gate keeps a ~9pp
+          # Security-critical PII deny/redact policy (entity-path redaction; the
+          # query path is denied by the sql_guard gate above). 90% gate keeps a
           # regression cushion on a mutmut target.
-          python -m pytest tests/unit/test_masking.py -v --tb=short --cov=src.serving.masking --cov-report=term-missing --cov-fail-under=90
+          python -m pytest tests/unit/test_pii_policy.py -v --tb=short --cov=src.serving.pii_policy --cov-report=term-missing --cov-fail-under=90
       - name: Run rate limiter coverage gate
         run: |
           # Security-critical sliding-window rate limiter (Redis + in-memory

@@ -17,9 +17,17 @@ the forbidden-function check -- a surviving mutant there is a denylist bypass.
 """
 
 try:  # mutation-harness workspace exposes it as a top-level package
-    from serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
+    from serving.semantic_layer.sql_guard import (
+        UnsafeSQLError,
+        assert_no_pii_access,
+        validate_nl_sql,
+    )
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
+    from src.serving.semantic_layer.sql_guard import (
+        UnsafeSQLError,
+        assert_no_pii_access,
+        validate_nl_sql,
+    )
 
 import pytest
 
@@ -88,3 +96,86 @@ def test_schema_qualified_table_raises():
 def test_unknown_table_raises():
     with pytest.raises(UnsafeSQLError, match=r"Unknown tables: \['secrets'\]"):
         validate_nl_sql("SELECT id FROM secrets", ALLOWED)
+
+
+# ── assert_no_pii_access deny-gate ───────────────────────────────
+# The bounded PII deny-gate lives in this module, so its mutants are scored here.
+# table_to_entity maps physical tables -> catalog entity; pii_fields_by_entity maps
+# entity -> declared PII columns. products has no PII entry (no PII reachable).
+PII_MAP = {"users_enriched": "user", "orders_v2": "order", "products": "product"}
+PII_FIELDS = {"user": frozenset({"email", "phone"}), "order": frozenset({"shipping_address"})}
+
+
+def _deny(sql: str) -> None:
+    assert_no_pii_access(sql, PII_MAP, PII_FIELDS)
+
+
+def test_pii_allows_query_with_no_pii_bearing_table():
+    # products maps to an entity with no declared PII -> nothing reachable, even *.
+    _deny("SELECT * FROM products")
+    _deny("SELECT name FROM products")
+
+
+def test_pii_allows_count_star_over_pii_table():
+    # COUNT(*) is exp.Count, not a star projection -> aggregate stays allowed.
+    _deny("SELECT COUNT(*) FROM users_enriched")
+
+
+def test_pii_allows_explicit_non_pii_columns_over_pii_table():
+    _deny("SELECT user_id, status FROM users_enriched")
+
+
+def test_pii_denies_named_pii_column():
+    with pytest.raises(UnsafeSQLError, match=r"Query reads PII column\(s\): \['email'\]"):
+        _deny("SELECT email FROM users_enriched")
+
+
+def test_pii_denies_pii_column_case_insensitively():
+    # Pins the .lower() on referenced columns: UPPER must still match the rule.
+    with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['email'\]"):
+        _deny("SELECT EMAIL FROM users_enriched")
+
+
+def test_pii_denies_pii_table_case_insensitively():
+    # Pins the table_to_entity lowercasing: a mixed-case table still resolves PII.
+    with pytest.raises(UnsafeSQLError, match="PII column"):
+        _deny("SELECT email FROM USERS_ENRICHED")
+
+
+def test_pii_denies_aliased_pii_column():
+    # The raw column name survives the rename in the AST -> no lineage needed.
+    with pytest.raises(UnsafeSQLError, match="email"):
+        _deny("SELECT email AS contact FROM users_enriched")
+
+
+def test_pii_denies_pii_column_in_where_clause():
+    with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['phone'\]"):
+        _deny("SELECT user_id FROM users_enriched WHERE phone = '555'")
+
+
+def test_pii_denies_select_star_over_pii_table():
+    with pytest.raises(UnsafeSQLError, match=r"^SELECT \* / table\.\*"):
+        _deny("SELECT * FROM users_enriched")
+
+
+def test_pii_denies_qualified_star_over_pii_table():
+    with pytest.raises(UnsafeSQLError, match=r"SELECT \* / table\.\*"):
+        _deny("SELECT users_enriched.* FROM users_enriched")
+
+
+def test_pii_denies_star_in_a_union_branch():
+    # The star is in the second SELECT; the gate iterates every select, not just
+    # the outermost. A surviving mutant here is a union-branch SELECT * leak.
+    with pytest.raises(UnsafeSQLError, match=r"SELECT \* / table\.\*"):
+        _deny("SELECT id FROM products UNION SELECT * FROM users_enriched")
+
+
+def test_pii_denies_second_entity_pii_column():
+    # reachable_pii is the union over all referenced PII tables.
+    with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['shipping_address'\]"):
+        _deny("SELECT shipping_address FROM orders_v2")
+
+
+def test_pii_unparseable_fails_closed():
+    with pytest.raises(UnsafeSQLError, match="Unparseable SQL"):
+        _deny("SELECT FROM")

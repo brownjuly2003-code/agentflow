@@ -159,12 +159,12 @@ def assert_no_pii_access(
     "reachable" only when the query references a table whose entity declares PII.
     """
     try:
-        statement = sqlglot.parse_one(sql, dialect="duckdb")
+        statement = sqlglot.parse_one(sql, read="duckdb")
     except sqlglot.errors.ParseError as exc:
-        # Unparseable here means we cannot prove the query is PII-free → fail closed.
+        # Unparseable means we cannot prove the query is PII-free → fail closed.
+        # (validate_nl_sql already rejects this upstream; the re-parse is defensive.
+        # parse_one returns an Expression or raises — it never yields None.)
         raise UnsafeSQLError(f"Unparseable SQL: {exc}") from exc
-    if statement is None:
-        raise UnsafeSQLError("Empty SQL")
 
     normalized_map = {table.lower(): entity for table, entity in table_to_entity.items()}
     reachable_pii: set[str] = set()

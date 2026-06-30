@@ -145,6 +145,70 @@ def test_mask_query_results_masks_single_entity(tmp_path: Path):
     assert rows == [{"email": "j***@example.com"}]
 
 
+def _user_email_config(tmp_path: Path) -> Path:
+    return _write_pii_config(
+        tmp_path / "pii_fields.yaml",
+        """
+        masking:
+          default_strategy: partial
+          entity_fields:
+            user:
+              - field: email
+                strategy: partial
+          pii_exempt_tenants: []
+        """,
+    )
+
+
+def test_mask_query_results_masks_aliased_pii_column(tmp_path: Path):
+    # `email AS contact` previously bypassed masking: the output key was
+    # "contact", not the rule field "email", so the cleartext address was
+    # returned with no X-PII-Masked signal. Projection lineage now masks the
+    # column derived from email. (audit_30_06_26.md D2)
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    rows, masked = masker.mask_query_results(
+        "SELECT email AS contact FROM users_enriched",
+        [{"contact": "alice@example.com"}],
+        tenant="acme",
+        table_to_entity={"users_enriched": "user"},
+    )
+
+    assert masked is True
+    assert rows == [{"contact": "a***@example.com"}]
+
+
+def test_mask_query_results_masks_derived_pii_column(tmp_path: Path):
+    # A derived expression over a PII column is masked by what it's built from.
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    rows, masked = masker.mask_query_results(
+        "SELECT lower(email) AS e FROM users_enriched",
+        [{"e": "alice@example.com"}],
+        tenant="acme",
+        table_to_entity={"users_enriched": "user"},
+    )
+
+    assert masked is True
+    assert rows == [{"e": "a***@example.com"}]
+
+
+def test_mask_query_results_masks_select_star_by_name(tmp_path: Path):
+    # SELECT * has no resolvable projection lineage; masking falls back to
+    # matching rule fields against the (canonical) output column names.
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    rows, masked = masker.mask_query_results(
+        "SELECT * FROM users_enriched",
+        [{"email": "alice@example.com", "user_id": "U-1"}],
+        tenant="acme",
+        table_to_entity={"users_enriched": "user"},
+    )
+
+    assert masked is True
+    assert rows == [{"email": "a***@example.com", "user_id": "U-1"}]
+
+
 def test_mask_query_results_masks_union_when_multiple_entities(tmp_path: Path):
     """A multi-entity JOIN must mask the union of all matched entities, not fail
     open. The old behaviour returned cleartext PII for any query touching !=1

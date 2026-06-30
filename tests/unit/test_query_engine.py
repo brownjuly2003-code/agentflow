@@ -49,6 +49,25 @@ def test_scope_sql_does_not_qualify_cte_aliases(engine: QueryEngine) -> None:
     assert ("orders_v2", "") in _tables(scoped)
 
 
+def test_scope_sql_qualifies_physical_table_shadowed_by_cte_name(engine: QueryEngine) -> None:
+    # A CTE whose name collides with a real table must not hide the *physical*
+    # inner reference from tenant rescoping. Pre-fix the inner `orders_v2` was
+    # skipped (its name matched the CTE) and stayed bound to the shared `main`
+    # schema, leaking every tenant's rows. (audit_30_06_26.md D1)
+    scoped = engine._scope_sql(
+        "WITH orders_v2 AS (SELECT * FROM orders_v2) SELECT * FROM orders_v2",
+        tenant_id="tenant_a",
+    )
+
+    tables = _tables(scoped)
+    # The physical inner reference is now pinned to the caller's tenant schema.
+    assert ("orders_v2", "tenant_a") in tables
+    # The only unqualified `orders_v2` left is the outer CTE reference (1, not 2).
+    assert tables.count(("orders_v2", "")) == 1
+    # And nothing fell back to the shared `main` schema.
+    assert all(db != "main" for _, db in tables)
+
+
 def test_scope_sql_qualifies_tables_after_subquery(engine: QueryEngine) -> None:
     scoped = engine._scope_sql(
         "SELECT * FROM (SELECT * FROM orders_v2) AS recent, users_enriched",

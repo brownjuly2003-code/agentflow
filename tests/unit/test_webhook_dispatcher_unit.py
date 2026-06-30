@@ -20,6 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import duckdb
+import httpx
 import pytest
 
 from src.serving.api.webhook_dispatcher import (
@@ -272,6 +273,75 @@ def test_enqueue_delivery_is_idempotent_on_webhook_event() -> None:
         status, attempts, _ = _queue_row(conn, "wh-1", "e1")
         assert status == "pending"
         assert attempts == 0
+    finally:
+        conn.close()
+
+
+def test_enqueue_delivery_returns_true_only_for_a_new_row() -> None:
+    conn = duckdb.connect(":memory:")
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+        webhook = SimpleNamespace(id="wh-1")
+        # A fresh (webhook, event) inserts and tells the caller to inline-deliver.
+        assert dispatcher._enqueue_delivery(webhook, _event("e1")) is True
+        # A re-scan of an already-queued pair is a no-op and must NOT be
+        # re-delivered inline (that would storm the receiver every poll cycle
+        # whenever an unrelated webhook left the event unseen). (audit_30_06_26.md C2)
+        assert dispatcher._enqueue_delivery(webhook, _event("e1")) is False
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_isolates_webhook_failure_and_enqueues_all(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two webhooks match the same event; the first one's inline delivery raises
+    # an error deliver() does not catch (e.g. httpx.InvalidURL). Pre-fix that
+    # exception propagated out of dispatch_new_events *after* the event was
+    # already marked seen, so the second webhook was never enqueued and its
+    # delivery was lost for good. Now each webhook is durably enqueued first and
+    # isolated, and the event is marked seen only once all are enqueued.
+    # (audit_30_06_26.md C2)
+    conn = duckdb.connect(":memory:")
+    try:
+        conn.execute(
+            "CREATE TABLE pipeline_events (event_id VARCHAR, topic VARCHAR, "
+            "tenant_id VARCHAR DEFAULT 'default', event_type VARCHAR, processed_at TIMESTAMP)"
+        )
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES "
+            "('e1', 'orders.raw', 'acme', 'order.created', NOW())"
+        )
+        wh1 = create_webhook(
+            config_path, url="https://a.test/h1", tenant="acme", filters=WebhookFilters()
+        )
+        wh2 = create_webhook(
+            config_path, url="https://b.test/h2", tenant="acme", filters=WebhookFilters()
+        )
+        monkeypatch.setattr(
+            "src.serving.api.webhook_dispatcher.get_webhook_config_path",
+            lambda app: config_path,
+        )
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+
+        async def _deliver(webhook: object, event: dict) -> dict:
+            if getattr(webhook, "id", None) == wh1.id:
+                raise httpx.InvalidURL("boom")
+            return {"success": True, "status_code": 200, "event_id": event["event_id"]}
+
+        monkeypatch.setattr(dispatcher, "deliver", _deliver)
+
+        await dispatcher.dispatch_new_events()  # must not raise
+
+        # Both webhooks are durably enqueued despite wh1's inline failure...
+        assert _queue_row(conn, wh1.id, "e1") is not None
+        assert _queue_row(conn, wh2.id, "e1") is not None
+        # ...wh2 delivered, wh1 left 'pending' for process_delivery_queue to re-drive.
+        assert _queue_row(conn, wh2.id, "e1")[0] == "delivered"
+        assert _queue_row(conn, wh1.id, "e1")[0] == "pending"
+        # The event is marked seen (durably enqueued) so it isn't re-scanned.
+        assert "acme:e1" in dispatcher.seen_event_ids
     finally:
         conn.close()
 

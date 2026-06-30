@@ -516,6 +516,21 @@ async def get_metric(
         )
     _ensure_metric_allowed(req, metric_name)
 
+    # Reject windows the metric doesn't declare. The engine silently maps an
+    # unknown window to "1 hour" (and active_sessions ignores it entirely), so
+    # without this the response would echo the *requested* window while
+    # returning a *different* window's value, and each bogus window string would
+    # pollute the metric cache. Mirrors the alerts router. (audit_30_06_26.md A1)
+    available_windows = catalog.metrics[metric_name].available_windows
+    if window not in available_windows:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported window '{window}' for metric '{metric_name}'. "
+                f"Available: {available_windows}"
+            ),
+        )
+
     as_of = _normalize_as_of(as_of)
     as_of_text = _as_of_iso_text(as_of)
     try:

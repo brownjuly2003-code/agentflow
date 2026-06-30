@@ -94,3 +94,24 @@ async def test_hot_path_endpoints_do_not_block_event_loop(
 
     assert all(response.status_code == 200 for response in responses)
     assert elapsed < 0.9, f"Event loop blocked: {elapsed:.2f}s (expected < 0.9s)"
+
+
+@pytest.mark.asyncio
+async def test_get_metric_rejects_window_not_in_available_windows():
+    # Pre-fix any window was accepted and silently computed as 1h (active_sessions
+    # always 30m) while the response echoed the requested window — a wrong value
+    # under a confident label, plus cache-key pollution. (audit_30_06_26.md A1)
+    app = FastAPI()
+    app.state.catalog = DataCatalog()
+    app.state.query_engine = SlowEngine(delay_seconds=0.0)
+    app.include_router(agent_router, prefix="/v1")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        bad = await client.get("/v1/metrics/revenue?window=2h")
+        good = await client.get("/v1/metrics/revenue?window=1h")
+        bad_active = await client.get("/v1/metrics/active_sessions?window=24h")
+
+    assert bad.status_code == 422  # 2h is not a declared window for revenue
+    assert good.status_code == 200
+    assert bad_active.status_code == 422  # active_sessions only supports "now"

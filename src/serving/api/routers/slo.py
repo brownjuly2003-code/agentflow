@@ -7,6 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 try:
     import yaml
@@ -60,8 +61,11 @@ def load_slos(path: Path) -> list[SLODefinition]:
 
 
 def _pipeline_event_columns(request: Request) -> set[str]:
-    conn = request.app.state.query_engine._conn
-    return {row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    cursor = request.app.state.query_engine._conn.cursor()
+    try:
+        return {row[1] for row in cursor.execute("PRAGMA table_info('pipeline_events')").fetchall()}
+    finally:
+        cursor.close()
 
 
 def _time_column(columns: set[str]) -> str | None:
@@ -96,7 +100,10 @@ def _measurement_value(
     if time_column is None:
         return None
 
-    conn = request.app.state.query_engine._conn
+    # A dedicated cursor (not the shared connection object) keeps concurrent
+    # /v1/slo requests — offloaded to worker threads by get_slos — from
+    # colliding on the connection. (audit_30_06_26.md A2)
+    conn = request.app.state.query_engine._conn.cursor()
     window = f"{definition.window_days} days"
     tenant_sql, tenant_params = _tenant_filter(columns, _tenant_id(request))
 
@@ -195,9 +202,12 @@ def _error_budget_remaining(target: float, current: float) -> float:
     return max(0.0, min(1.0, 1.0 - consumed))
 
 
-@router.get("", response_model=SLOResponse)
-async def get_slos(request: Request) -> SLOResponse:
-    definitions = load_slos(get_slo_config_path(request.app))
+def _compute_slo_statuses(request: Request, definitions: list[SLODefinition]) -> list[SLOStatus]:
+    # Runs on a worker thread (get_slos offloads it) so the per-SLO aggregate
+    # scans can't block the event loop for every tenant on the worker. The
+    # helpers each open their own short-lived cursor, so concurrent /v1/slo
+    # requests on different threads never collide on the shared connection.
+    # (audit_30_06_26.md A2)
     columns = _pipeline_event_columns(request)
     time_column = _time_column(columns)
     statuses = []
@@ -232,4 +242,11 @@ async def get_slos(request: Request) -> SLOResponse:
             )
         )
 
+    return statuses
+
+
+@router.get("", response_model=SLOResponse)
+async def get_slos(request: Request) -> SLOResponse:
+    definitions = load_slos(get_slo_config_path(request.app))
+    statuses = await run_in_threadpool(_compute_slo_statuses, request, definitions)
     return SLOResponse(slos=statuses)

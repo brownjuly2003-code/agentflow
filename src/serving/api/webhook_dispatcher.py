@@ -258,19 +258,55 @@ class WebhookDispatcher:
             seen_key = _seen_event_key(event)
             if not event_id or event_id in self.seen_event_ids or seen_key in self.seen_event_ids:
                 continue
-            self.seen_event_ids.add(seen_key)
 
             tenant = str(event.get("tenant_id") or "default")
+            enqueued_all = True
             for webhook in webhooks_by_tenant.get(tenant, []):
-                if _matches_filters(event, webhook.filters):
-                    # Record the delivery durably *before* attempting it, then
-                    # attempt inline (low latency for the happy path). A failure
-                    # leaves a 'pending' row that process_delivery_queue re-drives
-                    # — surviving all-retries-failed and a process restart, which
-                    # the in-memory seen-set alone could not (audit #3).
-                    self._enqueue_delivery(webhook, event)
+                if not _matches_filters(event, webhook.filters):
+                    continue
+                # Record the delivery durably *before* attempting it, then attempt
+                # inline (low latency for the happy path). A failure leaves a
+                # 'pending' row that process_delivery_queue re-drives — surviving
+                # all-retries-failed and a process restart, which the in-memory
+                # seen-set alone could not (audit #3). Each webhook is isolated:
+                # one webhook's exception must neither abort the scan (skipping
+                # later webhooks) nor mark the event seen before it was durably
+                # enqueued. (audit_30_06_26.md C2)
+                try:
+                    inserted = self._enqueue_delivery(webhook, event)
+                except Exception as exc:
+                    logger.warning(
+                        "webhook_enqueue_failed",
+                        webhook_id=webhook.id,
+                        event_id=event_id,
+                        error=str(exc),
+                    )
+                    enqueued_all = False
+                    continue
+                if not inserted:
+                    # Already enqueued on an earlier scan (this event stayed unseen
+                    # because some other webhook's enqueue failed); its durable row
+                    # is re-driven by process_delivery_queue — don't re-POST inline.
+                    continue
+                try:
                     result = await self.deliver(webhook, event)
                     self._record_delivery_outcome(webhook.id, event_id, result)
+                except Exception as exc:
+                    # Durable row is already 'pending'; let process_delivery_queue
+                    # re-drive it instead of unwinding the whole scan.
+                    logger.warning(
+                        "webhook_inline_delivery_failed",
+                        webhook_id=webhook.id,
+                        event_id=event_id,
+                        error=str(exc),
+                    )
+
+            # Mark the event seen only once every matching webhook is durably
+            # enqueued. This also drives metric-cache invalidation (main.py wraps
+            # this method and invalidates on seen-set growth), so it still runs
+            # for events with zero matching webhooks (enqueued_all stays True).
+            if enqueued_all:
+                self.seen_event_ids.add(seen_key)
 
     async def deliver(self, webhook: WebhookRegistration, event: dict) -> dict:
         """Deliver one event now (the ``/test`` endpoint and the inline dispatch
@@ -424,14 +460,24 @@ class WebhookDispatcher:
         result_columns = [description[0] for description in cursor.description]
         return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
 
-    def _enqueue_delivery(self, webhook: WebhookRegistration, event: dict) -> None:
+    def _enqueue_delivery(self, webhook: WebhookRegistration, event: dict) -> bool:
         """Durably record a (webhook, event) delivery as ``pending`` (idempotent
-        on the primary key — a re-scan of the same event never duplicates it)."""
+        on the primary key — a re-scan of the same event never duplicates it).
+
+        Returns ``True`` only when a new row is inserted, so the caller can
+        inline-deliver exactly the fresh rows and never re-POST a (webhook,
+        event) that was already enqueued on an earlier scan."""
         event_id = str(event.get("event_id") or "")
         if not event_id:
-            return
+            return False
         conn = self.app.state.query_engine._conn
         ensure_webhook_delivery_queue_table(conn)
+        existing = conn.execute(
+            "SELECT 1 FROM webhook_delivery_queue WHERE webhook_id = ? AND event_id = ?",
+            [webhook.id, event_id],
+        ).fetchone()
+        if existing is not None:
+            return False
         now = datetime.now(UTC)
         conn.execute(
             """
@@ -452,6 +498,7 @@ class WebhookDispatcher:
                 now,
             ],
         )
+        return True
 
     def _record_delivery_outcome(self, webhook_id: str, event_id: str, result: dict) -> None:
         """Advance a queue row from the outcome of one delivery round: success →

@@ -43,12 +43,10 @@ class ModuleTarget:
 # helpers) before import. auth/manager imports as the auth package whose __init__
 # imports duckdb plus the key_rotation/usage_table chain, but manager.py itself
 # never calls duckdb (all usage-table I/O lives in usage_table.py), so its test
-# swaps in a fake top-level `duckdb` module and mutates manager duckdb-free.
-# auth/key_rotation is now live too: it DOES call duckdb directly in its three
-# usage-stat methods, so its duckdb-free test (test_key_rotation_mutation.py)
-# stubs those methods out of coverage and fakes the import-chain duckdb, mutating
-# only the create/rotate/revoke/grace logic. The full declared mutation set is
-# now live -- there is no declared-but-not-live serving surface left.
+# swaps in a fake top-level `duckdb` module and mutates manager duckdb-free. The
+# only remaining declared-but-not-live serving surface is auth/key_rotation,
+# which uses the duckdb connection directly; it stays declared-only in the
+# [tool.mutmut] policy until it gets a duckdb-free unit test of its own.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
@@ -87,28 +85,11 @@ MODULE_TARGETS = {
     # / previous-key paths and in _matches_key_material) and every rate-limit /
     # failed-auth throttle off-by-one. Local mutmut (py3.10) scores 405/483 = 83.9%;
     # 0.80 leaves headroom for equivalent-mutant noise while still enforcing a real
-    # floor (the do-nothing baseline was 76.5%).
+    # floor (the do-nothing baseline was 76.5%). key_rotation is the next target and
+    # stays declared-only until it gets its own duckdb-free test.
     Path("serving/api/auth/manager.py"): ModuleTarget(
         threshold=0.80,
         tests=("tests/unit/test_auth_manager_mutation.py",),
-    ),
-    # key_rotation.py holds 0.90 like the other serving guards (not manager's 0.80):
-    # the create/rotate/revoke/grace surface is mostly pure logic, so its
-    # behaviour-reachable mutants are killable. Mutated duckdb-free via
-    # test_key_rotation_mutation.py -- a fake top-level `duckdb` satisfies the
-    # import chain, and the three duckdb-querying usage-stat methods plus the two
-    # `while True` uniqueness loops (generate_key / generate_key_id, which mutmut's
-    # `not in`->`in` flip would turn into infinite-loop timeouts) are stubbed out
-    # of coverage, so only the rotation logic is mutated. Local mutmut (py3.10)
-    # scores 344/365 = 94.2%; the 21 residual survivors are equivalents (strict vs
-    # non-strict comparisons against the live datetime.now(UTC) wall clock,
-    # datetime.now(None) date-equal on a UTC runner, the runtime-cache prune /
-    # timer-cancel calls subsumed by load()'s reprune + blanket cancel, the
-    # model_copy "key" stripped on persist and overwritten on return, and
-    # write_text encoding / newline kwargs with no observable change).
-    Path("serving/api/auth/key_rotation.py"): ModuleTarget(
-        threshold=0.90,
-        tests=("tests/unit/test_key_rotation_mutation.py",),
     ),
 }
 

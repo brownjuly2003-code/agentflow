@@ -18,12 +18,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 #     assembled here.
 # NOTE: these are the *declared* targets (intent). Actual mutation execution is
 # gated by scripts/mutation_report.py (MODULE_TARGETS), which now runs retry.py,
-# sql_guard.py, masking.py, rate_limiter.py, sql_builder.py, nl_queries.py,
-# auth/manager.py AND auth/key_rotation.py live (the serving modules via
-# duckdb-free narrow tests, mutated as a top-level `serving` package so mutmut's
-# trampoline accepts them). The declared set now equals the live set -- there is
-# no declared-but-not-live serving surface left. These assertions guard the
-# declared policy, which the live MODULE_TARGETS must remain a superset-or-equal of.
+# sql_guard.py, masking.py, rate_limiter.py, sql_builder.py, nl_queries.py AND
+# auth/manager.py live (the serving modules via duckdb-free narrow tests, mutated
+# as a top-level `serving` package so mutmut's trampoline accepts them). The only
+# remaining declared serving surface -- auth/key_rotation -- stays declared-only
+# until it gets a duckdb-free unit test of its own. These assertions guard the
+# declared policy, not live coverage.
 REQUIRED_MUTATION_TARGETS = {
     "src/serving/semantic_layer/sql_guard.py",
     "src/serving/api/auth/manager.py",

@@ -10,12 +10,11 @@ This is the main entry point for the Flink cluster. Submit with:
 import json
 import os
 from collections.abc import Iterator
-from datetime import timedelta
 from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
 from pyflink.common.serialization import SimpleStringSchema
-from pyflink.common.time import Duration
+from pyflink.common.time import Duration, Time
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import (
@@ -224,7 +223,7 @@ class DeduplicateByEventId(MapFunction):
         from pyflink.datastream.state import StateTtlConfig, ValueStateDescriptor
 
         ttl_config = (
-            StateTtlConfig.new_builder(timedelta(minutes=10))
+            StateTtlConfig.new_builder(Time.minutes(10))
             .set_update_type(StateTtlConfig.UpdateType.OnCreateAndWrite)
             .build()
         )

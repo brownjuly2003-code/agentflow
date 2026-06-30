@@ -75,8 +75,17 @@ class ValidateAndEnrich(ProcessFunction):
     """
 
     def process_element(
-        self, value: str, ctx: ProcessFunction.Context
-    ) -> Iterator[tuple[str, str]]:
+        self,
+        value: str,
+        ctx: ProcessFunction.Context,  # noqa: ARG002 - required by the ProcessFunction interface
+    ) -> Iterator[tuple[str | OutputTag, str]]:
+        # PyFlink routes side outputs by *yielding* ``(OutputTag, value)`` — the
+        # Java ``ctx.output(tag, value)`` API does not exist on pyflink's
+        # ProcessFunction context (``InternalProcessFunctionContext`` has no
+        # ``.output``), so emitting via ctx raised AttributeError and broke the
+        # dead-letter path. The main output yields ``(event_id, payload)``; the
+        # framework tells them apart by the first element's type (str vs
+        # OutputTag), so the tuple main output is unambiguous. (R4 follow-up)
         from datetime import UTC, datetime
 
         from src.processing.transformations.enrichment import (
@@ -91,7 +100,7 @@ class ValidateAndEnrich(ProcessFunction):
         try:
             event = json.loads(value)
         except json.JSONDecodeError as e:
-            ctx.output(
+            yield (
                 DEAD_LETTER_TAG,
                 json.dumps(
                     {
@@ -112,7 +121,7 @@ class ValidateAndEnrich(ProcessFunction):
                 # available so tenant resolution sees the prefixed topic.
                 event = normalize_debezium_event(event, topic=event.get("topic"))
         except ValueError as e:
-            ctx.output(
+            yield (
                 DEAD_LETTER_TAG,
                 json.dumps(
                     {
@@ -132,7 +141,7 @@ class ValidateAndEnrich(ProcessFunction):
         # 2. Schema validation (Pydantic models)
         schema_result = validate_event(event)
         if not schema_result.is_valid:
-            ctx.output(
+            yield (
                 DEAD_LETTER_TAG,
                 json.dumps(
                     {
@@ -160,7 +169,7 @@ class ValidateAndEnrich(ProcessFunction):
                 if i.severity == "error"
             ]
             if error_issues:
-                ctx.output(
+                yield (
                     DEAD_LETTER_TAG,
                     json.dumps(
                         {

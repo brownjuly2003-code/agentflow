@@ -141,11 +141,14 @@ class _FakeExecutionEnvironment:
 
 
 class _FakeProcessContext:
-    def __init__(self):
-        self.outputs = []
+    """Stand-in for pyflink's ProcessFunction.Context.
 
-    def output(self, tag, value):
-        self.outputs.append((tag, value))
+    Real pyflink has **no** ``ctx.output()`` — that is the Java side-output API
+    (``InternalProcessFunctionContext`` lacks it). Side outputs are emitted by
+    *yielding* ``(OutputTag, value)``. The fake deliberately omits ``output`` so
+    a regression back to ``ctx.output(...)`` fails loudly here, not only on the
+    live cluster.
+    """
 
 
 class _ValidationResult:
@@ -522,9 +525,11 @@ def test_process_element_routes_corrupt_json_to_dlq(stream_processor, monkeypatc
 
     emitted = list(processor.process_element("{bad json", ctx))
 
-    assert emitted == []
-    assert len(ctx.outputs) == 1
-    tag, payload = ctx.outputs[0]
+    # Invalid events are routed to the dead-letter side output by *yielding*
+    # (DEAD_LETTER_TAG, payload); the framework distinguishes side from main
+    # output by the first element's type. Nothing else is emitted.
+    assert len(emitted) == 1
+    tag, payload = emitted[0]
     assert tag is stream_processor.DEAD_LETTER_TAG
     assert json.loads(payload)["stage"] == "parse"
 
@@ -542,8 +547,10 @@ def test_process_element_routes_schema_errors_to_dlq(stream_processor, monkeypat
 
     emitted = list(processor.process_element(json.dumps({"event_type": "order.created"}), ctx))
 
-    assert emitted == []
-    assert json.loads(ctx.outputs[0][1]) == {
+    assert len(emitted) == 1
+    tag, payload = emitted[0]
+    assert tag is stream_processor.DEAD_LETTER_TAG
+    assert json.loads(payload) == {
         "event_id": "unknown",
         "error": [{"type": "missing", "field": "event_id"}],
         "stage": "schema_validation",
@@ -580,7 +587,7 @@ def test_process_element_normalizes_debezium_before_validation(stream_processor,
     pairs = list(processor.process_element(value, ctx))
     emitted = [json.loads(payload) for _, payload in pairs]
 
-    assert ctx.outputs == []
+    assert all(tag is not stream_processor.DEAD_LETTER_TAG for tag, _ in pairs)
     assert validated_events[0]["event_type"] == "order.created"
     assert validated_events[0]["operation"] == "insert"
     assert emitted[0]["source"] == "postgres_cdc"
@@ -608,8 +615,10 @@ def test_process_element_routes_semantic_errors_to_dlq(stream_processor, monkeyp
 
     emitted = list(processor.process_element(value, ctx))
 
-    assert emitted == []
-    assert json.loads(ctx.outputs[0][1]) == {
+    assert len(emitted) == 1
+    tag, payload = emitted[0]
+    assert tag is stream_processor.DEAD_LETTER_TAG
+    assert json.loads(payload) == {
         "event_id": "evt-1",
         "error": [
             {
@@ -644,9 +653,10 @@ def test_process_element_ignores_semantic_warnings(stream_processor, monkeypatch
         }
     )
 
-    emitted = [json.loads(payload) for _, payload in processor.process_element(value, ctx)]
+    pairs = list(processor.process_element(value, ctx))
+    emitted = [json.loads(payload) for _, payload in pairs]
 
-    assert ctx.outputs == []
+    assert all(tag is not stream_processor.DEAD_LETTER_TAG for tag, _ in pairs)
     assert emitted[0]["enriched_by"] == "payment"
 
 

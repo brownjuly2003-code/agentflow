@@ -24,6 +24,7 @@ editable ``src`` package is importable (reuses the canonical event model):
 
     python scripts/benchmark_freshness_realpath.py --bootstrap localhost:19092 --iterations 30
 """
+
 from __future__ import annotations
 
 import argparse
@@ -151,13 +152,18 @@ def main() -> int:
     )
     consumer = make_validated_consumer(args.bootstrap, args.validated_topic)
     if not consumer.assignment():
-        print("ERROR: consumer never got an assignment for "
-              f"{args.validated_topic!r} on {args.bootstrap!r}", file=sys.stderr)
+        print(
+            "ERROR: consumer never got an assignment for "
+            f"{args.validated_topic!r} on {args.bootstrap!r}",
+            file=sys.stderr,
+        )
         return 2
 
-    print(f"bootstrap={args.bootstrap} source={args.source_topic} "
-          f"validated={args.validated_topic} "
-          f"warmup={args.warmup} iterations={args.iterations}")
+    print(
+        f"bootstrap={args.bootstrap} source={args.source_topic} "
+        f"validated={args.validated_topic} "
+        f"warmup={args.warmup} iterations={args.iterations}"
+    )
 
     samples: list[float] = []
     misses = 0
@@ -189,8 +195,11 @@ def main() -> int:
     producer.flush(5)
 
     if not samples:
-        print("\nNO MEASURED SAMPLES -- every event timed out. Is the Flink job "
-              "RUNNING and consuming orders.raw? Check http://localhost:8081", file=sys.stderr)
+        print(
+            "\nNO MEASURED SAMPLES -- every event timed out. Is the Flink job "
+            "RUNNING and consuming orders.raw? Check http://localhost:8081",
+            file=sys.stderr,
+        )
         return 1
 
     summary = {

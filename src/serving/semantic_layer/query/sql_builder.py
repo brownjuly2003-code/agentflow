@@ -6,6 +6,7 @@ from typing import cast
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer.scope import traverse_scope
 
 from src.serving.api.auth import get_current_tenant_id
 
@@ -79,32 +80,37 @@ class SQLBuilderMixin:
         known_tables.add("pipeline_events")
 
         parsed = sqlglot.parse_one(sql, dialect="duckdb")
-        cte_names = {
-            cte.alias_or_name.lower() for cte in parsed.find_all(exp.CTE) if cte.alias_or_name
-        }
+        # Classify every table reference by scope so a CTE whose name collides
+        # with a real table — e.g. `WITH orders_v2 AS (SELECT * FROM orders_v2)
+        # SELECT * FROM orders_v2` — cannot hide the *physical* inner reference
+        # from tenant rescoping. The old global cte_names skip dropped any table
+        # whose name matched any CTE in the statement, so the inner physical
+        # `orders_v2` stayed unqualified, bound to the shared `main` schema, and
+        # leaked every tenant's rows (this is the *sole* isolation mechanism:
+        # one DuckDB DB, a schema per tenant, no per-connection search_path).
+        # Scope resolution rescopes the physical ref while leaving the genuine
+        # CTE reference alone. (audit_30_06_26.md D1; builds on audit_28 #5)
+        physical_tables = [
+            table
+            for scope in traverse_scope(parsed)
+            for table in scope.tables
+            if table.name
+            and table.name.lower() in known_tables
+            and table.name.lower() not in {name.lower() for name in scope.cte_sources}
+        ]
+
         schema = self._get_tenant_schema(tenant_id)
         if schema is None:
-            for table in parsed.find_all(exp.Table):
-                table_name = table.name
-                if (
-                    not table_name
-                    or table.db
-                    or table.catalog
-                    or table_name.lower() not in known_tables
-                    or table_name.lower() in cte_names
-                ):
-                    continue
-                self._qualify_table(table_name, tenant_id)
+            for table in physical_tables:
+                if not table.db and not table.catalog:
+                    # No tenant schema resolved: keep the "tenant context is
+                    # required" guard firing for a physical tenant-scoped table
+                    # even when its name collides with a CTE (the old skip let
+                    # such a query silently read `main`).
+                    self._qualify_table(table.name, tenant_id)
             return sql
 
-        for table in parsed.find_all(exp.Table):
-            table_name = table.name
-            if (
-                not table_name
-                or table_name.lower() not in known_tables
-                or table_name.lower() in cte_names
-            ):
-                continue
+        for table in physical_tables:
             # Force the known table into the caller's tenant schema even if it
             # arrived already schema-qualified — defense-in-depth so a qualified
             # name can never read another tenant. validate_nl_sql already rejects
@@ -112,6 +118,6 @@ class SQLBuilderMixin:
             # reaches here through another caller. (audit_28_06_26.md #5)
             table.set("catalog", None)
             table.set("db", exp.to_identifier(schema, quoted=True))
-            table.set("this", exp.to_identifier(table_name, quoted=True))
+            table.set("this", exp.to_identifier(table.name, quoted=True))
 
         return parsed.sql(dialect="duckdb")

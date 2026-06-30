@@ -116,3 +116,77 @@ def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
     } - normalized_allowed_tables
     if unknown_tables:
         raise UnsafeSQLError(f"Unknown tables: {sorted(unknown_tables)}")
+
+
+def _is_star_projection(projection: exp.Expression) -> bool:
+    """Whether a select item expands to every column of its source.
+
+    ``SELECT *`` parses to an :class:`exp.Star`; a qualified ``t.*`` parses to an
+    :class:`exp.Column` wrapping a star. A star nested as a *function argument*
+    (``COUNT(*)``) is deliberately **not** a star projection — it exposes no
+    columns, so an aggregate over a PII-bearing table stays allowed.
+    """
+    if isinstance(projection, exp.Star):
+        return True
+    return isinstance(projection, exp.Column) and isinstance(projection.this, exp.Star)
+
+
+def assert_no_pii_access(
+    sql: str,
+    table_to_entity: dict[str, str],
+    pii_fields_by_entity: dict[str, frozenset[str]],
+) -> None:
+    """Reject a query that can read a PII column (bounded deny-gate).
+
+    The bounded counterpart to the deleted lineage masker. Rather than trace which
+    *output* column derives from PII (an unbounded analysis that was bypassed three
+    times), this refuses the query outright when PII is reachable from it at all:
+
+    * a ``SELECT *`` / ``table.*`` at **any** nesting level over a PII-bearing query
+      is rejected — a star can expand to any column, and proving a nested star never
+      reaches the output is exactly the lineage analysis we removed, so we fail
+      closed rather than reason about it;
+    * a reference to a PII column by name anywhere — projection, filter, join, a
+      subquery, an alias source (``email AS contact``), an expression
+      (``upper(email)``) — is rejected, because the raw column name still appears in
+      the AST however it is renamed downstream.
+
+    Over-rejection (a non-PII column that merely shares a name with a PII column) is
+    the safe direction and is accepted. Callers skip this for PII-exempt tenants.
+
+    ``table_to_entity`` maps a physical table name to its catalog entity;
+    ``pii_fields_by_entity`` maps an entity to its declared PII field names. PII is
+    "reachable" only when the query references a table whose entity declares PII.
+    """
+    try:
+        statement = sqlglot.parse_one(sql, dialect="duckdb")
+    except sqlglot.errors.ParseError as exc:
+        # Unparseable here means we cannot prove the query is PII-free → fail closed.
+        raise UnsafeSQLError(f"Unparseable SQL: {exc}") from exc
+    if statement is None:
+        raise UnsafeSQLError("Empty SQL")
+
+    normalized_map = {table.lower(): entity for table, entity in table_to_entity.items()}
+    reachable_pii: set[str] = set()
+    for table in statement.find_all(exp.Table):
+        entity = normalized_map.get(table.name.lower()) if table.name else None
+        if entity:
+            reachable_pii |= {
+                field.lower() for field in pii_fields_by_entity.get(entity, frozenset())
+            }
+    if not reachable_pii:
+        return
+
+    for select in statement.find_all(exp.Select):
+        if any(_is_star_projection(projection) for projection in select.expressions):
+            raise UnsafeSQLError(
+                "SELECT * / table.* over a PII-bearing table is not allowed; "
+                "select explicit non-PII columns"
+            )
+
+    referenced_columns = {
+        column.name.lower() for column in statement.find_all(exp.Column) if column.name
+    }
+    forbidden = sorted(referenced_columns & reachable_pii)
+    if forbidden:
+        raise UnsafeSQLError(f"Query reads PII column(s): {forbidden}")

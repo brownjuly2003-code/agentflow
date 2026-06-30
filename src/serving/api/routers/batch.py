@@ -10,8 +10,8 @@ from src.serving.api.routers.agent_query import (
     _allowed_tables_for_request,
     _call_in_threadpool_with_kwarg_fallback,
     _ensure_metric_allowed,
-    _get_pii_masker,
 )
+from src.serving.pii_policy import get_pii_policy
 
 router = APIRouter(tags=["agent"])
 
@@ -98,7 +98,7 @@ async def _execute_entity_item(item: BatchItem, req: Request) -> dict[str, Any]:
 
     payload = dict(result)
     payload.pop("_last_updated", None)
-    return _get_pii_masker().mask(entity_type, payload, tenant_id or "default")
+    return get_pii_policy().redact_entity(entity_type, payload, tenant_id or "default")
 
 
 async def _execute_metric_item(item: BatchItem, req: Request) -> dict[str, Any]:
@@ -146,17 +146,10 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
         optional_kwargs={"tenant_id": tenant_id, "allowed_tables": allowed_tables},
         context=context,
     )
-    table_to_entity = {
-        entity.table: name for name, entity in req.app.state.catalog.entities.items()
-    }
-    answer, _ = _get_pii_masker().mask_query_results(
-        result.get("sql", ""),
-        result["data"],
-        tenant_id or "default",
-        table_to_entity,
-    )
+    # PII deny-gate ran in the engine before execution, so the rows are PII-free
+    # for a non-exempt tenant (or this tenant is entitled to them) — return as-is.
     return {
-        "answer": answer,
+        "answer": result["data"],
         "sql": result.get("sql"),
         "metadata": {
             "rows_returned": result.get("row_count", 0),

@@ -7,7 +7,6 @@ Every response includes metadata that helps agents assess data reliability.
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
 import sqlglot
@@ -25,20 +24,11 @@ from src.serving.api.versioning import (
     resolve_request_version,
 )
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
-from src.serving.masking import PiiMasker
+from src.serving.pii_policy import get_pii_policy
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.api")
 router = APIRouter(tags=["agent"])
-_PII_MASKER: PiiMasker | None = None
-
-
-def _get_pii_masker() -> PiiMasker:
-    global _PII_MASKER
-    config_path = os.getenv("AGENTFLOW_PII_CONFIG", "config/pii_fields.yaml")
-    if _PII_MASKER is None or Path(_PII_MASKER.config_path) != Path(config_path):
-        _PII_MASKER = PiiMasker(config_path)
-    return _PII_MASKER
 
 
 # Engine call-signature compatibility (F-4): older engine implementations and
@@ -281,9 +271,7 @@ async def explain_query(request: ExplainRequest, req: Request) -> ExplainRespons
 
 
 @router.post("/query", response_model=QueryResponse)
-async def natural_language_query(
-    request: NLQueryRequest, req: Request, response: Response
-) -> QueryResponse:
+async def natural_language_query(request: NLQueryRequest, req: Request) -> QueryResponse:
     """Execute a natural language query against the data platform.
 
     The query engine translates natural language to SQL, executes it,
@@ -329,22 +317,10 @@ async def natural_language_query(
         span.set_attribute("query.rows", int(result.get("row_count", 0)))
 
     logger.info("nl_query_executed", question=request.question[:100])
-    tenant = tenant_id or "default"
-    catalog = getattr(req.app.state, "catalog", None)
-    table_to_entity = (
-        {entity.table: name for name, entity in catalog.entities.items()}
-        if catalog is not None
-        else {}
-    )
-    answer, pii_masked = _get_pii_masker().mask_query_results(
-        result.get("sql", ""),
-        result["data"],
-        tenant,
-        table_to_entity,
-    )
-    if pii_masked:
-        response.headers["X-PII-Masked"] = "true"
-
+    # PII never reaches here on the query path: the engine's deny-gate rejects a
+    # non-exempt query that could read a PII column before it executes, and an
+    # exempt tenant is entitled to the raw rows. So the rows are returned as-is.
+    answer = result["data"]
     rows = answer if isinstance(answer, list) else [answer]
 
     return QueryResponse(
@@ -450,7 +426,7 @@ async def get_entity(
     if last_updated and as_of is None:
         freshness = (now - datetime.fromisoformat(last_updated)).total_seconds()
     tenant = tenant_id or "default"
-    masked_payload = _get_pii_masker().mask(entity_type, payload, tenant)
+    masked_payload = get_pii_policy().redact_entity(entity_type, payload, tenant)
     pii_masked = masked_payload != payload
     if pii_masked:
         response.headers["X-PII-Masked"] = "true"

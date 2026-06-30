@@ -13,9 +13,10 @@ from opentelemetry import trace
 
 from src.processing.tracing import telemetry_disabled
 from src.serving.backends import BackendExecutionError
+from src.serving.pii_policy import get_pii_policy
 
 from .contracts import NLQueryHost
-from .sql_guard import UnsafeSQLError, validate_nl_sql
+from .sql_guard import UnsafeSQLError, assert_no_pii_access, validate_nl_sql
 
 tracer = trace.get_tracer("agentflow.query_engine")
 
@@ -37,9 +38,26 @@ def _default_allowed_tables(self: NLQueryHost) -> set[str]:
     return allowed_tables
 
 
-def _prepare_nl_sql(translated_sql: str, allowed_tables: set[str]) -> str:
+def _host_table_to_entity(self: NLQueryHost) -> dict[str, str]:
+    """Physical table name -> catalog entity type, for the PII deny-gate."""
+    return {entity.table: name for name, entity in self.catalog.entities.items()}
+
+
+def _prepare_nl_sql(
+    translated_sql: str,
+    allowed_tables: set[str],
+    *,
+    table_to_entity: dict[str, str],
+    tenant_id: str | None,
+) -> str:
     try:
         validate_nl_sql(translated_sql, allowed_tables)
+        # Bounded PII deny-gate: a non-exempt tenant may not run a query that can
+        # read a PII column, so PII never leaves the warehouse. Replaces the
+        # post-hoc lineage masker. (road-to-9.8 STATUS 2026-06-30 item 1)
+        policy = get_pii_policy()
+        if not policy.is_exempt(tenant_id):
+            assert_no_pii_access(translated_sql, table_to_entity, policy.pii_fields_by_entity)
     except UnsafeSQLError as e:
         raise UnsafeNLQueryError(f"NL-to-SQL produced unsafe query: {e}") from e
     return translated_sql
@@ -125,6 +143,8 @@ class NLQueryMixin:
         prepared_sql = _prepare_nl_sql(
             translated_sql,
             set(allowed_tables) if allowed_tables is not None else _default_allowed_tables(self),
+            table_to_entity=_host_table_to_entity(self),
+            tenant_id=tenant_id,
         )
         sql = self._scope_sql(prepared_sql, tenant_id)
         query_hash = self._build_query_hash(sql, tenant_id)
@@ -205,6 +225,8 @@ class NLQueryMixin:
         prepared_sql = _prepare_nl_sql(
             translated_sql,
             set(allowed_tables) if allowed_tables is not None else _default_allowed_tables(self),
+            table_to_entity=_host_table_to_entity(self),
+            tenant_id=tenant_id,
         )
         sql = self._scope_sql(prepared_sql, tenant_id)
 
@@ -258,6 +280,8 @@ class NLQueryMixin:
         prepared_sql = _prepare_nl_sql(
             translated_sql,
             set(allowed_tables) if allowed_tables is not None else _default_allowed_tables(self),
+            table_to_entity=_host_table_to_entity(self),
+            tenant_id=tenant_id,
         )
         sql = self._scope_sql(prepared_sql, tenant_id)
 

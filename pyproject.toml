@@ -208,18 +208,20 @@ asyncio_mode = "auto"
 # MODULE_TARGETS, which now mutates sdk/agentflow/retry.py,
 # src/serving/semantic_layer/sql_guard.py, src/serving/masking.py,
 # src/serving/api/rate_limiter.py, src/serving/semantic_layer/query/sql_builder.py,
-# src/serving/semantic_layer/query/nl_queries.py AND src/serving/api/auth/manager.py
-# live. The serving modules are mutated as a top-level `serving` package against
-# duckdb-free narrow tests: mutmut's trampoline rejects a module name starting with
-# `src.`, which (not duckdb) was the real blocker. manager.py runs at an honest
-# 0.80 threshold (not 0.90): it is a large stateful auth class whose residual
-# survivors are equivalent mutants (structured-logging args, model_copy updates
-# equal to their defaults, redis-url strings masked by the `_redis = None`
-# override, the env-only-dead write path) -- every behaviour-reachable mutant,
-# including every auth-bypass and throttle off-by-one, is killed. The remaining
-# declared serving surface -- auth/key_rotation -- stays declared-only until it
-# gets a duckdb-free test of its own (the pattern the live modules use); the
-# blocker is the test import chain, not the module. See scripts/mutation_report.py.
+# src/serving/semantic_layer/query/nl_queries.py, src/serving/api/auth/manager.py
+# AND src/serving/api/auth/key_rotation.py live -- every declared serving surface
+# is now mutated. The serving modules are mutated as a top-level `serving` package
+# against duckdb-free narrow tests: mutmut's trampoline rejects a module name
+# starting with `src.`, which (not duckdb) was the real blocker. (The gate runner
+# also strips the repo's relative pytest --basetemp inside the mutmut workspace --
+# under py3.11 it breaks coverage->mutant mapping for file-I/O targets like
+# key_rotation; see scripts/mutation_report.py.) manager.py runs at an honest 0.80
+# threshold (not 0.90): it is a
+# large stateful auth class whose residual survivors are equivalent mutants
+# (structured-logging args, model_copy updates equal to their defaults, redis-url
+# strings masked by the `_redis = None` override, the env-only-dead write path) --
+# every behaviour-reachable mutant, including every auth-bypass and throttle
+# off-by-one, is killed. See scripts/mutation_report.py.
 paths_to_mutate = [
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",

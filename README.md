@@ -25,7 +25,7 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 - **Measured event-to-metric freshness** — an event entering the pipeline is reflected in `GET /v1/metrics/*` in **1.06 s p50 / 1.99 s p95** on production defaults (event-driven cache invalidation, no webhook registration), tunable to **238 ms p50**; a plain TTL cache on the same pipeline sits at ~15 s. Reproducible via `python scripts/benchmark_freshness.py` → [freshness benchmark](docs/freshness-benchmark.md)
 - **Lineage as a contract** — all six metrics declare their source events, serving table, and a 2.5 s p95 staleness budget in versioned contracts, exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
 - **Published release line through `v1.5.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
-- **Tested and gated** — 960+ unit tests plus a broad Windows no-Docker suite; CI enforces 12 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract) through branch protection
+- **Tested and gated** — 1,500+ unit tests plus a broad Windows no-Docker suite; CI enforces 13 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract, build-smoke) through branch protection
 - **Dual SDK parity** across Python and TypeScript — retries, circuit breakers, batching, pagination, contract pinning, idempotency keys, `as_of` historical reads — over sub-second entity lookups (p50 `38–55 ms`, p99 `167 ms` on local hardware)
 - **Security in the hot path** — tenant isolation on every read surface, parameterized queries, `sqlglot` AST validation for NL-to-SQL, fail-closed auth, secret scrubbing, and a Bandit gate for new findings
 - **Production-shaped extras** — two CDC paths (hardened Debezium/Kafka Connect + a ClickHouse per-branch fan-out), on-call [runbooks](docs/runbooks/README.md), and a [narrated demo](docs/dv2-multi-branch/) of the DV2 multi-branch warehouse
@@ -158,7 +158,7 @@ audit-closure sprint:
 - **`v1.1.0`** — audit closure: tenant isolation across every read
   surface, SQL guard centralized on `sqlglot`, entity allowlist
   enforcement, fail-closed auth, secret rotation, Helm hardening,
-  OpenAPI drift gate, and the 12 required status checks.
+  OpenAPI drift gate, and the required status checks.
 - **`v1.2.0`** — DV2 multi-branch warehouse: 38 Data Vault 2.0 tables
   (8 hubs / 8 links / 22+ satellites), an Argo Workflows `dv2-refresh`
   template, a dbt project (3 mart models + 12 tests), and per-branch CDC
@@ -187,7 +187,7 @@ the `[Unreleased]` section of the [changelog](CHANGELOG.md) for details.
 
 This is a reference data-engineering project. The streaming, warehouse, and
 deployment artifacts (Flink, Iceberg, Helm, Terraform, k8s) are exercised
-against a local pipeline and a kind cluster in CI rather than a paid managed
+against a local pipeline and a kind cluster in CI rather than a managed
 cloud. Wiring it to a live production source needs inputs that live outside
 the repo — CDC source onboarding (runbook ready in
 [docs/operations/cdc-production-onboarding.md](docs/operations/cdc-production-onboarding.md)),

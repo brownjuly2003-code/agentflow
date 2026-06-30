@@ -1,7 +1,16 @@
-# Release status — v1.4.0 PUBLISHED
+# Release status — v1.5.0 PUBLISHED
 
-**Status (verified 2026-05-30 via live registry queries):** v1.1.0,
-v1.2.0, v1.3.0, and v1.4.0 are all published on the three registries.
+**Status (verified 2026-06-30 via live registry queries):** v1.1.0
+through v1.5.0 are all published on the three registries (PyPI
+`agentflow-runtime` + `agentflow-client`, npm
+`@yuliaedomskikh/agentflow-client`). v1.5.0 is a security & correctness
+hardening release: argon2id key hashing with an O(1) peppered lookup
+index, an NL→SQL guard bypass fix (typed `read_csv` / `read_parquet`
+scan functions denied in projection position), `sqlglot` control-byte
+and mutation-target repairs, and a strict-`mypy` expansion. No public
+API changes from v1.4.0; the full v1.5.0 release mechanics are finalized
+in the formal release cut.
+
 v1.4.0 is a maintenance release bundling documentation
 (`docs/runbooks/` on-call playbooks, `SECURITY.md`, issue/PR
 templates), CI hardening (`contract.yml`
@@ -20,6 +29,9 @@ gate). No runtime API changes from v1.3.0.
 
 | Registry | Package | Version | Upload time (UTC) | Tag commit |
 |----------|---------|---------|-------------------|------------|
+| PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.5.0/) | 1.5.0 | 2026-06-05 07:48 | `c99d094` |
+| PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.5.0/)   | 1.5.0 | 2026-06-05 07:48 | `c99d094` |
+| npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.5.0) | 1.5.0 | 2026-06-05 07:48 | `c99d094` |
 | PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.4.0/) | 1.4.0 | 2026-05-24 21:05 | `e58693b` |
 | PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.4.0/)   | 1.4.0 | 2026-05-24 21:05 | `e58693b` |
 | npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.4.0) | 1.4.0 | 2026-05-24 21:05 | `e58693b` |
@@ -48,15 +60,15 @@ through `v1.4.0`.
 
 ```bash
 # PyPI metadata
-curl -sf "https://pypi.org/pypi/agentflow-runtime/1.4.0/json" -o /dev/null && echo OK
-curl -sf "https://pypi.org/pypi/agentflow-client/1.4.0/json"  -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-runtime/1.5.0/json" -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-client/1.5.0/json"  -o /dev/null && echo OK
 
 # npm metadata
-npm view "@yuliaedomskikh/agentflow-client@1.4.0" version dist.tarball
+npm view "@yuliaedomskikh/agentflow-client@1.5.0" version dist.tarball
 
 # Install smoke
 python -m venv /tmp/.afcheck && . /tmp/.afcheck/bin/activate
-pip install agentflow-runtime==1.4.0 agentflow-client==1.4.0
+pip install agentflow-runtime==1.5.0 agentflow-client==1.5.0
 python -c "from importlib.metadata import version; print(version('agentflow-runtime'), version('agentflow-client'))"
 ```
 
@@ -158,8 +170,9 @@ same one.
 | v1.2.0     | `eb59508` | published  |
 | v1.3.0     | `8fa99e6` | published  |
 | v1.4.0     | `e58693b` | published  |
+| v1.5.0     | `c99d094` | published  |
 
-The next release (1.5.0 or 2.0.0) should follow the same recipe:
+The next release (2.0.0) should follow the same recipe:
 bump 5 files (root `pyproject.toml`, `sdk/pyproject.toml`,
 `sdk/agentflow/__init__.py`, `sdk-ts/package.json`,
 `sdk-ts/package-lock.json`), update Helm chart/app image pins when the

@@ -30,8 +30,9 @@ class ModuleTarget:
 # (a) copy the module so it imports as a top-level package and (b) pair it with a
 # NARROW test that does not pull the duckdb-backed engine import chain. So
 # retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard,
-# masking, rate_limiter, sql_builder, nl_queries and auth/manager mutate as
-# serving.* (from src/serving) against duckdb-free tests. Each duckdb-free test
+# masking, rate_limiter, sql_builder, nl_queries, auth/manager and
+# auth/key_rotation mutate as serving.* (from src/serving) against duckdb-free
+# tests. Each duckdb-free test
 # also avoids fixtures and calls the module's methods directly: under
 # mutate_only_covered_lines a fixture-built object left every method line
 # uncovered, so only __init__ got mutated. rate_limiter additionally imports
@@ -43,10 +44,13 @@ class ModuleTarget:
 # helpers) before import. auth/manager imports as the auth package whose __init__
 # imports duckdb plus the key_rotation/usage_table chain, but manager.py itself
 # never calls duckdb (all usage-table I/O lives in usage_table.py), so its test
-# swaps in a fake top-level `duckdb` module and mutates manager duckdb-free. The
-# only remaining declared-but-not-live serving surface is auth/key_rotation,
-# which uses the duckdb connection directly; it stays declared-only in the
-# [tool.mutmut] policy until it gets a duckdb-free unit test of its own.
+# swaps in a fake top-level `duckdb` module and mutates manager duckdb-free.
+# auth/key_rotation does the same (fake `duckdb`, stub the connect path) and pins
+# the create/rotate/revoke/grace lifecycle; it is the last serving surface to go
+# live. Its mutants are only mappable because build_workspace_pyproject drops the
+# repo's relative pytest --basetemp from the workspace config -- under py3.11 that
+# relative tmp path breaks coverage.py's line->mutant attribution for key_rotation
+# (which writes its key store under tmp_path) and the module scores zero.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
@@ -90,6 +94,18 @@ MODULE_TARGETS = {
     Path("serving/api/auth/manager.py"): ModuleTarget(
         threshold=0.80,
         tests=("tests/unit/test_auth_manager_mutation.py",),
+    ),
+    # key_rotation runs at 0.90. Its residual survivors (local mutmut: 21 of 365)
+    # are documented equivalents: wall-clock boundary flips on datetime.now(UTC)
+    # comparisons, the revoke-prune / timer-cancel masked by load()'s blanket
+    # cancel+reprune, model_copy "key" popped from the storage payload, and
+    # write_text encoding/newline platform-equivalents. Every behaviour-reachable
+    # create/rotate/revoke/grace mutant is killed. The three duckdb-querying usage
+    # methods are an observability surface (not an auth boundary) and are stubbed
+    # out of the duckdb-free harness, pinned instead by tests/unit/test_key_rotation.py.
+    Path("serving/api/auth/key_rotation.py"): ModuleTarget(
+        threshold=0.90,
+        tests=("tests/unit/test_key_rotation_mutation.py",),
     ),
 }
 
@@ -200,6 +216,14 @@ def render_mutmut_section(module_path: Path, tests: tuple[str, ...]) -> str:
 
 def build_workspace_pyproject(module_path: Path, target: ModuleTarget) -> str:
     original = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    # Drop the repo's RELATIVE pytest --basetemp (.tmp/pytest-basetemp) from the
+    # workspace config. Inside the mutmut workspace under py3.11 that relative tmp
+    # path defeats coverage.py's line->file attribution for file-I/O-heavy targets
+    # (auth/key_rotation writes its rotated key store under tmp_path), so mutmut
+    # maps zero tests to the generated mutants and reports "could not find any test
+    # case for any mutant" -> the module scores zero. Default (absolute) basetemp
+    # attributes coverage correctly. (TOML tolerates the trailing comma left behind.)
+    original = re.sub(r'\s*,?\s*"--basetemp=[^"]*"', "", original)
     rendered = render_mutmut_section(module_path, target.tests)
     if not MUTMUT_SECTION_RE.search(original):
         raise RuntimeError("Could not find [tool.mutmut] section in pyproject.toml")

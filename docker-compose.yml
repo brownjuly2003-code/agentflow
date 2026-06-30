@@ -54,6 +54,8 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
+        jobmanager.bind-host: 0.0.0.0
+        rest.bind-host: 0.0.0.0
         state.backend.type: rocksdb
         execution.checkpointing.dir: s3://agentflow-lake/checkpoints
         s3.endpoint: http://minio:9000
@@ -79,6 +81,7 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
+        taskmanager.bind-host: 0.0.0.0
         taskmanager.numberOfTaskSlots: 4
         state.backend.type: rocksdb
         s3.endpoint: http://minio:9000

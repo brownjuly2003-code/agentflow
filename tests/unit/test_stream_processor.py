@@ -2,7 +2,7 @@ import importlib
 import json
 import sys
 import types
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
@@ -286,7 +286,16 @@ def stream_processor(monkeypatch):
         def of_seconds(cls, seconds):
             return cls(seconds * 1000)
 
+    class _Time:
+        def __init__(self, millis):
+            self.millis = millis
+
+        @classmethod
+        def minutes(cls, minutes):
+            return cls(minutes * 60 * 1000)
+
     time_module.Duration = _Duration
+    time_module.Time = _Time
 
     datastream = types.ModuleType("pyflink.datastream")
     datastream.__path__ = []
@@ -758,7 +767,7 @@ def test_open_initializes_ttl_state_for_deduplication(stream_processor):
 
     assert [descriptor.name for descriptor in runtime_context.descriptors] == ["seen"]
     assert runtime_context.descriptors[0].type_info == stream_processor.Types.BOOLEAN()
-    assert runtime_context.descriptors[0].ttl_config.ttl == timedelta(minutes=10)
+    assert runtime_context.descriptors[0].ttl_config.ttl.millis == 10 * 60 * 1000
     assert runtime_context.descriptors[0].ttl_config.update_type == "OnCreateAndWrite"
 
 

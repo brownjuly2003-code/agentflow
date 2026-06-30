@@ -80,6 +80,27 @@ class SQLBuilderMixin:
         known_tables.add("pipeline_events")
 
         parsed = sqlglot.parse_one(sql, dialect="duckdb")
+        # A recursive CTE *can* self-reference, so sqlglot keeps its name in its
+        # own body scope and the cte_sources skip below mis-classifies the
+        # physical *anchor* reference (the first UNION branch, which cannot
+        # self-reference) as a CTE reference — it is never re-scoped, stays bound
+        # to the shared `main` schema and leaks every tenant's rows. There is no
+        # safe re-scoping of a recursive anchor (genuinely ambiguous with the
+        # recursion) and no legitimate query names a recursive CTE after a
+        # physical table, so fail closed. validate_nl_sql rejects this on the NL
+        # path; this guards any other caller. (audit_30 D1 follow-up: WITH
+        # RECURSIVE bypass of f153b23)
+        recursive_shadow = sorted(
+            {
+                cte.alias_or_name.lower()
+                for with_node in parsed.find_all(exp.With)
+                if with_node.args.get("recursive")
+                for cte in with_node.expressions
+                if cte.alias_or_name and cte.alias_or_name.lower() in known_tables
+            }
+        )
+        if recursive_shadow:
+            raise ValueError(f"Recursive CTE shadows tenant-scoped table(s): {recursive_shadow}")
         # Classify every table reference by scope so a CTE whose name collides
         # with a real table — e.g. `WITH orders_v2 AS (SELECT * FROM orders_v2)
         # SELECT * FROM orders_v2` — cannot hide the *physical* inner reference

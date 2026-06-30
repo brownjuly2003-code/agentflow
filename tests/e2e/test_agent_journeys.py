@@ -20,7 +20,9 @@ async def test_support_agent_journey(base_url: str, support_api_key: str):
         user = await client.get_user(order.user_id)
         assert user.user_id == "USR-10001"
 
-        metric = await client.get_metric("active_sessions", window="1h")
+        # active_sessions is a point-in-time gauge — its only declared window is
+        # "now". (audit_30_06_26.md A1: /v1/metrics now rejects undeclared windows.)
+        metric = await client.get_metric("active_sessions", window="now")
         assert metric.value >= 0
 
 

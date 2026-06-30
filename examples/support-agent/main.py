@@ -61,11 +61,11 @@ def run_demo(
     )
     order = client.get_order(DEFAULT_ORDER_ID)
     user = client.get_user(order.user_id)
-    active_sessions = client.get_metric("active_sessions", window="1h")
+    active_sessions = client.get_metric("active_sessions", window="now")
     response = (
         f"Order {order.order_id} is {order.status}. "
         f"The customer is {user.user_id} with {user.total_orders} lifetime orders "
-        f"and {active_sessions.value} active sessions in the last hour."
+        f"and {active_sessions.value} active sessions right now."
     )
 
     return {
@@ -76,7 +76,7 @@ def run_demo(
         "status": order.status,
         "user_id": user.user_id,
         "user_total_orders": user.total_orders,
-        "active_sessions_1h": active_sessions.value,
+        "active_sessions_now": active_sessions.value,
         "response": response,
         "steps": [
             "Fetched the live order entity",

@@ -52,6 +52,21 @@ UNSAFE_SQL = [
         "Schema-qualified",
     ),
     ("SELECT * FROM cat.acme.orders_v2", "Schema-qualified"),
+    # A recursive CTE whose name shadows a real (allowed) table bypasses the
+    # leaf-name allow-list (the CTE name is excluded from the unknown-tables
+    # check) AND _scope_sql's cte_sources skip: a recursive CTE *can* self-
+    # reference, so sqlglot puts the name in its own body scope, and the physical
+    # anchor reference (which cannot self-reference) is mis-classified as a CTE
+    # reference and never re-scoped — it stays bound to the shared `main` schema
+    # and leaks every tenant's rows. Non-recursive shadows are safely re-scoped
+    # (test_query_engine), but the recursive anchor cannot be, so reject the
+    # shape outright. (audit_30 D1 follow-up: WITH RECURSIVE bypass)
+    (
+        "WITH RECURSIVE orders_v2 AS "
+        "(SELECT * FROM orders_v2 UNION SELECT * FROM orders_v2) "
+        "SELECT * FROM orders_v2",
+        "Recursive CTE shadows",
+    ),
 ]
 
 

@@ -89,6 +89,26 @@ def validate_nl_sql(sql: str, allowed_tables: set[str]) -> None:
         cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE) if cte.alias_or_name
     }
     normalized_allowed_tables = {table.lower() for table in allowed_tables}
+    # A recursive CTE whose name shadows a real (allowed) table is a cross-tenant
+    # read vector. A recursive CTE *can* self-reference, so its name lives in its
+    # own body scope; the leaf-name allow-list excludes the CTE name, AND
+    # _scope_sql's cte_sources skip mis-classifies the physical *anchor*
+    # reference (the first UNION branch, which cannot self-reference) as a CTE
+    # reference — so it stays bare, binds to the shared `main` schema, and leaks
+    # every tenant's rows. Non-recursive shadows are safely re-scoped, but the
+    # recursive anchor cannot be, so reject the shape outright. (audit_30 D1
+    # follow-up: WITH RECURSIVE bypass of f153b23)
+    recursive_shadows = {
+        cte.alias_or_name.lower()
+        for with_node in statement.find_all(exp.With)
+        if with_node.args.get("recursive")
+        for cte in with_node.expressions
+        if cte.alias_or_name and cte.alias_or_name.lower() in normalized_allowed_tables
+    }
+    if recursive_shadows:
+        raise UnsafeSQLError(
+            f"Recursive CTE shadows physical table(s): {sorted(recursive_shadows)}"
+        )
     unknown_tables = {
         table.name.lower()
         for table in statement.find_all(exp.Table)

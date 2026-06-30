@@ -5,11 +5,29 @@ from pathlib import Path
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.lineage import lineage
 
 try:
     import yaml
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
+
+
+class _UnresolvedSources(frozenset[str]):
+    """Sentinel column-source set whose membership test is always ``True``.
+
+    Used when projection lineage can't be resolved for an output column (an
+    ambiguous reference, or an exotic shape sqlglot's lineage rejects). Treating
+    every masking rule field as a possible source masks the column **fail
+    closed** rather than letting a renamed/derived PII value slip through as
+    cleartext. (audit_30 D2 follow-up)
+    """
+
+    def __contains__(self, item: object) -> bool:
+        return True
+
+
+_UNRESOLVED_SOURCES: frozenset[str] = _UnresolvedSources()
 
 
 class PiiMasker:
@@ -25,7 +43,7 @@ class PiiMasker:
         data: dict,
         tenant: str,
         *,
-        source_columns: dict[str, set[str]] | None = None,
+        source_columns: dict[str, frozenset[str]] | None = None,
     ) -> dict:
         masking = self._config.get("masking", {})
         if tenant in masking.get("pii_exempt_tenants", []):
@@ -46,7 +64,7 @@ class PiiMasker:
         self,
         field: str,
         data: dict,
-        source_columns: dict[str, set[str]] | None,
+        source_columns: dict[str, frozenset[str]] | None,
     ) -> set[str]:
         """Which result columns to mask for a rule's source ``field``.
 
@@ -93,12 +111,19 @@ class PiiMasker:
             ]
         return masked_rows, masked_rows != rows
 
-    def _projection_source_columns(self, sql: str) -> dict[str, set[str]] | None:
+    def _projection_source_columns(self, sql: str) -> dict[str, frozenset[str]] | None:
         """Map each output column to the source column names that feed it.
 
-        Returns ``None`` when the projection can't be resolved precisely — a
-        ``SELECT *`` (whose outputs are the source names verbatim) or unparseable
-        SQL — so masking falls back to matching rule fields against output names.
+        Resolves *true* projection lineage (through subqueries, CTEs and unions)
+        so a PII column renamed at any nesting depth is masked by what it is
+        built from, not by its output name. The shallow one-level resolver this
+        replaces saw only the outermost projection, so an inner rename —
+        ``SELECT contact FROM (SELECT email AS contact FROM users_enriched)`` —
+        returned cleartext. (audit_30 D2 follow-up: subquery/CTE-alias bypass)
+
+        Returns ``None`` for a ``SELECT *`` (whose outputs are the source names
+        verbatim, so name-matching is correct) or unparseable SQL, so masking
+        falls back to matching rule fields against output names.
         """
         try:
             parsed = sqlglot.parse_one(sql, read="duckdb")
@@ -107,15 +132,55 @@ class PiiMasker:
         select = parsed.find(exp.Select)
         if select is None:
             return None
-        mapping: dict[str, set[str]] = {}
+        if any(
+            isinstance(projection, exp.Star) or projection.find(exp.Star) is not None
+            for projection in select.expressions
+        ):
+            return None
+        mapping: dict[str, frozenset[str]] = {}
         for projection in select.expressions:
-            if isinstance(projection, exp.Star) or projection.find(exp.Star) is not None:
-                return None
             output_name = projection.alias_or_name
             if not output_name:
                 continue
-            mapping[output_name] = {col.name for col in projection.find_all(exp.Column) if col.name}
+            # Union the *deep* lineage sources (which trace a renamed PII column
+            # through subqueries/CTEs) with the *shallow* columns named directly
+            # in this projection. Lineage is blind through an inner ``SELECT *``
+            # (no schema to expand it), where the shallow scan still catches a
+            # direct ``email AS contact``; lineage catches the inner rename the
+            # shallow scan misses. Either alone leaks one shape — the union
+            # closes both.
+            deep = self._lineage_source_columns(output_name, sql)
+            if isinstance(deep, _UnresolvedSources):
+                mapping[output_name] = deep
+                continue
+            shallow = frozenset(col.name for col in projection.find_all(exp.Column) if col.name)
+            mapping[output_name] = deep | shallow
         return mapping
+
+    def _lineage_source_columns(self, output_name: str, sql: str) -> frozenset[str]:
+        """The ultimate source column names feeding ``output_name``.
+
+        Walks the lineage graph to its leaves (across subqueries, CTEs and union
+        branches) and returns the bare column names. Fails closed — a sentinel
+        that matches every rule field — when lineage can't be resolved, so an
+        unresolved column is masked rather than leaked.
+        """
+        try:
+            root = lineage(output_name, sql, dialect="duckdb")
+        except Exception:  # noqa: BLE001 - any lineage failure must fail closed
+            return _UNRESOLVED_SOURCES
+        sources: set[str] = set()
+        stack = [root]
+        seen: set[int] = set()
+        while stack:
+            node = stack.pop()
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+            if not node.downstream and node.name:
+                sources.add(node.name.split(".")[-1])
+            stack.extend(node.downstream)
+        return frozenset(sources)
 
     def _extract_table_names(self, sql: str) -> set[str]:
         try:

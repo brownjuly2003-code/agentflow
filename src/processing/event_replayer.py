@@ -12,6 +12,7 @@ import duckdb
 import structlog
 from opentelemetry import trace
 
+from src.db_concurrency import catalog_ddl_lock
 from src.processing.outbox import OutboxProcessor, ensure_outbox_table
 from src.processing.tracing import inject_trace_to_kafka_headers, telemetry_disabled
 from src.quality.validators.schema_validator import validate_event
@@ -40,25 +41,30 @@ class ReplayResult:
 
 
 def ensure_dead_letter_table(conn: duckdb.DuckDBPyConnection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS dead_letter_events (
-            event_id TEXT PRIMARY KEY,
-            tenant_id TEXT DEFAULT 'default',
-            event_type TEXT,
-            payload JSON,
-            failure_reason TEXT,
-            failure_detail TEXT,
-            received_at TIMESTAMP,
-            retry_count INTEGER DEFAULT 0,
-            last_retried_at TIMESTAMP,
-            status TEXT DEFAULT 'failed'
+    # Serialize the lazy DDL: the offloaded read handlers call this on worker
+    # threads, and concurrent CREATE/ALTER on a cold DuckDB catalog conflicts.
+    # (audit_30 A2 follow-up: #120 offload race)
+    with catalog_ddl_lock:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS dead_letter_events (
+                event_id TEXT PRIMARY KEY,
+                tenant_id TEXT DEFAULT 'default',
+                event_type TEXT,
+                payload JSON,
+                failure_reason TEXT,
+                failure_detail TEXT,
+                received_at TIMESTAMP,
+                retry_count INTEGER DEFAULT 0,
+                last_retried_at TIMESTAMP,
+                status TEXT DEFAULT 'failed'
+            )
+            """
         )
-        """
-    )
-    conn.execute(
-        "ALTER TABLE dead_letter_events ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT 'default'"
-    )
+        conn.execute(
+            "ALTER TABLE dead_letter_events "
+            "ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT 'default'"
+        )
 
 
 class EventReplayer:

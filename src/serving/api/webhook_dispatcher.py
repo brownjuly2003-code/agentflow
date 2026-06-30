@@ -17,6 +17,7 @@ import structlog
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from src.db_concurrency import catalog_ddl_lock
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 
 try:
@@ -124,21 +125,25 @@ def deactivate_webhook(path: Path, webhook_id: str, tenant: str) -> bool:
 
 
 def ensure_webhook_deliveries_table(conn: duckdb.DuckDBPyConnection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS webhook_deliveries (
-            delivery_id VARCHAR,
-            webhook_id VARCHAR,
-            event_id VARCHAR,
-            event_type VARCHAR,
-            attempt INTEGER,
-            status_code INTEGER,
-            success BOOLEAN,
-            error TEXT,
-            delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    # Serialize the lazy DDL: the offloaded read handler calls this on a worker
+    # thread, and concurrent CREATE on a cold DuckDB catalog conflicts (across
+    # tables too). (audit_30 A2 follow-up: #120 offload race)
+    with catalog_ddl_lock:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                delivery_id VARCHAR,
+                webhook_id VARCHAR,
+                event_id VARCHAR,
+                event_type VARCHAR,
+                attempt INTEGER,
+                status_code INTEGER,
+                success BOOLEAN,
+                error TEXT,
+                delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
 
 
 def get_delivery_logs(conn: duckdb.DuckDBPyConnection, webhook_id: str) -> list[dict]:

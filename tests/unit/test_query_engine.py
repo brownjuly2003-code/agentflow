@@ -68,6 +68,24 @@ def test_scope_sql_qualifies_physical_table_shadowed_by_cte_name(engine: QueryEn
     assert all(db != "main" for _, db in tables)
 
 
+def test_scope_sql_rejects_recursive_cte_shadowing_physical_table(engine: QueryEngine) -> None:
+    # A recursive CTE *can* self-reference, so sqlglot keeps its name in its own
+    # body scope and the cte_sources skip mis-classifies the physical *anchor*
+    # reference (the first UNION branch, which cannot self-reference) as a CTE
+    # reference — it is never re-scoped, stays bound to the shared `main` schema,
+    # and leaks every tenant's rows (the WITH RECURSIVE bypass of the D1 fix).
+    # There is no safe re-scoping of a recursive anchor and no legitimate query
+    # names a recursive CTE after a physical table, so fail closed.
+    # (audit_30 D1 follow-up)
+    with pytest.raises(ValueError, match="[Rr]ecursive CTE shadows"):
+        engine._scope_sql(
+            "WITH RECURSIVE orders_v2 AS "
+            "(SELECT * FROM orders_v2 UNION SELECT * FROM orders_v2) "
+            "SELECT * FROM orders_v2",
+            tenant_id="tenant_a",
+        )
+
+
 def test_scope_sql_qualifies_tables_after_subquery(engine: QueryEngine) -> None:
     scoped = engine._scope_sql(
         "SELECT * FROM (SELECT * FROM orders_v2) AS recent, users_enriched",

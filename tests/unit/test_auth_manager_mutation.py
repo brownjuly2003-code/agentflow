@@ -258,7 +258,13 @@ class TestAuthenticate:
         entry = _key(key=None, key_hash="stored-hash", key_lookup="digest-x", tenant="t1")
         m._keys_by_lookup = {"digest-x": entry}
         monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "digest-x")
-        monkeypatch.setattr(manager_module, "verify_api_key", lambda value, h: h == "stored-hash")
+        # The stub requires the PRESENTED key as verify's first arg, so a mutant
+        # that passes None (or the hash) instead of api_key fails to authenticate.
+        monkeypatch.setattr(
+            manager_module,
+            "verify_api_key",
+            lambda value, h: value == "real-key" and h == "stored-hash",
+        )
         out = m.authenticate("real-key")
         assert out is not None
         assert out.matched_slot == "current"
@@ -289,18 +295,21 @@ class TestAuthenticate:
         # only accepts the legacy hash. The indexed entry must be skipped by the
         # `key_lookup is not None -> continue` guard, not verified.
         monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-index-hit")
-        seen: list[str] = []
+        seen: list[tuple[str, str]] = []
 
         def _verify(value: str, h: str) -> bool:
-            seen.append(h)
-            return h == "legacy-hash"
+            seen.append((value, h))
+            return value == "real-key" and h == "legacy-hash"
 
         monkeypatch.setattr(manager_module, "verify_api_key", _verify)
         out = m.authenticate("real-key")
         assert out is not None
         assert out.tenant == "legacy"
         assert out.matched_slot == "current"
-        assert "indexed-hash" not in seen  # indexed entry skipped, not verified
+        assert out.key == "real-key"  # the presented key is bound onto the match copy
+        # the plaintext->hash binding is remembered under the PRESENTED key
+        assert m._runtime_plaintext_by_hash["legacy-hash"] == "real-key"
+        assert "indexed-hash" not in [h for _, h in seen]  # indexed entry skipped
 
     def test_no_configured_keys_returns_none(self) -> None:
         m = _build_manager()
@@ -357,6 +366,25 @@ class TestMatchesKeyMaterial:
         item = _key(key=None, key_hash="not-a-valid-bcrypt-hash")
         assert m._matches_key_material(item, "anything") is False
 
+    def test_previous_key_hash_branch_verifies_presented_value(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `_matches_key_material` is the revoke-path matcher (key_rotation.py).
+        # Its previous_key_hash branch -- `item.previous_key_hash is not None and
+        # verify_api_key(value, item.previous_key_hash)` -- must verify the
+        # PRESENTED value against the PREVIOUS hash. Pins arg order and arg
+        # presence so a None/dropped-arg mutant on that verify call dies.
+        m = _build_manager()
+        item = _key(key=None, key_hash="cur-hash")
+        item = item.model_copy(update={"previous_key_hash": "prev-hash"})
+        monkeypatch.setattr(
+            manager_module,
+            "verify_api_key",
+            lambda value, h: value == "old-secret" and h == "prev-hash",
+        )
+        assert m._matches_key_material(item, "old-secret") is True
+        assert m._matches_key_material(item, "wrong-secret") is False
+
 
 # --------------------------------------------------------------------------- #
 # Per-IP failed-auth brute-force throttle.
@@ -404,6 +432,17 @@ class TestFailedAuthThrottle:
         # window keeps stamp only if stamp > cutoff; 1000.0 > 1000.0 is False.
         m.record_failed_auth("ip")
         assert len(m._failed_auth_windows["ip"]) == 1
+
+    def test_is_failed_auth_limited_drops_stamp_exactly_at_cutoff(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock)
+        m.security_policy = _policy(0)
+        # stamp == now - FAILED_AUTH_WINDOW == cutoff. is_failed_auth_limited's own
+        # filter keeps a stamp only if stamp > cutoff, so the cutoff stamp is
+        # dropped -> empty window -> 0 > 0 is False. A `>=` mutant on that read-path
+        # filter keeps it -> 1 > 0 -> True, so this pins the strict comparison.
+        m._failed_auth_windows["ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS]
+        assert m.is_failed_auth_limited("ip") is False
 
     def test_clear_failed_auth_removes_ip(self) -> None:
         m = _build_manager(time_source=FrozenClock(1_000.0))
@@ -471,6 +510,28 @@ class TestInMemoryRateLimiting:
         # Old stamp expired -> allowed again.
         assert m.is_rate_limited(tenant_key) is False
 
+    def test_is_rate_limited_tracks_keys_independently(self) -> None:
+        # Each tenant key gets its own window (keyed by _rate_limit_key). A mutant
+        # that drops the key (windows collapse onto one) would let key "a"'s
+        # traffic throttle the unrelated key "b" -- a cross-tenant rate-limit leak.
+        m = _build_manager(time_source=FrozenClock(1_000.0))
+        key_a = _key(key="a", rate_limit_rpm=1)
+        key_b = _key(key="b", rate_limit_rpm=1)
+        assert m.is_rate_limited(key_a) is False
+        assert m.is_rate_limited(key_a) is True  # "a" now at its own limit
+        assert m.is_rate_limited(key_b) is False  # "b" is independent
+
+    def test_is_rate_limited_drops_stamp_exactly_at_cutoff(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock)
+        tenant_key = _key(key="k", rate_limit_rpm=1)
+        assert m.is_rate_limited(tenant_key) is False  # stamp recorded at 1000
+        clock.now = 1_000.0 + DEFAULT_RATE_LIMIT_WINDOW_SECONDS  # cutoff == old stamp
+        # the window keeps a stamp only if stamp > cutoff; 1000 > 1000 is False, so
+        # the stamp is evicted and the caller is allowed. A `>=` mutant keeps it and
+        # would block at exactly the window edge.
+        assert m.is_rate_limited(tenant_key) is False
+
     @pytest.mark.asyncio
     async def test_check_rate_limit_applies_local_window_when_redis_reports_full(self) -> None:
         m = _build_manager(
@@ -484,6 +545,23 @@ class TestInMemoryRateLimiting:
         assert first == (True, 1, 1_060)
         assert second == (True, 0, 1_060)
         assert third == (False, 0, 1_060)
+
+    @pytest.mark.asyncio
+    async def test_check_rate_limit_reset_uses_first_window_stamp(self) -> None:
+        # rpm=1 -> the local secondary window holds exactly ONE stamp when reset_at
+        # is computed as int(window[0] + WINDOW). A window[1] mutant would IndexError
+        # on this single-element window, so reset_at pins the [0] index.
+        m = _build_manager(
+            time_source=FrozenClock(1_000.0),
+            rate_limiter=_FullRemainingLimiter(),
+        )
+        tenant_key = _key(rate_limit_rpm=1)
+        allowed, remaining, reset_at = await m.check_rate_limit(tenant_key)
+        assert allowed is True
+        assert remaining == 0
+        assert reset_at == 1_060
+        # second call: window already at rpm -> blocked, reset still from window[0]
+        assert await m.check_rate_limit(tenant_key) == (False, 0, 1_060)
 
 
 # --------------------------------------------------------------------------- #
@@ -611,6 +689,31 @@ class TestInitConfigBranches:
         m = _build_manager()
         assert m.rotation_grace_period_seconds == 7
 
+    def test_rotation_grace_period_floor_is_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # max(1, int(env)) floors the grace at 1; a configured 1 stays 1 and is
+        # not bumped (pins the literal floor against a max(2, ...) mutant).
+        monkeypatch.setenv("AGENTFLOW_ROTATION_GRACE_PERIOD_SECONDS", "1")
+        m = _build_manager()
+        assert m.rotation_grace_period_seconds == 1
+
+    def test_derives_db_path_preserves_explicit_pipeline_suffix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_USAGE_DB_PATH", raising=False)
+        monkeypatch.setenv("DUCKDB_PATH", "/data/pipeline.db")
+        m = _build_manager(db_path="agentflow_api.duckdb")
+        # pipeline_path.suffix (".db") is truthy -> `suffix or ".duckdb"` keeps ".db"
+        assert m.db_path.name == "pipeline_api.db"
+
+    def test_derives_db_path_defaults_suffix_when_pipeline_has_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_USAGE_DB_PATH", raising=False)
+        monkeypatch.setenv("DUCKDB_PATH", "/data/pipeline")
+        m = _build_manager(db_path="agentflow_api.duckdb")
+        # no suffix -> the `or ".duckdb"` fallback supplies the literal ".duckdb"
+        assert m.db_path.name == "pipeline_api.duckdb"
+
     def test_load_with_env_only_config_has_no_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("AGENTFLOW_API_KEYS", raising=False)
         m = _build_manager()
@@ -647,6 +750,7 @@ class TestInitState:
         assert dict(m._rate_windows) == {}
         assert dict(m._failed_auth_windows) == {}
         assert m.rotation_grace_period_seconds == DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
+        assert m.security_config_path is not None
         assert m.security_policy is not None
         assert m.rate_limiter is not None
         assert m.audit_publisher is not None
@@ -730,12 +834,20 @@ class TestLoadRebuildsIndexes:
         assert "plain1" in m.keys_by_value
         assert m.keys_by_value["plain1"].matched_slot == "current"
         assert m.keys_by_value["plain1"].tenant == "t1"
-        # both ids indexed
+        # both ids indexed -> to the actual TenantKey entries, not None
         assert set(m._keys_by_id) == {"id-plain", "id-hash"}
+        assert m._keys_by_id["id-hash"].key_id == "id-hash"
+        assert m._keys_by_id["id-plain"].key == "plain1"
         # only the hashed entry lands in _hashed_keys and the lookup index
         assert [k.key_hash for k in m._hashed_keys] == ["hash2"]
         assert "lookup2" in m._keys_by_lookup
         assert m._keys_by_lookup["lookup2"].key_id == "id-hash"
+        # no previous-rotation entries in this config -> the index is reset to {}
+        assert m._previous_keys_by_lookup == {}
+        # a fresh policy object is loaded (not left None) and used by the throttle
+        assert m.security_policy is not None
+        # _rate_windows stays a list-defaultdict: an unseen key yields [], not KeyError
+        assert m._rate_windows["never-seen"] == []
 
     def test_load_rebuilds_runtime_cache_for_live_hash_and_prunes_stale(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: object
@@ -751,6 +863,9 @@ class TestLoadRebuildsIndexes:
         assert m._runtime_plaintext_by_hash == {"hash2": "runtime-plain"}
         assert "runtime-plain" in m.keys_by_value
         assert m.keys_by_value["runtime-plain"].key_hash == "hash2"
+        # the re-indexed copy carries the runtime plaintext as its current key
+        assert m.keys_by_value["runtime-plain"].key == "runtime-plain"
+        assert m.keys_by_value["runtime-plain"].matched_slot == "current"
 
 
 # --------------------------------------------------------------------------- #
@@ -769,8 +884,14 @@ class TestAuthenticatePreviousKey:
         )
         m._previous_keys_by_lookup = {"prev-lk": entry}
         monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "prev-lk")
-        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: True)
-        monkeypatch.setattr(manager_module, "verify_api_key", lambda value, h: h == "prev-hash")
+        # is_previous_key_active must receive the matched ENTRY and verify must
+        # receive the PRESENTED key -- both pinned so an arg-swap-to-None mutant dies.
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: item is entry)
+        monkeypatch.setattr(
+            manager_module,
+            "verify_api_key",
+            lambda value, h: value == "old-key" and h == "prev-hash",
+        )
         out = m.authenticate("old-key")
         assert out is not None
         assert out.matched_slot == "previous"
@@ -800,11 +921,41 @@ class TestAuthenticatePreviousKey:
         )
         m._loaded_keys = [entry]
         monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
-        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: True)
-        monkeypatch.setattr(manager_module, "verify_api_key", lambda value, h: h == "prev-hash")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: item is entry)
+        monkeypatch.setattr(
+            manager_module,
+            "verify_api_key",
+            lambda value, h: value == "old-key" and h == "prev-hash",
+        )
         out = m.authenticate("old-key")
         assert out is not None
         assert out.matched_slot == "previous"
+        assert out.key == "old-key"
+
+    def test_legacy_previous_scan_skips_inactive_previous_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # An INACTIVE previous key (rotation grace expired) must be skipped by the
+        # guard `if not is_previous_key_active(item) or previous_key_hash is None:
+        # continue`. The `or`->`and` mutant stops skipping it and would verify an
+        # expired key -- a real rotation-grace bypass.
+        m = _build_manager()
+        entry = _key(key=None, key_hash="cur")
+        entry = entry.model_copy(
+            update={"previous_key_hash": "prev-hash", "previous_key_lookup": None}
+        )
+        m._loaded_keys = [entry]
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: False)
+        seen: list[str] = []
+
+        def _verify(value: str, h: str) -> bool:
+            seen.append(h)
+            return True
+
+        monkeypatch.setattr(manager_module, "verify_api_key", _verify)
+        assert m.authenticate("old-key") is None
+        assert "prev-hash" not in seen  # inactive entry never verified
 
     def test_legacy_previous_scan_skips_indexed_entries(
         self, monkeypatch: pytest.MonkeyPatch
@@ -876,6 +1027,15 @@ class TestSweepBoundary:
         m._failed_auth_windows["ip"] = [inside]
         m._sweep_expired_windows()
         assert m._failed_auth_windows["ip"] == [inside]
+
+    def test_failed_auth_stamp_exactly_at_cutoff_is_dropped(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock)
+        # stamp == now - FAILED_AUTH_WINDOW == cutoff; kept only if > cutoff (not
+        # >=) -> the failed-auth sweep drops it, pinning the strict comparison.
+        m._failed_auth_windows["ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS]
+        m._sweep_expired_windows()
+        assert "ip" not in m._failed_auth_windows
 
 
 class TestRateLimitBoundary:

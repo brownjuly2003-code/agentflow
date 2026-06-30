@@ -8,6 +8,7 @@ from typing import cast
 import duckdb
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from src.processing.event_replayer import (
     DeadLetterEventNotFoundError,
@@ -68,6 +69,18 @@ def _conn(request: Request) -> duckdb.DuckDBPyConnection:
     return conn
 
 
+def _read_cursor(request: Request) -> duckdb.DuckDBPyConnection:
+    """A dedicated cursor for the GET handlers, used on a worker thread.
+
+    The read handlers offload their scans with ``run_in_threadpool``; a separate
+    cursor — not the shared connection object — keeps concurrent reads on
+    different worker threads from colliding on the connection. (audit_30_06_26.md A2)
+    """
+    cursor = cast(duckdb.DuckDBPyConnection, request.app.state.query_engine._conn).cursor()
+    ensure_dead_letter_table(cursor)
+    return cursor
+
+
 def _tenant_id(request: Request) -> str:
     tenant_key = getattr(request.state, "tenant_key", None)
     tenant_id = getattr(request.state, "tenant_id", None)
@@ -116,41 +129,48 @@ def _require_deadletter_write_access(request: Request, event_id: str) -> None:
 
 @router.get("/stats", response_model=DeadLetterStatsResponse)
 async def deadletter_stats(request: Request) -> DeadLetterStatsResponse:
-    conn = _conn(request)
+    return await run_in_threadpool(_deadletter_stats, request)
+
+
+def _deadletter_stats(request: Request) -> DeadLetterStatsResponse:
+    cursor = _read_cursor(request)
     tenant_id = _tenant_id(request)
-    rows = conn.execute(
-        """
-        SELECT failure_reason, COUNT(*)
-        FROM dead_letter_events
-        WHERE status = 'failed'
-          AND COALESCE(tenant_id, 'default') = ?
-        GROUP BY failure_reason
-        ORDER BY failure_reason
-        """,
-        [tenant_id],
-    ).fetchall()
-    last_24h_row = conn.execute(
-        """
-        SELECT COUNT(*)
-        FROM dead_letter_events
-        WHERE status = 'failed'
-          AND COALESCE(tenant_id, 'default') = ?
-          AND received_at >= NOW() - INTERVAL '24 hours'
-        """,
-        [tenant_id],
-    ).fetchone()
-    trend_rows = conn.execute(
-        """
-        SELECT DATE_TRUNC('hour', received_at) AS hour_bucket, COUNT(*)
-        FROM dead_letter_events
-        WHERE status = 'failed'
-          AND COALESCE(tenant_id, 'default') = ?
-          AND received_at >= NOW() - INTERVAL '24 hours'
-        GROUP BY hour_bucket
-        ORDER BY hour_bucket
-        """,
-        [tenant_id],
-    ).fetchall()
+    try:
+        rows = cursor.execute(
+            """
+            SELECT failure_reason, COUNT(*)
+            FROM dead_letter_events
+            WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
+            GROUP BY failure_reason
+            ORDER BY failure_reason
+            """,
+            [tenant_id],
+        ).fetchall()
+        last_24h_row = cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM dead_letter_events
+            WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
+              AND received_at >= NOW() - INTERVAL '24 hours'
+            """,
+            [tenant_id],
+        ).fetchone()
+        trend_rows = cursor.execute(
+            """
+            SELECT DATE_TRUNC('hour', received_at) AS hour_bucket, COUNT(*)
+            FROM dead_letter_events
+            WHERE status = 'failed'
+              AND COALESCE(tenant_id, 'default') = ?
+              AND received_at >= NOW() - INTERVAL '24 hours'
+            GROUP BY hour_bucket
+            ORDER BY hour_bucket
+            """,
+            [tenant_id],
+        ).fetchall()
+    finally:
+        cursor.close()
     return DeadLetterStatsResponse(
         counts={str(reason): int(count) for reason, count in rows if reason is not None},
         last_24h=int(last_24h_row[0]) if last_24h_row and last_24h_row[0] is not None else 0,
@@ -171,75 +191,84 @@ async def list_deadletter_events(
     page_size: int = Query(default=50, ge=1, le=100),
     reason: str | None = Query(default=None),
 ) -> DeadLetterListResponse:
-    conn = _conn(request)
+    return await run_in_threadpool(_list_deadletter_events, request, page, page_size, reason)
+
+
+def _list_deadletter_events(
+    request: Request, page: int, page_size: int, reason: str | None
+) -> DeadLetterListResponse:
+    cursor = _read_cursor(request)
     tenant_id = _tenant_id(request)
-    params: list[object]
-    if reason is not None:
-        params = [tenant_id, reason]
-        total_row = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-              AND failure_reason = ?
-            """,
-            params,
-        ).fetchone()
-    else:
-        params = [tenant_id]
-        total_row = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-            """,
-            params,
-        ).fetchone()
-    total = int(total_row[0]) if total_row and total_row[0] is not None else 0
-    offset = (page - 1) * page_size
-    if reason is not None:
-        rows = conn.execute(
-            """
-            SELECT
-                event_id,
-                event_type,
-                failure_reason,
-                failure_detail,
-                received_at,
-                retry_count,
-                last_retried_at,
-                status
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-              AND failure_reason = ?
-            ORDER BY received_at DESC, event_id ASC
-            LIMIT ? OFFSET ?
-            """,
-            [tenant_id, reason, page_size, offset],
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT
-                event_id,
-                event_type,
-                failure_reason,
-                failure_detail,
-                received_at,
-                retry_count,
-                last_retried_at,
-                status
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-            ORDER BY received_at DESC, event_id ASC
-            LIMIT ? OFFSET ?
-            """,
-            [tenant_id, page_size, offset],
-        ).fetchall()
+    try:
+        params: list[object]
+        if reason is not None:
+            params = [tenant_id, reason]
+            total_row = cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM dead_letter_events
+                WHERE status = 'failed'
+                  AND COALESCE(tenant_id, 'default') = ?
+                  AND failure_reason = ?
+                """,
+                params,
+            ).fetchone()
+        else:
+            params = [tenant_id]
+            total_row = cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM dead_letter_events
+                WHERE status = 'failed'
+                  AND COALESCE(tenant_id, 'default') = ?
+                """,
+                params,
+            ).fetchone()
+        total = int(total_row[0]) if total_row and total_row[0] is not None else 0
+        offset = (page - 1) * page_size
+        if reason is not None:
+            rows = cursor.execute(
+                """
+                SELECT
+                    event_id,
+                    event_type,
+                    failure_reason,
+                    failure_detail,
+                    received_at,
+                    retry_count,
+                    last_retried_at,
+                    status
+                FROM dead_letter_events
+                WHERE status = 'failed'
+                  AND COALESCE(tenant_id, 'default') = ?
+                  AND failure_reason = ?
+                ORDER BY received_at DESC, event_id ASC
+                LIMIT ? OFFSET ?
+                """,
+                [tenant_id, reason, page_size, offset],
+            ).fetchall()
+        else:
+            rows = cursor.execute(
+                """
+                SELECT
+                    event_id,
+                    event_type,
+                    failure_reason,
+                    failure_detail,
+                    received_at,
+                    retry_count,
+                    last_retried_at,
+                    status
+                FROM dead_letter_events
+                WHERE status = 'failed'
+                  AND COALESCE(tenant_id, 'default') = ?
+                ORDER BY received_at DESC, event_id ASC
+                LIMIT ? OFFSET ?
+                """,
+                [tenant_id, page_size, offset],
+            ).fetchall()
+    finally:
+        cursor.close()
 
     return DeadLetterListResponse(
         items=[
@@ -266,25 +295,32 @@ async def list_deadletter_events(
 
 @router.get("/{event_id}", response_model=DeadLetterDetail)
 async def get_deadletter_event(event_id: str, request: Request) -> DeadLetterDetail:
-    conn = _conn(request)
-    row = conn.execute(
-        """
-        SELECT
-            event_id,
-            event_type,
-            payload,
-            failure_reason,
-            failure_detail,
-            received_at,
-            retry_count,
-            last_retried_at,
-            status
-        FROM dead_letter_events
-        WHERE event_id = ?
-          AND COALESCE(tenant_id, 'default') = ?
-        """,
-        [event_id, _tenant_id(request)],
-    ).fetchone()
+    return await run_in_threadpool(_get_deadletter_event, request, event_id)
+
+
+def _get_deadletter_event(request: Request, event_id: str) -> DeadLetterDetail:
+    cursor = _read_cursor(request)
+    try:
+        row = cursor.execute(
+            """
+            SELECT
+                event_id,
+                event_type,
+                payload,
+                failure_reason,
+                failure_detail,
+                received_at,
+                retry_count,
+                last_retried_at,
+                status
+            FROM dead_letter_events
+            WHERE event_id = ?
+              AND COALESCE(tenant_id, 'default') = ?
+            """,
+            [event_id, _tenant_id(request)],
+        ).fetchone()
+    finally:
+        cursor.close()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
     return DeadLetterDetail(

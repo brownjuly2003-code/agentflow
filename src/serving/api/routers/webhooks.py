@@ -4,6 +4,7 @@ from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import AnyHttpUrl, BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 from src.serving.api.webhook_dispatcher import (
@@ -100,5 +101,16 @@ async def webhook_logs(webhook_id: str, request: Request) -> dict[str, object]:
     )
     if registration is None:
         raise HTTPException(status_code=404, detail=f"Webhook '{webhook_id}' not found.")
-    logs = get_delivery_logs(request.app.state.query_engine._conn, webhook_id)
+    logs = await run_in_threadpool(_read_delivery_logs, request, webhook_id)
     return {"logs": logs}
+
+
+def _read_delivery_logs(request: Request, webhook_id: str) -> list[dict]:
+    # The log scan runs on a worker thread (run_in_threadpool); a dedicated
+    # cursor — not the shared connection — keeps concurrent reads on different
+    # threads from colliding on the connection. (audit_30_06_26.md A2)
+    cursor = request.app.state.query_engine._conn.cursor()
+    try:
+        return get_delivery_logs(cursor, webhook_id)
+    finally:
+        cursor.close()

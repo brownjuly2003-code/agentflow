@@ -270,12 +270,24 @@ async def test_test_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) 
 # ── alert_history ────────────────────────────────────────────────
 
 
+class _CursorConn:
+    """A connection stub that yields a closeable cursor — the history read
+    offloads onto a dedicated cursor (audit_30 A2). get_alert_history is stubbed,
+    so the cursor itself is never queried."""
+
+    def cursor(self) -> _CursorConn:
+        return self
+
+    def close(self) -> None:
+        pass
+
+
 async def test_alert_history_returns_records(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: _rule())
     monkeypatch.setattr(
         alerts_module, "get_alert_history", lambda conn, alert_id: [{"fired_at": "2026-06-13"}]
     )
-    result = await alert_history("al-1", _req(query_conn=object()))
+    result = await alert_history("al-1", _req(query_conn=_CursorConn()))
     assert result == {"history": [{"fired_at": "2026-06-13"}]}
 
 

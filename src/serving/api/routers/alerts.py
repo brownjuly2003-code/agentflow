@@ -3,6 +3,7 @@ from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import AnyHttpUrl, BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from src.serving.api.alert_dispatcher import (
     create_alert,
@@ -145,5 +146,16 @@ async def alert_history(alert_id: str, request: Request) -> dict[str, object]:
     rule = get_alert(get_alert_config_path(request.app), alert_id, _tenant(request))
     if rule is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
-    history = get_alert_history(request.app.state.query_engine._conn, alert_id)
+    history = await run_in_threadpool(_read_alert_history, request, alert_id)
     return {"history": history}
+
+
+def _read_alert_history(request: Request, alert_id: str) -> list[dict]:
+    # The history scan runs on a worker thread (run_in_threadpool); a dedicated
+    # cursor — not the shared connection — keeps concurrent reads on different
+    # threads from colliding on the connection. (audit_30_06_26.md A2)
+    cursor = request.app.state.query_engine._conn.cursor()
+    try:
+        return get_alert_history(cursor, alert_id)
+    finally:
+        cursor.close()

@@ -250,6 +250,46 @@ def test_mask_query_results_masks_pii_renamed_above_inner_select_star(tmp_path: 
         assert rows == [{"c": "a***@example.com"}], sql
 
 
+def test_mask_query_results_masks_unaliased_pii_expression(tmp_path: Path):
+    # An unaliased expression over PII has no `alias_or_name`, so the resolver
+    # skipped it and the output column kept DuckDB's rendered name (`upper(email)`,
+    # `(email || '')`) — which never matched a rule field, so cleartext leaked.
+    # Aligning projections positionally to the real result keys maps the column to
+    # the source it references and masks it. (audit_30 D2 follow-up: unaliased-expr)
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    for sql, out_col in (
+        ("SELECT upper(email) FROM users_enriched", "upper(email)"),
+        ("SELECT email || '' FROM users_enriched", "(email || '')"),
+    ):
+        rows, masked = masker.mask_query_results(
+            sql,
+            [{out_col: "alice@example.com"}],
+            tenant="acme",
+            table_to_entity={"users_enriched": "user"},
+        )
+
+        assert masked is True, sql
+        assert rows == [{out_col: "a***@example.com"}], sql
+
+
+def test_mask_query_results_does_not_overmask_directly_named_nonpii(tmp_path: Path):
+    # Positional alignment must key each projection to its *own* result column: a
+    # directly-named non-PII column alongside a PII one stays untouched (no star,
+    # no derivation -> resolvable lineage, not the fail-closed sentinel).
+    masker = PiiMasker(_user_email_config(tmp_path))
+
+    rows, masked = masker.mask_query_results(
+        "SELECT email, user_id FROM users_enriched",
+        [{"email": "alice@example.com", "user_id": "U-1"}],
+        tenant="acme",
+        table_to_entity={"users_enriched": "user"},
+    )
+
+    assert masked is True
+    assert rows == [{"email": "a***@example.com", "user_id": "U-1"}]
+
+
 def test_mask_query_results_masks_select_star_by_name(tmp_path: Path):
     # SELECT * has no resolvable projection lineage; masking falls back to
     # matching rule fields against the (canonical) output column names.

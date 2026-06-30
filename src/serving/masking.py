@@ -98,7 +98,11 @@ class PiiMasker:
             return [dict(row) for row in rows], False
         # Resolve projection lineage so a renamed/derived PII column is masked by
         # what it's *built from*, not by its output name. (audit_30_06_26.md D2)
-        source_columns = self._projection_source_columns(sql)
+        # The real result keys (projection order) let an *unaliased* expression be
+        # keyed by its true DuckDB output name. (audit_30 D2 follow-up: unaliased
+        # expression PII leak)
+        output_keys = list(rows[0].keys()) if rows else []
+        source_columns = self._projection_source_columns(sql, output_keys)
         # Apply every matched entity's masking rules. A multi-entity JOIN must not
         # bypass masking — returning the rows unmasked leaked cleartext PII
         # (e.g. users_enriched JOIN orders_v2). Mask the union of all matched
@@ -111,8 +115,10 @@ class PiiMasker:
             ]
         return masked_rows, masked_rows != rows
 
-    def _projection_source_columns(self, sql: str) -> dict[str, frozenset[str]] | None:
-        """Map each output column to the source column names that feed it.
+    def _projection_source_columns(
+        self, sql: str, output_keys: list[str]
+    ) -> dict[str, frozenset[str]] | None:
+        """Map each *result* column to the source column names that feed it.
 
         Resolves *true* projection lineage (through subqueries, CTEs and unions)
         so a PII column renamed at any nesting depth is masked by what it is
@@ -121,9 +127,19 @@ class PiiMasker:
         ``SELECT contact FROM (SELECT email AS contact FROM users_enriched)`` —
         returned cleartext. (audit_30 D2 follow-up: subquery/CTE-alias bypass)
 
+        Projections are aligned *positionally* to the real DuckDB result keys
+        (``output_keys``; projection order == result-column order) so an
+        *unaliased* expression — ``SELECT upper(email) FROM users_enriched``
+        (output column ``upper(email)``), ``SELECT email || '' …``
+        (``(email || '')``) — is keyed by its true output name and masked by the
+        column it references. sqlglot's own rendering does not reproduce DuckDB's
+        column naming (case and parenthesisation differ), so the names must come
+        from the rows. (audit_30 D2 follow-up: unaliased-expression PII leak)
+
         Returns ``None`` for a ``SELECT *`` (whose outputs are the source names
-        verbatim, so name-matching is correct) or unparseable SQL, so masking
-        falls back to matching rule fields against output names.
+        verbatim, so name-matching is correct), for unparseable SQL, or when the
+        projections can't be aligned 1:1 to the result keys, so masking falls
+        back to matching rule fields against output names.
         """
         try:
             parsed = sqlglot.parse_one(sql, read="duckdb")
@@ -132,29 +148,40 @@ class PiiMasker:
         select = parsed.find(exp.Select)
         if select is None:
             return None
+        projections = select.expressions
         if any(
             isinstance(projection, exp.Star) or projection.find(exp.Star) is not None
-            for projection in select.expressions
+            for projection in projections
         ):
             return None
+        # Align projections to the real result keys positionally. A count mismatch
+        # means an expansion we can't map 1:1 — fall back to name-matching rather
+        # than mis-key a column.
+        if not output_keys or len(projections) != len(output_keys):
+            return None
         mapping: dict[str, frozenset[str]] = {}
-        for projection in select.expressions:
+        for projection, output_key in zip(projections, output_keys, strict=False):
             output_name = projection.alias_or_name
-            if not output_name:
-                continue
-            # Union the *deep* lineage sources (which trace a renamed PII column
-            # through subqueries/CTEs) with the *shallow* columns named directly
-            # in this projection. Lineage is blind through an inner ``SELECT *``
-            # (no schema to expand it), where the shallow scan still catches a
-            # direct ``email AS contact``; lineage catches the inner rename the
-            # shallow scan misses. Either alone leaks one shape — the union
-            # closes both.
-            deep = self._lineage_source_columns(output_name, sql)
-            if isinstance(deep, _UnresolvedSources):
-                mapping[output_name] = deep
-                continue
-            shallow = frozenset(col.name for col in projection.find_all(exp.Column) if col.name)
-            mapping[output_name] = deep | shallow
+            if output_name:
+                # Union the *deep* lineage sources (which trace a renamed PII
+                # column through subqueries/CTEs) with the *shallow* columns named
+                # directly in this projection. Lineage is blind through an inner
+                # ``SELECT *`` (handled fail-closed in _lineage_source_columns);
+                # the shallow scan still catches a direct ``email AS contact``.
+                # Either alone leaks one shape — the union closes both.
+                deep = self._lineage_source_columns(output_name, sql)
+                if isinstance(deep, _UnresolvedSources):
+                    mapping[output_key] = deep
+                    continue
+                shallow = frozenset(col.name for col in projection.find_all(exp.Column) if col.name)
+                mapping[output_key] = deep | shallow
+            else:
+                # An unaliased expression has no output name for lineage to key on,
+                # so mask by the columns it directly references (``upper(email)`` ->
+                # ``email``). A nested star was already excluded above.
+                mapping[output_key] = frozenset(
+                    col.name for col in projection.find_all(exp.Column) if col.name
+                )
         return mapping
 
     def _lineage_source_columns(self, output_name: str, sql: str) -> frozenset[str]:

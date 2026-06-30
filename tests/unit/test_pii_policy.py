@@ -159,6 +159,44 @@ def test_prepare_nl_sql_denies_select_star_over_pii_table(
         )
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # DuckDB COLUMNS(...) expands to source columns (incl. PII) like a star,
+        # but parses as exp.Columns, not exp.Star. (audit_01_07_26 deny-gate bypass)
+        "SELECT COLUMNS('.*') FROM users_enriched",
+        "SELECT COLUMNS('mail') FROM users_enriched",
+        "SELECT COLUMNS(c -> c LIKE '%mail%') FROM users_enriched",
+        "SELECT max(COLUMNS('.*')) FROM users_enriched",
+    ],
+)
+def test_prepare_nl_sql_denies_columns_expansion_over_pii_table(
+    monkeypatch: pytest.MonkeyPatch, sql: str
+) -> None:
+    monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(DEFAULT_CONFIG_PATH))
+    with pytest.raises(UnsafeNLQueryError, match="COLUMNS"):
+        _prepare_nl_sql(sql, _USER_TABLES, table_to_entity=_USER_MAP, tenant_id="acme")
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # DuckDB whole-row struct reference: a bare table name / alias in projection
+        # returns a STRUCT of every column, PII included, naming no PII column and
+        # using no star. (audit_01_07_26 deny-gate bypass)
+        "SELECT users_enriched FROM users_enriched",
+        "SELECT t FROM users_enriched AS t",
+        "SELECT s FROM (SELECT users_enriched AS s FROM users_enriched) z",
+    ],
+)
+def test_prepare_nl_sql_denies_whole_row_struct_reference_over_pii_table(
+    monkeypatch: pytest.MonkeyPatch, sql: str
+) -> None:
+    monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(DEFAULT_CONFIG_PATH))
+    with pytest.raises(UnsafeNLQueryError, match="struct reference"):
+        _prepare_nl_sql(sql, _USER_TABLES, table_to_entity=_USER_MAP, tenant_id="acme")
+
+
 def test_prepare_nl_sql_allows_pii_query_for_exempt_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

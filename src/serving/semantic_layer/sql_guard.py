@@ -146,6 +146,12 @@ def assert_no_pii_access(
       is rejected — a star can expand to any column, and proving a nested star never
       reaches the output is exactly the lineage analysis we removed, so we fail
       closed rather than reason about it;
+    * a DuckDB ``COLUMNS(...)`` projection (regex or lambda) is rejected — it
+      expands to one-or-more source columns just like a star (incl. PII) but parses
+      as ``exp.Columns``, not ``exp.Star``;
+    * a DuckDB whole-row struct reference — a bare table name or table alias in
+      projection position (``SELECT users_enriched FROM users_enriched``) returns a
+      STRUCT of every column, PII included, without naming a column or using a star;
     * a reference to a PII column by name anywhere — projection, filter, join, a
       subquery, an alias source (``email AS contact``), an expression
       (``upper(email)``) — is rejected, because the raw column name still appears in
@@ -182,6 +188,35 @@ def assert_no_pii_access(
             raise UnsafeSQLError(
                 "SELECT * / table.* over a PII-bearing table is not allowed; "
                 "select explicit non-PII columns"
+            )
+
+    # DuckDB COLUMNS(...) expands to one-or-more source columns (PII included),
+    # exactly like a star, but parses as exp.Columns rather than exp.Star — so the
+    # star check above misses it. Fail closed over a PII-bearing table.
+    # (audit_01_07_26.md deny-gate bypass: SELECT COLUMNS('.*') FROM users_enriched)
+    if statement.find(exp.Columns) is not None:
+        raise UnsafeSQLError(
+            "COLUMNS(...) expansion over a PII-bearing table is not allowed; "
+            "select explicit non-PII columns"
+        )
+
+    # A bare table name (or table alias) in projection position is a DuckDB
+    # whole-row struct reference: `SELECT users_enriched FROM users_enriched` (or
+    # `SELECT t FROM users_enriched AS t`) returns a STRUCT of every column, PII
+    # included, without ever naming a PII column or using a star. It parses as an
+    # unqualified exp.Column whose name is a referenced table/alias.
+    # (audit_01_07_26.md deny-gate bypass)
+    table_refs: set[str] = set()
+    for table in statement.find_all(exp.Table):
+        if table.name:
+            table_refs.add(table.name.lower())
+        if table.alias:
+            table_refs.add(table.alias.lower())
+    for column in statement.find_all(exp.Column):
+        if not column.table and column.name and column.name.lower() in table_refs:
+            raise UnsafeSQLError(
+                "Whole-row struct reference over a PII-bearing table is not "
+                "allowed; select explicit non-PII columns"
             )
 
     referenced_columns = {

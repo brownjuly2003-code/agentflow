@@ -170,6 +170,50 @@ def test_pii_denies_star_in_a_union_branch():
         _deny("SELECT id FROM products UNION SELECT * FROM users_enriched")
 
 
+def test_pii_denies_columns_expansion_over_pii_table():
+    # DuckDB COLUMNS(...) expands to source columns like a star but parses as
+    # exp.Columns, not exp.Star. (audit_01_07_26 deny-gate bypass)
+    with pytest.raises(UnsafeSQLError, match="COLUMNS"):
+        _deny("SELECT COLUMNS('.*') FROM users_enriched")
+
+
+def test_pii_denies_columns_lambda_expansion_over_pii_table():
+    with pytest.raises(UnsafeSQLError, match="COLUMNS"):
+        _deny("SELECT COLUMNS(c -> c LIKE '%mail%') FROM users_enriched")
+
+
+def test_pii_allows_columns_expansion_over_non_pii_table():
+    # COLUMNS over a no-PII table stays allowed: the gate returns before the
+    # COLUMNS check when nothing PII is reachable. Kills a mutant that drops the
+    # reachable-PII guard and rejects COLUMNS unconditionally.
+    _deny("SELECT COLUMNS('.*') FROM products")
+
+
+def test_pii_denies_whole_row_struct_reference():
+    # A bare table name in projection is a DuckDB whole-row STRUCT of every column
+    # (PII included), naming no PII column. (audit_01_07_26 deny-gate bypass)
+    with pytest.raises(UnsafeSQLError, match="struct reference"):
+        _deny("SELECT users_enriched FROM users_enriched")
+
+
+def test_pii_denies_whole_row_struct_reference_via_alias():
+    # The bare reference can be a table alias, not just the table name; pins the
+    # table.alias branch of the ref set.
+    with pytest.raises(UnsafeSQLError, match="struct reference"):
+        _deny("SELECT t FROM users_enriched AS t")
+
+
+def test_pii_denies_struct_reference_case_insensitively():
+    # Pins the .lower() on both the table-ref set and the projected column name.
+    with pytest.raises(UnsafeSQLError, match="struct reference"):
+        _deny("SELECT USERS_ENRICHED FROM USERS_ENRICHED")
+
+
+def test_pii_allows_struct_reference_over_non_pii_table():
+    # A whole-row reference to a non-PII table is allowed (nothing PII reachable).
+    _deny("SELECT products FROM products")
+
+
 def test_pii_denies_second_entity_pii_column():
     # reachable_pii is the union over all referenced PII tables.
     with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['shipping_address'\]"):

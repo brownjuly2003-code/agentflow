@@ -19,7 +19,14 @@ class PiiMasker:
         self.config_path = Path(config_path)
         self._config = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
 
-    def mask(self, entity_type: str, data: dict, tenant: str) -> dict:
+    def mask(
+        self,
+        entity_type: str,
+        data: dict,
+        tenant: str,
+        *,
+        source_columns: dict[str, set[str]] | None = None,
+    ) -> dict:
         masking = self._config.get("masking", {})
         if tenant in masking.get("pii_exempt_tenants", []):
             return dict(data)
@@ -28,12 +35,35 @@ class PiiMasker:
         masked = dict(data)
         for rule in rules:
             field = rule.get("field")
-            if field in masked:
-                masked[field] = self._apply_strategy(
-                    masked[field],
-                    rule.get("strategy", default_strategy),
-                )
+            if not field:
+                continue
+            strategy = rule.get("strategy", default_strategy)
+            for output_col in self._output_columns_for_field(field, masked, source_columns):
+                masked[output_col] = self._apply_strategy(masked[output_col], strategy)
         return masked
+
+    def _output_columns_for_field(
+        self,
+        field: str,
+        data: dict,
+        source_columns: dict[str, set[str]] | None,
+    ) -> set[str]:
+        """Which result columns to mask for a rule's source ``field``.
+
+        With projection lineage (from a SELECT), mask every output column that
+        *derives* from the source field — this catches a renamed/derived PII
+        column such as ``email AS contact`` or ``lower(email) AS e`` that the old
+        output-name match silently let through as cleartext. (audit_30_06_26.md D2)
+        Without lineage (a single-entity payload, ``SELECT *``, or unparseable
+        SQL) the output column keeps the source name, so match by name.
+        """
+        if source_columns is not None:
+            return {
+                output_col
+                for output_col, sources in source_columns.items()
+                if field in sources and output_col in data
+            }
+        return {field} if field in data else set()
 
     def mask_query_results(
         self,
@@ -48,14 +78,44 @@ class PiiMasker:
         }
         if not entity_types:
             return [dict(row) for row in rows], False
+        # Resolve projection lineage so a renamed/derived PII column is masked by
+        # what it's *built from*, not by its output name. (audit_30_06_26.md D2)
+        source_columns = self._projection_source_columns(sql)
         # Apply every matched entity's masking rules. A multi-entity JOIN must not
         # bypass masking — returning the rows unmasked leaked cleartext PII
         # (e.g. users_enriched JOIN orders_v2). Mask the union of all matched
         # entities rather than failing open. (audit_28_06_26.md #6)
         masked_rows = [dict(row) for row in rows]
         for entity_type in entity_types:
-            masked_rows = [self.mask(entity_type, row, tenant) for row in masked_rows]
+            masked_rows = [
+                self.mask(entity_type, row, tenant, source_columns=source_columns)
+                for row in masked_rows
+            ]
         return masked_rows, masked_rows != rows
+
+    def _projection_source_columns(self, sql: str) -> dict[str, set[str]] | None:
+        """Map each output column to the source column names that feed it.
+
+        Returns ``None`` when the projection can't be resolved precisely — a
+        ``SELECT *`` (whose outputs are the source names verbatim) or unparseable
+        SQL — so masking falls back to matching rule fields against output names.
+        """
+        try:
+            parsed = sqlglot.parse_one(sql, read="duckdb")
+        except sqlglot.errors.ParseError:
+            return None
+        select = parsed.find(exp.Select)
+        if select is None:
+            return None
+        mapping: dict[str, set[str]] = {}
+        for projection in select.expressions:
+            if isinstance(projection, exp.Star) or projection.find(exp.Star) is not None:
+                return None
+            output_name = projection.alias_or_name
+            if not output_name:
+                continue
+            mapping[output_name] = {col.name for col in projection.find_all(exp.Column) if col.name}
+        return mapping
 
     def _extract_table_names(self, sql: str) -> set[str]:
         try:

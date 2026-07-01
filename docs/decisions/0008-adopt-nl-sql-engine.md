@@ -2,7 +2,14 @@
 
 ## Status
 
-Accepted - 2026-07-01
+Accepted - 2026-07-01. **Implemented (cont.37, 2026-07-01):** the generation half
+is vendored at `src/serving/semantic_layer/nl_sql_engine/` (Sonnet 5 via
+GraceKelly), `nl_engine._llm_translate` routes through it, and the eval harness
+measured **100% EA (18/18)** on the demo set live (rule-based baseline recomputed
+to 27.8% after the gold set was normalised to a consistent minimal projection).
+See `docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`. Remaining: step 3-proper
+(schema-grounding for bounded PII via a non-PII `exclude_fields` allowlist).
+Shipped default stays rule-based (`GRACEKELLY_URL` unset).
 
 ## Context
 

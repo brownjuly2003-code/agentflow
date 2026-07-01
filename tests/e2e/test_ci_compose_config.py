@@ -66,13 +66,36 @@ def test_lite_compose_contains_only_required_services():
 
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
 
-    assert set(compose["services"]) == {"agentflow-api", "redis", "kafka", "postgres"}
+    assert set(compose["services"]) == {"agentflow-api", "redis", "kafka", "postgres", "clickhouse"}
 
 
 def test_lite_compose_mounts_contracts_for_api_startup():
     compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.e2e.yml").read_text(encoding="utf-8"))
 
     assert "./contracts:/app/contracts:ro" in compose["services"]["agentflow-api"]["volumes"]
+
+
+def test_lite_compose_runs_shipped_clickhouse_serving_profile():
+    compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.e2e.yml").read_text(encoding="utf-8"))
+    api = compose["services"]["agentflow-api"]
+
+    assert api["depends_on"]["clickhouse"] == {"condition": "service_healthy"}
+    assert api["environment"]["CLICKHOUSE_HOST"] == "clickhouse"
+    assert api["environment"]["CLICKHOUSE_DATABASE"] == "agentflow"
+    # No SERVING_BACKEND override: the container must read the shipped
+    # config/serving.yaml profile (ClickHouse), not a test pin.
+    assert "SERVING_BACKEND" not in api["environment"]
+
+
+def test_e2e_workflow_verifies_clickhouse_serving_path():
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "e2e.yml").read_text(encoding="utf-8")
+    )
+    steps = {step.get("name"): step for step in workflow["jobs"]["e2e"]["steps"]}
+    verify = steps["Verify ClickHouse serving path"]
+
+    assert "agentflow.orders_v2" in verify["run"]
+    assert "agentflow.pipeline_events" in verify["run"]
 
 
 def test_compose_override_keeps_host_gateway_on_linux(tmp_path, monkeypatch):

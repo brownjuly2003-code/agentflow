@@ -77,10 +77,8 @@ DuckDB.
       (`${GRACEKELLY_URL}/api/v1/orchestrate`), model `claude-sonnet-5` — no
       direct provider SDK. Gate + engine detection realigned to `GRACEKELLY_URL`
       across `nl_engine`, `nl_queries`, `analytics`, `agent_query`.
-- [ ] **GraceKelly must expose Sonnet 5.** Its registry currently ships
-      `claude-sonnet-4-6`; upgrade GraceKelly to `claude-sonnet-5` (registry +
-      Perplexity browser selectors) so the requested model resolves. Tracked in
-      the GraceKelly repo, not here.
+- [x] **GraceKelly serves Sonnet 5.** `claude-sonnet-5` resolves through the GK
+      orchestration API today — no GK-side upgrade needed.
 - [ ] Prompt dialect: **keep DuckDB-flavored** (backend transpiles). Documented
       in ADR 0006.
 - [ ] LLM reachability: the shipped demo runs the **rule-based** translator

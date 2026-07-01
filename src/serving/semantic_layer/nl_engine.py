@@ -7,11 +7,8 @@ configured.
 The LLM path does NOT call any model provider (Anthropic/OpenAI) directly — it
 routes through GraceKelly's `/api/v1/orchestrate` endpoint, which owns model
 selection and execution (browser-backed Sonnet 5). Set GRACEKELLY_URL to enable
-LLM mode; the target model is GRACEKELLY_NL_SQL_MODEL (default claude-sonnet-5).
-
-NOTE: the GraceKelly model registry must actually expose the requested model.
-At time of writing GraceKelly ships `claude-sonnet-4-6`; `claude-sonnet-5`
-becomes reachable only once GraceKelly itself is upgraded (tracked separately).
+LLM mode; the target model is GRACEKELLY_NL_SQL_MODEL (default claude-sonnet-5),
+which the GraceKelly orchestrator serves today.
 """
 
 import os

@@ -107,10 +107,9 @@ Concretely:
 - NL→SQL LLM path runs **through the GraceKelly orchestration API**
   (`${GRACEKELLY_URL}/api/v1/orchestrate`), never a direct provider SDK.
   GraceKelly owns model selection/execution (browser-backed **Sonnet 5**,
-  `GRACEKELLY_NL_SQL_MODEL=claude-sonnet-5`). NOTE: GraceKelly currently ships
-  `claude-sonnet-4-6` in its registry — `claude-sonnet-5` becomes reachable only
-  once GraceKelly itself is upgraded (tracked in the GraceKelly repo). Prompt
-  dialect stays DuckDB-flavored because the backend transpiles.
+  `GRACEKELLY_NL_SQL_MODEL=claude-sonnet-5`, which GraceKelly serves today, so the
+  requested model resolves through the GK API). Prompt dialect stays
+  DuckDB-flavored because the backend transpiles.
 
 ## Consequences
 

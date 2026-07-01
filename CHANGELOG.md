@@ -34,9 +34,8 @@ All notable changes to AgentFlow are documented in this file.
   `ANTHROPIC_API_KEY`); engine detection across the query package, analytics, and
   agent-query telemetry was realigned to match. The previous direct
   `claude-sonnet-4-20250514` call is removed. The shipped demo still runs the
-  **rule-based** translator (GraceKelly is opt-in, unset in deploy configs).
-  NOTE: GraceKelly currently ships `claude-sonnet-4-6`; `claude-sonnet-5` becomes
-  reachable once GraceKelly itself is upgraded.
+  **rule-based** translator (GraceKelly is opt-in, unset in deploy configs);
+  when configured, GraceKelly serves `claude-sonnet-5`.
 - **Serving engine decision: fixed on ClickHouse** (ADR 0006 + 0007). The demo
   serving default moves DuckDB → ClickHouse, with DuckDB demoted to the
   local-dev / test and compatibility store. This unblocks engine-native bounded

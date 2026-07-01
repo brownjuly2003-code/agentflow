@@ -115,10 +115,10 @@ def _route_after_validate(state: PipelineState) -> str:
     """
     outcome = state.get("outcome")
     if outcome is not None and outcome.error_kind is None:
-        return END
+        return str(END)
     if not state.get("repair_attempted"):
         return "repair_once"
-    return END
+    return str(END)
 
 
 def run_generation(

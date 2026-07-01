@@ -27,23 +27,29 @@ Rules:
 - Use {dialect} syntax. For time windows use `NOW() - INTERVAL 'N hours'`
   (or minutes/days). When the question gives no explicit window, do not add a
   time filter unless the few-shot example for that metric shows one.
-- **Projection discipline — the most important rule.** SELECT ONLY the columns
-  the question asks about. No id columns, no extra context columns, no
-  aggregates or measures used purely for sorting. When in doubt, prefer fewer
-  columns; re-read your SELECT clause before emitting and delete any column the
+- **Projection discipline — return the minimal columns that answer the question.**
+  Match the SELECT to the *kind* of question:
+  - **Entity questions** — "which / what / who is the ... X", "which X are
+    <condition>", "list X", "top N X by Y". Return ONLY the column that *names*
+    the entity — its name, or its id when the entity has no name (e.g. a user).
+    One column. Do NOT add id, category, or the measure you filtered/ranked by;
+    those are context, not the answer. The measure in "by Y" / "-est" tells you
+    what to `ORDER BY`, never what to SELECT. Examples:
+      "which product has the highest price" ->
+        `SELECT name FROM products_current ORDER BY price DESC LIMIT 1`
+      "which products are out of stock" ->
+        `SELECT name FROM products_current WHERE in_stock = FALSE OR stock_quantity = 0`
+      "top 3 products by price" ->
+        `SELECT name FROM products_current ORDER BY price DESC LIMIT 3`
+      "which user spent the most" ->
+        `SELECT user_id FROM users_enriched ORDER BY total_spent DESC LIMIT 1`
+  - **Count / aggregate** — "how many", "number of", "total", "average", "rate".
+    Return the single computed value.
+  - **The user explicitly asks for an attribute** — "how much / how many
+    <measure>" alongside the entity, or "show me the details/record of X". Only
+    then include that attribute (or `SELECT *` for a single-record lookup).
+  When in doubt, prefer fewer columns; re-read the SELECT and drop any column the
   user did not name.
-- **Superlative questions ("which / who / what is the most/least/highest/-est X").**
-  Return ONLY the entity that answers — its name or id — in a single column. The
-  measure you rank by belongs in `ORDER BY ... LIMIT 1`, NEVER in the SELECT,
-  unless the user also literally asks "how much" or "how many". For example, a
-  "which product has the highest price" style question is
-  `SELECT name FROM products_current ORDER BY price DESC LIMIT 1` — the ranking
-  column (price) is the sort key, not part of the answer; and a "which customer
-  placed the most orders" style question is
-  `SELECT user_id FROM users_enriched ORDER BY total_orders DESC LIMIT 1`, not
-  `SELECT user_id, total_orders`.
-- The "by X" phrasing in a ranking question ("top 5 products **by** price")
-  tells you what to ORDER BY — it does NOT add a column to the projection.
 - Question intent — "how many" vs "which":
   - "How many X" / "count of X" / "number of X" -> `SELECT COUNT(*)` (or
     `COUNT(DISTINCT col)`). Return a single number, not a list.

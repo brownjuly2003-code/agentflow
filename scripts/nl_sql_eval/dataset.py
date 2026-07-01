@@ -6,8 +6,20 @@ splits the set into questions the shipped rule-based translator is designed to
 handle ("in-pattern") and questions outside its seven regexes ("out-of-pattern"),
 so the report can show coverage honestly rather than as a single blended number.
 
-Gold SQL is plain DuckDB. Column *names* are never compared (see metrics), so
-gold uses whatever projection is natural for the question.
+Gold SQL is plain DuckDB. Column *names* are never compared (see metrics), but
+the *set* of value columns is, so the gold projection must be consistent.
+
+**Projection convention (enforced across the set):** a question is answered by
+the *minimal* columns that name/compute the answer —
+  - entity questions ("which / list / top-N X") -> the column that NAMES the
+    entity (its name, or id when it has no name); one column;
+  - count / aggregate ("how many / total / average / rate") -> the single value;
+  - explicit attribute / single-record lookup -> that attribute, or `SELECT *`.
+Two items (top_products, out_of_stock) originally carried wide multi-column
+"cards" lifted from the rule-based templates; they were the only golds that broke
+this convention (and were inconsistent with each other), so they were normalised
+to the entity-name projection. This measures whether the engine finds the right
+answer, not whether it guesses a template's arbitrary column list.
 """
 
 from __future__ import annotations
@@ -46,10 +58,12 @@ GOLD_SET: list[GoldItem] = [
     GoldItem(
         id="top_products",
         question="Show me the top 3 products by price.",
-        gold_sql=(
-            "SELECT name, category, price, stock_quantity FROM products_current "
-            "ORDER BY price DESC LIMIT 3"
-        ),
+        # Minimal-projection convention (see module docstring): an "which/list/top-N
+        # entity" question is answered by the column that NAMES the entity. The
+        # earlier wide "product card" here (name, category, price, stock_quantity)
+        # was lifted verbatim from the rule-based template and was the odd one out
+        # in this set — inconsistent even with out_of_stock's card.
+        gold_sql="SELECT name FROM products_current ORDER BY price DESC LIMIT 3",
         category="in-pattern",
     ),
     GoldItem(
@@ -64,10 +78,12 @@ GOLD_SET: list[GoldItem] = [
     GoldItem(
         id="out_of_stock",
         question="Which products are out of stock?",
-        gold_sql=(
-            "SELECT product_id, name, category, stock_quantity FROM products_current "
-            "WHERE in_stock = FALSE OR stock_quantity = 0"
-        ),
+        # Minimal-projection convention (see module docstring): "which products
+        # are out of stock" is answered by the product names. The earlier wide
+        # card (product_id, name, category, stock_quantity) was the rule-based
+        # template's projection, inconsistent with top_products' card and with the
+        # rest of the set.
+        gold_sql="SELECT name FROM products_current WHERE in_stock = FALSE OR stock_quantity = 0",
         category="in-pattern",
     ),
     GoldItem(

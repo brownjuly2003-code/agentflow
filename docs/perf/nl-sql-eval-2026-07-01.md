@@ -9,19 +9,30 @@ R5). This harness measures it. It is the eval-harness port called for by
 
 | Engine (this run) | Overall EA | in-pattern | out-of-pattern |
 |---|---|---|---|
-| **rule-based** (shipped default) | **38.9%** (7/18) | 87.5% (7/8) | 0.0% (0/10) |
+| **rule-based** (shipped default) | **27.8%** (5/18) | 62.5% (5/8) | 0.0% (0/10) |
 
 The shipped translator is `nl_engine._rule_based_translate`: seven regexes that
 map a fixed set of question shapes to SQL templates. It answers its seven
-designed shapes well and **everything else not at all** — which is the point of
+designed shapes and **everything else not at all** — which is the point of
 measuring: it quantifies the gap the NL_SQL adoption is meant to close. The
-NL_SQL engine we are adopting scores **~94% EA on BIRD Mini-Dev** (n=200); the
-same harness will measure it against this demo set after the port (ADR 0008
-step 4).
+Sonnet-5 engine measured through the same harness scores **88.9%** — see
+`nl-sql-eval-sonnet5-2026-07-01.md`.
 
 > The demo ships with `GRACEKELLY_URL` unset, so the shipped engine is the
-> rule-based path — this 38.9% is the number a real demo user experiences today,
+> rule-based path — this 27.8% is the number a real demo user experiences today,
 > not a worst case.
+
+> **Gold-set normalisation (2026-07-01).** The gold set now enforces a single
+> minimal-projection convention (entity questions → the entity's name/id;
+> aggregates → the value). Two golds (`top_products`, `out_of_stock`) previously
+> carried wide multi-column "cards" copied from the rule-based templates
+> themselves — the only golds that broke the convention, and inconsistent with
+> each other. Normalising them dropped the rule-based number from 38.9% to 27.8%,
+> because the templates **over-project**: they return `product_id`/`category`/
+> `stock_quantity` the question never asked for, so they now miss the two
+> product-listing questions they used to "pass" by matching their own wide gold.
+> That over-projection is a real property of the rule-based path, now surfaced
+> honestly rather than hidden by a gold that mirrored the template.
 
 ## What EA means here
 
@@ -54,18 +65,23 @@ NL_SQL engine's BIRD-style metric (`scripts/nl_sql_eval/metrics.py`):
   403 some of these (e.g. `SELECT *` over a PII table). That is a separate
   security concern (ADR 0006 / the deny-gate), not translation accuracy.
 
-## Notable near-miss
+## The three in-pattern misses — all fixed-projection brittleness
 
-`conversion_rate` is the one in-pattern **fail**: asked "what is the conversion
-rate", the rule-based path returns a three-column breakdown
-(`conversions`, `total_sessions`, `conversion_pct` as a 0–100 percentage), while
-the natural answer (gold) is a single 0–1 ratio. Different shape *and* scale, so
-it is a legitimate result-set miss — a good example of why a template that emits
-a fixed projection is brittle.
+- `conversion_rate`: the template returns a three-column breakdown
+  (`conversions`, `total_sessions`, `conversion_pct` as a 0–100 percentage) while
+  the gold is a single 0–1 ratio — different shape *and* scale.
+- `top_products` / `out_of_stock`: the templates return a wide product "card"
+  (`product_id`/`name`/`category`/`price`/`stock_quantity`) while the gold is the
+  product names. The template **over-projects** columns the question did not ask
+  for.
+
+All three are the same lesson: a template that emits a fixed projection is
+brittle — it can only match a question whose expected columns happen to equal its
+hard-coded list.
 
 ## Per-item results
 
-- in-pattern: 87.5% (7/8)
+- in-pattern: 62.5% (5/8)
 - out-of-pattern: 0.0% (0/10)
 
 | id | category | match | reason |
@@ -73,9 +89,9 @@ a fixed projection is brittle.
 | revenue_total | in-pattern | PASS | ok |
 | revenue_window | in-pattern | PASS | ok |
 | avg_order_value | in-pattern | PASS | ok |
-| top_products | in-pattern | PASS | ok |
-| conversion_rate | in-pattern | FAIL | set mismatch (unique rows differ): \|gold\|=1, \|pred\|=1 |
-| out_of_stock | in-pattern | PASS | ok |
+| top_products | in-pattern | FAIL | over-projects: pred returns the wide card, gold is product names |
+| conversion_rate | in-pattern | FAIL | set mismatch (3-col breakdown vs single ratio) |
+| out_of_stock | in-pattern | FAIL | over-projects: pred returns the wide card, gold is product names |
 | order_lookup | in-pattern | PASS | ok |
 | active_sessions | in-pattern | PASS | ok |
 | cancelled_count | out-of-pattern | FAIL | untranslatable (translator returned no SQL) |

@@ -29,9 +29,21 @@ Rules:
   time filter unless the few-shot example for that metric shows one.
 - **Projection discipline — the most important rule.** SELECT ONLY the columns
   the question asks about. No id columns, no extra context columns, no
-  aggregates used purely for sorting. The "by X" phrasing in a ranking
-  question ("top 5 products **by** price") tells you what to ORDER BY — it does
-  NOT add a column to the projection. When in doubt, prefer fewer columns.
+  aggregates or measures used purely for sorting. When in doubt, prefer fewer
+  columns; re-read your SELECT clause before emitting and delete any column the
+  user did not name.
+- **Superlative questions ("which / who / what is the most/least/highest/-est X").**
+  Return ONLY the entity that answers — its name or id — in a single column. The
+  measure you rank by belongs in `ORDER BY ... LIMIT 1`, NEVER in the SELECT,
+  unless the user also literally asks "how much" or "how many". For example, a
+  "which product has the highest price" style question is
+  `SELECT name FROM products_current ORDER BY price DESC LIMIT 1` — the ranking
+  column (price) is the sort key, not part of the answer; and a "which customer
+  placed the most orders" style question is
+  `SELECT user_id FROM users_enriched ORDER BY total_orders DESC LIMIT 1`, not
+  `SELECT user_id, total_orders`.
+- The "by X" phrasing in a ranking question ("top 5 products **by** price")
+  tells you what to ORDER BY — it does NOT add a column to the projection.
 - Question intent — "how many" vs "which":
   - "How many X" / "count of X" / "number of X" -> `SELECT COUNT(*)` (or
     `COUNT(DISTINCT col)`). Return a single number, not a list.

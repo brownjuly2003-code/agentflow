@@ -146,17 +146,24 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | kind staging | `helm/agentflow`, `k8s/`, `scripts/k8s_staging_up.sh` | Production-shaped staging on a local Kubernetes cluster |
 | Production | Managed Kafka/Flink/Iceberg/object storage + Helm/Terraform | Durable, autoscaled multi-service deployment |
 
-> **⚠ Open architecture decision — serving engine is not fixed.** The demo currently
-> defaults to DuckDB (`config/serving.yaml: backend: duckdb`) with ClickHouse as an
-> opt-in (`SERVING_BACKEND=clickhouse`); the intended direction is for the demo to run
-> on **ClickHouse**. Until that is settled, treat the serving engine as unresolved.
-> This has a concrete security consequence: the NL→SQL PII guard hard-codes
-> `dialect="duckdb"` (`src/serving/semantic_layer/sql_guard.py`), so it parses one
-> dialect while a swappable engine may execute another (the ClickHouse backend also
-> rewrites SQL after the guard). That is why the PII deny-gate is **best-effort
-> defense-in-depth, not a bounded guarantee** — a bounded solution needs engine-native
-> column security (e.g. ClickHouse row/column policies), not dialect-pinned SQL
-> parsing. Tracked in `road-to-9.8.md`.
+> **Serving engine decision — fixed on ClickHouse ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md),
+> [ADR 0007](decisions/0007-deployment-topology-kubernetes.md)).** The serving engine is
+> now a recorded decision, not an open question: the demo/production serving path fixes
+> on **ClickHouse**, with DuckDB demoted to the local-dev / test and compatibility store
+> (still first-class for `pytest` and offline work — see the DuckDB pin in
+> `tests/conftest.py`).
+>
+> **Execution is staged, not yet shipped.** `config/serving.yaml` still defaults to
+> `backend: duckdb`; the config/compose/Helm cutover, the engine-bounded PII redesign,
+> and K8s autoscaling are tracked in `docs/clickhouse-cutover-plan.md` and land together
+> (Phase 2 — moving the PII boundary onto the engine — is the irreversible, owner-gated
+> part; verifying the live ClickHouse serving path needs a container, so it runs on the
+> Mac/Docker stand). Until the cutover lands, the NL→SQL PII deny-gate remains
+> **best-effort defense-in-depth, not a bounded guarantee**: `sql_guard` parses
+> `dialect="duckdb"` (`src/serving/semantic_layer/sql_guard.py`) while a swappable engine
+> may execute another dialect and the ClickHouse backend rewrites SQL after the guard.
+> The bounded solution is engine-native column security (ClickHouse row/column policies),
+> delivered by the cutover. Tracked in `road-to-9.8.md`.
 
 ## v1-v6 Capability Map
 

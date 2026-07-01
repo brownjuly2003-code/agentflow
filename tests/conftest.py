@@ -1,9 +1,16 @@
 """Shared fixtures for unit and integration tests."""
 
+import os
 import uuid
 from datetime import UTC, datetime
 
 import pytest
+
+# ADR 0006: DuckDB is the local-dev / test store. Pin it explicitly so the test
+# suite stays deterministic regardless of the shipped serving default (which is
+# moving to ClickHouse per the cutover plan). `setdefault` lets an opt-in
+# ClickHouse test lane still override it via SERVING_BACKEND.
+os.environ.setdefault("SERVING_BACKEND", "duckdb")
 
 
 @pytest.fixture

@@ -146,6 +146,18 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | kind staging | `helm/agentflow`, `k8s/`, `scripts/k8s_staging_up.sh` | Production-shaped staging on a local Kubernetes cluster |
 | Production | Managed Kafka/Flink/Iceberg/object storage + Helm/Terraform | Durable, autoscaled multi-service deployment |
 
+> **⚠ Open architecture decision — serving engine is not fixed.** The demo currently
+> defaults to DuckDB (`config/serving.yaml: backend: duckdb`) with ClickHouse as an
+> opt-in (`SERVING_BACKEND=clickhouse`); the intended direction is for the demo to run
+> on **ClickHouse**. Until that is settled, treat the serving engine as unresolved.
+> This has a concrete security consequence: the NL→SQL PII guard hard-codes
+> `dialect="duckdb"` (`src/serving/semantic_layer/sql_guard.py`), so it parses one
+> dialect while a swappable engine may execute another (the ClickHouse backend also
+> rewrites SQL after the guard). That is why the PII deny-gate is **best-effort
+> defense-in-depth, not a bounded guarantee** — a bounded solution needs engine-native
+> column security (e.g. ClickHouse row/column policies), not dialect-pinned SQL
+> parsing. Tracked in `road-to-9.8.md`.
+
 ## v1-v6 Capability Map
 
 | Capability | Implementation | Architectural impact |

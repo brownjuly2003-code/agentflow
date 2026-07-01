@@ -6,17 +6,26 @@ All notable changes to AgentFlow are documented in this file.
 
 ### Changed
 
-- **PII protection is now a bounded deny-gate, not post-hoc masking.** The
-  SQL-lineage result masker (`src/serving/masking.py`) is replaced by
-  `src/serving/pii_policy.py` plus an `assert_no_pii_access` gate in `sql_guard`:
-  a non-exempt NL query that reads a PII column — or a `SELECT *` / `table.*` over
-  a PII-bearing table — is rejected before execution, so PII never leaves the
-  warehouse; direct `/entity/{type}/{id}` reads redact the declared PII fields to a
-  constant `[REDACTED]` sentinel. PII-exempt tenants are unchanged, and the
-  `X-PII-Masked` response header is retained on entity reads. The replaced masker
-  had been bypassed three times; the deny-gate is bounded (a finite, declared PII
-  surface) and verifiable, with the deny logic added to the `sql_guard` mutation
-  target and `pii_policy` mutated in its place.
+- **PII protection is now a deny-gate, not post-hoc masking.** The SQL-lineage
+  result masker (`src/serving/masking.py`) is replaced by `src/serving/pii_policy.py`
+  plus an `assert_no_pii_access` gate in `sql_guard`: a non-exempt NL query that
+  reads a PII column — or a `SELECT *` / `table.*` over a PII-bearing table — is
+  rejected before execution; direct `/entity/{type}/{id}` reads redact the declared
+  PII fields to a constant `[REDACTED]` sentinel. PII-exempt tenants are unchanged,
+  and the `X-PII-Masked` response header is retained on entity reads. The deny logic
+  is a `sql_guard` mutation target with `pii_policy` mutated in its place.
+- **Honest scope of the deny-gate (do not overstate).** The query-path gate is a
+  **best-effort defense-in-depth denylist of SQL projection shapes, not a bounded
+  guarantee.** It reasons about AST shape, but a PII leak is defined by the column
+  *ordinal* a query reads, which shape-denial cannot bound — three distinct DuckDB
+  bypasses were found and closed (`COLUMNS(...)`, whole-row struct references, and
+  the `FROM t AS a(c1, c2, …)` column-rename list). In the **shipped rule-based**
+  translator PII-safety rests on its fixed template repertoire (it cannot emit those
+  forms); the **LLM translator** (opt-in `ANTHROPIC_API_KEY`, unset in every deploy
+  config) emits arbitrary SELECTs and is **not** bounded by this gate. A bounded
+  guarantee needs column-level resolution against the real schema
+  (execution/DESCRIBE/column-security) and is tracked as a follow-up; do not enable
+  the LLM translator against real PII until then.
 
 ### Added
 

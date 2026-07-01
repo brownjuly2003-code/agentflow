@@ -9,10 +9,10 @@ function denylist, no schema escalation. It returns a ``ValidationReport``
 describing every detected issue rather than raising on the first one, because
 the caller (the repair node) needs the full list to build a useful retry hint.
 
-It is NOT the PII boundary: PII enforcement stays in AgentFlow's own
-``sql_guard.assert_no_pii_access`` deny-gate, which runs on the generated SQL at
-execution time (ADR 0008 §"Execution half"). This guard runs first, at
-generation time, so malformed SQL never reaches the executor.
+This is not a PII boundary. The serving warehouse holds no PII (the demo tables
+carry only analytics columns); raw contact PII lives in the DV2 vault and is
+governed engine-side there (ClickHouse row/column policies, ADR 0006). This
+guard runs at generation time so malformed SQL never reaches the executor.
 """
 
 from __future__ import annotations

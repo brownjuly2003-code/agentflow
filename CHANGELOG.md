@@ -4,28 +4,30 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- **The serving-layer PII protection is removed — it guarded columns that do not
+  exist.** The demo serving warehouse holds no PII: `users_enriched` and
+  `orders_v2` (and every other serving table) carry only analytics columns
+  (aggregates, ids, timestamps) — none of the fields declared in the former
+  `config/pii_fields.yaml` (`email`, `phone`, `full_name`, `ip_address`,
+  `shipping_address`) exist in the catalog entity contracts or the physical DDL.
+  So the interim NL→SQL `assert_no_pii_access` deny-gate and the entity-path
+  `redact_entity` masker were operating on a surface that is never present in the
+  demo — defense-in-depth over an empty set. Both are deleted, along with
+  `src/serving/pii_policy.py`, `config/pii_fields.yaml`, their CI coverage /
+  mutation gates, the helm `piiFields` config, and the `X-PII-Masked` emission
+  (the versioned header stays reserved; the generic version-transform that would
+  strip it for older clients is unchanged). This also un-breaks the rule-based
+  `SELECT *` user/order lookups the deny-gate had been rejecting. The earlier
+  SQL-lineage masker (`src/serving/masking.py`, removed in the same cycle) is
+  likewise gone. **Real contact PII lives only in the DV2 business vault**
+  (`warehouse/agentflow/dv2/business_vault/bv_customer_mdm__*.sql`), and its
+  governance belongs engine-side there — ClickHouse row/column policies, tracked
+  as ADR 0006 Phase 2 — not in a dialect-pinned string parse in the serving tier.
+
 ### Changed
 
-- **PII protection is now a deny-gate, not post-hoc masking.** The SQL-lineage
-  result masker (`src/serving/masking.py`) is replaced by `src/serving/pii_policy.py`
-  plus an `assert_no_pii_access` gate in `sql_guard`: a non-exempt NL query that
-  reads a PII column — or a `SELECT *` / `table.*` over a PII-bearing table — is
-  rejected before execution; direct `/entity/{type}/{id}` reads redact the declared
-  PII fields to a constant `[REDACTED]` sentinel. PII-exempt tenants are unchanged,
-  and the `X-PII-Masked` response header is retained on entity reads. The deny logic
-  is a `sql_guard` mutation target with `pii_policy` mutated in its place.
-- **Honest scope of the deny-gate (do not overstate).** The query-path gate is a
-  **best-effort defense-in-depth denylist of SQL projection shapes, not a bounded
-  guarantee.** It reasons about AST shape, but a PII leak is defined by the column
-  *ordinal* a query reads, which shape-denial cannot bound — three distinct DuckDB
-  bypasses were found and closed (`COLUMNS(...)`, whole-row struct references, and
-  the `FROM t AS a(c1, c2, …)` column-rename list). In the **shipped rule-based**
-  translator PII-safety rests on its fixed template repertoire (it cannot emit those
-  forms); the **LLM translator** (opt-in via GraceKelly, `GRACEKELLY_URL`, unset in
-  every deploy config) emits arbitrary SELECTs and is **not** bounded by this gate. A bounded
-  guarantee needs column-level resolution against the real schema
-  (execution/DESCRIBE/column-security) and is tracked as a follow-up; do not enable
-  the LLM translator against real PII until then.
 - **NL→SQL LLM path now routes through the GraceKelly orchestration API**
   (`nl_engine._llm_translate`), not a direct provider SDK. It POSTs to
   `${GRACEKELLY_URL}/api/v1/orchestrate` with the target model

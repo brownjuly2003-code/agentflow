@@ -30,7 +30,7 @@ class ModuleTarget:
 # (a) copy the module so it imports as a top-level package and (b) pair it with a
 # NARROW test that does not pull the duckdb-backed engine import chain. So
 # retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard,
-# pii_policy, rate_limiter, sql_builder, nl_queries, auth/manager and
+# rate_limiter, sql_builder, nl_queries, auth/manager and
 # auth/key_rotation mutate as serving.* (from src/serving) against duckdb-free
 # tests. Each duckdb-free test
 # also avoids fixtures and calls the module's methods directly: under
@@ -60,19 +60,6 @@ MODULE_TARGETS = {
         threshold=0.90,
         tests=("tests/unit/test_sql_guard_mutation.py",),
     ),
-    # pii_policy runs at the standard 0.90. Every behaviour-reachable mutant is
-    # killed -- the redaction/exemption/parse assertions plus the two default-path
-    # tests (no-arg PiiPolicy() and env-unset get_pii_policy()) that pin config
-    # resolution. The six default-VALUE survivors were removed at the SOURCE
-    # rather than excused: the `.get(key, {}) or {}` idiom's `{}` default is dead
-    # (the trailing `or {}`/`or []` already coerces a missing/None value), so
-    # dropping it deletes those equivalent mutants outright. The only 2 residual
-    # survivors are read_text encoding aliases (`utf-8`->`UTF-8`/`None`) that
-    # decode the ASCII config identically -> 65/67 = 97.0%, above 0.90.
-    Path("serving/pii_policy.py"): ModuleTarget(
-        threshold=0.90,
-        tests=("tests/unit/test_pii_policy_mutation.py",),
-    ),
     Path("serving/api/rate_limiter.py"): ModuleTarget(
         threshold=0.90,
         tests=("tests/unit/test_rate_limiter_mutation.py",),
@@ -86,7 +73,7 @@ MODULE_TARGETS = {
         tests=("tests/unit/test_nl_queries_mutation.py",),
     ),
     # manager.py runs at 0.80, not the 0.90 the pure-function guards (sql_guard,
-    # masking, sql_builder, ...) hold. It is a ~400-line stateful auth class whose
+    # sql_builder, ...) hold. It is a ~400-line stateful auth class whose
     # surviving mutants are dominated by EQUIVALENTS that no behaviour-level test
     # can kill: structured-logging arguments (the auth logger event names / kwargs),
     # `model_copy(update=...)` dicts whose mutated field equals its default

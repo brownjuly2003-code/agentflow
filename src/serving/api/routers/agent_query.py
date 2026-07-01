@@ -24,7 +24,6 @@ from src.serving.api.versioning import (
     resolve_request_version,
 )
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
-from src.serving.pii_policy import get_pii_policy
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.api")
@@ -317,9 +316,10 @@ async def natural_language_query(request: NLQueryRequest, req: Request) -> Query
         span.set_attribute("query.rows", int(result.get("row_count", 0)))
 
     logger.info("nl_query_executed", question=request.question[:100])
-    # PII never reaches here on the query path: the engine's deny-gate rejects a
-    # non-exempt query that could read a PII column before it executes, and an
-    # exempt tenant is entitled to the raw rows. So the rows are returned as-is.
+    # The serving warehouse holds no PII: users_enriched/orders_v2 carry only
+    # analytics columns (aggregates, ids), so query rows are returned as-is.
+    # Raw contact PII lives in the DV2 vault and is governed engine-side there
+    # (ClickHouse row/column policies) — not in this serving path. See ADR 0006.
     answer = result["data"]
     rows = answer if isinstance(answer, list) else [answer]
 
@@ -390,8 +390,6 @@ async def get_entity(
             if cached is not None:
                 logger.debug("entity_cache_hit", key=cache_key)
                 cached_payload = cached.get("payload", cached)
-                if cached.get("pii_masked"):
-                    response.headers["X-PII-Masked"] = "true"
                 response.headers["X-Cache"] = "HIT"
                 transformed_payload = _transform_payload_for_requested_version(
                     req,
@@ -425,17 +423,12 @@ async def get_entity(
     freshness = None
     if last_updated and as_of is None:
         freshness = (now - datetime.fromisoformat(last_updated)).total_seconds()
-    tenant = tenant_id or "default"
-    masked_payload = get_pii_policy().redact_entity(entity_type, payload, tenant)
-    pii_masked = masked_payload != payload
-    if pii_masked:
-        response.headers["X-PII-Masked"] = "true"
     as_of_text = _as_of_iso_text(as_of)
 
     response_payload = {
         "entity_type": entity_type,
         "entity_id": entity_id,
-        "data": masked_payload,
+        "data": payload,
         "last_updated": last_updated,
         "freshness_seconds": freshness,
         "meta": {
@@ -448,10 +441,7 @@ async def get_entity(
         cache, cache_key = entity_cache
         await cache.set(
             cache_key,
-            {
-                "payload": response_payload,
-                "pii_masked": pii_masked,
-            },
+            {"payload": response_payload},
             ttl=ENTITY_TTL_SECONDS,
         )
         response.headers["X-Cache"] = "MISS"

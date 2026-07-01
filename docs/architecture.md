@@ -154,16 +154,19 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > `tests/conftest.py`).
 >
 > **Execution is staged, not yet shipped.** `config/serving.yaml` still defaults to
-> `backend: duckdb`; the config/compose/Helm cutover, the engine-bounded PII redesign,
-> and K8s autoscaling are tracked in `docs/clickhouse-cutover-plan.md` and land together
-> (Phase 2 — moving the PII boundary onto the engine — is the irreversible, owner-gated
-> part; verifying the live ClickHouse serving path needs a container, so it runs on the
-> Mac/Docker stand). Until the cutover lands, the NL→SQL PII deny-gate remains
-> **best-effort defense-in-depth, not a bounded guarantee**: `sql_guard` parses
-> `dialect="duckdb"` (`src/serving/semantic_layer/sql_guard.py`) while a swappable engine
-> may execute another dialect and the ClickHouse backend rewrites SQL after the guard.
-> The bounded solution is engine-native column security (ClickHouse row/column policies),
-> delivered by the cutover. Tracked in `road-to-9.8.md`.
+> `backend: duckdb`; the config/compose/Helm cutover and K8s autoscaling are tracked in
+> `docs/clickhouse-cutover-plan.md` and land together (verifying the live ClickHouse
+> serving path needs a container, so it runs on the Mac/Docker stand).
+>
+> **PII is not a serving-tier concern (2026-07-01).** The demo serving warehouse holds
+> no PII — `users_enriched`/`orders_v2` carry only analytics columns — so the interim
+> NL→SQL PII deny-gate and the entity redactor were guarding a surface that never exists
+> in the demo, and both have been removed (see CHANGELOG). Real contact PII lives only in
+> the DV2 business vault; its governance belongs engine-side there, via ClickHouse
+> row/column policies (ADR 0006 Phase 2, owner-gated, needs the container stand), not in a
+> dialect-pinned string parse in the serving tier. `sql_guard` remains, scoped to what it
+> can actually enforce: SELECT-only, no DML, the tenant table allow-list, and the
+> recursive-CTE shadow reject. Tracked in `road-to-9.8.md`.
 
 ## v1-v6 Capability Map
 

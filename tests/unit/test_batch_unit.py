@@ -131,15 +131,6 @@ class _LegacyEngine:
         return self._query
 
 
-class _IdentityPolicy:
-    """No-op PII policy so the entity executor's redaction call is exercised
-    without coupling the unit test to the live ``config/pii_fields.yaml``. The
-    query path no longer touches the policy — its deny-gate runs in the engine."""
-
-    def redact_entity(self, entity_type: str, data: dict[str, Any], tenant: str) -> dict[str, Any]:
-        return data
-
-
 def _make_req(
     engine: Any,
     *,
@@ -162,8 +153,7 @@ def _make_req(
 
 
 @pytest.fixture(autouse=True)
-def _identity_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(batch_module, "get_pii_policy", lambda: _IdentityPolicy())
+def _pin_allowed_tables(monkeypatch: pytest.MonkeyPatch) -> None:
     # _execute_query_item delegates table-allowlist resolution to agent_query;
     # pin it here so the unit test exercises only batch.py's orchestration.
     monkeypatch.setattr(

@@ -34,9 +34,12 @@ architectural mismatches, all rooted in the same unfixed decision:
 2. **The PII guard is dialect-pinned.** `sql_guard` parses SQL with
    `dialect="duckdb"`, so it cannot be a security boundary when a swappable
    engine executes a different dialect and the ClickHouse backend rewrites the
-   SQL *after* the guard runs. This is the root cause of the repeated PII bypass
-   findings (deny-gate is best-effort defense-in-depth, not bounded — see
-   `docs/architecture.md`).
+   SQL *after* the guard runs. This was the root cause of the repeated PII bypass
+   findings. **Update (2026-07-01):** the serving-layer PII deny-gate has since
+   been removed entirely — the demo serving warehouse holds no PII (see CHANGELOG),
+   so it guarded an empty surface. Real PII lives only in the DV2 business vault,
+   and Phase 2 below re-homes its governance onto the engine there (ClickHouse
+   row/column policies) rather than a dialect-pinned string parse.
 3. **Kubernetes horizontal scaling is decorative under DuckDB.** The Helm chart
    ships autoscaling, HPA target CPU, PodDisruptionBudget, and anti-affinity, but
    `config.duckdbPath` puts an embedded DuckDB file on a ReadWriteOnce PVC.

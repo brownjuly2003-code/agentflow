@@ -40,8 +40,6 @@ class _MinimalQueryHost(
         tenant_id: str | None = None,
     ) -> str:
         del question, tenant_id
-        # Non-PII projection: a bare SELECT * over orders_v2 (entity "order" has the
-        # PII column shipping_address) is now rejected by the deny-gate.
         return "SELECT order_id FROM orders_v2"
 
 

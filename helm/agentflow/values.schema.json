@@ -405,7 +405,6 @@
         "apiKeysPath",
         "tenantsPath",
         "sloPath",
-        "piiFieldsPath",
         "securityPath",
         "apiVersionsPath",
         "contractsDir",
@@ -417,7 +416,6 @@
         "otlpServiceName",
         "tenants",
         "slo",
-        "piiFields",
         "security",
         "apiVersions"
       ],
@@ -439,10 +437,6 @@
           "minLength": 1
         },
         "sloPath": {
-          "type": "string",
-          "minLength": 1
-        },
-        "piiFieldsPath": {
           "type": "string",
           "minLength": 1
         },
@@ -533,10 +527,6 @@
           }
         },
         "slo": {
-          "type": "string",
-          "minLength": 1
-        },
-        "piiFields": {
           "type": "string",
           "minLength": 1
         },

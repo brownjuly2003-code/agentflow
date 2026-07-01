@@ -54,9 +54,6 @@ class _Host(
         tenant_id: str | None = None,
     ) -> str:
         del question, tenant_id
-        # Explicit non-PII column: a bare SELECT * over orders_v2 (entity "order"
-        # has the PII column shipping_address) is now rejected by the deny-gate, so
-        # these mechanics tests use a permitted projection.
         return "SELECT order_id FROM orders_v2"
 
 
@@ -570,8 +567,8 @@ def test_explain_falls_back_to_regex_when_sqlglot_parse_fails(
 
     monkeypatch.setattr(sqlglot, "parse_one", _boom)
 
-    # Exempt tenant so the deny-gate (which also parses) is skipped — this test
-    # exercises explain's OWN parse_one regex fallback, not the PII gate.
+    # This test exercises explain's OWN parse_one regex fallback (validate_nl_sql
+    # uses sqlglot.parse, not parse_one, so it is unaffected by the monkeypatch).
     result = host.explain("show orders", tenant_id="internal-analytics")
 
     assert result["tables_accessed"] == ["orders_v2"]

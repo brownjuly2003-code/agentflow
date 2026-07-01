@@ -34,10 +34,17 @@ reversible (`SERVING_BACKEND=duckdb` rolls back).
 
 ## Phase 2 — Make PII bounded on the engine (the point of the cutover)
 
-This is the part that actually fixes the repeated PII bypasses. Today
-`sql_guard` is dialect-pinned (`dialect="duckdb"`) and runs *before* the
-ClickHouse transpile — it cannot be a boundary. Replace string-shape denial with
-engine-enforced policy.
+> **Scope correction (2026-07-01).** This phase originally targeted the serving
+> demo tables, but those hold **no PII** — the app-level `assert_no_pii_access`
+> gate and the entity redactor guarded an empty surface and have since been
+> removed (see CHANGELOG). Real contact PII lives only in the **DV2 business vault**
+> (`warehouse/agentflow/dv2/business_vault/bv_customer_mdm__*.sql`), so this phase
+> applies ClickHouse row/column policies **to the vault**, not to the serving
+> `users_enriched`/`orders_v2`. The bullets below that reference the app-level gate
+> or `X-PII-Masked` are obsolete; the row/column-policy bullet is the live plan.
+
+Replace string-shape denial with engine-enforced policy on the vault tables that
+actually carry PII.
 
 - [ ] Introduce a **schema-execution** check for the PII gate: resolve the actual
       output columns/types of a candidate query against ClickHouse

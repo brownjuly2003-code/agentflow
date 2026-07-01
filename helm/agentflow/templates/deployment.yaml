@@ -73,8 +73,6 @@ spec:
               value: {{ .Values.config.tenantsPath | quote }}
             - name: AGENTFLOW_SLO_FILE
               value: {{ .Values.config.sloPath | quote }}
-            - name: AGENTFLOW_PII_CONFIG
-              value: {{ .Values.config.piiFieldsPath | quote }}
             - name: AGENTFLOW_SECURITY_CONFIG_FILE
               value: {{ .Values.config.securityPath | quote }}
             - name: AGENTFLOW_API_VERSIONS_FILE

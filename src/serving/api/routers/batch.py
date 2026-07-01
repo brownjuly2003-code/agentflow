@@ -11,7 +11,6 @@ from src.serving.api.routers.agent_query import (
     _call_in_threadpool_with_kwarg_fallback,
     _ensure_metric_allowed,
 )
-from src.serving.pii_policy import get_pii_policy
 
 router = APIRouter(tags=["agent"])
 
@@ -98,7 +97,7 @@ async def _execute_entity_item(item: BatchItem, req: Request) -> dict[str, Any]:
 
     payload = dict(result)
     payload.pop("_last_updated", None)
-    return get_pii_policy().redact_entity(entity_type, payload, tenant_id or "default")
+    return payload
 
 
 async def _execute_metric_item(item: BatchItem, req: Request) -> dict[str, Any]:

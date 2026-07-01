@@ -115,8 +115,6 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         engine,
         "_translate_question_to_sql",
-        # Non-PII projection: SELECT * over orders_v2 (PII col shipping_address) is
-        # now rejected by the deny-gate.
         lambda question, tenant_id=None: "SELECT order_id FROM orders_v2",
     )
 

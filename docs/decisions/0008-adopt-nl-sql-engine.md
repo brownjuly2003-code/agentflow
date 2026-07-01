@@ -7,9 +7,21 @@ is vendored at `src/serving/semantic_layer/nl_sql_engine/` (Sonnet 5 via
 GraceKelly), `nl_engine._llm_translate` routes through it, and the eval harness
 measured **100% EA (18/18)** on the demo set live (rule-based baseline recomputed
 to 27.8% after the gold set was normalised to a consistent minimal projection).
-See `docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`. Remaining: step 3-proper
-(schema-grounding for bounded PII via a non-PII `exclude_fields` allowlist).
-Shipped default stays rule-based (`GRACEKELLY_URL` unset).
+See `docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`. Shipped default stays
+rule-based (`GRACEKELLY_URL` unset).
+
+**Bounded-PII sub-goal WITHDRAWN (2026-07-01).** The "schema-grounding for
+bounded PII" work below (§Decision, "Schema-grounding becomes the bounded-PII
+mechanism") assumed the serving warehouse holds PII. It does not: `users_enriched`
+/ `orders_v2` carry only analytics columns, and none of the fields the former
+`config/pii_fields.yaml` declared exist in the catalog or the physical DDL. So the
+whole serving-layer PII apparatus (the `assert_no_pii_access` deny-gate and the
+entity-path `redact_entity`) guarded an empty surface and has been **removed**
+(see CHANGELOG). Real contact PII lives only in the DV2 business vault; its
+governance belongs engine-side there (ClickHouse row/column policies) — this is
+ADR 0006 Phase 2, not an NL→SQL generation concern. The `exclude_fields` seam on
+the vendored engine is retained as a generic (non-PII-specific) column-hiding
+capability but has no PII caller.
 
 ## Context
 

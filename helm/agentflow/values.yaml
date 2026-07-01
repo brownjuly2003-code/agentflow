@@ -119,7 +119,6 @@ config:
   apiKeysPath: /etc/agentflow/secret/api_keys.yaml
   tenantsPath: /etc/agentflow/config/tenants.yaml
   sloPath: /etc/agentflow/config/slo.yaml
-  piiFieldsPath: /etc/agentflow/config/pii_fields.yaml
   securityPath: /etc/agentflow/config/security.yaml
   apiVersionsPath: /etc/agentflow/config/api_versions.yaml
   contractsDir: /app/config/contracts
@@ -169,28 +168,6 @@ config:
         measurement: error_rate_percent
         threshold: 0.1
         window_days: 30
-  piiFields: |
-    masking:
-      default_strategy: partial
-
-      entity_fields:
-        user:
-          - field: email
-            strategy: partial
-          - field: phone
-            strategy: partial
-          - field: full_name
-            strategy: partial
-          - field: ip_address
-            strategy: hash
-
-        order:
-          - field: shipping_address
-            strategy: partial
-
-      pii_exempt_tenants:
-        - "internal-analytics"
-        - "compliance-audit"
   security: |
     security:
       key_hashing: bcrypt

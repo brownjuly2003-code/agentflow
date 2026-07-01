@@ -19,13 +19,11 @@ the forbidden-function check -- a surviving mutant there is a denylist bypass.
 try:  # mutation-harness workspace exposes it as a top-level package
     from serving.semantic_layer.sql_guard import (
         UnsafeSQLError,
-        assert_no_pii_access,
         validate_nl_sql,
     )
 except ImportError:  # ordinary pytest sees it under the src package
     from src.serving.semantic_layer.sql_guard import (
         UnsafeSQLError,
-        assert_no_pii_access,
         validate_nl_sql,
     )
 
@@ -98,171 +96,6 @@ def test_unknown_table_raises():
         validate_nl_sql("SELECT id FROM secrets", ALLOWED)
 
 
-# ── assert_no_pii_access deny-gate ───────────────────────────────
-# The bounded PII deny-gate lives in this module, so its mutants are scored here.
-# table_to_entity maps physical tables -> catalog entity; pii_fields_by_entity maps
-# entity -> declared PII columns. products has no PII entry (no PII reachable).
-PII_MAP = {"users_enriched": "user", "orders_v2": "order", "products": "product"}
-PII_FIELDS = {"user": frozenset({"email", "phone"}), "order": frozenset({"shipping_address"})}
-
-
-def _deny(sql: str) -> None:
-    assert_no_pii_access(sql, PII_MAP, PII_FIELDS)
-
-
-def test_pii_allows_query_with_no_pii_bearing_table():
-    # products maps to an entity with no declared PII -> nothing reachable, even *.
-    _deny("SELECT * FROM products")
-    _deny("SELECT name FROM products")
-
-
-def test_pii_allows_count_star_over_pii_table():
-    # COUNT(*) is exp.Count, not a star projection -> aggregate stays allowed.
-    _deny("SELECT COUNT(*) FROM users_enriched")
-
-
-def test_pii_allows_explicit_non_pii_columns_over_pii_table():
-    _deny("SELECT user_id, status FROM users_enriched")
-
-
-def test_pii_denies_named_pii_column():
-    with pytest.raises(UnsafeSQLError, match=r"Query reads PII column\(s\): \['email'\]"):
-        _deny("SELECT email FROM users_enriched")
-
-
-def test_pii_denies_pii_column_case_insensitively():
-    # Pins the .lower() on referenced columns: UPPER must still match the rule.
-    with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['email'\]"):
-        _deny("SELECT EMAIL FROM users_enriched")
-
-
-def test_pii_denies_pii_table_case_insensitively():
-    # Pins the table_to_entity lowercasing: a mixed-case table still resolves PII.
-    with pytest.raises(UnsafeSQLError, match="PII column"):
-        _deny("SELECT email FROM USERS_ENRICHED")
-
-
-def test_pii_denies_aliased_pii_column():
-    # The raw column name survives the rename in the AST -> no lineage needed.
-    with pytest.raises(UnsafeSQLError, match="email"):
-        _deny("SELECT email AS contact FROM users_enriched")
-
-
-def test_pii_denies_pii_column_in_where_clause():
-    with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['phone'\]"):
-        _deny("SELECT user_id FROM users_enriched WHERE phone = '555'")
-
-
-def test_pii_denies_select_star_over_pii_table():
-    with pytest.raises(UnsafeSQLError, match=r"^SELECT \* / table\.\*"):
-        _deny("SELECT * FROM users_enriched")
-
-
-def test_pii_denies_qualified_star_over_pii_table():
-    with pytest.raises(UnsafeSQLError, match=r"SELECT \* / table\.\*"):
-        _deny("SELECT users_enriched.* FROM users_enriched")
-
-
-def test_pii_denies_star_in_a_union_branch():
-    # The star is in the second SELECT; the gate iterates every select, not just
-    # the outermost. A surviving mutant here is a union-branch SELECT * leak.
-    with pytest.raises(UnsafeSQLError, match=r"SELECT \* / table\.\*"):
-        _deny("SELECT id FROM products UNION SELECT * FROM users_enriched")
-
-
-def test_pii_denies_columns_expansion_over_pii_table():
-    # DuckDB COLUMNS(...) expands to source columns like a star but parses as
-    # exp.Columns, not exp.Star. (audit_01_07_26 deny-gate bypass)
-    with pytest.raises(
-        UnsafeSQLError,
-        match=r"^COLUMNS\(\.\.\.\) expansion over a PII-bearing table is not "
-        r"allowed; select explicit non-PII columns$",
-    ):
-        _deny("SELECT COLUMNS('.*') FROM users_enriched")
-
-
-def test_pii_denies_columns_lambda_expansion_over_pii_table():
-    with pytest.raises(UnsafeSQLError, match="COLUMNS"):
-        _deny("SELECT COLUMNS(c -> c LIKE '%mail%') FROM users_enriched")
-
-
-def test_pii_allows_columns_expansion_over_non_pii_table():
-    # COLUMNS over a no-PII table stays allowed: the gate returns before the
-    # COLUMNS check when nothing PII is reachable. Kills a mutant that drops the
-    # reachable-PII guard and rejects COLUMNS unconditionally.
-    _deny("SELECT COLUMNS('.*') FROM products")
-
-
-def test_pii_denies_whole_row_struct_reference():
-    # A bare table name in projection is a DuckDB whole-row STRUCT of every column
-    # (PII included), naming no PII column. (audit_01_07_26 deny-gate bypass)
-    with pytest.raises(
-        UnsafeSQLError,
-        match=r"^Whole-row struct reference over a PII-bearing table is not "
-        r"allowed; select explicit non-PII columns$",
-    ):
-        _deny("SELECT users_enriched FROM users_enriched")
-
-
-def test_pii_denies_whole_row_struct_reference_via_alias():
-    # The bare reference can be a table alias, not just the table name; pins the
-    # table.alias branch of the ref set.
-    with pytest.raises(UnsafeSQLError, match="struct reference"):
-        _deny("SELECT t FROM users_enriched AS t")
-
-
-def test_pii_denies_struct_reference_case_insensitively():
-    # Pins the .lower() on both the table-ref set and the projected column name.
-    with pytest.raises(UnsafeSQLError, match="struct reference"):
-        _deny("SELECT USERS_ENRICHED FROM USERS_ENRICHED")
-
-
-def test_pii_allows_struct_reference_over_non_pii_table():
-    # A whole-row reference to a non-PII table is allowed (nothing PII reachable).
-    _deny("SELECT products FROM products")
-
-
-def test_pii_denies_column_rename_list_projection():
-    # FROM users_enriched AS t(a,b,c) renames PII cols to positional aliases;
-    # SELECT b reads a PII column by ordinal. (audit_01_07_26 deny-gate bypass #3)
-    with pytest.raises(
-        UnsafeSQLError,
-        match=r"^column-rename list over a PII-bearing table is not allowed; "
-        r"reference columns by their real names$",
-    ):
-        _deny("SELECT b FROM users_enriched AS t(a,b,c,d,e)")
-
-
-def test_pii_denies_column_rename_list_in_where():
-    # The rename list also defeats a WHERE oracle; rejecting the whole table
-    # reference closes both. Pins the reject-the-table (not just projection) design.
-    with pytest.raises(UnsafeSQLError, match="rename list"):
-        _deny("SELECT COUNT(*) FROM users_enriched AS t(a,b,c,d,e) WHERE t.b='x'")
-
-
-def test_pii_allows_rename_list_over_non_pii_table():
-    # A rename list on a no-PII table is allowed. Kills a mutant that drops the
-    # PII guard and rejects every rename list.
-    _deny("SELECT a FROM products AS p(a,b,c)")
-
-
-def test_pii_allows_plain_alias_without_rename_over_pii_table():
-    # A plain alias with no column list must NOT trigger the rename-list reject.
-    # Kills a mutant that drops the `alias.columns` check.
-    _deny("SELECT user_id FROM users_enriched AS t")
-
-
-def test_pii_denies_second_entity_pii_column():
-    # reachable_pii is the union over all referenced PII tables.
-    with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['shipping_address'\]"):
-        _deny("SELECT shipping_address FROM orders_v2")
-
-
-def test_pii_unparseable_fails_closed():
-    with pytest.raises(UnsafeSQLError, match="Unparseable SQL"):
-        _deny("SELECT FROM")
-
-
 # ── validate_nl_sql recursive-CTE shadow guard (audit_30 D1 follow-up) ─────────
 def test_recursive_cte_shadowing_allowed_table_rejected():
     # WITH RECURSIVE <name> where <name> is a real allowed table is a cross-tenant
@@ -288,24 +121,3 @@ def test_recursive_cte_not_shadowing_is_allowed():
         "SELECT n FROM seq",
         ALLOWED,
     )
-
-
-# ── assert_no_pii_access reachable-PII union + per-table guard ─────────────────
-def test_pii_reachable_union_across_two_pii_tables():
-    # reachable_pii must be the UNION over every referenced PII table. A JOIN of two
-    # PII entities where the projected column belongs to the first-visited table
-    # kills the `|=`->`=` mutant (which would keep only the last table's fields and
-    # miss `email`).
-    with pytest.raises(UnsafeSQLError, match=r"Query reads PII column\(s\): \['email'\]"):
-        _deny(
-            "SELECT email FROM users_enriched "
-            "JOIN orders_v2 ON users_enriched.user_id = orders_v2.user_id"
-        )
-
-
-def test_pii_rename_list_guard_requires_pii_fields_for_that_table():
-    # The rename-list reject must fire only for a table whose entity actually
-    # declares PII. With a PII table present (so PII is reachable and the gate does
-    # not return early), a rename list on a NON-PII table (products) must stay
-    # allowed — killing the `and`->`or` mutant that would reject it.
-    _deny("SELECT u.user_id FROM users_enriched u JOIN products AS p(a, b) ON u.user_id = p.a")

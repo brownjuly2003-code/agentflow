@@ -15,7 +15,8 @@ Translates natural-language agent queries into SQL. Two modes:
 
 The engine is imported lazily on the LLM path so the rule-based default carries
 no langgraph dependency. Either mode's output still passes through the serving
-layer's DuckDB executor + ``sql_guard`` PII deny-gate at query time.
+layer's DuckDB executor + ``sql_guard`` static validation (SELECT-only, no DML,
+tenant-scoped) at query time.
 """
 
 import os

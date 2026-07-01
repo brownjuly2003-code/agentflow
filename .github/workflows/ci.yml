@@ -81,17 +81,11 @@ jobs:
           python -m pytest tests/unit/test_event_producer.py -v --tb=short --cov=src.ingestion.producers.event_producer --cov-report=term-missing --cov-fail-under=90
       - name: Run SQL guard coverage gate
         run: |
-          # Security-critical NL->SQL guard: validate_nl_sql (test_sql_guard) plus
-          # the assert_no_pii_access deny-gate (test_sql_guard_mutation). Both files
-          # are needed for full module coverage (100% local); the 90% gate keeps a
-          # 10pp regression cushion.
+          # Security-critical NL->SQL guard: validate_nl_sql (SELECT-only, no DML,
+          # tenant table allow-list, recursive-CTE shadow reject). test_sql_guard
+          # plus test_sql_guard_mutation give full module coverage (100% local);
+          # the 90% gate keeps a 10pp regression cushion.
           python -m pytest tests/unit/test_sql_guard.py tests/unit/test_sql_guard_mutation.py -v --tb=short --cov=src.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
-      - name: Run PII policy coverage gate
-        run: |
-          # Security-critical PII deny/redact policy (entity-path redaction; the
-          # query path is denied by the sql_guard gate above). 90% gate keeps a
-          # regression cushion on a mutmut target.
-          python -m pytest tests/unit/test_pii_policy.py -v --tb=short --cov=src.serving.pii_policy --cov-report=term-missing --cov-fail-under=90
       - name: Run rate limiter coverage gate
         run: |
           # Security-critical sliding-window rate limiter (Redis + in-memory

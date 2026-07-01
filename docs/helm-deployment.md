@@ -9,7 +9,7 @@ The AgentFlow Helm chart deploys the FastAPI API to Kubernetes with:
 - a `PersistentVolumeClaim` for DuckDB files
 - a `HorizontalPodAutoscaler` driven by CPU
 - optional `Ingress` with TLS
-- mounted config files for tenants, SLOs, PII masking, API versioning, and security policy
+- mounted config files for tenants, SLOs, API versioning, and security policy
 - mounted secrets for the admin key and API-key config, either rendered by the
   chart or supplied through an existing Kubernetes Secret
 

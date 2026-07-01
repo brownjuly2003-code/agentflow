@@ -18,7 +18,9 @@ Common response headers:
 - `X-AgentFlow-Version`, `X-AgentFlow-Latest-Version`, `X-AgentFlow-Deprecated`
 - `X-AgentFlow-Deprecation-Warning` when a pinned version is deprecated
 - `X-Cache` on metric requests
-- `X-PII-Masked` when PII was withheld from an entity read (fields redacted)
+- `X-PII-Masked` — reserved (added in the 2026-04-11 version). The serving demo
+  holds no PII, so the current build never emits it; the version negotiator still
+  strips it for pre-2026-04-11 clients if a future build ever sets it.
 
 The Python SDK stores the latest version headers on `last_server_version`, `last_latest_version`, `last_deprecated`, and `last_deprecation_warning` after each request.
 
@@ -275,7 +277,7 @@ console.log(order.status, order.total_amount);
 ```
 
 **Errors:** `401`, `403`, `404`, `422` for future `as_of`, `503` if the serving table is unavailable.  
-**Rate limit:** per API key; response may also include `X-Cache` and `X-PII-Masked`.
+**Rate limit:** per API key; response may also include `X-Cache`.
 
 ### GET /v1/metrics/{metric_name}
 

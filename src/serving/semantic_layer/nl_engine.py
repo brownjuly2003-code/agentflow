@@ -1,14 +1,21 @@
-"""LLM-powered NL→SQL engine via the GraceKelly orchestration API.
+"""NL→SQL translation entrypoint for the serving layer.
 
-Translates natural language agent queries into SQL using the semantic catalog
-as schema context. Falls back to rule-based patterns when GraceKelly is not
-configured.
+Translates natural-language agent queries into SQL. Two modes:
 
-The LLM path does NOT call any model provider (Anthropic/OpenAI) directly — it
-routes through GraceKelly's `/api/v1/orchestrate` endpoint, which owns model
-selection and execution (browser-backed Sonnet 5). Set GRACEKELLY_URL to enable
-LLM mode; the target model is GRACEKELLY_NL_SQL_MODEL (default claude-sonnet-5),
-which the GraceKelly orchestrator serves today.
+- **Rule-based (shipped default).** Seven regex patterns → fixed SQL templates.
+  Used whenever ``GRACEKELLY_URL`` is unset (every shipped demo config).
+- **LLM (opt-in, ``GRACEKELLY_URL`` set).** Routes through the vendored NL_SQL
+  generation engine (``nl_sql_engine``, ADR 0008): a LangGraph
+  generate→validate→repair pipeline on **Claude Sonnet 5 via GraceKelly**,
+  schema-grounded from the catalog. AgentFlow never calls a model provider
+  (Anthropic/OpenAI) directly — GraceKelly owns model selection/execution behind
+  ``/api/v1/orchestrate`` (browser-backed). Target model is
+  ``GRACEKELLY_NL_SQL_MODEL`` (default ``claude-sonnet-5``), which GraceKelly
+  serves today.
+
+The engine is imported lazily on the LLM path so the rule-based default carries
+no langgraph dependency. Either mode's output still passes through the serving
+layer's DuckDB executor + ``sql_guard`` PII deny-gate at query time.
 """
 
 import os
@@ -41,20 +48,6 @@ def _sql_str_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _build_schema_prompt(catalog: DataCatalog) -> str:
-    """Build a schema description for the LLM from the catalog."""
-    lines = ["Available tables and columns:\n"]
-    for name, entity in catalog.entities.items():
-        fields = ", ".join(f"{f} ({desc})" for f, desc in entity.fields.items())
-        lines.append(f"- {entity.table} (entity: {name}): {fields}")
-
-    lines.append("\nAvailable metrics:")
-    for name, metric in catalog.metrics.items():
-        lines.append(f"- {name}: {metric.description} (unit: {metric.unit})")
-
-    return "\n".join(lines)
-
-
 def translate_nl_to_sql(
     question: str,
     catalog: DataCatalog,
@@ -70,62 +63,43 @@ def translate_nl_to_sql(
 
 
 def _llm_translate(question: str, catalog: DataCatalog) -> str | None:
-    """Generate SQL via GraceKelly's orchestration API (Sonnet 5, single-model).
+    """Generate SQL through the vendored NL_SQL engine (Sonnet 5 via GraceKelly).
 
-    Posts the schema-grounded prompt to `${GRACEKELLY_URL}/api/v1/orchestrate`
-    with the target model and reads ``output_text`` from the returned task
-    snapshot. GraceKelly owns provider/model execution — this function never
-    talks to a model API directly. Any transport/HTTP failure returns ``None``
-    so the caller degrades gracefully (the query package treats ``None`` as
-    "untranslatable").
+    Runs the LangGraph generate→validate→repair pipeline, schema-grounded from
+    ``catalog``, on GraceKelly's ``/api/v1/orchestrate`` (this function never
+    talks to a model API directly). Returns the validated SQL, or ``None`` when
+    the engine is unavailable or the final candidate fails the static guard —
+    the query package treats ``None`` as "untranslatable" and degrades.
+
+    The engine is imported lazily so the rule-based default (the shipped path)
+    never pulls in langgraph. If that import fails (e.g. langgraph/httpx not
+    installed) we fall back to the rule-based translator rather than erroring.
     """
     try:
-        import httpx
+        from src.serving.semantic_layer.nl_sql_engine import (
+            GraceKellyProvider,
+            ProviderError,
+            generate_sql_text,
+        )
     except ImportError:
-        logger.warning("httpx_not_installed_falling_back", path="nl_llm")
+        logger.warning("nl_sql_engine_unavailable_falling_back", path="nl_llm")
         return _rule_based_translate(question)
 
-    schema = _build_schema_prompt(catalog)
-    prompt = (
-        "You are a SQL generator for DuckDB. Given the user's question, return "
-        "ONLY a single SQL query. No explanation, no markdown, just the SQL.\n\n"
-        f"{schema}\n\n"
-        "Rules:\n"
-        "- Use DuckDB SQL syntax\n"
-        "- For time windows, use NOW() - INTERVAL 'N hours/minutes'\n"
-        "- Default time window is 1 hour if not specified\n"
-        "- Return at most 100 rows\n"
-        "- Only query tables listed above\n\n"
-        f"Question: {question}"
+    provider = GraceKellyProvider(
+        model=_GK_NL_SQL_MODEL,
+        base_url=_GRACEKELLY_URL,
+        timeout_seconds=_GK_TIMEOUT_SECONDS,
     )
-
     start = time.monotonic()
     try:
-        response = httpx.post(
-            f"{_GRACEKELLY_URL.rstrip('/')}/api/v1/orchestrate",
-            json={"prompt": prompt, "model": _GK_NL_SQL_MODEL},
-            timeout=_GK_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
+        sql = generate_sql_text(question, catalog, provider=provider)
+    except ProviderError as exc:
         logger.warning("gracekelly_request_failed", error=str(exc), model=_GK_NL_SQL_MODEL)
         return None
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
-    try:
-        output = (response.json().get("output_text") or "").strip()
-    except ValueError:
-        logger.warning("gracekelly_non_json_response")
-        return None
-
-    sql = _strip_sql_fence(output)
     if not sql:
         logger.warning("gracekelly_returned_no_sql")
-        return None
-
-    # Basic safety: must be a SELECT
-    if not sql.upper().startswith("SELECT"):
-        logger.warning("gracekelly_returned_non_select", sql=sql[:100])
         return None
 
     logger.info(
@@ -135,19 +109,6 @@ def _llm_translate(question: str, catalog: DataCatalog) -> str | None:
         elapsed_ms=elapsed_ms,
     )
     return sql
-
-
-def _strip_sql_fence(text: str) -> str:
-    """Strip a leading/trailing markdown code fence GraceKelly may add.
-
-    Browser-routed output can arrive wrapped in ```sql ... ``` despite the
-    "no markdown" instruction; unwrap it so the SELECT check sees raw SQL.
-    """
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```[a-zA-Z]*\n?", "", stripped)
-        stripped = re.sub(r"\n?```$", "", stripped)
-    return stripped.strip()
 
 
 def _rule_based_translate(question: str) -> str | None:

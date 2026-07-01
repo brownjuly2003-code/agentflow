@@ -136,11 +136,26 @@ def assert_no_pii_access(
     table_to_entity: dict[str, str],
     pii_fields_by_entity: dict[str, frozenset[str]],
 ) -> None:
-    """Reject a query that can read a PII column (bounded deny-gate).
+    """Reject queries that read a PII column — best-effort, NOT a bounded guarantee.
 
-    The bounded counterpart to the deleted lineage masker. Rather than trace which
-    *output* column derives from PII (an unbounded analysis that was bypassed three
-    times), this refuses the query outright when PII is reachable from it at all:
+    .. warning::
+       This is a **defense-in-depth denylist of SQL projection shapes**, not a bounded
+       proof of PII-safety. It reasons about AST *shape*, but a leak is defined by the
+       *column ordinal* the query actually reads, which no amount of shape-denial
+       bounds — DuckDB's ``FROM t AS a(c1, c2, …)`` rename list, and any future
+       expanding form, can read a PII column under a harmless name. Three distinct
+       bypasses were found and closed in one audit (``audit_01_07_26.md``); treat that
+       as evidence the approach is whack-a-mole, exactly like the lineage masker it
+       replaced. In the **shipped rule-based** translator PII-safety actually rests on
+       the translator's fixed template repertoire (it cannot emit these forms); the
+       **LLM translator** (opt-in ``ANTHROPIC_API_KEY``) emits arbitrary SELECTs and is
+       therefore NOT bounded here. A truly bounded guarantee needs column-level
+       resolution against the real schema (execution / DESCRIBE / column security) —
+       tracked as a follow-up. Do not enable the LLM translator against real PII until
+       then.
+
+    Given that caveat, the gate rejects the shapes known to reach PII without naming a
+    PII column outright:
 
     * a ``SELECT *`` / ``table.*`` at **any** nesting level over a PII-bearing query
       is rejected — a star can expand to any column, and proving a nested star never
@@ -152,6 +167,9 @@ def assert_no_pii_access(
     * a DuckDB whole-row struct reference — a bare table name or table alias in
       projection position (``SELECT users_enriched FROM users_enriched``) returns a
       STRUCT of every column, PII included, without naming a column or using a star;
+    * a DuckDB column-rename list on a PII table (``FROM users_enriched AS t(a, b,
+      …)``) is rejected wholesale — it renames PII columns to harmless positional
+      aliases that the shape check cannot otherwise catch (in projection or WHERE);
     * a reference to a PII column by name anywhere — projection, filter, join, a
       subquery, an alias source (``email AS contact``), an expression
       (``upper(email)``) — is rejected, because the raw column name still appears in
@@ -218,6 +236,23 @@ def assert_no_pii_access(
                 "Whole-row struct reference over a PII-bearing table is not "
                 "allowed; select explicit non-PII columns"
             )
+
+    # A DuckDB column-rename list on a PII table — FROM users_enriched AS t(a, b, …)
+    # — renames columns positionally, so projecting a harmless alias (SELECT b)
+    # reads a PII column BY ORDINAL, with no PII name, star or struct-ref anywhere in
+    # the AST (and it defeats a WHERE-clause too: WHERE t.b = '…'). We cannot resolve
+    # an ordinal to a name without the physical schema, so fail closed: reject any
+    # PII-bearing table that carries a rename list. (audit_01_07_26.md deny-gate
+    # bypass #3 — and see the module note: shape-based denial is not bounded.)
+    for table in statement.find_all(exp.Table):
+        entity = normalized_map.get(table.name.lower()) if table.name else None
+        if entity and pii_fields_by_entity.get(entity):
+            alias = table.args.get("alias")
+            if alias is not None and alias.columns:
+                raise UnsafeSQLError(
+                    "column-rename list over a PII-bearing table is not allowed; "
+                    "reference columns by their real names"
+                )
 
     referenced_columns = {
         column.name.lower() for column in statement.find_all(exp.Column) if column.name

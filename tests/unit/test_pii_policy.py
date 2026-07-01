@@ -197,6 +197,41 @@ def test_prepare_nl_sql_denies_whole_row_struct_reference_over_pii_table(
         _prepare_nl_sql(sql, _USER_TABLES, table_to_entity=_USER_MAP, tenant_id="acme")
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # DuckDB column-rename list renames PII columns to harmless positional
+        # aliases; SELECT b reads email by ordinal, WHERE t.b filters on it — no PII
+        # name, star or struct-ref in the AST. (audit_01_07_26 deny-gate bypass #3)
+        "SELECT b FROM users_enriched AS t(a,b,c,d,e)",
+        "SELECT t.b FROM users_enriched AS t(a,b,c,d,e)",
+        "SELECT b FROM users_enriched t(a,b,c,d,e)",
+        "SELECT COUNT(*) FROM users_enriched AS t(a,b,c,d,e) WHERE t.b='a@b.com'",
+    ],
+)
+def test_prepare_nl_sql_denies_column_rename_list_over_pii_table(
+    monkeypatch: pytest.MonkeyPatch, sql: str
+) -> None:
+    monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(DEFAULT_CONFIG_PATH))
+    with pytest.raises(UnsafeNLQueryError, match="rename list"):
+        _prepare_nl_sql(sql, _USER_TABLES, table_to_entity=_USER_MAP, tenant_id="acme")
+
+
+def test_prepare_nl_sql_allows_plain_alias_without_rename_over_pii_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A plain table alias (no column-rename list) over a non-PII projection stays
+    # allowed — only the rename list is rejected.
+    monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(DEFAULT_CONFIG_PATH))
+    sql = _prepare_nl_sql(
+        "SELECT user_id FROM users_enriched AS t",
+        _USER_TABLES,
+        table_to_entity=_USER_MAP,
+        tenant_id="acme",
+    )
+    assert sql == "SELECT user_id FROM users_enriched AS t"
+
+
 def test_prepare_nl_sql_allows_pii_query_for_exempt_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

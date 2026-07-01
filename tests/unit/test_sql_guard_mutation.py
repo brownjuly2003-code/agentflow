@@ -214,6 +214,32 @@ def test_pii_allows_struct_reference_over_non_pii_table():
     _deny("SELECT products FROM products")
 
 
+def test_pii_denies_column_rename_list_projection():
+    # FROM users_enriched AS t(a,b,c) renames PII cols to positional aliases;
+    # SELECT b reads a PII column by ordinal. (audit_01_07_26 deny-gate bypass #3)
+    with pytest.raises(UnsafeSQLError, match="rename list"):
+        _deny("SELECT b FROM users_enriched AS t(a,b,c,d,e)")
+
+
+def test_pii_denies_column_rename_list_in_where():
+    # The rename list also defeats a WHERE oracle; rejecting the whole table
+    # reference closes both. Pins the reject-the-table (not just projection) design.
+    with pytest.raises(UnsafeSQLError, match="rename list"):
+        _deny("SELECT COUNT(*) FROM users_enriched AS t(a,b,c,d,e) WHERE t.b='x'")
+
+
+def test_pii_allows_rename_list_over_non_pii_table():
+    # A rename list on a no-PII table is allowed. Kills a mutant that drops the
+    # PII guard and rejects every rename list.
+    _deny("SELECT a FROM products AS p(a,b,c)")
+
+
+def test_pii_allows_plain_alias_without_rename_over_pii_table():
+    # A plain alias with no column list must NOT trigger the rename-list reject.
+    # Kills a mutant that drops the `alias.columns` check.
+    _deny("SELECT user_id FROM users_enriched AS t")
+
+
 def test_pii_denies_second_entity_pii_column():
     # reachable_pii is the union over all referenced PII tables.
     with pytest.raises(UnsafeSQLError, match=r"PII column\(s\): \['shipping_address'\]"):

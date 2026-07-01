@@ -48,13 +48,21 @@ def test_sql_injection_checks_are_not_globally_suppressed() -> None:
 # test_bandit_diff.test_nosec_comments_carry_reason.
 _ALLOWED_B608_SITES = {
     "src/orchestration/dags/daily_batch.py": 1,
+    # ADR 0006 Phase 1a (reviewed 2026-07-02): the ClickHouse pipeline sink
+    # interpolates _quote_literal-escaped ids into its aggregate-recompute
+    # reads (the backend transpile re-escapes them structurally), and
+    # QueryEngine.fetch_pipeline_events interpolates only schema-probe column
+    # names plus _quote_literal-escaped values on the non-binding backend path
+    # — the journal scan moved there from stream.py / webhook_dispatcher.py,
+    # whose sites are gone; clickhouse_backend gained the insert_rows header
+    # (identifiers regex-validated).
+    "src/processing/clickhouse_sink.py": 2,
     "src/serving/api/routers/lineage.py": 1,
     "src/serving/api/routers/slo.py": 4,
-    "src/serving/api/routers/stream.py": 1,
-    "src/serving/api/webhook_dispatcher.py": 1,
-    "src/serving/backends/clickhouse_backend.py": 6,
+    "src/serving/backends/clickhouse_backend.py": 7,
     "src/serving/backends/duckdb_backend.py": 2,
     "src/serving/semantic_layer/nl_engine.py": 6,
+    "src/serving/semantic_layer/query/engine.py": 1,
     "src/serving/semantic_layer/query/entity_queries.py": 3,
     "src/serving/semantic_layer/query/nl_queries.py": 3,
     "src/serving/semantic_layer/search_index.py": 1,

@@ -1,4 +1,8 @@
-backend: duckdb
+# Serving engine (ADR 0006): the demo and production serving path is
+# ClickHouse; DuckDB remains the local-dev / test and compatibility store
+# (tests pin SERVING_BACKEND=duckdb in tests/conftest.py). Override at runtime
+# with SERVING_BACKEND=duckdb to roll back — Phase 1 is config-reversible.
+backend: clickhouse
 
 clickhouse:
   host: localhost

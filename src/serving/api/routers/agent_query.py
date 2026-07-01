@@ -7,7 +7,6 @@ Every response includes metadata that helps agents assess data reliability.
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
 import sqlglot
@@ -25,20 +24,10 @@ from src.serving.api.versioning import (
     resolve_request_version,
 )
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
-from src.serving.masking import PiiMasker
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.api")
 router = APIRouter(tags=["agent"])
-_PII_MASKER: PiiMasker | None = None
-
-
-def _get_pii_masker() -> PiiMasker:
-    global _PII_MASKER
-    config_path = os.getenv("AGENTFLOW_PII_CONFIG", "config/pii_fields.yaml")
-    if _PII_MASKER is None or Path(_PII_MASKER.config_path) != Path(config_path):
-        _PII_MASKER = PiiMasker(config_path)
-    return _PII_MASKER
 
 
 # Engine call-signature compatibility (F-4): older engine implementations and
@@ -281,9 +270,7 @@ async def explain_query(request: ExplainRequest, req: Request) -> ExplainRespons
 
 
 @router.post("/query", response_model=QueryResponse)
-async def natural_language_query(
-    request: NLQueryRequest, req: Request, response: Response
-) -> QueryResponse:
+async def natural_language_query(request: NLQueryRequest, req: Request) -> QueryResponse:
     """Execute a natural language query against the data platform.
 
     The query engine translates natural language to SQL, executes it,
@@ -300,7 +287,7 @@ async def natural_language_query(
         span.set_attribute("query.text", request.question)
         span.set_attribute(
             "query.engine",
-            "claude" if os.getenv("ANTHROPIC_API_KEY") else "rule_based",
+            "gracekelly" if os.getenv("GRACEKELLY_URL") else "rule_based",
         )
         optional_kwargs = {"tenant_id": tenant_id, "allowed_tables": allowed_tables}
         try:
@@ -329,22 +316,11 @@ async def natural_language_query(
         span.set_attribute("query.rows", int(result.get("row_count", 0)))
 
     logger.info("nl_query_executed", question=request.question[:100])
-    tenant = tenant_id or "default"
-    catalog = getattr(req.app.state, "catalog", None)
-    table_to_entity = (
-        {entity.table: name for name, entity in catalog.entities.items()}
-        if catalog is not None
-        else {}
-    )
-    answer, pii_masked = _get_pii_masker().mask_query_results(
-        result.get("sql", ""),
-        result["data"],
-        tenant,
-        table_to_entity,
-    )
-    if pii_masked:
-        response.headers["X-PII-Masked"] = "true"
-
+    # The serving warehouse holds no PII: users_enriched/orders_v2 carry only
+    # analytics columns (aggregates, ids), so query rows are returned as-is.
+    # Raw contact PII lives in the DV2 vault and is governed engine-side there
+    # (ClickHouse row/column policies) — not in this serving path. See ADR 0006.
+    answer = result["data"]
     rows = answer if isinstance(answer, list) else [answer]
 
     return QueryResponse(
@@ -414,8 +390,6 @@ async def get_entity(
             if cached is not None:
                 logger.debug("entity_cache_hit", key=cache_key)
                 cached_payload = cached.get("payload", cached)
-                if cached.get("pii_masked"):
-                    response.headers["X-PII-Masked"] = "true"
                 response.headers["X-Cache"] = "HIT"
                 transformed_payload = _transform_payload_for_requested_version(
                     req,
@@ -449,17 +423,12 @@ async def get_entity(
     freshness = None
     if last_updated and as_of is None:
         freshness = (now - datetime.fromisoformat(last_updated)).total_seconds()
-    tenant = tenant_id or "default"
-    masked_payload = _get_pii_masker().mask(entity_type, payload, tenant)
-    pii_masked = masked_payload != payload
-    if pii_masked:
-        response.headers["X-PII-Masked"] = "true"
     as_of_text = _as_of_iso_text(as_of)
 
     response_payload = {
         "entity_type": entity_type,
         "entity_id": entity_id,
-        "data": masked_payload,
+        "data": payload,
         "last_updated": last_updated,
         "freshness_seconds": freshness,
         "meta": {
@@ -472,10 +441,7 @@ async def get_entity(
         cache, cache_key = entity_cache
         await cache.set(
             cache_key,
-            {
-                "payload": response_payload,
-                "pii_masked": pii_masked,
-            },
+            {"payload": response_payload},
             ttl=ENTITY_TTL_SECONDS,
         )
         response.headers["X-Cache"] = "MISS"

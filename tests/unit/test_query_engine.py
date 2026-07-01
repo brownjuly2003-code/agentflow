@@ -166,7 +166,7 @@ def test_explain_extracts_row_estimate_from_box_drawing_plan(
     monkeypatch.setattr(
         engine,
         "_translate_question_to_sql",
-        lambda question, tenant_id=None: "SELECT * FROM orders_v2",
+        lambda question, tenant_id=None: "SELECT order_id FROM orders_v2",
     )
     monkeypatch.setattr(
         engine._backend,

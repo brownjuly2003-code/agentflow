@@ -7,7 +7,6 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-import src.serving.api.routers.agent_query as agent_query_module
 from src.serving.api.versioning import ApiVersionRegistry, ResponseTransformer
 from src.serving.cache import QueryCache
 
@@ -73,23 +72,6 @@ def _write_api_versions(path: Path, content: str | None = None) -> None:
     )
 
 
-def _write_pii_config(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        (
-            "masking:\n"
-            "  default_strategy: partial\n"
-            "  entity_fields:\n"
-            "    order:\n"
-            "      - field: user_id\n"
-            "        strategy: full\n"
-            "  pii_exempt_tenants: []\n"
-        ),
-        encoding="utf-8",
-        newline="\n",
-    )
-
-
 def _seed_tenant_data(db_path: Path) -> None:
     conn = duckdb.connect(str(db_path))
     try:
@@ -130,12 +112,10 @@ def _build_client(
     api_keys_path = tmp_path / "config" / "api_keys.yaml"
     tenants_path = tmp_path / "config" / "tenants.yaml"
     versions_path = tmp_path / "config" / "api_versions.yaml"
-    pii_path = tmp_path / "config" / "pii_fields.yaml"
 
     _write_api_keys(api_keys_path)
     _write_tenants(tenants_path, pin=tenant_pin)
     _write_api_versions(versions_path, versions_content)
-    _write_pii_config(pii_path)
     _seed_tenant_data(db_path)
 
     monkeypatch.setenv("DUCKDB_PATH", str(db_path))
@@ -143,8 +123,6 @@ def _build_client(
     monkeypatch.setenv("AGENTFLOW_API_KEYS_FILE", str(api_keys_path))
     monkeypatch.setenv("AGENTFLOW_TENANTS_FILE", str(tenants_path))
     monkeypatch.setenv("AGENTFLOW_API_VERSIONS_FILE", str(versions_path))
-    monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(pii_path))
-    monkeypatch.setattr(agent_query_module, "_PII_MASKER", None, raising=False)
 
     main_module = importlib.import_module("src.serving.api.main")
     main_module = importlib.reload(main_module)
@@ -337,18 +315,6 @@ def test_metric_cache_is_scoped_by_requested_version(
     assert latest.status_code == 200
     assert latest.headers["X-Cache"] == "MISS"
     assert latest.json()["meta"]["is_historical"] is False
-
-
-def test_older_versions_hide_new_pii_header(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    with _build_client(monkeypatch, tmp_path) as client:
-        response = client.get("/v1/entity/order/ORD-ACME", headers={"X-API-Key": "acme-key"})
-
-    assert response.status_code == 200
-    assert "X-PII-Masked" not in response.headers
-    assert response.json()["data"]["user_id"] == "***"
 
 
 def test_deprecated_versions_emit_warning_header(

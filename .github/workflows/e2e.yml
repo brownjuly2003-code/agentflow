@@ -65,7 +65,7 @@ jobs:
               return entries
 
           compose_ps_command = ["docker", "compose", "-f", "docker-compose.e2e.yml", "ps", "--format", "json"]
-          required = {"agentflow-api", "redis", "kafka", "postgres"}
+          required = {"agentflow-api", "redis", "kafka", "postgres", "clickhouse"}
           deadline = time.monotonic() + 180
 
           while time.monotonic() < deadline:
@@ -104,6 +104,20 @@ jobs:
 
       - name: Run E2E tests
         run: pytest tests/e2e/ -v --tb=short --timeout=60
+
+      # The API seeds ClickHouse only when it boots on the shipped ClickHouse
+      # serving profile (config/serving.yaml), so rows in agentflow.orders_v2
+      # prove the E2E stack exercised the real engine, not a DuckDB fallback.
+      - name: Verify ClickHouse serving path
+        run: |
+          orders=$(docker compose -f docker-compose.e2e.yml exec -T clickhouse \
+            clickhouse-client --query "SELECT count() FROM agentflow.orders_v2")
+          echo "agentflow.orders_v2 rows: $orders"
+          test "$orders" -gt 0
+          events_table=$(docker compose -f docker-compose.e2e.yml exec -T clickhouse \
+            clickhouse-client --query "EXISTS TABLE agentflow.pipeline_events")
+          echo "agentflow.pipeline_events exists: $events_table"
+          test "$events_table" = "1"
 
       - name: Collect logs on failure
         if: failure()

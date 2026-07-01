@@ -1,9 +1,22 @@
-"""LLM-powered NL→SQL engine using Claude API.
+"""NL→SQL translation entrypoint for the serving layer.
 
-Translates natural language agent queries into SQL using the semantic catalog
-as schema context. Falls back to rule-based patterns if no API key is set.
+Translates natural-language agent queries into SQL. Two modes:
 
-Set ANTHROPIC_API_KEY to enable LLM mode.
+- **Rule-based (shipped default).** Seven regex patterns → fixed SQL templates.
+  Used whenever ``GRACEKELLY_URL`` is unset (every shipped demo config).
+- **LLM (opt-in, ``GRACEKELLY_URL`` set).** Routes through the vendored NL_SQL
+  generation engine (``nl_sql_engine``, ADR 0008): a LangGraph
+  generate→validate→repair pipeline on **Claude Sonnet 5 via GraceKelly**,
+  schema-grounded from the catalog. AgentFlow never calls a model provider
+  (Anthropic/OpenAI) directly — GraceKelly owns model selection/execution behind
+  ``/api/v1/orchestrate`` (browser-backed). Target model is
+  ``GRACEKELLY_NL_SQL_MODEL`` (default ``claude-sonnet-5``), which GraceKelly
+  serves today.
+
+The engine is imported lazily on the LLM path so the rule-based default carries
+no langgraph dependency. Either mode's output still passes through the serving
+layer's DuckDB executor + ``sql_guard`` static validation (SELECT-only, no DML,
+tenant-scoped) at query time.
 """
 
 import os
@@ -16,7 +29,12 @@ from src.serving.semantic_layer.catalog import DataCatalog
 
 logger = structlog.get_logger()
 
-_ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# GraceKelly V2 orchestration API (multi-model, browser-backed). The LLM NL→SQL
+# path posts to `${GRACEKELLY_URL}/api/v1/orchestrate`. Empty => LLM disabled and
+# the rule-based fallback is used.
+_GRACEKELLY_URL = os.getenv("GRACEKELLY_URL", "")
+_GK_NL_SQL_MODEL = os.getenv("GRACEKELLY_NL_SQL_MODEL", "claude-sonnet-5")
+_GK_TIMEOUT_SECONDS = float(os.getenv("GRACEKELLY_TIMEOUT_SECONDS", "60"))
 
 
 def _sql_str_literal(value: str) -> str:
@@ -31,83 +49,66 @@ def _sql_str_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _build_schema_prompt(catalog: DataCatalog) -> str:
-    """Build a schema description for the LLM from the catalog."""
-    lines = ["Available tables and columns:\n"]
-    for name, entity in catalog.entities.items():
-        fields = ", ".join(f"{f} ({desc})" for f, desc in entity.fields.items())
-        lines.append(f"- {entity.table} (entity: {name}): {fields}")
-
-    lines.append("\nAvailable metrics:")
-    for name, metric in catalog.metrics.items():
-        lines.append(f"- {name}: {metric.description} (unit: {metric.unit})")
-
-    return "\n".join(lines)
-
-
 def translate_nl_to_sql(
     question: str,
     catalog: DataCatalog,
 ) -> str | None:
     """Translate natural language to SQL.
 
-    Uses Claude API if ANTHROPIC_API_KEY is set, otherwise falls back
-    to rule-based patterns.
+    Routes through GraceKelly (Sonnet 5) if GRACEKELLY_URL is set, otherwise
+    falls back to rule-based patterns.
     """
-    if _ANTHROPIC_KEY:
+    if _GRACEKELLY_URL:
         return _llm_translate(question, catalog)
     return _rule_based_translate(question)
 
 
 def _llm_translate(question: str, catalog: DataCatalog) -> str | None:
-    """Use Claude to generate SQL from natural language."""
+    """Generate SQL through the vendored NL_SQL engine (Sonnet 5 via GraceKelly).
+
+    Runs the LangGraph generate→validate→repair pipeline, schema-grounded from
+    ``catalog``, on GraceKelly's ``/api/v1/orchestrate`` (this function never
+    talks to a model API directly). Returns the validated SQL, or ``None`` when
+    the engine is unavailable or the final candidate fails the static guard —
+    the query package treats ``None`` as "untranslatable" and degrades.
+
+    The engine is imported lazily so the rule-based default (the shipped path)
+    never pulls in langgraph. If that import fails (e.g. langgraph/httpx not
+    installed) we fall back to the rule-based translator rather than erroring.
+    """
     try:
-        import anthropic
+        from src.serving.semantic_layer.nl_sql_engine import (
+            GraceKellyProvider,
+            ProviderError,
+            generate_sql_text,
+        )
     except ImportError:
-        logger.warning("anthropic package not installed, falling back to rule-based")
+        logger.warning("nl_sql_engine_unavailable_falling_back", path="nl_llm")
         return _rule_based_translate(question)
 
-    schema = _build_schema_prompt(catalog)
-
-    client = anthropic.Anthropic(api_key=_ANTHROPIC_KEY)
-    start = time.monotonic()
-
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=300,
-        messages=[{"role": "user", "content": question}],
-        system=(
-            "You are a SQL generator for DuckDB. "
-            "Given the user's question, return ONLY a single SQL query. "
-            "No explanation, no markdown, just the SQL.\n\n"
-            f"{schema}\n\n"
-            "Rules:\n"
-            "- Use DuckDB SQL syntax\n"
-            "- For time windows, use NOW() - INTERVAL 'N hours/minutes'\n"
-            "- Default time window is 1 hour if not specified\n"
-            "- Return at most 100 rows\n"
-            "- Only query tables listed above\n"
-        ),
+    provider = GraceKellyProvider(
+        model=_GK_NL_SQL_MODEL,
+        base_url=_GRACEKELLY_URL,
+        timeout_seconds=_GK_TIMEOUT_SECONDS,
     )
+    start = time.monotonic()
+    try:
+        sql = generate_sql_text(question, catalog, provider=provider)
+    except ProviderError as exc:
+        logger.warning("gracekelly_request_failed", error=str(exc), model=_GK_NL_SQL_MODEL)
+        return None
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
-    sql = ""
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            sql = text.strip()
-            if sql:
-                break
     if not sql:
-        logger.warning("llm_returned_no_text_blocks")
+        logger.warning("gracekelly_returned_no_sql")
         return None
 
-    # Basic safety: must be a SELECT
-    if not sql.upper().startswith("SELECT"):
-        logger.warning("llm_returned_non_select", sql=sql[:100])
-        return None
-
-    logger.info("llm_sql_generated", question=question[:80], elapsed_ms=elapsed_ms)
+    logger.info(
+        "gracekelly_sql_generated",
+        question=question[:80],
+        model=_GK_NL_SQL_MODEL,
+        elapsed_ms=elapsed_ms,
+    )
     return sql
 
 

@@ -81,15 +81,11 @@ jobs:
           python -m pytest tests/unit/test_event_producer.py -v --tb=short --cov=src.ingestion.producers.event_producer --cov-report=term-missing --cov-fail-under=90
       - name: Run SQL guard coverage gate
         run: |
-          # Security-critical NL->SQL allowlist/denylist guard; local module
-          # coverage is 100%, so the 90% gate keeps a 10pp regression cushion.
-          python -m pytest tests/unit/test_sql_guard.py -v --tb=short --cov=src.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
-      - name: Run PII masking coverage gate
-        run: |
-          # Security-critical PII masker (email/phone/address/name + query-result
-          # masking); local module coverage is 99%, so the 90% gate keeps a ~9pp
-          # regression cushion on a mutmut target.
-          python -m pytest tests/unit/test_masking.py -v --tb=short --cov=src.serving.masking --cov-report=term-missing --cov-fail-under=90
+          # Security-critical NL->SQL guard: validate_nl_sql (SELECT-only, no DML,
+          # tenant table allow-list, recursive-CTE shadow reject). test_sql_guard
+          # plus test_sql_guard_mutation give full module coverage (100% local);
+          # the 90% gate keeps a 10pp regression cushion.
+          python -m pytest tests/unit/test_sql_guard.py tests/unit/test_sql_guard_mutation.py -v --tb=short --cov=src.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
       - name: Run rate limiter coverage gate
         run: |
           # Security-critical sliding-window rate limiter (Redis + in-memory
@@ -139,9 +135,11 @@ jobs:
           # query_engine.py is a re-export shim, so the gate spans the whole
           # query package. The engine imports duckdb, so it uses coverage run +
           # coverage report --include like the auth/outbox gates. Package
-          # coverage is 97% across the five dedicated unit files; the gap is
+          # coverage is 97% across the six dedicated unit files; the gap is
           # the OTel span-recording branches the integration suites cover.
-          python -m coverage run -m pytest tests/unit/test_query_engine.py tests/unit/test_query_engine_injection.py tests/unit/test_query_engine_mixin_contracts.py tests/unit/test_paginated_nl_query.py tests/unit/test_query_package_logic.py -p no:schemathesis
+          # test_pipeline_events_scan.py covers QueryEngine.fetch_pipeline_events
+          # (the backend event scan the webhook dispatcher and SSE delegate to).
+          python -m coverage run -m pytest tests/unit/test_query_engine.py tests/unit/test_query_engine_injection.py tests/unit/test_query_engine_mixin_contracts.py tests/unit/test_paginated_nl_query.py tests/unit/test_query_package_logic.py tests/unit/test_pipeline_events_scan.py -p no:schemathesis
           python -m coverage report --include="*/serving/semantic_layer/query/*" --show-missing --fail-under=90
       - name: Upload coverage
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -239,6 +237,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev,load,cloud]"
       - name: Run benchmark
+        # DuckDB-profile benchmark: the pipeline runs on the runner host with no
+        # ClickHouse service, and the perf history compares against DuckDB-era
+        # numbers. The shipped ClickHouse path is exercised by the E2E lane.
+        env:
+          SERVING_BACKEND: duckdb
         run: python scripts/run_benchmark.py
       - name: Convert benchmark report to JSON
         run: |

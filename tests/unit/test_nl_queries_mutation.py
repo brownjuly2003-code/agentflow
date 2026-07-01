@@ -97,7 +97,7 @@ def _install_harness_stubs() -> None:
     # nl_engine is imported lazily inside explain(); supply a rule-based default.
     semantic_pkg = _ensure_module("src.serving.semantic_layer")
     nl_engine_mod = _ensure_module("src.serving.semantic_layer.nl_engine")
-    nl_engine_mod._ANTHROPIC_KEY = ""
+    nl_engine_mod._GRACEKELLY_URL = ""
     semantic_pkg.nl_engine = nl_engine_mod
 
     # nl_queries imports `.sql_guard`, a shim that does
@@ -819,13 +819,13 @@ def test_explain_uses_default_allowed_tables_when_none():
     assert result["tables_accessed"] == ["orders"]
 
 
-def test_explain_reports_llm_engine_when_key_and_anthropic_present(monkeypatch):
-    # When a key is configured and `import anthropic` succeeds, the engine label
-    # is "llm". Pins the getattr(nl_engine, "_ANTHROPIC_KEY", "") read: a mutant
+def test_explain_reports_llm_engine_when_gracekelly_configured(monkeypatch):
+    # When GraceKelly is configured and `import httpx` succeeds, the engine label
+    # is "llm". Pins the getattr(nl_engine, "_GRACEKELLY_URL", "") read: a mutant
     # that reads the wrong attribute/object collapses to "rule_based".
     nl_engine_mod = sys.modules["src.serving.semantic_layer.nl_engine"]
-    monkeypatch.setattr(nl_engine_mod, "_ANTHROPIC_KEY", "sk-test", raising=False)
-    monkeypatch.setitem(sys.modules, "anthropic", types.ModuleType("anthropic"))
+    monkeypatch.setattr(nl_engine_mod, "_GRACEKELLY_URL", "http://gracekelly.test", raising=False)
+    monkeypatch.setitem(sys.modules, "httpx", types.ModuleType("httpx"))
     backend = _FakeBackend(explain_rows=[(0, "x")])
     host = _Host(backend=backend, translated="SELECT id FROM orders")
     result = host.explain("q", allowed_tables={"orders"})
@@ -854,7 +854,7 @@ def test_explain_wraps_backend_error_as_value_error():
 #     code point range) and the plan-join separator mutant (the joined plan text
 #     is not returned, only scanned for the same substrings either way).
 #   * the explain() getattr default-value mutants: nl_engine always defines
-#     _ANTHROPIC_KEY, so the third (default) argument is unreachable.
+#     _GRACEKELLY_URL, so the third (default) argument is unreachable.
 #   * elapsed_ms `* 1000`->`* 1001`: indistinguishable at unit-test timescales.
 #   * the span SQL slice `[:200]`->`[:201]`: in the `len(sql) <= 200` branch the
 #     slice never reaches 200 chars, so the extra index is a no-op.

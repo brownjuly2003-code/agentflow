@@ -41,11 +41,28 @@ from src.serving.api.webhook_dispatcher import (
     list_webhooks,
     load_webhooks,
 )
+from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.semantic_layer.query import QueryEngine
+
+
+def _engine_stub(conn: duckdb.DuckDBPyConnection) -> QueryEngine:
+    # A minimal real QueryEngine over the test connection: the journal scan
+    # goes through the serving backend (fetch_pipeline_events), the durable
+    # queue through `_conn`. Built via __new__ so initialize_demo_data cannot
+    # widen the schema-variant pipeline_events fixtures with its ALTERs.
+    engine = QueryEngine.__new__(QueryEngine)
+    backend = DuckDBBackend(db_path=":memory:", connection=conn)
+    engine._duckdb_backend = backend
+    engine._backend = backend
+    engine._backend_name = backend.name
+    engine._conn = conn
+    return engine
 
 
 def _stub_app(conn: duckdb.DuckDBPyConnection) -> SimpleNamespace:
-    # WebhookDispatcher only reaches conn via app.state.query_engine._conn.
-    return SimpleNamespace(state=SimpleNamespace(query_engine=SimpleNamespace(_conn=conn)))
+    # WebhookDispatcher reaches the journal via query_engine.fetch_pipeline_events
+    # and the control-plane delivery queue via query_engine._conn.
+    return SimpleNamespace(state=SimpleNamespace(query_engine=_engine_stub(conn)))
 
 
 @pytest.fixture

@@ -117,6 +117,13 @@ Evidence: `src/serving/api/rate_limiter.py`, `src/serving/api/auth/middleware.py
 
 ## 7. Data Protection and Privacy Controls
 
+> **Superseded (2026-07-01).** The response-side PII masking / deny-gate described
+> in this section has been **removed**. The demo serving warehouse holds no PII
+> (`users_enriched`/`orders_v2` carry only analytics columns), so the machinery
+> guarded an empty surface. Real contact PII lives only in the DV2 business vault
+> and is governed engine-side there (ClickHouse row/column policies — ADR 0006
+> Phase 2). The paragraph below is retained as the point-in-time record.
+
 Response-side PII masking is implemented in `PiiMasker` and applied on entity responses and NL-query results. Masking behavior is configured through `config/pii_fields.yaml`, supports multiple strategies (`partial`, `full`, `hash`), and allows explicit tenant exemptions for internal tenants. When masking is applied, the API sets `X-PII-Masked: true`.
 
 Security headers are applied centrally and include:

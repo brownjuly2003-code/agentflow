@@ -37,7 +37,10 @@ def _default_allowed_tables(self: NLQueryHost) -> set[str]:
     return allowed_tables
 
 
-def _prepare_nl_sql(translated_sql: str, allowed_tables: set[str]) -> str:
+def _prepare_nl_sql(
+    translated_sql: str,
+    allowed_tables: set[str],
+) -> str:
     try:
         validate_nl_sql(translated_sql, allowed_tables)
     except UnsafeSQLError as e:
@@ -73,7 +76,7 @@ class NLQueryMixin:
                 span.set_attribute("question", question[:200])
                 span.set_attribute(
                     "model",
-                    "anthropic" if os.getenv("ANTHROPIC_API_KEY") else "rule_based",
+                    "gracekelly" if os.getenv("GRACEKELLY_URL") else "rule_based",
                 )
                 if resolved_tenant_id is not None:
                     span.set_attribute("tenant_id", resolved_tenant_id)
@@ -196,7 +199,7 @@ class NLQueryMixin:
     ) -> dict:
         """Translate a natural language question to SQL and execute it.
 
-        Uses Claude API if ANTHROPIC_API_KEY is set, falls back to rule-based.
+        Uses GraceKelly (Sonnet 5) if GRACEKELLY_URL is set, falls back to rule-based.
         """
         del context
 
@@ -262,9 +265,9 @@ class NLQueryMixin:
         sql = self._scope_sql(prepared_sql, tenant_id)
 
         engine = "rule_based"
-        if getattr(nl_engine, "_ANTHROPIC_KEY", ""):
+        if getattr(nl_engine, "_GRACEKELLY_URL", ""):
             try:
-                import anthropic  # noqa: F401
+                import httpx  # noqa: F401
             except ImportError:
                 pass
             else:

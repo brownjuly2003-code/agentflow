@@ -30,7 +30,7 @@ class ModuleTarget:
 # (a) copy the module so it imports as a top-level package and (b) pair it with a
 # NARROW test that does not pull the duckdb-backed engine import chain. So
 # retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard,
-# masking, rate_limiter, sql_builder, nl_queries, auth/manager and
+# rate_limiter, sql_builder, nl_queries, auth/manager and
 # auth/key_rotation mutate as serving.* (from src/serving) against duckdb-free
 # tests. Each duckdb-free test
 # also avoids fixtures and calls the module's methods directly: under
@@ -60,10 +60,6 @@ MODULE_TARGETS = {
         threshold=0.90,
         tests=("tests/unit/test_sql_guard_mutation.py",),
     ),
-    Path("serving/masking.py"): ModuleTarget(
-        threshold=0.90,
-        tests=("tests/unit/test_masking_mutation.py",),
-    ),
     Path("serving/api/rate_limiter.py"): ModuleTarget(
         threshold=0.90,
         tests=("tests/unit/test_rate_limiter_mutation.py",),
@@ -77,7 +73,7 @@ MODULE_TARGETS = {
         tests=("tests/unit/test_nl_queries_mutation.py",),
     ),
     # manager.py runs at 0.80, not the 0.90 the pure-function guards (sql_guard,
-    # masking, sql_builder, ...) hold. It is a ~400-line stateful auth class whose
+    # sql_builder, ...) hold. It is a ~400-line stateful auth class whose
     # surviving mutants are dominated by EQUIVALENTS that no behaviour-level test
     # can kill: structured-logging arguments (the auth logger event names / kwargs),
     # `model_copy(update=...)` dicts whose mutated field equals its default

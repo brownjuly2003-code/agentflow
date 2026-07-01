@@ -146,6 +146,39 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | kind staging | `helm/agentflow`, `k8s/`, `scripts/k8s_staging_up.sh` | Production-shaped staging on a local Kubernetes cluster |
 | Production | Managed Kafka/Flink/Iceberg/object storage + Helm/Terraform | Durable, autoscaled multi-service deployment |
 
+> **Serving engine decision — fixed on ClickHouse ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md),
+> [ADR 0007](decisions/0007-deployment-topology-kubernetes.md)).** The serving engine is
+> now a recorded decision, not an open question: the demo/production serving path fixes
+> on **ClickHouse**, with DuckDB demoted to the local-dev / test and compatibility store
+> (still first-class for `pytest` and offline work — see the DuckDB pin in
+> `tests/conftest.py`).
+>
+> **Phase 1 is executed (2026-07-02).** `config/serving.yaml` defaults to
+> `backend: clickhouse`; `make demo` and `docker-compose.prod.yml` bring up the
+> ClickHouse service by default. The local pipeline mirrors serving-table writes
+> to ClickHouse (`src/processing/clickhouse_sink.py`), and the freshness-critical
+> event scan (webhooks, metric-cache invalidation, SSE) goes through the serving
+> backend (`QueryEngine.fetch_pipeline_events`) — so the event→metric axis works
+> on the shipped engine, across process boundaries. Upserts are modeled as
+> ReplacingMergeTree row versions with `final=1` reads. The Helm chart keeps the
+> safe single-node DuckDB profile as default (it ships no ClickHouse service);
+> `serving.backend=clickhouse` wires an external service.
+>
+> **Horizontal scaling stays gated ([ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md)).**
+> The control plane (webhook queue, alert history, outbox, usage) is an embedded
+> per-pod DuckDB store; scaling requires externalizing it, not only the serving
+> engine. `replicaCount`/`autoscaling` stay pinned until that lands.
+>
+> **PII is not a serving-tier concern (2026-07-01).** The demo serving warehouse holds
+> no PII — `users_enriched`/`orders_v2` carry only analytics columns — so the interim
+> NL→SQL PII deny-gate and the entity redactor were guarding a surface that never exists
+> in the demo, and both have been removed (see CHANGELOG). Real contact PII lives only in
+> the DV2 business vault; its governance belongs engine-side there, via ClickHouse
+> row/column policies (ADR 0006 Phase 2, owner-gated, needs the container stand), not in a
+> dialect-pinned string parse in the serving tier. `sql_guard` remains, scoped to what it
+> can actually enforce: SELECT-only, no DML, the tenant table allow-list, and the
+> recursive-CTE shadow reject. Tracked in `road-to-9.8.md`.
+
 ## v1-v6 Capability Map
 
 | Capability | Implementation | Architectural impact |

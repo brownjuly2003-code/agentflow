@@ -28,6 +28,7 @@ from src.ingestion.producers.event_producer import (
     generate_product,
 )
 from src.logger import configure_logging
+from src.processing.clickhouse_sink import ClickHouseSink
 from src.processing.iceberg_sink import IcebergSink
 from src.processing.transformations.enrichment import (
     compute_payment_risk_score,
@@ -111,6 +112,7 @@ def _process_event(
     conn: duckdb.DuckDBPyConnection,
     event: dict,
     iceberg_sink: IcebergSink | None = None,
+    clickhouse_sink: ClickHouseSink | None = None,
 ) -> tuple[bool, str]:
     """Validate, enrich, and store a single event. Returns (success, reason)."""
     event_type = event.get("event_type", "")
@@ -146,6 +148,18 @@ def _process_event(
                     ],
                 )
             conn.execute("COMMIT")
+            # Mirror to the ClickHouse serving store only after the DuckDB
+            # commit, so a serving-store failure never rolls back or forks the
+            # local lake state; the mirror raising is deliberate (loud) —
+            # see ClickHouseSink.from_serving_config.
+            if clickhouse_sink is not None:
+                clickhouse_sink.record_pipeline_event(
+                    event_id=str(event_id),
+                    topic="events.deadletter",
+                    tenant_id=tenant_id,
+                    event_type=event_type,
+                    latency_ms=0,
+                )
             return False, f"schema: {schema_result.errors[0]}"
 
         # Semantic validation
@@ -176,6 +190,14 @@ def _process_event(
                     ],
                 )
             conn.execute("COMMIT")
+            if clickhouse_sink is not None:
+                clickhouse_sink.record_pipeline_event(
+                    event_id=str(event_id),
+                    topic="events.deadletter",
+                    tenant_id=tenant_id,
+                    event_type=event_type,
+                    latency_ms=0,
+                )
             return False, f"semantic: {error_issues[0].rule}"
 
         # Enrichment
@@ -218,6 +240,20 @@ def _process_event(
             [event_id, tenant_id, event_type, latency_ms, datetime.now(UTC)],
         )
         conn.execute("COMMIT")
+        if clickhouse_sink is not None:
+            if event_type.startswith("order."):
+                clickhouse_sink.upsert_order(event)
+            elif event_type in ("click", "page_view", "add_to_cart"):
+                clickhouse_sink.upsert_session(event)
+            elif event_type.startswith("product."):
+                clickhouse_sink.upsert_product(event)
+            clickhouse_sink.record_pipeline_event(
+                event_id=str(event_id),
+                topic="events.validated",
+                tenant_id=tenant_id,
+                event_type=event_type,
+                latency_ms=latency_ms,
+            )
         return True, "ok"
     # rollback must preserve the original pipeline failure
     except Exception:  # nosec B110
@@ -374,6 +410,11 @@ def run(events_per_second: int = 10, burst: int = 0) -> None:
     logger = structlog.get_logger()
     conn = duckdb.connect(DB_PATH)
     _ensure_tables(conn)
+    # ADR 0006: when serving is ClickHouse, mirror serving-table writes there
+    # so the store the API reads is the one that moves when events happen.
+    # A configured-but-unreachable ClickHouse raises here — failing loudly at
+    # startup beats a demo that silently serves a frozen seed.
+    clickhouse_sink = ClickHouseSink.from_serving_config()
     iceberg_sink = None
     iceberg_config = os.getenv("AGENTFLOW_ICEBERG_CONFIG")
     if not iceberg_config:
@@ -406,6 +447,7 @@ def run(events_per_second: int = 10, burst: int = 0) -> None:
         db=DB_PATH,
         eps=events_per_second,
         burst=burst,
+        serving_sink="clickhouse" if clickhouse_sink is not None else "duckdb",
     )
 
     total = 0
@@ -417,7 +459,9 @@ def run(events_per_second: int = 10, burst: int = 0) -> None:
         count = burst if burst > 0 else float("inf")
         while total < count:
             _, event = _generate_random_event()
-            success, reason = _process_event(conn, event, iceberg_sink=iceberg_sink)
+            success, reason = _process_event(
+                conn, event, iceberg_sink=iceberg_sink, clickhouse_sink=clickhouse_sink
+            )
 
             total += 1
             if success:

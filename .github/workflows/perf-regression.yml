@@ -24,6 +24,10 @@ jobs:
       - name: Run entity perf smoke gate
         shell: bash
         env:
+          # DuckDB-profile perf gate: the 500 ms p99 threshold was calibrated on the
+          # embedded engine. The shipped ClickHouse path is exercised by the E2E
+          # workflow's ClickHouse lane, not by this latency gate.
+          SERVING_BACKEND: duckdb
           DUCKDB_PATH: .artifacts/perf-smoke/agentflow-perf.duckdb
           AGENTFLOW_USAGE_DB_PATH: .artifacts/perf-smoke/agentflow-api-usage.duckdb
           AGENTFLOW_AUTH_DISABLED: "true"

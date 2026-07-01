@@ -21,7 +21,6 @@ Every backup archive contains:
   - `config/tenants.yaml`
   - `config/contracts/`
   - `config/slo.yaml`
-  - `config/pii_fields.yaml`
   - `config/security.yaml`
   - `config/webhooks.yaml`
 - `manifest.json` with SHA-256 checksums for every archived file

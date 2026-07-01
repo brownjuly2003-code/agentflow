@@ -73,23 +73,6 @@ def test_ci_has_scoped_sql_guard_coverage_gate() -> None:
     assert "--cov-fail-under=90" in gate_step["run"]
 
 
-def test_ci_has_scoped_pii_masking_coverage_gate() -> None:
-    workflow = yaml.safe_load(
-        (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    )
-    steps = workflow["jobs"]["test-unit"]["steps"]
-
-    gate_step = next(
-        (step for step in steps if step.get("name") == "Run PII masking coverage gate"),
-        None,
-    )
-
-    assert gate_step is not None
-    assert "tests/unit/test_masking.py" in gate_step["run"]
-    assert "--cov=src.serving.masking" in gate_step["run"]
-    assert "--cov-fail-under=90" in gate_step["run"]
-
-
 def test_ci_has_scoped_rate_limiter_coverage_gate() -> None:
     workflow = yaml.safe_load(
         (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

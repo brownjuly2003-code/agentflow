@@ -4,22 +4,16 @@ import io
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import duckdb
 import pytest
 import structlog
-from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from pyiceberg.exceptions import ServiceUnavailableError
 
-import src.serving.api.routers.agent_query as agent_query_module
 from src.processing import local_pipeline as local_pipeline_module
 from src.processing.event_replayer import EventReplayer, ensure_dead_letter_table
 from src.serving.api.main import app
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.api.routers.batch import router as batch_router
-from src.serving.semantic_layer.catalog import DataCatalog
 
 pytestmark = pytest.mark.integration
 
@@ -57,141 +51,6 @@ def test_metric_endpoint_returns_503_when_backing_table_is_not_materialized(
 
     assert response.status_code == 503
     assert "is not materialized yet" in response.json()["detail"]
-
-
-def _write_masking_config(path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        (
-            "masking:\n"
-            "  default_strategy: partial\n"
-            "  entity_fields:\n"
-            "    user:\n"
-            "      - field: email\n"
-            "        strategy: partial\n"
-            "      - field: full_name\n"
-            "        strategy: partial\n"
-            "  pii_exempt_tenants: []\n"
-        ),
-        encoding="utf-8",
-        newline="\n",
-    )
-    return path
-
-
-class _MaskingEngineStub:
-    class _ConnectionStub:
-        def cursor(self):
-            return self
-
-        def close(self) -> None:
-            return None
-
-    def __init__(self) -> None:
-        self._conn = self._ConnectionStub()
-
-    def get_entity(
-        self,
-        entity_type: str,
-        entity_id: str,
-        tenant_id: str | None = None,
-    ) -> dict:
-        return {
-            "user_id": entity_id,
-            "email": "jane@example.com",
-            "full_name": "Jane Doe",
-            "_last_updated": "2026-04-10T12:00:00+00:00",
-        }
-
-    def get_metric(
-        self,
-        metric_name: str,
-        window: str = "1h",
-        as_of=None,
-        tenant_id: str | None = None,
-    ) -> dict:
-        return {"value": 1.0, "unit": "USD"}
-
-    def execute_nl_query(
-        self,
-        question: str,
-        context: dict | None = None,
-        tenant_id: str | None = None,
-    ) -> dict:
-        return {
-            "data": [
-                {
-                    "user_id": "USR-1",
-                    "email": "jane@example.com",
-                    "full_name": "Jane Doe",
-                }
-            ],
-            "sql": "SELECT user_id, email, full_name FROM users_enriched WHERE user_id = 'USR-1'",
-            "row_count": 1,
-            "execution_time_ms": 1,
-            "freshness_seconds": None,
-        }
-
-
-def _build_masking_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
-    config_path = _write_masking_config(tmp_path / "config" / "pii_fields.yaml")
-    monkeypatch.setenv("AGENTFLOW_PII_CONFIG", str(config_path))
-    monkeypatch.setattr(agent_query_module, "_PII_MASKER", None, raising=False)
-
-    test_app = FastAPI()
-    test_app.state.catalog = DataCatalog()
-    test_app.state.query_engine = _MaskingEngineStub()
-
-    @test_app.middleware("http")
-    async def inject_tenant(request: Request, call_next):
-        request.state.tenant_id = "acme"
-        request.state.tenant_key = SimpleNamespace(tenant="acme")
-        return await call_next(request)
-
-    test_app.include_router(agent_router, prefix="/v1")
-    test_app.include_router(batch_router, prefix="/v1")
-    return TestClient(test_app)
-
-
-def test_nl_query_results_are_masked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    with _build_masking_client(monkeypatch, tmp_path) as client:
-        response = client.post("/v1/query", json={"question": "show user USR-1"})
-
-    assert response.status_code == 200
-    assert response.headers["X-PII-Masked"] == "true"
-    assert response.json()["answer"][0]["email"] == "j***@example.com"
-    assert response.json()["answer"][0]["full_name"] == "J*** D***"
-
-
-def test_batch_masks_entity_and_query_results(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    with _build_masking_client(monkeypatch, tmp_path) as client:
-        response = client.post(
-            "/v1/batch",
-            json={
-                "requests": [
-                    {
-                        "id": "entity-1",
-                        "type": "entity",
-                        "params": {"entity_type": "user", "entity_id": "USR-1"},
-                    },
-                    {
-                        "id": "query-1",
-                        "type": "query",
-                        "params": {"question": "show user USR-1"},
-                    },
-                ]
-            },
-        )
-
-    assert response.status_code == 200
-    payload = response.json()["results"]
-    assert payload[0]["data"]["email"] == "j***@example.com"
-    assert payload[0]["data"]["full_name"] == "J*** D***"
-    assert payload[1]["data"]["answer"][0]["email"] == "j***@example.com"
-    assert payload[1]["data"]["answer"][0]["full_name"] == "J*** D***"
 
 
 def test_local_pipeline_falls_back_to_duckdb_when_iceberg_init_fails(

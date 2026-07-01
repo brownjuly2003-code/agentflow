@@ -37,9 +37,6 @@ cloud = [
     "boto3>=1.35,<2",
     "pyiceberg[pyiceberg-core]>=0.7,<1",
 ]
-llm = [
-    "anthropic>=0.39,<1",
-]
 load = [
     "locust>=2.29,<3",
     # benchmark_freshness.py: production QueryCache semantics (TTL + key
@@ -55,6 +52,12 @@ integrations = [
     "langchain>=0.3.30,<2",
     "langchain-core>=1.2.22,<2",
     "langchain-text-splitters>=1.1.2,<2",
+    # langgraph powers the vendored NL->SQL generation pipeline
+    # (src/serving/semantic_layer/nl_sql_engine, ADR 0008). It is an *optional*
+    # dependency, not core: the shipped demo default is the rule-based
+    # translator (GRACEKELLY_URL unset), and nl_engine lazy-imports the engine
+    # only on the opt-in LLM path — so a core install needs no langgraph.
+    "langgraph>=1,<2",
     "langsmith>=0.7.31,<1",
     "llama-index-core>=0.12,<1",
 ]
@@ -170,6 +173,18 @@ ignore = ["S101", "S311"]
     "S608",
     "E501",
 ]
+# Serving-store mirror for the local pipeline: table/column identifiers are
+# module constants, values are single-quote-escaped literals that the backend's
+# sqlglot round-trip re-escapes structurally (see ClickHouseBackend docstring).
+"src/processing/clickhouse_sink.py" = [
+    "S608",
+]
+# fetch_pipeline_events: selected columns come from the backend schema probe
+# (fixed allowlist), values are `?`-bound on DuckDB and _quote_literal-escaped
+# on external backends — same convention as entity_queries.py.
+"src/serving/semantic_layer/query/engine.py" = [
+    "S608",
+]
 "src/serving/semantic_layer/nl_engine.py" = [
     "S608",
 ]
@@ -206,7 +221,7 @@ asyncio_mode = "auto"
 # security-critical surfaces). It is a superset of what the CI gate actually
 # mutates: scripts/mutation_report.py drives the gate from its own
 # MODULE_TARGETS, which now mutates sdk/agentflow/retry.py,
-# src/serving/semantic_layer/sql_guard.py, src/serving/masking.py,
+# src/serving/semantic_layer/sql_guard.py,
 # src/serving/api/rate_limiter.py, src/serving/semantic_layer/query/sql_builder.py,
 # src/serving/semantic_layer/query/nl_queries.py, src/serving/api/auth/manager.py
 # AND src/serving/api/auth/key_rotation.py live -- every declared serving surface
@@ -225,7 +240,6 @@ asyncio_mode = "auto"
 paths_to_mutate = [
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",
-    "src/serving/masking.py",
     "src/serving/semantic_layer/query/engine.py",
     "src/serving/semantic_layer/query/entity_queries.py",
     "src/serving/semantic_layer/query/metric_queries.py",

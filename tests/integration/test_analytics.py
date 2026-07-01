@@ -235,8 +235,14 @@ def test_analytics_logging_is_non_blocking(client: TestClient, monkeypatch: pyte
 
     original_insert_session = analytics_module._insert_session
 
+    # The injected delay must dwarf CI-runner jitter: with a 1.5 s sleep, a
+    # blocking write pushes the request past baseline + 1.5 s while a
+    # non-blocking one stays in the sub-second noise band, so the 1.0 s
+    # threshold separates the two by a wide margin (a 0.25 s delay vs a
+    # baseline+0.15 s threshold was flaky — the classes overlapped on shared
+    # runners).
     def delayed_insert_session(*args, **kwargs):
-        time.sleep(0.25)
+        time.sleep(1.5)
         original_insert_session(*args, **kwargs)
 
     monkeypatch.setattr(analytics_module, "_insert_session", delayed_insert_session)
@@ -249,7 +255,7 @@ def test_analytics_logging_is_non_blocking(client: TestClient, monkeypatch: pyte
     elapsed = time.perf_counter() - started_at
 
     assert response.status_code == 200
-    assert elapsed < max(0.2, baseline_elapsed + 0.15)
+    assert elapsed < max(1.0, baseline_elapsed + 0.75)
 
     def assert_logged():
         count = (
@@ -259,7 +265,8 @@ def test_analytics_logging_is_non_blocking(client: TestClient, monkeypatch: pyte
         )
         assert count == 1
 
-    _wait_until(assert_logged)
+    # The background write only lands after the injected 1.5 s delay.
+    _wait_until(assert_logged, timeout=6.0)
 
 
 def test_analytics_background_logging_survives_forced_gc(

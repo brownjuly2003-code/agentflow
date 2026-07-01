@@ -1,14 +1,17 @@
-# DuckDB to ClickHouse Migration Guide
+# ClickHouse Serving Guide (default engine) / DuckDB rollback
 
 ## Overview
 
-Task 8 adds a pluggable serving backend. `DuckDB` remains the default for local and single-node deployments, while `ClickHouse` is available for higher read concurrency and larger datasets.
+**ClickHouse is the shipped serving engine** ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md), executed 2026-07-02): `config/serving.yaml` defaults to `backend: clickhouse`, `make demo` and `docker-compose.prod.yml` bring the service up by default, and the local pipeline writes the serving tables + `pipeline_events` journal to it (`src/processing/clickhouse_sink.py`). `DuckDB` remains the local-dev / test and compatibility store — `pytest` pins it (`tests/conftest.py`) and the control-plane state (webhooks, alerts, outbox, usage) stays on it per [ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md).
 
-## When to switch
+Upsert model on ClickHouse: mutable serving tables are `ReplacingMergeTree` versioned by a `MATERIALIZED af_updated_at` column; an upsert is an appended row version and every backend read runs with the `final=1` setting, so queries always see the latest version. The journal stays append-only `MergeTree`. Live verification: [clickhouse-serving-verify-2026-07-02](perf/clickhouse-serving-verify-2026-07-02.md).
 
-- Tenant data is moving past roughly 100 GB.
-- Read traffic is trending beyond what a single local `DuckDB` file can handle comfortably.
-- You need a path to horizontal scale without changing the API contract.
+## When to roll back to DuckDB
+
+- Zero-dependency offline development (no container / no server available).
+- Test debugging against the pytest-pinned store.
+
+Rollback is configuration-only: `SERVING_BACKEND=duckdb`.
 
 ## Backend selection
 
@@ -38,16 +41,16 @@ CLICKHOUSE_DATABASE=agentflow
 
 ## Local bring-up
 
-Start the optional `ClickHouse` service with its dedicated profile:
+`ClickHouse` is part of the default bring-up (no profile flag needed):
 
 ```bash
-docker compose -f docker-compose.prod.yml --profile clickhouse up -d clickhouse
+docker compose -f docker-compose.prod.yml up -d clickhouse
 ```
 
-Then run the API against it:
+Then run the API against it (clickhouse is already the default backend):
 
 ```bash
-SERVING_BACKEND=clickhouse docker compose -f docker-compose.prod.yml up -d agentflow-api
+docker compose -f docker-compose.prod.yml up -d agentflow-api
 ```
 
 The bundled production compose file provisions a local development user:

@@ -7,9 +7,8 @@ abuse-protection hot path: a surviving mutant in its sliding-window arithmetic o
 its fail-closed Redis fallback is a real DoS / brute-force exposure
 (audit_28_06_26.md #7), exactly the kind of code a mutation gate should pin.
 
-Three design rules, the first two shared with test_sql_guard_mutation.py and
-test_masking_mutation.py (see the masking/sql_guard entries in fable_handoff.md
-cont.16-17):
+Three design rules, the first two shared with test_sql_guard_mutation.py (see
+the sql_guard entries in fable_handoff.md cont.16-17):
 
 1. **duckdb-free.** The ordinary tests/unit/test_rate_limiter.py builds the auth
    middleware -> AuthManager -> a DuckDB usage table, which drags duckdb's

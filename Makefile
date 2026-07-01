@@ -41,17 +41,20 @@ api:
 tools:
 	python scripts/export_openapi.py
 
-# ── End-to-End Demo (Docker Redis only) ──────────────────────────
+# ── End-to-End Demo (Docker: Redis + ClickHouse serving store) ───
 
 demo:
 	@echo "=== AgentFlow Demo ==="
+	@echo "Step 0: Starting Redis + ClickHouse (serving store, ADR 0006)..."
+	docker compose up -d redis clickhouse
+	python scripts/wait_for_clickhouse.py
+	@echo ""
 	@echo "Step 1: Seeding 500 events through the full pipeline..."
 	python -m src.processing.local_pipeline --burst 500
 	@echo ""
 	@echo "Step 1.5: Seeding benchmark fixture rows into agentflow_demo.duckdb..."
 	python -c "from pathlib import Path; from scripts.run_benchmark import seed_benchmark_fixtures; seed_benchmark_fixtures(Path('agentflow_demo.duckdb'))"
 	@echo ""
-	docker compose up -d redis
 	@echo "Step 2: Starting API server (Ctrl+C to stop)..."
 	@echo "  Open http://localhost:8000/docs"
 	@echo "  Try:  curl http://localhost:8000/v1/metrics/revenue?window=24h"

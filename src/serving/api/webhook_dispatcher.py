@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from src.db_concurrency import catalog_ddl_lock
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
+from src.serving.backends import BackendExecutionError
 
 try:
     import yaml
@@ -252,7 +253,7 @@ class WebhookDispatcher:
                 event_id = str(event.get("event_id") or "")
                 if event_id:
                     self.seen_event_ids.add(_seen_event_key(event))
-        except duckdb.Error as exc:
+        except (duckdb.Error, BackendExecutionError) as exc:
             logger.warning("webhook_seen_init_failed", error=str(exc))
 
     async def dispatch_new_events(self) -> None:
@@ -449,30 +450,12 @@ class WebhookDispatcher:
         }
 
     def _fetch_pipeline_events(self, tenant: str | None = None) -> list[dict]:
-        conn = self.app.state.query_engine._conn
-        columns = [
-            row[1] for row in conn.execute("PRAGMA table_info('pipeline_events')").fetchall()
-        ]
-        if not columns:
-            return []
-        if tenant is not None and "tenant_id" not in columns and tenant != "default":
-            return []
-        if "processed_at" in columns:
-            order_by = "processed_at"
-        elif "created_at" in columns:
-            order_by = "created_at"
-        else:
-            order_by = "event_id"
-        # order_by is chosen from a fixed column allowlist
-        sql = "SELECT * FROM pipeline_events"  # nosec B608
-        params: list[str] = []
-        if tenant is not None and "tenant_id" in columns:
-            sql = f"{sql} WHERE COALESCE(tenant_id, 'default') = ?"
-            params.append(tenant)
-        sql = f"{sql} ORDER BY {order_by} ASC, event_id ASC"
-        cursor = conn.execute(sql, params)
-        result_columns = [description[0] for description in cursor.description]
-        return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
+        # Scan the journal through the serving backend, not the embedded DuckDB
+        # connection: when serving is ClickHouse (ADR 0006) the events that
+        # matter arrive from an out-of-process writer, and this scan is what
+        # drives both webhook delivery and metric-cache invalidation.
+        events: list[dict] = self.app.state.query_engine.fetch_pipeline_events(tenant_id=tenant)
+        return events
 
     def _enqueue_delivery(self, webhook: WebhookRegistration, event: dict) -> bool:
         """Durably record a (webhook, event) delivery as ``pending`` (idempotent

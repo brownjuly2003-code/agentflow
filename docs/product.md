@@ -152,7 +152,7 @@ These are the product gates for market readiness, not assumptions that every loc
 | Access control | Named API keys, per-key rate limits, and entity allow-lists | Full tenant isolation, RBAC, SSO, and audit export |
 | Data plane | Local DuckDB-backed demo that proves the end-to-end path from ingestion to serving | DuckDB as the default serving path, optional ClickHouse serving for production scale, and Iceberg as the storage/lakehouse context |
 | Reliability | Health endpoint, benchmark report, and failure/integration tests | SLO dashboards, alert routing, and latency tuning to consistently hit target p95 |
-| Governance | Schema and semantic quality gates before serving | PII masking, policy controls, retention, and compliance workflows |
+| Governance | Schema and semantic quality gates before serving | Engine-side PII governance in the DV2 vault (ClickHouse row/column policies), policy controls, retention, and compliance workflows |
 
 ## Constraints
 

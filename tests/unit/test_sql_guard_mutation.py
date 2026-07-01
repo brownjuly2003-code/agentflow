@@ -17,9 +17,15 @@ the forbidden-function check -- a surviving mutant there is a denylist bypass.
 """
 
 try:  # mutation-harness workspace exposes it as a top-level package
-    from serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
+    from serving.semantic_layer.sql_guard import (
+        UnsafeSQLError,
+        validate_nl_sql,
+    )
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
+    from src.serving.semantic_layer.sql_guard import (
+        UnsafeSQLError,
+        validate_nl_sql,
+    )
 
 import pytest
 
@@ -88,3 +94,30 @@ def test_schema_qualified_table_raises():
 def test_unknown_table_raises():
     with pytest.raises(UnsafeSQLError, match=r"Unknown tables: \['secrets'\]"):
         validate_nl_sql("SELECT id FROM secrets", ALLOWED)
+
+
+# ── validate_nl_sql recursive-CTE shadow guard (audit_30 D1 follow-up) ─────────
+def test_recursive_cte_shadowing_allowed_table_rejected():
+    # WITH RECURSIVE <name> where <name> is a real allowed table is a cross-tenant
+    # read vector: the physical anchor reference cannot be re-scoped. Rejecting it
+    # exercises the whole recursive_shadows comprehension — pins args.get("recursive"),
+    # the .lower() membership against normalized_allowed_tables, and the `and`.
+    with pytest.raises(
+        UnsafeSQLError, match=r"^Recursive CTE shadows physical table\(s\): \['orders'\]$"
+    ):
+        validate_nl_sql(
+            "WITH RECURSIVE orders AS (SELECT id FROM orders UNION "
+            "SELECT id FROM orders) SELECT id FROM orders",
+            ALLOWED,
+        )
+
+
+def test_recursive_cte_not_shadowing_is_allowed():
+    # A recursive CTE whose name is NOT an allowed table is fine (it is re-scoped
+    # like any CTE). Kills the `and`->`or` mutant, which would flag every recursive
+    # CTE name regardless of whether it shadows a physical table.
+    validate_nl_sql(
+        "WITH RECURSIVE seq AS (SELECT 1 AS n UNION SELECT n + 1 FROM seq WHERE n < 3) "
+        "SELECT n FROM seq",
+        ALLOWED,
+    )

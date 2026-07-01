@@ -7,10 +7,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # Security-critical modules whose mutation coverage must never silently lapse.
 # A surviving mutant in any of these is a real safety regression:
 #   - sql_guard: the NL->SQL denylist (forbidden node types + forbidden scan
-#     functions); the H-6 projection-position bypass lived here, so a surviving
-#     mutant in its checks is a guard bypass.
+#     functions, tenant table allow-list, recursive-CTE shadow reject); a
+#     surviving mutant in its checks is a guard bypass.
 #   - auth manager / key rotation: API-key issue / verify / rotation.
-#   - masking: PII redaction.
 #   - rate_limiter: API hot-path / abuse protection.
 #   - nl_queries: the only validate_nl_sql() enforcement boundary, plus the
 #     pagination SQL wrappers built around prevalidated NL SQL.
@@ -18,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 #     assembled here.
 # NOTE: these are the *declared* targets (intent). Actual mutation execution is
 # gated by scripts/mutation_report.py (MODULE_TARGETS), which now runs retry.py,
-# sql_guard.py, masking.py, rate_limiter.py, sql_builder.py, nl_queries.py,
+# sql_guard.py, rate_limiter.py, sql_builder.py, nl_queries.py,
 # auth/manager.py AND auth/key_rotation.py live -- every declared serving surface
 # is now mutated (via duckdb-free narrow tests, mutated as a top-level `serving`
 # package so mutmut's trampoline accepts them). These assertions guard the
@@ -27,7 +26,6 @@ REQUIRED_MUTATION_TARGETS = {
     "src/serving/semantic_layer/sql_guard.py",
     "src/serving/api/auth/manager.py",
     "src/serving/api/auth/key_rotation.py",
-    "src/serving/masking.py",
     "src/serving/api/rate_limiter.py",
     "src/serving/semantic_layer/query/nl_queries.py",
     "src/serving/semantic_layer/query/sql_builder.py",

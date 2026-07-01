@@ -4,6 +4,95 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed — ClickHouse is the shipped serving engine (ADR 0006 Phase 1, executed 2026-07-02)
+
+- **`config/serving.yaml` defaults to `backend: clickhouse`.** `make demo`,
+  `docker-compose.yml`, and `docker-compose.prod.yml` bring the ClickHouse
+  service up by default (the `--profile clickhouse` gate is removed; the API
+  container `depends_on` its healthcheck). Rollback is config-only
+  (`SERVING_BACKEND=duckdb`). Tests stay pinned to DuckDB
+  (`tests/conftest.py`), and DuckDB remains the local-dev / test store.
+- **The local pipeline writes the serving store** — new
+  `src/processing/clickhouse_sink.py`: when the configured backend is
+  ClickHouse, every validated event mirrors its serving-table writes and its
+  `pipeline_events` journal row there (dead-letter rows included), after the
+  DuckDB commit. A configured-but-unreachable ClickHouse fails loudly instead
+  of letting the demo serve a frozen seed.
+- **Upserts are ReplacingMergeTree row versions.** The four mutable serving
+  tables move from `MergeTree` to `ReplacingMergeTree` versioned by a
+  `MATERIALIZED af_updated_at` column (invisible to `SELECT *`, inserts, and
+  `table_columns`); every backend read carries the `final=1` setting so
+  queries always see the latest version. **Existing demo ClickHouse volumes
+  must be dropped and re-seeded** (engine changes don't apply to existing
+  tables; the demo store is disposable by design).
+- **The freshness-critical event scan goes through the serving backend.** New
+  `QueryEngine.fetch_pipeline_events()`; the webhook dispatcher (which also
+  drives metric-cache invalidation) and the `/v1/stream/events` SSE scan
+  delegate to it instead of reaching into the embedded DuckDB connection — so
+  event-driven freshness works when the writer is out-of-process and the
+  engine is external. Verified live against a real ClickHouse 26.7 server:
+  cross-process burst moved the served revenue metric, SSE streamed
+  ClickHouse-only events, upsert dedup read back one latest-version row
+  (`docs/perf/clickhouse-serving-verify-2026-07-02.md`).
+- **Transpile safety net:** `ClickHouseBackend._translate_sql` now fails
+  closed if any table reference — including the tenant schema qualifier
+  applied by `_scope_sql` *before* the rewrite — does not survive the
+  duckdb→clickhouse transpile or does not re-parse. Guards the
+  rewrite-after-guard seam that produced the historical PII bypasses, now for
+  tenant isolation.
+- **Fixed (found by the live verification):** the ClickHouse backend sent the
+  session-database URL parameter on the `CREATE DATABASE` bootstrap statement,
+  which fails with `UNKNOWN_DATABASE` on a bare server (Docker's
+  `CLICKHOUSE_DB` pre-creation masked it).
+- **Helm:** new `serving.*` values wire `SERVING_BACKEND` /
+  `CLICKHOUSE_*` env (password via `existingSecret`); the chart default stays
+  the safe single-node DuckDB profile because the chart ships no ClickHouse
+  service. **ADR 0009** records the honest scaling gate: the control plane
+  (webhook queue, alert history, outbox, usage) is an embedded per-pod DuckDB
+  store, so `replicaCount`/`autoscaling` stay pinned even on the ClickHouse
+  profile until it is externalized.
+
+### Removed
+
+- **The serving-layer PII protection is removed — it guarded columns that do not
+  exist.** The demo serving warehouse holds no PII: `users_enriched` and
+  `orders_v2` (and every other serving table) carry only analytics columns
+  (aggregates, ids, timestamps) — none of the fields declared in the former
+  `config/pii_fields.yaml` (`email`, `phone`, `full_name`, `ip_address`,
+  `shipping_address`) exist in the catalog entity contracts or the physical DDL.
+  So the interim NL→SQL `assert_no_pii_access` deny-gate and the entity-path
+  `redact_entity` masker were operating on a surface that is never present in the
+  demo — defense-in-depth over an empty set. Both are deleted, along with
+  `src/serving/pii_policy.py`, `config/pii_fields.yaml`, their CI coverage /
+  mutation gates, the helm `piiFields` config, and the `X-PII-Masked` emission
+  (the versioned header stays reserved; the generic version-transform that would
+  strip it for older clients is unchanged). This also un-breaks the rule-based
+  `SELECT *` user/order lookups the deny-gate had been rejecting. The earlier
+  SQL-lineage masker (`src/serving/masking.py`, removed in the same cycle) is
+  likewise gone. **Real contact PII lives only in the DV2 business vault**
+  (`warehouse/agentflow/dv2/business_vault/bv_customer_mdm__*.sql`), and its
+  governance belongs engine-side there — ClickHouse row/column policies, tracked
+  as ADR 0006 Phase 2 — not in a dialect-pinned string parse in the serving tier.
+
+### Changed
+
+- **NL→SQL LLM path now routes through the GraceKelly orchestration API**
+  (`nl_engine._llm_translate`), not a direct provider SDK. It POSTs to
+  `${GRACEKELLY_URL}/api/v1/orchestrate` with the target model
+  (`GRACEKELLY_NL_SQL_MODEL`, default `claude-sonnet-5`); GraceKelly owns model
+  execution (browser-backed). LLM mode is gated on `GRACEKELLY_URL` (was
+  `ANTHROPIC_API_KEY`); engine detection across the query package, analytics, and
+  agent-query telemetry was realigned to match. The previous direct
+  `claude-sonnet-4-20250514` call is removed. The shipped demo still runs the
+  **rule-based** translator (GraceKelly is opt-in, unset in deploy configs);
+  when configured, GraceKelly serves `claude-sonnet-5`.
+- **Serving engine decision: fixed on ClickHouse** (ADR 0006 + 0007). The demo
+  serving default moves DuckDB → ClickHouse, with DuckDB demoted to the
+  local-dev / test and compatibility store. This unblocks engine-native bounded
+  PII (ClickHouse row/column policies) and real Kubernetes horizontal API
+  scaling. Recorded as a decision and staged in `docs/clickhouse-cutover-plan.md`;
+  the config/compose/Helm cutover itself is **not yet executed**.
+
 ### Added
 
 - **DV2 raw vault migrated from ClickHouse to PostgreSQL** with a cloud

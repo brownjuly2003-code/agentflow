@@ -9,8 +9,6 @@ data:
     {{- toYaml .Values.config.tenants | nindent 4 }}
   slo.yaml: |
     {{- .Values.config.slo | nindent 4 }}
-  pii_fields.yaml: |
-    {{- .Values.config.piiFields | nindent 4 }}
   security.yaml: |
     {{- .Values.config.security | nindent 4 }}
   api_versions.yaml: |

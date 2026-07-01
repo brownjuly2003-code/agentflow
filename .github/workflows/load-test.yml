@@ -33,6 +33,10 @@ jobs:
       - name: Run p99 CI smoke load gate
         shell: bash
         env:
+          # DuckDB-profile perf gate: baselines in docs/benchmark-baseline.json were
+          # measured on the embedded engine. The shipped ClickHouse path is exercised
+          # by the E2E workflow's ClickHouse lane, not by this latency gate.
+          SERVING_BACKEND: duckdb
           DUCKDB_PATH: .artifacts/load/agentflow-load.duckdb
           AGENTFLOW_API_KEYS: af-prod-agent-support-abc123:Support Agent,af-prod-agent-ops-def456:Ops Agent,af-prod-agent-rate-e2e000:Rate Limit Agent
           AGENTFLOW_USAGE_DB_PATH: .artifacts/load/agentflow-api-usage.duckdb

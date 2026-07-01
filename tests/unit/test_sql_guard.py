@@ -115,7 +115,7 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         engine,
         "_translate_question_to_sql",
-        lambda question, tenant_id=None: "SELECT * FROM orders_v2",
+        lambda question, tenant_id=None: "SELECT order_id FROM orders_v2",
     )
 
     result = engine.execute_nl_query("show me orders")
@@ -124,5 +124,5 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
     assert result["row_count"] == 1
     # execute_nl_query wraps the validated SQL in a bounded LIMIT (audit #8).
     backend.execute.assert_called_once_with(
-        "SELECT * FROM (SELECT * FROM orders_v2) AS bounded_nl_query LIMIT 1000"
+        "SELECT * FROM (SELECT order_id FROM orders_v2) AS bounded_nl_query LIMIT 1000"
     )

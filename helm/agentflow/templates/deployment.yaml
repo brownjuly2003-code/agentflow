@@ -63,6 +63,25 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
+            - name: SERVING_BACKEND
+              value: {{ .Values.serving.backend | quote }}
+            {{- if eq .Values.serving.backend "clickhouse" }}
+            - name: CLICKHOUSE_HOST
+              value: {{ required "serving.clickhouse.host is required when serving.backend=clickhouse" .Values.serving.clickhouse.host | quote }}
+            - name: CLICKHOUSE_PORT
+              value: {{ .Values.serving.clickhouse.port | quote }}
+            - name: CLICKHOUSE_DATABASE
+              value: {{ .Values.serving.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.serving.clickhouse.user | quote }}
+            {{- if .Values.serving.clickhouse.existingSecret }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.serving.clickhouse.existingSecret | quote }}
+                  key: {{ .Values.serving.clickhouse.passwordKey | quote }}
+            {{- end }}
+            {{- end }}
             - name: DUCKDB_PATH
               value: {{ .Values.config.duckdbPath | quote }}
             - name: AGENTFLOW_USAGE_DB_PATH
@@ -73,8 +92,6 @@ spec:
               value: {{ .Values.config.tenantsPath | quote }}
             - name: AGENTFLOW_SLO_FILE
               value: {{ .Values.config.sloPath | quote }}
-            - name: AGENTFLOW_PII_CONFIG
-              value: {{ .Values.config.piiFieldsPath | quote }}
             - name: AGENTFLOW_SECURITY_CONFIG_FILE
               value: {{ .Values.config.securityPath | quote }}
             - name: AGENTFLOW_API_VERSIONS_FILE

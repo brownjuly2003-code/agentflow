@@ -1,0 +1,34 @@
+A previous attempt at the SQL below failed. Produce a FIXED version of the SQL
+that addresses the error, against the same schema. Output the same strict JSON
+object as before.
+
+# Dialect
+{dialect}
+
+# Schema (only the tables and columns you may reference)
+{schema_block}
+
+# Original question
+{question}
+
+# Previous SQL (failed)
+{previous_sql}
+
+# Error context
+{error_context}
+
+# Output contract — strict JSON, no prose around it
+{{
+  "sql": "<corrected {dialect} SELECT statement, no trailing semicolon>",
+  "rationale": "<one sentence: what you changed and why it should fix the error>",
+  "tables_used": ["<table>", "..."],
+  "confidence": <float in [0, 1]>
+}}
+
+Rules:
+- Do NOT repeat the same mistake; reread the error.
+- Stay within the schema; do not invent tables or columns.
+- If you cannot fix the issue, return the safest minimal SELECT that returns an
+  empty result and set `confidence` to 0.
+
+Output only the JSON object, no markdown fences, no commentary.

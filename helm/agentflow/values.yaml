@@ -113,13 +113,30 @@ networkPolicy:
     clickhouse: 8123
     otlp: 4317
 
+# Serving engine (ADR 0006 / 0007 / 0009). The shipped demo runs ClickHouse;
+# the chart's default stays the safe single-node DuckDB profile because the
+# chart does not ship a ClickHouse service. To serve from an external
+# ClickHouse set backend: clickhouse + clickhouse.host (password via
+# existingSecret); NetworkPolicy egress for port 8123 is already declared.
+# NOTE (ADR 0009): even on ClickHouse, replicaCount stays 1 — the control
+# plane (webhooks/alerts/outbox/usage) is an embedded per-pod DuckDB store, so
+# horizontal scaling is gated on externalizing it, not only on the engine.
+serving:
+  backend: duckdb
+  clickhouse:
+    host: ""
+    port: 8123
+    database: agentflow
+    user: default
+    existingSecret: ""
+    passwordKey: clickhouse-password
+
 config:
   duckdbPath: /data/agentflow.duckdb
   usageDbPath: /data/agentflow_api.duckdb
   apiKeysPath: /etc/agentflow/secret/api_keys.yaml
   tenantsPath: /etc/agentflow/config/tenants.yaml
   sloPath: /etc/agentflow/config/slo.yaml
-  piiFieldsPath: /etc/agentflow/config/pii_fields.yaml
   securityPath: /etc/agentflow/config/security.yaml
   apiVersionsPath: /etc/agentflow/config/api_versions.yaml
   contractsDir: /app/config/contracts
@@ -169,28 +186,6 @@ config:
         measurement: error_rate_percent
         threshold: 0.1
         window_days: 30
-  piiFields: |
-    masking:
-      default_strategy: partial
-
-      entity_fields:
-        user:
-          - field: email
-            strategy: partial
-          - field: phone
-            strategy: partial
-          - field: full_name
-            strategy: partial
-          - field: ip_address
-            strategy: hash
-
-        order:
-          - field: shipping_address
-            strategy: partial
-
-      pii_exempt_tenants:
-        - "internal-analytics"
-        - "compliance-audit"
   security: |
     security:
       key_hashing: bcrypt

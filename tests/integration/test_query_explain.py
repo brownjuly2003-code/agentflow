@@ -105,12 +105,11 @@ def test_query_explain_returns_400_for_untranslatable_question(client):
 def test_query_explain_reports_llm_engine_when_llm_translation_is_used(client, monkeypatch):
     _disable_auth(client)
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setitem(sys.modules, "anthropic", types.ModuleType("anthropic"))
+    monkeypatch.setitem(sys.modules, "httpx", types.ModuleType("httpx"))
 
     from src.serving.semantic_layer import nl_engine
 
-    monkeypatch.setattr(nl_engine, "_ANTHROPIC_KEY", "test-key")
+    monkeypatch.setattr(nl_engine, "_GRACEKELLY_URL", "http://gracekelly.test")
     monkeypatch.setattr(
         nl_engine,
         "_llm_translate",

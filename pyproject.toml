@@ -52,6 +52,12 @@ integrations = [
     "langchain>=0.3.30,<2",
     "langchain-core>=1.2.22,<2",
     "langchain-text-splitters>=1.1.2,<2",
+    # langgraph powers the vendored NL->SQL generation pipeline
+    # (src/serving/semantic_layer/nl_sql_engine, ADR 0008). It is an *optional*
+    # dependency, not core: the shipped demo default is the rule-based
+    # translator (GRACEKELLY_URL unset), and nl_engine lazy-imports the engine
+    # only on the opt-in LLM path — so a core install needs no langgraph.
+    "langgraph>=1,<2",
     "langsmith>=0.7.31,<1",
     "llama-index-core>=0.12,<1",
 ]

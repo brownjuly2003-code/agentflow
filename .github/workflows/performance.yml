@@ -20,6 +20,10 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev,load,cloud]"
       - name: Run canonical benchmark
+        # DuckDB-profile benchmark: no ClickHouse service on the runner host,
+        # and the baseline predates the ClickHouse serving flip.
+        env:
+          SERVING_BACKEND: duckdb
         run: |
           python scripts/run_benchmark.py \
             --results-json .artifacts/benchmark/current.json \

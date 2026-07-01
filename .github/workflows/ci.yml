@@ -237,6 +237,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev,load,cloud]"
       - name: Run benchmark
+        # DuckDB-profile benchmark: the pipeline runs on the runner host with no
+        # ClickHouse service, and the perf history compares against DuckDB-era
+        # numbers. The shipped ClickHouse path is exercised by the E2E lane.
+        env:
+          SERVING_BACKEND: duckdb
         run: python scripts/run_benchmark.py
       - name: Convert benchmark report to JSON
         run: |

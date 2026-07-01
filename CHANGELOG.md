@@ -21,11 +21,28 @@ All notable changes to AgentFlow are documented in this file.
   bypasses were found and closed (`COLUMNS(...)`, whole-row struct references, and
   the `FROM t AS a(c1, c2, …)` column-rename list). In the **shipped rule-based**
   translator PII-safety rests on its fixed template repertoire (it cannot emit those
-  forms); the **LLM translator** (opt-in `ANTHROPIC_API_KEY`, unset in every deploy
-  config) emits arbitrary SELECTs and is **not** bounded by this gate. A bounded
+  forms); the **LLM translator** (opt-in via GraceKelly, `GRACEKELLY_URL`, unset in
+  every deploy config) emits arbitrary SELECTs and is **not** bounded by this gate. A bounded
   guarantee needs column-level resolution against the real schema
   (execution/DESCRIBE/column-security) and is tracked as a follow-up; do not enable
   the LLM translator against real PII until then.
+- **NL→SQL LLM path now routes through the GraceKelly orchestration API**
+  (`nl_engine._llm_translate`), not a direct provider SDK. It POSTs to
+  `${GRACEKELLY_URL}/api/v1/orchestrate` with the target model
+  (`GRACEKELLY_NL_SQL_MODEL`, default `claude-sonnet-5`); GraceKelly owns model
+  execution (browser-backed). LLM mode is gated on `GRACEKELLY_URL` (was
+  `ANTHROPIC_API_KEY`); engine detection across the query package, analytics, and
+  agent-query telemetry was realigned to match. The previous direct
+  `claude-sonnet-4-20250514` call is removed. The shipped demo still runs the
+  **rule-based** translator (GraceKelly is opt-in, unset in deploy configs).
+  NOTE: GraceKelly currently ships `claude-sonnet-4-6`; `claude-sonnet-5` becomes
+  reachable once GraceKelly itself is upgraded.
+- **Serving engine decision: fixed on ClickHouse** (ADR 0006 + 0007). The demo
+  serving default moves DuckDB → ClickHouse, with DuckDB demoted to the
+  local-dev / test and compatibility store. This unblocks engine-native bounded
+  PII (ClickHouse row/column policies) and real Kubernetes horizontal API
+  scaling. Recorded as a decision and staged in `docs/clickhouse-cutover-plan.md`;
+  the config/compose/Helm cutover itself is **not yet executed**.
 
 ### Added
 

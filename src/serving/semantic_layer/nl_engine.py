@@ -1,9 +1,17 @@
-"""LLM-powered NL→SQL engine using Claude API.
+"""LLM-powered NL→SQL engine via the GraceKelly orchestration API.
 
 Translates natural language agent queries into SQL using the semantic catalog
-as schema context. Falls back to rule-based patterns if no API key is set.
+as schema context. Falls back to rule-based patterns when GraceKelly is not
+configured.
 
-Set ANTHROPIC_API_KEY to enable LLM mode.
+The LLM path does NOT call any model provider (Anthropic/OpenAI) directly — it
+routes through GraceKelly's `/api/v1/orchestrate` endpoint, which owns model
+selection and execution (browser-backed Sonnet 5). Set GRACEKELLY_URL to enable
+LLM mode; the target model is GRACEKELLY_NL_SQL_MODEL (default claude-sonnet-5).
+
+NOTE: the GraceKelly model registry must actually expose the requested model.
+At time of writing GraceKelly ships `claude-sonnet-4-6`; `claude-sonnet-5`
+becomes reachable only once GraceKelly itself is upgraded (tracked separately).
 """
 
 import os
@@ -16,7 +24,12 @@ from src.serving.semantic_layer.catalog import DataCatalog
 
 logger = structlog.get_logger()
 
-_ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# GraceKelly V2 orchestration API (multi-model, browser-backed). The LLM NL→SQL
+# path posts to `${GRACEKELLY_URL}/api/v1/orchestrate`. Empty => LLM disabled and
+# the rule-based fallback is used.
+_GRACEKELLY_URL = os.getenv("GRACEKELLY_URL", "")
+_GK_NL_SQL_MODEL = os.getenv("GRACEKELLY_NL_SQL_MODEL", "claude-sonnet-5")
+_GK_TIMEOUT_SECONDS = float(os.getenv("GRACEKELLY_TIMEOUT_SECONDS", "60"))
 
 
 def _sql_str_literal(value: str) -> str:
@@ -51,64 +64,93 @@ def translate_nl_to_sql(
 ) -> str | None:
     """Translate natural language to SQL.
 
-    Uses Claude API if ANTHROPIC_API_KEY is set, otherwise falls back
-    to rule-based patterns.
+    Routes through GraceKelly (Sonnet 5) if GRACEKELLY_URL is set, otherwise
+    falls back to rule-based patterns.
     """
-    if _ANTHROPIC_KEY:
+    if _GRACEKELLY_URL:
         return _llm_translate(question, catalog)
     return _rule_based_translate(question)
 
 
 def _llm_translate(question: str, catalog: DataCatalog) -> str | None:
-    """Use Claude to generate SQL from natural language."""
+    """Generate SQL via GraceKelly's orchestration API (Sonnet 5, single-model).
+
+    Posts the schema-grounded prompt to `${GRACEKELLY_URL}/api/v1/orchestrate`
+    with the target model and reads ``output_text`` from the returned task
+    snapshot. GraceKelly owns provider/model execution — this function never
+    talks to a model API directly. Any transport/HTTP failure returns ``None``
+    so the caller degrades gracefully (the query package treats ``None`` as
+    "untranslatable").
+    """
     try:
-        import anthropic
+        import httpx
     except ImportError:
-        logger.warning("anthropic package not installed, falling back to rule-based")
+        logger.warning("httpx_not_installed_falling_back", path="nl_llm")
         return _rule_based_translate(question)
 
     schema = _build_schema_prompt(catalog)
-
-    client = anthropic.Anthropic(api_key=_ANTHROPIC_KEY)
-    start = time.monotonic()
-
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=300,
-        messages=[{"role": "user", "content": question}],
-        system=(
-            "You are a SQL generator for DuckDB. "
-            "Given the user's question, return ONLY a single SQL query. "
-            "No explanation, no markdown, just the SQL.\n\n"
-            f"{schema}\n\n"
-            "Rules:\n"
-            "- Use DuckDB SQL syntax\n"
-            "- For time windows, use NOW() - INTERVAL 'N hours/minutes'\n"
-            "- Default time window is 1 hour if not specified\n"
-            "- Return at most 100 rows\n"
-            "- Only query tables listed above\n"
-        ),
+    prompt = (
+        "You are a SQL generator for DuckDB. Given the user's question, return "
+        "ONLY a single SQL query. No explanation, no markdown, just the SQL.\n\n"
+        f"{schema}\n\n"
+        "Rules:\n"
+        "- Use DuckDB SQL syntax\n"
+        "- For time windows, use NOW() - INTERVAL 'N hours/minutes'\n"
+        "- Default time window is 1 hour if not specified\n"
+        "- Return at most 100 rows\n"
+        "- Only query tables listed above\n\n"
+        f"Question: {question}"
     )
 
+    start = time.monotonic()
+    try:
+        response = httpx.post(
+            f"{_GRACEKELLY_URL.rstrip('/')}/api/v1/orchestrate",
+            json={"prompt": prompt, "model": _GK_NL_SQL_MODEL},
+            timeout=_GK_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("gracekelly_request_failed", error=str(exc), model=_GK_NL_SQL_MODEL)
+        return None
+
     elapsed_ms = int((time.monotonic() - start) * 1000)
-    sql = ""
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            sql = text.strip()
-            if sql:
-                break
+    try:
+        output = (response.json().get("output_text") or "").strip()
+    except ValueError:
+        logger.warning("gracekelly_non_json_response")
+        return None
+
+    sql = _strip_sql_fence(output)
     if not sql:
-        logger.warning("llm_returned_no_text_blocks")
+        logger.warning("gracekelly_returned_no_sql")
         return None
 
     # Basic safety: must be a SELECT
     if not sql.upper().startswith("SELECT"):
-        logger.warning("llm_returned_non_select", sql=sql[:100])
+        logger.warning("gracekelly_returned_non_select", sql=sql[:100])
         return None
 
-    logger.info("llm_sql_generated", question=question[:80], elapsed_ms=elapsed_ms)
+    logger.info(
+        "gracekelly_sql_generated",
+        question=question[:80],
+        model=_GK_NL_SQL_MODEL,
+        elapsed_ms=elapsed_ms,
+    )
     return sql
+
+
+def _strip_sql_fence(text: str) -> str:
+    """Strip a leading/trailing markdown code fence GraceKelly may add.
+
+    Browser-routed output can arrive wrapped in ```sql ... ``` despite the
+    "no markdown" instruction; unwrap it so the SELECT check sees raw SQL.
+    """
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```[a-zA-Z]*\n?", "", stripped)
+        stripped = re.sub(r"\n?```$", "", stripped)
+    return stripped.strip()
 
 
 def _rule_based_translate(question: str) -> str | None:

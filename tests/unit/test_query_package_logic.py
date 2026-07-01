@@ -516,13 +516,13 @@ def test_execute_nl_query_rejects_unsafe_translation(host: _Host) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_explain_reports_llm_engine_when_anthropic_available(
+def test_explain_reports_llm_engine_when_gracekelly_configured(
     host: _Host, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import src.serving.semantic_layer.nl_engine as nl_engine
 
-    monkeypatch.setattr(nl_engine, "_ANTHROPIC_KEY", "test-key")
-    monkeypatch.setitem(sys.modules, "anthropic", types.ModuleType("anthropic"))
+    monkeypatch.setattr(nl_engine, "_GRACEKELLY_URL", "http://gracekelly.test")
+    monkeypatch.setitem(sys.modules, "httpx", types.ModuleType("httpx"))
     host._backend.explain.return_value = [("physical_plan", "SEQ_SCAN ~10 rows")]
 
     result = host.explain("show orders")
@@ -540,14 +540,14 @@ def test_explain_execution_error_maps_to_value_error(host: _Host) -> None:
         host.explain("show orders")
 
 
-def test_explain_stays_rule_based_when_anthropic_import_fails(
+def test_explain_stays_rule_based_when_httpx_import_fails(
     host: _Host, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import src.serving.semantic_layer.nl_engine as nl_engine
 
-    monkeypatch.setattr(nl_engine, "_ANTHROPIC_KEY", "test-key")
-    # A None entry in sys.modules makes `import anthropic` raise ImportError.
-    monkeypatch.setitem(sys.modules, "anthropic", None)  # type: ignore[arg-type]
+    monkeypatch.setattr(nl_engine, "_GRACEKELLY_URL", "http://gracekelly.test")
+    # A None entry in sys.modules makes `import httpx` raise ImportError.
+    monkeypatch.setitem(sys.modules, "httpx", None)  # type: ignore[arg-type]
     host._backend.explain.return_value = [("physical_plan", "PROJECTION")]
 
     result = host.explain("show orders")

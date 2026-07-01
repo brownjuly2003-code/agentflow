@@ -288,7 +288,7 @@ async def natural_language_query(request: NLQueryRequest, req: Request) -> Query
         span.set_attribute("query.text", request.question)
         span.set_attribute(
             "query.engine",
-            "claude" if os.getenv("ANTHROPIC_API_KEY") else "rule_based",
+            "gracekelly" if os.getenv("GRACEKELLY_URL") else "rule_based",
         )
         optional_kwargs = {"tenant_id": tenant_id, "allowed_tables": allowed_tables}
         try:

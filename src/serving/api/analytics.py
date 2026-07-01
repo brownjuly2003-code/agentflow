@@ -534,7 +534,7 @@ def _build_session_record(
         metric_name = parts[2]
         endpoint = f"/v1/metrics/{metric_name}"
     elif request.url.path == "/v1/query":
-        query_engine = "llm" if os.getenv("ANTHROPIC_API_KEY") else "rule_based"
+        query_engine = "llm" if os.getenv("GRACEKELLY_URL") else "rule_based"
         if body:
             try:
                 payload = json.loads(body)

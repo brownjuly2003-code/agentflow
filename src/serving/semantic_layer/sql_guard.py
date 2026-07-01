@@ -148,8 +148,8 @@ def assert_no_pii_access(
        as evidence the approach is whack-a-mole, exactly like the lineage masker it
        replaced. In the **shipped rule-based** translator PII-safety actually rests on
        the translator's fixed template repertoire (it cannot emit these forms); the
-       **LLM translator** (opt-in ``ANTHROPIC_API_KEY``) emits arbitrary SELECTs and is
-       therefore NOT bounded here. A truly bounded guarantee needs column-level
+       **LLM translator** (opt-in via GraceKelly, ``GRACEKELLY_URL``) emits arbitrary
+       SELECTs and is therefore NOT bounded here. A truly bounded guarantee needs column-level
        resolution against the real schema (execution / DESCRIBE / column security) —
        tracked as a follow-up. Do not enable the LLM translator against real PII until
        then.

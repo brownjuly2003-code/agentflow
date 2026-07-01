@@ -37,9 +37,6 @@ cloud = [
     "boto3>=1.35,<2",
     "pyiceberg[pyiceberg-core]>=0.7,<1",
 ]
-llm = [
-    "anthropic>=0.39,<1",
-]
 load = [
     "locust>=2.29,<3",
     # benchmark_freshness.py: production QueryCache semantics (TTL + key

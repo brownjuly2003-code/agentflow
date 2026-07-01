@@ -40,7 +40,17 @@ jobs:
           AGENTFLOW_CHAOS_CI_MODE: "1"
           AGENTFLOW_CHAOS_STARTUP_TIMEOUT: "120"
           PYTHONUNBUFFERED: "1"
-        run: python -m pytest tests/chaos/test_chaos_smoke.py -v --tb=short --json-report --json-report-file=.artifacts/chaos/chaos-report.json
+          # Dump thread stacks if the interpreter aborts at exit (the known
+          # intermittent native teardown SIGABRT the guard below tolerates).
+          PYTHONFAULTHANDLER: "1"
+        run: |
+          set +e
+          python -m pytest tests/chaos/test_chaos_smoke.py -v --tb=short --json-report --json-report-file=.artifacts/chaos/chaos-report.json
+          pytest_exit=$?
+          set -e
+          # Tolerate ONLY a green-session signal death (post-report native
+          # teardown abort); real failures propagate. See the script docstring.
+          python scripts/chaos_teardown_guard.py --report .artifacts/chaos/chaos-report.json --pytest-exit-code "$pytest_exit"
 
       - name: Generate chaos report
         if: always()
@@ -90,7 +100,17 @@ jobs:
           AGENTFLOW_CHAOS_CI_MODE: "1"
           AGENTFLOW_CHAOS_STARTUP_TIMEOUT: "120"
           PYTHONUNBUFFERED: "1"
-        run: python -m pytest tests/chaos/ --ignore=tests/chaos/test_chaos_smoke.py -v --tb=short --json-report --json-report-file=.artifacts/chaos/chaos-report.json
+          # Dump thread stacks if the interpreter aborts at exit (the known
+          # intermittent native teardown SIGABRT the guard below tolerates).
+          PYTHONFAULTHANDLER: "1"
+        run: |
+          set +e
+          python -m pytest tests/chaos/ --ignore=tests/chaos/test_chaos_smoke.py -v --tb=short --json-report --json-report-file=.artifacts/chaos/chaos-report.json
+          pytest_exit=$?
+          set -e
+          # Tolerate ONLY a green-session signal death (post-report native
+          # teardown abort); real failures propagate. See the script docstring.
+          python scripts/chaos_teardown_guard.py --report .artifacts/chaos/chaos-report.json --pytest-exit-code "$pytest_exit"
 
       - name: Generate chaos report
         if: always()

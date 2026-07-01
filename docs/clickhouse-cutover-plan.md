@@ -27,9 +27,13 @@ reversible (`SERVING_BACKEND=duckdb` rolls back).
       bring-up (profile gate removed, API `depends_on` its healthcheck);
       `docker-compose.yml` gained the service for `make demo`; `SERVING_BACKEND`
       stays overridable.
-- [ ] `docker-compose.e2e.yml` — a ClickHouse E2E lane so the shipped path is
-      CI-covered. Deferred until the branch is pushed (the lane can only be
-      verified by the E2E workflow, which needs CI).
+- [x] `docker-compose.e2e.yml` — a ClickHouse E2E lane so the shipped path is
+      CI-covered. Done 2026-07-02: the E2E stack ships a `clickhouse` service,
+      the API boots the shipped serving profile against it, and the workflow
+      asserts post-run that ClickHouse holds the seeded serving tables (the API
+      seeds them only on the ClickHouse profile, so rows there prove no silent
+      DuckDB fallback). Verified green via `workflow_dispatch` on the branch
+      (run 28552265071).
 - [x] Verify: live single-binary ClickHouse bring-up — `/v1/health` green,
       entity + metric + NL query parity, and the cross-process freshness loop
       (pipeline writes CH → dispatcher scan → cache invalidation). See

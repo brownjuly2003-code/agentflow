@@ -60,6 +60,15 @@ MODULE_TARGETS = {
         threshold=0.90,
         tests=("tests/unit/test_sql_guard_mutation.py",),
     ),
+    # pii_policy runs at the standard 0.90. Every behaviour-reachable mutant is
+    # killed -- the redaction/exemption/parse assertions plus the two default-path
+    # tests (no-arg PiiPolicy() and env-unset get_pii_policy()) that pin config
+    # resolution. The six default-VALUE survivors were removed at the SOURCE
+    # rather than excused: the `.get(key, {}) or {}` idiom's `{}` default is dead
+    # (the trailing `or {}`/`or []` already coerces a missing/None value), so
+    # dropping it deletes those equivalent mutants outright. The only 2 residual
+    # survivors are read_text encoding aliases (`utf-8`->`UTF-8`/`None`) that
+    # decode the ASCII config identically -> 65/67 = 97.0%, above 0.90.
     Path("serving/pii_policy.py"): ModuleTarget(
         threshold=0.90,
         tests=("tests/unit/test_pii_policy_mutation.py",),

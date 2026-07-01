@@ -173,7 +173,11 @@ def test_pii_denies_star_in_a_union_branch():
 def test_pii_denies_columns_expansion_over_pii_table():
     # DuckDB COLUMNS(...) expands to source columns like a star but parses as
     # exp.Columns, not exp.Star. (audit_01_07_26 deny-gate bypass)
-    with pytest.raises(UnsafeSQLError, match="COLUMNS"):
+    with pytest.raises(
+        UnsafeSQLError,
+        match=r"^COLUMNS\(\.\.\.\) expansion over a PII-bearing table is not "
+        r"allowed; select explicit non-PII columns$",
+    ):
         _deny("SELECT COLUMNS('.*') FROM users_enriched")
 
 
@@ -192,7 +196,11 @@ def test_pii_allows_columns_expansion_over_non_pii_table():
 def test_pii_denies_whole_row_struct_reference():
     # A bare table name in projection is a DuckDB whole-row STRUCT of every column
     # (PII included), naming no PII column. (audit_01_07_26 deny-gate bypass)
-    with pytest.raises(UnsafeSQLError, match="struct reference"):
+    with pytest.raises(
+        UnsafeSQLError,
+        match=r"^Whole-row struct reference over a PII-bearing table is not "
+        r"allowed; select explicit non-PII columns$",
+    ):
         _deny("SELECT users_enriched FROM users_enriched")
 
 
@@ -217,7 +225,11 @@ def test_pii_allows_struct_reference_over_non_pii_table():
 def test_pii_denies_column_rename_list_projection():
     # FROM users_enriched AS t(a,b,c) renames PII cols to positional aliases;
     # SELECT b reads a PII column by ordinal. (audit_01_07_26 deny-gate bypass #3)
-    with pytest.raises(UnsafeSQLError, match="rename list"):
+    with pytest.raises(
+        UnsafeSQLError,
+        match=r"^column-rename list over a PII-bearing table is not allowed; "
+        r"reference columns by their real names$",
+    ):
         _deny("SELECT b FROM users_enriched AS t(a,b,c,d,e)")
 
 
@@ -249,3 +261,51 @@ def test_pii_denies_second_entity_pii_column():
 def test_pii_unparseable_fails_closed():
     with pytest.raises(UnsafeSQLError, match="Unparseable SQL"):
         _deny("SELECT FROM")
+
+
+# ── validate_nl_sql recursive-CTE shadow guard (audit_30 D1 follow-up) ─────────
+def test_recursive_cte_shadowing_allowed_table_rejected():
+    # WITH RECURSIVE <name> where <name> is a real allowed table is a cross-tenant
+    # read vector: the physical anchor reference cannot be re-scoped. Rejecting it
+    # exercises the whole recursive_shadows comprehension — pins args.get("recursive"),
+    # the .lower() membership against normalized_allowed_tables, and the `and`.
+    with pytest.raises(
+        UnsafeSQLError, match=r"^Recursive CTE shadows physical table\(s\): \['orders'\]$"
+    ):
+        validate_nl_sql(
+            "WITH RECURSIVE orders AS (SELECT id FROM orders UNION "
+            "SELECT id FROM orders) SELECT id FROM orders",
+            ALLOWED,
+        )
+
+
+def test_recursive_cte_not_shadowing_is_allowed():
+    # A recursive CTE whose name is NOT an allowed table is fine (it is re-scoped
+    # like any CTE). Kills the `and`->`or` mutant, which would flag every recursive
+    # CTE name regardless of whether it shadows a physical table.
+    validate_nl_sql(
+        "WITH RECURSIVE seq AS (SELECT 1 AS n UNION SELECT n + 1 FROM seq WHERE n < 3) "
+        "SELECT n FROM seq",
+        ALLOWED,
+    )
+
+
+# ── assert_no_pii_access reachable-PII union + per-table guard ─────────────────
+def test_pii_reachable_union_across_two_pii_tables():
+    # reachable_pii must be the UNION over every referenced PII table. A JOIN of two
+    # PII entities where the projected column belongs to the first-visited table
+    # kills the `|=`->`=` mutant (which would keep only the last table's fields and
+    # miss `email`).
+    with pytest.raises(UnsafeSQLError, match=r"Query reads PII column\(s\): \['email'\]"):
+        _deny(
+            "SELECT email FROM users_enriched "
+            "JOIN orders_v2 ON users_enriched.user_id = orders_v2.user_id"
+        )
+
+
+def test_pii_rename_list_guard_requires_pii_fields_for_that_table():
+    # The rename-list reject must fire only for a table whose entity actually
+    # declares PII. With a PII table present (so PII is reachable and the gate does
+    # not return early), a rename list on a NON-PII table (products) must stay
+    # allowed — killing the `and`->`or` mutant that would reject it.
+    _deny("SELECT u.user_id FROM users_enriched u JOIN products AS p(a, b) ON u.user_id = p.a")

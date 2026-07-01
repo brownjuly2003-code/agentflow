@@ -129,6 +129,29 @@ def test_redact_entity_skips_absent_pii_field(tmp_path: Path) -> None:
     assert policy.redact_entity("user", {"user_id": "U-1"}, "acme") == {"user_id": "U-1"}
 
 
+def test_default_config_path_constructs_from_repo_config() -> None:
+    # No-arg construction must resolve the real default path relative to cwd
+    # (the repo root under pytest; the also_copied `config/` dir inside the
+    # mutmut workspace). Kills the default-ARGUMENT mutants that swap the path
+    # string ("XXconfig...XX" / upper-cased): they point at a nonexistent file
+    # and raise on construction, so merely constructing without a path dies.
+    policy = PiiPolicy()
+    assert policy.config_path == Path("config/pii_fields.yaml")
+    assert isinstance(policy.pii_fields_by_entity, dict)
+
+
+def test_get_pii_policy_uses_default_path_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # With AGENTFLOW_PII_CONFIG unset the resolver must fall back to the real
+    # default path. Kills the get_pii_policy default mutants: None -> Path(None)
+    # raises TypeError; a bad/upper-cased string -> FileNotFoundError.
+    pii_module._POLICY = None
+    monkeypatch.delenv("AGENTFLOW_PII_CONFIG", raising=False)
+    policy = get_pii_policy()
+    assert policy.config_path == Path("config/pii_fields.yaml")
+
+
 def test_get_pii_policy_caches_and_rebuilds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

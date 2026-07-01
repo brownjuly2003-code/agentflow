@@ -41,8 +41,11 @@ class PiiPolicy:
             raise RuntimeError("PyYAML is required for the PII policy.")
         self.config_path = Path(config_path)
         config = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
-        masking = config.get("masking", {}) or {}
-        entity_fields = masking.get("entity_fields", {}) or {}
+        # The trailing ``or {}`` already coerces a missing/None value to an empty
+        # dict, so the .get() default is deliberately omitted — a redundant ``{}``
+        # default would be a dead, untestable (equivalent-mutant) branch.
+        masking = config.get("masking") or {}
+        entity_fields = masking.get("entity_fields") or {}
         # entity_type -> frozenset of declared PII field names. The yaml lists a
         # strategy per field; the deny-gate ignores it (every PII field is denied
         # the same way), so only the field name is kept.
@@ -54,9 +57,7 @@ class PiiPolicy:
             )
             for entity_type, rules in entity_fields.items()
         }
-        self._exempt_tenants: frozenset[str] = frozenset(
-            masking.get("pii_exempt_tenants", []) or []
-        )
+        self._exempt_tenants: frozenset[str] = frozenset(masking.get("pii_exempt_tenants") or [])
 
     def is_exempt(self, tenant: str | None) -> bool:
         """Whether ``tenant`` may read PII unredacted (e.g. internal analytics)."""

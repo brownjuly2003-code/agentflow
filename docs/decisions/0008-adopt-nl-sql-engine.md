@@ -173,6 +173,50 @@ Concretely:
   ADR 0006): the generator keeps emitting DuckDB-flavored SQL and the backend
   transpiles.
 
+## Integration approach: vendor + hybrid execution (decided 2026-07-01)
+
+The engine is **vendored** into AgentFlow (a copy under `src/`), not consumed as
+an external package: `D:\NL_SQL` is a portfolio Streamlit app, not a published
+library, so a copy keeps AgentFlow self-contained and deployable.
+
+Two facts about the NL_SQL engine shape the port:
+
+- Its DB layer (`nl_sql/db/connection.py`) is SQLAlchemy over **sqlite /
+  postgresql only** — it has no DuckDB dialect. AgentFlow's warehouse is DuckDB.
+- Its `context_builder` retrieves schema via a **ChromaDB** index with Mistral
+  embeddings. AgentFlow's demo warehouse is five tables — small enough that
+  retrieval is trivial (all tables fit the prompt).
+
+So the port is **hybrid**, not a wholesale lift:
+
+- **Generation half — vendored from NL_SQL:** the LangGraph pipeline
+  (`generate_sql → validate → repair_once`), the prompt templates, and the
+  sqlglot validation. `sql_provider` = the **`GraceKellyProvider`** added to
+  `nl_sql/llm/` this session (default `claude-sonnet-5`, verified live: a real
+  Sonnet 5.0 browser call returns correct SQL). **The generation path runs on
+  Sonnet 5.0 via GraceKelly — never Mistral, never a direct SDK.**
+- **Context — lightweight, no ChromaDB for the demo:** build the `ContextBundle`
+  directly from AgentFlow's `DataCatalog` (all demo tables), skipping ChromaDB /
+  onnxruntime / embeddings. Revisit RAG only if the schema grows past what fits a
+  prompt.
+- **Execution half — AgentFlow's own DuckDB path + PII deny-gate:** do not vendor
+  NL_SQL's SQLAlchemy sqlite executor. Run generated SQL through AgentFlow's
+  existing DuckDB serving path so the PII boundary (`sql_guard`) stays in force.
+
+New dependency: `langgraph` (pipeline). `sqlglot` and `langchain-core` are
+already present; ChromaDB is deliberately avoided for the demo.
+
+### Vendoring steps (each verified before the next)
+
+1. Install `langgraph`; vendor the generation subtree into
+   `src/serving/semantic_layer/nl_sql_engine/`, import-clean.
+2. Build a demo `ContextBundle` from `DataCatalog`; run `generate_sql` →
+   GraceKelly Sonnet 5 → SQL for a demo question (live).
+3. Wire the pipeline as the `translate_nl_to_sql` LLM path; execute via
+   AgentFlow's DuckDB + deny-gate.
+4. Run the eval harness (ADR step 2) through it → the real Sonnet-5 EA number on
+   the demo (vs the 38.9% rule-based baseline).
+
 ## Follow-up
 
 - Execute the sequence above (eval port → schema-grounding PII → full port).

@@ -4,6 +4,12 @@
 
 Accepted - 2026-07-01
 
+> **Update (2026-07-02, ADR 0009):** the scaling gate below is *necessary but
+> not sufficient*. Even with an external serving engine, the control plane
+> (webhook queue, alert history, outbox, usage) is an embedded per-pod DuckDB
+> store, so `replicaCount > 1` would fork it. See
+> [ADR 0009](0009-control-plane-state-and-scaling-gate.md) for the full gate.
+
 ## Context
 
 The repository already ships a Kubernetes deployment surface:

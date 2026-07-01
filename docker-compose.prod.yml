@@ -151,8 +151,9 @@ services:
       COLLECTOR_OTLP_ENABLED: "true"
 
   clickhouse:
+    # Part of the default bring-up since ADR 0006 fixed the serving engine on
+    # ClickHouse (no longer profile-gated).
     image: clickhouse/clickhouse-server:24.8
-    profiles: ["clickhouse"]
     ports:
       - "127.0.0.1:8123:8123"
       - "127.0.0.1:9000:9000"
@@ -178,12 +179,14 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
       AGENTFLOW_SERVING_CONFIG: /app/config/serving.yaml
       DUCKDB_PATH: /app/data/agentflow_api.duckdb
-      SERVING_BACKEND: ${SERVING_BACKEND:-duckdb}
+      SERVING_BACKEND: ${SERVING_BACKEND:-clickhouse}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 8123
       CLICKHOUSE_DATABASE: agentflow

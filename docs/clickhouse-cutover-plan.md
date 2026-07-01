@@ -16,21 +16,41 @@ local-dev / test store.
 - `docs/clickhouse-migration.md` — operator switch guide.
 - NL→SQL model already updated to `claude-sonnet-5` (`nl_engine._llm_translate`).
 
-## Phase 1 — Fix the engine default (config, reversible)
+## Phase 1 — Fix the engine default (config, reversible) — **EXECUTED 2026-07-02**
 
 Flip the shipped default from `duckdb` to `clickhouse`. This is config-only and
 reversible (`SERVING_BACKEND=duckdb` rolls back).
 
-- [ ] `config/serving.yaml` → `backend: clickhouse`.
-- [ ] `docker-compose.prod.yml` → make the `clickhouse` service part of the
-      default demo bring-up (not just `--profile clickhouse`), or document that
-      the demo command now includes it. Keep `SERVING_BACKEND` overridable.
-- [ ] `docker-compose.e2e.yml` — decide: run E2E against ClickHouse (closest to
-      shipped) or keep DuckDB for speed and add a ClickHouse E2E lane. Recommend a
-      ClickHouse E2E lane so the shipped path is covered.
-- [ ] Verify: `SERVING_BACKEND=clickhouse` local bring-up, `/v1/health` green,
-      `test_query_package_logic.py::...clickhouse` path passes, entity + metric +
-      `/v1/query/explain` return correct rows (parity with DuckDB).
+- [x] `config/serving.yaml` → `backend: clickhouse` (owner decision 2026-07-02:
+      the demo runs on ClickHouse).
+- [x] `docker-compose.prod.yml` → `clickhouse` service is part of the default
+      bring-up (profile gate removed, API `depends_on` its healthcheck);
+      `docker-compose.yml` gained the service for `make demo`; `SERVING_BACKEND`
+      stays overridable.
+- [ ] `docker-compose.e2e.yml` — a ClickHouse E2E lane so the shipped path is
+      CI-covered. Deferred until the branch is pushed (the lane can only be
+      verified by the E2E workflow, which needs CI).
+- [x] Verify: live single-binary ClickHouse bring-up — `/v1/health` green,
+      entity + metric + NL query parity, and the cross-process freshness loop
+      (pipeline writes CH → dispatcher scan → cache invalidation). See
+      `docs/perf/clickhouse-serving-verify-2026-07-02.md`.
+
+### Phase 1a — Make the flip *coherent* (added by the 2026-07-02 audit) — **EXECUTED**
+
+The original plan flipped reads but left the event→metric axis on DuckDB: no
+writer fed ClickHouse and the webhook/invalidate/SSE scans polled the embedded
+connection — the core freshness property would have silently died on the
+shipped engine.
+
+- [x] `src/processing/clickhouse_sink.py` — the local pipeline mirrors serving
+      tables + the `pipeline_events` journal to ClickHouse when it is the
+      configured backend (DuckDB stays the local lake/test store).
+- [x] Upsert model: mutable serving tables are `ReplacingMergeTree` versioned
+      by a MATERIALIZED `af_updated_at`; every backend read runs with `final=1`.
+- [x] `QueryEngine.fetch_pipeline_events` — the freshness-critical scan goes
+      through the serving backend; webhook dispatcher and SSE delegate to it.
+- [x] Transpile safety net: `_translate_sql` fails closed if a table reference
+      (incl. the tenant schema qualifier) does not survive the rewrite.
 
 ## Phase 2 — Make PII bounded on the engine (the point of the cutover)
 

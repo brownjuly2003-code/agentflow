@@ -133,6 +133,25 @@ services:
       timeout: 3s
       retries: 3
 
+  # ── ClickHouse (serving store, ADR 0006) ──────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    environment:
+      CLICKHOUSE_DB: agentflow
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q 'Ok.'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
   # ── Prometheus ────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.54.0
@@ -161,5 +180,6 @@ volumes:
   kafka-data:
   flink-checkpoints:
   minio-data:
+  clickhouse-data:
   prometheus-data:
   grafana-data:

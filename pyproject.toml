@@ -173,6 +173,18 @@ ignore = ["S101", "S311"]
     "S608",
     "E501",
 ]
+# Serving-store mirror for the local pipeline: table/column identifiers are
+# module constants, values are single-quote-escaped literals that the backend's
+# sqlglot round-trip re-escapes structurally (see ClickHouseBackend docstring).
+"src/processing/clickhouse_sink.py" = [
+    "S608",
+]
+# fetch_pipeline_events: selected columns come from the backend schema probe
+# (fixed allowlist), values are `?`-bound on DuckDB and _quote_literal-escaped
+# on external backends — same convention as entity_queries.py.
+"src/serving/semantic_layer/query/engine.py" = [
+    "S608",
+]
 "src/serving/semantic_layer/nl_engine.py" = [
     "S608",
 ]

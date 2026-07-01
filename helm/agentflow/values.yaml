@@ -113,6 +113,24 @@ networkPolicy:
     clickhouse: 8123
     otlp: 4317
 
+# Serving engine (ADR 0006 / 0007 / 0009). The shipped demo runs ClickHouse;
+# the chart's default stays the safe single-node DuckDB profile because the
+# chart does not ship a ClickHouse service. To serve from an external
+# ClickHouse set backend: clickhouse + clickhouse.host (password via
+# existingSecret); NetworkPolicy egress for port 8123 is already declared.
+# NOTE (ADR 0009): even on ClickHouse, replicaCount stays 1 — the control
+# plane (webhooks/alerts/outbox/usage) is an embedded per-pod DuckDB store, so
+# horizontal scaling is gated on externalizing it, not only on the engine.
+serving:
+  backend: duckdb
+  clickhouse:
+    host: ""
+    port: 8123
+    database: agentflow
+    user: default
+    existingSecret: ""
+    passwordKey: clickhouse-password
+
 config:
   duckdbPath: /data/agentflow.duckdb
   usageDbPath: /data/agentflow_api.duckdb

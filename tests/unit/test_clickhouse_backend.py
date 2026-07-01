@@ -9,6 +9,7 @@ mapping, and the health/missing-table paths.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from io import BytesIO
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -397,9 +398,12 @@ class TestTranslateSqlInjectionSafety:
 
 
 def test_initialize_demo_data_sends_native_clickhouse_ddl_untranslated(backend):
-    """The demo DDL is already ClickHouse SQL (ENGINE = MergeTree, String /
-    UInt8 types) — it must bypass the duckdb→clickhouse transpile, which
-    would reject it at parse time."""
+    """The demo DDL is already ClickHouse SQL (ENGINE clauses, String / UInt8
+    types) — it must bypass the duckdb→clickhouse transpile, which would
+    reject it at parse time. The mutable serving tables are ReplacingMergeTree
+    versioned by the MATERIALIZED ``af_updated_at`` column (upsert = append a
+    new version; reads run with final=1); the append-only ``pipeline_events``
+    journal stays plain MergeTree."""
     sent: list[str] = []
 
     def fake_urlopen(req, timeout=None):  # noqa: ARG001
@@ -412,8 +416,15 @@ def test_initialize_demo_data_sends_native_clickhouse_ddl_untranslated(backend):
 
     create_statements = [sql for sql in sent if "CREATE TABLE" in sql]
     assert create_statements, "demo init must issue CREATE TABLE statements"
-    for sql in create_statements:
-        assert "ENGINE = MergeTree()" in sql, "native DDL must reach ClickHouse untouched"
+    replacing = [sql for sql in create_statements if "ReplacingMergeTree(af_updated_at)" in sql]
+    plain = [sql for sql in create_statements if "ENGINE = MergeTree()" in sql]
+    assert len(replacing) == 4, "orders/products/sessions/users must be ReplacingMergeTree"
+    assert len(plain) == 1, "the journal must stay append-only MergeTree"
+    assert "pipeline_events" in plain[0]
+    for sql in replacing:
+        assert "af_updated_at DateTime64(3) MATERIALIZED now64(3)" in sql, (
+            "version column must be MATERIALIZED so it stays out of SELECT * and inserts"
+        )
 
 
 def test_table_columns_sends_describe_untranslated(backend):
@@ -461,3 +472,153 @@ def test_scalar_returns_first_value_or_none(backend):
         return_value=_http_response(empty),
     ):
         assert backend.scalar("SELECT 1 WHERE FALSE") is None
+
+
+# ── ReplacingMergeTree read/write model ──────────────────────────
+
+
+def test_execute_reads_with_final_setting(backend):
+    """Every read must carry final=1 so ReplacingMergeTree versions collapse
+    at query time — without it a freshly upserted row would read as a
+    duplicate until a background merge happens to run."""
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["url"] = req.full_url
+        return _http_response(b'{"data":[]}')
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        backend.execute("SELECT COUNT(*) AS value FROM orders_v2")
+
+    assert "final=1" in captured["url"]
+
+
+def test_ddl_and_inserts_do_not_carry_final(backend):
+    urls: list[str] = []
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        urls.append(req.full_url)
+        return _http_response(b'{"data":[{"value":1}]}')
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        backend.ensure_schema()
+        backend.insert_rows("pipeline_events", [{"event_id": "e1", "topic": "t"}])
+
+    write_urls = [url for url in urls if "final=1" in url]
+    assert write_urls == [], "final is a read-time setting; writes must not carry it"
+
+
+def test_table_columns_hides_materialized_version_column(backend):
+    """`af_updated_at` is MATERIALIZED — excluded from SELECT * and inserts —
+    so exposing it via table_columns would fork the logical schema from the
+    DuckDB store and the entity contracts."""
+    payload = (
+        b'{"data":[{"name":"order_id","default_type":""},'
+        b'{"name":"status","default_type":""},'
+        b'{"name":"af_updated_at","default_type":"MATERIALIZED"},'
+        b'{"name":"alias_col","default_type":"ALIAS"}]}'
+    )
+    with patch(
+        "src.serving.backends.clickhouse_backend.urlopen",
+        return_value=_http_response(payload),
+    ):
+        assert backend.table_columns("orders_v2") == {"order_id", "status"}
+
+
+# ── insert_rows (JSONEachRow) ────────────────────────────────────
+
+
+def test_insert_rows_formats_jsoneachrow(backend):
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        captured["data"] = req.data.decode("utf-8")
+        return _http_response(b"")
+
+    row = {
+        "order_id": "ORD-1",
+        "total_amount": 12.5,
+        "in_stock": True,
+        "created_at": datetime(2026, 7, 2, 10, 30, 0),
+        "entity_id": None,
+    }
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        backend.insert_rows("orders_v2", [row])
+
+    header, payload = captured["data"].split("\n", 1)
+    assert header == (
+        "INSERT INTO agentflow.orders_v2 "
+        "(order_id, total_amount, in_stock, created_at, entity_id) FORMAT JSONEachRow"
+    )
+    decoded = json.loads(payload)
+    assert decoded == {
+        "order_id": "ORD-1",
+        "total_amount": 12.5,
+        "in_stock": 1,
+        "created_at": "2026-07-02 10:30:00",
+        "entity_id": None,
+    }
+
+
+def test_insert_rows_rejects_hostile_identifiers(backend):
+    with patch(
+        "src.serving.backends.clickhouse_backend.urlopen",
+        return_value=_http_response(b""),
+    ):
+        with pytest.raises(BackendExecutionError, match="invalid table name"):
+            backend.insert_rows("orders_v2; DROP TABLE x", [{"a": 1}])
+        with pytest.raises(BackendExecutionError, match="invalid column name"):
+            backend.insert_rows("orders_v2", [{"a) VALUES (1); --": 1}])
+        with pytest.raises(BackendExecutionError, match="one column set"):
+            backend.insert_rows("orders_v2", [{"a": 1}, {"b": 2}])
+
+
+def test_insert_rows_noop_on_empty(backend):
+    with patch("src.serving.backends.clickhouse_backend.urlopen") as mocked:
+        backend.insert_rows("orders_v2", [])
+    mocked.assert_not_called()
+
+
+# ── scope preservation across the transpile (rewrite-after-guard seam) ──
+
+
+def test_translate_preserves_tenant_schema_qualification(backend):
+    """Tenant isolation is a schema qualification applied *before* this
+    backend rewrites the SQL; the transpile must carry it through."""
+    translated = backend._translate_sql(
+        'SELECT COUNT(*) AS n FROM "acme_corp"."orders_v2" WHERE status = \'paid\''
+    )
+    assert "acme_corp" in translated
+    assert "orders_v2" in translated
+
+
+def test_assert_scope_preserved_fails_closed_on_dropped_qualifier(backend):
+    """Counterfactual for the guard itself: a translation that loses the
+    tenant schema (or swaps the table) must refuse to execute."""
+    source = sqlglot.parse_one('SELECT * FROM "acme_corp"."orders_v2"', read="duckdb")
+    with pytest.raises(BackendExecutionError, match="table references"):
+        backend._assert_scope_preserved(source, "SELECT * FROM orders_v2")
+    with pytest.raises(BackendExecutionError, match="table references"):
+        backend._assert_scope_preserved(source, 'SELECT * FROM "acme_corp"."users_enriched"')
+    # And the well-behaved translation passes.
+    backend._assert_scope_preserved(source, 'SELECT * FROM "acme_corp"."orders_v2"')
+
+
+def test_create_database_bootstrap_does_not_set_session_database(backend):
+    """Found live (2026-07-02, bare single-binary server): sending
+    `?database=agentflow` on the CREATE DATABASE bootstrap statement fails with
+    UNKNOWN_DATABASE before the database can be created. Docker images mask
+    this by pre-creating the database via CLICKHOUSE_DB."""
+    urls: list[str] = []
+
+    def fake_urlopen(req, timeout=None):  # noqa: ARG001
+        urls.append(req.full_url)
+        return _http_response(b'{"data":[{"value":1}]}')
+
+    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+        backend.ensure_schema()
+
+    assert "database=agentflow" not in urls[0], "bootstrap must not set the session database"
+    assert all("database=agentflow" in url for url in urls[1:]), (
+        "every post-bootstrap statement runs against the serving database"
+    )

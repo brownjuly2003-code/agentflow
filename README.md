@@ -38,7 +38,7 @@ Prerequisites:
 
 - Python `3.11+`
 - `make`
-- Docker Compose (`make demo` starts Redis)
+- Docker Compose (`make demo` starts Redis and the ClickHouse serving store)
 
 PowerShell 7+:
 
@@ -58,7 +58,7 @@ source ./scripts/setup.sh
 make demo
 ```
 
-`make demo` seeds local data, starts Redis, and serves the API on `http://localhost:8000`. Swagger UI is available at `http://localhost:8000/docs`.
+`make demo` starts Redis and ClickHouse, seeds demo data through the full pipeline (validated events land in the ClickHouse serving store), and serves the API on `http://localhost:8000`. Swagger UI is available at `http://localhost:8000/docs`.
 
 Try it:
 
@@ -75,16 +75,17 @@ Local demo runs without API-key enforcement unless you explicitly configure `AGE
 ## Architecture
 
 ```text
-Event sources -> Kafka -> Flink -> Iceberg ----\
-                                                -> Semantic layer -> FastAPI -> Agent / SDK
-Local demo   -> local_pipeline -> DuckDB ------/
+Event sources -> Kafka -> Flink -> Iceberg --------\
+                                                    -> Semantic layer -> FastAPI -> Agent / SDK
+Local demo   -> local_pipeline -> ClickHouse ------/
+                       (DuckDB stays the local lake / test store)
 ```
 
 Stack:
 
 - **Ingestion**: Kafka producers, Debezium/Kafka Connect CDC, and a local synthetic pipeline
 - **Processing**: Flink plus validation and enrichment stages
-- **Storage**: Iceberg for production-shaped tables, DuckDB for the local serving path
+- **Storage**: Iceberg for production-shaped tables; **ClickHouse is the serving store** (ADR 0006 — ReplacingMergeTree upserts, `final=1` reads), DuckDB the local-dev / test store
 - **Serving**: FastAPI, contract registry, lineage, search, and operational endpoints
 - **Orchestration**: Dagster
 - **IaC**: Terraform, Helm, Docker Compose, and a Fly.io demo config

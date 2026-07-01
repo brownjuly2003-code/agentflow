@@ -4,6 +4,54 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed — ClickHouse is the shipped serving engine (ADR 0006 Phase 1, executed 2026-07-02)
+
+- **`config/serving.yaml` defaults to `backend: clickhouse`.** `make demo`,
+  `docker-compose.yml`, and `docker-compose.prod.yml` bring the ClickHouse
+  service up by default (the `--profile clickhouse` gate is removed; the API
+  container `depends_on` its healthcheck). Rollback is config-only
+  (`SERVING_BACKEND=duckdb`). Tests stay pinned to DuckDB
+  (`tests/conftest.py`), and DuckDB remains the local-dev / test store.
+- **The local pipeline writes the serving store** — new
+  `src/processing/clickhouse_sink.py`: when the configured backend is
+  ClickHouse, every validated event mirrors its serving-table writes and its
+  `pipeline_events` journal row there (dead-letter rows included), after the
+  DuckDB commit. A configured-but-unreachable ClickHouse fails loudly instead
+  of letting the demo serve a frozen seed.
+- **Upserts are ReplacingMergeTree row versions.** The four mutable serving
+  tables move from `MergeTree` to `ReplacingMergeTree` versioned by a
+  `MATERIALIZED af_updated_at` column (invisible to `SELECT *`, inserts, and
+  `table_columns`); every backend read carries the `final=1` setting so
+  queries always see the latest version. **Existing demo ClickHouse volumes
+  must be dropped and re-seeded** (engine changes don't apply to existing
+  tables; the demo store is disposable by design).
+- **The freshness-critical event scan goes through the serving backend.** New
+  `QueryEngine.fetch_pipeline_events()`; the webhook dispatcher (which also
+  drives metric-cache invalidation) and the `/v1/stream/events` SSE scan
+  delegate to it instead of reaching into the embedded DuckDB connection — so
+  event-driven freshness works when the writer is out-of-process and the
+  engine is external. Verified live against a real ClickHouse 26.7 server:
+  cross-process burst moved the served revenue metric, SSE streamed
+  ClickHouse-only events, upsert dedup read back one latest-version row
+  (`docs/perf/clickhouse-serving-verify-2026-07-02.md`).
+- **Transpile safety net:** `ClickHouseBackend._translate_sql` now fails
+  closed if any table reference — including the tenant schema qualifier
+  applied by `_scope_sql` *before* the rewrite — does not survive the
+  duckdb→clickhouse transpile or does not re-parse. Guards the
+  rewrite-after-guard seam that produced the historical PII bypasses, now for
+  tenant isolation.
+- **Fixed (found by the live verification):** the ClickHouse backend sent the
+  session-database URL parameter on the `CREATE DATABASE` bootstrap statement,
+  which fails with `UNKNOWN_DATABASE` on a bare server (Docker's
+  `CLICKHOUSE_DB` pre-creation masked it).
+- **Helm:** new `serving.*` values wire `SERVING_BACKEND` /
+  `CLICKHOUSE_*` env (password via `existingSecret`); the chart default stays
+  the safe single-node DuckDB profile because the chart ships no ClickHouse
+  service. **ADR 0009** records the honest scaling gate: the control plane
+  (webhook queue, alert history, outbox, usage) is an embedded per-pod DuckDB
+  store, so `replicaCount`/`autoscaling` stay pinned even on the ClickHouse
+  profile until it is externalized.
+
 ### Removed
 
 - **The serving-layer PII protection is removed — it guarded columns that do not

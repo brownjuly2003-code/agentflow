@@ -20,6 +20,8 @@ import pytest
 
 from src.serving.api.routers import stream as stream_module
 from src.serving.api.routers.stream import fetch_recent_events, stream_events
+from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.semantic_layer.query import QueryEngine
 
 # ── fetch_recent_events ──────────────────────────────────────────
 
@@ -54,8 +56,22 @@ def conn() -> Iterator[duckdb.DuckDBPyConnection]:
         connection.close()
 
 
+def _engine_stub(conn: duckdb.DuckDBPyConnection) -> QueryEngine:
+    # Minimal real QueryEngine over the test connection (built via __new__ so
+    # initialize_demo_data cannot widen the schema-variant fixtures): the SSE
+    # scan goes through QueryEngine.fetch_pipeline_events on the serving
+    # backend.
+    engine = QueryEngine.__new__(QueryEngine)
+    backend = DuckDBBackend(db_path=":memory:", connection=conn)
+    engine._duckdb_backend = backend
+    engine._backend = backend
+    engine._backend_name = backend.name
+    engine._conn = conn
+    return engine
+
+
 def _req(conn: duckdb.DuckDBPyConnection, *, tenant_id: Any = None) -> SimpleNamespace:
-    app = SimpleNamespace(state=SimpleNamespace(query_engine=SimpleNamespace(_conn=conn)))
+    app = SimpleNamespace(state=SimpleNamespace(query_engine=_engine_stub(conn)))
     return SimpleNamespace(app=app, state=SimpleNamespace(tenant_id=tenant_id))
 
 

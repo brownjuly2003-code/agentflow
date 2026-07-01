@@ -107,11 +107,33 @@ class ClickHouseBackend(ServingBackend):
         # verification when no context is passed).
         self._ssl_context = ssl.create_default_context() if secure else None
 
-    def _request(self, sql: str, *, expect_json: bool, translate: bool = True) -> str:
+    def _request(
+        self,
+        sql: str,
+        *,
+        expect_json: bool,
+        translate: bool = True,
+        final: bool = False,
+        use_database: bool = True,
+    ) -> str:
         translated_sql = self._translate_sql(sql) if translate else sql
-        url = f"{self._base_url}/?database={quote(self._database)}"
+        # `use_database=False` is for bootstrap statements (CREATE DATABASE):
+        # setting the session database to one that does not exist yet fails the
+        # whole request on a bare server (Docker images pre-create it via
+        # CLICKHOUSE_DB, which masked this).
+        url = (
+            f"{self._base_url}/?database={quote(self._database)}"
+            if use_database
+            else f"{self._base_url}/?"
+        )
         if expect_json:
             url = f"{url}&default_format=JSON"
+        if final:
+            # The mutable serving tables are ReplacingMergeTree (upserts are
+            # modeled as append-a-new-version); `final=1` makes every read see
+            # only the latest version per sorting key without the semantic
+            # layer having to know the engine's dedup model.
+            url = f"{url}&final=1"
 
         request = Request(url, data=translated_sql.encode("utf-8"), method="POST")
         if self._user or self._password:
@@ -158,14 +180,54 @@ class ClickHouseBackend(ServingBackend):
             raise BackendExecutionError(f"expected exactly one SQL statement, got {len(parsed)}")
         rewritten = parsed[0].transform(_rewrite_for_clickhouse)
         translated: str = rewritten.sql(dialect="clickhouse")
+        self._assert_scope_preserved(parsed[0], translated)
         return translated
+
+    @staticmethod
+    def _table_refs(node: exp.Expr) -> list[tuple[str, str, str]]:
+        return sorted(
+            (
+                (table.catalog or "").lower(),
+                (table.db or "").lower(),
+                (table.name or "").lower(),
+            )
+            for table in node.find_all(exp.Table)
+        )
+
+    def _assert_scope_preserved(self, source: exp.Expr, translated: str) -> None:
+        """Fail closed if the transpile changed any table reference.
+
+        Tenant isolation is enforced upstream by ``_scope_sql`` as a *schema
+        qualification* on the table name (``"tenant_schema"."table"``), and this
+        backend rewrites the SQL *after* that guard ran. The rewrite must
+        therefore never add, drop, or rename a table reference — otherwise a
+        transpiler regression could silently unqualify a tenant-scoped table and
+        read another tenant's rows (the same rewrite-after-guard seam that
+        produced the historical PII bypasses). Parse the *generated string* back
+        rather than trusting the rewritten AST, so generation-level quoting bugs
+        are caught too.
+        """
+        try:
+            reparsed = sqlglot.parse_one(translated, read="clickhouse")
+        except sqlglot.errors.ParseError as exc:
+            raise BackendExecutionError(
+                f"translated SQL does not re-parse; refusing to execute: {exc}"
+            ) from exc
+        source_refs = self._table_refs(source)
+        translated_refs = self._table_refs(reparsed)
+        if source_refs != translated_refs:
+            raise BackendExecutionError(
+                "SQL translation changed table references "
+                f"(before={source_refs}, after={translated_refs}); "
+                "refusing to execute a query whose tenant scoping may have been lost."
+            )
 
     def execute(self, sql: str, params: list | None = None) -> list[dict]:
         # `params` is a documented no-op on this backend (see the class
         # docstring): the ClickHouse query path inlines values as literals that
         # `_translate_sql` re-escapes structurally, rather than binding `?`.
         del params
-        payload = self._request(sql, expect_json=True)
+        payload = self._request(sql, expect_json=True, final=True)
         data = json.loads(payload)
         rows: list[dict] = data.get("data", [])
         return rows
@@ -190,7 +252,17 @@ class ClickHouseBackend(ServingBackend):
                 return set()
             raise
         rows: list[dict] = json.loads(payload).get("data", [])
-        return {str(row["name"]) for row in rows if "name" in row}
+        # MATERIALIZED / ALIAS / EPHEMERAL columns (e.g. the ReplacingMergeTree
+        # version column `af_updated_at`) are not part of the logical row: they
+        # are excluded from `SELECT *` and cannot be INSERTed, so exposing them
+        # here would make the semantic layer's column set diverge from the
+        # DuckDB store and from the entity contracts.
+        return {
+            str(row["name"])
+            for row in rows
+            if "name" in row
+            and str(row.get("default_type", "")) not in {"MATERIALIZED", "ALIAS", "EPHEMERAL"}
+        }
 
     def explain(self, sql: str) -> list[tuple]:
         # EXPLAIN itself is ClickHouse syntax, but the wrapped query comes
@@ -200,9 +272,24 @@ class ClickHouseBackend(ServingBackend):
         raw = self._request(f"EXPLAIN {translated}", expect_json=False, translate=False)
         return [(line,) for line in raw.splitlines() if line.strip()]
 
-    def initialize_demo_data(self) -> None:
+    def ensure_schema(self) -> None:
+        """Create the serving database and tables (no seed rows).
+
+        The four mutable serving tables are **ReplacingMergeTree**: the pipeline
+        models an upsert as appending a new row version keyed by the sorting
+        key, ClickHouse collapses versions on merges, and every read on this
+        backend runs with ``final=1`` (see ``_request``) so queries always see
+        the latest version. The version column ``af_updated_at`` is
+        ``MATERIALIZED`` — populated server-side on insert, invisible to
+        ``SELECT *`` and to ``table_columns`` — so the logical schema stays
+        identical to the DuckDB store. ``pipeline_events`` is an append-only
+        journal and stays plain MergeTree.
+        """
         self._request(
-            f"CREATE DATABASE IF NOT EXISTS {self._database}", expect_json=False, translate=False
+            f"CREATE DATABASE IF NOT EXISTS {self._database}",
+            expect_json=False,
+            translate=False,
+            use_database=False,
         )
         self._request(
             f"""
@@ -212,8 +299,9 @@ class ClickHouseBackend(ServingBackend):
                 status String,
                 total_amount Decimal(10, 2),
                 currency String,
-                created_at DateTime
-            ) ENGINE = MergeTree()
+                created_at DateTime,
+                af_updated_at DateTime64(3) MATERIALIZED now64(3)
+            ) ENGINE = ReplacingMergeTree(af_updated_at)
             ORDER BY order_id
         """,
             expect_json=False,
@@ -227,8 +315,9 @@ class ClickHouseBackend(ServingBackend):
                 category String,
                 price Decimal(10, 2),
                 in_stock UInt8,
-                stock_quantity Int32
-            ) ENGINE = MergeTree()
+                stock_quantity Int32,
+                af_updated_at DateTime64(3) MATERIALIZED now64(3)
+            ) ENGINE = ReplacingMergeTree(af_updated_at)
             ORDER BY product_id
         """,
             expect_json=False,
@@ -245,8 +334,9 @@ class ClickHouseBackend(ServingBackend):
                 event_count Int32,
                 unique_pages Int32,
                 funnel_stage String,
-                is_conversion UInt8
-            ) ENGINE = MergeTree()
+                is_conversion UInt8,
+                af_updated_at DateTime64(3) MATERIALIZED now64(3)
+            ) ENGINE = ReplacingMergeTree(af_updated_at)
             ORDER BY session_id
         """,
             expect_json=False,
@@ -260,8 +350,9 @@ class ClickHouseBackend(ServingBackend):
                 total_spent Decimal(10, 2),
                 first_order_at DateTime,
                 last_order_at DateTime,
-                preferred_category String
-            ) ENGINE = MergeTree()
+                preferred_category Nullable(String),
+                af_updated_at DateTime64(3) MATERIALIZED now64(3)
+            ) ENGINE = ReplacingMergeTree(af_updated_at)
             ORDER BY user_id
         """,
             expect_json=False,
@@ -273,6 +364,9 @@ class ClickHouseBackend(ServingBackend):
                 event_id String,
                 topic String,
                 tenant_id String DEFAULT 'default',
+                entity_id Nullable(String),
+                event_type Nullable(String),
+                latency_ms Nullable(Int32),
                 processed_at DateTime
             ) ENGINE = MergeTree()
             ORDER BY (tenant_id, topic, processed_at, event_id)
@@ -288,6 +382,59 @@ class ClickHouseBackend(ServingBackend):
             expect_json=False,
             translate=False,
         )
+        for column_ddl in (
+            "entity_id Nullable(String)",
+            "event_type Nullable(String)",
+            "latency_ms Nullable(Int32)",
+        ):
+            self._request(
+                f"""
+                ALTER TABLE {self._database}.pipeline_events
+                ADD COLUMN IF NOT EXISTS {column_ddl}
+                """,
+                expect_json=False,
+                translate=False,
+            )
+
+    def insert_rows(self, table_name: str, rows: list[dict]) -> None:
+        """Append rows via ``FORMAT JSONEachRow``.
+
+        JSONEachRow keeps value escaping structural (no SQL-literal quoting to
+        get wrong), which is why the pipeline sink writes through this method
+        instead of assembling INSERT literals. Column names come from the row
+        keys and are validated as bare identifiers; values are JSON-encoded
+        with datetimes rendered in ClickHouse's ``YYYY-MM-DD hh:mm:ss`` form.
+        """
+        if not rows:
+            return
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name) is None:
+            raise BackendExecutionError(f"invalid table name {table_name!r}")
+        columns = list(rows[0].keys())
+        for row in rows:
+            if list(row.keys()) != columns:
+                raise BackendExecutionError("all rows must share one column set")
+        for column in columns:
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", column) is None:
+                raise BackendExecutionError(f"invalid column name {column!r}")
+
+        def _encode(value: object) -> object:
+            if isinstance(value, datetime):
+                return value.strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(value, bool):
+                return int(value)
+            return value
+
+        payload = "\n".join(
+            json.dumps({key: _encode(value) for key, value in row.items()}) for row in rows
+        )
+        statement = (
+            f"INSERT INTO {self._database}.{table_name} "  # nosec B608 - identifiers validated above
+            f"({', '.join(columns)}) FORMAT JSONEachRow\n{payload}"
+        )
+        self._request(statement, expect_json=False, translate=False)
+
+    def initialize_demo_data(self) -> None:
+        self.ensure_schema()
 
         # database name comes from trusted backend config
         existing_rows = self.scalar(f"SELECT COUNT(*) AS value FROM {self._database}.orders_v2")  # nosec B608
@@ -372,17 +519,26 @@ class ClickHouseBackend(ServingBackend):
             "\n".join(
                 [
                     # demo seed data uses trusted config and generated timestamps
-                    f"INSERT INTO {self._database}.pipeline_events (event_id, topic, tenant_id, processed_at) VALUES",  # nosec B608
-                    f"('evt-001', 'events.validated', 'default', '{ts(timedelta(minutes=10))}'),",
-                    f"('evt-002', 'events.validated', 'default', '{ts(timedelta(minutes=9))}'),",
-                    f"('evt-003', 'events.validated', 'default', '{ts(timedelta(minutes=8))}'),",
-                    f"('evt-004', 'events.deadletter', 'default', '{ts(timedelta(minutes=7))}'),",
-                    f"('evt-005', 'events.validated', 'default', '{ts(timedelta(minutes=6))}'),",
-                    f"('evt-006', 'events.validated', 'default', '{ts(timedelta(minutes=5))}'),",
-                    f"('evt-007', 'events.validated', 'default', '{ts(timedelta(minutes=4))}'),",
-                    f"('evt-008', 'events.validated', 'default', '{ts(timedelta(minutes=3))}'),",
-                    f"('evt-009', 'events.deadletter', 'default', '{ts(timedelta(minutes=2))}'),",
-                    f"('evt-010', 'events.validated', 'default', '{ts(timedelta(minutes=1))}')",
+                    f"INSERT INTO {self._database}.pipeline_events (event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at) VALUES",  # nosec B608
+                    f"('evt-001', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=10))}'),",
+                    f"('evt-002', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=9))}'),",
+                    f"('evt-003', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=8))}'),",
+                    f"('evt-004', 'events.deadletter', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=7))}'),",
+                    f"('evt-005', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=6))}'),",
+                    f"('evt-006', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=5))}'),",
+                    f"('evt-007', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=4))}'),",
+                    f"('evt-008', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=3))}'),",
+                    f"('evt-009', 'events.deadletter', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=2))}'),",
+                    f"('evt-010', 'events.validated', 'default', NULL, NULL, NULL, '{ts(timedelta(minutes=1))}'),",
+                    # Lineage trail for ORD-20260404-1001, mirroring the DuckDB
+                    # seed so /v1/lineage-style reads see the same demo story on
+                    # either backend.
+                    "('evt-ord-1001-ingest', 'orders.raw', 'default', 'ORD-20260404-1001',"
+                    f" 'order.created', 12, '{ts(timedelta(minutes=3))}'),",
+                    "('evt-ord-1001-validated', 'events.validated', 'default', 'ORD-20260404-1001',"
+                    f" 'order.validated', 8, '{ts(timedelta(minutes=2))}'),",
+                    "('evt-ord-1001-served', 'events.served', 'default', 'ORD-20260404-1001',"
+                    f" 'order.served', 4, '{ts(timedelta(minutes=1))}')",
                 ]
             ),
             expect_json=False,

@@ -137,3 +137,42 @@ def test_staging_overrides_use_structured_api_keys_with_explicit_ids():
         assert item["created_at"]
         assert item["rate_limit_rpm"] >= 1
         assert item.get("key") or item.get("key_hash")
+
+
+def test_serving_defaults_to_safe_duckdb_profile_with_clickhouse_support():
+    """ADR 0006/0007/0009: the chart's default stays the single-node DuckDB
+    profile (the chart ships no ClickHouse service), but ClickHouse serving is
+    first-class via values — flipping the backend must wire the env without
+    editing templates."""
+    values = _load_yaml(CHART_PATH / "values.yaml")
+
+    assert values["serving"]["backend"] == "duckdb"
+    assert values["replicaCount"] == 1
+    assert values["autoscaling"]["enabled"] is False
+
+    result = _run_helm_template()
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert 'value: "duckdb"' in output
+    assert "CLICKHOUSE_HOST" not in output
+
+
+def test_serving_clickhouse_render_wires_env_and_requires_host():
+    rendered = _run_helm_template(
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+    )
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+    assert 'value: "clickhouse"' in output
+    assert 'value: "clickhouse.data.svc"' in output
+    assert "CLICKHOUSE_PASSWORD" in output
+    assert 'name: "agentflow-clickhouse"' in output
+
+    missing_host = _run_helm_template("--set", "serving.backend=clickhouse")
+    assert missing_host.returncode != 0
+    assert "serving.clickhouse.host is required" in _combined_output(missing_host)

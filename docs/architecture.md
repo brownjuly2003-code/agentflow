@@ -153,10 +153,21 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > (still first-class for `pytest` and offline work — see the DuckDB pin in
 > `tests/conftest.py`).
 >
-> **Execution is staged, not yet shipped.** `config/serving.yaml` still defaults to
-> `backend: duckdb`; the config/compose/Helm cutover and K8s autoscaling are tracked in
-> `docs/clickhouse-cutover-plan.md` and land together (verifying the live ClickHouse
-> serving path needs a container, so it runs on the Mac/Docker stand).
+> **Phase 1 is executed (2026-07-02).** `config/serving.yaml` defaults to
+> `backend: clickhouse`; `make demo` and `docker-compose.prod.yml` bring up the
+> ClickHouse service by default. The local pipeline mirrors serving-table writes
+> to ClickHouse (`src/processing/clickhouse_sink.py`), and the freshness-critical
+> event scan (webhooks, metric-cache invalidation, SSE) goes through the serving
+> backend (`QueryEngine.fetch_pipeline_events`) — so the event→metric axis works
+> on the shipped engine, across process boundaries. Upserts are modeled as
+> ReplacingMergeTree row versions with `final=1` reads. The Helm chart keeps the
+> safe single-node DuckDB profile as default (it ships no ClickHouse service);
+> `serving.backend=clickhouse` wires an external service.
+>
+> **Horizontal scaling stays gated ([ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md)).**
+> The control plane (webhook queue, alert history, outbox, usage) is an embedded
+> per-pod DuckDB store; scaling requires externalizing it, not only the serving
+> engine. `replicaCount`/`autoscaling` stay pinned until that lands.
 >
 > **PII is not a serving-tier concern (2026-07-01).** The demo serving warehouse holds
 > no PII — `users_enriched`/`orders_v2` carry only analytics columns — so the interim

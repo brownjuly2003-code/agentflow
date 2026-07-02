@@ -223,6 +223,13 @@ class AlertDispatcher:
         self.app = app
         self.poll_interval_seconds = poll_interval_seconds
         self.backoff_seconds = [1.0, 5.0, 25.0]
+        # How long one rule's tick claim is held before it self-expires
+        # (ADR 0010 §2). Longer than the poll interval so a healthy evaluation
+        # (deliveries retry with backoff) finishes inside its lease; short
+        # enough that a crashed claim owner only silences a rule for two
+        # ticks. The embedded store grants claims unconditionally, so this
+        # only matters on the PostgreSQL profile.
+        self.tick_lease_seconds = 120.0
         self._task: asyncio.Task | None = None
 
     def start(self) -> None:
@@ -250,19 +257,36 @@ class AlertDispatcher:
     async def dispatch_alerts(self) -> int:
         from .escalation import dispatch_alert
 
+        store = get_control_plane_store(self.app)
         alerts = load_alerts(self.app)
         now = datetime.now(UTC)
         triggered = 0
-        changed = False
-        for index, alert in enumerate(alerts):
+        for alert in alerts:
             if not alert.active:
                 continue
-            updated_alert, alert_changed, alert_triggered = await dispatch_alert(self, alert, now)
-            alerts[index] = updated_alert
+            # Single-flight each rule across replicas (ADR 0010 §2): only the
+            # claim winner evaluates and pages; a lost claim means another pod
+            # owns this rule's tick. The embedded store grants every claim
+            # (one process), so the single-replica profile behaves as before.
+            if not store.claim_alert_tick(alert.id, lease_seconds=self.tick_lease_seconds):
+                continue
+            try:
+                updated_alert, alert_changed, alert_triggered = await dispatch_alert(
+                    self, alert, now
+                )
+            except BaseException:
+                # Release the claim so the next tick retries this rule
+                # immediately instead of waiting out the lease.
+                store.complete_alert_tick(alert.id, record=None)
+                raise
             triggered += alert_triggered
-            changed = changed or alert_changed
-        if changed:
-            save_alerts(self.app, alerts)
+            # Rule state advances per rule, in the same transaction as the
+            # claim release — a full-set save here would let two replicas
+            # advancing different rules clobber each other's runtime state.
+            store.complete_alert_tick(
+                alert.id,
+                record=updated_alert.model_dump(mode="json") if alert_changed else None,
+            )
         return triggered
 
     async def send_test_alert(self, alert: AlertRule) -> dict:

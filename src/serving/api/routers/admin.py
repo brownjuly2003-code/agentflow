@@ -99,7 +99,7 @@ async def get_analytics_usage(
 ) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        return get_usage_analytics(manager.db_path, window=window, tenant=tenant)
+        return get_usage_analytics(manager.store, window=window, tenant=tenant)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -112,7 +112,7 @@ async def get_analytics_top_queries(
 ) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        return get_top_queries(manager.db_path, limit=limit, window=window)
+        return get_top_queries(manager.store, limit=limit, window=window)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -125,7 +125,7 @@ async def get_analytics_top_entities(
 ) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        return get_top_entities(manager.db_path, limit=limit, window=window)
+        return get_top_entities(manager.store, limit=limit, window=window)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -137,7 +137,7 @@ async def get_analytics_latency(
 ) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        return get_latency_analytics(manager.db_path, window=window)
+        return get_latency_analytics(manager.store, window=window)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -149,6 +149,6 @@ async def get_analytics_anomalies(
 ) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        return get_anomalies(manager.db_path, window=window)
+        return get_anomalies(manager.store, window=window)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

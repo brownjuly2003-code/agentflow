@@ -4,6 +4,63 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — PostgresControlPlaneStore: the scale profile ships (ADR 0010 slice 5, 2026-07-03)
+
+- **New `src/serving/control_plane/postgres.py`** — all six control-plane
+  state classes as PostgreSQL tables behind the existing port, with the claim
+  semantics the embedded adapter only satisfies degenerately made real:
+  enqueue-win by `INSERT .. ON CONFLICT DO NOTHING` rowcount, queue/outbox
+  claims by `FOR UPDATE SKIP LOCKED` + a self-expiring `lease_expires_at`
+  (work-stealing across replicas, no leader election; a crashed owner's rows
+  become due again on lease expiry), invariant 8 as an ordinary transaction
+  (every store method is one transaction: commit on success, rollback on any
+  exception). Payloads stay TEXT/JSON-string so callers see the embedded
+  adapter's shapes. One connection per call — pooling stays out of ADR scope.
+  Selection: `AGENTFLOW_CONTROLPLANE_STORE=postgres` +
+  `AGENTFLOW_CONTROLPLANE_PG_DSN` (+ optional
+  `AGENTFLOW_CONTROLPLANE_LEASE_SECONDS`); the slice-1 `NotImplementedError`
+  ratchet is gone, and a missing DSN or missing `psycopg` fails the boot
+  loudly — never a silent fallback to embedded. `psycopg` is a new optional
+  extra (`pip install agentflow-runtime[postgres]`), the `redis` import
+  pattern.
+- **Webhook registrations (state class 5) move behind the port** — the
+  sharpest split-brain of the ADR's inventory was still a per-pod YAML read
+  outside the port after slices 1–4. New port methods
+  `load_webhook_registrations`/`save_webhook_registrations`;
+  `load_webhooks`/`save_webhooks`/`create_webhook`/`list_webhooks`/
+  `get_webhook`/`deactivate_webhook` now take `app` and resolve the store
+  inside (the same move the alert-rule helpers made in slice 2). The embedded
+  adapter keeps the byte-compatible `config/webhooks.yaml`.
+- **Alert-tick single-flight (ADR 0010 §2) wired into the dispatcher** — new
+  port methods `claim_alert_tick`/`complete_alert_tick`;
+  `AlertDispatcher.dispatch_alerts` claims each rule before evaluating (a
+  lost claim = another replica owns that rule's tick) and persists advanced
+  rule state **per rule** in the same transaction as the claim release — the
+  old full-set save would let two replicas advancing different rules clobber
+  each other's runtime state. Embedded grants every claim (one process), so
+  the single-replica profile behaves as before; a CRUD full-set save on
+  PostgreSQL upserts by id and does not release an in-flight claim.
+- **The postgres profile shares one store across every consumer**: `main.py`
+  injects the app-wide store into `AuthManager` and `OutboxProcessor` when
+  the profile is external (embedded keeps its historical private stores);
+  the analytics entry points (`analytics.py`, `routers/admin.py`,
+  `admin_ui.py`'s QPS tile) accept the store handle and route through
+  `AuthManager.store`, so usage/sessions land in PostgreSQL instead of a
+  per-pod DuckDB file.
+- **Verified live (standalone PostgreSQL 17.5, no Docker): 31/31 probes** —
+  the ADR's named suite (parallel claim exclusivity, lease-expiry re-drive,
+  restart re-drive, enqueue-win uniqueness, outbox↔dead-letter atomicity
+  incl. rollback halves, alert-tick single-flight) plus a full contract
+  parity sweep and an end-to-end app test (two boots on the postgres profile
+  see each other's webhook registration; usage accounting lands in PG):
+  `docs/perf/control-plane-pg-verify-2026-07-03.md`. The same suite runs in
+  CI against a new `postgres:17` service in the integration job and
+  self-skips where `AGENTFLOW_TEST_PG_DSN` is absent.
+- Helm is untouched by design: the values schema still pins
+  `controlPlane.store=embedded` and the chart still refuses multi-replica
+  renders — the enum extension and env/secret wiring are rollout slice 6,
+  which this slice unblocks.
+
 ### Added — API-usage accounting and session analytics behind the ControlPlaneStore port (ADR 0010 slice 4, 2026-07-02)
 
 - **`api_usage`** (per-tenant/per-key request counters) and **`api_sessions`**

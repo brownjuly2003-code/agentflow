@@ -11,7 +11,7 @@ from starlette.responses import Response
 
 from src.serving.api.auth import require_admin_key
 from src.serving.cache import ENTITY_TTL_SECONDS
-from src.serving.control_plane import EmbeddedControlPlaneStore
+from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
 
 router = APIRouter(
     prefix="/admin",
@@ -53,7 +53,7 @@ async def _build_context(request: Request, *, partial: bool) -> dict[str, object
         "key_usage": manager.list_keys_with_usage(),
         "db_pool": state.db_pool.stats(),
         "cache_stats": _cache_stats(state),
-        "qps_1m": await run_in_threadpool(_qps_last_minute, manager.db_path),
+        "qps_1m": await run_in_threadpool(_qps_last_minute, manager.store),
     }
 
 
@@ -75,8 +75,12 @@ def _cache_stats(state: State) -> dict[str, object]:
     }
 
 
-def _qps_last_minute(db_path: Path | str) -> float:
+def _qps_last_minute(source: ControlPlaneStore | Path | str) -> float:
     # ADR 0010 slice 4: routed through the ControlPlaneStore port — was a
-    # direct connect_duckdb(db_path) query.
-    store = EmbeddedControlPlaneStore(usage_db_path_provider=lambda: db_path)
+    # direct connect_duckdb(db_path) query. Slice 5: the admin dashboard
+    # hands in the manager's store (shared PostgreSQL store on the scale
+    # profile); a bare path still builds the embedded per-call wrapper.
+    if isinstance(source, ControlPlaneStore):
+        return source.get_queries_per_second_last_minute()
+    store = EmbeddedControlPlaneStore(usage_db_path_provider=lambda: source)
     return store.get_queries_per_second_last_minute()

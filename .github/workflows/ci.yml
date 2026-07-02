@@ -177,6 +177,22 @@ jobs:
           CLICKHOUSE_USER: agentflow
           CLICKHOUSE_PASSWORD: agentflow
           CLICKHOUSE_DB: agentflow
+      postgres:
+        # Live coverage for PostgresControlPlaneStore (ADR 0010 slice 5);
+        # test_control_plane_postgres_live.py skips itself when
+        # AGENTFLOW_TEST_PG_DSN is absent.
+        image: postgres:17
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: agentflow
+          POSTGRES_PASSWORD: agentflow
+          POSTGRES_DB: agentflow
+        options: >-
+          --health-cmd "pg_isready -U agentflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -184,7 +200,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install -e ".[dev,cloud]"
+          pip install -e ".[dev,cloud,postgres]"
           pip install -e "./sdk"
       - name: Prepare pytest temp directory
         run: mkdir -p .tmp
@@ -201,6 +217,7 @@ jobs:
           CLICKHOUSE_LIVE_USER: agentflow
           CLICKHOUSE_LIVE_PASSWORD: agentflow
           CLICKHOUSE_LIVE_DATABASE: agentflow
+          AGENTFLOW_TEST_PG_DSN: postgresql://agentflow:agentflow@localhost:5432/agentflow
         run: pytest tests/integration/ -v --tb=short
 
   helm-schema-live:

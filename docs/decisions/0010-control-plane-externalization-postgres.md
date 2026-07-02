@@ -186,7 +186,17 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
 5. `PostgresControlPlaneStore` + live verification (standalone-PG probe
    suite: parallel claim exclusivity, lease expiry re-drive, restart
    re-drive, enqueue-win uniqueness, outbox↔dead-letter atomicity) +
-   CI integration coverage on the existing PG service.
+   CI integration coverage (a `postgres:17` service added to the CI
+   integration job). Executed 2026-07-03 with two scope additions the
+   extraction slices had left open, both required for §1's "all six state
+   classes" to hold: **webhook registrations** (class 5 — the sharpest
+   split-brain — was still a per-pod YAML read outside the port; the
+   registration CRUD now resolves the store from ``app``, embedded keeps the
+   byte-compatible YAML) and **§2's ``claim_alert_tick`` /
+   ``complete_alert_tick``** wired into the dispatcher (per-rule state
+   persistence — a full-set save would let two replicas clobber each other's
+   rule runtime state). Verified live: 31/31 probes,
+   `docs/perf/control-plane-pg-verify-2026-07-03.md`.
 6. Helm wiring (`controlPlane.store=postgres` profile: env + secret, schema
    enum extension — the render gate then admits multi-replica) and cutover
    plan Phase 3 execution: kind staging at `replicaCount=2`, verifying
@@ -213,8 +223,9 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
 - Per-pod event scanning is N× read amplification on the serving backend at
   scale (accepted; the scan is bounded and cheap, and consolidating scanners
   is a later topology refinement, cf. option 3).
-- Until slice 5 lands, multi-replica is simply impossible to render — a
-  deliberate fail-closed period.
+- Until slice 6 extends the chart, multi-replica is simply impossible to
+  render — a deliberate fail-closed period (the slice-5 adapter is app-side;
+  the schema enum still pins `embedded` until the helm profile ships).
 
 ## Follow-up
 

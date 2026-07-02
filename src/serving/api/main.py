@@ -53,7 +53,7 @@ from src.serving.api.versioning import (
 )
 from src.serving.api.webhook_dispatcher import WebhookDispatcher
 from src.serving.cache import QueryCache
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
 from src.serving.db_pool import DuckDBPool
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
@@ -162,10 +162,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             value=os.getenv("CACHE_TTL_SECONDS"),
             fallback=30,
         )
+    # Control-plane store (ADR 0010): resolve eagerly so a misconfigured
+    # AGENTFLOW_CONTROLPLANE_STORE fails the boot, not the first delivery.
+    # Reset any instance cached by a previous lifespan of this process-wide
+    # app — the query engine above is fresh, the store must bind to it.
+    app.state.control_plane_store = None
+    control_plane_store = get_control_plane_store(app)
+    # On the external (postgres) profile every control-plane consumer shares
+    # the one store (slice 5); the embedded profile injects nothing, so the
+    # consumers keep building their historical private stores (usage on its
+    # own file, outbox on the engine's conn/path) exactly as before.
+    shared_control_plane_store = (
+        control_plane_store if control_plane_store_kind() != "embedded" else None
+    )
     app.state.auth_manager = AuthManager(
         api_keys_path=os.getenv("AGENTFLOW_API_KEYS_FILE"),
         db_path=os.getenv("AGENTFLOW_USAGE_DB_PATH", "agentflow_api.duckdb"),
         admin_key=os.getenv("AGENTFLOW_ADMIN_KEY"),
+        store=shared_control_plane_store,
     )
     app.state.auth_manager.load()
     if app.state.demo_mode:
@@ -195,13 +209,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
     app.state.auth_manager.register_signal_handlers()
     app.state.auth_manager.ensure_usage_table()
-    ensure_analytics_table(app.state.auth_manager.db_path)
-    # Control-plane store (ADR 0010): resolve eagerly so a misconfigured
-    # AGENTFLOW_CONTROLPLANE_STORE fails the boot, not the first delivery.
-    # Reset any instance cached by a previous lifespan of this process-wide
-    # app — the query engine above is fresh, the store must bind to it.
-    app.state.control_plane_store = None
-    get_control_plane_store(app)
+    if shared_control_plane_store is None:
+        # Embedded-profile bootstrap of the local api_sessions file table; the
+        # postgres adapter creates its whole schema (sessions included) once
+        # per process, so a stray local DuckDB file would be dead weight.
+        ensure_analytics_table(app.state.auth_manager.db_path)
     app.state.webhook_dispatcher = WebhookDispatcher(app)
     original_dispatch_new_events = app.state.webhook_dispatcher.dispatch_new_events
 
@@ -217,7 +229,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.alert_dispatcher = AlertDispatcher(app)
     if getattr(app.state, "alert_dispatcher_autostart", True):
         app.state.alert_dispatcher.start()
-    if app.state.query_engine._db_path == ":memory:":
+    if shared_control_plane_store is not None:
+        app.state.outbox_processor = OutboxProcessor(store=shared_control_plane_store)
+    elif app.state.query_engine._db_path == ":memory:":
         app.state.outbox_processor = OutboxProcessor(conn=app.state.query_engine._conn)
     else:
         app.state.outbox_processor = OutboxProcessor(

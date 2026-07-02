@@ -13,19 +13,22 @@ from starlette.background import BackgroundTasks
 from starlette.responses import Response
 from starlette.types import Message
 
-from src.serving.control_plane import EmbeddedControlPlaneStore
+from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
 from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
 
 
-def _usage_store(db_path: Path | str) -> EmbeddedControlPlaneStore:
+def _usage_store(source: ControlPlaneStore | Path | str) -> ControlPlaneStore:
     # ADR 0010 slice 4: the SQL for the functions below lives behind the
-    # ControlPlaneStore port (control_plane/embedded.py) so a future
-    # PostgreSQL adapter can serve them too. A fresh, cheap wrapper per call —
-    # nothing is connected until a method on it runs — matches these
-    # functions' pre-port behavior of opening their own connection each call.
-    return EmbeddedControlPlaneStore(usage_db_path_provider=lambda: db_path)
+    # ControlPlaneStore port (control_plane/embedded.py). Slice 5 makes the
+    # entry points polymorphic: callers on the scale profile hand in the
+    # shared store (AuthManager.store, a PostgresControlPlaneStore there);
+    # a path keeps the pre-port behavior — a fresh, cheap embedded wrapper
+    # per call, nothing connected until a method on it runs.
+    if isinstance(source, ControlPlaneStore):
+        return source
+    return EmbeddedControlPlaneStore(usage_db_path_provider=lambda: source)
 
 
 AnalyticsMiddleware = Callable[
@@ -122,7 +125,7 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
             # un-throttled DB write/thread spawn. (audit_30_06_26.md S1)
             if getattr(request.state, "tenant_key", None) is not None:
                 _schedule_session_write(
-                    request.app.state.auth_manager.db_path,
+                    request.app.state.auth_manager.store,
                     request_id,
                     _build_session_record(
                         request=request,
@@ -153,7 +156,7 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
             background = BackgroundTasks([background])
         background.add_task(
             _schedule_session_write,
-            request.app.state.auth_manager.db_path,
+            request.app.state.auth_manager.store,
             request_id,
             _build_session_record(
                 request=request,
@@ -171,58 +174,61 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
 
 
 def get_usage_analytics(
-    db_path: Path | str,
+    source: ControlPlaneStore | Path | str,
     *,
     window: str = "24h",
     tenant: str | None = None,
 ) -> dict:
-    return _usage_store(db_path).get_usage_analytics(window=window, tenant=tenant)
+    return _usage_store(source).get_usage_analytics(window=window, tenant=tenant)
 
 
 def get_top_queries(
-    db_path: Path | str,
+    source: ControlPlaneStore | Path | str,
     *,
     limit: int = 10,
     window: str = "24h",
 ) -> dict:
-    return _usage_store(db_path).get_top_queries(limit=limit, window=window)
+    return _usage_store(source).get_top_queries(limit=limit, window=window)
 
 
 def get_top_entities(
-    db_path: Path | str,
+    source: ControlPlaneStore | Path | str,
     *,
     limit: int = 10,
     window: str = "24h",
 ) -> dict:
-    return _usage_store(db_path).get_top_entities(limit=limit, window=window)
+    return _usage_store(source).get_top_entities(limit=limit, window=window)
 
 
 def get_latency_analytics(
-    db_path: Path | str,
+    source: ControlPlaneStore | Path | str,
     *,
     window: str = "24h",
 ) -> dict:
-    return _usage_store(db_path).get_latency_analytics(window=window)
+    return _usage_store(source).get_latency_analytics(window=window)
 
 
-def get_anomalies(db_path: Path | str, *, window: str = "24h") -> dict:
-    return _usage_store(db_path).get_anomalies(window=window)
+def get_anomalies(source: ControlPlaneStore | Path | str, *, window: str = "24h") -> dict:
+    return _usage_store(source).get_anomalies(window=window)
 
 
-def _schedule_session_write(db_path: Path | str, request_id: str, record: dict) -> None:
+def _schedule_session_write(
+    source: ControlPlaneStore | Path | str, request_id: str, record: dict
+) -> None:
     threading.Thread(
         target=_insert_session,
-        args=(db_path, request_id, record),
+        args=(source, request_id, record),
         daemon=True,
     ).start()
 
 
-def _insert_session(db_path: Path | str, request_id: str, record: dict) -> None:
+def _insert_session(source: ControlPlaneStore | Path | str, request_id: str, record: dict) -> None:
     # Deliberately does NOT call ensure_analytics_table: the table is
-    # guaranteed to exist by main.py's boot-time call, and re-checking it on
-    # every background write would be wasted work on the hot path (see
+    # guaranteed to exist by main.py's boot-time call (embedded profile; the
+    # postgres adapter creates its schema once per process), and re-checking
+    # it on every background write would be wasted work on the hot path (see
     # test_insert_session_uses_existing_schema_without_rechecking).
-    _usage_store(db_path).record_api_session(request_id, record)
+    _usage_store(source).record_api_session(request_id, record)
 
 
 def _build_session_record(

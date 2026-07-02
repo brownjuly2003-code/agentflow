@@ -56,36 +56,33 @@ def get_webhook_config_path(app: FastAPI) -> Path:
     return Path(configured) if configured else DEFAULT_WEBHOOKS_CONFIG_PATH
 
 
-def load_webhooks(path: Path) -> list[WebhookRegistration]:
-    if not path.exists():
-        return []
-    raw = path.read_text(encoding="utf-8")
-    if not raw.strip():
-        return []
-    data = yaml.safe_load(raw) if yaml is not None else json.loads(raw)
-    config = WebhookConfig.model_validate(data or {})
-    return config.webhooks
+# The registration CRUD helpers below take ``app`` and resolve the
+# control-plane store inside (ADR 0010 slice 5) — the same move the alert-rule
+# helpers made in slice 2: registrations were the last control-plane state
+# read from a per-pod file (config/webhooks.yaml) instead of the store, the
+# exact split-brain the ADR's inventory calls the sharpest. The embedded
+# adapter keeps the YAML file (via ``get_webhook_config_path``), so the
+# single-replica profile and its on-disk format do not change.
 
 
-def save_webhooks(path: Path, webhooks: list[WebhookRegistration]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def load_webhooks(app: FastAPI) -> list[WebhookRegistration]:
+    records = get_control_plane_store(app).load_webhook_registrations()
+    return WebhookConfig.model_validate({"webhooks": records}).webhooks
+
+
+def save_webhooks(app: FastAPI, webhooks: list[WebhookRegistration]) -> None:
     payload = WebhookConfig(webhooks=webhooks).model_dump(mode="json")
-    content = (
-        yaml.safe_dump(payload, sort_keys=False)
-        if yaml is not None
-        else json.dumps(payload, indent=2)
-    )
-    path.write_text(content, encoding="utf-8")
+    get_control_plane_store(app).save_webhook_registrations(payload["webhooks"])
 
 
 def create_webhook(
-    path: Path,
+    app: FastAPI,
     *,
     url: str,
     tenant: str,
     filters: WebhookFilters,
 ) -> WebhookRegistration:
-    webhooks = load_webhooks(path)
+    webhooks = load_webhooks(app)
     registration = WebhookRegistration(
         id=str(uuid.uuid4()),
         url=url,
@@ -95,25 +92,25 @@ def create_webhook(
         created_at=datetime.now(UTC),
     )
     webhooks.append(registration)
-    save_webhooks(path, webhooks)
+    save_webhooks(app, webhooks)
     return registration
 
 
-def list_webhooks(path: Path, tenant: str) -> list[WebhookRegistration]:
+def list_webhooks(app: FastAPI, tenant: str) -> list[WebhookRegistration]:
     return [
-        webhook for webhook in load_webhooks(path) if webhook.tenant == tenant and webhook.active
+        webhook for webhook in load_webhooks(app) if webhook.tenant == tenant and webhook.active
     ]
 
 
-def get_webhook(path: Path, webhook_id: str, tenant: str) -> WebhookRegistration | None:
-    for webhook in load_webhooks(path):
+def get_webhook(app: FastAPI, webhook_id: str, tenant: str) -> WebhookRegistration | None:
+    for webhook in load_webhooks(app):
         if webhook.id == webhook_id and webhook.tenant == tenant and webhook.active:
             return webhook
     return None
 
 
-def deactivate_webhook(path: Path, webhook_id: str, tenant: str) -> bool:
-    webhooks = load_webhooks(path)
+def deactivate_webhook(app: FastAPI, webhook_id: str, tenant: str) -> bool:
+    webhooks = load_webhooks(app)
     changed = False
     for webhook in webhooks:
         if webhook.id == webhook_id and webhook.tenant == tenant and webhook.active:
@@ -121,7 +118,7 @@ def deactivate_webhook(path: Path, webhook_id: str, tenant: str) -> bool:
             changed = True
             break
     if changed:
-        save_webhooks(path, webhooks)
+        save_webhooks(app, webhooks)
     return changed
 
 
@@ -179,8 +176,7 @@ class WebhookDispatcher:
             logger.warning("webhook_seen_init_failed", error=str(exc))
 
     async def dispatch_new_events(self) -> None:
-        path = get_webhook_config_path(self.app)
-        webhooks = [webhook for webhook in load_webhooks(path) if webhook.active]
+        webhooks = [webhook for webhook in load_webhooks(self.app) if webhook.active]
         webhooks_by_tenant: dict[str, list[WebhookRegistration]] = {}
         for webhook in webhooks:
             webhooks_by_tenant.setdefault(webhook.tenant, []).append(webhook)
@@ -417,9 +413,8 @@ class WebhookDispatcher:
         forever. Bounded by ``redrive_batch_size`` so one pass can't stall the
         loop on a large backlog."""
         store = get_control_plane_store(self.app)
-        path = get_webhook_config_path(self.app)
         for row in store.claim_due_webhook_deliveries(limit=self.redrive_batch_size):
-            webhook = get_webhook(path, row.webhook_id, str(row.tenant or "default"))
+            webhook = get_webhook(self.app, row.webhook_id, str(row.tenant or "default"))
             if webhook is None:
                 store.park_webhook_delivery(
                     webhook_id=row.webhook_id,

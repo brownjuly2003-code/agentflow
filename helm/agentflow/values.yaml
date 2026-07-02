@@ -121,6 +121,9 @@ networkPolicy:
 # NOTE (ADR 0009): even on ClickHouse, replicaCount stays 1 — the control
 # plane (webhooks/alerts/outbox/usage) is an embedded per-pod DuckDB store, so
 # horizontal scaling is gated on externalizing it, not only on the engine.
+# ADR 0010 enforces this at render time: templates/deployment.yaml fails any
+# multi-replica render unless controlPlane.store=postgres AND
+# serving.backend=clickhouse.
 serving:
   backend: duckdb
   clickhouse:
@@ -130,6 +133,16 @@ serving:
     user: default
     existingSecret: ""
     passwordKey: clickhouse-password
+
+# Control-plane state (ADR 0009 / ADR 0010): webhook queue+log, alert rules and
+# history, outbox, dead-letter and usage accounting. 'embedded' = per-pod
+# DuckDB + config files — correct for the single-replica profile, a split-brain
+# at replicaCount > 1 (duplicate deliveries, forked alert state). ADR 0010
+# externalizes this state to PostgreSQL behind a ControlPlaneStore port; until
+# that adapter ships, the values schema pins store=embedded (fail-closed
+# ratchet) and the chart refuses any multi-replica render.
+controlPlane:
+  store: embedded
 
 config:
   duckdbPath: /data/agentflow.duckdb

@@ -4,6 +4,35 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — Control-plane externalization decided; scaling gate enforced at render time (ADR 0010, 2026-07-02)
+
+- **New [ADR 0010](docs/decisions/0010-control-plane-externalization-postgres.md)**
+  resolves the choice ADR 0009 deferred: control-plane state (webhook delivery
+  queue + attempt log, alert rules **and their mutable runtime state**, alert
+  history, replay outbox + dead-letter transitions, usage/session accounting,
+  webhook registrations) externalizes to **PostgreSQL behind a
+  `ControlPlaneStore` port**, with the embedded DuckDB+YAML store remaining
+  the default zero-dependency single-replica profile. Claims are
+  `FOR UPDATE SKIP LOCKED` + lease (work-stealing, no leader election), the
+  outbox↔dead-letter transactional invariant is preserved natively, and the
+  rollout is staged (port extraction per subsystem → PG adapter with live
+  verification → Helm wiring → cutover Phase 3). The ADR also extends
+  ADR 0009's inventory: webhook registrations and alert rules/runtime state
+  live in per-pod YAML files — the sharpest replica split-brain of all.
+- **The scaling gate is now enforced, not commented**:
+  `helm/agentflow/templates/deployment.yaml` fails **any** multi-replica
+  render (`replicaCount > 1`, or autoscaling enabled with `maxReplicas > 1`)
+  unless `controlPlane.store=postgres` **and** `serving.backend=clickhouse` —
+  previously, disabling persistence let a split-brain multi-replica render
+  through. `values.schema.json` pins `controlPlane.store` to the enum
+  `["embedded"]` as a fail-closed ratchet until the postgres adapter ships.
+  Contract tests pin the gate, the ratchet, and the untouched single-replica
+  default (`tests/unit/test_helm_values_contract.py`).
+- Cutover plan Phase 3 rewritten with the full prerequisite chain (ADR 0010
+  slices) and replica-correctness verification checks (exactly-one delivery
+  per (webhook, event) across two pods, one alert page per incident,
+  cross-pod webhook registration visibility).
+
 ### Added — PostgreSQL port of the vault PII governance (ADR 0006 Phase 2 follow-up, executed 2026-07-02)
 
 - **New `warehouse/agentflow/dv2/postgres/governance/`** — the documented

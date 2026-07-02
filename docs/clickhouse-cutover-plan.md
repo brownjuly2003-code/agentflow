@@ -92,22 +92,40 @@ actually carry PII.
   left to gate. The engine policy above IS the boundary. `X-PII-Masked` stays
   a reserved header (versioning contract), untouched by this phase.
 
-## Phase 3 — Turn on K8s horizontal scaling (ADR 0007)
+## Phase 3 — Turn on K8s horizontal scaling (ADR 0007 + ADR 0009/0010)
 
-Only valid once serving is external (Phase 1). Do not do this while backend is
-DuckDB.
+Only valid once serving is external (Phase 1) **and** the control plane is
+external (ADR 0010 rollout: webhook queue/log, alert rules+history,
+outbox/dead-letter, usage behind `ControlPlaneStore`, PostgreSQL adapter
+live-verified). Do not do this while backend is DuckDB or while
+`controlPlane.store=embedded` — the chart now **fails any multi-replica
+render** until both halves of the gate are set, so this phase cannot be
+executed accidentally.
 
+- [ ] Prerequisite: ADR 0010 slices 1–5 merged (`PostgresControlPlaneStore`
+      exists, live-verified); slice 6 extends the values schema so
+      `controlPlane.store=postgres` renders.
 - [ ] `helm/agentflow/values.yaml` — set serving to ClickHouse (drop
       `config.duckdbPath` from the request path; point at the ClickHouse service
-      via `CLICKHOUSE_HOST` etc. / `SERVING_BACKEND=clickhouse`). Keep
-      `usageDbPath` only if the usage store still needs it.
-- [ ] Remove the request-path write PVC dependency; confirm pods are stateless.
+      via `CLICKHOUSE_HOST` etc. / `SERVING_BACKEND=clickhouse`) and set
+      `controlPlane.store=postgres` + DSN secret. `usageDbPath` retires with
+      ADR 0010 slice 4 (usage moves into the control-plane store).
+- [ ] Remove the request-path write PVC dependency; confirm pods are stateless
+      (with the control plane external there is no writable volume left on the
+      request path).
 - [ ] Enable `autoscaling` with sane `minReplicas`/`maxReplicas` and an HPA CPU
       target; remove the `replicaCount: 1` hard-pin.
-- [ ] Add a `values.schema.json` / comment note: `autoscaling` requires an
-      external serving engine.
+- [x] Add a `values.schema.json` / comment note: `autoscaling` requires an
+      external serving engine. *(Done 2026-07-02, strengthened beyond a note:
+      the schema pins `controlPlane.store` to `embedded` until the adapter
+      ships, and `templates/deployment.yaml` fails any multi-replica render
+      unless `controlPlane.store=postgres` and `serving.backend=clickhouse` —
+      see ADR 0010.)*
 - [ ] Verify: `scripts/k8s_staging_up.sh` on kind, `k8s_smoke_test.sh` green,
-      `replicaCount: 2` schedules without PVC contention.
+      `replicaCount: 2` schedules without PVC contention; **plus the ADR 0010
+      replica-correctness checks** — exactly one delivery per (webhook, event)
+      across two pods, one alert page per incident, a webhook registered via
+      either pod visible to both.
 
 ## Phase 4 — NL→SQL (routes through GraceKelly)
 

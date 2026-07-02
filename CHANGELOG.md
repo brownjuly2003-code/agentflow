@@ -4,6 +4,37 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — vault-side PII governance on the engine (ADR 0006 Phase 2, executed 2026-07-02)
+
+- **New `warehouse/agentflow/dv2/governance/`** — ClickHouse RBAC as the PII
+  boundary for the DV2 vault, replacing the removed app-level string-parse
+  gate with access control on resolved columns: `dv2_analyst` (cross-branch
+  analytics, fail-closed allow-list, contact-PII columns never granted) and
+  per-jurisdiction `dv2_pii_officer__<branch>` roles (own branch's
+  `bv_customer_mdm` view + personal satellite only), plus row policies
+  scoping the shared `rv.hub_customer` to the officer's jurisdiction (with
+  the mandatory catch-all keeping non-officer visibility independent of
+  `users_without_row_policies_can_read_rows`).
+- **`bv_customer_mdm__*` views run `SQL SECURITY DEFINER`** so column-limited
+  grants on the views work without exposing the underlying
+  `sat_customer_personal__1c__*` satellites to readers.
+- **`marts.customer_360` is PII-free by contract** — the cross-branch
+  materialized mart no longer selects `first_name`/`last_name`/`email`
+  (copying jurisdiction-bound PII past the column grants at build time);
+  `pii_source` metadata stays.
+- **Verified live** against ClickHouse 26.7 (32/32 adversarial probes): every
+  PII shape denied for `dv2_analyst` — including the three historical
+  bypass forms of the removed app gate, two of which are not even expressible
+  on this engine — officers bounded to their jurisdiction, admin unaffected,
+  re-apply idempotent. Includes a root-caused ergonomic limitation of filter
+  pushdown over column-limited DEFINER views and its PII-safe subquery
+  workaround. Evidence: `docs/perf/vault-pii-governance-verify-2026-07-02.md`.
+- `infrastructure/dv2/clickhouse-sts.yaml` sets
+  `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"` so the stand admin can apply
+  RBAC DDL; `tests/unit/test_dv2_governance_ddl.py` pins the boundary
+  structure (PII columns never granted, every satellite classified, catch-all
+  in sync with officer roles, DEFINER on the views, mart stays PII-free).
+
 ### Changed — ClickHouse is the shipped serving engine (ADR 0006 Phase 1, executed 2026-07-02)
 
 - **`config/serving.yaml` defaults to `backend: clickhouse`.** `make demo`,

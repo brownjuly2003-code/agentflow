@@ -35,8 +35,12 @@ travel is intentionally **not** in these views — it belongs in a sibling
 
 Customer PII is jurisdiction-bound — a row from `1c__dxb` must not be
 visible to an MSK analyst without explicit policy. Keeping the MDM view
-per-branch makes ClickHouse RBAC (`GRANT SELECT ON rv.bv_customer_mdm__msk
-TO msk_analyst`) the enforcement primitive — no row policy required.
+per-branch makes ClickHouse RBAC the enforcement primitive. The actual
+policy set lives in `../governance/` (ADR 0006 Phase 2): column-limited
+grants for `dv2_analyst` (no contact PII anywhere), per-jurisdiction
+`dv2_pii_officer__<branch>` roles, and row policies scoping the shared
+`hub_customer`. The MDM views run `SQL SECURITY DEFINER` so those
+column grants work without exposing the underlying personal satellites.
 
 Orders are jurisdictionally tagged in their own `branch` column, and
 finance / mart layers need cross-branch P&L. A single `bv_order_canonical`
@@ -52,6 +56,8 @@ done
 
 `infrastructure/dv2/bootstrap.sh` does not auto-apply this layer because it
 is optional — add the loop manually after the raw vault is populated.
+Apply `../governance/*.sql` (roles, grants, row policies) right after this
+loop — see `../governance/README.md`.
 
 ## Current state in `hq-demo` (2026-05-23, after satellite seed)
 

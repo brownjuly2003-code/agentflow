@@ -3,6 +3,13 @@
   lookup by business key (load-test 03_customer360_point). At X5 scale the
   old (branch, customer_hk) key meant every bk lookup full-scanned the mart:
   p99 250-470 ms vs the 200 ms point budget.
+
+  PII-free by contract (ADR 0006 Phase 2): this mart is cross-branch and
+  materialized as a table, so contact PII here would copy jurisdiction-bound
+  data out of its branch and past the engine's column grants. Contact fields
+  (first_name / last_name / email) stay in the per-branch bv_customer_mdm__*
+  views under the dv2_pii_officer__<branch> roles; pii_source metadata is kept
+  so analysts can see WHICH source contributed PII without seeing the PII.
 #}
 {{
     config(
@@ -14,23 +21,23 @@
 }}
 
 WITH customers AS (
-    SELECT customer_hk, customer_bk, branch, first_name, last_name, email,
+    SELECT customer_hk, customer_bk, branch,
            loyalty_segment, loyalty_points, last_visit_at, pii_source, loyalty_source
     FROM {{ source('rv', 'bv_customer_mdm__msk') }}
     UNION ALL
-    SELECT customer_hk, customer_bk, branch, first_name, last_name, email,
+    SELECT customer_hk, customer_bk, branch,
            loyalty_segment, loyalty_points, last_visit_at, pii_source, loyalty_source
     FROM {{ source('rv', 'bv_customer_mdm__spb') }}
     UNION ALL
-    SELECT customer_hk, customer_bk, branch, first_name, last_name, email,
+    SELECT customer_hk, customer_bk, branch,
            loyalty_segment, loyalty_points, last_visit_at, pii_source, loyalty_source
     FROM {{ source('rv', 'bv_customer_mdm__ekb') }}
     UNION ALL
-    SELECT customer_hk, customer_bk, branch, first_name, last_name, email,
+    SELECT customer_hk, customer_bk, branch,
            loyalty_segment, loyalty_points, last_visit_at, pii_source, loyalty_source
     FROM {{ source('rv', 'bv_customer_mdm__dxb') }}
     UNION ALL
-    SELECT customer_hk, customer_bk, branch, first_name, last_name, email,
+    SELECT customer_hk, customer_bk, branch,
            loyalty_segment, loyalty_points, last_visit_at, pii_source, loyalty_source
     FROM {{ source('rv', 'bv_customer_mdm__ala') }}
 ),
@@ -53,9 +60,6 @@ SELECT
     c.customer_hk                                    AS customer_hk,
     c.customer_bk                                    AS customer_bk,
     c.branch                                         AS branch,
-    c.first_name                                     AS first_name,
-    c.last_name                                      AS last_name,
-    c.email                                          AS email,
     c.loyalty_segment                                AS loyalty_segment,
     c.loyalty_points                                 AS loyalty_points,
     c.last_visit_at                                  AS last_visit_at,

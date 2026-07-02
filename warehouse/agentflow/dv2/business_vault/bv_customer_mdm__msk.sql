@@ -13,8 +13,13 @@ Hub admission: splitByString('__', record_source)[2] = 'msk', so a customer
          ...) is integrated, not only 1C. The old record_source = '1c__msk'
          filter silently dropped OLTP/X5-promoted customers (audit_28_06_26 #12);
          this mirrors the PostgreSQL port's split_part(record_source,'__',2).
+Security: SQL SECURITY DEFINER (ADR 0006 Phase 2) — readers query this view
+         under the definer's rights, so the column-limited grants in
+         dv2/governance/ expose non-PII columns without granting the
+         underlying personal satellite to the reader.
 */
-CREATE OR REPLACE VIEW rv.bv_customer_mdm__msk AS
+CREATE OR REPLACE VIEW rv.bv_customer_mdm__msk
+SQL SECURITY DEFINER AS
 WITH
     personal AS (
         SELECT

@@ -173,11 +173,14 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > no PII — `users_enriched`/`orders_v2` carry only analytics columns — so the interim
 > NL→SQL PII deny-gate and the entity redactor were guarding a surface that never exists
 > in the demo, and both have been removed (see CHANGELOG). Real contact PII lives only in
-> the DV2 business vault; its governance belongs engine-side there, via ClickHouse
-> row/column policies (ADR 0006 Phase 2, owner-gated, needs the container stand), not in a
-> dialect-pinned string parse in the serving tier. `sql_guard` remains, scoped to what it
-> can actually enforce: SELECT-only, no DML, the tenant table allow-list, and the
-> recursive-CTE shadow reject. Tracked in `road-to-9.8.md`.
+> the DV2 business vault; its governance is engine-side there, not a dialect-pinned
+> string parse in the serving tier. **Executed 2026-07-02 (ADR 0006 Phase 2):**
+> `warehouse/agentflow/dv2/governance/` — fail-closed column grants for `dv2_analyst`,
+> per-jurisdiction `dv2_pii_officer__<branch>` roles, row policies on `hub_customer`,
+> `SQL SECURITY DEFINER` MDM views, PII-free `customer_360`; verified live 32/32
+> (`docs/perf/vault-pii-governance-verify-2026-07-02.md`). `sql_guard` remains, scoped
+> to what it can actually enforce: SELECT-only, no DML, the tenant table allow-list, and
+> the recursive-CTE shadow reject. Tracked in `road-to-9.8.md`.
 
 ## v1-v6 Capability Map
 

@@ -56,7 +56,7 @@ shipped engine.
 - [x] Transpile safety net: `_translate_sql` fails closed if a table reference
       (incl. the tenant schema qualifier) does not survive the rewrite.
 
-## Phase 2 — Make PII bounded on the engine (the point of the cutover)
+## Phase 2 — Make PII bounded on the engine (the point of the cutover) — **EXECUTED 2026-07-02**
 
 > **Scope correction (2026-07-01).** This phase originally targeted the serving
 > demo tables, but those hold **no PII** — the app-level `assert_no_pii_access`
@@ -64,26 +64,33 @@ shipped engine.
 > removed (see CHANGELOG). Real contact PII lives only in the **DV2 business vault**
 > (`warehouse/agentflow/dv2/business_vault/bv_customer_mdm__*.sql`), so this phase
 > applies ClickHouse row/column policies **to the vault**, not to the serving
-> `users_enriched`/`orders_v2`. The bullets below that reference the app-level gate
-> or `X-PII-Masked` are obsolete; the row/column-policy bullet is the live plan.
+> `users_enriched`/`orders_v2`.
 
 Replace string-shape denial with engine-enforced policy on the vault tables that
 actually carry PII.
 
-- [ ] Introduce a **schema-execution** check for the PII gate: resolve the actual
-      output columns/types of a candidate query against ClickHouse
-      (`DESCRIBE` / `LIMIT 0`) and require them to be ⊆ non-PII, recursing through
-      structs. This is engine ground-truth, not SQL-form guessing.
-- [ ] Apply **ClickHouse row/column policies** (`CREATE ROW POLICY` /
-      column-level `GRANT`) for PII tables so non-exempt tenants cannot read PII
-      columns even if a query slips the app-level gate. DuckDB has no equivalent —
-      this is why the cutover is what makes PII bounded.
-- [ ] Reclassify the app-level gate honestly: it becomes defense-in-depth in
-      front of an engine-enforced boundary, not the boundary itself. Update the
-      `assert_no_pii_access` docstring + `docs/architecture.md` note + CHANGELOG.
-- [ ] Verify: the 3 historical bypass forms (COLUMNS-expr, whole-row struct-ref,
-      column-rename-list) are denied by the engine policy regardless of app gate;
-      exempt tenants unchanged; `X-PII-Masked` contract preserved.
+- [x] Apply **ClickHouse row/column policies** (`CREATE ROW POLICY` /
+      column-level `GRANT`) for PII tables so non-exempt principals cannot read
+      PII columns. Done: `warehouse/agentflow/dv2/governance/` — `dv2_analyst`
+      fail-closed allow-list (contact-PII columns never granted, PII satellites
+      not granted), per-jurisdiction `dv2_pii_officer__<branch>` roles, row
+      policies scoping `rv.hub_customer` + mandatory catch-all;
+      `bv_customer_mdm__*` flipped to `SQL SECURITY DEFINER` so the column
+      grants work without exposing the personal satellites;
+      `marts.customer_360` made PII-free by contract. DuckDB has no
+      equivalent — this is why the cutover is what makes PII bounded.
+- [x] Verify: the 3 historical bypass forms (COLUMNS-expr, whole-row struct-ref,
+      column-rename-list) are dead at the engine — `COLUMNS` resolves to real
+      columns and hits the missing grant (`ACCESS_DENIED`); the other two are
+      not expressible on ClickHouse at all (`UNKNOWN_IDENTIFIER`). 32/32
+      adversarial probes green on a live 26.7 server, incl. jurisdiction
+      row-scoping and admin-unaffected checks:
+      `docs/perf/vault-pii-governance-verify-2026-07-02.md`.
+- ~~Introduce a schema-execution check for the PII gate~~ /
+  ~~Reclassify the app-level gate~~ — obsolete: the app-level gate was removed
+  with the serving PII layer (2026-07-01); there is no app-side PII surface
+  left to gate. The engine policy above IS the boundary. `X-PII-Masked` stays
+  a reserved header (versioning contract), untouched by this phase.
 
 ## Phase 3 — Turn on K8s horizontal scaling (ADR 0007)
 

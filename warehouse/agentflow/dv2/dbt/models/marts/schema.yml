@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: customer_360
-    description: "One row per (customer, branch). Joins MDM customer profile with order aggregates from bv_order_canonical_mat."
+    description: "One row per (customer, branch). Joins MDM customer profile with order aggregates from bv_order_canonical_mat. PII-free by contract (ADR 0006 Phase 2): no contact fields — those stay in the per-branch bv_customer_mdm__* views under the PII-officer roles."
     columns:
       - name: customer_hk
         description: "MD5 of customer business key (16 byte raw)."

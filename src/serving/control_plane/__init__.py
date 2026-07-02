@@ -8,6 +8,7 @@ store via ``get_control_plane_store`` — never through ``query_engine._conn``.
 
 from .embedded import (
     EmbeddedControlPlaneStore,
+    ensure_alert_history_table,
     ensure_webhook_deliveries_table,
     ensure_webhook_delivery_queue_table,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "ControlPlaneStore",
     "EmbeddedControlPlaneStore",
     "WebhookQueueRow",
+    "ensure_alert_history_table",
     "ensure_webhook_deliveries_table",
     "ensure_webhook_delivery_queue_table",
     "get_control_plane_store",

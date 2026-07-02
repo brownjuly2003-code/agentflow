@@ -4,6 +4,30 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — Alert history + alert-rule repository behind the ControlPlaneStore port (ADR 0010 slice 2, 2026-07-02)
+
+- **Alert delivery history** (`alert_history`) moved behind `ControlPlaneStore`
+  (`log_alert_delivery` / `get_alert_delivery_history`) — `alerts/escalation.py`
+  and `routers/alerts.py` no longer reach `query_engine._conn`; the DDL
+  (`ensure_alert_history_table`) moved to `control_plane/embedded.py` next to
+  its webhook sibling, same catalog-DDL-lock discipline.
+- **Alert-rule repository** (`config/alerts.yaml`, including mutable runtime
+  state — `state`, `fired_at`, `last_escalation_level`, flap window, cooldown)
+  moved behind the port (`load_alert_rules` / `save_alert_rules`); the
+  embedded adapter keeps the exact YAML file format, so `config/alerts.yaml`
+  is unchanged on disk. `create_alert` / `list_alerts` / `get_alert` /
+  `update_alert` / `deactivate_alert` now take the FastAPI `app` (resolving
+  the store internally) instead of a bare config `Path`.
+- `src/serving/api/alerts/history.py` removed — its logic split between the
+  store port (history log) and `alerts/dispatcher.py` (rule repository
+  callers); the `get_alert_history` / `ensure_alert_history_table` backwards-
+  compatible re-exports on `alert_dispatcher.py` are retired with it (both
+  were internal DB-plumbing, not public SDK surface).
+- Structural ratchet test extended to `alerts/dispatcher.py`,
+  `alerts/escalation.py` and `routers/alerts.py` — none may reach
+  `query_engine._conn` directly. New `tests/unit/test_control_plane_store.py`
+  coverage for the alert history log and the YAML rule-repository round-trip.
+
 ### Added — ControlPlaneStore port + embedded adapter: webhook queue/log behind it (ADR 0010 slice 1, 2026-07-02)
 
 - **New `src/serving/control_plane/`** — the `ControlPlaneStore` port and its

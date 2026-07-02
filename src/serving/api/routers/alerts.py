@@ -10,12 +10,11 @@ from src.serving.api.alert_dispatcher import (
     deactivate_alert,
     ensure_alert_dispatcher,
     get_alert,
-    get_alert_config_path,
-    get_alert_history,
     list_alerts,
     update_alert,
 )
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
+from src.serving.control_plane import get_control_plane_store
 
 router = APIRouter(prefix="/v1/alerts", tags=["alerts"])
 
@@ -74,7 +73,7 @@ async def register_alert(payload: AlertCreateRequest, request: Request) -> dict[
     except UnsafeEgressURLError as exc:
         raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {exc}") from exc
     rule = create_alert(
-        get_alert_config_path(request.app),
+        request.app,
         name=payload.name,
         tenant=_tenant(request),
         metric=payload.metric,
@@ -90,7 +89,7 @@ async def register_alert(payload: AlertCreateRequest, request: Request) -> dict[
 
 @router.get("")
 async def list_my_alerts(request: Request) -> dict[str, object]:
-    alerts = list_alerts(get_alert_config_path(request.app), _tenant(request))
+    alerts = list_alerts(request.app, _tenant(request))
     # Exclude signing `secret` from list responses (audit p2_2 #7).
     return {"alerts": [alert.model_dump(mode="json", exclude={"secret"}) for alert in alerts]}
 
@@ -99,8 +98,7 @@ async def list_my_alerts(request: Request) -> dict[str, object]:
 async def modify_alert(
     alert_id: str, payload: AlertUpdateRequest, request: Request
 ) -> dict[str, object]:
-    path = get_alert_config_path(request.app)
-    existing = get_alert(path, alert_id, _tenant(request))
+    existing = get_alert(request.app, alert_id, _tenant(request))
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
 
@@ -114,7 +112,7 @@ async def modify_alert(
         except UnsafeEgressURLError as exc:
             raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {exc}") from exc
 
-    updated = update_alert(path, alert_id, _tenant(request), updates)
+    updated = update_alert(request.app, alert_id, _tenant(request), updates)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
     # Exclude signing `secret` from update responses (audit p2_2 #7).
@@ -123,11 +121,7 @@ async def modify_alert(
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_alert(alert_id: str, request: Request) -> Response:
-    removed = deactivate_alert(
-        get_alert_config_path(request.app),
-        alert_id,
-        _tenant(request),
-    )
+    removed = deactivate_alert(request.app, alert_id, _tenant(request))
     if not removed:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -135,7 +129,7 @@ async def remove_alert(alert_id: str, request: Request) -> Response:
 
 @router.post("/{alert_id}/test")
 async def test_alert(alert_id: str, request: Request) -> dict[str, object]:
-    rule = get_alert(get_alert_config_path(request.app), alert_id, _tenant(request))
+    rule = get_alert(request.app, alert_id, _tenant(request))
     if rule is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
     return cast(dict[str, object], await ensure_alert_dispatcher(request.app).send_test_alert(rule))
@@ -143,7 +137,7 @@ async def test_alert(alert_id: str, request: Request) -> dict[str, object]:
 
 @router.get("/{alert_id}/history")
 async def alert_history(alert_id: str, request: Request) -> dict[str, object]:
-    rule = get_alert(get_alert_config_path(request.app), alert_id, _tenant(request))
+    rule = get_alert(request.app, alert_id, _tenant(request))
     if rule is None:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
     history = await run_in_threadpool(_read_alert_history, request, alert_id)
@@ -151,11 +145,8 @@ async def alert_history(alert_id: str, request: Request) -> dict[str, object]:
 
 
 def _read_alert_history(request: Request, alert_id: str) -> list[dict]:
-    # The history scan runs on a worker thread (run_in_threadpool); a dedicated
-    # cursor — not the shared connection — keeps concurrent reads on different
-    # threads from colliding on the connection. (audit_30_06_26.md A2)
-    cursor = request.app.state.query_engine._conn.cursor()
-    try:
-        return get_alert_history(cursor, alert_id)
-    finally:
-        cursor.close()
+    # Runs on a worker thread (run_in_threadpool); the control-plane store
+    # isolates the read (a dedicated cursor per call in the embedded adapter)
+    # so concurrent reads on different threads don't collide on the shared
+    # connection. (audit_30_06_26.md A2)
+    return get_control_plane_store(request.app).get_alert_delivery_history(alert_id)

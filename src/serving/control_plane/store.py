@@ -19,9 +19,19 @@ Claim semantics are part of this contract, not adapter detail:
   PostgreSQL adapter uses ``FOR UPDATE SKIP LOCKED`` plus a lease column so
   N replicas work-steal without leader election.
 
-Rollout slice 1 covers the webhook delivery queue + attempt log; alert
-rules/history, outbox/dead-letter and usage migrate behind this port in
-follow-up slices (see the ADR's rollout section).
+Rollout slice 1 covers the webhook delivery queue + attempt log. Slice 2
+(this module's alert methods) covers the alert delivery/history log and the
+alert-rule repository — including the rules' mutable runtime state (``state``,
+``fired_at``, ``last_escalation_level``, flap window, cooldown), the sharpest
+per-pod split-brain in the ADR's inventory. Outbox/dead-letter and usage
+migrate behind this port in follow-up slices (see the ADR's rollout section).
+
+The alert-rule repository methods (``load_alert_rules`` / ``save_alert_rules``)
+operate on plain JSON-shaped ``dict`` records rather than the ``AlertRule``
+pydantic model: the port must not import ``src.serving.api.alerts`` (that
+module imports this one to resolve the store — see ``get_control_plane_store``
+below), so callers validate/serialize at the boundary, exactly like the
+embedded adapter's YAML round-trip already did before the port existed.
 """
 
 from __future__ import annotations
@@ -121,6 +131,51 @@ class ControlPlaneStore(ABC):
         Safe to call from a worker thread (adapters isolate the read — the
         embedded store opens a dedicated cursor per call, audit_30 A2)."""
 
+    # --- alert delivery history (append-only) --------------------------------
+
+    @abstractmethod
+    def log_alert_delivery(
+        self,
+        *,
+        delivery_id: str,
+        alert_id: str,
+        alert_name: str,
+        tenant: str,
+        metric: str,
+        current_value: float | None,
+        previous_value: float | None,
+        change_pct: float | None,
+        threshold: float,
+        condition: str,
+        window: str,
+        event_type: str,
+        status_code: int | None,
+        success: bool,
+        error: str | None,
+        payload: dict,
+    ) -> None:
+        """Append one alert-delivery attempt to the ``alert_history`` log."""
+
+    @abstractmethod
+    def get_alert_delivery_history(self, alert_id: str, *, limit: int = 20) -> list[dict]:
+        """Most recent alert-history entries for one alert, newest first.
+
+        Safe to call from a worker thread (adapters isolate the read — the
+        embedded store opens a dedicated cursor per call, audit_30 A2)."""
+
+    # --- alert rule repository (mutable runtime state) ------------------------
+
+    @abstractmethod
+    def load_alert_rules(self) -> list[dict]:
+        """Return every alert rule as a JSON-shaped record (the caller
+        validates each into ``AlertRule``), including mutable runtime state
+        (``state``, ``fired_at``, ``last_escalation_level``, flap window)."""
+
+    @abstractmethod
+    def save_alert_rules(self, rules: list[dict]) -> None:
+        """Persist the full alert-rule set verbatim (JSON-shaped records, the
+        caller's serialized ``AlertRule.model_dump(mode="json")`` output)."""
+
 
 def get_control_plane_store(app: FastAPI) -> ControlPlaneStore:
     """Resolve the app's control-plane store, creating the configured one on
@@ -137,12 +192,21 @@ def get_control_plane_store(app: FastAPI) -> ControlPlaneStore:
         return store
     kind = (os.getenv(CONTROL_PLANE_STORE_ENV) or "embedded").strip().lower()
     if kind == "embedded":
+        # Deferred: src.serving.api.alerts.dispatcher imports this module at
+        # top level to resolve the store, so a module-level import here would
+        # cycle. Resolved lazily, exactly like the EmbeddedControlPlaneStore
+        # import above.
+        from src.serving.api.alerts.dispatcher import get_alert_config_path
+
         from .embedded import EmbeddedControlPlaneStore
 
         # The one sanctioned reach into the engine's embedded connection: the
         # composition seam that binds the default profile's store to the
         # serving DuckDB. Everything above the port goes through the store.
-        store = EmbeddedControlPlaneStore(conn_provider=lambda: app.state.query_engine._conn)
+        store = EmbeddedControlPlaneStore(
+            conn_provider=lambda: app.state.query_engine._conn,
+            alert_rules_path_provider=lambda: get_alert_config_path(app),
+        )
     elif kind == "postgres":
         raise NotImplementedError(
             "AGENTFLOW_CONTROLPLANE_STORE=postgres is the ADR 0010 scale profile; "

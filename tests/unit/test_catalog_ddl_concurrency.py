@@ -7,12 +7,11 @@ import duckdb
 import pytest
 
 import src.processing.event_replayer as event_replayer_module
-import src.serving.api.alerts.history as history_module
 import src.serving.control_plane.embedded as control_plane_embedded_module
 from src.db_concurrency import catalog_ddl_lock
 from src.processing.event_replayer import ensure_dead_letter_table
-from src.serving.api.alerts.history import ensure_alert_history_table
 from src.serving.control_plane import (
+    ensure_alert_history_table,
     ensure_webhook_deliveries_table,
     ensure_webhook_delivery_queue_table,
 )
@@ -83,12 +82,11 @@ def test_ensure_tables_concurrency_safe_across_tables_cold_db() -> None:
 
 
 def test_catalog_ddl_lock_is_a_single_shared_instance() -> None:
-    # Every ensure_* helper (across all three modules) must guard DDL with the
+    # Every ensure_* helper (across both modules) must guard DDL with the
     # *same* lock instance, or the cross-table conflict resurfaces. Pins against a
     # future per-module lock.
     assert (
         event_replayer_module.catalog_ddl_lock
-        is history_module.catalog_ddl_lock
         is control_plane_embedded_module.catalog_ddl_lock
         is catalog_ddl_lock
     )

@@ -12,7 +12,6 @@ a regression in the alerts API contract fails fast.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -84,13 +83,6 @@ class _FakeDispatcher:
         return {"status": "sent", "alert_id": alert.id}
 
 
-@pytest.fixture(autouse=True)
-def _stub_config_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Every endpoint resolves the config path first; pin it so no test touches
-    # the real config/alerts.yaml.
-    monkeypatch.setattr(alerts_module, "get_alert_config_path", lambda app: Path("alerts.yaml"))
-
-
 # ── _tenant ──────────────────────────────────────────────────────
 
 
@@ -131,7 +123,7 @@ async def test_register_alert_validates_creates_and_starts_dispatcher(
 ) -> None:
     created: dict[str, Any] = {}
 
-    def fake_create(path: Path, **kwargs: Any) -> AlertRule:
+    def fake_create(app: Any, **kwargs: Any) -> AlertRule:
         created.update(kwargs)
         return _rule(name=kwargs["name"], tenant=kwargs["tenant"])
 
@@ -179,7 +171,7 @@ async def test_register_alert_rejects_unknown_metric(monkeypatch: pytest.MonkeyP
 
 async def test_list_alerts_excludes_signing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        alerts_module, "list_alerts", lambda path, tenant: [_rule(), _rule(id="al-2")]
+        alerts_module, "list_alerts", lambda app, tenant: [_rule(), _rule(id="al-2")]
     )
     result = await list_my_alerts(_req())
 
@@ -191,16 +183,16 @@ async def test_list_alerts_excludes_signing_secret(monkeypatch: pytest.MonkeyPat
 
 
 async def test_modify_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: None)
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: None)
     with pytest.raises(HTTPException) as exc:
         await modify_alert("al-x", AlertUpdateRequest(threshold=5.0), _req())
     assert exc.value.status_code == 404
 
 
 async def test_modify_alert_updates_and_excludes_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: _rule())
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: _rule())
     monkeypatch.setattr(
-        alerts_module, "update_alert", lambda path, alert_id, tenant, updates: _rule(threshold=5.0)
+        alerts_module, "update_alert", lambda app, alert_id, tenant, updates: _rule(threshold=5.0)
     )
     result = await modify_alert("al-1", AlertUpdateRequest(threshold=5.0), _req())
 
@@ -210,15 +202,15 @@ async def test_modify_alert_updates_and_excludes_secret(monkeypatch: pytest.Monk
 
 async def test_modify_alert_lost_race_returns_404(monkeypatch: pytest.MonkeyPatch) -> None:
     # get_alert sees the rule but update_alert finds it already gone.
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: _rule())
-    monkeypatch.setattr(alerts_module, "update_alert", lambda path, alert_id, tenant, updates: None)
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: _rule())
+    monkeypatch.setattr(alerts_module, "update_alert", lambda app, alert_id, tenant, updates: None)
     with pytest.raises(HTTPException) as exc:
         await modify_alert("al-1", AlertUpdateRequest(threshold=5.0), _req())
     assert exc.value.status_code == 404
 
 
 async def test_modify_alert_revalidates_new_metric(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: _rule())
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: _rule())
     monkeypatch.setattr(
         alerts_module,
         "update_alert",
@@ -233,14 +225,14 @@ async def test_modify_alert_revalidates_new_metric(monkeypatch: pytest.MonkeyPat
 
 
 async def test_remove_alert_returns_204(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "deactivate_alert", lambda path, alert_id, tenant: True)
+    monkeypatch.setattr(alerts_module, "deactivate_alert", lambda app, alert_id, tenant: True)
     result = await remove_alert("al-1", _req())
     assert isinstance(result, Response)
     assert result.status_code == 204
 
 
 async def test_remove_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "deactivate_alert", lambda path, alert_id, tenant: False)
+    monkeypatch.setattr(alerts_module, "deactivate_alert", lambda app, alert_id, tenant: False)
     with pytest.raises(HTTPException) as exc:
         await remove_alert("al-x", _req())
     assert exc.value.status_code == 404
@@ -251,7 +243,7 @@ async def test_remove_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch
 
 async def test_test_alert_sends_through_dispatcher(monkeypatch: pytest.MonkeyPatch) -> None:
     dispatcher = _FakeDispatcher()
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: _rule())
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: _rule())
     monkeypatch.setattr(alerts_module, "ensure_alert_dispatcher", lambda app: dispatcher)
 
     result = await _test_alert_endpoint("al-1", _req())
@@ -261,7 +253,7 @@ async def test_test_alert_sends_through_dispatcher(monkeypatch: pytest.MonkeyPat
 
 
 async def test_test_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: None)
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: None)
     with pytest.raises(HTTPException) as exc:
         await _test_alert_endpoint("al-x", _req())
     assert exc.value.status_code == 404
@@ -270,29 +262,30 @@ async def test_test_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) 
 # ── alert_history ────────────────────────────────────────────────
 
 
-class _CursorConn:
-    """A connection stub that yields a closeable cursor — the history read
-    offloads onto a dedicated cursor (audit_30 A2). get_alert_history is stubbed,
-    so the cursor itself is never queried."""
+class _FakeStore:
+    """Stands in for ``get_control_plane_store(app)`` — the history read goes
+    through the store port, not a raw ``query_engine._conn`` cursor."""
 
-    def cursor(self) -> _CursorConn:
-        return self
+    def __init__(self, history: list[dict]) -> None:
+        self._history = history
 
-    def close(self) -> None:
-        pass
+    def get_alert_delivery_history(self, alert_id: str) -> list[dict]:
+        return self._history
 
 
 async def test_alert_history_returns_records(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: _rule())
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: _rule())
     monkeypatch.setattr(
-        alerts_module, "get_alert_history", lambda conn, alert_id: [{"fired_at": "2026-06-13"}]
+        alerts_module,
+        "get_control_plane_store",
+        lambda app: _FakeStore([{"fired_at": "2026-06-13"}]),
     )
-    result = await alert_history("al-1", _req(query_conn=_CursorConn()))
+    result = await alert_history("al-1", _req())
     assert result == {"history": [{"fired_at": "2026-06-13"}]}
 
 
 async def test_alert_history_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_module, "get_alert", lambda path, alert_id, tenant: None)
+    monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: None)
     with pytest.raises(HTTPException) as exc:
         await alert_history("al-x", _req())
     assert exc.value.status_code == 404

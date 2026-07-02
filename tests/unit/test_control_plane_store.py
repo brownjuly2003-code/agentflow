@@ -1,10 +1,11 @@
-"""ADR 0010 slice 1: the ControlPlaneStore port and its embedded adapter.
+"""ADR 0010 slices 1-2: the ControlPlaneStore port and its embedded adapter.
 
 Covers the store-level contract the dispatcher relies on (enqueue-win
 semantics, due-claim ordering and bounds, the outcome state machine, parking,
-attempt-log roundtrip), the ``get_control_plane_store`` resolution/ratchet,
-and the structural pin that keeps the webhook path from re-growing direct
-``query_engine._conn`` reaches.
+attempt-log roundtrip), the alert-delivery history log and the YAML-backed
+alert-rule repository (slice 2), the ``get_control_plane_store``
+resolution/ratchet, and the structural pin that keeps the webhook and alert
+paths from re-growing direct ``query_engine._conn`` reaches.
 """
 
 from __future__ import annotations
@@ -38,6 +39,16 @@ def conn() -> Iterator[duckdb.DuckDBPyConnection]:
 @pytest.fixture
 def store(conn: duckdb.DuckDBPyConnection) -> EmbeddedControlPlaneStore:
     return EmbeddedControlPlaneStore(conn_provider=lambda: conn)
+
+
+@pytest.fixture
+def alert_store(
+    conn: duckdb.DuckDBPyConnection, tmp_path: Path
+) -> EmbeddedControlPlaneStore:
+    path = tmp_path / "alerts.yaml"
+    return EmbeddedControlPlaneStore(
+        conn_provider=lambda: conn, alert_rules_path_provider=lambda: path
+    )
 
 
 def _enqueue(store: EmbeddedControlPlaneStore, webhook_id: str, event_id: str) -> bool:
@@ -205,6 +216,100 @@ def test_delivery_log_roundtrip_is_isolated_per_webhook_and_newest_first(
     assert store.get_webhook_delivery_logs("wh-1", limit=1)[0]["delivery_id"] in {"d1", "d2"}
 
 
+# --- alert delivery history -----------------------------------------------------
+
+
+def _log_alert(
+    store: EmbeddedControlPlaneStore, *, delivery_id: str, alert_id: str, success: bool
+) -> None:
+    store.log_alert_delivery(
+        delivery_id=delivery_id,
+        alert_id=alert_id,
+        alert_name="High error rate",
+        tenant="acme",
+        metric="error_rate",
+        current_value=0.5,
+        previous_value=0.1,
+        change_pct=400.0,
+        threshold=0.1,
+        condition="above",
+        window="1h",
+        event_type="alert.triggered",
+        status_code=200 if success else 500,
+        success=success,
+        error=None if success else "boom",
+        payload={"alert_id": alert_id, "status": "firing"},
+    )
+
+
+def test_alert_delivery_log_roundtrip_is_isolated_per_alert_and_newest_first(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    _log_alert(alert_store, delivery_id="d1", alert_id="a1", success=False)
+    _log_alert(alert_store, delivery_id="d2", alert_id="a1", success=True)
+    _log_alert(alert_store, delivery_id="d-other", alert_id="a-other", success=True)
+
+    history = alert_store.get_alert_delivery_history("a1")
+
+    assert [entry["delivery_id"] for entry in history] == ["d2", "d1"]
+    assert history[0]["success"] is True
+    assert history[1]["error"] == "boom"
+    assert alert_store.get_alert_delivery_history("a-ghost") == []
+    assert alert_store.get_alert_delivery_history("a1", limit=1) == history[:1]
+
+
+def test_alert_delivery_history_decodes_json_payload(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    _log_alert(alert_store, delivery_id="d1", alert_id="a1", success=True)
+
+    history = alert_store.get_alert_delivery_history("a1")
+
+    assert history[0]["payload"] == {"alert_id": "a1", "status": "firing"}
+
+
+# --- alert rule repository (YAML round-trip) --------------------------------------
+
+
+def test_load_alert_rules_returns_empty_list_when_file_is_missing(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    assert alert_store.load_alert_rules() == []
+
+
+def test_save_then_load_alert_rules_round_trips_verbatim(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    rules = [
+        {"id": "a1", "name": "High error rate", "state": "firing", "last_escalation_level": 2},
+        {"id": "a2", "name": "Low revenue", "state": "ok", "last_escalation_level": 0},
+    ]
+
+    alert_store.save_alert_rules(rules)
+
+    assert alert_store.load_alert_rules() == rules
+
+
+def test_save_alert_rules_creates_parent_directories(tmp_path: Path, conn) -> None:
+    nested_path = tmp_path / "nested" / "alerts.yaml"
+    store = EmbeddedControlPlaneStore(
+        conn_provider=lambda: conn, alert_rules_path_provider=lambda: nested_path
+    )
+
+    store.save_alert_rules([{"id": "a1"}])
+
+    assert nested_path.exists()
+    assert store.load_alert_rules() == [{"id": "a1"}]
+
+
+def test_alert_rules_methods_require_a_path_provider(store: EmbeddedControlPlaneStore) -> None:
+    # ``store`` (unlike ``alert_store``) was constructed without
+    # alert_rules_path_provider — mirrors a caller that only wired the webhook
+    # queue's conn_provider and forgot the alert-rule repository.
+    with pytest.raises(RuntimeError, match="alert_rules_path_provider"):
+        store.load_alert_rules()
+
+
 # --- get_control_plane_store resolution + ratchet -------------------------------
 
 
@@ -269,13 +374,16 @@ def test_get_store_follows_a_swapped_query_engine(
 
 
 def test_webhook_path_does_not_reach_into_the_engine_connection() -> None:
-    """ADR 0010 slice 1 ratchet: the dispatcher and the webhooks router go
-    through the ControlPlaneStore port; direct ``query_engine._conn`` reaches
-    must not re-grow there. The single sanctioned reach is the composition
-    seam in ``control_plane/store.py``."""
+    """ADR 0010 slices 1-2 ratchet: the webhook/alert dispatchers and their
+    routers go through the ControlPlaneStore port; direct ``query_engine._conn``
+    reaches must not re-grow there. The single sanctioned reach is the
+    composition seam in ``control_plane/store.py``."""
     for relative in (
         "src/serving/api/webhook_dispatcher.py",
         "src/serving/api/routers/webhooks.py",
+        "src/serving/api/alerts/dispatcher.py",
+        "src/serving/api/alerts/escalation.py",
+        "src/serving/api/routers/alerts.py",
     ):
         source = (PROJECT_ROOT / relative).read_text(encoding="utf-8")
         assert "query_engine._conn" not in source, relative

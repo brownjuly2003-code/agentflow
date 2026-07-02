@@ -14,6 +14,7 @@ import duckdb
 import pytest
 
 import src.serving.api.auth.key_rotation as key_rotation_module
+import src.serving.control_plane.embedded as embedded_module
 from src.serving.api.auth.key_rotation import rotate_all_keys
 from src.serving.api.auth.manager import AuthManager, KeyCreateRequest, TenantKey
 
@@ -245,7 +246,9 @@ class TestRotatorHelpers:
     def test_usage_query_retries_on_transient_duckdb_error(
         self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        real_connect = key_rotation_module.connect_duckdb
+        # ADR 0010 slice 4: the retry-loop-with-connect for these usage-stat
+        # queries now lives in EmbeddedControlPlaneStore, not key_rotation.py.
+        real_connect = embedded_module.connect_duckdb
         calls = {"n": 0}
 
         def flaky_connect(path: object) -> object:
@@ -254,10 +257,10 @@ class TestRotatorHelpers:
                 raise duckdb.Error("database is locked")
             return real_connect(path)
 
-        monkeypatch.setattr(key_rotation_module, "connect_duckdb", flaky_connect)
+        monkeypatch.setattr(embedded_module, "connect_duckdb", flaky_connect)
 
         # list_keys_with_usage runs the usage queries; the first connect raises
-        # a transient error and the rotator must retry rather than propagate.
+        # a transient error and the store must retry rather than propagate.
         manager.list_keys_with_usage()
 
         assert calls["n"] >= 2
@@ -265,7 +268,7 @@ class TestRotatorHelpers:
     def test_old_key_usage_retries_on_transient_duckdb_error(
         self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        real_connect = key_rotation_module.connect_duckdb
+        real_connect = embedded_module.connect_duckdb
         calls = {"n": 0}
 
         def flaky_connect(path: object) -> object:
@@ -274,7 +277,7 @@ class TestRotatorHelpers:
                 raise duckdb.Error("database is locked")
             return real_connect(path)
 
-        monkeypatch.setattr(key_rotation_module, "connect_duckdb", flaky_connect)
+        monkeypatch.setattr(embedded_module, "connect_duckdb", flaky_connect)
 
         # old_key_usage_last_hour runs its own connect+query with the same retry
         # guard; a transient error on the first attempt must be retried.

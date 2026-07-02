@@ -36,6 +36,7 @@ from src.serving.api.security import (
     verify_api_key,
 )
 from src.serving.audit_publisher import AuditPublisher, build_audit_publisher_from_env
+from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
 
 if TYPE_CHECKING:
     from .key_rotation import KeyRotator
@@ -117,6 +118,8 @@ class AuthManager:
         rate_limiter: RateLimiter | None = None,
         redis_url: str | None = None,
         audit_publisher: AuditPublisher | None = None,
+        *,
+        store: ControlPlaneStore | None = None,
     ) -> None:
         self.api_keys_path = Path(api_keys_path) if api_keys_path else None
         resolved_db_path = Path(db_path)
@@ -130,6 +133,16 @@ class AuthManager:
                 suffix = pipeline_path.suffix or ".duckdb"
                 resolved_db_path = pipeline_path.with_name(f"{pipeline_path.stem}_api{suffix}")
         self.db_path = resolved_db_path
+        # ADR 0010 slice 4: usage/session accounting goes through the
+        # ControlPlaneStore port. When no store is injected (the common
+        # case), build a private embedded store bound to this manager's own
+        # usage db path — never the app's shared query_engine connection;
+        # usage/session state has always lived in its own file (see the
+        # port module's docstring on why this is not the outbox's
+        # :memory:-vs-file duality).
+        self.store: ControlPlaneStore = store or EmbeddedControlPlaneStore(
+            usage_db_path_provider=lambda: self.db_path
+        )
         self.admin_key = admin_key if admin_key is not None else os.getenv("AGENTFLOW_ADMIN_KEY")
         self.security_config_path = Path(security_config_path)
         self.security_policy = load_security_policy(self.security_config_path)

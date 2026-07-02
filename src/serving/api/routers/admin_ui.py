@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import duckdb
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -10,10 +9,9 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import State
 from starlette.responses import Response
 
-from src.serving.api.analytics import ensure_analytics_table
 from src.serving.api.auth import require_admin_key
 from src.serving.cache import ENTITY_TTL_SECONDS
-from src.serving.duckdb_connection import connect_duckdb
+from src.serving.control_plane import EmbeddedControlPlaneStore
 
 router = APIRouter(
     prefix="/admin",
@@ -78,19 +76,7 @@ def _cache_stats(state: State) -> dict[str, object]:
 
 
 def _qps_last_minute(db_path: Path | str) -> float:
-    ensure_analytics_table(db_path)
-    conn = connect_duckdb(db_path)
-    try:
-        row = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM api_sessions
-            WHERE ts >= CURRENT_TIMESTAMP - INTERVAL '1 minute'
-            """
-        ).fetchone()
-        requests_last_minute = row[0] if row else 0
-    except duckdb.Error:
-        return 0.0
-    finally:
-        conn.close()
-    return round(float(requests_last_minute) / 60.0, 2)
+    # ADR 0010 slice 4: routed through the ControlPlaneStore port — was a
+    # direct connect_duckdb(db_path) query.
+    store = EmbeddedControlPlaneStore(usage_db_path_provider=lambda: db_path)
+    return store.get_queries_per_second_last_minute()

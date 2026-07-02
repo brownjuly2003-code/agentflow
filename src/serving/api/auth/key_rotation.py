@@ -4,10 +4,7 @@ import json
 import re
 import secrets
 import threading
-import time
 from datetime import UTC, datetime, timedelta
-
-import duckdb
 
 try:
     import yaml
@@ -15,7 +12,6 @@ except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
 from src.serving.api.security import compute_key_lookup, hash_api_key
-from src.serving.duckdb_connection import connect_duckdb
 
 from .manager import ApiKeysConfig, AuthManager, KeyCreateRequest, TenantKey
 
@@ -198,68 +194,17 @@ class KeyRotator:
             self.cancel_rotation_cleanup_timers()
 
     def old_key_usage_by_key_id(self) -> dict[str, int]:
-        for attempt in range(10):
-            try:
-                conn = connect_duckdb(self._manager.db_path)
-            except duckdb.Error:
-                if attempt == 9:
-                    raise
-                time.sleep(0.01 * (attempt + 1))
-                continue
-
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT key_id, COUNT(*) AS requests_last_hour
-                    FROM api_usage
-                    WHERE key_slot = 'previous'
-                      AND ts >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
-                      AND key_id IS NOT NULL
-                    GROUP BY key_id
-                    """
-                ).fetchall()
-                return dict(rows)
-            except duckdb.Error:
-                if attempt == 9:
-                    raise
-                time.sleep(0.01 * (attempt + 1))
-            finally:
-                conn.close()
-        return {}
+        # ADR 0010 slice 4: routed through the ControlPlaneStore port —
+        # was a direct connect_duckdb(self._manager.db_path) query.
+        return self._manager.store.get_old_key_usage_by_key_id()
 
     def old_key_usage_last_hour(self, key_id: str) -> int:
         return self.old_key_usage_by_key_id().get(key_id, 0)
 
     def _usage_by_key(self) -> dict[tuple[str, str], int]:
-        for attempt in range(10):
-            try:
-                conn = connect_duckdb(self._manager.db_path)
-            except duckdb.Error:
-                if attempt == 9:
-                    raise
-                time.sleep(0.01 * (attempt + 1))
-                continue
-
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT tenant, key_name, COUNT(*) AS requests_last_24h
-                    FROM api_usage
-                    WHERE ts >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                    GROUP BY tenant, key_name
-                    """
-                ).fetchall()
-                return {
-                    (tenant, key_name): requests_last_24h
-                    for tenant, key_name, requests_last_24h in rows
-                }
-            except duckdb.Error:
-                if attempt == 9:
-                    raise
-                time.sleep(0.01 * (attempt + 1))
-            finally:
-                conn.close()
-        return {}
+        # ADR 0010 slice 4: routed through the ControlPlaneStore port —
+        # was a direct connect_duckdb(self._manager.db_path) query.
+        return self._manager.store.get_usage_by_key()
 
     def write_config(self, config: ApiKeysConfig) -> None:
         if self._manager.api_keys_path is None:

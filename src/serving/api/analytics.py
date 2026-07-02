@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -14,9 +13,20 @@ from starlette.background import BackgroundTasks
 from starlette.responses import Response
 from starlette.types import Message
 
+from src.serving.control_plane import EmbeddedControlPlaneStore
 from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
+
+
+def _usage_store(db_path: Path | str) -> EmbeddedControlPlaneStore:
+    # ADR 0010 slice 4: the SQL for the functions below lives behind the
+    # ControlPlaneStore port (control_plane/embedded.py) so a future
+    # PostgreSQL adapter can serve them too. A fresh, cheap wrapper per call —
+    # nothing is connected until a method on it runs — matches these
+    # functions' pre-port behavior of opening their own connection each call.
+    return EmbeddedControlPlaneStore(usage_db_path_provider=lambda: db_path)
+
 
 AnalyticsMiddleware = Callable[
     [Request, Callable[[Request], Awaitable[Response]]],
@@ -166,72 +176,7 @@ def get_usage_analytics(
     window: str = "24h",
     tenant: str | None = None,
 ) -> dict:
-    interval = _window_to_interval(window)
-    ensure_analytics_table(db_path)
-    conn = connect_duckdb(db_path)
-    try:
-        if tenant:
-            rows = conn.execute(
-                """
-                SELECT
-                    tenant,
-                    COUNT(*) AS total_requests,
-                    ROUND(AVG(CASE WHEN status_code >= 400 THEN 1.0 ELSE 0.0 END), 4) AS error_rate,
-                    ROUND(AVG(CASE WHEN cache_hit THEN 1.0 ELSE 0.0 END), 4) AS cache_hit_rate,
-                    ROUND(AVG(duration_ms), 3) AS avg_duration_ms
-                FROM api_sessions
-                WHERE tenant IS NOT NULL
-                  AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-                  AND tenant = ?
-                GROUP BY tenant
-                ORDER BY tenant
-                """,
-                [interval, tenant],
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT
-                    tenant,
-                    COUNT(*) AS total_requests,
-                    ROUND(AVG(CASE WHEN status_code >= 400 THEN 1.0 ELSE 0.0 END), 4) AS error_rate,
-                    ROUND(AVG(CASE WHEN cache_hit THEN 1.0 ELSE 0.0 END), 4) AS cache_hit_rate,
-                    ROUND(AVG(duration_ms), 3) AS avg_duration_ms
-                FROM api_sessions
-                WHERE tenant IS NOT NULL
-                  AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-                GROUP BY tenant
-                ORDER BY tenant
-                """,
-                [interval],
-            ).fetchall()
-        tenants = []
-        for tenant_name, total_requests, error_rate, cache_hit_rate, avg_duration_ms in rows:
-            top_endpoints = conn.execute(
-                """
-                SELECT endpoint
-                FROM api_sessions
-                WHERE tenant = ?
-                  AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-                GROUP BY endpoint
-                ORDER BY COUNT(*) DESC, endpoint
-                LIMIT 3
-                """,
-                [tenant_name, interval],
-            ).fetchall()
-            tenants.append(
-                {
-                    "tenant": tenant_name,
-                    "total_requests": total_requests,
-                    "error_rate": float(error_rate or 0.0),
-                    "cache_hit_rate": float(cache_hit_rate or 0.0),
-                    "top_endpoints": [item[0] for item in top_endpoints],
-                    "avg_duration_ms": float(avg_duration_ms or 0.0),
-                }
-            )
-        return {"window": window, "tenants": tenants}
-    finally:
-        conn.close()
+    return _usage_store(db_path).get_usage_analytics(window=window, tenant=tenant)
 
 
 def get_top_queries(
@@ -240,30 +185,7 @@ def get_top_queries(
     limit: int = 10,
     window: str = "24h",
 ) -> dict:
-    interval = _window_to_interval(window)
-    ensure_analytics_table(db_path)
-    conn = connect_duckdb(db_path)
-    try:
-        rows = conn.execute(
-            """
-            SELECT query_text, COUNT(*) AS frequency
-            FROM api_sessions
-            WHERE query_text IS NOT NULL
-              AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-            GROUP BY query_text
-            ORDER BY frequency DESC, query_text
-            LIMIT ?
-            """,
-            [interval, limit],
-        ).fetchall()
-        return {
-            "window": window,
-            "queries": [
-                {"query": query_text, "count": frequency} for query_text, frequency in rows
-            ],
-        }
-    finally:
-        conn.close()
+    return _usage_store(db_path).get_top_queries(limit=limit, window=window)
 
 
 def get_top_entities(
@@ -272,35 +194,7 @@ def get_top_entities(
     limit: int = 10,
     window: str = "24h",
 ) -> dict:
-    interval = _window_to_interval(window)
-    ensure_analytics_table(db_path)
-    conn = connect_duckdb(db_path)
-    try:
-        rows = conn.execute(
-            """
-            SELECT entity_type, entity_id, COUNT(*) AS frequency
-            FROM api_sessions
-            WHERE entity_id IS NOT NULL
-              AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-            GROUP BY entity_type, entity_id
-            ORDER BY frequency DESC, entity_type, entity_id
-            LIMIT ?
-            """,
-            [interval, limit],
-        ).fetchall()
-        return {
-            "window": window,
-            "entities": [
-                {
-                    "entity_type": entity_type,
-                    "entity_id": entity_id,
-                    "count": frequency,
-                }
-                for entity_type, entity_id, frequency in rows
-            ],
-        }
-    finally:
-        conn.close()
+    return _usage_store(db_path).get_top_entities(limit=limit, window=window)
 
 
 def get_latency_analytics(
@@ -308,119 +202,11 @@ def get_latency_analytics(
     *,
     window: str = "24h",
 ) -> dict:
-    interval = _window_to_interval(window)
-    ensure_analytics_table(db_path)
-    conn = connect_duckdb(db_path)
-    try:
-        rows = conn.execute(
-            """
-            SELECT
-                endpoint,
-                COUNT(*) AS requests,
-                ROUND(quantile_cont(duration_ms, 0.50), 3) AS p50_ms,
-                ROUND(quantile_cont(duration_ms, 0.95), 3) AS p95_ms,
-                ROUND(quantile_cont(duration_ms, 0.99), 3) AS p99_ms
-            FROM api_sessions
-            WHERE ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-            GROUP BY endpoint
-            ORDER BY endpoint
-            """,
-            [interval],
-        ).fetchall()
-        return {
-            "window": window,
-            "endpoints": [
-                {
-                    "endpoint": endpoint,
-                    "requests": requests,
-                    "p50_ms": float(p50_ms or 0.0),
-                    "p95_ms": float(p95_ms or 0.0),
-                    "p99_ms": float(p99_ms or 0.0),
-                }
-                for endpoint, requests, p50_ms, p95_ms, p99_ms in rows
-            ],
-        }
-    finally:
-        conn.close()
+    return _usage_store(db_path).get_latency_analytics(window=window)
 
 
 def get_anomalies(db_path: Path | str, *, window: str = "24h") -> dict:
-    interval = _window_to_interval(window)
-    ensure_analytics_table(db_path)
-    conn = connect_duckdb(db_path)
-    try:
-        rows = conn.execute(
-            """
-            WITH hourly AS (
-                SELECT
-                    tenant,
-                    date_trunc('hour', ts) AS hour_bucket,
-                    COUNT(*) AS requests
-                FROM api_sessions
-                WHERE tenant IS NOT NULL
-                  AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-                GROUP BY tenant, hour_bucket
-            ),
-            latest AS (
-                SELECT tenant, MAX(hour_bucket) AS current_hour
-                FROM hourly
-                GROUP BY tenant
-            ),
-            current_hour AS (
-                SELECT
-                    hourly.tenant,
-                    hourly.hour_bucket,
-                    hourly.requests AS current_hour_requests
-                FROM hourly
-                JOIN latest
-                  ON latest.tenant = hourly.tenant
-                 AND latest.current_hour = hourly.hour_bucket
-            ),
-            historical AS (
-                SELECT
-                    current_hour.tenant,
-                    ROUND(AVG(hourly.requests), 1) AS hourly_average
-                FROM current_hour
-                JOIN hourly
-                  ON hourly.tenant = current_hour.tenant
-                 AND hourly.hour_bucket < current_hour.hour_bucket
-                GROUP BY current_hour.tenant
-            ),
-            scored AS (
-                SELECT
-                    current_hour.tenant,
-                    current_hour.current_hour_requests,
-                    historical.hourly_average,
-                    ROUND(
-                        current_hour.current_hour_requests
-                        / NULLIF(historical.hourly_average, 0),
-                        2
-                    ) AS spike_ratio
-                FROM current_hour
-                JOIN historical
-                  ON historical.tenant = current_hour.tenant
-            )
-            SELECT tenant, current_hour_requests, hourly_average, spike_ratio
-            FROM scored
-            WHERE spike_ratio > 3
-            ORDER BY spike_ratio DESC, tenant
-            """,
-            [interval],
-        ).fetchall()
-        return {
-            "window": window,
-            "anomalies": [
-                {
-                    "tenant": tenant,
-                    "current_hour_requests": current_hour_requests,
-                    "hourly_average": float(hourly_average or 0.0),
-                    "spike_ratio": float(spike_ratio or 0.0),
-                }
-                for tenant, current_hour_requests, hourly_average, spike_ratio in rows
-            ],
-        }
-    finally:
-        conn.close()
+    return _usage_store(db_path).get_anomalies(window=window)
 
 
 def _schedule_session_write(db_path: Path | str, request_id: str, record: dict) -> None:
@@ -432,80 +218,11 @@ def _schedule_session_write(db_path: Path | str, request_id: str, record: dict) 
 
 
 def _insert_session(db_path: Path | str, request_id: str, record: dict) -> None:
-    for attempt in range(10):
-        try:
-            conn = connect_duckdb(db_path)
-        except duckdb.Error as exc:
-            if attempt == 9:
-                logger.warning(
-                    "analytics_session_write_skipped",
-                    stage="connect",
-                    db_path=str(db_path),
-                    request_id=request_id,
-                    tenant=record.get("tenant"),
-                    endpoint=record.get("endpoint"),
-                    attempts=attempt + 1,
-                    error=str(exc),
-                    exc_info=True,
-                )
-                return
-            time.sleep(0.01 * (attempt + 1))
-            continue
-
-        try:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO api_sessions (
-                    request_id,
-                    tenant,
-                    key_name,
-                    endpoint,
-                    method,
-                    status_code,
-                    duration_ms,
-                    cache_hit,
-                    entity_type,
-                    entity_id,
-                    metric_name,
-                    query_engine,
-                    query_text
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    request_id,
-                    record["tenant"],
-                    record["key_name"],
-                    record["endpoint"],
-                    record["method"],
-                    record["status_code"],
-                    record["duration_ms"],
-                    record["cache_hit"],
-                    record["entity_type"],
-                    record["entity_id"],
-                    record["metric_name"],
-                    record["query_engine"],
-                    record["query_text"],
-                ],
-            )
-            return
-        except duckdb.Error as exc:
-            if attempt == 9:
-                logger.warning(
-                    "analytics_session_write_skipped",
-                    stage="insert",
-                    db_path=str(db_path),
-                    request_id=request_id,
-                    tenant=record.get("tenant"),
-                    endpoint=record.get("endpoint"),
-                    attempts=attempt + 1,
-                    error=str(exc),
-                    exc_info=True,
-                )
-                return
-            time.sleep(0.01 * (attempt + 1))
-        finally:
-            conn.close()
+    # Deliberately does NOT call ensure_analytics_table: the table is
+    # guaranteed to exist by main.py's boot-time call, and re-checking it on
+    # every background write would be wasted work on the hot path (see
+    # test_insert_session_uses_existing_schema_without_rechecking).
+    _usage_store(db_path).record_api_session(request_id, record)
 
 
 def _build_session_record(
@@ -561,15 +278,3 @@ def _build_session_record(
         "query_engine": query_engine,
         "query_text": query_text,
     }
-
-
-def _window_to_interval(window: str) -> str:
-    match = re.fullmatch(r"(\d+)([mhd])", window.strip())
-    if match is None:
-        raise ValueError("Invalid window. Use formats like 15m, 1h, or 7d.")
-    value, unit = match.groups()
-    if unit == "m":
-        return f"{value} minutes"
-    if unit == "h":
-        return f"{value} hours"
-    return f"{value} days"

@@ -15,12 +15,14 @@ test_rate_limiter_mutation.py / test_sql_builder_mutation.py (see
 fable_handoff.md cont.16-23):
 
 1. **duckdb-free.** Importing ``serving.api.auth.key_rotation`` runs the auth
-   package ``__init__`` (``import duckdb`` + the key_rotation / usage_table
-   import chain) and key_rotation itself does ``import duckdb`` +
-   ``from ...duckdb_connection import connect_duckdb``. Real duckdb's lazy
-   ``_duckdb._sqltypes`` import crashes mutmut's coverage-instrumented stats
-   pass (the same break ci.yml works around with ``coverage run``). A fake
-   top-level ``duckdb`` module satisfies the import chain; the three usage-stat
+   package ``__init__`` (``import duckdb``) and, since ADR 0010 slice 4,
+   ``key_rotation`` -> ``manager`` -> ``control_plane`` -> ``embedded`` pulls in
+   ``import duckdb`` there instead (key_rotation itself no longer imports
+   duckdb directly — its usage-stat methods delegate to
+   ``AuthManager.store``). Real duckdb's lazy ``_duckdb._sqltypes`` import
+   crashes mutmut's coverage-instrumented stats pass (the same break ci.yml
+   works around with ``coverage run``). A fake top-level ``duckdb`` module
+   satisfies the import chain either way; the three usage-stat
    methods that actually *call* duckdb (``old_key_usage_by_key_id`` /
    ``_usage_by_key`` / ``old_key_usage_last_hour``) are stubbed on the rotator in
    the tests that need them, so their bodies stay uncovered and are NOT mutated.

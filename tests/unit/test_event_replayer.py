@@ -21,8 +21,8 @@ from src.processing.event_replayer import (
     DeadLetterEventNotFoundError,
     EventReplayer,
     ReplayValidationError,
-    ensure_dead_letter_table,
 )
+from src.serving.control_plane import ensure_dead_letter_table
 
 # Event schema pins event_id to a 36-char uuid pattern (^[a-f0-9\-]{36}$).
 EVENT_ID_1 = "11111111-1111-4111-8111-111111111111"

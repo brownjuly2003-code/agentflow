@@ -16,8 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.serving.api.main as main_module
-from src.processing.event_replayer import ensure_dead_letter_table
 from src.serving.cache import QueryCache
+from src.serving.control_plane import ensure_dead_letter_table
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHAOS_COMPOSE_FILE = PROJECT_ROOT / "docker-compose.chaos.yml"

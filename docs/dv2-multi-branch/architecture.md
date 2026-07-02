@@ -100,7 +100,12 @@ flowchart LR
 - **business_vault** resolves conflicts: e.g. `bv_customer_mdm` picks the
   canonical PII source per branch when both 1C and Bitrix have a record. SCD2
   effectivity is maintained at this layer, not the raw one.
-- **mart** is the only layer BI tools see. Per-branch row policies live here.
+- **mart** is the only layer BI tools see, and it is PII-free by contract
+  (`customer_360` carries no contact fields). Access governance ships in
+  `warehouse/agentflow/dv2/governance/` (ADR 0006 Phase 2): column-limited
+  grants for analysts on the business-vault MDM views, per-jurisdiction
+  PII-officer roles, and per-branch row policies on the shared
+  `rv.hub_customer`.
 
 ### ClickHouse → S3 cold
 

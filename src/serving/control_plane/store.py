@@ -37,7 +37,24 @@ pydantic model: the port must not import ``src.serving.api.alerts`` (that
 module imports this one to resolve the store — see ``get_control_plane_store``
 below), so callers validate/serialize at the boundary, exactly like the
 embedded adapter's YAML round-trip already did before the port existed. The
-outbox/dead-letter methods follow the same rule for the same reason.
+outbox/dead-letter methods follow the same rule for the same reason, and so
+does the webhook-registration repository (slice 5, below).
+
+Slice 5 ships the PostgreSQL adapter and closes the two per-pod gaps the
+extraction slices left open:
+
+- **Webhook registrations** (state class 5 of the ADR's inventory — the
+  sharpest split-brain, a webhook registered on pod A that pod B has never
+  heard of) move behind ``load_webhook_registrations`` /
+  ``save_webhook_registrations``, mirroring the alert-rule repository: the
+  embedded adapter keeps the byte-compatible per-app YAML file, the
+  PostgreSQL adapter stores rows.
+- **Alert tick single-flight** (``claim_alert_tick`` / ``complete_alert_tick``,
+  ADR 0010 §2): the dispatcher claims each rule before evaluating it and
+  completes the claim with that rule's advanced state. Rule state is
+  persisted *per rule*, not as a full-set save — with per-rule claims, two
+  replicas advancing different rules in overlapping ticks would clobber each
+  other's runtime state through a full-set write.
 
 The outbox/dead-letter write methods (``mark_outbox_sent``,
 ``schedule_outbox_retry``, ``enqueue_outbox_replay``,
@@ -82,6 +99,15 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 CONTROL_PLANE_STORE_ENV = "AGENTFLOW_CONTROLPLANE_STORE"
+CONTROL_PLANE_PG_DSN_ENV = "AGENTFLOW_CONTROLPLANE_PG_DSN"
+
+
+def control_plane_store_kind() -> str:
+    """The configured adapter kind (``'embedded'`` when unset). Composition
+    seams that must branch per profile (main.py deciding whether the
+    outbox/auth consumers share the app-wide store) use this instead of
+    re-parsing the env var."""
+    return (os.getenv(CONTROL_PLANE_STORE_ENV) or "embedded").strip().lower()
 
 
 @dataclass(frozen=True)
@@ -210,6 +236,22 @@ class ControlPlaneStore(ABC):
         Safe to call from a worker thread (adapters isolate the read — the
         embedded store opens a dedicated cursor per call, audit_30 A2)."""
 
+    # --- webhook registration repository --------------------------------------
+
+    @abstractmethod
+    def load_webhook_registrations(self) -> list[dict]:
+        """Return every webhook registration as a JSON-shaped record (the
+        caller validates each into ``WebhookRegistration``) — state class 5 of
+        the ADR 0010 inventory, the per-pod YAML whose split-brain motivated
+        the ADR. Same no-model rule as the alert-rule repository below: this
+        module must not import ``webhook_dispatcher`` (it imports this one)."""
+
+    @abstractmethod
+    def save_webhook_registrations(self, registrations: list[dict]) -> None:
+        """Persist the full registration set verbatim (JSON-shaped records,
+        the caller's serialized ``WebhookRegistration.model_dump(mode="json")``
+        output)."""
+
     # --- alert rule repository (mutable runtime state) ------------------------
 
     @abstractmethod
@@ -222,6 +264,25 @@ class ControlPlaneStore(ABC):
     def save_alert_rules(self, rules: list[dict]) -> None:
         """Persist the full alert-rule set verbatim (JSON-shaped records, the
         caller's serialized ``AlertRule.model_dump(mode="json")`` output)."""
+
+    @abstractmethod
+    def claim_alert_tick(self, rule_id: str, *, lease_seconds: float) -> bool:
+        """Claim one alert rule's evaluation tick for this worker (ADR 0010
+        §2): only the claim winner evaluates and pages; a lost claim means
+        another pod owns this rule's tick, so N replicas never run N parallel
+        state machines for the same rule. The embedded adapter grants every
+        claim (one process); the PostgreSQL adapter takes a lease that expires
+        on its own — crash recovery without coordination."""
+
+    @abstractmethod
+    def complete_alert_tick(self, rule_id: str, *, record: dict | None) -> None:
+        """Release the rule's tick claim; when ``record`` is not ``None``,
+        persist that rule's advanced runtime state in the same transaction as
+        the release (ADR 0010 §2). ``record`` is the caller's serialized
+        ``AlertRule.model_dump(mode="json")``, exactly like
+        ``save_alert_rules`` — but scoped to one rule, so two replicas
+        advancing different rules in overlapping ticks cannot clobber each
+        other's state the way a full-set save would."""
 
     # --- replay outbox + dead-letter (invariant 8: one transaction) -----------
 
@@ -398,21 +459,23 @@ def get_control_plane_store(app: FastAPI) -> ControlPlaneStore:
     first use and caching it on ``app.state`` (the lazy pattern mirrors
     ``ensure_alert_dispatcher`` so lightweight test stubs keep working).
 
-    ``AGENTFLOW_CONTROLPLANE_STORE`` selects the adapter. Fail-closed ratchet:
-    ``postgres`` is the ADR 0010 target profile and raises until the
-    ``PostgresControlPlaneStore`` adapter ships (rollout slice 5); anything
-    else but ``embedded`` is a configuration error.
+    ``AGENTFLOW_CONTROLPLANE_STORE`` selects the adapter: ``embedded``
+    (default) or ``postgres`` (scale profile, slice 5 — requires
+    ``AGENTFLOW_CONTROLPLANE_PG_DSN`` and the optional ``psycopg``
+    dependency; both fail the boot loudly when missing, never a silent
+    fallback to embedded). Anything else is a configuration error.
     """
     store: ControlPlaneStore | None = getattr(app.state, "control_plane_store", None)
     if store is not None:
         return store
-    kind = (os.getenv(CONTROL_PLANE_STORE_ENV) or "embedded").strip().lower()
+    kind = control_plane_store_kind()
     if kind == "embedded":
-        # Deferred: src.serving.api.alerts.dispatcher imports this module at
-        # top level to resolve the store, so a module-level import here would
-        # cycle. Resolved lazily, exactly like the EmbeddedControlPlaneStore
-        # import above.
+        # Deferred: src.serving.api.alerts.dispatcher and webhook_dispatcher
+        # import this module at top level to resolve the store, so module-level
+        # imports here would cycle. Resolved lazily, exactly like the
+        # EmbeddedControlPlaneStore import above.
         from src.serving.api.alerts.dispatcher import get_alert_config_path
+        from src.serving.api.webhook_dispatcher import get_webhook_config_path
 
         from .embedded import EmbeddedControlPlaneStore
 
@@ -422,13 +485,15 @@ def get_control_plane_store(app: FastAPI) -> ControlPlaneStore:
         store = EmbeddedControlPlaneStore(
             conn_provider=lambda: app.state.query_engine._conn,
             alert_rules_path_provider=lambda: get_alert_config_path(app),
+            webhook_registrations_path_provider=lambda: get_webhook_config_path(app),
         )
     elif kind == "postgres":
-        raise NotImplementedError(
-            "AGENTFLOW_CONTROLPLANE_STORE=postgres is the ADR 0010 scale profile; "
-            "the PostgresControlPlaneStore adapter ships in rollout slice 5 — "
-            "until then only 'embedded' runs."
-        )
+        # Deferred for a different reason than the embedded branch: psycopg is
+        # an optional dependency (the redis pattern), so the adapter module
+        # must not load unless this profile is actually configured.
+        from .postgres import resolve_postgres_store_from_env
+
+        store = resolve_postgres_store_from_env()
     else:
         raise ValueError(
             f"Unknown control-plane store {kind!r} "

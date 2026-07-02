@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -174,8 +173,7 @@ async def test_alert_history_does_not_block_event_loop(monkeypatch: pytest.Monke
 
 @pytest.mark.asyncio
 async def test_webhook_logs_does_not_block_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The registration lookup is a YAML read, not the DuckDB scan under test.
-    monkeypatch.setattr(webhooks_module, "get_webhook_config_path", lambda app: Path("unused"))
+    # The registration lookup is a store read, not the DuckDB scan under test.
     monkeypatch.setattr(webhooks_module, "get_webhook", lambda *a, **k: SimpleNamespace(id="W1"))
     app = FastAPI()
     app.state.query_engine = SimpleNamespace(_conn=_SleepyHistoryConn(delay_seconds=0.3))

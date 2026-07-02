@@ -2,7 +2,7 @@
 {{- fail "DuckDB persistence requires a single writer replica: set replicaCount=1 and autoscaling.maxReplicas=1, or disable persistence and use ephemeral storage." }}
 {{- end }}
 {{- if and (or (gt (int .Values.replicaCount) 1) (and .Values.autoscaling.enabled (gt (int .Values.autoscaling.maxReplicas) 1))) (or (ne .Values.controlPlane.store "postgres") (ne .Values.serving.backend "clickhouse")) }}
-{{- fail "Multi-replica requires BOTH an external serving engine (serving.backend=clickhouse, ADR 0006/0007) AND an external control-plane store (controlPlane.store=postgres, ADR 0009/0010): the embedded per-pod store forks webhook/alert/outbox/usage state across replicas (duplicate deliveries, split alert history). Until the ADR 0010 rollout ships the postgres store, keep replicaCount=1 and autoscaling.maxReplicas=1." }}
+{{- fail "Multi-replica requires BOTH an external serving engine (serving.backend=clickhouse, ADR 0006/0007) AND an external control-plane store (controlPlane.store=postgres, ADR 0009/0010): the embedded per-pod store forks webhook/alert/outbox/usage state across replicas (duplicate deliveries, split alert history). The app-side postgres adapter shipped with ADR 0010 slice 5; until the chart profile for it lands (rollout slice 6), keep replicaCount=1 and autoscaling.maxReplicas=1." }}
 {{- end }}
 {{- $secretName := .Values.secrets.existingSecret | default (include "agentflow.fullname" .) }}
 apiVersion: apps/v1

@@ -134,13 +134,16 @@ serving:
     existingSecret: ""
     passwordKey: clickhouse-password
 
-# Control-plane state (ADR 0009 / ADR 0010): webhook queue+log, alert rules and
-# history, outbox, dead-letter and usage accounting. 'embedded' = per-pod
-# DuckDB + config files — correct for the single-replica profile, a split-brain
-# at replicaCount > 1 (duplicate deliveries, forked alert state). ADR 0010
-# externalizes this state to PostgreSQL behind a ControlPlaneStore port; until
-# that adapter ships, the values schema pins store=embedded (fail-closed
-# ratchet) and the chart refuses any multi-replica render.
+# Control-plane state (ADR 0009 / ADR 0010): webhook queue+log, registrations,
+# alert rules and history, outbox, dead-letter and usage accounting.
+# 'embedded' = per-pod DuckDB + config files — correct for the single-replica
+# profile, a split-brain at replicaCount > 1 (duplicate deliveries, forked
+# alert state). The PostgresControlPlaneStore adapter shipped with ADR 0010
+# rollout slice 5 (app-side: AGENTFLOW_CONTROLPLANE_STORE=postgres +
+# AGENTFLOW_CONTROLPLANE_PG_DSN); the chart profile for it (env + secret
+# wiring, schema enum extension) lands with rollout slice 6 — until then the
+# values schema pins store=embedded (fail-closed ratchet) and the chart
+# refuses any multi-replica render.
 controlPlane:
   store: embedded
 

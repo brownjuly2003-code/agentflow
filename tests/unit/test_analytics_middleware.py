@@ -17,6 +17,7 @@ async def test_analytics_middleware_does_not_read_body_for_get_requests(tmp_path
     app = FastAPI()
     app.state.auth_manager = SimpleNamespace(
         db_path=tmp_path / "usage.duckdb",
+        store=analytics_module._usage_store(tmp_path / "usage.duckdb"),
         has_configured_keys=lambda: True,
     )
     middleware = build_analytics_middleware()
@@ -54,6 +55,7 @@ async def test_analytics_middleware_skips_logging_when_auth_is_open(tmp_path: Pa
     app = FastAPI()
     app.state.auth_manager = SimpleNamespace(
         db_path=tmp_path / "usage.duckdb",
+        store=analytics_module._usage_store(tmp_path / "usage.duckdb"),
         has_configured_keys=lambda: False,
     )
     middleware = build_analytics_middleware()
@@ -147,6 +149,7 @@ async def test_analytics_middleware_skips_unauthenticated_request(tmp_path: Path
     app = FastAPI()
     app.state.auth_manager = SimpleNamespace(
         db_path=tmp_path / "usage.duckdb",
+        store=analytics_module._usage_store(tmp_path / "usage.duckdb"),
         has_configured_keys=lambda: True,
     )
     middleware = build_analytics_middleware()
@@ -168,6 +171,7 @@ async def test_analytics_middleware_records_authenticated_request(tmp_path: Path
     app = FastAPI()
     app.state.auth_manager = SimpleNamespace(
         db_path=tmp_path / "usage.duckdb",
+        store=analytics_module._usage_store(tmp_path / "usage.duckdb"),
         has_configured_keys=lambda: True,
     )
     middleware = build_analytics_middleware()

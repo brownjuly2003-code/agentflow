@@ -269,10 +269,12 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
         *,
         alert_rules_path_provider: Callable[[], Path] | None = None,
         usage_db_path_provider: Callable[[], Path | str] | None = None,
+        webhook_registrations_path_provider: Callable[[], Path] | None = None,
     ) -> None:
         self._conn_provider = conn_provider
         self._alert_rules_path_provider = alert_rules_path_provider
         self._usage_db_path_provider = usage_db_path_provider
+        self._webhook_registrations_path_provider = webhook_registrations_path_provider
         # Set once by _ensure_usage_db_connection's IOException fallback and
         # then sticky for the rest of this store's lifetime — mirrors the
         # pre-port code permanently reassigning `AuthManager.db_path` in
@@ -290,6 +292,16 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
                 "are unavailable."
             )
         return self._alert_rules_path_provider()
+
+    @property
+    def _webhook_registrations_path(self) -> Path:
+        if self._webhook_registrations_path_provider is None:
+            raise RuntimeError(
+                "EmbeddedControlPlaneStore was constructed without a "
+                "webhook_registrations_path_provider; webhook-registration "
+                "repository methods are unavailable."
+            )
+        return self._webhook_registrations_path_provider()
 
     @property
     def _conn(self) -> duckdb.DuckDBPyConnection:
@@ -570,6 +582,32 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
                     pass
         return records
 
+    # --- webhook registration repository ---------------------------------------
+
+    def load_webhook_registrations(self) -> list[dict]:
+        # Byte-compatible with the pre-port webhook_dispatcher.load_webhooks
+        # YAML round-trip (ADR 0010 slice 5) — existing config/webhooks.yaml
+        # files keep working unchanged.
+        path = self._webhook_registrations_path
+        if not path.exists():
+            return []
+        raw = path.read_text(encoding="utf-8")
+        if not raw.strip():
+            return []
+        data = yaml.safe_load(raw) if yaml is not None else json.loads(raw)
+        return list((data or {}).get("webhooks", []))
+
+    def save_webhook_registrations(self, registrations: list[dict]) -> None:
+        path = self._webhook_registrations_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"webhooks": registrations}
+        content = (
+            yaml.safe_dump(payload, sort_keys=False)
+            if yaml is not None
+            else json.dumps(payload, indent=2)
+        )
+        path.write_text(content, encoding="utf-8")
+
     # --- alert rule repository (mutable runtime state) ------------------------
 
     def load_alert_rules(self) -> list[dict]:
@@ -592,6 +630,25 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
             else json.dumps(payload, indent=2)
         )
         path.write_text(content, encoding="utf-8", newline="\n")
+
+    def claim_alert_tick(self, rule_id: str, *, lease_seconds: float) -> bool:
+        # One process, one dispatcher loop: every claim is granted — the same
+        # degenerate exclusivity as claim_due_webhook_deliveries above. The
+        # PostgreSQL adapter takes a real lease here (ADR 0010 §2).
+        return True
+
+    def complete_alert_tick(self, rule_id: str, *, record: dict | None) -> None:
+        if record is None:
+            # Nothing advanced and embedded claims hold no lease to release.
+            return
+        rules = self.load_alert_rules()
+        for index, existing in enumerate(rules):
+            if existing.get("id") == rule_id:
+                rules[index] = record
+                break
+        else:
+            rules.append(record)
+        self.save_alert_rules(rules)
 
     # --- replay outbox + dead-letter (invariant 8: one transaction) -----------
 

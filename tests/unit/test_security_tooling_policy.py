@@ -59,6 +59,12 @@ _ALLOWED_B608_SITES = {
     "src/processing/clickhouse_sink.py": 2,
     "src/serving/api/routers/lineage.py": 1,
     "src/serving/api/routers/slo.py": 4,
+    # ADR 0010 slice 5 (reviewed 2026-07-03): _replace_record_set interpolates
+    # only its `table` argument, a module literal at exactly two call sites
+    # (save_webhook_registrations / save_alert_rules); every value binds via
+    # %s. All other adapter SQL is literal (the lease fragment is inlined and
+    # the tenant/reason filters branch into full literal statements).
+    "src/serving/control_plane/postgres.py": 3,
     "src/serving/backends/clickhouse_backend.py": 7,
     "src/serving/backends/duckdb_backend.py": 2,
     "src/serving/semantic_layer/nl_engine.py": 6,

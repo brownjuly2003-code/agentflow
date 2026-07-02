@@ -37,6 +37,12 @@ cloud = [
     "boto3>=1.35,<2",
     "pyiceberg[pyiceberg-core]>=0.7,<1",
 ]
+postgres = [
+    # ADR 0010 slice 5: PostgresControlPlaneStore (scale profile). Optional
+    # exactly like redis — the embedded default profile needs none of it,
+    # and control_plane/postgres.py degrades to a clear boot error without it.
+    "psycopg[binary]>=3.2,<4",
+]
 load = [
     "locust>=2.29,<3",
     # benchmark_freshness.py: production QueryCache semantics (TTL + key
@@ -156,6 +162,11 @@ ignore = ["S101", "S311"]
     "S608",
 ]
 "src/serving/api/routers/lineage.py" = [
+    "S608",
+]
+# Interpolations are internal literals only (a lease-expiry SQL fragment,
+# optional filter clauses, table-name constants); all values bind via %s.
+"src/serving/control_plane/postgres.py" = [
     "S608",
 ]
 "src/serving/api/routers/slo.py" = [
@@ -284,7 +295,10 @@ editable-installs = [".[dev]"]
 editable-installs = [".[dev,cloud]"]
 
 [tool.agentflow.dependency-profiles.profiles.test-sdk]
-editable-installs = [".[dev,cloud]", "./sdk"]
+# postgres: the CI integration job drives the PostgresControlPlaneStore live
+# suite against its postgres:17 service (ADR 0010 slice 5), so it needs the
+# optional psycopg extra.
+editable-installs = [".[dev,cloud,postgres]", "./sdk"]
 
 [tool.agentflow.dependency-profiles.profiles.test-integrations]
 editable-installs = [".[dev,cloud]", "./sdk", "./integrations[mcp]"]

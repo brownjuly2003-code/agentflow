@@ -21,6 +21,7 @@ import duckdb
 import pytest
 
 from src.serving.control_plane import (
+    CONTROL_PLANE_PG_DSN_ENV,
     CONTROL_PLANE_STORE_ENV,
     EmbeddedControlPlaneStore,
     get_control_plane_store,
@@ -317,6 +318,157 @@ def test_alert_rules_methods_require_a_path_provider(store: EmbeddedControlPlane
         store.load_alert_rules()
 
 
+# --- webhook registration repository (YAML round-trip, slice 5) -------------------
+
+
+@pytest.fixture
+def registration_store(tmp_path: Path) -> EmbeddedControlPlaneStore:
+    path = tmp_path / "webhooks.yaml"
+    return EmbeddedControlPlaneStore(webhook_registrations_path_provider=lambda: path)
+
+
+def test_load_webhook_registrations_empty_when_file_is_missing(
+    registration_store: EmbeddedControlPlaneStore,
+) -> None:
+    assert registration_store.load_webhook_registrations() == []
+
+
+def test_save_then_load_webhook_registrations_round_trips_verbatim(
+    registration_store: EmbeddedControlPlaneStore,
+) -> None:
+    registrations = [
+        {"id": "wh-1", "url": "https://a.test/h", "tenant": "acme", "active": True},
+        {"id": "wh-2", "url": "https://b.test/h", "tenant": "beta", "active": False},
+    ]
+
+    registration_store.save_webhook_registrations(registrations)
+
+    assert registration_store.load_webhook_registrations() == registrations
+
+
+def test_load_webhook_registrations_reads_the_pre_port_yaml_shape(tmp_path: Path) -> None:
+    # Byte-compatibility pin: a config/webhooks.yaml written by the pre-port
+    # save_webhooks (a top-level ``webhooks:`` list) loads unchanged.
+    path = tmp_path / "webhooks.yaml"
+    path.write_text(
+        "webhooks:\n- id: wh-1\n  url: https://a.test/h\n  tenant: acme\n  active: true\n",
+        encoding="utf-8",
+    )
+    store = EmbeddedControlPlaneStore(webhook_registrations_path_provider=lambda: path)
+
+    assert store.load_webhook_registrations() == [
+        {"id": "wh-1", "url": "https://a.test/h", "tenant": "acme", "active": True}
+    ]
+
+
+def test_webhook_registration_methods_require_a_path_provider(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    with pytest.raises(RuntimeError, match="webhook_registrations_path_provider"):
+        store.load_webhook_registrations()
+
+
+# --- alert tick claims (slice 5) ---------------------------------------------------
+
+
+def test_embedded_claim_alert_tick_always_grants(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    # One process, one dispatcher loop: the embedded adapter satisfies the
+    # single-flight contract degenerately, like its claim_due siblings.
+    assert alert_store.claim_alert_tick("a1", lease_seconds=60.0) is True
+    assert alert_store.claim_alert_tick("a1", lease_seconds=60.0) is True
+
+
+def test_embedded_complete_alert_tick_persists_only_that_rule(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    alert_store.save_alert_rules([{"id": "a1", "state": "ok"}, {"id": "a2", "state": "ok"}])
+
+    alert_store.complete_alert_tick("a1", record={"id": "a1", "state": "firing"})
+
+    assert alert_store.load_alert_rules() == [
+        {"id": "a1", "state": "firing"},
+        {"id": "a2", "state": "ok"},
+    ]
+
+
+def test_embedded_complete_alert_tick_without_record_is_a_no_op(
+    alert_store: EmbeddedControlPlaneStore,
+) -> None:
+    alert_store.save_alert_rules([{"id": "a1", "state": "ok"}])
+
+    alert_store.complete_alert_tick("a1", record=None)
+
+    assert alert_store.load_alert_rules() == [{"id": "a1", "state": "ok"}]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_alerts_single_flights_rules_through_the_claim() -> None:
+    """ADR 0010 §2 wiring pin: the dispatcher evaluates only the rules whose
+    tick it claimed, and completes every claim it took — with the advanced
+    record when the rule changed, with ``None`` when it did not."""
+    from src.serving.api.alerts import dispatcher as dispatcher_module
+    from src.serving.api.alerts import escalation as escalation_module
+    from src.serving.api.alerts.dispatcher import AlertDispatcher, AlertRule
+
+    now = datetime.now(UTC)
+    rules = [
+        AlertRule(
+            id=f"a{index}",
+            name=f"rule {index}",
+            tenant="acme",
+            metric="error_rate",
+            window="1h",
+            condition="above",
+            threshold=0.1,
+            webhook_url="https://example.test/hook",
+            secret="s",
+            created_at=now,
+            updated_at=now,
+        )
+        for index in range(3)
+    ]
+
+    class _ClaimingStubStore:
+        def __init__(self) -> None:
+            self.claims: list[str] = []
+            self.completions: list[tuple[str, bool]] = []
+
+        def load_alert_rules(self) -> list[dict]:
+            return [rule.model_dump(mode="json") for rule in rules]
+
+        def claim_alert_tick(self, rule_id: str, *, lease_seconds: float) -> bool:
+            self.claims.append(rule_id)
+            return rule_id != "a1"  # a1's tick belongs to "another replica"
+
+        def complete_alert_tick(self, rule_id: str, *, record: dict | None) -> None:
+            self.completions.append((rule_id, record is not None))
+
+    stub_store = _ClaimingStubStore()
+    app = SimpleNamespace(state=SimpleNamespace(control_plane_store=stub_store))
+    dispatcher = AlertDispatcher(app)  # type: ignore[arg-type]
+
+    evaluated: list[str] = []
+
+    async def _fake_dispatch_alert(dispatcher_arg, alert, now_arg):
+        evaluated.append(alert.id)
+        # a2 advances state; a0 does not.
+        return alert, alert.id == "a2", 0
+
+    original = escalation_module.dispatch_alert
+    escalation_module.dispatch_alert = _fake_dispatch_alert  # type: ignore[assignment]
+    try:
+        await dispatcher.dispatch_alerts()
+    finally:
+        escalation_module.dispatch_alert = original  # type: ignore[assignment]
+    del dispatcher_module  # imported for parity with the dispatcher under test
+
+    assert stub_store.claims == ["a0", "a1", "a2"]
+    assert evaluated == ["a0", "a2"]  # the lost claim was never evaluated
+    assert stub_store.completions == [("a0", False), ("a2", True)]
+
+
 # --- replay outbox + dead-letter (invariant 8) ------------------------------------
 
 
@@ -595,14 +747,59 @@ def test_get_store_defaults_to_embedded_and_caches_on_app_state(
     assert get_control_plane_store(app) is store  # type: ignore[arg-type]
 
 
-def test_get_store_postgres_is_a_fail_closed_ratchet_until_slice_5(
+def test_get_store_postgres_requires_a_dsn(
     conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # ADR 0010: the scale profile must not silently fall back to the embedded
-    # (split-brain at replicaCount>1) store — it fails the boot instead, and
-    # this test is deleted only when PostgresControlPlaneStore ships.
+    # (split-brain at replicaCount>1) store — a missing DSN fails the boot.
     monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
-    with pytest.raises(NotImplementedError, match="slice 5"):
+    monkeypatch.delenv(CONTROL_PLANE_PG_DSN_ENV, raising=False)
+    with pytest.raises(ValueError, match=CONTROL_PLANE_PG_DSN_ENV):
+        get_control_plane_store(_stub_app(conn))  # type: ignore[arg-type]
+
+
+def test_get_store_postgres_resolves_the_adapter_and_caches_it(
+    conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.serving.control_plane import postgres as postgres_module
+    from src.serving.control_plane.postgres import PostgresControlPlaneStore
+
+    # The selection seam is under test, not psycopg: stub the module object so
+    # this resolves identically whether or not the optional dependency is
+    # installed (the CI unit job installs no optional extras).
+    monkeypatch.setattr(postgres_module, "psycopg", SimpleNamespace())
+    monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
+    monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
+    app = _stub_app(conn)
+
+    store = get_control_plane_store(app)  # type: ignore[arg-type]
+
+    # Construction is connection-free (schema DDL runs on first method use),
+    # so resolution succeeds without a live server.
+    assert isinstance(store, PostgresControlPlaneStore)
+    assert app.state.control_plane_store is store
+    assert get_control_plane_store(app) is store  # type: ignore[arg-type]
+
+
+def test_get_store_postgres_fails_loudly_without_psycopg(
+    conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.serving.control_plane import postgres as postgres_module
+
+    monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
+    monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
+    monkeypatch.setattr(postgres_module, "psycopg", None)
+    with pytest.raises(RuntimeError, match="psycopg"):
+        get_control_plane_store(_stub_app(conn))  # type: ignore[arg-type]
+
+
+def test_get_store_postgres_rejects_a_malformed_lease_override(
+    conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
+    monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
+    monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_LEASE_SECONDS", "soon")
+    with pytest.raises(ValueError, match="LEASE_SECONDS"):
         get_control_plane_store(_stub_app(conn))  # type: ignore[arg-type]
 
 

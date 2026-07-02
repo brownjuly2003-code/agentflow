@@ -13,7 +13,6 @@ from src.serving.api.webhook_dispatcher import (
     create_webhook,
     deactivate_webhook,
     get_webhook,
-    get_webhook_config_path,
     list_webhooks,
 )
 from src.serving.control_plane import get_control_plane_store
@@ -40,7 +39,7 @@ async def register_webhook(payload: WebhookCreateRequest, request: Request) -> d
     except UnsafeEgressURLError as exc:
         raise HTTPException(status_code=400, detail=f"Unsafe webhook URL: {exc}") from exc
     registration = create_webhook(
-        get_webhook_config_path(request.app),
+        request.app,
         url=str(payload.url),
         tenant=_tenant(request),
         filters=payload.filters,
@@ -50,7 +49,7 @@ async def register_webhook(payload: WebhookCreateRequest, request: Request) -> d
 
 @router.get("")
 async def list_my_webhooks(request: Request) -> dict[str, object]:
-    webhooks = list_webhooks(get_webhook_config_path(request.app), _tenant(request))
+    webhooks = list_webhooks(request.app, _tenant(request))
     # Exclude `secret` from list/read responses. Plaintext signing material
     # is returned only once on POST. Listing it again would let any tenant
     # API key recover signing secrets after creation (audit p2_2 #7).
@@ -62,7 +61,7 @@ async def list_my_webhooks(request: Request) -> dict[str, object]:
 @router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def unregister_webhook(webhook_id: str, request: Request) -> Response:
     removed = deactivate_webhook(
-        get_webhook_config_path(request.app),
+        request.app,
         webhook_id,
         _tenant(request),
     )
@@ -74,7 +73,7 @@ async def unregister_webhook(webhook_id: str, request: Request) -> Response:
 @router.post("/{webhook_id}/test")
 async def test_webhook(webhook_id: str, request: Request) -> dict[str, object]:
     registration = get_webhook(
-        get_webhook_config_path(request.app),
+        request.app,
         webhook_id,
         _tenant(request),
     )
@@ -95,7 +94,7 @@ async def test_webhook(webhook_id: str, request: Request) -> dict[str, object]:
 @router.get("/{webhook_id}/logs")
 async def webhook_logs(webhook_id: str, request: Request) -> dict[str, object]:
     registration = get_webhook(
-        get_webhook_config_path(request.app),
+        request.app,
         webhook_id,
         _tenant(request),
     )

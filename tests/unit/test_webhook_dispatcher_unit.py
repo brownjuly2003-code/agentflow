@@ -93,54 +93,66 @@ def config_path(tmp_path: Path) -> Path:
     return tmp_path / "webhooks.yaml"
 
 
+def _registry_app(config_path: Path) -> SimpleNamespace:
+    # Registration CRUD resolves the control-plane store from the app
+    # (ADR 0010 slice 5); the embedded store persists registrations to the
+    # app's webhook_config_path YAML, exactly like the pre-port path-based
+    # helpers did.
+    return SimpleNamespace(state=SimpleNamespace(webhook_config_path=config_path))
+
+
 def test_create_then_load_and_list_roundtrip(config_path: Path) -> None:
+    app = _registry_app(config_path)
     created = create_webhook(
-        config_path,
+        app,
         url="https://example.test/hook",
         tenant="acme",
         filters=WebhookFilters(event_types=["order"]),
     )
 
     assert created.secret  # a secret is generated
-    assert load_webhooks(config_path)  # persisted
-    listed = list_webhooks(config_path, "acme")
+    assert config_path.exists()  # persisted to the embedded profile's YAML
+    assert load_webhooks(app)
+    listed = list_webhooks(app, "acme")
     assert [w.id for w in listed] == [created.id]
     # tenant isolation: another tenant sees nothing
-    assert list_webhooks(config_path, "other") == []
+    assert list_webhooks(app, "other") == []
 
 
 def test_get_webhook_respects_tenant_and_activity(config_path: Path) -> None:
+    app = _registry_app(config_path)
     created = create_webhook(
-        config_path,
+        app,
         url="https://example.test/hook",
         tenant="acme",
         filters=WebhookFilters(),
     )
 
-    assert get_webhook(config_path, created.id, "acme") is not None
-    assert get_webhook(config_path, created.id, "other") is None
-    assert get_webhook(config_path, "missing-id", "acme") is None
+    assert get_webhook(app, created.id, "acme") is not None
+    assert get_webhook(app, created.id, "other") is None
+    assert get_webhook(app, "missing-id", "acme") is None
 
 
 def test_deactivate_hides_webhook(config_path: Path) -> None:
+    app = _registry_app(config_path)
     created = create_webhook(
-        config_path,
+        app,
         url="https://example.test/hook",
         tenant="acme",
         filters=WebhookFilters(),
     )
 
-    assert deactivate_webhook(config_path, created.id, "acme") is True
-    assert list_webhooks(config_path, "acme") == []
+    assert deactivate_webhook(app, created.id, "acme") is True
+    assert list_webhooks(app, "acme") == []
     # second deactivation is a no-op
-    assert deactivate_webhook(config_path, created.id, "acme") is False
+    assert deactivate_webhook(app, created.id, "acme") is False
 
 
 def test_load_webhooks_missing_or_empty_returns_empty(tmp_path: Path) -> None:
-    assert load_webhooks(tmp_path / "absent.yaml") == []
+    assert load_webhooks(_registry_app(tmp_path / "absent.yaml")) == []
     empty = tmp_path / "empty.yaml"
     empty.write_text("   \n", encoding="utf-8")
-    assert load_webhooks(empty) == []
+    assert load_webhooks(_registry_app(empty)) == []
 
 
 def test_matches_filters_event_type_prefix_and_exact() -> None:
@@ -327,17 +339,11 @@ async def test_dispatch_isolates_webhook_failure_and_enqueues_all(
             "INSERT INTO pipeline_events VALUES "
             "('e1', 'orders.raw', 'acme', 'order.created', NOW())"
         )
-        wh1 = create_webhook(
-            config_path, url="https://a.test/h1", tenant="acme", filters=WebhookFilters()
-        )
-        wh2 = create_webhook(
-            config_path, url="https://b.test/h2", tenant="acme", filters=WebhookFilters()
-        )
-        monkeypatch.setattr(
-            "src.serving.api.webhook_dispatcher.get_webhook_config_path",
-            lambda app: config_path,
-        )
-        dispatcher = WebhookDispatcher(_stub_app(conn))
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        wh1 = create_webhook(app, url="https://a.test/h1", tenant="acme", filters=WebhookFilters())
+        wh2 = create_webhook(app, url="https://b.test/h2", tenant="acme", filters=WebhookFilters())
+        dispatcher = WebhookDispatcher(app)
 
         async def _deliver(webhook: object, event: dict) -> dict:
             if getattr(webhook, "id", None) == wh1.id:
@@ -395,12 +401,11 @@ def test_record_outcome_failure_reschedules_then_dies_at_max() -> None:
 def test_process_delivery_queue_redrives_due_pending(tmp_path: Path) -> None:
     conn = duckdb.connect(":memory:")
     try:
-        config_path = tmp_path / "webhooks.yaml"
-        created = create_webhook(
-            config_path, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
-        )
         app = _stub_app(conn)
-        app.state.webhook_config_path = config_path
+        app.state.webhook_config_path = tmp_path / "webhooks.yaml"
+        created = create_webhook(
+            app, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
+        )
         dispatcher = WebhookDispatcher(app)
         dispatcher._enqueue_delivery(SimpleNamespace(id=created.id), _event("e1", tenant="acme"))
         dispatcher._record_delivery_outcome(
@@ -450,12 +455,11 @@ def test_process_delivery_queue_parks_dead_when_webhook_removed(tmp_path: Path) 
 def test_process_delivery_queue_skips_not_due(tmp_path: Path) -> None:
     conn = duckdb.connect(":memory:")
     try:
-        config_path = tmp_path / "webhooks.yaml"
-        created = create_webhook(
-            config_path, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
-        )
         app = _stub_app(conn)
-        app.state.webhook_config_path = config_path
+        app.state.webhook_config_path = tmp_path / "webhooks.yaml"
+        created = create_webhook(
+            app, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
+        )
         dispatcher = WebhookDispatcher(app)
         dispatcher._enqueue_delivery(SimpleNamespace(id=created.id), _event("e1", tenant="acme"))
         conn.execute(
@@ -484,12 +488,11 @@ def test_pending_delivery_survives_a_new_dispatcher_instance(tmp_path: Path) -> 
     in-memory seen-set cannot do this."""
     conn = duckdb.connect(":memory:")
     try:
-        config_path = tmp_path / "webhooks.yaml"
-        created = create_webhook(
-            config_path, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
-        )
         app = _stub_app(conn)
-        app.state.webhook_config_path = config_path
+        app.state.webhook_config_path = tmp_path / "webhooks.yaml"
+        created = create_webhook(
+            app, url="https://example.test/hook", tenant="acme", filters=WebhookFilters()
+        )
 
         first = WebhookDispatcher(app)
         first._enqueue_delivery(SimpleNamespace(id=created.id), _event("e1", tenant="acme"))

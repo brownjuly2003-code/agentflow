@@ -105,4 +105,6 @@ grant, PII-free by contract).
 - **`default` is superuser.** The demo admin (`default`/`demo`) sees
   everything — engine policies bound *roles*, they do not remove the admin.
   Production would split the admin identity from human users.
-- Live verification evidence: `docs/perf/vault-pii-governance-verify-2026-07-02.md`.
+- Live verification evidence: `docs/perf/vault-pii-governance-verify-2026-07-02.md`;
+  re-run the full deny/allow matrix on any stand with `verify_live.sh`
+  (`CH_CLIENT="clickhouse-client --user default --password demo" bash verify_live.sh`).

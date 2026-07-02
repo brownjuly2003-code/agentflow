@@ -106,6 +106,7 @@ inside fails with `ACCESS_DENIED` (probed). Documented in
   default, a column-limited reader would need SELECT on the underlying
   personal satellites — exactly what the boundary denies — and every view
   read would fail.
-- The whole matrix is re-runnable: probe script kept in the session scratchpad
-  (`verify_governance.sh`); the governance SQL itself is idempotent
+- The whole matrix is re-runnable on any stand:
+  `warehouse/agentflow/dv2/governance/verify_live.sh` (configure the client
+  via `CH_CLIENT`); the governance SQL itself is idempotent
   (`IF NOT EXISTS` / additive `GRANT`).

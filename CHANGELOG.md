@@ -4,6 +4,25 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — ControlPlaneStore port + embedded adapter: webhook queue/log behind it (ADR 0010 slice 1, 2026-07-02)
+
+- **New `src/serving/control_plane/`** — the `ControlPlaneStore` port and its
+  `EmbeddedControlPlaneStore` (DuckDB) adapter; the webhook durable delivery
+  queue and the delivery attempt log are the first subsystem behind it. Pure
+  extraction: DDL, SQL shapes, the catalog-DDL-lock discipline and the
+  dispatcher's pinned method signatures are byte-compatible — no behavior
+  change on the embedded (default) profile.
+- Claim semantics are part of the port contract (enqueue-winner-only inline
+  delivery; `claim_due` ownership — degenerate in one process, `FOR UPDATE
+  SKIP LOCKED` + lease in the slice-5 PostgreSQL adapter); the outcome state
+  machine moved into the store so it can be one transaction on PostgreSQL,
+  while retry policy stays dispatcher configuration.
+- `webhook_dispatcher` and `routers/webhooks.py` no longer reach into
+  `query_engine._conn` — pinned by a structural ratchet test; the
+  `AGENTFLOW_CONTROLPLANE_STORE` knob resolves the adapter (`postgres` raises
+  until slice 5 ships — fail-closed, pinned by test; unknown values fail the
+  boot). New `tests/unit/test_control_plane_store.py` (12 tests).
+
 ### Added — Control-plane externalization decided; scaling gate enforced at render time (ADR 0010, 2026-07-02)
 
 - **New [ADR 0010](docs/decisions/0010-control-plane-externalization-postgres.md)**

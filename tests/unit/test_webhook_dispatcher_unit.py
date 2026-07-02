@@ -29,19 +29,17 @@ from src.serving.api.webhook_dispatcher import (
     _event_body,
     _event_type_matches,
     _json_default,
-    _log_delivery,
     _matches_filters,
     _seen_event_key,
     _signature,
     create_webhook,
     deactivate_webhook,
-    ensure_webhook_deliveries_table,
-    get_delivery_logs,
     get_webhook,
     list_webhooks,
     load_webhooks,
 )
 from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.control_plane import EmbeddedControlPlaneStore
 from src.serving.semantic_layer.query import QueryEngine
 
 
@@ -237,9 +235,8 @@ def test_mark_existing_events_seen_populates_seen_ids(
 def test_delivery_logs_roundtrip() -> None:
     conn = duckdb.connect(":memory:")
     try:
-        ensure_webhook_deliveries_table(conn)
-        _log_delivery(
-            conn,
+        store = EmbeddedControlPlaneStore(conn_provider=lambda: conn)
+        store.log_webhook_delivery(
             delivery_id="d1",
             webhook_id="wh-1",
             event_id="e1",
@@ -249,12 +246,12 @@ def test_delivery_logs_roundtrip() -> None:
             success=True,
             error=None,
         )
-        logs = get_delivery_logs(conn, "wh-1")
+        logs = store.get_webhook_delivery_logs("wh-1")
         assert len(logs) == 1
         assert logs[0]["webhook_id"] == "wh-1"
         assert logs[0]["success"] is True
         # unrelated webhook id sees nothing
-        assert get_delivery_logs(conn, "wh-other") == []
+        assert store.get_webhook_delivery_logs("wh-other") == []
     finally:
         conn.close()
 

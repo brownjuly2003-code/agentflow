@@ -53,6 +53,7 @@ from src.serving.api.versioning import (
 )
 from src.serving.api.webhook_dispatcher import WebhookDispatcher
 from src.serving.cache import QueryCache
+from src.serving.control_plane import get_control_plane_store
 from src.serving.db_pool import DuckDBPool
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
@@ -195,6 +196,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.auth_manager.register_signal_handlers()
     app.state.auth_manager.ensure_usage_table()
     ensure_analytics_table(app.state.auth_manager.db_path)
+    # Control-plane store (ADR 0010): resolve eagerly so a misconfigured
+    # AGENTFLOW_CONTROLPLANE_STORE fails the boot, not the first delivery.
+    # Reset any instance cached by a previous lifespan of this process-wide
+    # app — the query engine above is fresh, the store must bind to it.
+    app.state.control_plane_store = None
+    get_control_plane_store(app)
     app.state.webhook_dispatcher = WebhookDispatcher(app)
     original_dispatch_new_events = app.state.webhook_dispatcher.dispatch_new_events
 

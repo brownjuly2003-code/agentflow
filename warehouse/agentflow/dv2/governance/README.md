@@ -98,10 +98,12 @@ grant, PII-free by contract).
 
 ## What this does NOT cover (honest scope)
 
-- **The PostgreSQL port** (`../postgres/03_business_vault.sql`) has the same
-  MDM views but no equivalent policy set yet (PG RLS + column grants would be
-  the analog). The ClickHouse vault is the demo/serving path; the PG port is
-  a source-replica used by the CDC demo. Follow-up, not shipped.
+- **The PostgreSQL port** (`../postgres/`) has the same MDM views and, since
+  2026-07-02, its own governance analog: `../postgres/governance/` (PG RLS +
+  column grants, verified live —
+  `docs/perf/vault-pii-governance-pg-verify-2026-07-02.md`). The ClickHouse
+  vault remains the demo/serving path; the PG port is a source-replica used
+  by the CDC demo.
 - **`default` is superuser.** The demo admin (`default`/`demo`) sees
   everything — engine policies bound *roles*, they do not remove the admin.
   Production would split the admin identity from human users.

@@ -52,6 +52,7 @@ def _pg_sql_files() -> list[Path]:
         PG_DIR / "03_business_vault.sql",
     ]
     files += [Path(p) for p in sorted(glob.glob(str(PG_DIR / "satellites" / "*.sql")))]
+    files += [Path(p) for p in sorted(glob.glob(str(PG_DIR / "governance" / "*.sql")))]
     return files
 
 

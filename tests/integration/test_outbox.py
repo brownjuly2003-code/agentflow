@@ -15,7 +15,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 
 import src.serving.api.main as main_module
-from src.processing.event_replayer import EventReplayer, ensure_dead_letter_table
+from src.processing.event_replayer import EventReplayer
+from src.serving.control_plane import ensure_dead_letter_table
 
 pytestmark = pytest.mark.integration
 

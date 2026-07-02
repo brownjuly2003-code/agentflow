@@ -1,11 +1,13 @@
-"""ADR 0010 slices 1-2: the ControlPlaneStore port and its embedded adapter.
+"""ADR 0010 slices 1-3: the ControlPlaneStore port and its embedded adapter.
 
 Covers the store-level contract the dispatcher relies on (enqueue-win
 semantics, due-claim ordering and bounds, the outcome state machine, parking,
 attempt-log roundtrip), the alert-delivery history log and the YAML-backed
-alert-rule repository (slice 2), the ``get_control_plane_store``
-resolution/ratchet, and the structural pin that keeps the webhook and alert
-paths from re-growing direct ``query_engine._conn`` reaches.
+alert-rule repository (slice 2), the replay outbox + dead-letter transitions
+including invariant 8's transactional atomicity (slice 3), the
+``get_control_plane_store`` resolution/ratchet, and the structural pin that
+keeps the webhook/alert/outbox/dead-letter paths from re-growing direct
+``query_engine._conn`` reaches.
 """
 
 from __future__ import annotations
@@ -47,6 +49,13 @@ def alert_store(conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> EmbeddedCont
     return EmbeddedControlPlaneStore(
         conn_provider=lambda: conn, alert_rules_path_provider=lambda: path
     )
+
+
+@pytest.fixture
+def outbox_store(conn: duckdb.DuckDBPyConnection) -> EmbeddedControlPlaneStore:
+    store = EmbeddedControlPlaneStore(conn_provider=lambda: conn)
+    store.ensure_outbox_schema()
+    return store
 
 
 def _enqueue(store: EmbeddedControlPlaneStore, webhook_id: str, event_id: str) -> bool:
@@ -308,6 +317,263 @@ def test_alert_rules_methods_require_a_path_provider(store: EmbeddedControlPlane
         store.load_alert_rules()
 
 
+# --- replay outbox + dead-letter (invariant 8) ------------------------------------
+
+
+def _seed_dead_letter(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    event_id: str,
+    tenant_id: str = "acme",
+    status: str = "failed",
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO dead_letter_events (
+            event_id, tenant_id, event_type, payload, failure_reason,
+            failure_detail, received_at, retry_count, last_retried_at, status
+        ) VALUES (?, ?, 'order.created', '{"a": 1}', 'semantic', 'x', ?, 0, NULL, ?)
+        """,
+        [event_id, tenant_id, datetime.now(UTC), status],
+    )
+
+
+def _seed_outbox(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    outbox_id: str,
+    event_id: str = "evt-1",
+    status: str = "pending",
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO outbox (id, event_id, payload, topic, status, retry_count, next_attempt_at)
+        VALUES (?, ?, '{"a": 1}', 'agentflow.orders', ?, 0, ?)
+        """,
+        [outbox_id, event_id, status, datetime.now(UTC)],
+    )
+
+
+def test_claim_due_outbox_entries_returns_oldest_first(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    for index in range(3):
+        _seed_outbox(conn, outbox_id=f"o{index}", event_id=f"e{index}")
+        conn.execute(
+            "UPDATE outbox SET created_at = ? WHERE id = ?",
+            [datetime.now(UTC) + timedelta(seconds=index), f"o{index}"],
+        )
+
+    claimed = outbox_store.claim_due_outbox_entries(limit=2)
+
+    assert [entry.id for entry in claimed] == ["o0", "o1"]
+    assert claimed[0].topic == "agentflow.orders"
+
+
+def test_get_pending_outbox_entry_returns_none_when_not_pending_or_missing(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_outbox(conn, outbox_id="o1", status="sent")
+    assert outbox_store.get_pending_outbox_entry("o1") is None
+    assert outbox_store.get_pending_outbox_entry("does-not-exist") is None
+
+
+def test_mark_outbox_sent_flips_both_rows_in_one_transaction(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_outbox(conn, outbox_id="o1", event_id="e1")
+    _seed_dead_letter(conn, event_id="e1")
+
+    outbox_store.mark_outbox_sent(outbox_id="o1", event_id="e1")
+
+    assert conn.execute("SELECT status FROM outbox WHERE id = 'o1'").fetchone()[0] == "sent"
+    assert (
+        conn.execute("SELECT status FROM dead_letter_events WHERE event_id = 'e1'").fetchone()[0]
+        == "replayed"
+    )
+
+
+def test_mark_outbox_sent_rolls_back_when_dead_letter_update_fails(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_outbox(conn, outbox_id="o1", event_id="e1")
+    conn.execute("DROP TABLE dead_letter_events")
+
+    with pytest.raises(duckdb.Error):
+        outbox_store.mark_outbox_sent(outbox_id="o1", event_id="e1")
+
+    assert conn.execute("SELECT status FROM outbox WHERE id = 'o1'").fetchone()[0] == "pending"
+
+
+def test_schedule_outbox_retry_backs_off_then_fails_and_dead_letters(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_outbox(conn, outbox_id="o1", event_id="e1")
+    _seed_dead_letter(conn, event_id="e1")
+
+    outbox_store.schedule_outbox_retry(
+        outbox_id="o1", event_id="e1", retry_count=1, error_message="boom", max_retries=2
+    )
+    status, next_at = conn.execute(
+        "SELECT status, next_attempt_at FROM outbox WHERE id = 'o1'"
+    ).fetchone()
+    assert status == "pending"
+    assert next_at is not None
+
+    outbox_store.schedule_outbox_retry(
+        outbox_id="o1", event_id="e1", retry_count=2, error_message="boom", max_retries=2
+    )
+    status, next_at = conn.execute(
+        "SELECT status, next_attempt_at FROM outbox WHERE id = 'o1'"
+    ).fetchone()
+    assert status == "failed"
+    assert next_at is None
+    assert (
+        conn.execute("SELECT status FROM dead_letter_events WHERE event_id = 'e1'").fetchone()[0]
+        == "failed"
+    )
+
+
+def test_schedule_outbox_retry_floors_kafka_shaped_errors_at_30s(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_outbox(conn, outbox_id="o1", event_id="e1")
+    _seed_dead_letter(conn, event_id="e1")
+
+    outbox_store.schedule_outbox_retry(
+        outbox_id="o1",
+        event_id="e1",
+        retry_count=1,
+        error_message="KafkaError{code=_MSG_TIMED_OUT}",
+        max_retries=5,
+    )
+
+    next_at = conn.execute("SELECT next_attempt_at FROM outbox WHERE id = 'o1'").fetchone()[0]
+    assert next_at >= datetime.now(UTC).replace(tzinfo=next_at.tzinfo) + timedelta(seconds=20)
+
+
+def test_enqueue_outbox_replay_marks_pending_and_inserts_row_in_one_transaction(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1", status="failed")
+    replayed_at = datetime.now(UTC)
+
+    outbox_store.enqueue_outbox_replay(
+        outbox_id="o1",
+        event_id="e1",
+        payload={"event_id": "e1", "total_amount": "9.99"},
+        topic="events.raw",
+        retry_count=1,
+        replayed_at=replayed_at,
+    )
+
+    dl_status, dl_retry = conn.execute(
+        "SELECT status, retry_count FROM dead_letter_events WHERE event_id = 'e1'"
+    ).fetchone()
+    assert dl_status == "replay_pending"
+    assert dl_retry == 1
+    outbox_row = conn.execute(
+        "SELECT event_id, topic, status FROM outbox WHERE id = 'o1'"
+    ).fetchone()
+    assert outbox_row == ("e1", "events.raw", "pending")
+
+
+def test_enqueue_outbox_replay_rolls_back_when_outbox_insert_fails(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1", status="failed")
+    conn.execute("DROP TABLE outbox")
+
+    with pytest.raises(duckdb.Error):
+        outbox_store.enqueue_outbox_replay(
+            outbox_id="o1",
+            event_id="e1",
+            payload={"event_id": "e1"},
+            topic="events.raw",
+            retry_count=1,
+            replayed_at=datetime.now(UTC),
+        )
+
+    assert (
+        conn.execute("SELECT status FROM dead_letter_events WHERE event_id = 'e1'").fetchone()[0]
+        == "failed"
+    )
+
+
+def test_get_dead_letter_event_for_replay_returns_none_when_missing(
+    outbox_store: EmbeddedControlPlaneStore,
+) -> None:
+    assert outbox_store.get_dead_letter_event_for_replay("ghost") is None
+
+
+def test_dismiss_dead_letter_event_marks_dismissed(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1")
+    outbox_store.dismiss_dead_letter_event("e1")
+    assert (
+        conn.execute("SELECT status FROM dead_letter_events WHERE event_id = 'e1'").fetchone()[0]
+        == "dismissed"
+    )
+
+
+def test_dead_letter_event_exists_is_tenant_scoped(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1", tenant_id="acme")
+    assert outbox_store.dead_letter_event_exists("e1", "acme") is True
+    assert outbox_store.dead_letter_event_exists("e1", "beta") is False
+    assert outbox_store.dead_letter_event_exists("ghost", "acme") is False
+
+
+def test_get_dead_letter_event_is_tenant_scoped_and_shapes_detail(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1", tenant_id="acme")
+
+    record = outbox_store.get_dead_letter_event("e1", "acme")
+
+    assert record is not None
+    assert record["event_id"] == "e1"
+    assert record["failure_reason"] == "semantic"
+    assert outbox_store.get_dead_letter_event("e1", "beta") is None
+
+
+def test_list_dead_letter_events_paginates_and_filters_by_reason(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1", tenant_id="acme")
+    _seed_dead_letter(conn, event_id="e2", tenant_id="acme")
+    _seed_dead_letter(conn, event_id="e-beta", tenant_id="beta")
+    conn.execute("UPDATE dead_letter_events SET failure_reason = 'schema' WHERE event_id = 'e2'")
+
+    items, total = outbox_store.list_dead_letter_events(
+        tenant_id="acme", reason=None, page=1, page_size=1
+    )
+    assert total == 2
+    assert len(items) == 1
+
+    items, total = outbox_store.list_dead_letter_events(
+        tenant_id="acme", reason="schema", page=1, page_size=10
+    )
+    assert total == 1
+    assert items[0]["event_id"] == "e2"
+
+
+def test_get_dead_letter_stats_counts_by_reason_and_last_24h(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="e1", tenant_id="acme")
+    _seed_dead_letter(conn, event_id="e2", tenant_id="acme")
+    _seed_dead_letter(conn, event_id="e-beta", tenant_id="beta")
+    conn.execute("UPDATE dead_letter_events SET failure_reason = 'schema' WHERE event_id = 'e2'")
+
+    stats = outbox_store.get_dead_letter_stats("acme")
+
+    assert stats["counts"] == {"semantic": 1, "schema": 1}
+    assert stats["last_24h"] == 2
+
+
 # --- get_control_plane_store resolution + ratchet -------------------------------
 
 
@@ -372,16 +638,19 @@ def test_get_store_follows_a_swapped_query_engine(
 
 
 def test_webhook_path_does_not_reach_into_the_engine_connection() -> None:
-    """ADR 0010 slices 1-2 ratchet: the webhook/alert dispatchers and their
-    routers go through the ControlPlaneStore port; direct ``query_engine._conn``
-    reaches must not re-grow there. The single sanctioned reach is the
-    composition seam in ``control_plane/store.py``."""
+    """ADR 0010 slices 1-3 ratchet: the webhook/alert/outbox/dead-letter
+    dispatchers and their routers go through the ControlPlaneStore port;
+    direct ``query_engine._conn`` reaches must not re-grow there. The single
+    sanctioned reach is the composition seam in ``control_plane/store.py``."""
     for relative in (
         "src/serving/api/webhook_dispatcher.py",
         "src/serving/api/routers/webhooks.py",
         "src/serving/api/alerts/dispatcher.py",
         "src/serving/api/alerts/escalation.py",
         "src/serving/api/routers/alerts.py",
+        "src/processing/outbox.py",
+        "src/processing/event_replayer.py",
+        "src/serving/api/routers/deadletter.py",
     ):
         source = (PROJECT_ROOT / relative).read_text(encoding="utf-8")
         assert "query_engine._conn" not in source, relative

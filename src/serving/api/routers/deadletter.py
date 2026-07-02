@@ -3,9 +3,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime
-from typing import cast
 
-import duckdb
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -14,8 +12,8 @@ from src.processing.event_replayer import (
     DeadLetterEventNotFoundError,
     EventReplayer,
     ReplayValidationError,
-    ensure_dead_letter_table,
 )
+from src.serving.control_plane import get_control_plane_store
 
 router = APIRouter(prefix="/v1/deadletter", tags=["deadletter"])
 
@@ -62,31 +60,6 @@ class DismissResponse(BaseModel):
     status: str
 
 
-def _conn(request: Request) -> duckdb.DuckDBPyConnection:
-    # app.state is dynamically typed; the query engine owns a real DuckDB handle.
-    conn = cast(duckdb.DuckDBPyConnection, request.app.state.query_engine._conn)
-    ensure_dead_letter_table(conn)
-    return conn
-
-
-def _read_cursor(request: Request) -> duckdb.DuckDBPyConnection:
-    """A dedicated cursor for the GET handlers, used on a worker thread.
-
-    The read handlers offload their scans with ``run_in_threadpool``; a separate
-    cursor — not the shared connection object — keeps concurrent reads on
-    different worker threads from colliding on the connection. (audit_30_06_26.md A2)
-    """
-    cursor = cast(duckdb.DuckDBPyConnection, request.app.state.query_engine._conn).cursor()
-    try:
-        ensure_dead_letter_table(cursor)
-    except Exception:
-        # Don't leak the freshly-opened cursor if the lazy DDL fails before the
-        # handler's own try/finally takes over.
-        cursor.close()
-        raise
-    return cursor
-
-
 def _tenant_id(request: Request) -> str:
     tenant_key = getattr(request.state, "tenant_key", None)
     tenant_id = getattr(request.state, "tenant_id", None)
@@ -105,7 +78,10 @@ def _decode_payload(payload: object) -> dict:
 
 def _replayer(request: Request) -> EventReplayer:
     producer = getattr(request.app.state, "deadletter_producer", None)
-    return EventReplayer(_conn(request), producer=producer if callable(producer) else None)
+    return EventReplayer(
+        store=get_control_plane_store(request.app),
+        producer=producer if callable(producer) else None,
+    )
 
 
 def _require_deadletter_write_access(request: Request, event_id: str) -> None:
@@ -117,19 +93,10 @@ def _require_deadletter_write_access(request: Request, event_id: str) -> None:
             status_code=403,
             detail="This API key has read-only access to dead-letter operations.",
         )
-    row = (
-        _conn(request)
-        .execute(
-            """
-        SELECT event_id
-        FROM dead_letter_events
-        WHERE event_id = ? AND COALESCE(tenant_id, 'default') = ?
-        """,
-            [event_id, _tenant_id(request)],
-        )
-        .fetchone()
+    exists = get_control_plane_store(request.app).dead_letter_event_exists(
+        event_id, _tenant_id(request)
     )
-    if row is None:
+    if not exists:
         raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
 
 
@@ -139,55 +106,8 @@ async def deadletter_stats(request: Request) -> DeadLetterStatsResponse:
 
 
 def _deadletter_stats(request: Request) -> DeadLetterStatsResponse:
-    cursor = _read_cursor(request)
-    tenant_id = _tenant_id(request)
-    try:
-        rows = cursor.execute(
-            """
-            SELECT failure_reason, COUNT(*)
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-            GROUP BY failure_reason
-            ORDER BY failure_reason
-            """,
-            [tenant_id],
-        ).fetchall()
-        last_24h_row = cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-              AND received_at >= NOW() - INTERVAL '24 hours'
-            """,
-            [tenant_id],
-        ).fetchone()
-        trend_rows = cursor.execute(
-            """
-            SELECT DATE_TRUNC('hour', received_at) AS hour_bucket, COUNT(*)
-            FROM dead_letter_events
-            WHERE status = 'failed'
-              AND COALESCE(tenant_id, 'default') = ?
-              AND received_at >= NOW() - INTERVAL '24 hours'
-            GROUP BY hour_bucket
-            ORDER BY hour_bucket
-            """,
-            [tenant_id],
-        ).fetchall()
-    finally:
-        cursor.close()
-    return DeadLetterStatsResponse(
-        counts={str(reason): int(count) for reason, count in rows if reason is not None},
-        last_24h=int(last_24h_row[0]) if last_24h_row and last_24h_row[0] is not None else 0,
-        trend=[
-            {
-                "hour": hour.isoformat() if hasattr(hour, "isoformat") else str(hour),
-                "count": int(count),
-            }
-            for hour, count in trend_rows
-        ],
-    )
+    stats = get_control_plane_store(request.app).get_dead_letter_stats(_tenant_id(request))
+    return DeadLetterStatsResponse(**stats)
 
 
 @router.get("", response_model=DeadLetterListResponse)
@@ -203,93 +123,11 @@ async def list_deadletter_events(
 def _list_deadletter_events(
     request: Request, page: int, page_size: int, reason: str | None
 ) -> DeadLetterListResponse:
-    cursor = _read_cursor(request)
-    tenant_id = _tenant_id(request)
-    try:
-        params: list[object]
-        if reason is not None:
-            params = [tenant_id, reason]
-            total_row = cursor.execute(
-                """
-                SELECT COUNT(*)
-                FROM dead_letter_events
-                WHERE status = 'failed'
-                  AND COALESCE(tenant_id, 'default') = ?
-                  AND failure_reason = ?
-                """,
-                params,
-            ).fetchone()
-        else:
-            params = [tenant_id]
-            total_row = cursor.execute(
-                """
-                SELECT COUNT(*)
-                FROM dead_letter_events
-                WHERE status = 'failed'
-                  AND COALESCE(tenant_id, 'default') = ?
-                """,
-                params,
-            ).fetchone()
-        total = int(total_row[0]) if total_row and total_row[0] is not None else 0
-        offset = (page - 1) * page_size
-        if reason is not None:
-            rows = cursor.execute(
-                """
-                SELECT
-                    event_id,
-                    event_type,
-                    failure_reason,
-                    failure_detail,
-                    received_at,
-                    retry_count,
-                    last_retried_at,
-                    status
-                FROM dead_letter_events
-                WHERE status = 'failed'
-                  AND COALESCE(tenant_id, 'default') = ?
-                  AND failure_reason = ?
-                ORDER BY received_at DESC, event_id ASC
-                LIMIT ? OFFSET ?
-                """,
-                [tenant_id, reason, page_size, offset],
-            ).fetchall()
-        else:
-            rows = cursor.execute(
-                """
-                SELECT
-                    event_id,
-                    event_type,
-                    failure_reason,
-                    failure_detail,
-                    received_at,
-                    retry_count,
-                    last_retried_at,
-                    status
-                FROM dead_letter_events
-                WHERE status = 'failed'
-                  AND COALESCE(tenant_id, 'default') = ?
-                ORDER BY received_at DESC, event_id ASC
-                LIMIT ? OFFSET ?
-                """,
-                [tenant_id, page_size, offset],
-            ).fetchall()
-    finally:
-        cursor.close()
-
+    items, total = get_control_plane_store(request.app).list_dead_letter_events(
+        tenant_id=_tenant_id(request), reason=reason, page=page, page_size=page_size
+    )
     return DeadLetterListResponse(
-        items=[
-            DeadLetterSummary(
-                event_id=row[0],
-                event_type=row[1],
-                failure_reason=row[2],
-                failure_detail=row[3],
-                received_at=row[4],
-                retry_count=int(row[5] or 0),
-                last_retried_at=row[6],
-                status=row[7],
-            )
-            for row in rows
-        ],
+        items=[DeadLetterSummary(**item) for item in items],
         pagination={
             "page": page,
             "page_size": page_size,
@@ -305,41 +143,10 @@ async def get_deadletter_event(event_id: str, request: Request) -> DeadLetterDet
 
 
 def _get_deadletter_event(request: Request, event_id: str) -> DeadLetterDetail:
-    cursor = _read_cursor(request)
-    try:
-        row = cursor.execute(
-            """
-            SELECT
-                event_id,
-                event_type,
-                payload,
-                failure_reason,
-                failure_detail,
-                received_at,
-                retry_count,
-                last_retried_at,
-                status
-            FROM dead_letter_events
-            WHERE event_id = ?
-              AND COALESCE(tenant_id, 'default') = ?
-            """,
-            [event_id, _tenant_id(request)],
-        ).fetchone()
-    finally:
-        cursor.close()
+    row = get_control_plane_store(request.app).get_dead_letter_event(event_id, _tenant_id(request))
     if row is None:
         raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
-    return DeadLetterDetail(
-        event_id=row[0],
-        event_type=row[1],
-        payload=_decode_payload(row[2]),
-        failure_reason=row[3],
-        failure_detail=row[4],
-        received_at=row[5],
-        retry_count=int(row[6] or 0),
-        last_retried_at=row[7],
-        status=row[8],
-    )
+    return DeadLetterDetail(**{**row, "payload": _decode_payload(row["payload"])})
 
 
 @router.post("/{event_id}/replay", response_model=ReplayResponse)

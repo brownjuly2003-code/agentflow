@@ -12,8 +12,9 @@ from fastapi.testclient import TestClient
 from pyiceberg.exceptions import ServiceUnavailableError
 
 from src.processing import local_pipeline as local_pipeline_module
-from src.processing.event_replayer import EventReplayer, ensure_dead_letter_table
+from src.processing.event_replayer import EventReplayer
 from src.serving.api.main import app
+from src.serving.control_plane import ensure_dead_letter_table
 
 pytestmark = pytest.mark.integration
 

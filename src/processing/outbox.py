@@ -5,8 +5,6 @@ import json
 import os
 from collections.abc import Callable
 from contextlib import nullcontext
-from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import duckdb
 import structlog
@@ -14,31 +12,13 @@ from confluent_kafka import KafkaException
 from opentelemetry import trace
 
 from src.processing.tracing import inject_trace_to_kafka_headers, telemetry_disabled
+from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore, OutboxEntry
 from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.outbox")
 
 DEFAULT_KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-
-
-def ensure_outbox_table(conn: duckdb.DuckDBPyConnection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS outbox (
-            id TEXT PRIMARY KEY,
-            event_id TEXT NOT NULL,
-            payload JSON NOT NULL,
-            topic TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            sent_at TIMESTAMP,
-            status TEXT DEFAULT 'pending',
-            retry_count INTEGER DEFAULT 0,
-            next_attempt_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_error TEXT
-        )
-        """
-    )
 
 
 class OutboxProcessor:
@@ -49,17 +29,30 @@ class OutboxProcessor:
         producer: Callable[[str, dict], None] | None = None,
         bootstrap_servers: str | None = None,
         max_retries: int = 5,
+        *,
+        store: ControlPlaneStore | None = None,
     ) -> None:
-        if conn is None and duckdb_path is None:
+        if conn is None and duckdb_path is None and store is None:
             raise ValueError("duckdb_path or conn is required")
-        self._owns_conn = conn is None
+        self._owns_conn = conn is None and store is None
         self._conn: duckdb.DuckDBPyConnection | None = (
-            conn if conn is not None else connect_duckdb(str(duckdb_path))
+            None
+            if store is not None
+            else (conn if conn is not None else connect_duckdb(str(duckdb_path)))
         )
         self._producer = producer or self._produce_to_kafka
         self._bootstrap_servers = bootstrap_servers or DEFAULT_KAFKA_BOOTSTRAP
         self._max_retries = max_retries
-        ensure_outbox_table(self._connection)
+        # ADR 0010 slice 3: table access goes through the ControlPlaneStore
+        # port. When no store is injected (the common case — main.py and every
+        # existing test construct via conn/duckdb_path), this builds a private
+        # embedded store bound to whichever connection this instance owns —
+        # not necessarily the app's shared query_engine connection (see
+        # main.py's file-vs-:memory: branch this preserves verbatim).
+        self._store: ControlPlaneStore = store or EmbeddedControlPlaneStore(
+            conn_provider=lambda: self._connection
+        )
+        self._store.ensure_outbox_schema()
 
     @property
     def _connection(self) -> duckdb.DuckDBPyConnection:
@@ -90,20 +83,10 @@ class OutboxProcessor:
             self.close()
 
     def process_pending(self, limit: int = 100) -> int:
-        rows = self._connection.execute(
-            """
-            SELECT id, event_id, payload, topic, retry_count
-            FROM outbox
-            WHERE status = 'pending'
-              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-            ORDER BY created_at
-            LIMIT ?
-            """,
-            [datetime.now(UTC), limit],
-        ).fetchall()
+        entries = self._store.claim_due_outbox_entries(limit=limit)
         processed = 0
-        for row in rows:
-            if self._process_row(row):
+        for entry in entries:
+            if self._process_entry(entry):
                 processed += 1
         return processed
 
@@ -115,28 +98,17 @@ class OutboxProcessor:
         but the blocking Kafka produce+flush(10) is offloaded so a slow or
         unreachable broker can't freeze the whole event loop. (audit_28_06_26.md #1)
         """
-        rows = self._connection.execute(
-            """
-            SELECT id, event_id, payload, topic, retry_count
-            FROM outbox
-            WHERE status = 'pending'
-              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-            ORDER BY created_at
-            LIMIT ?
-            """,
-            [datetime.now(UTC), limit],
-        ).fetchall()
+        entries = self._store.claim_due_outbox_entries(limit=limit)
         processed = 0
-        for row in rows:
-            if await self._process_row_async(row):
+        for entry in entries:
+            if await self._process_entry_async(entry):
                 processed += 1
         return processed
 
-    async def _process_row_async(self, row: tuple[Any, ...]) -> bool:
-        outbox_id, event_id, payload, topic, retry_count = row
-        decoded_payload = self._decode_payload(payload)
+    async def _process_entry_async(self, entry: OutboxEntry) -> bool:
+        decoded_payload = self._decode_payload(entry.payload)
         try:
-            await asyncio.to_thread(self._producer, topic, decoded_payload)
+            await asyncio.to_thread(self._producer, entry.topic, decoded_payload)
         except (BufferError, ConnectionError, TimeoutError, KafkaException, RuntimeError) as exc:
             error_message = str(exc)
             if isinstance(exc, RuntimeError) and not (
@@ -144,45 +116,37 @@ class OutboxProcessor:
                 or "Kafka message(s) were not delivered" in error_message
             ):
                 raise
-            next_retry_count = int(retry_count or 0) + 1
+            next_retry_count = int(entry.retry_count or 0) + 1
             logger.warning(
                 "outbox_delivery_retry_scheduled",
-                outbox_id=outbox_id,
-                event_id=event_id,
-                topic=topic,
+                outbox_id=entry.id,
+                event_id=entry.event_id,
+                topic=entry.topic,
                 retry_count=next_retry_count,
                 error=error_message,
                 exc_info=True,
             )
-            self._schedule_retry(
-                outbox_id=outbox_id,
-                event_id=event_id,
+            self._store.schedule_outbox_retry(
+                outbox_id=entry.id,
+                event_id=entry.event_id,
                 retry_count=next_retry_count,
                 error_message=error_message,
+                max_retries=self._max_retries,
             )
             return False
-        self._mark_sent(outbox_id=outbox_id, event_id=event_id)
+        self._store.mark_outbox_sent(outbox_id=entry.id, event_id=entry.event_id)
         return True
 
     def process_entry(self, outbox_id: str) -> bool:
-        row = self._connection.execute(
-            """
-            SELECT id, event_id, payload, topic, retry_count
-            FROM outbox
-            WHERE id = ?
-              AND status = 'pending'
-            """,
-            [outbox_id],
-        ).fetchone()
-        if row is None:
+        entry = self._store.get_pending_outbox_entry(outbox_id)
+        if entry is None:
             return False
-        return self._process_row(row)
+        return self._process_entry(entry)
 
-    def _process_row(self, row: tuple[Any, ...]) -> bool:
-        outbox_id, event_id, payload, topic, retry_count = row
-        decoded_payload = self._decode_payload(payload)
+    def _process_entry(self, entry: OutboxEntry) -> bool:
+        decoded_payload = self._decode_payload(entry.payload)
         try:
-            self._producer(topic, decoded_payload)
+            self._producer(entry.topic, decoded_payload)
         except (BufferError, ConnectionError, TimeoutError, KafkaException, RuntimeError) as exc:
             error_message = str(exc)
             if isinstance(exc, RuntimeError) and not (
@@ -190,96 +154,26 @@ class OutboxProcessor:
                 or "Kafka message(s) were not delivered" in error_message
             ):
                 raise
-            next_retry_count = int(retry_count or 0) + 1
+            next_retry_count = int(entry.retry_count or 0) + 1
             logger.warning(
                 "outbox_delivery_retry_scheduled",
-                outbox_id=outbox_id,
-                event_id=event_id,
-                topic=topic,
+                outbox_id=entry.id,
+                event_id=entry.event_id,
+                topic=entry.topic,
                 retry_count=next_retry_count,
                 error=error_message,
                 exc_info=True,
             )
-            self._schedule_retry(
-                outbox_id=outbox_id,
-                event_id=event_id,
+            self._store.schedule_outbox_retry(
+                outbox_id=entry.id,
+                event_id=entry.event_id,
                 retry_count=next_retry_count,
                 error_message=error_message,
+                max_retries=self._max_retries,
             )
             return False
-        self._mark_sent(outbox_id=outbox_id, event_id=event_id)
+        self._store.mark_outbox_sent(outbox_id=entry.id, event_id=entry.event_id)
         return True
-
-    def _mark_sent(self, outbox_id: str, event_id: str) -> None:
-        sent_at = datetime.now(UTC)
-        self._connection.execute("BEGIN TRANSACTION")
-        try:
-            self._connection.execute(
-                """
-                UPDATE outbox
-                SET status = 'sent',
-                    sent_at = ?,
-                    last_error = NULL
-                WHERE id = ?
-                """,
-                [sent_at, outbox_id],
-            )
-            self._connection.execute(
-                "UPDATE dead_letter_events SET status = 'replayed' WHERE event_id = ?",
-                [event_id],
-            )
-            self._connection.execute("COMMIT")
-        # rollback must preserve the original replay failure
-        except Exception:  # nosec B110
-            # Transaction rollback must happen before unexpected errors propagate.
-            self._connection.execute("ROLLBACK")
-            raise
-
-    def _schedule_retry(
-        self,
-        outbox_id: str,
-        event_id: str,
-        retry_count: int,
-        error_message: str,
-    ) -> None:
-        status = "pending"
-        retry_delay_seconds = 2**retry_count
-        is_kafka_error = (
-            error_message.startswith("KafkaError{")
-            or "Kafka message(s) were not delivered" in error_message
-        )
-        if is_kafka_error:
-            retry_delay_seconds = max(retry_delay_seconds, 30)
-        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(
-            seconds=retry_delay_seconds
-        )
-        self._connection.execute("BEGIN TRANSACTION")
-        try:
-            if retry_count >= self._max_retries:
-                status = "failed"
-                next_attempt_at = None
-            self._connection.execute(
-                """
-                UPDATE outbox
-                SET status = ?,
-                    retry_count = ?,
-                    next_attempt_at = ?,
-                    last_error = ?
-                WHERE id = ?
-                """,
-                [status, retry_count, next_attempt_at, error_message, outbox_id],
-            )
-            if status == "failed":
-                self._connection.execute(
-                    "UPDATE dead_letter_events SET status = 'failed' WHERE event_id = ?",
-                    [event_id],
-                )
-            self._connection.execute("COMMIT")
-        # rollback must preserve the original retry scheduling failure
-        except Exception:  # nosec B110
-            # Transaction rollback must happen before unexpected errors propagate.
-            self._connection.execute("ROLLBACK")
-            raise
 
     def _decode_payload(self, payload: object) -> dict:
         if isinstance(payload, dict):

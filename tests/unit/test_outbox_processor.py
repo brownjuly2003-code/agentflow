@@ -18,8 +18,8 @@ import duckdb
 import pytest
 
 import src.processing.outbox as outbox_module
-from src.processing.event_replayer import ensure_dead_letter_table
 from src.processing.outbox import OutboxProcessor
+from src.serving.control_plane import ensure_dead_letter_table
 
 TOPIC = "agentflow.orders"
 

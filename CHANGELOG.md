@@ -4,6 +4,37 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — Replay outbox + dead-letter behind the ControlPlaneStore port (ADR 0010 slice 3, 2026-07-02)
+
+- **Invariant 8 preserved verbatim**: `mark_outbox_sent` flips an outbox row
+  to `sent` and its dead-letter row to `replayed` in one transaction;
+  `schedule_outbox_retry` bumps attempts/backoff or parks both rows `failed`
+  once retries are exhausted, also in one transaction. Both moved into
+  `EmbeddedControlPlaneStore` byte-for-byte (same SQL, same
+  BEGIN/COMMIT/ROLLBACK shape) — confirmed by the existing rollback-simulation
+  tests (table-drop and connection-wrapper fault injection) passing unchanged.
+- `OutboxProcessor` and `EventReplayer` gain an additive `store:
+  ControlPlaneStore | None = None` constructor kwarg; when omitted (every
+  existing call site) they build a private embedded store bound to whichever
+  `conn`/`duckdb_path` they already owned — preserving `main.py`'s
+  `:memory:`-vs-file dual-connection split verbatim. `routers/deadletter.py`
+  now resolves the app's shared store and passes it via `store=`, so it never
+  reaches `query_engine._conn` directly (stats/list/detail/replay/dismiss all
+  routed through new store methods).
+- `ensure_outbox_table` / `ensure_dead_letter_table` moved to
+  `control_plane/embedded.py` (same location as their webhook/alert
+  siblings); `ensure_outbox_table` is deliberately NOT called lazily inside
+  the write-transaction methods above (unlike the webhook/alert log methods)
+  — it and `ensure_dead_letter_table` run once at `OutboxProcessor` /
+  `EventReplayer` construction via a new `ensure_outbox_schema` port method,
+  matching the pre-port eager-DDL timing exactly.
+- Structural ratchet test extended to `src/processing/outbox.py`,
+  `src/processing/event_replayer.py` and `routers/deadletter.py`. New
+  `tests/unit/test_control_plane_store.py` coverage for the outbox/
+  dead-letter store methods (claim ordering, mark-sent + rollback,
+  retry/backoff/kafka-floor, replay enqueue + rollback, tenant-scoped
+  reads, stats).
+
 ### Added — Alert history + alert-rule repository behind the ControlPlaneStore port (ADR 0010 slice 2, 2026-07-02)
 
 - **Alert delivery history** (`alert_history`) moved behind `ControlPlaneStore`

@@ -20,18 +20,34 @@ Claim semantics are part of this contract, not adapter detail:
   N replicas work-steal without leader election.
 
 Rollout slice 1 covers the webhook delivery queue + attempt log. Slice 2
-(this module's alert methods) covers the alert delivery/history log and the
-alert-rule repository — including the rules' mutable runtime state (``state``,
-``fired_at``, ``last_escalation_level``, flap window, cooldown), the sharpest
-per-pod split-brain in the ADR's inventory. Outbox/dead-letter and usage
-migrate behind this port in follow-up slices (see the ADR's rollout section).
+covers the alert delivery/history log and the alert-rule repository —
+including the rules' mutable runtime state (``state``, ``fired_at``,
+``last_escalation_level``, flap window, cooldown), the sharpest per-pod
+split-brain in the ADR's inventory. Slice 3 (this module's outbox/dead-letter
+methods) covers the replay outbox and dead-letter status transitions,
+preserving invariant 8 verbatim: ``mark_outbox_sent`` flips a delivered
+outbox row *and* its dead-letter row to ``replayed`` in one transaction;
+``schedule_outbox_retry`` flips both to ``failed`` once retries are exhausted,
+in one transaction. Usage/sessions migrate behind this port in the next
+slice (see the ADR's rollout section).
 
 The alert-rule repository methods (``load_alert_rules`` / ``save_alert_rules``)
 operate on plain JSON-shaped ``dict`` records rather than the ``AlertRule``
 pydantic model: the port must not import ``src.serving.api.alerts`` (that
 module imports this one to resolve the store — see ``get_control_plane_store``
 below), so callers validate/serialize at the boundary, exactly like the
-embedded adapter's YAML round-trip already did before the port existed.
+embedded adapter's YAML round-trip already did before the port existed. The
+outbox/dead-letter methods follow the same rule for the same reason.
+
+The outbox/dead-letter write methods (``mark_outbox_sent``,
+``schedule_outbox_retry``, ``enqueue_outbox_replay``,
+``dismiss_dead_letter_event``) do NOT lazily create their tables on every
+call, unlike the webhook/alert log methods above: ``OutboxProcessor`` and
+``EventReplayer`` call ``ensure_outbox_schema`` once at construction (mirrors
+the pre-port ``OutboxProcessor.__init__`` behavior verbatim). A lazy
+``CREATE TABLE IF NOT EXISTS`` inside these methods would silently recreate a
+table a test dropped mid-scenario to simulate a transaction failure,
+defeating that fault injection.
 """
 
 from __future__ import annotations
@@ -43,6 +59,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from fastapi import FastAPI
 
 CONTROL_PLANE_STORE_ENV = "AGENTFLOW_CONTROLPLANE_STORE"
@@ -57,6 +75,17 @@ class WebhookQueueRow:
     tenant: str | None
     event_type: str | None
     body: str | None
+
+
+@dataclass(frozen=True)
+class OutboxEntry:
+    """One pending replay-outbox row (a Kafka message owed to a topic)."""
+
+    id: str
+    event_id: str
+    payload: object
+    topic: str
+    retry_count: int
 
 
 class ControlPlaneStore(ABC):
@@ -175,6 +204,100 @@ class ControlPlaneStore(ABC):
     def save_alert_rules(self, rules: list[dict]) -> None:
         """Persist the full alert-rule set verbatim (JSON-shaped records, the
         caller's serialized ``AlertRule.model_dump(mode="json")`` output)."""
+
+    # --- replay outbox + dead-letter (invariant 8: one transaction) -----------
+
+    @abstractmethod
+    def ensure_outbox_schema(self) -> None:
+        """Idempotently create the ``outbox`` and ``dead_letter_events``
+        tables. Called once at ``OutboxProcessor`` / ``EventReplayer``
+        construction — not lazily inside the methods below (see the module
+        docstring)."""
+
+    @abstractmethod
+    def claim_due_outbox_entries(self, *, limit: int = 100) -> list[OutboxEntry]:
+        """Return up to ``limit`` due ``pending`` outbox rows, oldest first."""
+
+    @abstractmethod
+    def get_pending_outbox_entry(self, outbox_id: str) -> OutboxEntry | None:
+        """Fetch one ``pending`` outbox row by id, or ``None`` if it does not
+        exist or has already left the ``pending`` state."""
+
+    @abstractmethod
+    def mark_outbox_sent(self, *, outbox_id: str, event_id: str) -> None:
+        """Flip an outbox row to ``sent`` and its dead-letter row (if any) to
+        ``replayed``, in one transaction (invariant 8). Rolls back and
+        re-raises if either update fails."""
+
+    @abstractmethod
+    def schedule_outbox_retry(
+        self,
+        *,
+        outbox_id: str,
+        event_id: str,
+        retry_count: int,
+        error_message: str,
+        max_retries: int,
+    ) -> None:
+        """Bump an outbox row's attempts and back off (exponential, floored at
+        30s for Kafka-shaped errors), or park it ``failed`` and flip its
+        dead-letter row to ``failed`` too once ``max_retries`` is reached —
+        both updates in one transaction (invariant 8)."""
+
+    @abstractmethod
+    def enqueue_outbox_replay(
+        self,
+        *,
+        outbox_id: str,
+        event_id: str,
+        payload: dict,
+        topic: str,
+        retry_count: int,
+        replayed_at: datetime,
+    ) -> None:
+        """Mark a dead-letter row ``replay_pending`` (with the corrected
+        payload and bumped retry count) and insert its outbox replay row, in
+        one transaction (invariant 8, the other half of ``mark_outbox_sent``:
+        this is the write ``EventReplayer.replay`` performs before inline
+        delivery)."""
+
+    @abstractmethod
+    def get_dead_letter_event_for_replay(self, event_id: str) -> dict | None:
+        """Fetch ``{event_id, payload, retry_count}`` for a replay/dismiss
+        candidate, or ``None`` if the event does not exist."""
+
+    @abstractmethod
+    def dismiss_dead_letter_event(self, event_id: str) -> None:
+        """Mark a dead-letter row ``dismissed``."""
+
+    @abstractmethod
+    def dead_letter_event_exists(self, event_id: str, tenant_id: str) -> bool:
+        """Whether a dead-letter row exists for this event, scoped to
+        ``tenant_id`` (write-access and tenant-isolation gate)."""
+
+    @abstractmethod
+    def get_dead_letter_event(self, event_id: str, tenant_id: str) -> dict | None:
+        """Full detail record for one dead-letter event, tenant-scoped, or
+        ``None`` if not found. ``payload`` is returned as stored (string or
+        dict) — the caller decodes it."""
+
+    @abstractmethod
+    def list_dead_letter_events(
+        self,
+        *,
+        tenant_id: str,
+        reason: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[dict], int]:
+        """Paginated ``failed`` dead-letter events for one tenant (optionally
+        filtered by ``failure_reason``), newest first, plus the total count
+        matching the filter."""
+
+    @abstractmethod
+    def get_dead_letter_stats(self, tenant_id: str) -> dict:
+        """``{"counts": {reason: count}, "last_24h": int, "trend": [...]}``
+        for one tenant's active (``failed``) dead-letter events."""
 
 
 def get_control_plane_store(app: FastAPI) -> ControlPlaneStore:

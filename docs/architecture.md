@@ -165,9 +165,16 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > `serving.backend=clickhouse` wires an external service.
 >
 > **Horizontal scaling stays gated ([ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md)).**
-> The control plane (webhook queue, alert history, outbox, usage) is an embedded
-> per-pod DuckDB store; scaling requires externalizing it, not only the serving
-> engine. `replicaCount`/`autoscaling` stay pinned until that lands.
+> The control plane (webhook queue, alert history, outbox, usage — plus webhook
+> registrations and alert rules/runtime state in per-pod YAML files) is embedded
+> per-pod state; scaling requires externalizing it, not only the serving
+> engine. The externalization is now a recorded decision
+> ([ADR 0010](decisions/0010-control-plane-externalization-postgres.md)):
+> PostgreSQL behind a `ControlPlaneStore` port with the embedded store staying
+> the default single-replica profile, rolled out in staged slices. The chart
+> enforces the gate at render time — any multi-replica render fails until
+> `controlPlane.store=postgres` ships and is set alongside
+> `serving.backend=clickhouse`.
 >
 > **PII is not a serving-tier concern (2026-07-01).** The demo serving warehouse holds
 > no PII — `users_enriched`/`orders_v2` carry only analytics columns — so the interim

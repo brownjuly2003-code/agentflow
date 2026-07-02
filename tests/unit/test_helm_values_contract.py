@@ -176,3 +176,63 @@ def test_serving_clickhouse_render_wires_env_and_requires_host():
     missing_host = _run_helm_template("--set", "serving.backend=clickhouse")
     assert missing_host.returncode != 0
     assert "serving.clickhouse.host is required" in _combined_output(missing_host)
+
+
+def test_chart_pins_embedded_control_plane_store():
+    """ADR 0009/0010: the control plane (webhook queue/log, alert rules+history,
+    outbox, dead-letter, usage) is embedded per-pod state. The schema enum is a
+    fail-closed ratchet — 'postgres' joins it only when the
+    PostgresControlPlaneStore adapter actually ships, so the chart can never
+    advertise a profile the app cannot run."""
+    values = _load_yaml(CHART_PATH / "values.yaml")
+    assert values["controlPlane"]["store"] == "embedded"
+
+    schema = json.loads((CHART_PATH / "values.schema.json").read_text(encoding="utf-8"))
+    assert "controlPlane" in schema["required"]
+    store = schema["properties"]["controlPlane"]["properties"]["store"]
+    assert store["enum"] == ["embedded"]
+
+
+def test_helm_template_rejects_multi_replica_with_embedded_control_plane():
+    """ADR 0009/0010: replicas>1 with per-pod control-plane state is a
+    split-brain (duplicate webhook deliveries, forked alert state) even with
+    persistence disabled and the serving engine external — the exact hole the
+    old persistence-only gate left open."""
+    result = _run_helm_template(
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "replicaCount=2",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+    )
+
+    output = _combined_output(result)
+    assert result.returncode != 0, output
+    assert "control-plane store" in output
+
+
+def test_helm_template_rejects_autoscaling_with_embedded_control_plane():
+    result = _run_helm_template(
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "autoscaling.enabled=true",
+        "--set",
+        "autoscaling.maxReplicas=3",
+    )
+
+    output = _combined_output(result)
+    assert result.returncode != 0, output
+    assert "control-plane store" in output
+
+
+def test_helm_template_single_replica_renders_with_embedded_control_plane():
+    """The gate must not touch the default single-replica profile."""
+    result = _run_helm_template()
+    output = _combined_output(result)
+    assert result.returncode == 0, output

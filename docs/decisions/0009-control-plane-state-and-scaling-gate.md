@@ -100,3 +100,15 @@ needed for the demo profile.
   five subsystems, and only then enable autoscaling (cutover plan Phase 3).
 - ADR 0007 remains accepted; its scaling gate is **extended** by this ADR
   (engine-external is necessary, not sufficient).
+
+### Resolution (2026-07-02)
+
+Multi-replica became actually required (owner-directed control-plane
+externalization + the multi-node topology plan), so the deferred choice is
+made: **option 2, PostgreSQL behind a `ControlPlaneStore` port** — decided
+and specified in
+[ADR 0010](0010-control-plane-externalization-postgres.md), which also
+extends this ADR's state inventory (webhook registrations and alert
+rules/runtime state live in per-pod YAML files too). The "stays pinned"
+constraint above is now enforced at render time: the chart fails any
+multi-replica render while the control-plane store is embedded.

@@ -28,7 +28,8 @@
     "tmpVolume",
     "podDisruptionBudget",
     "networkPolicy",
-    "serving"
+    "serving",
+    "controlPlane"
   ],
   "allOf": [
     {
@@ -435,6 +436,18 @@
               "minLength": 1
             }
           }
+        }
+      }
+    },
+    "controlPlane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["store"],
+      "properties": {
+        "store": {
+          "type": "string",
+          "enum": ["embedded"],
+          "description": "Where control-plane state (webhook queue/log, alert rules+history, outbox, dead-letter, usage) lives. 'embedded' = per-pod DuckDB + config files, single replica only. 'postgres' joins this enum only when the PostgresControlPlaneStore adapter ships (ADR 0010 rollout) — the schema must not advertise a profile the app cannot run."
         }
       }
     },

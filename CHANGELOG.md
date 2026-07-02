@@ -4,6 +4,8 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-02
+
 ### Added — vault-side PII governance on the engine (ADR 0006 Phase 2, executed 2026-07-02)
 
 - **New `warehouse/agentflow/dv2/governance/`** — ClickHouse RBAC as the PII

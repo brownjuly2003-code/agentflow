@@ -42,9 +42,7 @@ def store(conn: duckdb.DuckDBPyConnection) -> EmbeddedControlPlaneStore:
 
 
 @pytest.fixture
-def alert_store(
-    conn: duckdb.DuckDBPyConnection, tmp_path: Path
-) -> EmbeddedControlPlaneStore:
+def alert_store(conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> EmbeddedControlPlaneStore:
     path = tmp_path / "alerts.yaml"
     return EmbeddedControlPlaneStore(
         conn_provider=lambda: conn, alert_rules_path_provider=lambda: path

@@ -7,7 +7,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,9 +17,9 @@ import structlog
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from src.db_concurrency import catalog_ddl_lock
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 from src.serving.backends import BackendExecutionError
+from src.serving.control_plane import get_control_plane_store
 
 try:
     import yaml
@@ -123,84 +123,6 @@ def deactivate_webhook(path: Path, webhook_id: str, tenant: str) -> bool:
     if changed:
         save_webhooks(path, webhooks)
     return changed
-
-
-def ensure_webhook_deliveries_table(conn: duckdb.DuckDBPyConnection) -> None:
-    # Serialize the lazy DDL: the offloaded read handler calls this on a worker
-    # thread, and concurrent CREATE on a cold DuckDB catalog conflicts (across
-    # tables too). (audit_30 A2 follow-up: #120 offload race)
-    with catalog_ddl_lock:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS webhook_deliveries (
-                delivery_id VARCHAR,
-                webhook_id VARCHAR,
-                event_id VARCHAR,
-                event_type VARCHAR,
-                attempt INTEGER,
-                status_code INTEGER,
-                success BOOLEAN,
-                error TEXT,
-                delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-
-def get_delivery_logs(conn: duckdb.DuckDBPyConnection, webhook_id: str) -> list[dict]:
-    ensure_webhook_deliveries_table(conn)
-    cursor = conn.execute(
-        """
-        SELECT delivery_id, webhook_id, event_id, event_type, attempt,
-               status_code, success, error, delivered_at
-        FROM webhook_deliveries
-        WHERE webhook_id = ?
-        ORDER BY delivered_at DESC
-        LIMIT 20
-        """,
-        [webhook_id],
-    )
-    columns = [description[0] for description in cursor.description]
-    return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-
-
-def ensure_webhook_delivery_queue_table(conn: duckdb.DuckDBPyConnection) -> None:
-    """Durable per-(webhook, event) delivery state for re-drive.
-
-    Distinct from ``webhook_deliveries`` (an append-only attempt *log*): this is
-    the *state* table whose ``(webhook_id, event_id)`` primary key dedupes
-    enqueues and whose ``status`` / ``next_attempt_at`` drive retries that
-    survive a process restart. ``body`` stores the canonical payload so a
-    delivery can be replayed without re-reading ``pipeline_events``.
-    """
-    # Serialize the lazy DDL behind the shared catalog lock, exactly like the
-    # three #123-locked ``ensure_*`` siblings: the dispatcher creates this table
-    # on the shared serving connection from the event loop while an offloaded
-    # read handler runs its own ``ensure_*`` on a worker thread, and concurrent
-    # CREATE on a cold DuckDB catalog conflicts across *different* tables too.
-    # Omitting the lock here left the cross-table "Catalog write-write conflict"
-    # the #123 fix set out to remove still reachable on a cold restart.
-    # (audit_30 D2/A2 follow-up residual)
-    with catalog_ddl_lock:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS webhook_delivery_queue (
-                webhook_id VARCHAR NOT NULL,
-                event_id VARCHAR NOT NULL,
-                tenant VARCHAR,
-                event_type VARCHAR,
-                body VARCHAR,
-                status VARCHAR NOT NULL DEFAULT 'pending',
-                attempts INTEGER NOT NULL DEFAULT 0,
-                next_attempt_at TIMESTAMP,
-                last_status_code INTEGER,
-                last_error VARCHAR,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (webhook_id, event_id)
-            )
-            """
-        )
 
 
 class WebhookDispatcher:
@@ -345,8 +267,7 @@ class WebhookDispatcher:
         per-attempt logging. Shared by :meth:`deliver` and the durable re-drive
         (:meth:`process_delivery_queue`), which replays the stored body verbatim.
         """
-        conn = self.app.state.query_engine._conn
-        ensure_webhook_deliveries_table(conn)
+        store = get_control_plane_store(self.app)
 
         delivery_id = str(uuid.uuid4())
         if not event_id:
@@ -371,8 +292,7 @@ class WebhookDispatcher:
             await asyncio.to_thread(validate_public_url, webhook.url)
         except UnsafeEgressURLError as exc:
             error = f"unsafe egress URL: {exc}"
-            _log_delivery(
-                conn,
+            store.log_webhook_delivery(
                 delivery_id=delivery_id,
                 webhook_id=webhook.id,
                 event_id=event_id,
@@ -405,8 +325,7 @@ class WebhookDispatcher:
                     )
                     status_code = response.status_code
                     success = 200 <= response.status_code < 300
-                    _log_delivery(
-                        conn,
+                    store.log_webhook_delivery(
                         delivery_id=delivery_id,
                         webhook_id=webhook.id,
                         event_id=event_id,
@@ -422,8 +341,7 @@ class WebhookDispatcher:
                     status_code = None
                     success = False
                     error = str(exc)
-                    _log_delivery(
-                        conn,
+                    store.log_webhook_delivery(
                         delivery_id=delivery_id,
                         webhook_id=webhook.id,
                         event_id=event_id,
@@ -467,82 +385,30 @@ class WebhookDispatcher:
         event_id = str(event.get("event_id") or "")
         if not event_id:
             return False
-        conn = self.app.state.query_engine._conn
-        ensure_webhook_delivery_queue_table(conn)
-        existing = conn.execute(
-            "SELECT 1 FROM webhook_delivery_queue WHERE webhook_id = ? AND event_id = ?",
-            [webhook.id, event_id],
-        ).fetchone()
-        if existing is not None:
-            return False
-        now = datetime.now(UTC)
-        conn.execute(
-            """
-            INSERT INTO webhook_delivery_queue
-                (webhook_id, event_id, tenant, event_type, body, status, attempts,
-                 next_attempt_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)
-            ON CONFLICT DO NOTHING
-            """,
-            [
-                webhook.id,
-                event_id,
-                str(event.get("tenant_id") or "default"),
-                str(event.get("event_type") or event.get("topic") or "unknown"),
-                _event_body(event).decode("utf-8"),
-                now,
-                now,
-                now,
-            ],
+        return get_control_plane_store(self.app).enqueue_webhook_delivery(
+            webhook_id=webhook.id,
+            event_id=event_id,
+            tenant=str(event.get("tenant_id") or "default"),
+            event_type=str(event.get("event_type") or event.get("topic") or "unknown"),
+            body=_event_body(event).decode("utf-8"),
         )
-        return True
 
     def _record_delivery_outcome(self, webhook_id: str, event_id: str, result: dict) -> None:
         """Advance a queue row from the outcome of one delivery round: success →
         ``delivered``; failure → bump attempts and re-schedule (back to
         ``pending`` with a backoff ``next_attempt_at``), or park as ``dead`` once
-        ``max_delivery_attempts`` is reached."""
+        ``max_delivery_attempts`` is reached. The transition itself lives in the
+        control-plane store; the retry policy stays dispatcher configuration."""
         if not event_id:
             return
-        conn = self.app.state.query_engine._conn
-        now = datetime.now(UTC)
-        status_code = result.get("status_code")
-        if result.get("success"):
-            conn.execute(
-                "UPDATE webhook_delivery_queue SET status = 'delivered', "
-                "last_status_code = ?, last_error = NULL, updated_at = ? "
-                "WHERE webhook_id = ? AND event_id = ?",
-                [status_code, now, webhook_id, event_id],
-            )
-            return
-        row = conn.execute(
-            "SELECT attempts FROM webhook_delivery_queue WHERE webhook_id = ? AND event_id = ?",
-            [webhook_id, event_id],
-        ).fetchone()
-        attempts = (row[0] if row else 0) + 1
-        error = result.get("error")
-        if attempts >= self.max_delivery_attempts:
-            conn.execute(
-                "UPDATE webhook_delivery_queue SET status = 'dead', attempts = ?, "
-                "last_status_code = ?, last_error = ?, next_attempt_at = NULL, updated_at = ? "
-                "WHERE webhook_id = ? AND event_id = ?",
-                [attempts, status_code, error, now, webhook_id, event_id],
-            )
-            return
-        delay = self.backoff_seconds[min(attempts - 1, len(self.backoff_seconds) - 1)]
-        conn.execute(
-            "UPDATE webhook_delivery_queue SET status = 'pending', attempts = ?, "
-            "last_status_code = ?, last_error = ?, next_attempt_at = ?, updated_at = ? "
-            "WHERE webhook_id = ? AND event_id = ?",
-            [
-                attempts,
-                status_code,
-                error,
-                now + timedelta(seconds=delay),
-                now,
-                webhook_id,
-                event_id,
-            ],
+        get_control_plane_store(self.app).record_webhook_delivery_outcome(
+            webhook_id=webhook_id,
+            event_id=event_id,
+            success=bool(result.get("success")),
+            status_code=result.get("status_code"),
+            error=result.get("error"),
+            max_attempts=self.max_delivery_attempts,
+            backoff_seconds=self.backoff_seconds,
         )
 
     async def process_delivery_queue(self) -> None:
@@ -550,68 +416,24 @@ class WebhookDispatcher:
         removed/deactivated parks its row as ``dead`` rather than retrying
         forever. Bounded by ``redrive_batch_size`` so one pass can't stall the
         loop on a large backlog."""
-        conn = self.app.state.query_engine._conn
-        ensure_webhook_delivery_queue_table(conn)
+        store = get_control_plane_store(self.app)
         path = get_webhook_config_path(self.app)
-        now = datetime.now(UTC)
-        due = conn.execute(
-            "SELECT webhook_id, event_id, tenant, event_type, body "
-            "FROM webhook_delivery_queue "
-            "WHERE status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
-            "ORDER BY created_at ASC LIMIT ?",
-            [now, self.redrive_batch_size],
-        ).fetchall()
-        for webhook_id, event_id, tenant, event_type, body in due:
-            webhook = get_webhook(path, webhook_id, str(tenant or "default"))
+        for row in store.claim_due_webhook_deliveries(limit=self.redrive_batch_size):
+            webhook = get_webhook(path, row.webhook_id, str(row.tenant or "default"))
             if webhook is None:
-                conn.execute(
-                    "UPDATE webhook_delivery_queue SET status = 'dead', "
-                    "last_error = 'webhook inactive or removed', next_attempt_at = NULL, "
-                    "updated_at = ? WHERE webhook_id = ? AND event_id = ?",
-                    [datetime.now(UTC), webhook_id, event_id],
+                store.park_webhook_delivery(
+                    webhook_id=row.webhook_id,
+                    event_id=row.event_id,
+                    error="webhook inactive or removed",
                 )
                 continue
             result = await self._deliver_body(
                 webhook,
-                body=(body or "").encode("utf-8"),
-                event_id=event_id,
-                event_type=event_type or "unknown",
+                body=(row.body or "").encode("utf-8"),
+                event_id=row.event_id,
+                event_type=row.event_type or "unknown",
             )
-            self._record_delivery_outcome(webhook_id, event_id, result)
-
-
-def _log_delivery(
-    conn: duckdb.DuckDBPyConnection,
-    *,
-    delivery_id: str,
-    webhook_id: str,
-    event_id: str,
-    event_type: str,
-    attempt: int,
-    status_code: int | None,
-    success: bool,
-    error: str | None,
-) -> None:
-    conn.execute(
-        """
-        INSERT INTO webhook_deliveries (
-            delivery_id, webhook_id, event_id, event_type, attempt,
-            status_code, success, error, delivered_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-            delivery_id,
-            webhook_id,
-            event_id,
-            event_type,
-            attempt,
-            status_code,
-            success,
-            error,
-            datetime.now(UTC),
-        ],
-    )
+            self._record_delivery_outcome(row.webhook_id, row.event_id, result)
 
 
 def _matches_filters(event: dict, filters: WebhookFilters) -> bool:

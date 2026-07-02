@@ -8,20 +8,21 @@ import pytest
 
 import src.processing.event_replayer as event_replayer_module
 import src.serving.api.alerts.history as history_module
-import src.serving.api.webhook_dispatcher as webhook_module
+import src.serving.control_plane.embedded as control_plane_embedded_module
 from src.db_concurrency import catalog_ddl_lock
 from src.processing.event_replayer import ensure_dead_letter_table
 from src.serving.api.alerts.history import ensure_alert_history_table
-from src.serving.api.webhook_dispatcher import (
+from src.serving.control_plane import (
     ensure_webhook_deliveries_table,
     ensure_webhook_delivery_queue_table,
 )
 
 Ensurer = Callable[[duckdb.DuckDBPyConnection], None]
 
-# ``ensure_webhook_delivery_queue_table`` is the dispatcher's own lazy CREATE
-# (run on the shared serving connection from the event loop). It was left out of
-# the #123 lock and so still raced the offloaded read-handler DDL across tables;
+# ``ensure_webhook_delivery_queue_table`` is the control-plane store's lazy
+# CREATE (run on the shared serving connection from the event loop; lives in
+# ``control_plane.embedded`` since ADR 0010 slice 1). It was left out of the
+# #123 lock and so still raced the offloaded read-handler DDL across tables;
 # include it here so both the same-table and cross-table hammers cover it.
 # (audit_30 D2/A2 follow-up residual)
 _ENSURERS: list[Ensurer] = [
@@ -88,6 +89,6 @@ def test_catalog_ddl_lock_is_a_single_shared_instance() -> None:
     assert (
         event_replayer_module.catalog_ddl_lock
         is history_module.catalog_ddl_lock
-        is webhook_module.catalog_ddl_lock
+        is control_plane_embedded_module.catalog_ddl_lock
         is catalog_ddl_lock
     )

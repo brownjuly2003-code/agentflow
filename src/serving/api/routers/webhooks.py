@@ -12,11 +12,11 @@ from src.serving.api.webhook_dispatcher import (
     WebhookFilters,
     create_webhook,
     deactivate_webhook,
-    get_delivery_logs,
     get_webhook,
     get_webhook_config_path,
     list_webhooks,
 )
+from src.serving.control_plane import get_control_plane_store
 
 router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
 
@@ -106,11 +106,8 @@ async def webhook_logs(webhook_id: str, request: Request) -> dict[str, object]:
 
 
 def _read_delivery_logs(request: Request, webhook_id: str) -> list[dict]:
-    # The log scan runs on a worker thread (run_in_threadpool); a dedicated
-    # cursor — not the shared connection — keeps concurrent reads on different
-    # threads from colliding on the connection. (audit_30_06_26.md A2)
-    cursor = request.app.state.query_engine._conn.cursor()
-    try:
-        return get_delivery_logs(cursor, webhook_id)
-    finally:
-        cursor.close()
+    # Runs on a worker thread (run_in_threadpool); the control-plane store
+    # isolates the read (a dedicated cursor per call in the embedded adapter)
+    # so concurrent reads on different threads don't collide on the shared
+    # connection. (audit_30_06_26.md A2)
+    return get_control_plane_store(request.app).get_webhook_delivery_logs(webhook_id)

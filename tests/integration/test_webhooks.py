@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from src.serving.api import webhook_dispatcher
 from src.serving.api.auth import TenantKey
 from src.serving.api.main import app
+from src.serving.control_plane import ensure_webhook_delivery_queue_table
 
 
 class _HTTPXMock:
@@ -434,7 +435,7 @@ class TestWebhooksAPI:
         dispatcher = client.app.state.webhook_dispatcher
         dispatcher.seen_event_ids.clear()
         conn = client.app.state.query_engine._conn
-        webhook_dispatcher.ensure_webhook_delivery_queue_table(conn)
+        ensure_webhook_delivery_queue_table(conn)
         conn.execute("DELETE FROM webhook_delivery_queue")
 
         # endpoint down: every attempt of the inline burst returns 5xx

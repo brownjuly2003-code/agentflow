@@ -159,6 +159,12 @@ spec:
                 secretKeyRef:
                   name: ch-creds
                   key: password
+            # RBAC DDL (CREATE ROLE / GRANT / CREATE ROW POLICY) for the vault
+            # governance layer (warehouse/agentflow/dv2/governance/) needs
+            # access_management on the admin user. Existing stands need a pod
+            # restart to pick this up.
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
           resources:
             requests:
               cpu: 200m

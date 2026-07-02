@@ -101,6 +101,16 @@ Concretely:
 - The PII boundary moves **onto the engine**: schema-execution against ClickHouse
   (`DESCRIBE` / `LIMIT 0`) plus ClickHouse row/column policies, instead of
   dialect-pinned string parsing in `sql_guard`. Bounded, not best-effort.
+  **Update (2026-07-02, Phase 2 executed):** delivered as engine RBAC on the
+  vault — `warehouse/agentflow/dv2/governance/` (fail-closed allow-list for
+  `dv2_analyst` with contact-PII columns never granted, per-jurisdiction
+  `dv2_pii_officer__<branch>` roles, row policies on `rv.hub_customer`),
+  `SQL SECURITY DEFINER` on `bv_customer_mdm__*`, and a PII-free-by-contract
+  `marts.customer_360`. The separate schema-execution app check became moot
+  when the app-level gate was removed with the empty serving PII surface:
+  access control on resolved columns *is* the engine ground-truth. Verified
+  live, 32/32 adversarial probes:
+  `docs/perf/vault-pii-governance-verify-2026-07-02.md`.
 - The semantic layer **keeps emitting DuckDB-flavored SQL** and relies on
   `ClickHouseBackend._translate_sql` to transpile — this stays a deliberate,
   documented layer rather than an accident. Making the semantic layer emit
@@ -132,6 +142,10 @@ Concretely:
 ## Follow-up
 
 - Execute `docs/clickhouse-cutover-plan.md` (config/compose/helm cutover, PII
-  redesign, verification).
+  redesign, verification). *Status 2026-07-02: Phases 1, 1a and 2 executed;
+  Phase 3 (K8s scaling, gated on ADR 0009) and Phase 5 doc sweep remain.*
 - See ADR 0007 for how this unblocks Kubernetes horizontal scaling.
 - Keep DuckDB green in CI as the local-dev/test store; do not delete it.
+- The PostgreSQL port of the vault (`warehouse/agentflow/dv2/postgres/`) has
+  the same MDM views but no governance analog yet (PG RLS + column grants);
+  follow-up, not shipped — see `governance/README.md`.

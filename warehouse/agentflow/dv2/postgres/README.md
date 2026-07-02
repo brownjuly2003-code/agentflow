@@ -65,8 +65,12 @@ postgres/
   01_hubs.sql            8 hubs
   02_links.sql           8 links
   satellites/*.sql       43 satellites (generated from spec.yaml)
-  03_business_vault.sql  bv_order_canonical view
+  03_business_vault.sql  bv_order_canonical + bv_customer_mdm__<branch> views
   apply.sh               apply all of the above, in order
+  governance/            PII boundary: roles, allow-list grants, row-level
+                         security + verify_live.sh (PostgreSQL port of the
+                         ClickHouse governance layer; applied manually after
+                         apply.sh — see governance/README.md)
 ```
 
 ## Apply and verify
@@ -79,6 +83,10 @@ PGHOST=localhost PGUSER=agentflow PGDATABASE=agentflow ./apply.sh
 
 No-Docker validation (Windows / CI): every generated and hand-authored DDL
 statement is parsed with sqlglot's PostgreSQL dialect by
-`tests/unit/test_dv2_postgres_ddl.py`. A live apply + a `bv_order_canonical`
-query against real data is the next sub-step (single-node Mac), mirroring how
-the Flink and ClickHouse smokes are run live on the Mac.
+`tests/unit/test_dv2_postgres_ddl.py`. `apply.sh` itself has been applied
+live end-to-end (standalone PostgreSQL 17.5 on Windows, no Docker) as part of
+the governance verification —
+`docs/perf/vault-pii-governance-pg-verify-2026-07-02.md`. A
+`bv_order_canonical` query against real promoted data remains the next
+sub-step (single-node Mac), mirroring how the Flink and ClickHouse smokes are
+run live on the Mac.

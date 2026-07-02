@@ -147,5 +147,7 @@ Concretely:
 - See ADR 0007 for how this unblocks Kubernetes horizontal scaling.
 - Keep DuckDB green in CI as the local-dev/test store; do not delete it.
 - The PostgreSQL port of the vault (`warehouse/agentflow/dv2/postgres/`) has
-  the same MDM views but no governance analog yet (PG RLS + column grants);
-  follow-up, not shipped — see `governance/README.md`.
+  the same MDM views and, since 2026-07-02, its own governance analog
+  (`postgres/governance/`: PG RLS + column grants, verified live —
+  `docs/perf/vault-pii-governance-pg-verify-2026-07-02.md`). *The follow-up
+  previously noted here is executed.*

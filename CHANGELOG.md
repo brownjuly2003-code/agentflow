@@ -4,6 +4,33 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — PostgreSQL port of the vault PII governance (ADR 0006 Phase 2 follow-up, executed 2026-07-02)
+
+- **New `warehouse/agentflow/dv2/postgres/governance/`** — the documented
+  follow-up from the ClickHouse governance layer, now shipped: the same PII
+  boundary (fail-closed allow-list for `dv2_analyst`, per-jurisdiction
+  `dv2_pii_officer__<branch>` roles, jurisdiction row scoping on
+  `rv.hub_customer`) translated to PostgreSQL semantics — column grants,
+  `ENABLE ROW LEVEL SECURITY` (never `FORCE`: the owner-executed MDM views
+  are the `SQL SECURITY DEFINER` analog), and an analyst catch-all policy
+  that is deliberately not `TO PUBLIC` (permissive policies OR together and
+  would void the officer scoping). PostgreSQL RLS is default-deny for
+  unaddressed principals — fail-closed, verified live with a grant-only
+  probe user.
+- **Verified live** against standalone PostgreSQL 17.5 (33/33 adversarial
+  probes, `docs/perf/vault-pii-governance-pg-verify-2026-07-02.md`): every
+  PII shape denied for `dv2_analyst`, including whole-row refs, `to_jsonb`
+  and positional rename-lists — shapes ClickHouse cannot even express;
+  officers row-scoped on the hub across three record_source conventions;
+  all four files re-apply idempotently. The ClickHouse filter-pushdown
+  ergonomic limitation does not exist on PostgreSQL.
+- **New `tests/unit/test_dv2_postgres_governance_ddl.py`** — structural pins
+  incl. the fail-closed satellite classification ratchet, the
+  no-`TO PUBLIC`/no-`FORCE` policy invariants and the nested-block-comment
+  gotcha caught during the live apply; postgres governance DDL is also
+  covered by the sqlglot parse + ClickHouse-token-leak sweeps in
+  `test_dv2_postgres_ddl.py`.
+
 ## [1.6.0] - 2026-07-02
 
 ### Added — vault-side PII governance on the engine (ADR 0006 Phase 2, executed 2026-07-02)

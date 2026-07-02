@@ -761,8 +761,13 @@ def test_get_store_postgres_requires_a_dsn(
 def test_get_store_postgres_resolves_the_adapter_and_caches_it(
     conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from src.serving.control_plane import postgres as postgres_module
     from src.serving.control_plane.postgres import PostgresControlPlaneStore
 
+    # The selection seam is under test, not psycopg: stub the module object so
+    # this resolves identically whether or not the optional dependency is
+    # installed (the CI unit job installs no optional extras).
+    monkeypatch.setattr(postgres_module, "psycopg", SimpleNamespace())
     monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
     monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
     app = _stub_app(conn)

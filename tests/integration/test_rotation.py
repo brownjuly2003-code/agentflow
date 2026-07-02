@@ -5,7 +5,7 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-import src.serving.api.auth.key_rotation as key_rotation_module
+import src.serving.control_plane.embedded as embedded_module
 from src.serving.api.auth import AuthManager
 from src.serving.api.main import app
 
@@ -136,7 +136,10 @@ def test_rotation_status_retries_transient_usage_db_lock(
 ):
     manager = client.app.state.auth_manager
     key_id = manager.list_keys_with_usage()[0]["key_id"]
-    real_connect = key_rotation_module.duckdb.connect
+    # ADR 0010 slice 4: the usage-stat connect now happens in
+    # EmbeddedControlPlaneStore (control_plane/embedded.py), not
+    # key_rotation.py directly.
+    real_connect = embedded_module.duckdb.connect
     attempts = 0
 
     def flaky_connect(path: str):
@@ -146,7 +149,7 @@ def test_rotation_status_retries_transient_usage_db_lock(
             raise duckdb.IOException("usage db is locked")
         return real_connect(path)
 
-    monkeypatch.setattr(key_rotation_module.duckdb, "connect", flaky_connect)
+    monkeypatch.setattr(embedded_module.duckdb, "connect", flaky_connect)
 
     response = client.get(
         f"/v1/admin/keys/{key_id}/rotation-status",

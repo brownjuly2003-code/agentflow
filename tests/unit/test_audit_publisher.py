@@ -112,9 +112,9 @@ def test_record_usage_skips_publish_when_all_inserts_fail(
 
     import duckdb
 
-    from src.serving.api.auth import usage_table as usage_table_module
+    from src.serving.control_plane import embedded as embedded_module
 
-    real_connect = usage_table_module.connect_duckdb
+    real_connect = embedded_module.connect_duckdb
     call_count = {"n": 0}
 
     class _InsertFailingConn:
@@ -133,9 +133,11 @@ def test_record_usage_skips_publish_when_all_inserts_fail(
         call_count["n"] += 1
         return _InsertFailingConn(real_connect(db_path))
 
-    monkeypatch.setattr(usage_table_module, "connect_duckdb", _always_fail_insert)
+    # ADR 0010 slice 4: record_usage's retry-loop-with-connect now lives in
+    # EmbeddedControlPlaneStore.record_api_usage, not usage_table.py.
+    monkeypatch.setattr(embedded_module, "connect_duckdb", _always_fail_insert)
     # Also speed up the retry loop so the test does not spend ~0.55s sleeping.
-    monkeypatch.setattr(usage_table_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(embedded_module.time, "sleep", lambda _seconds: None)
 
     with pytest.raises(duckdb.Error):
         record_usage(manager, tenant_key, "/v1/entity/order")

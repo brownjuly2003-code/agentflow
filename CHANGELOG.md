@@ -4,6 +4,36 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — API-usage accounting and session analytics behind the ControlPlaneStore port (ADR 0010 slice 4, 2026-07-02)
+
+- **`api_usage`** (per-tenant/per-key request counters) and **`api_sessions`**
+  (per-request latency/entity/query telemetry) moved behind
+  `ControlPlaneStore`. Unlike every prior slice, this state was never on
+  `query_engine._conn` — `AuthManager.db_path` always resolves to its own
+  DuckDB file, independent of `DUCKDB_PATH` — so `EmbeddedControlPlaneStore`
+  gains a second, orthogonal `usage_db_path_provider` alongside its existing
+  `conn_provider`/`alert_rules_path_provider`, and `AuthManager` builds a
+  private embedded store bound to its own path (mirrors `OutboxProcessor`'s
+  additive-`store` pattern) rather than sharing the app-wide store.
+- **Scope widened past `usage_table.py` + `analytics.py`**: `KeyRotator`
+  (`key_rotation.py`) queried `api_usage` directly for old-key-usage stats,
+  and the admin dashboard (`admin_ui.py`) queried `api_sessions` directly for
+  its QPS tile — both bypassed every prior slice's port and are covered here
+  too, so a PostgreSQL swap (slice 5) doesn't leave two call sites hard-wired
+  to a local DuckDB file.
+- `record_usage`'s Windows file-lock fallback (temp-path rename on
+  `duckdb.IOException`) and `record_api_session`'s best-effort
+  log-and-return-on-exhaustion (vs. `record_api_usage`'s raise, which
+  `record_usage` depends on to skip its post-insert audit publish) both moved
+  into the store verbatim. `usage_table.py` / `analytics.py` / `key_rotation.py`
+  / `admin_ui.py` keep their pre-port public/test-facing signatures — only
+  the SQL and connection handling moved.
+- New `EmbeddedControlPlaneStore` methods: `ensure_usage_schema`,
+  `record_api_usage`, `get_usage_by_tenant`, `get_usage_by_key`,
+  `get_old_key_usage_by_key_id`, `record_api_session`, `get_usage_analytics`,
+  `get_top_queries`, `get_top_entities`, `get_latency_analytics`,
+  `get_anomalies`, `get_queries_per_second_last_minute`.
+
 ### Added — Replay outbox + dead-letter behind the ControlPlaneStore port (ADR 0010 slice 3, 2026-07-02)
 
 - **Invariant 8 preserved verbatim**: `mark_outbox_sent` flips an outbox row

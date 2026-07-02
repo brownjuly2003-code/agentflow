@@ -48,6 +48,24 @@ the pre-port ``OutboxProcessor.__init__`` behavior verbatim). A lazy
 ``CREATE TABLE IF NOT EXISTS`` inside these methods would silently recreate a
 table a test dropped mid-scenario to simulate a transaction failure,
 defeating that fault injection.
+
+Slice 4 covers API-usage accounting (``api_usage``: per-tenant/per-key
+request counters, including the rotation status endpoint's "requests on the
+old key" query) and API-session analytics (``api_sessions``: per-request
+latency/entity/query telemetry powering the admin usage dashboards). Unlike
+every store above, this state was NEVER on ``query_engine._conn`` — not even
+in the outbox's ``:memory:`` special case — because ``AuthManager.db_path``
+resolves to its own DuckDB file, independent of ``DUCKDB_PATH``, even when
+the query engine runs on a file backend (see ``AuthManager.__init__``'s
+sibling-path derivation). The embedded adapter preserves that separateness:
+its usage/session methods open dedicated connections against
+``usage_db_path_provider`` rather than the shared ``conn_provider``. The
+scope turned out wider than "usage_table.py + analytics.py": ``KeyRotator``
+(``key_rotation.py``) queries ``api_usage`` directly for old-key-usage
+stats, and the admin dashboard (``admin_ui.py``) queries ``api_sessions``
+directly for its QPS tile — both bypassed the port until this slice and are
+covered here too, or a PostgreSQL swap (slice 5) would leave two call sites
+still hard-wired to a local DuckDB file.
 """
 
 from __future__ import annotations
@@ -298,6 +316,81 @@ class ControlPlaneStore(ABC):
     def get_dead_letter_stats(self, tenant_id: str) -> dict:
         """``{"counts": {reason: count}, "last_24h": int, "trend": [...]}``
         for one tenant's active (``failed``) dead-letter events."""
+
+    # --- API usage accounting (per-tenant/per-key request counters) ----------
+
+    @abstractmethod
+    def ensure_usage_schema(self) -> None:
+        """Idempotently create the ``api_usage`` table. Called once at
+        ``AuthManager`` construction — not lazily inside the methods below
+        (mirrors the pre-port ``ensure_usage_table`` call site, main.py's
+        lifespan, verbatim)."""
+
+    @abstractmethod
+    def record_api_usage(
+        self,
+        *,
+        tenant: str,
+        key_name: str,
+        endpoint: str,
+        key_id: str | None,
+        key_slot: str,
+    ) -> None:
+        """Append one ``api_usage`` row for a completed authenticated
+        request. Raises on exhausted retries — a caller (``record_usage``)
+        depends on the exception to skip its post-insert audit publish."""
+
+    @abstractmethod
+    def get_usage_by_tenant(self) -> list[dict]:
+        """``{"tenant": ..., "requests_last_24h": ...}`` per tenant."""
+
+    @abstractmethod
+    def get_usage_by_key(self) -> dict[tuple[str, str], int]:
+        """``{(tenant, key_name): requests_last_24h}`` for every active key."""
+
+    @abstractmethod
+    def get_old_key_usage_by_key_id(self) -> dict[str, int]:
+        """``{key_id: requests_last_hour}`` for requests served on a
+        rotated-out (``previous``) key slot — powers the rotation-status
+        endpoint's "requests on the old key" figure."""
+
+    # --- API session analytics (per-request latency/entity/query log) -------
+
+    @abstractmethod
+    def record_api_session(self, request_id: str, record: dict) -> None:
+        """Insert-or-replace one ``api_sessions`` row, keyed on
+        ``request_id`` (idempotent — a retried background write must not
+        double-count). Best-effort: logs and returns on exhausted retries
+        rather than raising, unlike ``record_api_usage``."""
+
+    @abstractmethod
+    def get_usage_analytics(self, *, window: str = "24h", tenant: str | None = None) -> dict:
+        """Per-tenant request volume/error-rate/cache-hit-rate/latency and
+        top endpoints over ``window`` (e.g. ``"15m"``, ``"1h"``, ``"7d"``)."""
+
+    @abstractmethod
+    def get_top_queries(self, *, limit: int = 10, window: str = "24h") -> dict:
+        """Most frequent ``/v1/query`` question texts over ``window``."""
+
+    @abstractmethod
+    def get_top_entities(self, *, limit: int = 10, window: str = "24h") -> dict:
+        """Most frequently fetched ``(entity_type, entity_id)`` pairs over
+        ``window``."""
+
+    @abstractmethod
+    def get_latency_analytics(self, *, window: str = "24h") -> dict:
+        """Per-endpoint request count and p50/p95/p99 latency over
+        ``window``."""
+
+    @abstractmethod
+    def get_anomalies(self, *, window: str = "24h") -> dict:
+        """Per-tenant hours whose request volume spikes >3x their own
+        historical hourly average within ``window``."""
+
+    @abstractmethod
+    def get_queries_per_second_last_minute(self) -> float:
+        """Average QPS over the trailing 60s of ``api_sessions`` rows —
+        powers the admin-UI live dashboard tile."""
 
 
 def get_control_plane_store(app: FastAPI) -> ControlPlaneStore:

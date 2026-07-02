@@ -9,6 +9,8 @@ store via ``get_control_plane_store`` — never through ``query_engine._conn``.
 from .embedded import (
     EmbeddedControlPlaneStore,
     ensure_alert_history_table,
+    ensure_api_sessions_table,
+    ensure_api_usage_table,
     ensure_dead_letter_table,
     ensure_outbox_table,
     ensure_webhook_deliveries_table,
@@ -29,6 +31,8 @@ __all__ = [
     "OutboxEntry",
     "WebhookQueueRow",
     "ensure_alert_history_table",
+    "ensure_api_sessions_table",
+    "ensure_api_usage_table",
     "ensure_dead_letter_table",
     "ensure_outbox_table",
     "ensure_webhook_deliveries_table",

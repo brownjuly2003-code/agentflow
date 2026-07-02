@@ -178,8 +178,11 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
 2. Alert history + alert rules/runtime-state repository behind the port
    (embedded impl keeps the YAML file format).
 3. Outbox + dead-letter behind the port (invariant 8 preserved verbatim).
-4. Usage/sessions behind the port (pooled writes replace the
-   per-request file connections in `usage_table.py`).
+4. Usage/sessions behind the port — `usage_table.py`, `analytics.py`,
+   `key_rotation.py`'s old-key-usage queries and `admin_ui.py`'s QPS tile all
+   queried `api_usage`/`api_sessions` directly; all four move behind the port
+   (pure extraction, per-request file connections unchanged — pooling is not
+   part of this ADR).
 5. `PostgresControlPlaneStore` + live verification (standalone-PG probe
    suite: parallel claim exclusivity, lease expiry re-drive, restart
    re-drive, enqueue-win uniqueness, outbox↔dead-letter atomicity) +

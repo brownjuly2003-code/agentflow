@@ -1,34 +1,34 @@
-# Release status — v1.5.0 PUBLISHED
+# Release status — v1.6.0 PUBLISHED
 
-**Status (verified 2026-06-30 via live registry queries):** v1.1.0
-through v1.5.0 are all published on the three registries (PyPI
+**Status (verified 2026-07-02 via live registry queries):** v1.1.0
+through v1.6.0 are all published on the three registries (PyPI
 `agentflow-runtime` + `agentflow-client`, npm
-`@yuliaedomskikh/agentflow-client`). v1.5.0 is a security & correctness
-hardening release: argon2id key hashing with an O(1) peppered lookup
-index, an NL→SQL guard bypass fix (typed `read_csv` / `read_parquet`
-scan functions denied in projection position), `sqlglot` control-byte
-and mutation-target repairs, and a strict-`mypy` expansion. No public
-API changes from v1.4.0; the full v1.5.0 release mechanics are finalized
-in the formal release cut.
+`@yuliaedomskikh/agentflow-client`). v1.6.0 is the architecture-fixing
+release: ClickHouse becomes the shipped serving engine (ADR 0006
+Phase 1 — pipeline sink, `ReplacingMergeTree` row versions,
+backend-routed event scan, dedicated CI E2E lane), PII protection moves
+from the removed app-level string-parse gate to engine-enforced vault
+governance (ADR 0006 Phase 2 — fail-closed column grants,
+per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
+views; 32/32 live adversarial probes), plus the vendored NL→SQL
+generation engine routed through GraceKelly (ADR 0008), the DV2 raw
+vault PostgreSQL migration with `LISTEN`/`NOTIFY` freshness, the
+MinIO-backed PyIceberg catalog, ADR 0009, and the OpenSSF Scorecard
+channel (published score 5.8 → 7.0).
 
-v1.4.0 is a maintenance release bundling documentation
-(`docs/runbooks/` on-call playbooks, `SECURITY.md`, issue/PR
-templates), CI hardening (`contract.yml`
-paths broadening, `dora.yml` ref fix), repo hygiene
-(`.github/dependabot.yml` + `.editorconfig`, auto-merge enabled),
-type-stub adoption (`types-PyYAML` + `types-redis` → 18 import-untyped
-ignores retired), and the Dependabot Tier A wave 2 dependency bumps
-(`mypy<3`, `terraform-aws~>6.46`, `typescript6`, `github-script v9`,
-`download-artifact v8`, `build-push v7`, `vitest4`). Two
-intentionally-deferred Dependabot PRs were closed as
-`wait-for-upstream`: `#23 apache-flink 2.x` (Flink 2.2 Kafka
-connector unavailable) and `#11 python 3.14-slim` (docker-not-in-CI
-gate). No runtime API changes from v1.3.0.
+v1.5.0 is a security & correctness hardening release: argon2id key
+hashing with an O(1) peppered lookup index, an NL→SQL guard bypass fix
+(typed `read_csv` / `read_parquet` scan functions denied in projection
+position), `sqlglot` control-byte and mutation-target repairs, and a
+strict-`mypy` expansion. No public API changes from v1.4.0.
 
 ## Live registry state
 
 | Registry | Package | Version | Upload time (UTC) | Tag commit |
 |----------|---------|---------|-------------------|------------|
+| PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.6.0/) | 1.6.0 | 2026-07-02 00:55 | `734132a` |
+| PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.6.0/)   | 1.6.0 | 2026-07-02 00:55 | `734132a` |
+| npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.6.0) | 1.6.0 | 2026-07-02 00:55 | `734132a` |
 | PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.5.0/) | 1.5.0 | 2026-06-05 07:48 | `c99d094` |
 | PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.5.0/)   | 1.5.0 | 2026-06-05 07:48 | `c99d094` |
 | npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.5.0) | 1.5.0 | 2026-06-05 07:48 | `c99d094` |
@@ -48,27 +48,28 @@ gate). No runtime API changes from v1.3.0.
 ## GitHub Releases note
 
 `gh release list` reports GitHub Release objects for every tag through
-`v1.4.0`. The `v1.2.0`, `v1.3.0`, and `v1.4.0` Release objects were created on
-2026-06-03 from the existing signed tags to close the provenance gap with the
-package registries. This was metadata only — no re-publish: the PyPI/npm
-artifacts and Trusted Publishing runs predate the Release objects and remain
-the package source of truth (the publish workflows trigger on tag push, not on
-`release`). GitHub Releases and the PyPI/npm registries are now consistent
-through `v1.4.0`.
+`v1.6.0`. The `v1.2.0`, `v1.3.0`, and `v1.4.0` Release objects were created on
+2026-06-03, and the `v1.5.0` object was backfilled on 2026-07-02 alongside the
+`v1.6.0` release, all from the existing tags to close the provenance gap with
+the package registries. Backfills are metadata only — no re-publish: the
+PyPI/npm artifacts and Trusted Publishing runs predate those Release objects
+and remain the package source of truth (the publish workflows trigger on tag
+push, not on `release`). GitHub Releases and the PyPI/npm registries are now
+consistent through `v1.6.0`, with `v1.6.0` marked Latest.
 
 ## Re-verify
 
 ```bash
 # PyPI metadata
-curl -sf "https://pypi.org/pypi/agentflow-runtime/1.5.0/json" -o /dev/null && echo OK
-curl -sf "https://pypi.org/pypi/agentflow-client/1.5.0/json"  -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-runtime/1.6.0/json" -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-client/1.6.0/json"  -o /dev/null && echo OK
 
 # npm metadata
-npm view "@yuliaedomskikh/agentflow-client@1.5.0" version dist.tarball
+npm view "@yuliaedomskikh/agentflow-client@1.6.0" version dist.tarball
 
 # Install smoke
 python -m venv /tmp/.afcheck && . /tmp/.afcheck/bin/activate
-pip install agentflow-runtime==1.5.0 agentflow-client==1.5.0
+pip install agentflow-runtime==1.6.0 agentflow-client==1.6.0
 python -c "from importlib.metadata import version; print(version('agentflow-runtime'), version('agentflow-client'))"
 ```
 
@@ -148,13 +149,13 @@ shows the changes. The high-level shape:
 
 ## How the release fired
 
-Tag `v1.4.0` on commit `e58693b` triggered both
+Tag `v1.6.0` on commit `734132a` triggered both
 [`publish-pypi.yml`](../../.github/workflows/publish-pypi.yml) (OIDC
 Trusted Publishing, no token) and
 [`publish-npm.yml`](../../.github/workflows/publish-npm.yml) (npm
 Trusted Publishing, OIDC, npm CLI ≥ 11.5.1, no `NPM_TOKEN`). Both
-runs completed `success` on 2026-05-24T21:04Z, and packages were visible in
-the registries at 2026-05-24T21:05Z. Re-running them is
+runs completed `success` on 2026-07-02, and packages were visible in
+the registries at 2026-07-02T00:55Z. Re-running them is
 idempotent on the verify step but will fail at the upload step with
 `File already exists` — re-tag with a new version, do not retry the
 same one.
@@ -171,8 +172,9 @@ same one.
 | v1.3.0     | `8fa99e6` | published  |
 | v1.4.0     | `e58693b` | published  |
 | v1.5.0     | `c99d094` | published  |
+| v1.6.0     | `734132a` | published  |
 
-The next release (2.0.0) should follow the same recipe:
+The next release should follow the same recipe:
 bump 5 files (root `pyproject.toml`, `sdk/pyproject.toml`,
 `sdk/agentflow/__init__.py`, `sdk-ts/package.json`,
 `sdk-ts/package-lock.json`), update Helm chart/app image pins when the
@@ -180,4 +182,6 @@ release scope requires it, update the two version assertions in
 `tests/unit/test_version.py` and
 `tests/unit/test_sdk_backwards_compat.py`, move the `## [Unreleased]`
 block to a dated heading in `CHANGELOG.md`, commit, tag, push tag.
-Trusted Publishers + OIDC do the rest.
+Trusted Publishers + OIDC do the rest. Note: `test_version.py` checks
+the installed distribution metadata — re-run `pip install -e sdk/`
+locally after the bump or the test fails on stale metadata.

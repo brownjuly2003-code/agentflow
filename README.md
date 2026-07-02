@@ -2,7 +2,7 @@
 
 > Event-native metrics layer: business metrics that move when events happen — measured **1.1 s p50** event-to-metric freshness on production defaults. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery for people, dashboards, services, and AI agents alike.
 
-[![Release gate](https://img.shields.io/badge/release_gate-v1.5_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
+[![Release gate](https://img.shields.io/badge/release_gate-v1.6_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -24,7 +24,7 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 
 - **Measured event-to-metric freshness** — an event entering the pipeline is reflected in `GET /v1/metrics/*` in **1.06 s p50 / 1.99 s p95** on production defaults (event-driven cache invalidation, no webhook registration), tunable to **238 ms p50**; a plain TTL cache on the same pipeline sits at ~15 s. Reproducible via `python scripts/benchmark_freshness.py` → [freshness benchmark](docs/freshness-benchmark.md)
 - **Lineage as a contract** — all six metrics declare their source events, serving table, and a 2.5 s p95 staleness budget in versioned contracts, exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
-- **Published release line through `v1.5.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
+- **Published release line through `v1.6.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
 - **Tested and gated** — 1,500+ unit tests plus a broad Windows no-Docker suite; CI enforces 13 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract, build-smoke) through branch protection
 - **Dual SDK parity** across Python and TypeScript — retries, circuit breakers, batching, pagination, contract pinning, idempotency keys, `as_of` historical reads — over sub-second entity lookups (p50 `38–55 ms`, p99 `167 ms` on local hardware)
 - **Security in the hot path** — tenant isolation on every read surface, parameterized queries, `sqlglot` AST validation for NL-to-SQL, fail-closed auth, secret scrubbing, and a Bandit gate for new findings
@@ -148,12 +148,12 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 
 ## Status
 
-**`v1.5.0` is the current release line** — PyPI `agentflow-runtime` /
+**`v1.6.0` is the current release line** — PyPI `agentflow-runtime` /
 `agentflow-client` and npm `@yuliaedomskikh/agentflow-client`, all
 published via OIDC Trusted Publishers with SLSA provenance attestations.
-CI on `main` is green across all 12 required checks.
+CI on `main` is green across all 13 required checks.
 
-The `v1.1.0` → `v1.5.0` arc landed in five increments on top of a security
+The `v1.1.0` → `v1.6.0` arc landed in six increments on top of a security
 audit-closure sprint:
 
 - **`v1.1.0`** — audit closure: tenant isolation across every read
@@ -177,12 +177,19 @@ audit-closure sprint:
   projection position), `sqlglot` control-byte and mutation-target
   repairs, and a strict-`mypy` expansion across the orchestration and
   freshness slices. No public API changes.
+- **`v1.6.0`** — the architecture-fixing release: ClickHouse becomes the
+  shipped serving engine (pipeline sink, `ReplacingMergeTree` row versions,
+  backend-routed event scan, a dedicated CI E2E lane against a real
+  ClickHouse), PII protection moves from the removed app-level string-parse
+  gate to engine-enforced vault governance (fail-closed column grants,
+  per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
+  views — 32/32 live adversarial probes), plus the vendored NL→SQL
+  generation engine (LangGraph, routed through GraceKelly), the DV2 raw
+  vault on PostgreSQL with `LISTEN`/`NOTIFY` freshness, the MinIO-backed
+  PyIceberg catalog, and the OpenSSF Scorecard channel (5.8 → 7.0).
 
-Beyond the tagged line, `main` carries post-`v1.5.0` work pending the next
-tag: the DV2 raw vault migrated from ClickHouse to PostgreSQL with a cloud
-supplier reference, the PyIceberg sink backed by a real MinIO object store,
-and event-driven OLTP→vault freshness via PostgreSQL `LISTEN`/`NOTIFY`. See
-the `[Unreleased]` section of the [changelog](CHANGELOG.md) for details.
+The tagged line and `main` are in sync as of `v1.6.0`. See the
+[changelog](CHANGELOG.md) for full detail.
 
 ### Scope
 

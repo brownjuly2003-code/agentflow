@@ -10,9 +10,9 @@ import structlog
 
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 from src.serving.api.webhook_dispatcher import _event_body, _signature
+from src.serving.control_plane import get_control_plane_store
 
 from .evaluator import evaluate_rule
-from .history import ensure_alert_history_table, log_alert_history
 
 if TYPE_CHECKING:
     from .dispatcher import AlertDispatcher, AlertRule
@@ -248,8 +248,7 @@ async def deliver(
     change_pct: float | None = None,
     webhook_url: str | None = None,
 ) -> dict:
-    conn = dispatcher.app.state.query_engine._conn
-    ensure_alert_history_table(conn)
+    store = get_control_plane_store(dispatcher.app)
     delivery_id = str(uuid.uuid4())
     body = _event_body(payload)
     headers = {
@@ -270,10 +269,11 @@ async def deliver(
         await asyncio.to_thread(validate_public_url, target_url)
     except UnsafeEgressURLError as exc:
         error = f"unsafe egress URL: {exc}"
-        log_alert_history(
-            conn,
+        store.log_alert_delivery(
             delivery_id=delivery_id,
-            alert=alert,
+            alert_id=alert.id,
+            alert_name=alert.name,
+            tenant=alert.tenant,
             metric=alert.metric,
             current_value=current_value,
             previous_value=previous_value,
@@ -322,10 +322,11 @@ async def deliver(
                 ]
                 await asyncio.sleep(delay)
 
-    log_alert_history(
-        conn,
+    store.log_alert_delivery(
         delivery_id=delivery_id,
-        alert=alert,
+        alert_id=alert.id,
+        alert_name=alert.name,
+        tenant=alert.tenant,
         metric=alert.metric,
         current_value=current_value,
         previous_value=previous_value,

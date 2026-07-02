@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 
 from src.serving.api.alerts import dispatcher as alerts_dispatcher
 from src.serving.api.alerts import escalation as alerts_escalation
-from src.serving.api.alerts import history as alerts_history
 from src.serving.api.main import app
+from src.serving.control_plane import embedded as control_plane_embedded
 
 
 class _FrozenDateTime:
@@ -67,7 +67,9 @@ class _LoggerSpy:
 def freeze_time(monkeypatch) -> _Clock:
     clock = _Clock()
     monkeypatch.setattr(alerts_dispatcher, "datetime", _FrozenDateTime)
-    monkeypatch.setattr(alerts_history, "datetime", _FrozenDateTime)
+    # log_alert_delivery's triggered_at default lives in the embedded store
+    # since ADR 0010 slice 2 (moved from alerts/history.py).
+    monkeypatch.setattr(control_plane_embedded, "datetime", _FrozenDateTime)
     return clock
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import secrets
 import uuid
@@ -12,10 +11,7 @@ from typing import TYPE_CHECKING, Literal
 import structlog
 from pydantic import BaseModel, Field, model_validator
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None  # type: ignore[assignment]
+from src.serving.control_plane import get_control_plane_store
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -92,30 +88,18 @@ def get_alert_config_path(app: FastAPI) -> Path:
     return Path(configured) if configured else DEFAULT_ALERTS_CONFIG_PATH
 
 
-def load_alerts(path: Path) -> list[AlertRule]:
-    if not path.exists():
-        return []
-    raw = path.read_text(encoding="utf-8")
-    if not raw.strip():
-        return []
-    data = yaml.safe_load(raw) if yaml is not None else json.loads(raw)
-    config = AlertConfig.model_validate(data or {})
-    return config.alerts
+def load_alerts(app: FastAPI) -> list[AlertRule]:
+    store = get_control_plane_store(app)
+    return [AlertRule.model_validate(record) for record in store.load_alert_rules()]
 
 
-def save_alerts(path: Path, alerts: list[AlertRule]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = AlertConfig(alerts=alerts).model_dump(mode="json")
-    content = (
-        yaml.safe_dump(payload, sort_keys=False)
-        if yaml is not None
-        else json.dumps(payload, indent=2)
-    )
-    path.write_text(content, encoding="utf-8", newline="\n")
+def save_alerts(app: FastAPI, alerts: list[AlertRule]) -> None:
+    store = get_control_plane_store(app)
+    store.save_alert_rules([alert.model_dump(mode="json") for alert in alerts])
 
 
 def create_alert(
-    path: Path,
+    app: FastAPI,
     *,
     name: str,
     tenant: str,
@@ -126,7 +110,7 @@ def create_alert(
     webhook_url: str,
     cooldown_minutes: int,
 ) -> AlertRule:
-    alerts = load_alerts(path)
+    alerts = load_alerts(app)
     now = datetime.now(UTC)
     rule = AlertRule(
         id=str(uuid.uuid4()),
@@ -143,23 +127,23 @@ def create_alert(
         updated_at=now,
     )
     alerts.append(rule)
-    save_alerts(path, alerts)
+    save_alerts(app, alerts)
     return rule
 
 
-def list_alerts(path: Path, tenant: str) -> list[AlertRule]:
-    return [alert for alert in load_alerts(path) if alert.tenant == tenant and alert.active]
+def list_alerts(app: FastAPI, tenant: str) -> list[AlertRule]:
+    return [alert for alert in load_alerts(app) if alert.tenant == tenant and alert.active]
 
 
-def get_alert(path: Path, alert_id: str, tenant: str) -> AlertRule | None:
-    for alert in load_alerts(path):
+def get_alert(app: FastAPI, alert_id: str, tenant: str) -> AlertRule | None:
+    for alert in load_alerts(app):
         if alert.id == alert_id and alert.tenant == tenant and alert.active:
             return alert
     return None
 
 
-def update_alert(path: Path, alert_id: str, tenant: str, updates: dict) -> AlertRule | None:
-    alerts = load_alerts(path)
+def update_alert(app: FastAPI, alert_id: str, tenant: str, updates: dict) -> AlertRule | None:
+    alerts = load_alerts(app)
     for index, alert in enumerate(alerts):
         if alert.id != alert_id or alert.tenant != tenant or not alert.active:
             continue
@@ -168,13 +152,13 @@ def update_alert(path: Path, alert_id: str, tenant: str, updates: dict) -> Alert
         payload["updated_at"] = datetime.now(UTC)
         updated = AlertRule.model_validate(payload)
         alerts[index] = updated
-        save_alerts(path, alerts)
+        save_alerts(app, alerts)
         return updated
     return None
 
 
-def deactivate_alert(path: Path, alert_id: str, tenant: str) -> bool:
-    alerts = load_alerts(path)
+def deactivate_alert(app: FastAPI, alert_id: str, tenant: str) -> bool:
+    alerts = load_alerts(app)
     changed = False
     for index, alert in enumerate(alerts):
         if alert.id != alert_id or alert.tenant != tenant or not alert.active:
@@ -186,7 +170,7 @@ def deactivate_alert(path: Path, alert_id: str, tenant: str) -> bool:
         changed = True
         break
     if changed:
-        save_alerts(path, alerts)
+        save_alerts(app, alerts)
     return changed
 
 
@@ -266,8 +250,7 @@ class AlertDispatcher:
     async def dispatch_alerts(self) -> int:
         from .escalation import dispatch_alert
 
-        path = get_alert_config_path(self.app)
-        alerts = load_alerts(path)
+        alerts = load_alerts(self.app)
         now = datetime.now(UTC)
         triggered = 0
         changed = False
@@ -279,7 +262,7 @@ class AlertDispatcher:
             triggered += alert_triggered
             changed = changed or alert_changed
         if changed:
-            save_alerts(path, alerts)
+            save_alerts(self.app, alerts)
         return triggered
 
     async def send_test_alert(self, alert: AlertRule) -> dict:

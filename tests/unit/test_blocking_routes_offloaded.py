@@ -164,7 +164,6 @@ async def test_deadletter_stats_does_not_block_event_loop() -> None:
 async def test_alert_history_does_not_block_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     # The rule lookup is a YAML read, not the DuckDB scan under test — stub it so
     # the handler reaches the history scan with a non-None rule.
-    monkeypatch.setattr(alerts_module, "get_alert_config_path", lambda app: Path("unused"))
     monkeypatch.setattr(alerts_module, "get_alert", lambda *a, **k: SimpleNamespace(id="A1"))
     app = FastAPI()
     app.state.query_engine = SimpleNamespace(_conn=_SleepyHistoryConn(delay_seconds=0.3))

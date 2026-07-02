@@ -274,7 +274,10 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         # manager commits on clean exit and rolls back on exception, which is
         # exactly the invariant-8 semantics the port requires.
         self._ensure_schema()
-        return psycopg.connect(self._dsn)
+        # Annotated hop: with psycopg absent (optional dependency), mypy sees
+        # the module as Any and warn_return_any would flag a bare return.
+        connection: AbstractContextManager[Any] = psycopg.connect(self._dsn)
+        return connection
 
     def _ensure_schema(self) -> None:
         if self._schema_ready:

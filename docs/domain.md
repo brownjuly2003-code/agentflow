@@ -9,8 +9,8 @@ other way around.
 Downstream consumers:
 
 - **Generator spec / unit economics** — order volumes, channel mix, and
-  seasonality below are the fixed frame; exact distributions are pinned in the
-  generator spec.
+  seasonality below are the fixed frame; exact distributions are pinned in
+  [`generator-spec.md`](generator-spec.md).
 - **Docs sweep** — README, `docs/architecture.md`, and the DV2 docs inherit
   the storyline and the vocabulary from §5.
 - **Operational layer design** — the three ops surfaces (order timeline,
@@ -45,8 +45,9 @@ events, firmware versions, or app sessions to seeds or contracts; the data
 story is orders, stock, and fulfilment.
 
 **Brand name.** Deliberately unnamed in v1 ("the importer"). Product names in
-seeds use neutral category-based names without a brand string; if the
-generator spec needs a brand token, that is a generator-spec decision.
+seeds use neutral category-based names without a brand string — settled as a
+hard decision in [`generator-spec.md`](generator-spec.md) §3: no brand token
+anywhere in the data.
 
 ### Footprint: 5 locations, 3 jurisdictions
 

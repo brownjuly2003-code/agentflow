@@ -4,6 +4,30 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — Operational serving split decided; ops-surfaces spec (ADR 0011, 2026-07-03)
+
+- **New [ADR 0011](docs/decisions/0011-ops-serving-split.md)** — the design
+  decision for the operational layer (`docs/domain.md` §4): every ops surface
+  (Order 360 timeline, stuck-orders worklist, exception inbox) composes
+  exactly the two existing ports — `QueryEngine`/`ServingBackend` for
+  analytical reads, `ControlPlaneStore` for transactional triage state — with
+  no third data path (no `query_engine._conn`, no vault DSN). Options
+  considered and rejected with reasons: everything-on-ClickHouse,
+  everything-on-PostgreSQL, direct vault reads for the customer block,
+  precomputed ops marts. The exception-triage overlay is recorded as the
+  seventh control-plane state class, extending ADR 0010's inventory.
+- **New `docs/ops-surfaces-spec.md`** — the implementation contract for
+  slices D2–D4: SLA stage model with budgets as catalog data (a `stages:`
+  block in `contracts/entities/order.yaml`), stage-entry journal rows
+  (`orders.status` topic) as the stage clock with an honest `created_at`
+  fallback, the journal's `entity_id` axis made real on live writes, endpoint
+  contracts and response shapes for `/v1/entity/order/{id}/timeline`,
+  `/v1/ops/stuck-orders`, and `/v1/ops/exceptions` (+stats), reconciliation
+  checks R1/R2, the manual-resolutions counter, a pinned demo story
+  (ORD-20260404-1004 as the sole SLA breach), and twelve machine-checkable
+  invariants as the test ТЗ.
+- Docs-only: no runtime behavior changes in this entry.
+
 ### Added — PostgresControlPlaneStore: the scale profile ships (ADR 0010 slice 5, 2026-07-03)
 
 - **New `src/serving/control_plane/postgres.py`** — all six control-plane

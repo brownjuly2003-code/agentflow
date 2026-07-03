@@ -187,6 +187,24 @@ def test_cross_tenant_entity_lookup_returns_404(client: TestClient):
     assert response.json() == {"detail": "order/ORD-ACME not found"}
 
 
+def test_cross_tenant_order_timeline_returns_404(client: TestClient):
+    # ops-surfaces-spec.md §1.7 / invariant I8: Order 360 timeline scopes
+    # both ports' reads by the request tenant, same as the entity route.
+    response = client.get("/v1/entity/order/ORD-ACME/timeline", headers={"X-API-Key": "demo-key"})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "order/ORD-ACME not found"}
+
+
+def test_tenant_api_key_reads_own_order_timeline(client: TestClient):
+    response = client.get("/v1/entity/order/ORD-ACME/timeline", headers={"X-API-Key": "acme-key"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["order"]["order_id"] == "ORD-ACME"
+    assert data["order"]["user_id"] == "USR-ACME-2"
+
+
 def test_metric_cache_does_not_leak_across_tenants(client: TestClient):
     class FakeRedis:
         def __init__(self) -> None:

@@ -82,7 +82,8 @@ class ClickHouseSink:
         topic: str,
         tenant_id: str,
         event_type: str,
-        latency_ms: int,
+        latency_ms: int | None,
+        entity_id: str | None = None,
         processed_at: datetime | None = None,
     ) -> None:
         self._backend.insert_rows(
@@ -92,7 +93,7 @@ class ClickHouseSink:
                     "event_id": event_id,
                     "topic": topic,
                     "tenant_id": tenant_id,
-                    "entity_id": None,
+                    "entity_id": entity_id,
                     "event_type": event_type,
                     "latency_ms": latency_ms,
                     "processed_at": processed_at or datetime.now(UTC),

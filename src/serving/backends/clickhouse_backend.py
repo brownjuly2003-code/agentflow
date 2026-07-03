@@ -544,6 +544,58 @@ class ClickHouseBackend(ServingBackend):
             expect_json=False,
             translate=False,
         )
+        # Stage-entry trails (ops-surfaces-spec.md §1.6), mirroring the DuckDB
+        # seed row-for-row so the Order 360 demo story matches on either
+        # backend. ORD-20260404-1004's single pending entry at created_at is
+        # the demo's sole SLA breach once D3 wires the stages: contract block.
+        self._request(
+            "\n".join(
+                [
+                    # demo seed data uses trusted config and generated timestamps
+                    f"INSERT INTO {self._database}.pipeline_events (event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at) VALUES",  # nosec B608
+                    "('evt-ord-1001-status-pending', 'orders.status', 'default', 'ORD-20260404-1001',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=120))}'),",
+                    "('evt-ord-1001-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1001',"
+                    f" 'order.status.confirmed', NULL, '{ts(timedelta(minutes=100))}'),",
+                    "('evt-ord-1001-status-shipped', 'orders.status', 'default', 'ORD-20260404-1001',"
+                    f" 'order.status.shipped', NULL, '{ts(timedelta(minutes=60))}'),",
+                    "('evt-ord-1001-status-delivered', 'orders.status', 'default', 'ORD-20260404-1001',"
+                    f" 'order.status.delivered', NULL, '{ts(timedelta(minutes=10))}'),",
+                    "('evt-ord-1002-status-pending', 'orders.status', 'default', 'ORD-20260404-1002',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=90))}'),",
+                    "('evt-ord-1002-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1002',"
+                    f" 'order.status.confirmed', NULL, '{ts(timedelta(minutes=80))}'),",
+                    "('evt-ord-1002-status-shipped', 'orders.status', 'default', 'ORD-20260404-1002',"
+                    f" 'order.status.shipped', NULL, '{ts(timedelta(minutes=70))}'),",
+                    "('evt-ord-1003-status-pending', 'orders.status', 'default', 'ORD-20260404-1003',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=60))}'),",
+                    "('evt-ord-1003-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1003',"
+                    f" 'order.status.confirmed', NULL, '{ts(timedelta(minutes=50))}'),",
+                    "('evt-ord-1004-status-pending', 'orders.status', 'default', 'ORD-20260404-1004',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=45))}'),",
+                    "('evt-ord-1005-status-pending', 'orders.status', 'default', 'ORD-20260404-1005',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=30))}'),",
+                    "('evt-ord-1005-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1005',"
+                    f" 'order.status.confirmed', NULL, '{ts(timedelta(minutes=25))}'),",
+                    "('evt-ord-1005-status-shipped', 'orders.status', 'default', 'ORD-20260404-1005',"
+                    f" 'order.status.shipped', NULL, '{ts(timedelta(minutes=15))}'),",
+                    "('evt-ord-1005-status-delivered', 'orders.status', 'default', 'ORD-20260404-1005',"
+                    f" 'order.status.delivered', NULL, '{ts(timedelta(minutes=5))}'),",
+                    "('evt-ord-1006-status-pending', 'orders.status', 'default', 'ORD-20260404-1006',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=20))}'),",
+                    "('evt-ord-1006-status-cancelled', 'orders.status', 'default', 'ORD-20260404-1006',"
+                    f" 'order.status.cancelled', NULL, '{ts(timedelta(minutes=10))}'),",
+                    "('evt-ord-1007-status-pending', 'orders.status', 'default', 'ORD-20260404-1007',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=15))}'),",
+                    "('evt-ord-1007-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1007',"
+                    f" 'order.status.confirmed', NULL, '{ts(timedelta(minutes=8))}'),",
+                    "('evt-ord-1008-status-pending', 'orders.status', 'default', 'ORD-20260404-1008',"
+                    f" 'order.status.pending', NULL, '{ts(timedelta(minutes=5))}')",
+                ]
+            ),
+            expect_json=False,
+            translate=False,
+        )
 
     def health(self) -> dict:
         try:

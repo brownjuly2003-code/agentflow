@@ -59,10 +59,18 @@ def test_valid_order_mirrors_upsert_and_validated_journal_row(conn) -> None:
 
     assert (success, reason) == (True, "ok")
     kinds = [kind for kind, _ in sink.calls]
-    assert kinds == ["upsert_order", "record_pipeline_event"]
-    journal = sink.calls[1][1]
+    # ops-surfaces-spec.md §1.2: the orders.status stage-entry row is mirrored
+    # right after the domain upsert, ahead of the events.validated journal row.
+    assert kinds == ["upsert_order", "record_pipeline_event", "record_pipeline_event"]
+    stage_row = sink.calls[1][1]
+    assert stage_row["topic"] == "orders.status"
+    assert stage_row["entity_id"] == str(event["order_id"])
+    assert stage_row["event_type"] == f"order.status.{event['status']}"
+    assert stage_row["latency_ms"] is None
+    journal = sink.calls[2][1]
     assert journal["topic"] == "events.validated"
     assert journal["event_id"] == str(event["event_id"])
+    assert journal["entity_id"] == str(event["order_id"])
     # DuckDB stays the canonical local store — the mirror is additive.
     row = conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
     assert row is not None

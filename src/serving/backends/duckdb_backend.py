@@ -291,6 +291,56 @@ class DuckDBBackend(ServingBackend):
                 'order.served', 4, NOW() - INTERVAL '1 minute')
         """)
 
+        # Stage-entry trails (ops-surfaces-spec.md §1.6): topic='orders.status',
+        # one row per stage transition, back-dated between each order's
+        # created_at and now. ORD-20260404-1004's single pending entry at
+        # created_at is the demo's sole SLA breach (45min vs a 30min budget,
+        # once D3 wires the stages: contract block). ORD-20260404-1001 carries
+        # the full ladder for the Order 360 story (I7).
+        self._conn.execute("""
+            INSERT INTO pipeline_events
+                (event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at)
+            VALUES
+            ('evt-ord-1001-status-pending', 'orders.status', 'default', 'ORD-20260404-1001',
+                'order.status.pending', NULL, NOW() - INTERVAL '120 minutes'),
+            ('evt-ord-1001-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1001',
+                'order.status.confirmed', NULL, NOW() - INTERVAL '100 minutes'),
+            ('evt-ord-1001-status-shipped', 'orders.status', 'default', 'ORD-20260404-1001',
+                'order.status.shipped', NULL, NOW() - INTERVAL '60 minutes'),
+            ('evt-ord-1001-status-delivered', 'orders.status', 'default', 'ORD-20260404-1001',
+                'order.status.delivered', NULL, NOW() - INTERVAL '10 minutes'),
+            ('evt-ord-1002-status-pending', 'orders.status', 'default', 'ORD-20260404-1002',
+                'order.status.pending', NULL, NOW() - INTERVAL '90 minutes'),
+            ('evt-ord-1002-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1002',
+                'order.status.confirmed', NULL, NOW() - INTERVAL '80 minutes'),
+            ('evt-ord-1002-status-shipped', 'orders.status', 'default', 'ORD-20260404-1002',
+                'order.status.shipped', NULL, NOW() - INTERVAL '70 minutes'),
+            ('evt-ord-1003-status-pending', 'orders.status', 'default', 'ORD-20260404-1003',
+                'order.status.pending', NULL, NOW() - INTERVAL '60 minutes'),
+            ('evt-ord-1003-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1003',
+                'order.status.confirmed', NULL, NOW() - INTERVAL '50 minutes'),
+            ('evt-ord-1004-status-pending', 'orders.status', 'default', 'ORD-20260404-1004',
+                'order.status.pending', NULL, NOW() - INTERVAL '45 minutes'),
+            ('evt-ord-1005-status-pending', 'orders.status', 'default', 'ORD-20260404-1005',
+                'order.status.pending', NULL, NOW() - INTERVAL '30 minutes'),
+            ('evt-ord-1005-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1005',
+                'order.status.confirmed', NULL, NOW() - INTERVAL '25 minutes'),
+            ('evt-ord-1005-status-shipped', 'orders.status', 'default', 'ORD-20260404-1005',
+                'order.status.shipped', NULL, NOW() - INTERVAL '15 minutes'),
+            ('evt-ord-1005-status-delivered', 'orders.status', 'default', 'ORD-20260404-1005',
+                'order.status.delivered', NULL, NOW() - INTERVAL '5 minutes'),
+            ('evt-ord-1006-status-pending', 'orders.status', 'default', 'ORD-20260404-1006',
+                'order.status.pending', NULL, NOW() - INTERVAL '20 minutes'),
+            ('evt-ord-1006-status-cancelled', 'orders.status', 'default', 'ORD-20260404-1006',
+                'order.status.cancelled', NULL, NOW() - INTERVAL '10 minutes'),
+            ('evt-ord-1007-status-pending', 'orders.status', 'default', 'ORD-20260404-1007',
+                'order.status.pending', NULL, NOW() - INTERVAL '15 minutes'),
+            ('evt-ord-1007-status-confirmed', 'orders.status', 'default', 'ORD-20260404-1007',
+                'order.status.confirmed', NULL, NOW() - INTERVAL '8 minutes'),
+            ('evt-ord-1008-status-pending', 'orders.status', 'default', 'ORD-20260404-1008',
+                'order.status.pending', NULL, NOW() - INTERVAL '5 minutes')
+        """)
+
     def health(self) -> dict:
         try:
             value = self.scalar("SELECT 1")

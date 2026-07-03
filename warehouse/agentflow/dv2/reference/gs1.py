@@ -7,8 +7,10 @@ GTIN-13 / EAN-13 barcodes, not arbitrary 13-digit strings.
 The data identities are synthetic, but the encoding is genuine:
 
 * GS1 prefixes ``460``-``469`` are the real EAEU (Russia / EAEU member
-  states) country range, so the reference is coherent with the rest of the
-  AgentFlow X5-grocery context.
+  states) country range. That is correct for this reference even though
+  manufacturing is contracted to China: GTINs belong to the RU brand owner
+  registered with GS1 RUS, regardless of where the goods are made — the
+  own-brand kitchen-appliance importer legend (``docs/domain.md``).
 * The 13th digit is computed with the published GS1 mod-10 weighting
   (odd positions weight 1, even positions weight 3, counting from the left
   over the 12 data digits).

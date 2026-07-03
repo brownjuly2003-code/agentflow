@@ -23,6 +23,7 @@ import click
 import pandas as pd
 
 from .generator import ReferenceTables, build_reference
+from .legend import GENERATOR_SEED, TOTAL_PRODUCTS, TOTAL_SUPPLIERS
 from .vault_mapping import RECORD_SOURCE, map_reference
 
 
@@ -60,15 +61,16 @@ def _manifest(tables: ReferenceTables, load_ts: datetime, vault: dict[str, pd.Da
             "RU INN-10 control digit",
             "EAEU GS1 prefix range 460-469",
             "gross_weight_g >= net_weight_g invariant",
-            "MD5 hash keys join-compatible with the X5 / 1C vault feeds",
+            "pricing ladder ordering (FOB < landed < wholesale < marketplace-net < RRC)",
+            "MD5 hash keys join-compatible with the transactional vault feeds",
         ],
         "synthetic_but_labelled": [
-            "supplier legal names",
-            "brand names",
+            "supplier legal names (no brand token anywhere in the data)",
             "SKU <-> GTIN <-> supplier assignments",
-            "packaging dimensions and purchase prices",
+            "packaging dimensions, RRC and FOB purchase prices",
             "GPC brick codes (illustrative)",
             "ТН ВЭД sub-position digits (zero-padded; heading granularity)",
+            "CN USCC-18 check character (structurally shaped, not GB 32100-2015 verified)",
         ],
     }
 
@@ -77,9 +79,9 @@ def _manifest(tables: ReferenceTables, load_ts: datetime, vault: dict[str, pd.Da
 @click.option(
     "--out-dir", default="reference/build", type=click.Path(file_okay=False, path_type=Path)
 )
-@click.option("--seed", default=20260626, type=int)
-@click.option("--n-suppliers", default=40, type=int)
-@click.option("--n-products", default=300, type=int)
+@click.option("--seed", default=GENERATOR_SEED, type=int)
+@click.option("--n-suppliers", default=TOTAL_SUPPLIERS, type=int)
+@click.option("--n-products", default=TOTAL_PRODUCTS, type=int)
 @click.option("--load-ts", default=None, help="Fixed UTC load timestamp (ISO-8601), else now.")
 @click.option("--dry-run", is_flag=True, help="Build and summarize without writing files.")
 def main(

@@ -81,6 +81,7 @@ class QueryEngine(
         tenant_id: str | None = None,
         event_type: str | None = None,
         entity_id: str | None = None,
+        topic: str | None = None,
         limit: int | None = None,
         validated_only: bool = False,
         newest_first: bool = False,
@@ -106,6 +107,11 @@ class QueryEngine(
         ``event_type`` accepts the demo event families (``order``, ``payment``,
         ``clickstream``, ``inventory``) or an exact event type; family
         semantics mirror what the pipeline produces.
+
+        ``topic`` is an exact-match filter (e.g. ``orders.status`` for the
+        stage clock, ops-surfaces-spec.md §1.2/§3.2) — orthogonal to
+        ``event_type``/``validated_only``, usable without an ``entity_id``
+        for a bulk scan across many entities in one query.
         """
         # Deliberately uncached (unlike _table_columns): the journal is created
         # and widened by out-of-process writers, so a scan must see schema
@@ -175,6 +181,10 @@ class QueryEngine(
             where_clauses.append(f"COALESCE(tenant_id, 'default') = {render(str(tenant_id))}")
         if validated_only and "topic" in columns:
             where_clauses.append("topic = 'events.validated'")
+        if topic is not None:
+            if "topic" not in columns:
+                return []
+            where_clauses.append(f"topic = {render(topic)}")
         if event_type:
             if "event_type" not in columns:
                 return []

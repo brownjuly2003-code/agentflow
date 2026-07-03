@@ -41,6 +41,7 @@ from src.serving.api.routers.batch import router as batch_router
 from src.serving.api.routers.contracts import router as contracts_router
 from src.serving.api.routers.deadletter import router as deadletter_router
 from src.serving.api.routers.lineage import router as lineage_router
+from src.serving.api.routers.ops import router as ops_router
 from src.serving.api.routers.search import router as search_router
 from src.serving.api.routers.slo import router as slo_router
 from src.serving.api.routers.stream import router as stream_router
@@ -333,6 +334,7 @@ app.include_router(alert_router)
 app.include_router(contracts_router, prefix="/v1")
 app.include_router(deadletter_router)
 app.include_router(lineage_router)
+app.include_router(ops_router)
 app.include_router(search_router, prefix="/v1")
 app.include_router(slo_router)
 app.include_router(stream_router)

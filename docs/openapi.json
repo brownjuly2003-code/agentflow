@@ -1775,6 +1775,88 @@
         }
       }
     },
+    "/v1/ops/stuck-orders": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Get Stuck Orders",
+        "operationId": "get_stuck_orders_v1_ops_stuck_orders_get",
+        "parameters": [
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stage"
+            }
+          },
+          {
+            "name": "include_within_sla",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Within Sla"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StuckOrdersResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/search": {
       "get": {
         "tags": [
@@ -3723,6 +3805,159 @@
           "endpoint"
         ],
         "title": "SearchResult"
+      },
+      "StuckOrderItem": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "entered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entered At"
+          },
+          "in_stage_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Stage Seconds"
+          },
+          "sla_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Minutes"
+          },
+          "overshoot_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overshoot Ratio"
+          },
+          "clock": {
+            "type": "string",
+            "enum": [
+              "journal",
+              "fallback"
+            ],
+            "title": "Clock"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "status",
+          "clock"
+        ],
+        "title": "StuckOrderItem"
+      },
+      "StuckOrdersResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StuckOrderItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/StuckOrdersSummary"
+          },
+          "pagination": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Pagination"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "summary",
+          "pagination"
+        ],
+        "title": "StuckOrdersResponse"
+      },
+      "StuckOrdersSummary": {
+        "properties": {
+          "open_by_stage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Open By Stage"
+          },
+          "breached_by_stage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Breached By Stage"
+          }
+        },
+        "type": "object",
+        "title": "StuckOrdersSummary"
       },
       "ValidationError": {
         "properties": {

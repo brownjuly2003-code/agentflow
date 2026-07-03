@@ -82,6 +82,56 @@ class EntityQueryMixin:
 
         return entity
 
+    def fetch_orders_by_status(
+        self: QueryExecutionHost,
+        statuses: list[str],
+        tenant_id: str | None = None,
+    ) -> list[dict]:
+        """Bulk read for the stuck-orders worklist (ops-surfaces-spec.md §3.2).
+
+        Every order whose status is one of ``statuses`` — the caller-supplied
+        catalog ladder (I2: never a hardcoded stage-name literal here) — in
+        one query, no per-order round-trips. Journal-side composition (each
+        order's latest ``orders.status`` row) happens in the caller via
+        ``fetch_pipeline_events(topic="orders.status")``, the same port
+        method the Order 360 timeline already uses.
+        """
+        entity_def = self.catalog.entities.get("order")
+        if entity_def is None or not statuses:
+            return []
+
+        table_name = self._qualify_table(entity_def.table, tenant_id)
+        use_query_params = self._backend_name == self._duckdb_backend.name
+        params: list[str] = []
+
+        def render(value: str) -> str:
+            if use_query_params:
+                params.append(value)
+                return "?"
+            return self._quote_literal(value)
+
+        status_placeholders = ", ".join(render(status) for status in statuses)
+        sql = (
+            # table comes from the catalog allowlist; statuses are the
+            # caller-supplied catalog ladder, never a literal here
+            f"SELECT * FROM {table_name} "  # nosec B608
+            f"WHERE status IN ({status_placeholders}) "
+            f"ORDER BY {self._quote_identifier(entity_def.primary_key)}"
+        )
+        try:
+            rows = (
+                self._backend.execute(sql, params)
+                if use_query_params
+                else self._backend.execute(sql)
+            )
+        except BackendMissingTableError as e:
+            msg = f"Table '{table_name}' for entity 'order' is not materialized yet"
+            raise ValueError(msg) from e
+        except BackendExecutionError as e:
+            raise ValueError(f"Open-orders lookup failed: {e}") from e
+
+        return [dict(row) for row in rows]
+
     def get_entity_at(
         self: QueryExecutionHost,
         entity_type: str,

@@ -144,10 +144,10 @@ Dialect: postgresql.
 Branch:  one view per jurisdiction by design — PII stays in branch.
 Hub admission: split_part(record_source,'__',2) = '<branch>', so a customer
          promoted under ANY source convention (1c__<branch>, pg_ops__<branch>,
-         x5__<branch>, ...) is integrated. This mirrors bv_order_canonical's
+         mp__<branch>, ...) is integrated. This mirrors bv_order_canonical's
          order_branch derivation above. The ClickHouse views hard-code
          record_source = '1c__<branch>', which silently dropped every OLTP- and
-         X5-promoted customer (record_source pg_ops__/x5__) from the MDM result
+         marketplace-promoted customer (record_source pg_ops__/mp__) from the MDM result
          (audit_28_06_26 #12). The hash keys were never incompatible —
          customer_hk = md5(business_key) is identical across loaders; only the
          hub record_source filter excluded them. split_part is the source-

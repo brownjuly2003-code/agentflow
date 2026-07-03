@@ -147,10 +147,12 @@ def test_business_vault_uses_postgres_collapse():
 def test_customer_mdm_views_admit_all_source_conventions():
     """audit_28_06_26 #12: the customer MDM views must select hub rows by
     branch via split_part(record_source, '__', 2), NOT by a hard-coded
-    record_source = '1c__<branch>' filter that silently drops OLTP/X5-promoted
-    customers (record_source pg_ops__/x5__). Proven live on PG: the buggy filter
-    returns 1 of 2 seeded customers, the split_part filter returns both."""
-    body = _strip_comments((PG_DIR / "03_business_vault.sql").read_text(encoding="utf-8")).lower()
+    record_source = '1c__<branch>' filter that silently drops OLTP/marketplace-
+    promoted customers (record_source pg_ops__/mp__). Proven live on PG: the
+    buggy filter returns 1 of 2 seeded customers, the split_part filter returns
+    both."""
+    raw = (PG_DIR / "03_business_vault.sql").read_text(encoding="utf-8").lower()
+    body = _strip_comments(raw)
     branches = ("msk", "spb", "ekb", "dxb", "ala")
     for branch in branches:
         assert f"view rv.bv_customer_mdm__{branch}" in body, f"missing PG view for {branch}"
@@ -160,6 +162,15 @@ def test_customer_mdm_views_admit_all_source_conventions():
     # the regressed pattern must never reappear in any customer MDM hub filter.
     assert "record_source = '1c__" not in body, (
         "hard-coded record_source = '1c__<branch>' filter reintroduces audit #12"
+    )
+    # B2 (domain.md §5.4): the legend's marketplace-feed vocabulary replaces the
+    # Kaggle dataset name in the third-source-convention example (checked on the
+    # RAW text — the example lives in the header comment, which body strips).
+    assert "x5__" not in raw, (
+        "stale Kaggle-dataset record_source prefix x5__ leaked back into 03_business_vault.sql"
+    )
+    assert "mp__" in raw, (
+        "03_business_vault.sql should document the mp__ marketplace-feed convention (domain.md §5.3)"
     )
 
 

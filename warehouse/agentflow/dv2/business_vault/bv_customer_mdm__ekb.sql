@@ -3,7 +3,7 @@ Purpose: Canonical customer record for the EKB branch.
 Layer:   Business Vault.
 Branch:  ekb (RU jurisdiction; same conflict policy as MSK).
 Hub admission: splitByString('__', record_source)[2] = 'ekb' (source-agnostic:
-         1c__/pg_ops__/x5__ all integrated, not only 1C; audit_28_06_26 #12;
+         1c__/pg_ops__/mp__ all integrated, not only 1C; audit_28_06_26 #12;
          mirrors the PostgreSQL port's split_part(record_source,'__',2)).
 Security: SQL SECURITY DEFINER (ADR 0006 Phase 2) — readers query this view
          under the definer's rights, so the column-limited grants in

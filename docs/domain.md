@@ -197,13 +197,13 @@ renames. The two exceptions are listed in §5.4.
 | `wb__` | Wildberries seller API | FBS orders, commissions, returns |
 | `excel__` | Logistics spreadsheets | Container manifests, cross-dock — the inbound-container storyline |
 | `pg_ops__` | Postgres OLTP (hot tier) via CDC | Operational order/customer rows promoted into the vault |
-| `mp__` (currently `x5__`) | Consolidated marketplace order feed | High-volume retail order history (see §5.4) |
+| `mp__` | Consolidated marketplace order feed | High-volume retail order history |
 
 ### 5.4 Planned renames / repins (the only code changes the legend requires)
 
 | Change | Scope | Status |
 | ------ | ----- | ------ |
-| `x5__*` → `mp__*` record_source (+ governance SQL, officer probes, admission tests) | The prefix currently carries the name of the Kaggle seed dataset (X5 Retail Hero) that the demo loader replays as transaction history. Under the legend it is the **consolidated marketplace feed**, and the prefix should say so. Dataset attribution stays in the loader README | Planned (data phase) |
+| `x5__*` → `mp__*` record_source (+ governance SQL, officer probes, admission tests) | The prefix carried the name of the Kaggle seed dataset (X5 Retail Hero) that the demo loader replays as transaction history. Under the legend it is the **consolidated marketplace feed**, and the prefix says so. Dataset attribution stays in the loader README | **Done** (B2) |
 | Demo value repin: currencies to `RUB` (primary), `AED`/`KZT` in branch stories; demo revenue/counts consistent with §1–2 | `contracts/entities/order.yaml` currency examples, NL demo answers, seeded `ORD-*` rows | Planned (data phase, after the generator spec) |
 
 Vocabulary guardrails for all public docs: the company is an **own-brand /

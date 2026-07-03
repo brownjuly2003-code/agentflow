@@ -14,7 +14,10 @@ Downstream consumers:
 - **Docs sweep** — README, `docs/architecture.md`, and the DV2 docs inherit
   the storyline and the vocabulary from §5.
 - **Operational layer design** — the three ops surfaces (order timeline,
-  stuck-orders worklist, exception inbox) serve the workflows in §4.
+  stuck-orders worklist, exception inbox) serve the workflows in §4; the
+  serving split is decided in
+  [ADR 0011](decisions/0011-ops-serving-split.md) and the surface contracts
+  are pinned in [`ops-surfaces-spec.md`](ops-surfaces-spec.md).
 
 ---
 

@@ -188,6 +188,17 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > (`docs/perf/vault-pii-governance-verify-2026-07-02.md`). `sql_guard` remains, scoped
 > to what it can actually enforce: SELECT-only, no DML, the tenant table allow-list, and
 > the recursive-CTE shadow reject. Tracked in `road-to-9.8.md`.
+>
+> **Operational surfaces have a recorded serving split ([ADR 0011](decisions/0011-ops-serving-split.md), 2026-07-03).**
+> The planned ops layer (Order 360 timeline, stuck-orders worklist, exception
+> inbox — the workflows of [`domain.md`](domain.md) §4) composes exactly the two
+> existing ports: analytical reads (entity point-reads, the `pipeline_events`
+> journal, open-order scans) on the serving backend, transactional triage state
+> (dead-letter lifecycle, the exception-triage overlay, the manual-work counter)
+> on the `ControlPlaneStore` — no third data path. Endpoint contracts, the SLA
+> stage model, and exception sources are pinned in
+> [`docs/ops-surfaces-spec.md`](ops-surfaces-spec.md); implementation is staged
+> (D2–D4).
 
 ## v1-v6 Capability Map
 

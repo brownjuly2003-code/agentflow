@@ -2,7 +2,7 @@
 
 ## Контекст
 
-Multi-source / multi-branch e-com одежды/обуви. 5 локаций (MSK / SPB / EKB / DXB / ALA). Источники: 1С (УТ), Битрикс24, Excel-логистика, XML-обмен сайта, API маркетплейсов (ВБ/Озон).
+Multi-source / multi-branch DWH own-brand импортёра малой бытовой техники (легенда: [`domain.md`](../domain.md)). 5 локаций (MSK / SPB / EKB / DXB / ALA). Источники: 1С (УТ/ЗУП), Битрикс24, WMS, Excel-логистика (контейнерные манифесты), собственный D2C-сайт, API маркетплейсов (ВБ/Озон).
 
 Naming convention основана на публичных данных и engineering-материалах крупных ритейлеров (X5 Retail Hero, Lenta BigTarget, Магнит). DDL-шаблоны — адаптация Celestinfo + Tampere DV2.0 automation patterns под ClickHouse.
 

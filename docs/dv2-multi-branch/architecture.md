@@ -6,15 +6,16 @@ they go after.
 
 ## Storyline
 
-Mid-market e-com (clothing / footwear) with 5 locations and 3 jurisdictions:
+A mid-size Russian own-brand importer of small kitchen appliances, with 5
+locations and 3 jurisdictions — full legend in [`domain.md`](../domain.md):
 
-| Branch    | Region | Jurisdiction | Role                                  |
-| --------- | ------ | ------------ | ------------------------------------- |
-| `msk`     | RU     | RU           | HQ + flagship store + central WMS     |
-| `spb`     | RU     | RU           | Regional hub                          |
-| `ekb`     | RU     | RU           | Regional hub                          |
-| `dxb`     | UAE    | UAE          | Edge office + local fulfillment       |
-| `ala`     | KZ     | KZ           | Edge office + local fulfillment       |
+| Branch    | Region | Jurisdiction | Role                                                             |
+| --------- | ------ | ------------ | ----------------------------------------------------------------- |
+| `msk`     | RU     | RU           | HQ, central warehouse (fulfils all three RU channels), main WMS  |
+| `spb`     | RU     | RU           | Regional warehouse + B2B showroom                                |
+| `ekb`     | RU     | RU           | Regional warehouse (Urals/Siberia dealer logistics)               |
+| `dxb`     | UAE    | UAE          | Re-export trading hub, JAFZA free zone: China → Gulf market      |
+| `ala`     | KZ     | KZ           | EAEU hub: Kazakhstan local market + EAEU customs contour          |
 
 `record_source = {source_system}__{branch_code}` is load-bearing: it routes
 PII to a jurisdiction-local satellite and keeps cold-tier exports per-branch
@@ -134,8 +135,11 @@ flowchart LR
 - 1 HQ cluster (`hq-demo`) with 3 kind nodes, labelled `branch=msk`.
 - Postgres + ClickHouse pinned via `nodeSelector` — proving the placement
   primitive that production would use at the edge.
-- Synthetic seed populates `raw_vault` with the same `40/25/15/10/10` branch
-  distribution that X5 Retail Hero reproduces against real transactions.
+- Synthetic seed populates `raw_vault` with the branch split from
+  [`generator-spec.md`](../generator-spec.md) §1/§7: order *count* is
+  msk-heavy (≈95%, since all FBS/D2C fulfils from the central warehouse)
+  while B2B *revenue* splits more evenly by branch (msk 59.6% / spb 14.3% /
+  dxb 10.6% / ekb 10.2% / ala 5.3%).
 - CDC bridge, business_vault MDM, cold-offload CronJob, and per-branch edge
   clusters (`dxb`, `ala`) are **out of scope for the demo runtime** but
   described above so the design is reproducible.

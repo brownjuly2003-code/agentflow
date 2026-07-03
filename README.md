@@ -108,7 +108,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 | Design decisions | `docs/decisions/` (ADRs) |
 | Public site | `site/` |
 | IaC | `infrastructure/terraform/`, `infrastructure/dv2/`, `helm/`, `k8s/` |
-| DV2.0 warehouse | `warehouse/agentflow/dv2/` (hubs / links / satellites + X5 loader) |
+| DV2.0 warehouse | `warehouse/agentflow/dv2/` (hubs / links / satellites + real-dataset loader) |
 
 ## Documentation
 

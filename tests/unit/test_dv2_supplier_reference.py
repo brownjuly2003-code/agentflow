@@ -76,10 +76,14 @@ def test_ru_inn10_check_digit_known_vector():
 
 
 def test_tnved_headings_are_real_format():
-    assert len(TNVED_HEADINGS) >= 30
+    # 10 catalog categories (generator-spec.md §3), one split across two
+    # headings (vacuum sealers vs dryers) -> 11 heading entries.
+    assert len(TNVED_HEADINGS) == 11
+    allowed_headings = {"8516", "8509", "8423", "8422"}
     for h in TNVED_HEADINGS:
         assert len(h.heading) == 4
         assert h.heading.isdigit()
+        assert h.heading in allowed_headings
         assert h.code10 == f"{h.heading}000000"
         assert len(h.code10) == 10
         assert h.description.strip()

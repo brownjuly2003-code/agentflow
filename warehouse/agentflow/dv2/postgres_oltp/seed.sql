@@ -1,4 +1,6 @@
--- Hot-tier OLTP seed for the DV2.0 demo.
+-- Hot-tier OLTP seed for the DV2.0 demo (own-brand kitchen-appliance
+-- importer legend — see synthetic_seed.sql for the full customer/order
+-- numbering this small sample mirrors at hot-tier scale).
 -- Lives in Postgres 17, per-branch schema layout (ops_<branch>) so the
 -- CDC bridge described in docs/dv2-multi-branch/architecture.md can route
 -- straight by schema name. Each schema gets its own customers + orders table.
@@ -56,7 +58,7 @@ SELECT
     (ARRAY['Anna','Boris','Dasha','Egor','Fedor','Galya','Ivan','Kira','Lena','Mark'])[(n % 10) + 1],
     (ARRAY['Ivanov','Petrov','Sidorov','Smirnov','Volkov','Orlov','Lebedev','Sokolov'])[(n % 8) + 1],
     'oltp' || n::text || '@example.test',
-    '+7916' || lpad((n * 137 % 10000000)::text, 7, '0')
+    '+7495' || lpad((n * 137 % 10000000)::text, 7, '0')
 FROM generate_series(1, 50) AS n
 ON CONFLICT (customer_id) DO NOTHING;
 

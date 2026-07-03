@@ -99,6 +99,7 @@ def _ensure_tables(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
     )
+    conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS entity_id VARCHAR")
 
 
 def _event_tenant(event: dict) -> str:
@@ -106,6 +107,25 @@ def _event_tenant(event: dict) -> str:
     metadata_tenant = source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
     tenant = event.get("tenant") or metadata_tenant
     return str(tenant) if tenant else "default"
+
+
+# ops-surfaces-spec.md §1.3: the entity_id axis of the pipeline_events journal
+# is what Order 360 (and lineage) key off of. NULL when the id isn't
+# derivable from the payload — never synthesized.
+_ENTITY_ID_FIELD_BY_PREFIX = (
+    ("order.", "order_id"),
+    ("user.", "user_id"),
+    ("product.", "product_id"),
+    ("session.", "session_id"),
+)
+
+
+def _derive_entity_id(event: dict, event_type: str) -> str | None:
+    for prefix, field_name in _ENTITY_ID_FIELD_BY_PREFIX:
+        if event_type.startswith(prefix):
+            value = event.get(field_name)
+            return str(value) if value is not None else None
+    return None
 
 
 def _process_event(
@@ -118,6 +138,7 @@ def _process_event(
     event_type = event.get("event_type", "")
     event_id = event.get("event_id", "unknown")
     tenant_id = _event_tenant(event)
+    entity_id = _derive_entity_id(event, event_type)
 
     conn.execute("BEGIN")
     try:
@@ -127,11 +148,11 @@ def _process_event(
             conn.execute(
                 """
                 INSERT INTO pipeline_events (
-                    event_id, topic, tenant_id, event_type, latency_ms, processed_at
+                    event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
                 )
-                VALUES (?, 'events.deadletter', ?, ?, 0, ?)
+                VALUES (?, 'events.deadletter', ?, ?, ?, 0, ?)
                 """,
-                [event_id, tenant_id, event_type, datetime.now(UTC)],
+                [event_id, tenant_id, entity_id, event_type, datetime.now(UTC)],
             )
             if iceberg_sink is not None:
                 iceberg_sink.write_batch(
@@ -157,6 +178,7 @@ def _process_event(
                     event_id=str(event_id),
                     topic="events.deadletter",
                     tenant_id=tenant_id,
+                    entity_id=entity_id,
                     event_type=event_type,
                     latency_ms=0,
                 )
@@ -169,11 +191,11 @@ def _process_event(
             conn.execute(
                 """
                 INSERT INTO pipeline_events (
-                    event_id, topic, tenant_id, event_type, latency_ms, processed_at
+                    event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
                 )
-                VALUES (?, 'events.deadletter', ?, ?, 0, ?)
+                VALUES (?, 'events.deadletter', ?, ?, ?, 0, ?)
                 """,
-                [event_id, tenant_id, event_type, datetime.now(UTC)],
+                [event_id, tenant_id, entity_id, event_type, datetime.now(UTC)],
             )
             if iceberg_sink is not None:
                 iceberg_sink.write_batch(
@@ -195,6 +217,7 @@ def _process_event(
                     event_id=str(event_id),
                     topic="events.deadletter",
                     tenant_id=tenant_id,
+                    entity_id=entity_id,
                     event_type=event_type,
                     latency_ms=0,
                 )
@@ -204,6 +227,7 @@ def _process_event(
         if event_type.startswith("order."):
             event = enrich_order(event)
             _upsert_order(conn, event)
+            _record_order_status(conn, event, event_id, tenant_id)
             if iceberg_sink is not None:
                 iceberg_sink.write_batch("orders", [event])
         elif event_type in ("click", "page_view", "add_to_cart"):
@@ -233,16 +257,25 @@ def _process_event(
         conn.execute(
             """
             INSERT INTO pipeline_events (
-                event_id, topic, tenant_id, event_type, latency_ms, processed_at
+                event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
             )
-            VALUES (?, 'events.validated', ?, ?, ?, ?)
+            VALUES (?, 'events.validated', ?, ?, ?, ?, ?)
             """,
-            [event_id, tenant_id, event_type, latency_ms, datetime.now(UTC)],
+            [event_id, tenant_id, entity_id, event_type, latency_ms, datetime.now(UTC)],
         )
         conn.execute("COMMIT")
         if clickhouse_sink is not None:
             if event_type.startswith("order."):
                 clickhouse_sink.upsert_order(event)
+                clickhouse_sink.record_pipeline_event(
+                    event_id=f"{event_id}-status",
+                    topic="orders.status",
+                    tenant_id=tenant_id,
+                    entity_id=str(event["order_id"]),
+                    event_type=f"order.status.{event['status']}",
+                    latency_ms=None,
+                    processed_at=datetime.now(UTC),
+                )
             elif event_type in ("click", "page_view", "add_to_cart"):
                 clickhouse_sink.upsert_session(event)
             elif event_type.startswith("product."):
@@ -251,6 +284,7 @@ def _process_event(
                 event_id=str(event_id),
                 topic="events.validated",
                 tenant_id=tenant_id,
+                entity_id=entity_id,
                 event_type=event_type,
                 latency_ms=latency_ms,
             )
@@ -296,6 +330,30 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
         GROUP BY user_id
     """,
         [event["user_id"]],
+    )
+
+
+def _record_order_status(
+    conn: duckdb.DuckDBPyConnection, event: dict, event_id: str, tenant_id: str
+) -> None:
+    """Stage-entry journal row (ops-surfaces-spec.md §1.2) — the stage clock
+    for Order 360 / stuck-orders. ``topic='orders.status'`` is deliberately
+    disjoint from the ingestion vocabulary (``order.created``, ...) so it
+    never gets picked up by scans that filter on ingestion event types."""
+    conn.execute(
+        """
+        INSERT INTO pipeline_events (
+            event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
+        )
+        VALUES (?, 'orders.status', ?, ?, ?, NULL, ?)
+        """,
+        [
+            f"{event_id}-status",
+            tenant_id,
+            str(event["order_id"]),
+            f"order.status.{event['status']}",
+            datetime.now(UTC),
+        ],
     )
 
 

@@ -24,6 +24,7 @@ from src.serving.api.versioning import (
     resolve_request_version,
 )
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
+from src.serving.control_plane import get_control_plane_store
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.api")
@@ -111,6 +112,29 @@ def _as_of_iso_text(as_of: datetime | None) -> str | None:
     if as_of is None:
         return None
     return as_of.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _coerce_dt(value: object) -> datetime | None:
+    # Naive DuckDB timestamps are local wall-clock (DuckDB's NOW()), not UTC —
+    # same local_tz convention as EntityQueryMixin.get_entity's _last_updated.
+    local_tz = datetime.now().astimezone().tzinfo or UTC
+    if isinstance(value, datetime):
+        return (
+            value.astimezone(UTC)
+            if value.tzinfo is not None
+            else value.replace(tzinfo=local_tz).astimezone(UTC)
+        )
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return (
+            parsed.astimezone(UTC)
+            if parsed.tzinfo is not None
+            else parsed.replace(tzinfo=local_tz).astimezone(UTC)
+        )
+    return None
 
 
 def _transform_payload_for_requested_version(
@@ -243,6 +267,225 @@ class MetricResponse(BaseModel):
     computed_at: datetime
     components: dict | None = None
     meta: dict = Field(default_factory=dict)
+
+
+# ── Order 360 timeline models (ops-surfaces-spec.md §2.2) ────────
+# The customer block is a fixed field allow-list — the users_enriched
+# columns, PII-free by construction (spec invariant I3). No literal stage
+# name or SLA budget appears below (invariant I2): sla_minutes/breached
+# come only from the catalog's optional `stages` field, null until that
+# field exists (D3, ops-surfaces-spec.md §1.5).
+
+
+class OrderTimelineOrder(BaseModel):
+    order_id: str
+    user_id: str | None = None
+    status: str | None = None
+    total_amount: float | None = None
+    currency: str | None = None
+    created_at: datetime | None = None
+
+
+class OrderTimelineStage(BaseModel):
+    current: str | None = None
+    entered_at: datetime | None = None
+    in_stage_seconds: float | None = None
+    sla_minutes: int | None = None
+    breached: bool | None = None
+    clock: Literal["journal", "fallback"]
+
+
+class OrderTimelineStageHistoryItem(BaseModel):
+    status: str
+    at: datetime | None = None
+
+
+class OrderTimelinePipelineTrailItem(BaseModel):
+    event_id: str | None = None
+    topic: str | None = None
+    event_type: str | None = None
+    latency_ms: float | None = None
+    processed_at: datetime | None = None
+
+
+class OrderTimelineCustomer(BaseModel):
+    user_id: str
+    total_orders: int | None = None
+    total_spent: float | None = None
+    first_order_at: datetime | None = None
+    last_order_at: datetime | None = None
+    preferred_category: str | None = None
+
+
+class OrderTimelineExceptionActions(BaseModel):
+    replay: str
+    dismiss: str
+
+
+class OrderTimelineException(BaseModel):
+    event_id: str
+    failure_reason: str | None = None
+    status: str
+    occurred_at: datetime | None = None
+    actions: OrderTimelineExceptionActions
+
+
+class OrderTimelineResponse(BaseModel):
+    order: OrderTimelineOrder
+    stage: OrderTimelineStage
+    stage_history: list[OrderTimelineStageHistoryItem] = Field(default_factory=list)
+    pipeline_trail: list[OrderTimelinePipelineTrailItem] = Field(default_factory=list)
+    customer: OrderTimelineCustomer | None = None
+    exceptions: list[OrderTimelineException] = Field(default_factory=list)
+
+
+_ORDER_TIMELINE_ORDER_FIELDS = (
+    "order_id",
+    "user_id",
+    "status",
+    "total_amount",
+    "currency",
+    "created_at",
+)
+_ORDER_TIMELINE_CUSTOMER_FIELDS = (
+    "user_id",
+    "total_orders",
+    "total_spent",
+    "first_order_at",
+    "last_order_at",
+    "preferred_category",
+)
+
+
+def _build_order_timeline(request: Request, order_id: str) -> dict[str, Any] | None:
+    """Sync composition for GET /entity/order/{order_id}/timeline.
+
+    Runs on a worker thread (the route offloads it, matching lineage.py /
+    deadletter.py). Composes exactly the two ops-layer ports per ADR 0011:
+    QueryEngine for the order row, the journal, and the customer projection;
+    ControlPlaneStore for dead-letter exception detail. No raw connection, no
+    vault DSN (invariant I1).
+    """
+    engine = request.app.state.query_engine
+    tenant_id = _resolve_tenant_id(request)
+    store_tenant_id = tenant_id or "default"
+
+    order_row = engine.get_entity("order", order_id, tenant_id=tenant_id)
+    if order_row is None:
+        return None
+    order_row = dict(order_row)
+
+    journal_rows = engine.fetch_pipeline_events(
+        tenant_id=tenant_id, entity_id=order_id, newest_first=False
+    )
+    stage_rows = [row for row in journal_rows if row.get("topic") == "orders.status"]
+    trail_rows = [row for row in journal_rows if row.get("topic") != "orders.status"]
+
+    stage_history = [
+        {
+            "status": str(row["event_type"]).removeprefix("order.status."),
+            "at": row.get("processed_at"),
+        }
+        for row in stage_rows
+        if row.get("event_type")
+    ]
+
+    current_status = order_row.get("status")
+    catalog = request.app.state.catalog
+    order_def = catalog.entities.get("order")
+    stage_budgets = (getattr(order_def, "stages", None) or []) if order_def else []
+    budget = next(
+        (
+            entry
+            for entry in stage_budgets
+            if isinstance(entry, dict) and entry.get("name") == current_status
+        ),
+        None,
+    )
+
+    entered_at = None
+    clock = "fallback"
+    target_event_type = f"order.status.{current_status}"
+    for row in reversed(stage_rows):
+        if row.get("event_type") == target_event_type:
+            entered_at = _coerce_dt(row.get("processed_at"))
+            clock = "journal"
+            break
+    if entered_at is None:
+        entered_at = _coerce_dt(order_row.get("created_at"))
+
+    in_stage_seconds = (
+        (datetime.now(UTC) - entered_at).total_seconds() if entered_at is not None else None
+    )
+    sla_minutes = budget.get("sla_minutes") if budget else None
+    is_terminal = bool(budget.get("terminal")) if budget else False
+    breached = (
+        None
+        if is_terminal or sla_minutes is None or in_stage_seconds is None
+        else in_stage_seconds > sla_minutes * 60
+    )
+
+    customer = None
+    user_id = order_row.get("user_id")
+    if user_id:
+        try:
+            user_row = engine.get_entity("user", str(user_id), tenant_id=tenant_id)
+        except ValueError:
+            # users_enriched not materialized for this tenant/profile — the
+            # customer block is "null when absent" (spec §2.1), not a 503 for
+            # the whole timeline; the order/stage/trail data is still good.
+            user_row = None
+        if user_row is not None:
+            customer = {field: user_row.get(field) for field in _ORDER_TIMELINE_CUSTOMER_FIELDS}
+
+    store = get_control_plane_store(request.app)
+    exceptions = []
+    for row in trail_rows:
+        if row.get("topic") != "events.deadletter":
+            continue
+        event_id = row.get("event_id")
+        if not event_id:
+            continue
+        detail = store.get_dead_letter_event(str(event_id), store_tenant_id)
+        if detail is None:
+            continue
+        exceptions.append(
+            {
+                "event_id": detail["event_id"],
+                "failure_reason": detail.get("failure_reason"),
+                "status": detail["status"],
+                "occurred_at": detail.get("received_at"),
+                "actions": {
+                    "replay": f"/v1/deadletter/{detail['event_id']}/replay",
+                    "dismiss": f"/v1/deadletter/{detail['event_id']}/dismiss",
+                },
+            }
+        )
+
+    return {
+        "order": {field: order_row.get(field) for field in _ORDER_TIMELINE_ORDER_FIELDS},
+        "stage": {
+            "current": current_status,
+            "entered_at": entered_at,
+            "in_stage_seconds": in_stage_seconds,
+            "sla_minutes": sla_minutes,
+            "breached": breached,
+            "clock": clock,
+        },
+        "stage_history": stage_history,
+        "pipeline_trail": [
+            {
+                "event_id": row.get("event_id"),
+                "topic": row.get("topic"),
+                "event_type": row.get("event_type"),
+                "latency_ms": row.get("latency_ms"),
+                "processed_at": row.get("processed_at"),
+            }
+            for row in trail_rows
+        ],
+        "customer": customer,
+        "exceptions": exceptions,
+    }
 
 
 # ── Endpoints ───────────────────────────────────────────────────
@@ -447,6 +690,32 @@ async def get_entity(
         response.headers["X-Cache"] = "MISS"
     transformed_payload = _transform_payload_for_requested_version(req, response_payload)
     return EntityResponse.model_validate(transformed_payload)
+
+
+@router.get("/entity/order/{order_id}/timeline", response_model=OrderTimelineResponse)
+async def get_order_timeline(order_id: str, req: Request) -> OrderTimelineResponse:
+    """Order 360: order state, stage history, pipeline trail, customer block,
+    and linked exceptions — one composed read (ops-surfaces-spec.md §2).
+
+    Same tenant scoping and 404 semantics as GET /entity/order/{order_id}.
+    Not cached: this is the "now" surface (ADR 0011 constraint 3, spec §1.8).
+
+    Example:
+        GET /v1/entity/order/ORD-20260404-1001/timeline
+    """
+    catalog = req.app.state.catalog
+    if "order" not in catalog.entities:
+        raise HTTPException(status_code=404, detail="Unknown entity type: order")
+
+    try:
+        payload = await run_in_threadpool(_build_order_timeline, req, order_id)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from None
+
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"order/{order_id} not found")
+
+    return OrderTimelineResponse.model_validate(payload)
 
 
 @router.get("/metrics/{metric_name}", response_model=MetricResponse)

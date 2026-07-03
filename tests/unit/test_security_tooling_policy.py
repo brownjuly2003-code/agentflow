@@ -65,7 +65,12 @@ _ALLOWED_B608_SITES = {
     # %s. All other adapter SQL is literal (the lease fragment is inlined and
     # the tenant/reason filters branch into full literal statements).
     "src/serving/control_plane/postgres.py": 3,
-    "src/serving/backends/clickhouse_backend.py": 7,
+    # D2 (reviewed 2026-07-04): the new orders.status stage-trail seed INSERT
+    # in initialize_demo_data follows the same pattern as the file's other six
+    # seed-block sites — a static f-string of hardcoded demo ids and
+    # ts()-formatted (trusted, generated) timestamps, no request-derived
+    # input.
+    "src/serving/backends/clickhouse_backend.py": 8,
     "src/serving/backends/duckdb_backend.py": 2,
     "src/serving/semantic_layer/nl_engine.py": 6,
     "src/serving/semantic_layer/query/engine.py": 1,

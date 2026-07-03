@@ -104,6 +104,12 @@ def _fetch_matching_events(request: Request, entity_type: str, entity_id: str) -
         if tenant_id is not None and "tenant_id" in columns:
             where_clauses.append("COALESCE(tenant_id, 'default') = ?")
             params.append(str(tenant_id))
+        if "topic" in columns:
+            # ops-surfaces-spec.md §1.1: orders.status rows are the warehouse
+            # stage clock, not the ingestion pipeline trail this endpoint
+            # reconstructs — excluded so they don't hijack source_topic /
+            # earliest_at (Order 360's timeline shows stage history instead).
+            where_clauses.append("topic != 'orders.status'")
 
         cursor.execute(
             (

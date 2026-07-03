@@ -4,8 +4,8 @@ The ClickHouse ``business_vault/*.sql`` views had no parse or coverage before
 this file. It pins that every view parses under sqlglot's ClickHouse dialect and
 that the customer MDM views admit hub rows by branch via
 ``splitByString('__', record_source)[2]`` — NOT by a hard-coded
-``record_source = '1c__<branch>'`` filter that silently dropped OLTP/X5-promoted
-customers (``record_source`` ``pg_ops__`` / ``x5__``).
+``record_source = '1c__<branch>'`` filter that silently dropped OLTP/marketplace-
+promoted customers (``record_source`` ``pg_ops__`` / ``mp__``).
 
 This is the ClickHouse half of audit_28_06_26 #12. The PostgreSQL port was fixed
 in ``test_dv2_postgres_ddl.py::test_customer_mdm_views_admit_all_source_conventions``;
@@ -59,15 +59,17 @@ def test_customer_mdm_views_admit_all_source_conventions():
     """audit_28_06_26 #12 (ClickHouse half): the customer MDM views must select
     hub rows by branch via ``splitByString('__', record_source)[2]``, NOT by a
     hard-coded ``record_source = '1c__<branch>'`` filter that silently drops
-    OLTP/X5-promoted customers (record_source ``pg_ops__`` / ``x5__``). Proven
-    live on PostgreSQL in #99: the buggy filter returns 1 of 2 seeded customers,
-    the source-agnostic filter returns both. This keeps the ClickHouse views in
-    lock-step with the PostgreSQL port so the engines cannot diverge again."""
+    OLTP/marketplace-promoted customers (record_source ``pg_ops__`` / ``mp__``).
+    Proven live on PostgreSQL in #99: the buggy filter returns 1 of 2 seeded
+    customers, the source-agnostic filter returns both. This keeps the
+    ClickHouse views in lock-step with the PostgreSQL port so the engines
+    cannot diverge again."""
     for branch in MDM_BRANCHES:
         path = BV_DIR / f"bv_customer_mdm__{branch}.sql"
         # Strip block/line comments: the headers deliberately quote the old,
         # buggy ``record_source = '1c__<branch>'`` filter to explain the fix.
-        body = _strip_comments(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
+        body = _strip_comments(raw)
         assert f"CREATE OR REPLACE VIEW rv.bv_customer_mdm__{branch}" in body, (
             f"bv_customer_mdm__{branch}.sql must define rv.bv_customer_mdm__{branch}"
         )
@@ -79,4 +81,14 @@ def test_customer_mdm_views_admit_all_source_conventions():
         assert "record_source = '1c__" not in body, (
             f"hard-coded record_source = '1c__<branch>' filter in "
             f"bv_customer_mdm__{branch} reintroduces audit #12"
+        )
+        # B2 (domain.md §5.4): the legend's marketplace-feed vocabulary replaces
+        # the Kaggle dataset name in the third-source-convention example (checked
+        # on the RAW text — the example lives in the header comment, which body
+        # strips).
+        assert "x5__" not in raw, (
+            f"stale Kaggle-dataset record_source prefix x5__ leaked back into bv_customer_mdm__{branch}.sql"
+        )
+        assert "mp__" in raw, (
+            f"bv_customer_mdm__{branch}.sql should document the mp__ marketplace-feed convention (domain.md §5.3)"
         )

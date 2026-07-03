@@ -49,7 +49,7 @@ INSERT INTO rv.hub_customer (customer_hk, customer_bk, record_source) VALUES
  (decode(md5('CUST-MSK-5'),'hex'),'CUST-MSK-5','1c__msk'),
  (decode(md5('CUST-MSK-6'),'hex'),'CUST-MSK-6','1c__msk'),
  (decode(md5('CUST-MSK-7'),'hex'),'CUST-MSK-7','pg_ops__msk'),
- (decode(md5('CUST-MSK-8'),'hex'),'CUST-MSK-8','x5__msk'),
+ (decode(md5('CUST-MSK-8'),'hex'),'CUST-MSK-8','mp__msk'),
  (decode(md5('CUST-DXB-1'),'hex'),'CUST-DXB-1','1c__dxb'),
  (decode(md5('CUST-DXB-2'),'hex'),'CUST-DXB-2','1c__dxb')
 ON CONFLICT (customer_hk) DO NOTHING;

@@ -857,9 +857,7 @@ def test_ops_timeline_path_does_not_reach_into_the_engine_connection_or_vault() 
     """ADR 0011 invariant I1: the ops surfaces (Order 360 timeline first,
     D2) compose exactly the QueryEngine/ServingBackend and ControlPlaneStore
     ports — no raw ``query_engine._conn`` reach, no vault DSN, ever."""
-    source = (PROJECT_ROOT / "src/serving/api/routers/agent_query.py").read_text(
-        encoding="utf-8"
-    )
+    source = (PROJECT_ROOT / "src/serving/api/routers/agent_query.py").read_text(encoding="utf-8")
     assert "query_engine._conn" not in source
     assert "_conn." not in source
     assert "VAULT_DSN" not in source

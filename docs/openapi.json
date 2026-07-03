@@ -161,6 +161,49 @@
         }
       }
     },
+    "/v1/entity/order/{order_id}/timeline": {
+      "get": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Get Order Timeline",
+        "description": "Order 360: order state, stage history, pipeline trail, customer block,\nand linked exceptions \u2014 one composed read (ops-surfaces-spec.md \u00a72).\n\nSame tenant scoping and 404 semantics as GET /entity/order/{order_id}.\nNot cached: this is the \"now\" surface (ADR 0011 constraint 3, spec \u00a71.8).\n\nExample:\n    GET /v1/entity/order/ORD-20260404-1001/timeline",
+        "operationId": "get_order_timeline_v1_entity_order__order_id__timeline_get",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderTimelineResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/metrics/{metric_name}": {
       "get": {
         "tags": [
@@ -3016,6 +3059,415 @@
           "question"
         ],
         "title": "NLQueryRequest"
+      },
+      "OrderTimelineCustomer": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "total_orders": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Orders"
+          },
+          "total_spent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Spent"
+          },
+          "first_order_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Order At"
+          },
+          "last_order_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Order At"
+          },
+          "preferred_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Category"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "OrderTimelineCustomer"
+      },
+      "OrderTimelineException": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "actions": {
+            "$ref": "#/components/schemas/OrderTimelineExceptionActions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "status",
+          "actions"
+        ],
+        "title": "OrderTimelineException"
+      },
+      "OrderTimelineExceptionActions": {
+        "properties": {
+          "replay": {
+            "type": "string",
+            "title": "Replay"
+          },
+          "dismiss": {
+            "type": "string",
+            "title": "Dismiss"
+          }
+        },
+        "type": "object",
+        "required": [
+          "replay",
+          "dismiss"
+        ],
+        "title": "OrderTimelineExceptionActions"
+      },
+      "OrderTimelineOrder": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "total_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "OrderTimelineOrder"
+      },
+      "OrderTimelinePipelineTrailItem": {
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          }
+        },
+        "type": "object",
+        "title": "OrderTimelinePipelineTrailItem"
+      },
+      "OrderTimelineResponse": {
+        "properties": {
+          "order": {
+            "$ref": "#/components/schemas/OrderTimelineOrder"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/OrderTimelineStage"
+          },
+          "stage_history": {
+            "items": {
+              "$ref": "#/components/schemas/OrderTimelineStageHistoryItem"
+            },
+            "type": "array",
+            "title": "Stage History"
+          },
+          "pipeline_trail": {
+            "items": {
+              "$ref": "#/components/schemas/OrderTimelinePipelineTrailItem"
+            },
+            "type": "array",
+            "title": "Pipeline Trail"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderTimelineCustomer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/OrderTimelineException"
+            },
+            "type": "array",
+            "title": "Exceptions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order",
+          "stage"
+        ],
+        "title": "OrderTimelineResponse"
+      },
+      "OrderTimelineStage": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "entered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entered At"
+          },
+          "in_stage_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Stage Seconds"
+          },
+          "sla_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Minutes"
+          },
+          "breached": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breached"
+          },
+          "clock": {
+            "type": "string",
+            "enum": [
+              "journal",
+              "fallback"
+            ],
+            "title": "Clock"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clock"
+        ],
+        "title": "OrderTimelineStage"
+      },
+      "OrderTimelineStageHistoryItem": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "OrderTimelineStageHistoryItem"
       },
       "QueryResponse": {
         "properties": {

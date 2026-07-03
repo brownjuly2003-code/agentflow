@@ -25,10 +25,10 @@ def test_query_first_page_returns_rows_and_cursor(client: TestClient):
     data = response.json()
 
     assert [row["name"] for row in data["rows"]] == [
-        "Mechanical Keyboard",
-        "Running Shoes",
-        "Sunglasses",
-        "Backpack",
+        "Stand Mixer 5L Planetary",
+        "Air Fryer Grill 5.5L",
+        "Cold-Press Juicer",
+        "Drip Coffee Maker 1.2L",
     ]
     assert data["answer"] == data["rows"]
     assert data["page_size"] == 4
@@ -57,10 +57,10 @@ def test_query_next_page_returns_following_rows(client: TestClient):
     data = response.json()
 
     assert [row["name"] for row in data["rows"]] == [
-        "Wireless Headphones",
-        "Bluetooth Speaker",
-        "Coffee Maker",
-        "Desk Lamp",
+        "Vacuum Sealer Compact",
+        "Immersion Blender Set 800W",
+        "Waffle Maker Double",
+        "Electric Kettle 1.7L 2200W",
     ]
     assert data["page_size"] == 4
     assert data["has_more"] is True
@@ -95,8 +95,8 @@ def test_query_last_page_clears_cursor(client: TestClient):
     data = response.json()
 
     assert [row["name"] for row in data["rows"]] == [
-        "Yoga Mat",
-        "Water Bottle",
+        "Mini Chopper 500ml",
+        "Digital Kitchen Scale 5kg",
     ]
     assert data["page_size"] == 4
     assert data["has_more"] is False

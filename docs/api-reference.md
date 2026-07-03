@@ -233,7 +233,7 @@ console.log(Object.keys(catalog.entities));
 **Response 200**
 
 ```json
-{"entities":{"order":{"primary_key":"order_id"}},"metrics":{"revenue":{"unit":"USD"}}}
+{"entities":{"order":{"primary_key":"order_id"}},"metrics":{"revenue":{"unit":"RUB"}}}
 ```
 
 **Errors:** `401`, `429`.  
@@ -313,7 +313,7 @@ console.log(metric.value, metric.unit);
 **Response 200**
 
 ```json
-{"metric_name":"revenue","value":984.91,"unit":"USD","window":"1h","components":null}
+{"metric_name":"revenue","value":12750.00,"unit":"RUB","window":"1h","components":null}
 ```
 
 **Errors:** `401`, `404`, `422` for invalid historical anchor, `503` if metric computation cannot run.  

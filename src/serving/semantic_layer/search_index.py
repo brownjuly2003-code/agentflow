@@ -267,13 +267,13 @@ class SearchIndex:
             stock_status = "in stock" if payload.get("in_stock") else "out of stock"
             return (
                 f"Product {payload.get('name')} ({payload.get('product_id')}) "
-                f"category {payload.get('category')} price {payload.get('price')} USD "
+                f"category {payload.get('category')} price {payload.get('price')} RUB "
                 f"{stock_status}"
             )
         if entity.name == "user":
             return (
                 f"User {payload.get('user_id')} with {payload.get('total_orders')} orders "
-                f"spent {payload.get('total_spent')} USD "
+                f"spent {payload.get('total_spent')} RUB "
                 f"prefers {payload.get('preferred_category')}"
             )
         if entity.name == "session":

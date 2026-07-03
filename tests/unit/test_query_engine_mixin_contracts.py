@@ -77,7 +77,7 @@ def test_get_metric_runs_against_minimal_host_contract(host: _MinimalQueryHost) 
 
     result = host.get_metric("revenue")
 
-    assert result == {"value": 12.5, "unit": "USD"}
+    assert result == {"value": 12.5, "unit": "RUB"}
     host._backend.scalar.assert_called_once()
 
 

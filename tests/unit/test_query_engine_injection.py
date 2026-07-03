@@ -95,7 +95,7 @@ def test_get_metric_passes_as_of_anchor_as_query_params() -> None:
 
     result = engine.get_metric("revenue", window="24h", as_of=as_of)
 
-    assert result == {"value": 12.5, "unit": "USD"}
+    assert result == {"value": 12.5, "unit": "RUB"}
     assert backend.scalar.call_count == 1
     args = backend.scalar.call_args.args
     assert len(args) == 2

@@ -102,7 +102,7 @@ def test_batch_returns_results_for_mixed_request_types(client):
     assert "_last_updated" not in entity_result["data"]
 
     assert metric_result["status"] == "ok"
-    assert metric_result["data"]["unit"] == "USD"
+    assert metric_result["data"]["unit"] == "RUB"
     assert metric_result["data"]["value"] >= 0
 
     assert query_result["status"] == "ok"

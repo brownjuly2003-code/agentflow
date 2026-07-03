@@ -148,7 +148,7 @@ CONTRACT_SPECS = (
         ),
         field_overrides={
             "value": {
-                "unit": "USD",
+                "unit": "RUB",
             },
         },
         source_events=ORDER_SOURCE_EVENTS,
@@ -192,7 +192,7 @@ CONTRACT_SPECS = (
         ),
         field_overrides={
             "value": {
-                "unit": "USD",
+                "unit": "RUB",
             },
         },
         source_events=ORDER_SOURCE_EVENTS,

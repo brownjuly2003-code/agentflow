@@ -193,7 +193,7 @@ def test_get_metric_literal_backend_inlines_as_of_anchor(literal_host: _Host) ->
 
     result = literal_host.get_metric("revenue", as_of=AWARE_TS)
 
-    assert result == {"value": 42.0, "unit": "USD"}
+    assert result == {"value": 42.0, "unit": "RUB"}
     sql = literal_host._backend.scalar.call_args.args[0]
     assert "NOW()" not in sql
     assert sql.count("AS TIMESTAMP") == 2  # anchor substitution + upper bound

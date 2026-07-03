@@ -60,7 +60,7 @@ class TestAgentAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["metric_name"] == "revenue"
-        assert data["unit"] == "USD"
+        assert data["unit"] == "RUB"
         assert data["value"] > 0  # demo data seeded
 
     def test_metric_error_rate(self, client):
@@ -82,7 +82,7 @@ class TestAgentAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["entity_type"] == "user"
-        assert data["data"]["total_orders"] == 15
+        assert data["data"]["total_orders"] == 34
 
     def test_entity_not_found(self, client):
         response = client.get("/v1/entity/order/ORD-99999999-0000")
@@ -158,7 +158,7 @@ class TestQueryEngine:
         engine = QueryEngine(catalog=catalog)
         result = engine.get_metric("revenue", window="24h")
         assert "value" in result
-        assert result["unit"] == "USD"
+        assert result["unit"] == "RUB"
         assert result["value"] > 0  # demo data
 
     def test_get_metric_error_rate(self):
@@ -172,7 +172,7 @@ class TestQueryEngine:
         engine = QueryEngine(catalog=catalog)
         result = engine.get_entity("product", "PROD-001")
         assert result is not None
-        assert result["name"] == "Wireless Headphones"
+        assert result["name"] == "Electric Kettle 1.7L 2200W"
 
     def test_get_entity_missing(self):
         catalog = DataCatalog()

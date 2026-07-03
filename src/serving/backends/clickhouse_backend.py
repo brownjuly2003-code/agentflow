@@ -451,16 +451,16 @@ class ClickHouseBackend(ServingBackend):
                 [
                     # demo seed data uses trusted config and generated timestamps
                     f"INSERT INTO {self._database}.products_current VALUES",  # nosec B608
-                    "('PROD-001', 'Wireless Headphones', 'electronics', 79.99, 1, 142),",
-                    "('PROD-002', 'Running Shoes', 'footwear', 129.99, 1, 58),",
-                    "('PROD-003', 'Coffee Maker', 'kitchen', 49.99, 1, 203),",
-                    "('PROD-004', 'Mechanical Keyboard', 'electronics', 149.99, 1, 37),",
-                    "('PROD-005', 'Yoga Mat', 'fitness', 34.99, 1, 315),",
-                    "('PROD-006', 'Backpack', 'accessories', 89.99, 1, 94),",
-                    "('PROD-007', 'Water Bottle', 'fitness', 24.99, 1, 421),",
-                    "('PROD-008', 'Desk Lamp', 'home', 44.99, 0, 0),",
-                    "('PROD-009', 'Bluetooth Speaker', 'electronics', 59.99, 1, 167),",
-                    "('PROD-010', 'Sunglasses', 'accessories', 119.99, 1, 72)",
+                    "('PROD-001', 'Electric Kettle 1.7L 2200W', 'kettles', 2190.00, 0, 0),",
+                    "('PROD-002', 'Air Fryer Grill 5.5L', 'grills', 5490.00, 1, 58),",
+                    "('PROD-003', 'Immersion Blender Set 800W', 'blenders', 2490.00, 1, 203),",
+                    "('PROD-004', 'Stand Mixer 5L Planetary', 'mixers', 6990.00, 1, 37),",
+                    "('PROD-005', 'Drip Coffee Maker 1.2L', 'coffee', 3490.00, 1, 94),",
+                    "('PROD-006', 'Waffle Maker Double', 'multibakers', 2290.00, 1, 142),",
+                    "('PROD-007', 'Mini Chopper 500ml', 'choppers', 1490.00, 1, 315),",
+                    "('PROD-008', 'Cold-Press Juicer', 'juicers', 4490.00, 1, 72),",
+                    "('PROD-009', 'Digital Kitchen Scale 5kg', 'scales', 990.00, 1, 421),",
+                    "('PROD-010', 'Vacuum Sealer Compact', 'vacuum-dry', 3290.00, 1, 167)",
                 ]
             ),
             expect_json=False,
@@ -471,14 +471,14 @@ class ClickHouseBackend(ServingBackend):
                 [
                     # demo seed data uses trusted config and generated timestamps
                     f"INSERT INTO {self._database}.orders_v2 VALUES",  # nosec B608
-                    f"('ORD-20260404-1001', 'USR-10001', 'delivered', 159.98, 'USD', '{ts(timedelta(hours=2))}'),",
-                    f"('ORD-20260404-1002', 'USR-10002', 'shipped', 129.99, 'USD', '{ts(timedelta(minutes=90))}'),",
-                    f"('ORD-20260404-1003', 'USR-10001', 'confirmed', 249.97, 'USD', '{ts(timedelta(hours=1))}'),",
-                    f"('ORD-20260404-1004', 'USR-10003', 'pending', 79.99, 'USD', '{ts(timedelta(minutes=45))}'),",
-                    f"('ORD-20260404-1005', 'USR-10004', 'delivered', 89.99, 'USD', '{ts(timedelta(minutes=30))}'),",
-                    f"('ORD-20260404-1006', 'USR-10002', 'cancelled', 34.99, 'USD', '{ts(timedelta(minutes=20))}'),",
-                    f"('ORD-20260404-1007', 'USR-10005', 'confirmed', 179.98, 'USD', '{ts(timedelta(minutes=15))}'),",
-                    f"('ORD-20260404-1008', 'USR-10003', 'pending', 59.99, 'USD', '{ts(timedelta(minutes=5))}')",
+                    f"('ORD-20260404-1001', 'USR-10001', 'delivered', 76400.00, 'RUB', '{ts(timedelta(hours=2))}'),",
+                    f"('ORD-20260404-1002', 'USR-10002', 'shipped', 48100.00, 'RUB', '{ts(timedelta(minutes=90))}'),",
+                    f"('ORD-20260404-1003', 'USR-10003', 'confirmed', 2650.00, 'RUB', '{ts(timedelta(hours=1))}'),",
+                    f"('ORD-20260404-1004', 'USR-10003', 'pending', 1890.00, 'RUB', '{ts(timedelta(minutes=45))}'),",
+                    f"('ORD-20260404-1005', 'USR-10004', 'delivered', 2290.00, 'RUB', '{ts(timedelta(minutes=30))}'),",
+                    f"('ORD-20260404-1006', 'USR-10004', 'cancelled', 1590.00, 'RUB', '{ts(timedelta(minutes=20))}'),",
+                    f"('ORD-20260404-1007', 'USR-10005', 'confirmed', 2990.00, 'RUB', '{ts(timedelta(minutes=15))}'),",
+                    f"('ORD-20260404-1008', 'USR-10005', 'pending', 3990.00, 'RUB', '{ts(timedelta(minutes=5))}')",
                 ]
             ),
             expect_json=False,
@@ -489,11 +489,11 @@ class ClickHouseBackend(ServingBackend):
                 [
                     # demo seed data uses trusted config and generated timestamps
                     f"INSERT INTO {self._database}.users_enriched VALUES",  # nosec B608
-                    f"('USR-10001', 15, 2340.50, '{ts(timedelta(days=180))}', '{ts(timedelta(hours=1))}', 'electronics'),",
-                    f"('USR-10002', 8, 890.20, '{ts(timedelta(days=90))}', '{ts(timedelta(minutes=20))}', 'footwear'),",
-                    f"('USR-10003', 3, 210.00, '{ts(timedelta(days=30))}', '{ts(timedelta(minutes=5))}', 'electronics'),",
-                    f"('USR-10004', 22, 4100.75, '{ts(timedelta(days=365))}', '{ts(timedelta(minutes=30))}', 'accessories'),",
-                    f"('USR-10005', 1, 179.98, '{ts(timedelta(days=1))}', '{ts(timedelta(minutes=15))}', 'electronics')",
+                    f"('USR-10001', 34, 1200000.00, '{ts(timedelta(days=365))}', '{ts(timedelta(hours=2))}', 'grills'),",
+                    f"('USR-10002', 15, 460000.00, '{ts(timedelta(days=270))}', '{ts(timedelta(minutes=90))}', 'coffee'),",
+                    f"('USR-10003', 4, 8900.00, '{ts(timedelta(days=60))}', '{ts(timedelta(minutes=45))}', 'choppers'),",
+                    f"('USR-10004', 6, 15800.00, '{ts(timedelta(days=120))}', '{ts(timedelta(minutes=20))}', 'blenders'),",
+                    f"('USR-10005', 3, 28500.00, '{ts(timedelta(days=10))}', '{ts(timedelta(minutes=5))}', 'vacuum-dry')",
                 ]
             ),
             expect_json=False,
@@ -504,8 +504,8 @@ class ClickHouseBackend(ServingBackend):
                 [
                     # demo seed data uses trusted config and generated timestamps
                     f"INSERT INTO {self._database}.sessions_aggregated VALUES",  # nosec B608
-                    f"('SES-a1b2c3', 'USR-10001', '{ts(timedelta(hours=2))}', '{ts(timedelta(minutes=100))}', 1200, 14, 6, 'checkout', 1),",
-                    f"('SES-d4e5f6', 'USR-10002', '{ts(timedelta(minutes=90))}', '{ts(timedelta(minutes=70))}', 1200, 8, 4, 'add_to_cart', 0),",
+                    f"('SES-a1b2c3', 'USR-10005', '{ts(timedelta(hours=2))}', '{ts(timedelta(minutes=100))}', 1200, 14, 6, 'checkout', 1),",
+                    f"('SES-d4e5f6', 'USR-10004', '{ts(timedelta(minutes=90))}', '{ts(timedelta(minutes=70))}', 1200, 8, 4, 'add_to_cart', 0),",
                     f"('SES-g7h8i9', NULL, '{ts(timedelta(minutes=60))}', '{ts(timedelta(minutes=58))}', 120, 2, 2, 'bounce', 0),",
                     f"('SES-j1k2l3', 'USR-10003', '{ts(timedelta(minutes=45))}', '{ts(timedelta(minutes=20))}', 1500, 11, 5, 'checkout', 1),",
                     f"('SES-m4n5o6', 'USR-10004', '{ts(timedelta(minutes=30))}', '{ts(timedelta(minutes=15))}', 900, 6, 3, 'product_view', 0),",

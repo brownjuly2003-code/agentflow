@@ -7,7 +7,7 @@ fields:
   user_id: Customer identifier
   status: "Current status: pending, confirmed, shipped, delivered, cancelled"
   total_amount: Order total in the order currency
-  currency: ISO 4217 alpha-3 currency code (USD, EUR, GBP)
+  currency: ISO 4217 alpha-3 currency code (RUB primary; AED/KZT on branch-currency reads)
   created_at: Order creation timestamp
 relationships:
   user: user_id

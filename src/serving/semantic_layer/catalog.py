@@ -63,7 +63,7 @@ class DataCatalog:
                     "WHERE status != 'cancelled' "
                     "AND created_at >= NOW() - INTERVAL '{window}'"
                 ),
-                unit="USD",
+                unit="RUB",
                 contract_version=self.contract_registry.latest_contract_version("metric.revenue"),
                 source_events=["order.created", "order.updated", "order.cancelled"],
                 source_table="orders_v2",
@@ -103,7 +103,7 @@ class DataCatalog:
                     "WHERE status != 'cancelled' "
                     "AND created_at >= NOW() - INTERVAL '{window}'"
                 ),
-                unit="USD",
+                unit="RUB",
                 contract_version=self.contract_registry.latest_contract_version(
                     "metric.avg_order_value"
                 ),

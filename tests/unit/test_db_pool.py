@@ -174,7 +174,7 @@ def test_query_engine_uses_pool_for_reads(tmp_path):
         entity = engine.get_entity("product", "PROD-001")
 
         assert entity is not None
-        assert entity["name"] == "Wireless Headphones"
+        assert entity["name"] == "Electric Kettle 1.7L 2200W"
         assert engine._conn is pool.write_connection
         assert pool.stats()["read_in_use"] == 0
     finally:

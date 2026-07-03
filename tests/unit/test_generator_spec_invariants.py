@@ -137,8 +137,8 @@ def test_invariant_5_pricing_ladder_holds_per_sku():
 def test_invariant_6_seasonal_curves_average_to_one():
     assert len(legend.SEASONAL_RETAIL) == 12
     assert len(legend.SEASONAL_B2B) == 12
-    assert sum(legend.SEASONAL_RETAIL) / 12 == 1.0
-    assert sum(legend.SEASONAL_B2B) / 12 == 1.0
+    assert abs(sum(legend.SEASONAL_RETAIL) / 12 - 1.0) < 1e-9
+    assert abs(sum(legend.SEASONAL_B2B) / 12 - 1.0) < 1e-9
 
 
 # --- #7 GTIN validity -----------------------------------------------------------

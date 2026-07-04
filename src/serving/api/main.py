@@ -56,6 +56,7 @@ from src.serving.api.webhook_dispatcher import WebhookDispatcher
 from src.serving.cache import QueryCache
 from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
 from src.serving.db_pool import DuckDBPool
+from src.serving.node import resolve_node_config
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
@@ -85,6 +86,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
     app.state.demo_seed_on_boot = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+    # Three-node demo topology (ADR 0012): resolve role/branch/token once here
+    # and fail fast on a misconfigured node. Unset role == standalone, which is
+    # byte-identical to today's single-node demo (N1). The center ingest
+    # endpoint and the edge emitter hang off this resolved config.
+    app.state.node_config = resolve_node_config()
+    app.state.node_role = app.state.node_config.role
+    app.state.node_branch = app.state.node_config.branch
     # Reset the auth-disabled bypass flag on every lifespan startup. This is a
     # process-wide attribute and tests may toggle it; without an explicit
     # reset a later TestClient lifespan with no configured keys would silently

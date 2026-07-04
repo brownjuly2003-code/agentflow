@@ -38,16 +38,19 @@ The standalone no-Docker recipe used for the governance verifies
 ## Expected canonical output (derived by hand from `order_smoke_seed.sql`)
 
 Eight orders, one canonical row each. RUB amounts; VAT is RU 20 % / UAE 5 %.
+`total_amount` is **net of VAT** — it mirrors the pricing subtotal (the
+production `satellite_seed.sql` convention: "subtotal mirrors header.total_amount
+(pre-tax)"); tax is a separate column, never folded into the total.
 
 | order_bk | branch | channel | status | total | subtotal | tax | ship | wb_status | header_src | pricing_src | mkt_src |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| mp__msk__0000001 | msk | marketplace | delivered | 2400.00 | 2000.00 | 400.00 | 199.00 | delivered | bitrix__msk | 1c__msk | wb__msk |
-| mp__msk__0000002 | msk | marketplace | **shipped** | 2600.00 | **2166.67** | **433.33** | 199.00 | **delivering** | bitrix__msk | 1c__msk | wb__msk |
-| site__msk__0008901 | msk | d2c | delivered | 3500.00 | 3000.00 | 600.00 | 299.00 | — | bitrix__msk | 1c__msk | — |
-| bitrix__msk__0009181 | msk | b2b | **confirmed** | 60000.00 | 50000.00 | 10000.00 | 500.00 | — | bitrix__msk | 1c__msk | — |
-| bitrix__spb__0009541 | spb | b2b | delivered | 48000.00 | 40000.00 | 8000.00 | 800.00 | — | bitrix__spb | 1c__spb | — |
-| bitrix__ekb__0009721 | ekb | b2b | delivered | 36000.00 | 30000.00 | 6000.00 | 500.00 | — | bitrix__ekb | 1c__ekb | — |
-| bitrix__dxb__0009851 | dxb | b2b | delivered | 42000.00 | 40000.00 | **2000.00** | 500.00 | — | bitrix__dxb | 1c__dxb | — |
+| mp__msk__0000001 | msk | marketplace | delivered | 2000.00 | 2000.00 | 400.00 | 199.00 | delivered | bitrix__msk | 1c__msk | wb__msk |
+| mp__msk__0000002 | msk | marketplace | **shipped** | **2166.67** | **2166.67** | **433.33** | 199.00 | **delivering** | bitrix__msk | 1c__msk | wb__msk |
+| site__msk__0008901 | msk | d2c | delivered | 3000.00 | 3000.00 | 600.00 | 299.00 | — | bitrix__msk | 1c__msk | — |
+| bitrix__msk__0009181 | msk | b2b | **confirmed** | 50000.00 | 50000.00 | 10000.00 | 500.00 | — | bitrix__msk | 1c__msk | — |
+| bitrix__spb__0009541 | spb | b2b | delivered | 40000.00 | 40000.00 | 8000.00 | 800.00 | — | bitrix__spb | 1c__spb | — |
+| bitrix__ekb__0009721 | ekb | b2b | delivered | 30000.00 | 30000.00 | 6000.00 | 500.00 | — | bitrix__ekb | 1c__ekb | — |
+| bitrix__dxb__0009851 | dxb | b2b | delivered | 40000.00 | 40000.00 | **2000.00** | 500.00 | — | bitrix__dxb | 1c__dxb | — |
 | bitrix__ala__0009925 | ala | b2b | cancelled | 30000.00 | **—** | **—** | **—** | — | bitrix__ala | **—** | — |
 
 Bold cells are the invariants the smoke targets:
@@ -69,7 +72,8 @@ Bold cells are the invariants the smoke targets:
 - **Per-jurisdiction VAT** — dxb effective rate `tax/subtotal = 5 %` (UAE), the
   RU branches `20 %`.
 - **Branch derivation** — `split_part(record_source,'__',2)` yields
-  msk×4 / spb / ekb / dxb / ala; `total_amount` sums to `224500.00`.
+  msk×4 / spb / ekb / dxb / ala; `total_amount` (net of VAT) sums to
+  `197166.67`.
 
 ## Honest scope
 

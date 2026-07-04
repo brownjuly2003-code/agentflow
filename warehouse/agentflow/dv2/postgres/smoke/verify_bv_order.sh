@@ -55,12 +55,12 @@ assert_eq "no branch escapes the five jurisdictions" "0" \
   "SELECT count(*) FROM $BV WHERE $SCOPE AND branch NOT IN ('msk','spb','ekb','dxb','ala')"
 assert_eq "customer + store links all resolved" "8" \
   "SELECT count(*) FILTER (WHERE customer_hk IS NOT NULL AND store_hk IS NOT NULL) FROM $BV WHERE $SCOPE"
-assert_eq "total_amount sum (RUB)" "224500.00" \
+assert_eq "total_amount sum (RUB, net of VAT)" "197166.67" \
   "SELECT sum(total_amount) FROM $BV WHERE $SCOPE"
 
 echo
 echo "=== SCD2: latest load_ts wins ==="
-assert_eq "O2 header collapses across UNION to newest Bitrix version" "shipped|2600.00" \
+assert_eq "O2 header collapses across UNION to newest Bitrix version" "shipped|2166.67" \
   "SELECT order_status||'|'||total_amount FROM $BV WHERE order_bk='mp__msk__0000002'"
 assert_eq "O2 pricing collapses to newest 1C version" "2166.67|433.33" \
   "SELECT subtotal_amount||'|'||tax_amount FROM $BV WHERE order_bk='mp__msk__0000002'"

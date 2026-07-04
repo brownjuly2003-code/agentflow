@@ -984,6 +984,163 @@
   {
     "type": "function",
     "function": {
+      "name": "list_exceptions_v1_ops_exceptions_get",
+      "description": "List Exceptions",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "deadletter",
+                  "webhook_delivery",
+                  "reconciliation"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "in_progress",
+                  "acknowledged",
+                  "resolved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "default": 50,
+            "title": "Page Size"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "exceptions_stats_v1_ops_exceptions_stats_get",
+      "description": "Exceptions Stats",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "acknowledge_exception_v1_ops_exceptions__item_id__acknowledge_post",
+      "description": "Acknowledge Exception",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "properties": {
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Note"
+                  }
+                },
+                "type": "object",
+                "title": "TriageActionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          }
+        },
+        "required": [
+          "item_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "resolve_exception_v1_ops_exceptions__item_id__resolve_post",
+      "description": "Resolve Exception",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "properties": {
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Note"
+                  }
+                },
+                "type": "object",
+                "title": "TriageActionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          }
+        },
+        "required": [
+          "item_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "search_v1_search_get",
       "description": "Search",
       "parameters": {

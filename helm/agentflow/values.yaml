@@ -138,14 +138,21 @@ serving:
 # alert rules and history, outbox, dead-letter and usage accounting.
 # 'embedded' = per-pod DuckDB + config files — correct for the single-replica
 # profile, a split-brain at replicaCount > 1 (duplicate deliveries, forked
-# alert state). The PostgresControlPlaneStore adapter shipped with ADR 0010
-# rollout slice 5 (app-side: AGENTFLOW_CONTROLPLANE_STORE=postgres +
-# AGENTFLOW_CONTROLPLANE_PG_DSN); the chart profile for it (env + secret
-# wiring, schema enum extension) lands with rollout slice 6 — until then the
-# values schema pins store=embedded (fail-closed ratchet) and the chart
-# refuses any multi-replica render.
+# alert state). 'postgres' = the shared PostgresControlPlaneStore adapter
+# (ADR 0010): the app-side half shipped in rollout slice 5
+# (AGENTFLOW_CONTROLPLANE_STORE=postgres + AGENTFLOW_CONTROLPLANE_PG_DSN) and
+# the chart profile below in slice 6. To scale horizontally set
+# store: postgres + postgres.existingSecret (DSN) AND serving.backend:
+# clickhouse — templates/deployment.yaml fails any multi-replica render unless
+# BOTH halves of the gate are set, so the gate relaxes automatically and only
+# when the store that makes scaling correct exists. The chart never ships a
+# PostgreSQL service (mirroring ClickHouse) — the operator provides the DSN in
+# a Secret referenced by postgres.existingSecret / postgres.dsnKey.
 controlPlane:
   store: embedded
+  postgres:
+    existingSecret: ""
+    dsnKey: controlplane-pg-dsn
 
 config:
   duckdbPath: /data/agentflow.duckdb

@@ -202,6 +202,19 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
    plan Phase 3 execution: kind staging at `replicaCount=2`, verifying
    exactly-one delivery per (webhook, event) with two pods, one alert page
    per incident, and a webhook registered through either pod visible to both.
+   Chart wiring executed 2026-07-04: the `store` enum released to
+   `[embedded, postgres]`, `controlPlane.postgres.{existingSecret,dsnKey}`
+   sources the DSN, and `templates/deployment.yaml` wires
+   `AGENTFLOW_CONTROLPLANE_STORE` + `AGENTFLOW_CONTROLPLANE_PG_DSN`; the scale
+   profile is an overlay (`k8s/staging/values-staging-scale.yaml.example`), not
+   a change to the zero-dependency default. Render side verified locally
+   (`helm template`/`lint` + `tests/unit/test_helm_values_contract.py`). The
+   **two-real-pods live run** (kind at `replicaCount=2` + the replica-correctness
+   checks above) needs Docker and is the deferred Mac/CI tail —
+   `scripts/k8s_replica_correctness_verify.sh` automates the pod-count and
+   cross-pod registration-visibility checks; the delivery/alert checks follow
+   the recipe in the cutover plan (their store-level guarantee is already
+   live-verified by slice 5's 31/31 PG probes).
 
 ## Consequences
 

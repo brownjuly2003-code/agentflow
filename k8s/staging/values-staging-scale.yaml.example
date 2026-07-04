@@ -1,0 +1,53 @@
+# Scale-profile staging overlay (ADR 0010 rollout slice 6 / cutover plan
+# Phase 3). Layer this ON TOP of values-staging.yaml:
+#
+#   helm upgrade --install agentflow helm/agentflow \
+#     -f k8s/staging/values-staging.yaml \
+#     -f k8s/staging/values-staging-scale.yaml \
+#     --namespace agentflow
+#
+# It flips BOTH halves of the render gate (external serving engine + external
+# control-plane store) so replicaCount=2 is admissible, and exercises the
+# multi-replica correctness the ADR pins. The chart ships NO PostgreSQL and NO
+# ClickHouse service — the operator (or the kind bring-up script) provides both
+# and the secrets referenced below. This file is an .example: copy it to
+# values-staging-scale.yaml and fill in your real secret names. It carries no
+# credentials itself — only Secret *names* and hostnames — so it is safe to
+# commit (the DSN and ClickHouse password live in the referenced Secrets).
+#
+# Prerequisites in-cluster (see scripts/k8s_replica_correctness_verify.sh):
+#   - a PostgreSQL reachable at the DSN in secret `agentflow-controlplane-pg`
+#     (key controlplane-pg-dsn), schema initialised by the app on boot
+#   - a ClickHouse reachable at serving.clickhouse.host, password in secret
+#     `agentflow-clickhouse` (key clickhouse-password)
+#   - Redis (already stood up by k8s_staging_up.sh)
+
+# Two API pods behind the Service — the split-brain surface the control-plane
+# externalisation exists to make correct.
+replicaCount: 2
+
+# The DuckDB single-writer PVC must be gone on the request path: the control
+# plane now lives in PostgreSQL and serving reads go to ClickHouse, so the pod
+# is stateless (ADR 0007 "stateless pods" becomes literally true here).
+persistence:
+  enabled: false
+
+# External serving engine — the ADR 0006/0007 half of the gate.
+serving:
+  backend: clickhouse
+  clickhouse:
+    host: agentflow-clickhouse
+    port: 8123
+    database: agentflow
+    user: default
+    existingSecret: agentflow-clickhouse
+    passwordKey: clickhouse-password
+
+# External control-plane store — the ADR 0009/0010 half of the gate. The DSN
+# is operator-provided in a Secret (never inlined; it carries a password, same
+# posture as the ClickHouse password above).
+controlPlane:
+  store: postgres
+  postgres:
+    existingSecret: agentflow-controlplane-pg
+    dsnKey: controlplane-pg-dsn

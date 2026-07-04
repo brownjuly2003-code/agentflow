@@ -446,8 +446,25 @@
       "properties": {
         "store": {
           "type": "string",
-          "enum": ["embedded"],
-          "description": "Where control-plane state (webhook queue/log, alert rules+history, outbox, dead-letter, usage) lives. 'embedded' = per-pod DuckDB + config files, single replica only. 'postgres' joins this enum only when the PostgresControlPlaneStore adapter ships (ADR 0010 rollout) — the schema must not advertise a profile the app cannot run."
+          "enum": ["embedded", "postgres"],
+          "description": "Where control-plane state (webhook queue/log, alert rules+history, outbox, dead-letter, usage) lives. 'embedded' = per-pod DuckDB + config files, single replica only (the default profile). 'postgres' = the shared PostgresControlPlaneStore adapter (ADR 0010), required for multi-replica: it needs controlPlane.postgres.existingSecret to hold the DSN and serving.backend=clickhouse. The adapter shipped in ADR 0010 rollout slice 5 and the chart profile in slice 6, so the render gate now admits multi-replica once both halves are set."
+        },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "dsnKey"],
+          "description": "Scale-profile control-plane store connection (used only when store=postgres). The chart never ships a PostgreSQL service (mirroring how ClickHouse is consumed, ADR 0010): the operator provides the DSN in a Secret and references it here.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "description": "Name of an operator-managed Secret holding the PostgreSQL DSN. Required when store=postgres; the DSN carries a password, so like the ClickHouse password it is never inlined into values."
+            },
+            "dsnKey": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Key inside existingSecret whose value is the full PostgreSQL DSN (e.g. postgresql://user:pass@host:5432/agentflow). Wired to AGENTFLOW_CONTROLPLANE_PG_DSN."
+            }
+          }
         }
       }
     },

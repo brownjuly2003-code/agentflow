@@ -199,6 +199,20 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > stage model, and exception sources are pinned in
 > [`docs/ops-surfaces-spec.md`](ops-surfaces-spec.md); implementation is staged
 > (D2–D4).
+>
+> **A three-node demo topology is designed ([ADR 0012](decisions/0012-three-node-demo-topology.md), 2026-07-04).**
+> The public Hugging Face demo grows from one container to a center (`msk` HQ)
+> plus two edge branches (`spb`/`ekb` — [`domain.md`](domain.md) §1) that push
+> operational events over HTTPS, so the artifact shows the branch-distribution
+> story live. This is a **distinct axis from horizontal scaling**: the three
+> nodes are separate single-replica Spaces with embedded control planes — *not*
+> the [ADR 0010](decisions/0010-control-plane-externalization-postgres.md)
+> PostgreSQL scale profile — HTTPS substitutes for the Kafka→Flink transport,
+> and the federated live layer is ephemeral on a deterministic re-seeded
+> baseline. Node roles, the ingest contract, sleep choreography, and the N1–N12
+> test invariants are pinned in
+> [`docs/three-node-demo-topology.md`](three-node-demo-topology.md);
+> implementation is F2 and the Space deploy is an owner gate.
 
 ## v1-v6 Capability Map
 

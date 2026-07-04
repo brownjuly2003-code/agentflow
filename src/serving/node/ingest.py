@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from src.processing.local_pipeline import _process_event
+from src.serving.node.view import CROSS_BRANCH_HINT, cross_branch_summary
 
 logger = structlog.get_logger()
 
@@ -151,4 +152,26 @@ async def ingest_node_events(request: Request) -> JSONResponse:
             "dead_lettered": dead_lettered,
             "duplicates": duplicates,
         },
+    )
+
+
+@router.get("/branches", include_in_schema=False, response_model=None)
+async def cross_branch_view(request: Request) -> JSONResponse:
+    """Center's cross-branch summary (ADR 0012 §9). Center-only (404 off-center);
+    a normal demo read (public demo-key), degrading gracefully on silent
+    branches (N8)."""
+    config = request.app.state.node_config
+    if not config.is_center:
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+    query_engine = request.app.state.query_engine
+
+    def _read() -> list[dict]:
+        with query_engine._read_connection() as conn:
+            return cross_branch_summary(conn)
+
+    branches = await run_in_threadpool(_read)
+    return JSONResponse(
+        status_code=200,
+        content={"branches": branches, "hint": CROSS_BRANCH_HINT},
     )

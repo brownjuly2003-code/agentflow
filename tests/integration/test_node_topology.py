@@ -169,6 +169,47 @@ def test_standalone_boot_seeds_no_branch_baseline(standalone_client: TestClient)
     assert _baseline_counts(standalone_client) == {}
 
 
+# --- N8: center cross-branch view + graceful degradation ------------------
+
+
+def test_center_cross_branch_view_lists_all_branches(center_client: TestClient) -> None:
+    resp = center_client.get("/v1/node/branches", headers={"X-API-Key": "demo-key"})
+    assert resp.status_code == 200
+    data = resp.json()
+    by_branch = {row["branch"]: row for row in data["branches"]}
+    assert set(by_branch) == {"msk", "spb", "ekb"}
+    assert by_branch["msk"]["baseline"] == BASELINE_ROWS_BY_BRANCH["msk"]
+    # N8: no live events yet — silent branches are waking, not errors.
+    assert by_branch["spb"]["status"] == "waking"
+    assert by_branch["spb"]["last_seen"] is None
+    assert data["hint"]
+
+
+def test_center_cross_branch_view_reflects_ingested_event(center_client: TestClient) -> None:
+    # N4 (metric moved): an edge->center event lifts the spb live delta.
+    event = _order_event()
+    center_client.post(
+        "/v1/node/events", json={"origin_branch": "spb", "events": [event]}, headers=_AUTH
+    )
+    resp = center_client.get("/v1/node/branches", headers={"X-API-Key": "demo-key"})
+    by_branch = {row["branch"]: row for row in resp.json()["branches"]}
+    assert by_branch["spb"]["live_delta"] >= 1
+    assert by_branch["spb"]["last_seen"] is not None
+    assert by_branch["spb"]["status"] == "live"
+    # The hub's own branch stays baseline-only (it aggregates, does not emit).
+    assert by_branch["msk"]["status"] == "waking"
+
+
+def test_edge_cross_branch_view_is_404(edge_client: TestClient) -> None:
+    resp = edge_client.get("/v1/node/branches", headers={"X-API-Key": "demo-key"})
+    assert resp.status_code == 404
+
+
+def test_standalone_cross_branch_view_is_404(standalone_client: TestClient) -> None:
+    resp = standalone_client.get("/v1/node/branches", headers={"X-API-Key": "demo-key"})
+    assert resp.status_code == 404
+
+
 # --- N3 / N10: bearer auth, not the demo-key ------------------------------
 
 

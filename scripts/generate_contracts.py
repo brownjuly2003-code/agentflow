@@ -92,7 +92,7 @@ CONTRACT_SPECS = (
                 "values": [status.value for status in OrderStatus],
             },
             "total_amount": {
-                "unit": "USD",
+                "unit": "RUB",
             },
             "currency": {
                 "type": "enum",
@@ -125,7 +125,7 @@ CONTRACT_SPECS = (
                 "values": [status.value for status in OrderStatus],
             },
             "total_amount": {
-                "unit": "USD",
+                "unit": "RUB",
             },
             "currency": {
                 "type": "enum",

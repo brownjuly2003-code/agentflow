@@ -38,6 +38,11 @@ class CdcSource(StrEnum):
 
 
 class Currency(StrEnum):
+    # RUB is the house currency of the kitchen-appliance importer legend
+    # (docs/domain.md §1, generator-spec.md §10); the live producer and every
+    # serving sink default to it. USD/EUR/GBP stay valid enum members so
+    # historical fixtures and cross-border edge cases still parse.
+    RUB = "RUB"
     USD = "USD"
     EUR = "EUR"
     GBP = "GBP"
@@ -96,7 +101,7 @@ class OrderEvent(BaseEvent):
     status: OrderStatus
     items: list[OrderItem] = Field(..., min_length=1)
     total_amount: Decimal = Field(..., gt=0)
-    currency: Currency = Currency.USD
+    currency: Currency = Currency.RUB
 
     @field_validator("total_amount")
     @classmethod
@@ -121,7 +126,7 @@ class PaymentEvent(BaseEvent):
     order_id: str = Field(..., pattern=r"^ORD-\d{8}-\d{4,}$")
     user_id: str
     amount: Decimal = Field(..., gt=0)
-    currency: Currency = Currency.USD
+    currency: Currency = Currency.RUB
     method: PaymentMethod
     status: str = Field(..., pattern=r"^(initiated|completed|failed|refunded)$")
     failure_reason: str | None = None
@@ -142,6 +147,6 @@ class ProductEvent(BaseEvent):
     name: str = Field(..., min_length=1, max_length=500)
     category: str
     price: Decimal = Field(..., ge=0)
-    currency: Currency = Currency.USD
+    currency: Currency = Currency.RUB
     in_stock: bool
     stock_quantity: int = Field(..., ge=0)

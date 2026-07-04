@@ -49,7 +49,7 @@ def _ensure_tables(conn: duckdb.DuckDBPyConnection) -> None:
             user_id VARCHAR,
             status VARCHAR,
             total_amount DECIMAL(10,2),
-            currency VARCHAR DEFAULT 'USD',
+            currency VARCHAR DEFAULT 'RUB',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -327,7 +327,7 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
             event["user_id"],
             event["status"],
             float(event["total_amount"]),
-            event.get("currency", "USD"),
+            event.get("currency", "RUB"),
             datetime.fromisoformat(event["timestamp"]),
         ],
     )

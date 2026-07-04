@@ -19,11 +19,12 @@ fields:
 - name: total_amount
   type: float
   required: true
-  unit: USD
+  unit: RUB
 - name: currency
   type: enum
   required: true
   values:
+  - RUB
   - USD
   - EUR
   - GBP

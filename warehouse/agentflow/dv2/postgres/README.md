@@ -82,11 +82,15 @@ PGHOST=localhost PGUSER=agentflow PGDATABASE=agentflow ./apply.sh
 ```
 
 No-Docker validation (Windows / CI): every generated and hand-authored DDL
-statement is parsed with sqlglot's PostgreSQL dialect by
+statement — plus the `bv_order_canonical` smoke seed (`smoke/order_smoke_seed.sql`)
+— is parsed with sqlglot's PostgreSQL dialect by
 `tests/unit/test_dv2_postgres_ddl.py`. `apply.sh` itself has been applied
 live end-to-end (standalone PostgreSQL 17.5 on Windows, no Docker) as part of
 the governance verification —
-`docs/perf/vault-pii-governance-pg-verify-2026-07-02.md`. A
-`bv_order_canonical` query against real promoted data remains the next
-sub-step (single-node Mac), mirroring how the Flink and ClickHouse smokes are
-run live on the Mac.
+`docs/perf/vault-pii-governance-pg-verify-2026-07-02.md`.
+
+A live `bv_order_canonical` query is exercised by `smoke/verify_bv_order.sh`
+against a deterministic order seed (see `smoke/README.md` for the recipe and the
+hand-derived expected output). The single-node Mac run is the remaining
+sub-step, mirroring how the Flink and ClickHouse smokes are run live on the Mac;
+the standalone no-Docker recipe from the governance verify applies unchanged.

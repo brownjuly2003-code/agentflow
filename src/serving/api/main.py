@@ -57,6 +57,7 @@ from src.serving.cache import QueryCache
 from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
 from src.serving.db_pool import DuckDBPool
 from src.serving.node import resolve_node_config
+from src.serving.node.emitter import NodeEmitter
 from src.serving.node.ingest import router as node_ingest_router
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
@@ -78,6 +79,20 @@ except ModuleNotFoundError:
 
 configure_logging()
 logger = structlog.get_logger()
+
+
+def _env_float(name: str, fallback: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return fallback
+
+
+def _env_int(name: str, fallback: int) -> int:
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return fallback
 
 
 @asynccontextmanager
@@ -249,6 +264,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     app.state.outbox_processor_task = asyncio.create_task(app.state.outbox_processor.run_forever())
 
+    # Edge role (ADR 0012): start the slow generator->forward emitter. Off in
+    # center/standalone; tests disable it with AGENTFLOW_NODE_EMITTER_ENABLED=false.
+    app.state.node_emitter = None
+    app.state.node_emitter_task = None
+    emitter_enabled = os.getenv("AGENTFLOW_NODE_EMITTER_ENABLED", "true").lower() != "false"
+    if app.state.node_config.is_edge and emitter_enabled:
+        app.state.node_emitter = NodeEmitter(
+            config=app.state.node_config,
+            conn=app.state.query_engine._conn,
+            interval_seconds=_env_float("AGENTFLOW_NODE_EMIT_INTERVAL_SECONDS", 3.0),
+            batch_size=_env_int("AGENTFLOW_NODE_EMIT_BATCH_SIZE", 5),
+        )
+        app.state.node_emitter.start()
+        app.state.node_emitter_task = app.state.node_emitter.task
+
     auth_mode = (
         "multi_tenant_api_keys"
         if app.state.auth_manager.has_configured_keys()
@@ -273,6 +303,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pass
     await app.state.alert_dispatcher.stop()
     await app.state.webhook_dispatcher.stop()
+    if getattr(app.state, "node_emitter", None) is not None:
+        await app.state.node_emitter.stop()
     await app.state.query_cache.close()
     app.state.db_pool.close()
     logger.info("api_shutting_down")

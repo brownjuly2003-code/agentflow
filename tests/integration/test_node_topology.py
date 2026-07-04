@@ -8,6 +8,7 @@ N12 (role/branch guard). N6/N8/N11 land with the seed + cross-branch view.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Iterator
 
@@ -64,6 +65,23 @@ def edge_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         yield client
 
 
+@pytest.fixture
+def edge_emitting_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    # Emitter on, but a long interval + large batch so it applies at most one
+    # event locally and never forwards during the test (no network to the
+    # unreachable center).
+    monkeypatch.setenv("AGENTFLOW_NODE_ROLE", "edge")
+    monkeypatch.setenv("AGENTFLOW_NODE_BRANCH", "ekb")
+    monkeypatch.setenv("AGENTFLOW_NODE_CENTER_URL", "https://center.invalid")
+    monkeypatch.setenv("AGENTFLOW_NODE_TOKEN", _TOKEN)
+    monkeypatch.setenv("AGENTFLOW_NODE_EMIT_INTERVAL_SECONDS", "3600")
+    monkeypatch.setenv("AGENTFLOW_NODE_EMIT_BATCH_SIZE", "1000")
+    monkeypatch.setenv("AGENTFLOW_DEMO_MODE", "true")
+    monkeypatch.setenv("AGENTFLOW_SEED_ON_BOOT", "true")
+    with TestClient(app) as client:
+        yield client
+
+
 # --- N1: standalone is byte-identical -------------------------------------
 
 
@@ -111,6 +129,19 @@ def test_center_ingest_accepts_empty_batch(center_client: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert resp.json() == {"accepted": 0, "applied": 0, "dead_lettered": 0, "duplicates": 0}
+
+
+# --- Emitter wiring: started only in edge role ----------------------------
+
+
+def test_edge_boot_starts_emitter(edge_emitting_client: TestClient) -> None:
+    task = edge_emitting_client.app.state.node_emitter_task
+    assert isinstance(task, asyncio.Task)
+    assert edge_emitting_client.app.state.node_emitter is not None
+
+
+def test_center_boot_has_no_emitter(center_client: TestClient) -> None:
+    assert getattr(center_client.app.state, "node_emitter_task", None) is None
 
 
 # --- N3 / N10: bearer auth, not the demo-key ------------------------------

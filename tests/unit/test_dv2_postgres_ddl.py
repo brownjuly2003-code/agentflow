@@ -182,3 +182,41 @@ def test_hubs_and_links_have_bytea_primary_keys():
     assert links.count("BYTEA PRIMARY KEY") == 8
     # link member hash keys are NOT NULL, not part of the PK.
     assert "BYTEA NOT NULL" in links
+
+
+# --- bv_order_canonical smoke seed (G1) --------------------------------------
+# The live query is a Mac smoke (postgres/smoke/verify_bv_order.sh); the seed
+# itself is gated no-Docker here, exactly like the rest of the PG vault.
+
+SMOKE_SEED = PG_DIR / "smoke" / "order_smoke_seed.sql"
+
+
+def test_bv_order_smoke_seed_parses_as_postgres():
+    sql = SMOKE_SEED.read_text(encoding="utf-8")
+    parsed = sqlglot.parse(sql, dialect="postgres")
+    assert parsed, "order_smoke_seed.sql produced no statements"
+    inserts = [s for s in parsed if s and s.key == "insert"]
+    # hubs (3) + links (2) + headers (bitrix ×5 + 1c ×1) + pricing (×4) + wb (1)
+    assert len(inserts) >= 15, f"expected >=15 INSERTs, got {len(inserts)}"
+
+
+def test_bv_order_smoke_seed_has_no_clickhouse_constructs():
+    body = _strip_comments(SMOKE_SEED.read_text(encoding="utf-8")).lower()
+    for token in CH_TOKENS:
+        assert token not in body, f"smoke seed still contains ClickHouse token {token!r}"
+    # PostgreSQL hash idiom, not the ClickHouse MD5(toString(...)) form.
+    assert "decode(md5(" in body
+    assert "md5(tostring(" not in body
+
+
+def test_bv_order_smoke_seed_covers_every_order_source_and_branch():
+    body = _strip_comments(SMOKE_SEED.read_text(encoding="utf-8"))
+    # all three order-satellite families the view reconstructs
+    assert "rv.sat_order_header__bitrix__" in body
+    assert "rv.sat_order_pricing__1c__" in body
+    assert "rv.sat_order_marketplace__wb__msk" in body
+    # marketplace state exists for msk (production seed never populated it)
+    assert body.count("rv.sat_order_marketplace__wb__msk") == 1
+    # every jurisdiction present so split_part branch derivation is exercised
+    for branch in ("msk", "spb", "ekb", "dxb", "ala"):
+        assert f"bitrix__{branch}__" in body, f"smoke seed missing {branch} order"

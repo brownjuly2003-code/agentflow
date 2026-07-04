@@ -19,6 +19,11 @@ class EntityDefinition:
     fields: dict[str, str]  # field_name -> description
     relationships: dict[str, str] = field(default_factory=dict)
     contract_version: str | None = None
+    # Optional SLA-stage ladder (ops-surfaces-spec.md §1.5): list order is
+    # ladder order, each entry `{name, sla_minutes, description}` or
+    # `{name, terminal: true}`. None for entities without the block — parsing
+    # must not require it.
+    stages: list[dict] | None = None
 
 
 @dataclass

@@ -205,6 +205,37 @@ def test_tenant_api_key_reads_own_order_timeline(client: TestClient):
     assert data["order"]["user_id"] == "USR-ACME-2"
 
 
+def test_cross_tenant_stuck_orders_are_scoped_to_tenant_schema(client: TestClient):
+    # ops-surfaces-spec.md §1.7 / invariant I8: the stuck-orders worklist
+    # scopes the open-orders read by the request tenant, same as the entity
+    # route and the Order 360 timeline.
+    acme_response = client.get(
+        "/v1/ops/stuck-orders",
+        params={"include_within_sla": "true"},
+        headers={"X-API-Key": "acme-key"},
+    )
+    demo_response = client.get(
+        "/v1/ops/stuck-orders",
+        params={"include_within_sla": "true"},
+        headers={"X-API-Key": "demo-key"},
+    )
+
+    assert acme_response.status_code == 200
+    assert demo_response.status_code == 200
+
+    acme_items = acme_response.json()["items"]
+    demo_items = demo_response.json()["items"]
+
+    # ORD-ACME (delivered) is terminal — never in the worklist for anyone.
+    assert {item["order_id"] for item in acme_items} == {"ORD-SHARED"}
+    assert {item["order_id"] for item in demo_items} == {"ORD-SHARED", "ORD-DEMO"}
+
+    acme_shared = next(item for item in acme_items if item["order_id"] == "ORD-SHARED")
+    demo_shared = next(item for item in demo_items if item["order_id"] == "ORD-SHARED")
+    assert acme_shared["user_id"] == "USR-ACME"
+    assert demo_shared["user_id"] == "USR-DEMO"
+
+
 def test_metric_cache_does_not_leak_across_tenants(client: TestClient):
     class FakeRedis:
         def __init__(self) -> None:

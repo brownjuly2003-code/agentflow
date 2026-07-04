@@ -183,6 +183,43 @@ def test_loader_rejects_missing_directory(tmp_path: Path) -> None:
         load_entity_contracts(missing)
 
 
+def test_loader_is_tolerant_of_absent_stages_block(tmp_path: Path) -> None:
+    # ops-surfaces-spec.md §1.5: entities without a `stages:` block behave as
+    # today — parsing must not require it.
+    _write(
+        tmp_path,
+        "widget",
+        {
+            "name": "widget",
+            "description": "no SLA ladder",
+            "table": "widgets",
+            "primary_key": "widget_id",
+            "fields": {"widget_id": "pk"},
+        },
+    )
+
+    loaded = load_entity_contracts(tmp_path)
+
+    assert loaded[0].stages is None
+
+
+def test_loader_parses_order_stages_ladder() -> None:
+    # ops-surfaces-spec.md §1.5: list order is ladder order; terminal entries
+    # carry no sla_minutes.
+    order = DataCatalog().entities["order"]
+
+    assert [entry["name"] for entry in order.stages] == [
+        "pending",
+        "confirmed",
+        "shipped",
+        "delivered",
+        "cancelled",
+    ]
+    assert order.stages[0]["sla_minutes"] == 30
+    assert order.stages[3]["terminal"] is True
+    assert "sla_minutes" not in order.stages[3]
+
+
 def test_contracts_dir_shipped_in_repo_is_wellformed() -> None:
     assert CONTRACT_DIR.is_dir()
     yaml_files = list(CONTRACT_DIR.glob("*.yaml"))

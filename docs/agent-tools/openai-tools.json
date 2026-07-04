@@ -943,6 +943,47 @@
   {
     "type": "function",
     "function": {
+      "name": "get_stuck_orders_v1_ops_stuck_orders_get",
+      "description": "Get Stuck Orders",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "include_within_sla": {
+            "type": "boolean",
+            "default": false,
+            "title": "Include Within Sla"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "default": 50,
+            "title": "Page Size"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "search_v1_search_get",
       "description": "Search",
       "parameters": {

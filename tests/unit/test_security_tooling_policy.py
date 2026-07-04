@@ -74,7 +74,12 @@ _ALLOWED_B608_SITES = {
     "src/serving/backends/duckdb_backend.py": 2,
     "src/serving/semantic_layer/nl_engine.py": 6,
     "src/serving/semantic_layer/query/engine.py": 1,
-    "src/serving/semantic_layer/query/entity_queries.py": 3,
+    # D3 (reviewed 2026-07-04): fetch_orders_by_status's new stuck-orders
+    # bulk read follows get_entity's existing pattern in this same file — the
+    # table name comes from the catalog allowlist (_qualify_table), and every
+    # status value binds as a query param on DuckDB or is
+    # _quote_literal-escaped on the non-binding ClickHouse path.
+    "src/serving/semantic_layer/query/entity_queries.py": 4,
     "src/serving/semantic_layer/query/nl_queries.py": 3,
     "src/serving/semantic_layer/search_index.py": 1,
 }

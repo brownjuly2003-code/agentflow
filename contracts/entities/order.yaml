@@ -11,3 +11,20 @@ fields:
   created_at: Order creation timestamp
 relationships:
   user: user_id
+stages:
+  - name: pending
+    sla_minutes: 30
+    description: Confirmation SLA — marketplace orders auto-confirm within
+      minutes; a pending order older than this needs a payment/CRM decision
+  - name: confirmed
+    sla_minutes: 1440
+    description: Ship-by SLA — FBS marketplace shipping deadlines drive the
+      24h budget for warehouse handover
+  - name: shipped
+    sla_minutes: 7200
+    description: Delivery SLA — 5 days courier/pickup before a customer
+      contact is due
+  - name: delivered
+    terminal: true
+  - name: cancelled
+    terminal: true

@@ -103,6 +103,7 @@ def load_entity_contracts(
                 fields=dict(data["fields"]),
                 relationships=dict(data.get("relationships") or {}),
                 contract_version=None,
+                stages=list(data["stages"]) if data.get("stages") is not None else None,
             )
         )
 

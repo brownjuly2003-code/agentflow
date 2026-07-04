@@ -25,6 +25,7 @@ from src.serving.api.versioning import (
 )
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
 from src.serving.control_plane import get_control_plane_store
+from src.serving.semantic_layer.stage_clock import coerce_dt, resolve_breach, stage_budget
 
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.api")
@@ -112,29 +113,6 @@ def _as_of_iso_text(as_of: datetime | None) -> str | None:
     if as_of is None:
         return None
     return as_of.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _coerce_dt(value: object) -> datetime | None:
-    # Naive DuckDB timestamps are local wall-clock (DuckDB's NOW()), not UTC —
-    # same local_tz convention as EntityQueryMixin.get_entity's _last_updated.
-    local_tz = datetime.now().astimezone().tzinfo or UTC
-    if isinstance(value, datetime):
-        return (
-            value.astimezone(UTC)
-            if value.tzinfo is not None
-            else value.replace(tzinfo=local_tz).astimezone(UTC)
-        )
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value)
-        except ValueError:
-            return None
-        return (
-            parsed.astimezone(UTC)
-            if parsed.tzinfo is not None
-            else parsed.replace(tzinfo=local_tz).astimezone(UTC)
-        )
-    return None
 
 
 def _transform_payload_for_requested_version(
@@ -394,36 +372,20 @@ def _build_order_timeline(request: Request, order_id: str) -> dict[str, Any] | N
     catalog = request.app.state.catalog
     order_def = catalog.entities.get("order")
     stage_budgets = (getattr(order_def, "stages", None) or []) if order_def else []
-    budget = next(
-        (
-            entry
-            for entry in stage_budgets
-            if isinstance(entry, dict) and entry.get("name") == current_status
-        ),
-        None,
-    )
+    budget = stage_budget(stage_budgets, current_status)
 
     entered_at = None
     clock = "fallback"
     target_event_type = f"order.status.{current_status}"
     for row in reversed(stage_rows):
         if row.get("event_type") == target_event_type:
-            entered_at = _coerce_dt(row.get("processed_at"))
+            entered_at = coerce_dt(row.get("processed_at"))
             clock = "journal"
             break
     if entered_at is None:
-        entered_at = _coerce_dt(order_row.get("created_at"))
+        entered_at = coerce_dt(order_row.get("created_at"))
 
-    in_stage_seconds = (
-        (datetime.now(UTC) - entered_at).total_seconds() if entered_at is not None else None
-    )
-    sla_minutes = budget.get("sla_minutes") if budget else None
-    is_terminal = bool(budget.get("terminal")) if budget else False
-    breached = (
-        None
-        if is_terminal or sla_minutes is None or in_stage_seconds is None
-        else in_stage_seconds > sla_minutes * 60
-    )
+    in_stage_seconds, sla_minutes, breached = resolve_breach(entered_at=entered_at, budget=budget)
 
     customer = None
     user_id = order_row.get("user_id")

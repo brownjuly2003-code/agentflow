@@ -86,8 +86,11 @@ sdk/agentflow/**/__pycache__/
 sdk/agentflow/**/*.py[cod]
 integrations/agentflow_integrations/**/__pycache__/
 integrations/agentflow_integrations/**/*.py[cod]
-# Local Iceberg warehouse/runtime state (intentionally untracked).
-/warehouse/agentflow/
+# Local Iceberg warehouse/runtime state (intentionally untracked). DV2 SQL/Python
+# source under warehouse/agentflow/dv2/ is tracked normally — only the generated
+# lake and build output are excluded here.
+/warehouse/agentflow/orders/
+/warehouse/agentflow/dv2/reference/build/
 # Root API usage DuckDB runtime state (intentionally untracked).
 /agentflow_api.duckdb
 agentflow_bench_debug*.duckdb*

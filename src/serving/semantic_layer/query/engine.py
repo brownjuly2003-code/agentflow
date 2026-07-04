@@ -8,12 +8,12 @@ from pathlib import Path
 
 import duckdb
 
-from src.ingestion.tenant_router import TenantRouter
 from src.serving.backends import create_backend
 from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.db_pool import DuckDBPool
 from src.serving.duckdb_connection import connect_duckdb
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.tenancy import TenantRouter
 
 from .entity_queries import EntityQueryMixin
 from .metric_queries import MetricQueryMixin

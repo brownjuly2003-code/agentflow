@@ -4,9 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-from src.ingestion.tenant_router import TenantRouter
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query.sql_builder import SQLBuilderMixin
+from src.tenancy import TenantRouter
 
 
 def test_tenant_router_reuses_loaded_config(

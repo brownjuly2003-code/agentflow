@@ -51,7 +51,7 @@ This is stronger than soft application filtering because the query builder rewri
 
 The current evidence supports the claim "tenant-scoped DuckDB schemas with fail-closed query resolution." It does not support broader claims such as end-to-end isolation across every external dependency.
 
-Evidence: `src/ingestion/tenant_router.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/query/engine.py`, `tests/integration/test_tenant_isolation.py`
+Evidence: `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/query/engine.py`, `tests/integration/test_tenant_isolation.py`
 
 ## 4. Input Validation and Contract Safety
 

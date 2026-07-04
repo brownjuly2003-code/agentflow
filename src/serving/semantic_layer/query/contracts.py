@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.ingestion.tenant_router import TenantRouter
 from src.serving.backends import ServingBackend
 from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.tenancy import TenantRouter
 
 
 class SQLBuilderHost(Protocol):

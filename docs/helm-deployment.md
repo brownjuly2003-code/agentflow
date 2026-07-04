@@ -106,13 +106,50 @@ If `ingress.enabled=true`, verify the configured host instead of using port-forw
 - Default `secrets.apiKeys.keys` is empty. Supply API-key config through `secrets.existingSecret` or through an environment-specific values file; do not reuse repository defaults as runtime credentials.
 - If `secrets.create=false`, `secrets.existingSecret` must name a Kubernetes Secret with `admin-key` and `api_keys.yaml`.
 - `config.tenants` is the source of truth for tenant routing and API version pinning.
-- `autoscaling.enabled=true` creates an HPA from `minReplicas` to `maxReplicas`, but persistent DuckDB storage is guarded to one writer replica. Rendering fails when `persistence.enabled=true` and the chart is configured for more than one API writer replica.
+- `autoscaling.enabled=true` creates an HPA from `minReplicas` to `maxReplicas`, but persistent DuckDB storage is guarded to one writer replica. Rendering fails when `persistence.enabled=true` and the chart is configured for more than one API writer replica. Multi-replica also requires the external control-plane store — see [Horizontal scaling](#horizontal-scaling-postgres-control-plane-profile).
 - `ingress.tls` accepts the standard Helm ingress TLS structure.
 - ConfigMap and Secret checksums are injected into the pod template, so `helm upgrade` rolls the deployment when mounted config changes.
 - DuckDB is still a stateful local file. If your storage class only supports `ReadWriteOnce`, start with `replicaCount: 1` until you validate your storage and concurrency model.
 - Optional DuckDB file encryption is runtime-configured with `AGENTFLOW_DUCKDB_ENCRYPTION_KEY` or `AGENTFLOW_DUCKDB_ENCRYPTION_KEY_FILE`; use `extraEnv` with a `secretKeyRef` to supply the key. The default remains unencrypted for backward compatibility.
 - DuckDB encryption is a local at-rest hardening option only. It is not a NIST, GDPR, HIPAA, SOC 2, or external-compliance attestation by itself.
 - Optional append-only audit export is runtime-configured with `AGENTFLOW_AUDIT_LOG_PATH`, which writes a hash-chained JSONL file in addition to DuckDB usage analytics. For externally immutable retention, operators still need object-lock or SIEM evidence outside this chart.
+
+## Horizontal scaling (postgres control-plane profile)
+
+The chart default is the single-replica, zero-dependency demo (DuckDB serving,
+embedded per-pod control plane). Scaling the API horizontally needs **both**
+halves of the ADR 0009/0010 gate, enforced at render time — the chart fails any
+multi-replica render unless both are set:
+
+1. **External serving engine** — `serving.backend=clickhouse` (+ `serving.clickhouse.host`
+   and a password `existingSecret`). ADR 0006/0007.
+2. **External control-plane store** — `controlPlane.store=postgres` with a DSN
+   in `controlPlane.postgres.existingSecret` (key `controlPlane.postgres.dsnKey`,
+   default `controlplane-pg-dsn`). ADR 0009/0010. This moves the webhook
+   queue/registrations, alert rules+history, outbox/dead-letter and usage out of
+   the per-pod DuckDB/YAML into one shared store, so N replicas no longer fork
+   that state (duplicate deliveries, split alert history).
+
+The chart ships **no** PostgreSQL and **no** ClickHouse service, exactly as it
+consumes an external ClickHouse: the operator provides both and the referenced
+secrets. The DSN carries a password, so — like the ClickHouse password — it is
+never inlined into values, only referenced via `existingSecret`.
+
+`k8s/staging/values-staging-scale.yaml.example` is a ready overlay:
+
+```bash
+helm upgrade --install agentflow ./helm/agentflow \
+  -f k8s/staging/values-staging.yaml \
+  -f k8s/staging/values-staging-scale.yaml \
+  --namespace agentflow
+```
+
+Replica-correctness (exactly-one delivery per (webhook, event), one alert page
+per incident, cross-pod registration visibility) is verified by
+`scripts/k8s_replica_correctness_verify.sh` plus the recipe in
+`docs/clickhouse-cutover-plan.md` (Phase 3). With the postgres store the render
+gate relaxes automatically; with `controlPlane.store=embedded` any `replicaCount
+> 1` (or `autoscaling.maxReplicas > 1`) render is refused.
 
 ## Contract Maintenance
 

@@ -85,6 +85,20 @@ spec:
                   key: {{ .Values.serving.clickhouse.passwordKey | quote }}
             {{- end }}
             {{- end }}
+            # Control-plane store (ADR 0010). Set explicitly (mirrors
+            # SERVING_BACKEND) so the rendered manifest is self-documenting; the
+            # app treats an unset value as 'embedded'. The postgres profile also
+            # sources its DSN from an operator-provided secret — the chart ships
+            # no PostgreSQL service, exactly as it ships no ClickHouse.
+            - name: AGENTFLOW_CONTROLPLANE_STORE
+              value: {{ .Values.controlPlane.store | quote }}
+            {{- if eq .Values.controlPlane.store "postgres" }}
+            - name: AGENTFLOW_CONTROLPLANE_PG_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "controlPlane.postgres.existingSecret is required when controlPlane.store=postgres (it must hold the PostgreSQL DSN; the chart ships no PG service)" .Values.controlPlane.postgres.existingSecret | quote }}
+                  key: {{ .Values.controlPlane.postgres.dsnKey | quote }}
+            {{- end }}
             - name: DUCKDB_PATH
               value: {{ .Values.config.duckdbPath | quote }}
             - name: AGENTFLOW_USAGE_DB_PATH

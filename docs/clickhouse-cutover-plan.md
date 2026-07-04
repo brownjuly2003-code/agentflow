@@ -102,30 +102,68 @@ live-verified). Do not do this while backend is DuckDB or while
 render** until both halves of the gate are set, so this phase cannot be
 executed accidentally.
 
-- [ ] Prerequisite: ADR 0010 slices 1–5 merged (`PostgresControlPlaneStore`
+- [x] Prerequisite: ADR 0010 slices 1–5 merged (`PostgresControlPlaneStore`
       exists, live-verified); slice 6 extends the values schema so
-      `controlPlane.store=postgres` renders.
-- [ ] `helm/agentflow/values.yaml` — set serving to ClickHouse (drop
-      `config.duckdbPath` from the request path; point at the ClickHouse service
-      via `CLICKHOUSE_HOST` etc. / `SERVING_BACKEND=clickhouse`) and set
-      `controlPlane.store=postgres` + DSN secret. `usageDbPath` retires with
-      ADR 0010 slice 4 (usage moves into the control-plane store).
-- [ ] Remove the request-path write PVC dependency; confirm pods are stateless
-      (with the control plane external there is no writable volume left on the
-      request path).
-- [ ] Enable `autoscaling` with sane `minReplicas`/`maxReplicas` and an HPA CPU
-      target; remove the `replicaCount: 1` hard-pin.
+      `controlPlane.store=postgres` renders. *(Done 2026-07-04, slice 6: the
+      `store` enum now admits `postgres`, `controlPlane.postgres.{existingSecret,dsnKey}`
+      carries the DSN, and `templates/deployment.yaml` wires
+      `AGENTFLOW_CONTROLPLANE_STORE` + `AGENTFLOW_CONTROLPLANE_PG_DSN` — E4.)*
+- [x] Chart profile — the scale profile is now expressible **as an overlay**,
+      not by editing the shipped `values.yaml` (whose default stays the
+      zero-dependency DuckDB/embedded demo): `k8s/staging/values-staging-scale.yaml.example`
+      sets `serving.backend=clickhouse` (+ `CLICKHOUSE_HOST` etc.),
+      `controlPlane.store=postgres` + DSN secret, and drops the DuckDB request
+      path. `usageDbPath` retires with ADR 0010 slice 4 (usage already in the
+      store). *(Done 2026-07-04, E4.)*
+- [x] Request-path PVC dependency removed in the scale profile: the overlay
+      sets `persistence.enabled=false`, so with the control plane external there
+      is no writable volume left on the request path (ADR 0007 "stateless pods"
+      becomes literally true). *(Done 2026-07-04, E4.)*
+- [x] `autoscaling` renders an HPA in the scale profile (min/max + CPU target);
+      the chart carries no `replicaCount: 1` hard-pin — the default is 1 but any
+      value is admissible once both gate halves are set. *(Done 2026-07-04, E4:
+      `test_full_scale_profile_admits_autoscaling_hpa`.)*
 - [x] Add a `values.schema.json` / comment note: `autoscaling` requires an
       external serving engine. *(Done 2026-07-02, strengthened beyond a note:
-      the schema pins `controlPlane.store` to `embedded` until the adapter
-      ships, and `templates/deployment.yaml` fails any multi-replica render
+      the schema pinned `controlPlane.store` to `embedded` until the adapter
+      shipped, and `templates/deployment.yaml` fails any multi-replica render
       unless `controlPlane.store=postgres` and `serving.backend=clickhouse` —
-      see ADR 0010.)*
-- [ ] Verify: `scripts/k8s_staging_up.sh` on kind, `k8s_smoke_test.sh` green,
-      `replicaCount: 2` schedules without PVC contention; **plus the ADR 0010
-      replica-correctness checks** — exactly one delivery per (webhook, event)
-      across two pods, one alert page per incident, a webhook registered via
-      either pod visible to both.
+      see ADR 0010. Slice 6 (2026-07-04) released the enum ratchet to
+      `[embedded, postgres]`.)*
+- [ ] **LIVE verify (kind, Docker — pending Mac/CI, E4 tail):**
+      `scripts/k8s_staging_up.sh` on kind with the scale overlay,
+      `k8s_smoke_test.sh` green, `replicaCount: 2` schedules without PVC
+      contention; **plus the ADR 0010 replica-correctness checks** — exactly one
+      delivery per (webhook, event) across two pods, one alert page per incident,
+      a webhook registered via either pod visible to both. See the recipe below.
+      *(Chart-side render verified locally 2026-07-04 via `helm template`/`lint`;
+      the two-real-pods run needs Docker, unavailable on the authoring host.)*
+
+### Phase 3 replica-correctness verify recipe (ADR 0010 slice 6)
+
+Bring up the scale stand (kind + in-cluster PostgreSQL + ClickHouse + Redis and
+their secrets), install the chart with the scale overlay, then:
+
+1. **>=2 pods on the postgres store + cross-pod registration visibility** —
+   automated by `scripts/k8s_replica_correctness_verify.sh`: asserts the
+   deployment runs ≥2 ready pods all carrying `AGENTFLOW_CONTROLPLANE_STORE=postgres`,
+   registers one webhook through the Service, and confirms it is visible on
+   every round-robin read (on the embedded YAML store a read served by the pod
+   that did not register would miss it — the sharpest split-brain, class 5).
+2. **Exactly-one delivery per (webhook, event)** — emit one pipeline event
+   matching a registered webhook's filter; read `GET /v1/webhooks/{id}/logs`;
+   assert exactly one delivery record for that `event_id` despite both pods
+   scanning the event (idempotent enqueue insert-win).
+3. **One alert page per incident** — configure an alert rule, drive one
+   triggering evaluation window; assert a single page and one `alert_history`
+   transition, not one per pod (per-rule `claim_alert_tick` single-flight).
+
+Checks 2–3 need event/alert emission plus a capture sink, so they are part of
+the live run; the **store-level guarantee** behind them (idempotent enqueue,
+single-flight tick, outbox↔dead-letter atomicity) is already live-verified by
+the slice-5 standalone-PostgreSQL probe suite (31/31,
+`docs/perf/control-plane-pg-verify-2026-07-03.md`) — Phase 3 adds only the
+two-real-pods topology proof.
 
 ## Phase 4 — NL→SQL (routes through GraceKelly)
 

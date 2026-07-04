@@ -178,19 +178,28 @@ def test_serving_clickhouse_render_wires_env_and_requires_host():
     assert "serving.clickhouse.host is required" in _combined_output(missing_host)
 
 
-def test_chart_pins_embedded_control_plane_store():
+def test_chart_control_plane_store_defaults_embedded_and_admits_postgres():
     """ADR 0009/0010: the control plane (webhook queue/log, alert rules+history,
-    outbox, dead-letter, usage) is embedded per-pod state. The schema enum is a
-    fail-closed ratchet — 'postgres' joins it only when the
-    PostgresControlPlaneStore adapter actually ships, so the chart can never
-    advertise a profile the app cannot run."""
+    outbox, dead-letter, usage) defaults to embedded per-pod state. The schema
+    enum was a fail-closed ratchet — 'postgres' joined it only once the
+    PostgresControlPlaneStore adapter and its chart profile shipped (rollout
+    slices 5–6). The default value stays 'embedded' (the zero-dependency demo),
+    but 'postgres' is now a first-class, schema-advertised profile."""
     values = _load_yaml(CHART_PATH / "values.yaml")
     assert values["controlPlane"]["store"] == "embedded"
+    # The scale-profile DSN is operator-provided (never inlined) — same posture
+    # as the ClickHouse password: empty existingSecret by default.
+    assert values["controlPlane"]["postgres"]["existingSecret"] == ""
+    assert values["controlPlane"]["postgres"]["dsnKey"]
 
     schema = json.loads((CHART_PATH / "values.schema.json").read_text(encoding="utf-8"))
     assert "controlPlane" in schema["required"]
-    store = schema["properties"]["controlPlane"]["properties"]["store"]
-    assert store["enum"] == ["embedded"]
+    control_plane = schema["properties"]["controlPlane"]["properties"]
+    assert control_plane["store"]["enum"] == ["embedded", "postgres"]
+    postgres = control_plane["postgres"]
+    assert postgres["additionalProperties"] is False
+    assert "existingSecret" in postgres["required"]
+    assert "dsnKey" in postgres["required"]
 
 
 def test_helm_template_rejects_multi_replica_with_embedded_control_plane():
@@ -236,3 +245,116 @@ def test_helm_template_single_replica_renders_with_embedded_control_plane():
     result = _run_helm_template()
     output = _combined_output(result)
     assert result.returncode == 0, output
+
+
+def _scale_profile_args(*extra: str) -> list[str]:
+    """The minimal set of overrides that satisfies BOTH halves of the ADR
+    0010 render gate (external serving engine + external control-plane store),
+    so multi-replica / autoscaling is admissible."""
+    return [
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "controlPlane.postgres.existingSecret=agentflow-controlplane-pg",
+        *extra,
+    ]
+
+
+def test_embedded_profile_sets_store_env_and_omits_dsn():
+    """The default profile still boots embedded: the store env is set
+    explicitly (self-documenting manifest) and no PG DSN env is wired."""
+    result = _run_helm_template()
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert "AGENTFLOW_CONTROLPLANE_STORE" in output
+    assert 'value: "embedded"' in output
+    assert "AGENTFLOW_CONTROLPLANE_PG_DSN" not in output
+
+
+def test_postgres_control_plane_profile_wires_store_env_and_dsn_secret():
+    """ADR 0010 slice 6: the postgres profile wires AGENTFLOW_CONTROLPLANE_STORE
+    and sources AGENTFLOW_CONTROLPLANE_PG_DSN from the operator-provided secret
+    (never inlined, mirroring the ClickHouse password)."""
+    result = _run_helm_template(*_scale_profile_args("--set", "replicaCount=2"))
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert 'value: "postgres"' in output
+    assert "AGENTFLOW_CONTROLPLANE_PG_DSN" in output
+    assert 'name: "agentflow-controlplane-pg"' in output
+    assert 'key: "controlplane-pg-dsn"' in output
+
+
+def test_postgres_control_plane_requires_dsn_secret():
+    """store=postgres without a DSN secret fails the render (a silent fallback
+    to embedded would re-open the split-brain the gate prevents)."""
+    result = _run_helm_template(
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "replicaCount=2",
+    )
+    output = _combined_output(result)
+    assert result.returncode != 0, output
+    assert "controlPlane.postgres.existingSecret is required" in output
+
+
+def test_full_scale_profile_admits_multi_replica():
+    """The render gate relaxes automatically once BOTH halves are set: a
+    replicaCount=2 render succeeds and schedules two pods."""
+    result = _run_helm_template(*_scale_profile_args("--set", "replicaCount=2"))
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert "replicas: 2" in output
+
+
+def test_full_scale_profile_admits_autoscaling_hpa():
+    """Phase 3: autoscaling.maxReplicas>1 renders an HPA once the scale profile
+    (external serving + external control-plane store) is set."""
+    result = _run_helm_template(
+        *_scale_profile_args(
+            "--set",
+            "autoscaling.enabled=true",
+            "--set",
+            "autoscaling.minReplicas=2",
+            "--set",
+            "autoscaling.maxReplicas=4",
+        )
+    )
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert "kind: HorizontalPodAutoscaler" in output
+    assert "maxReplicas: 4" in output
+
+
+def test_postgres_store_still_gated_without_clickhouse_backend():
+    """The control-plane half alone does not open the gate — multi-replica on
+    the duckdb backend must still fail (ADR 0007 engine half unmet)."""
+    result = _run_helm_template(
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "replicaCount=2",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "controlPlane.postgres.existingSecret=agentflow-controlplane-pg",
+    )
+    output = _combined_output(result)
+    assert result.returncode != 0, output
+    assert "Multi-replica requires BOTH" in output

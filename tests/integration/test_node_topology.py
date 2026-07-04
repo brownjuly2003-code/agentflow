@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from src.ingestion.producers.event_producer import generate_order
 from src.serving.api.main import app
+from src.serving.node.seed import BASELINE_ROWS_BY_BRANCH, NODE_BASELINE_TOPIC
 
 pytestmark = pytest.mark.integration
 
@@ -142,6 +143,30 @@ def test_edge_boot_starts_emitter(edge_emitting_client: TestClient) -> None:
 
 def test_center_boot_has_no_emitter(center_client: TestClient) -> None:
     assert getattr(center_client.app.state, "node_emitter_task", None) is None
+
+
+# --- N6: branch-scoped baseline seed --------------------------------------
+
+
+def _baseline_counts(client: TestClient) -> dict[str, int]:
+    rows = client.app.state.query_engine._conn.execute(
+        "SELECT branch, COUNT(*) FROM pipeline_events WHERE topic = ? GROUP BY branch",
+        [NODE_BASELINE_TOPIC],
+    ).fetchall()
+    return {str(branch): int(count) for branch, count in rows}
+
+
+def test_center_boot_seeds_all_branch_baseline(center_client: TestClient) -> None:
+    assert _baseline_counts(center_client) == BASELINE_ROWS_BY_BRANCH
+
+
+def test_edge_boot_seeds_only_its_branch(edge_client: TestClient) -> None:
+    # edge_client is the spb edge (emitter off).
+    assert _baseline_counts(edge_client) == {"spb": BASELINE_ROWS_BY_BRANCH["spb"]}
+
+
+def test_standalone_boot_seeds_no_branch_baseline(standalone_client: TestClient) -> None:
+    assert _baseline_counts(standalone_client) == {}
 
 
 # --- N3 / N10: bearer auth, not the demo-key ------------------------------

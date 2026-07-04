@@ -59,6 +59,7 @@ from src.serving.db_pool import DuckDBPool
 from src.serving.node import resolve_node_config
 from src.serving.node.emitter import NodeEmitter
 from src.serving.node.ingest import router as node_ingest_router
+from src.serving.node.seed import seed_node_baseline
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
@@ -147,6 +148,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.query_engine._duckdb_backend.initialize_demo_data()
         if app.state.query_engine._backend_name != app.state.query_engine._duckdb_backend.name:
             app.state.query_engine._backend.initialize_demo_data()
+        # Three-node topology (ADR 0012 §7): lay down the per-branch journal
+        # baseline (center = all branches, edge = its own, standalone = none)
+        # so a center-first visitor sees a coherent cross-branch picture.
+        seed_node_baseline(app.state.query_engine._conn, app.state.node_config)
     app.state.search_index = SearchIndex(
         catalog=app.state.catalog,
         query_engine=app.state.query_engine,

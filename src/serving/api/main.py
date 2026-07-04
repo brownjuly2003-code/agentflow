@@ -57,6 +57,7 @@ from src.serving.cache import QueryCache
 from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
 from src.serving.db_pool import DuckDBPool
 from src.serving.node import resolve_node_config
+from src.serving.node.ingest import router as node_ingest_router
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
@@ -299,6 +300,11 @@ async def demo_mode_guard(request: Request, call_next: RequestResponseEndpoint) 
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and path not in {
             "/v1/query",
             "/v1/query/explain",
+            # Node federation ingest (ADR 0012): allow-listed past the demo
+            # read-only guard so the token-authenticated edge->center POST is
+            # not blocked; the endpoint's own bearer check still rejects the
+            # public demo-key caller (N3).
+            "/v1/node/events",
         }:
             return JSONResponse(
                 status_code=403,
@@ -347,6 +353,10 @@ app.include_router(search_router, prefix="/v1")
 app.include_router(slo_router)
 app.include_router(stream_router)
 app.include_router(webhook_router)
+# Three-node topology (ADR 0012): the node-ingest router is mounted on every
+# node but is a no-op (404) off the center and hidden from the public OpenAPI
+# (include_in_schema=False). It carries its own bearer-token auth.
+app.include_router(node_ingest_router)
 
 
 @app.get("/v1/changelog", response_model=None)

@@ -185,6 +185,9 @@ class DuckDBBackend(ServingBackend):
         self._conn.execute(
             "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS latency_ms INTEGER"
         )
+        # ADR 0012 N4: federated node events carry their originating branch on
+        # the journal; NULL for the standalone demo's in-process events.
+        self._conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS branch VARCHAR")
 
         row = self._conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
         count = row[0] if row else 0

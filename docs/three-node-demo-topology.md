@@ -179,8 +179,11 @@ default** behind a flag - the core design is push-only (ADR 0012 Decision 5).
 
 ## 11. Deploy runbook skeleton (owner gate)
 
-Mirrors `deploy/hf-space/DEPLOY.md` x3. `HF_TOKEN` from `D:/VacancyRadar/.env` - never
-printed. For each of `agentflow-center`, `agentflow-edge-spb`, `agentflow-edge-ekb`:
+The concrete runbook and per-role Space READMEs live in
+`deploy/hf-space/three-node/` (`DEPLOY.md` + `center/`, `edge-spb/`, `edge-ekb/`
+READMEs; the shared image is the existing `deploy/hf-space/Dockerfile`).
+`HF_TOKEN` from `D:/VacancyRadar/.env` - never printed. For each of
+`agentflow-center`, `agentflow-edge-spb`, `agentflow-edge-ekb`:
 
 ```bash
 # 1. Create (one-time)

@@ -100,6 +100,9 @@ def _ensure_tables(conn: duckdb.DuckDBPyConnection) -> None:
         "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
     )
     conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS entity_id VARCHAR")
+    # ADR 0012 N4: originating branch of a federated node event (NULL for
+    # in-process events).
+    conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS branch VARCHAR")
 
 
 def _event_tenant(event: dict) -> str:
@@ -107,6 +110,18 @@ def _event_tenant(event: dict) -> str:
     metadata_tenant = source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
     tenant = event.get("tenant") or metadata_tenant
     return str(tenant) if tenant else "default"
+
+
+def _event_branch(event: dict) -> str | None:
+    """Originating branch of a federated event (ADR 0012 N4).
+
+    The center's node-ingest endpoint stamps ``source_metadata.branch`` with the
+    edge's ``origin_branch`` before applying, so the ``pipeline_events`` journal
+    carries branch attribution. In-process events (standalone/edge local
+    generator) leave it ``NULL`` — never synthesized."""
+    source_metadata = event.get("source_metadata", {})
+    branch = source_metadata.get("branch") if isinstance(source_metadata, dict) else None
+    return str(branch) if branch else None
 
 
 # ops-surfaces-spec.md §1.3: the entity_id axis of the pipeline_events journal
@@ -139,6 +154,7 @@ def _process_event(
     event_id = event.get("event_id", "unknown")
     tenant_id = _event_tenant(event)
     entity_id = _derive_entity_id(event, event_type)
+    branch = _event_branch(event)
 
     conn.execute("BEGIN")
     try:
@@ -148,11 +164,12 @@ def _process_event(
             conn.execute(
                 """
                 INSERT INTO pipeline_events (
-                    event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
+                    event_id, topic, tenant_id, entity_id, event_type, latency_ms,
+                    processed_at, branch
                 )
-                VALUES (?, 'events.deadletter', ?, ?, ?, 0, ?)
+                VALUES (?, 'events.deadletter', ?, ?, ?, 0, ?, ?)
                 """,
-                [event_id, tenant_id, entity_id, event_type, datetime.now(UTC)],
+                [event_id, tenant_id, entity_id, event_type, datetime.now(UTC), branch],
             )
             if iceberg_sink is not None:
                 iceberg_sink.write_batch(
@@ -191,11 +208,12 @@ def _process_event(
             conn.execute(
                 """
                 INSERT INTO pipeline_events (
-                    event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
+                    event_id, topic, tenant_id, entity_id, event_type, latency_ms,
+                    processed_at, branch
                 )
-                VALUES (?, 'events.deadletter', ?, ?, ?, 0, ?)
+                VALUES (?, 'events.deadletter', ?, ?, ?, 0, ?, ?)
                 """,
-                [event_id, tenant_id, entity_id, event_type, datetime.now(UTC)],
+                [event_id, tenant_id, entity_id, event_type, datetime.now(UTC), branch],
             )
             if iceberg_sink is not None:
                 iceberg_sink.write_batch(
@@ -227,7 +245,7 @@ def _process_event(
         if event_type.startswith("order."):
             event = enrich_order(event)
             _upsert_order(conn, event)
-            _record_order_status(conn, event, event_id, tenant_id)
+            _record_order_status(conn, event, event_id, tenant_id, branch)
             if iceberg_sink is not None:
                 iceberg_sink.write_batch("orders", [event])
         elif event_type in ("click", "page_view", "add_to_cart"):
@@ -257,11 +275,12 @@ def _process_event(
         conn.execute(
             """
             INSERT INTO pipeline_events (
-                event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
+                event_id, topic, tenant_id, entity_id, event_type, latency_ms,
+                processed_at, branch
             )
-            VALUES (?, 'events.validated', ?, ?, ?, ?, ?)
+            VALUES (?, 'events.validated', ?, ?, ?, ?, ?, ?)
             """,
-            [event_id, tenant_id, entity_id, event_type, latency_ms, datetime.now(UTC)],
+            [event_id, tenant_id, entity_id, event_type, latency_ms, datetime.now(UTC), branch],
         )
         conn.execute("COMMIT")
         if clickhouse_sink is not None:
@@ -334,7 +353,11 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
 
 
 def _record_order_status(
-    conn: duckdb.DuckDBPyConnection, event: dict, event_id: str, tenant_id: str
+    conn: duckdb.DuckDBPyConnection,
+    event: dict,
+    event_id: str,
+    tenant_id: str,
+    branch: str | None = None,
 ) -> None:
     """Stage-entry journal row (ops-surfaces-spec.md §1.2) — the stage clock
     for Order 360 / stuck-orders. ``topic='orders.status'`` is deliberately
@@ -343,9 +366,9 @@ def _record_order_status(
     conn.execute(
         """
         INSERT INTO pipeline_events (
-            event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at
+            event_id, topic, tenant_id, entity_id, event_type, latency_ms, processed_at, branch
         )
-        VALUES (?, 'orders.status', ?, ?, ?, NULL, ?)
+        VALUES (?, 'orders.status', ?, ?, ?, NULL, ?, ?)
         """,
         [
             f"{event_id}-status",
@@ -353,6 +376,7 @@ def _record_order_status(
             str(event["order_id"]),
             f"order.status.{event['status']}",
             datetime.now(UTC),
+            branch,
         ],
     )
 

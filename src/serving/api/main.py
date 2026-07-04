@@ -56,6 +56,10 @@ from src.serving.api.webhook_dispatcher import WebhookDispatcher
 from src.serving.cache import QueryCache
 from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
 from src.serving.db_pool import DuckDBPool
+from src.serving.node import resolve_node_config
+from src.serving.node.emitter import NodeEmitter
+from src.serving.node.ingest import router as node_ingest_router
+from src.serving.node.seed import seed_node_baseline
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
@@ -78,6 +82,20 @@ configure_logging()
 logger = structlog.get_logger()
 
 
+def _env_float(name: str, fallback: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return fallback
+
+
+def _env_int(name: str, fallback: int) -> int:
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return fallback
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize shared resources on startup."""
@@ -85,6 +103,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
     app.state.demo_seed_on_boot = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+    # Three-node demo topology (ADR 0012): resolve role/branch/token once here
+    # and fail fast on a misconfigured node. Unset role == standalone, which is
+    # byte-identical to today's single-node demo (N1). The center ingest
+    # endpoint and the edge emitter hang off this resolved config.
+    app.state.node_config = resolve_node_config()
+    app.state.node_role = app.state.node_config.role
+    app.state.node_branch = app.state.node_config.branch
     # Reset the auth-disabled bypass flag on every lifespan startup. This is a
     # process-wide attribute and tests may toggle it; without an explicit
     # reset a later TestClient lifespan with no configured keys would silently
@@ -123,6 +148,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.query_engine._duckdb_backend.initialize_demo_data()
         if app.state.query_engine._backend_name != app.state.query_engine._duckdb_backend.name:
             app.state.query_engine._backend.initialize_demo_data()
+        # Three-node topology (ADR 0012 §7): lay down the per-branch journal
+        # baseline (center = all branches, edge = its own, standalone = none)
+        # so a center-first visitor sees a coherent cross-branch picture.
+        seed_node_baseline(app.state.query_engine._conn, app.state.node_config)
     app.state.search_index = SearchIndex(
         catalog=app.state.catalog,
         query_engine=app.state.query_engine,
@@ -240,6 +269,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     app.state.outbox_processor_task = asyncio.create_task(app.state.outbox_processor.run_forever())
 
+    # Edge role (ADR 0012): start the slow generator->forward emitter. Off in
+    # center/standalone; tests disable it with AGENTFLOW_NODE_EMITTER_ENABLED=false.
+    app.state.node_emitter = None
+    app.state.node_emitter_task = None
+    emitter_enabled = os.getenv("AGENTFLOW_NODE_EMITTER_ENABLED", "true").lower() != "false"
+    if app.state.node_config.is_edge and emitter_enabled:
+        app.state.node_emitter = NodeEmitter(
+            config=app.state.node_config,
+            conn=app.state.query_engine._conn,
+            interval_seconds=_env_float("AGENTFLOW_NODE_EMIT_INTERVAL_SECONDS", 3.0),
+            batch_size=_env_int("AGENTFLOW_NODE_EMIT_BATCH_SIZE", 5),
+        )
+        app.state.node_emitter.start()
+        app.state.node_emitter_task = app.state.node_emitter.task
+
     auth_mode = (
         "multi_tenant_api_keys"
         if app.state.auth_manager.has_configured_keys()
@@ -264,6 +308,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pass
     await app.state.alert_dispatcher.stop()
     await app.state.webhook_dispatcher.stop()
+    if getattr(app.state, "node_emitter", None) is not None:
+        await app.state.node_emitter.stop()
     await app.state.query_cache.close()
     app.state.db_pool.close()
     logger.info("api_shutting_down")
@@ -291,6 +337,11 @@ async def demo_mode_guard(request: Request, call_next: RequestResponseEndpoint) 
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and path not in {
             "/v1/query",
             "/v1/query/explain",
+            # Node federation ingest (ADR 0012): allow-listed past the demo
+            # read-only guard so the token-authenticated edge->center POST is
+            # not blocked; the endpoint's own bearer check still rejects the
+            # public demo-key caller (N3).
+            "/v1/node/events",
         }:
             return JSONResponse(
                 status_code=403,
@@ -339,6 +390,10 @@ app.include_router(search_router, prefix="/v1")
 app.include_router(slo_router)
 app.include_router(stream_router)
 app.include_router(webhook_router)
+# Three-node topology (ADR 0012): the node-ingest router is mounted on every
+# node but is a no-op (404) off the center and hidden from the public OpenAPI
+# (include_in_schema=False). It carries its own bearer-token auth.
+app.include_router(node_ingest_router)
 
 
 @app.get("/v1/changelog", response_model=None)

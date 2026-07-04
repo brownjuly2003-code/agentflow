@@ -202,6 +202,9 @@ def _is_exempt_path(path: str) -> bool:
         in {
             "/health",
             "/v1/health",
+            # Node federation ingest (ADR 0012) authenticates with its own
+            # bearer node-token, not an X-API-Key; the endpoint does the check.
+            "/v1/node/events",
         }
     )
 

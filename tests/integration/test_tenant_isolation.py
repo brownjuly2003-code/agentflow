@@ -7,12 +7,12 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from src.ingestion.tenant_router import TenantRouter
 from src.serving.api.main import app
 from src.serving.api.routers.agent_query import router as agent_router
 from src.serving.cache import QueryCache
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
+from src.tenancy import TenantRouter
 
 pytestmark = pytest.mark.integration
 

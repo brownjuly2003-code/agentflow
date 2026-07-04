@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from src.ingestion.tenant_router import TenantRouter
+from src.tenancy import TenantRouter
 
 _SOURCE_BY_CONNECTOR: dict[str, str] = {
     "postgresql": "postgres_cdc",

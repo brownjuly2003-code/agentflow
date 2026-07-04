@@ -10,6 +10,7 @@ import sqlglot
 from sqlglot import exp
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError, ServingBackend
+from src.serving.control_plane import ensure_dead_letter_table
 from src.serving.db_pool import DuckDBPool
 from src.serving.duckdb_connection import connect_duckdb
 
@@ -289,6 +290,29 @@ class DuckDBBackend(ServingBackend):
                 'order.validated', 8, NOW() - INTERVAL '2 minutes'),
             ('evt-ord-1001-served', 'events.served', 'default', 'ORD-20260404-1001',
                 'order.served', 4, NOW() - INTERVAL '1 minute')
+        """)
+
+        # Dead-letter store counterparts for the two seeded journal rows above
+        # (ops-surfaces-spec.md §4.6, D4): the exception inbox's native
+        # source aggregates `dead_letter_events` (control-plane state, always
+        # on this connection regardless of SERVING_BACKEND — see
+        # QueryEngine.__init__), not `pipeline_events` — without these rows
+        # the demo inbox would be empty even though the journal already
+        # carries two 'events.deadletter' entries (I7).
+        ensure_dead_letter_table(self._conn)
+        self._conn.execute("""
+            INSERT INTO dead_letter_events
+                (event_id, tenant_id, event_type, payload, failure_reason,
+                 failure_detail, received_at, retry_count, last_retried_at, status)
+            VALUES
+            ('evt-004', 'default', 'order.created',
+                '{"order_id": "ORD-DRAFT-004", "total_amount": 0}', 'schema_validation',
+                'total_amount is below the minimum order threshold',
+                NOW() - INTERVAL '7 minutes', 0, NULL, 'failed'),
+            ('evt-009', 'default', 'order.updated',
+                '{"order_id": "ORD-20260404-1002", "status": "shipped"}', 'duplicate_event',
+                'event_id already processed at an earlier journal offset',
+                NOW() - INTERVAL '2 minutes', 0, NULL, 'failed')
         """)
 
         # Stage-entry trails (ops-surfaces-spec.md §1.6): topic='orders.status',

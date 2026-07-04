@@ -236,6 +236,39 @@ def test_cross_tenant_stuck_orders_are_scoped_to_tenant_schema(client: TestClien
     assert demo_shared["user_id"] == "USR-DEMO"
 
 
+def test_cross_tenant_exceptions_inbox_is_scoped_to_tenant(client: TestClient):
+    # ops-surfaces-spec.md §1.7 / invariant I8: the exception inbox's native
+    # dead-letter source scopes by the request tenant, same as every other
+    # ops surface. `dead_letter_events` is control-plane state on the shared
+    # connection (a `tenant_id` column, not a per-tenant schema) — the demo
+    # seed's own `default`-tenant rows (evt-004/evt-009) must not leak here.
+    conn = client.app.state.query_engine._conn
+    conn.execute(
+        """
+        INSERT INTO dead_letter_events
+            (event_id, tenant_id, event_type, payload, failure_reason, failure_detail,
+             received_at, retry_count, last_retried_at, status)
+        VALUES
+        ('evt-acme-1', 'acme', 'order.created', '{}', 'schema_validation', 'x',
+            NOW(), 0, NULL, 'failed'),
+        ('evt-demo-1', 'demo', 'order.created', '{}', 'schema_validation', 'x',
+            NOW(), 0, NULL, 'failed')
+        """
+    )
+
+    acme_response = client.get("/v1/ops/exceptions", headers={"X-API-Key": "acme-key"})
+    demo_response = client.get("/v1/ops/exceptions", headers={"X-API-Key": "demo-key"})
+
+    assert acme_response.status_code == 200
+    assert demo_response.status_code == 200
+
+    acme_ids = {item["item_id"] for item in acme_response.json()["items"]}
+    demo_ids = {item["item_id"] for item in demo_response.json()["items"]}
+
+    assert acme_ids == {"dl:evt-acme-1"}
+    assert demo_ids == {"dl:evt-demo-1"}
+
+
 def test_metric_cache_does_not_leak_across_tenants(client: TestClient):
     class FakeRedis:
         def __init__(self) -> None:

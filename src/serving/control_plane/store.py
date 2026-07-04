@@ -132,6 +132,49 @@ class OutboxEntry:
     retry_count: int
 
 
+@dataclass(frozen=True)
+class TriageState:
+    """One ``ops_exception_triage`` overlay row (ops-surfaces-spec.md §4.2) —
+    control-plane state class 7. Only the ``webhook_delivery`` and
+    ``reconciliation`` sources get overlay rows; dead-letter items are native
+    and never tracked here (invariant I6)."""
+
+    item_id: str
+    tenant_id: str
+    source: str
+    status: str
+    first_seen_at: datetime
+    last_seen_at: datetime
+    resolved_at: datetime | None
+    note: str | None
+
+
+AUTO_RESOLVE_NOTE = "auto-resolved: no longer reproduces"
+"""Sentinel ``note`` an auto-resolved overlay row carries (§4.2/§4.3) —
+distinguishes a system-cleared finding from an operator's ``resolve`` call so
+``count_triage_manual_actions`` counts only genuine human triage decisions
+(the ``manual_resolutions`` KPI, §4.5)."""
+
+
+def stuck_replay_threshold_seconds() -> float:
+    """Staleness threshold for R2 ``stuck_replay`` (ops-surfaces-spec.md
+    §4.3): "the control-plane lease interval; env-tunable". Reuses
+    ``AGENTFLOW_CONTROLPLANE_LEASE_SECONDS`` — the same env var
+    ``postgres.py``'s ``DEFAULT_CLAIM_LEASE_SECONDS`` reads for its claim
+    leases — rather than a second knob; the embedded profile has no lease
+    concept of its own but a replay can still get stuck locally (an inline
+    ``EventReplayer.replay()`` that dies before its outbox entry resolves)."""
+    lease_env = (os.getenv("AGENTFLOW_CONTROLPLANE_LEASE_SECONDS") or "").strip()
+    if not lease_env:
+        return 300.0
+    try:
+        return float(lease_env)
+    except ValueError:
+        raise ValueError(
+            f"AGENTFLOW_CONTROLPLANE_LEASE_SECONDS must be a number of seconds, got {lease_env!r}."
+        ) from None
+
+
 class ControlPlaneStore(ABC):
     """Port for control-plane state (ADR 0010). See the module docstring for
     the claim-semantics contract adapters must uphold."""
@@ -377,6 +420,92 @@ class ControlPlaneStore(ABC):
     def get_dead_letter_stats(self, tenant_id: str) -> dict:
         """``{"counts": {reason: count}, "last_24h": int, "trend": [...]}``
         for one tenant's active (``failed``) dead-letter events."""
+
+    @abstractmethod
+    def list_dead_letter_events_for_inbox(self, tenant_id: str) -> list[dict]:
+        """Every dead-letter row for one tenant, any status, newest first —
+        the exception inbox's native source (§4.1 #1). Unlike
+        ``list_dead_letter_events`` (the public ``/v1/deadletter`` route:
+        ``status='failed'`` only, paginated), the inbox aggregates and
+        paginates across three heterogeneous sources itself."""
+
+    @abstractmethod
+    def list_stuck_replay_dead_letter_events(
+        self, tenant_id: str, *, older_than_seconds: float
+    ) -> list[dict]:
+        """``replay_pending`` dead-letter rows whose ``last_retried_at`` is
+        older than ``older_than_seconds`` — R2 ``stuck_replay`` (§4.3): a
+        replay was requested but its outbox entry never completed the
+        invariant-8 flip."""
+
+    @abstractmethod
+    def count_dead_letter_manual_actions(self, tenant_id: str) -> int:
+        """Count of ``replayed``/``dismissed`` dead-letter rows for one
+        tenant — the native half of the ``manual_resolutions`` KPI (§4.5).
+        Dismissal carries no per-action timestamp in this schema, so this is
+        a cumulative count, not time-windowed — an honest limitation, not
+        faked precision."""
+
+    # --- exception-inbox triage overlay (control-plane state class 7) --------
+
+    @abstractmethod
+    def ensure_triage_schema(self) -> None:
+        """Idempotently create the ``ops_exception_triage`` table."""
+
+    @abstractmethod
+    def list_triage_states(self, *, tenant_id: str, source: str | None = None) -> list[TriageState]:
+        """Every overlay row for one tenant, optionally filtered by
+        ``source`` (``'webhook_delivery'`` or ``'reconciliation'``)."""
+
+    @abstractmethod
+    def upsert_triage_finding(
+        self, *, item_id: str, tenant_id: str, source: str, seen_at: datetime
+    ) -> None:
+        """Insert an ``open`` row for a first-seen finding, or refresh
+        ``last_seen_at`` for one already ``open``/``acknowledged``. A row an
+        operator resolved stays ``resolved`` unless ``seen_at`` is after its
+        ``resolved_at`` — the finding reproducing post-resolution reopens it
+        as ``open`` with a fresh ``last_seen_at`` (§4.2)."""
+
+    @abstractmethod
+    def auto_resolve_missing_triage_findings(
+        self,
+        *,
+        tenant_id: str,
+        source: str,
+        seen_item_ids: Sequence[str],
+        resolved_at: datetime,
+    ) -> None:
+        """Resolve every non-``resolved`` overlay row of ``source``
+        (tenant-scoped) whose ``item_id`` is absent from ``seen_item_ids`` —
+        the finding no longer reproduces this run (§4.2/§4.3), noted
+        ``'auto-resolved: no longer reproduces'``."""
+
+    @abstractmethod
+    def set_triage_state(
+        self, *, item_id: str, tenant_id: str, status: str, note: str | None = None
+    ) -> bool:
+        """Set one overlay row's status (``'acknowledged'`` or
+        ``'resolved'``), stamping ``resolved_at`` when resolving — one
+        transactional ``UPDATE`` (single-row, so DuckDB's autocommit and a
+        PostgreSQL connection's implicit transaction both satisfy this
+        without extra ceremony). Returns ``False`` if no row exists for
+        ``(item_id, tenant_id)`` — the caller 404s; this method never creates
+        a row (only ``upsert_triage_finding`` does, from a live detection)."""
+
+    @abstractmethod
+    def count_triage_manual_actions(self, tenant_id: str) -> int:
+        """Count of overlay rows in ``acknowledged``/``resolved`` status for
+        one tenant — the overlay half of the ``manual_resolutions`` KPI
+        (§4.5)."""
+
+    # --- webhook dead deliveries for the exception inbox ----------------------
+
+    @abstractmethod
+    def list_dead_webhook_deliveries(self, tenant_id: str | None = None) -> list[dict]:
+        """Every ``webhook_delivery_queue`` row parked ``dead``, optionally
+        scoped to one tenant — the exception inbox's overlay source #2
+        (§4.1)."""
 
     # --- API usage accounting (per-tenant/per-key request counters) ----------
 

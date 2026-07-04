@@ -1857,6 +1857,244 @@
         }
       }
     },
+    "/v1/ops/exceptions": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "List Exceptions",
+        "operationId": "list_exceptions_v1_ops_exceptions_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "deadletter",
+                    "webhook_delivery",
+                    "reconciliation"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "in_progress",
+                    "acknowledged",
+                    "resolved"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ops/exceptions/stats": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Exceptions Stats",
+        "operationId": "exceptions_stats_v1_ops_exceptions_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionsStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ops/exceptions/{item_id}/acknowledge": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Acknowledge Exception",
+        "operationId": "acknowledge_exception_v1_ops_exceptions__item_id__acknowledge_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TriageActionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ops/exceptions/{item_id}/resolve": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Resolve Exception",
+        "operationId": "resolve_exception_v1_ops_exceptions__item_id__resolve_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TriageActionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/search": {
       "get": {
         "tags": [
@@ -2775,6 +3013,29 @@
         ],
         "title": "DismissResponse"
       },
+      "EntityRef": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "event",
+              "order",
+              "webhook"
+            ],
+            "title": "Kind"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "EntityRef"
+      },
       "EntityResponse": {
         "properties": {
           "entity_type": {
@@ -2826,6 +3087,154 @@
           "data"
         ],
         "title": "EntityResponse"
+      },
+      "ExceptionAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "href"
+        ],
+        "title": "ExceptionAction"
+      },
+      "ExceptionItem": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "deadletter",
+              "webhook_delivery",
+              "reconciliation"
+            ],
+            "title": "Source"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Severity"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At"
+          },
+          "entity_ref": {
+            "$ref": "#/components/schemas/EntityRef"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "in_progress",
+              "acknowledged",
+              "resolved"
+            ],
+            "title": "Status"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ExceptionAction"
+            },
+            "type": "array",
+            "title": "Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "source",
+          "severity",
+          "occurred_at",
+          "last_seen_at",
+          "entity_ref",
+          "title",
+          "detail",
+          "status",
+          "actions"
+        ],
+        "title": "ExceptionItem"
+      },
+      "ExceptionsListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExceptionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "pagination": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Pagination"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "pagination"
+        ],
+        "title": "ExceptionsListResponse"
+      },
+      "ExceptionsStatsResponse": {
+        "properties": {
+          "by_source": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "By Source"
+          },
+          "last_24h": {
+            "type": "integer",
+            "title": "Last 24H"
+          },
+          "manual_resolutions": {
+            "type": "integer",
+            "title": "Manual Resolutions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "last_24h",
+          "manual_resolutions"
+        ],
+        "title": "ExceptionsStatsResponse"
       },
       "ExplainRequest": {
         "properties": {
@@ -3958,6 +4367,41 @@
         },
         "type": "object",
         "title": "StuckOrdersSummary"
+      },
+      "TriageActionRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "TriageActionRequest"
+      },
+      "TriageActionResponse": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "status"
+        ],
+        "title": "TriageActionResponse"
       },
       "ValidationError": {
         "properties": {

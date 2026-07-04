@@ -831,6 +831,279 @@ def test_get_store_follows_a_swapped_query_engine(
         second.close()
 
 
+# --- exception inbox: dead-letter/webhook reads + triage overlay (D4) ------------
+
+
+def _seed_webhook_dead(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    webhook_id: str,
+    event_id: str,
+    tenant: str = "acme",
+    last_error: str = "connection refused",
+    updated_at: datetime | None = None,
+) -> None:
+    from src.serving.control_plane.embedded import ensure_webhook_delivery_queue_table
+
+    ensure_webhook_delivery_queue_table(conn)
+    now = updated_at or datetime.now(UTC)
+    conn.execute(
+        """
+        INSERT INTO webhook_delivery_queue
+            (webhook_id, event_id, tenant, event_type, body, status, attempts,
+             last_error, created_at, updated_at)
+        VALUES (?, ?, ?, 'order.created', '{}', 'dead', 5, ?, ?, ?)
+        """,
+        [webhook_id, event_id, tenant, last_error, now, now],
+    )
+
+
+def test_list_dead_webhook_deliveries_returns_only_dead_rows_for_the_tenant(
+    store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_webhook_dead(conn, webhook_id="wh-1", event_id="evt-a", tenant="acme")
+    _seed_webhook_dead(conn, webhook_id="wh-2", event_id="evt-b", tenant="beta")
+    _enqueue(store, "wh-3", "evt-c")  # status stays 'pending' — not dead
+
+    acme_rows = store.list_dead_webhook_deliveries("acme")
+    all_rows = store.list_dead_webhook_deliveries()
+
+    assert [row["webhook_id"] for row in acme_rows] == ["wh-1"]
+    assert acme_rows[0]["last_error"] == "connection refused"
+    assert {row["webhook_id"] for row in all_rows} == {"wh-1", "wh-2"}
+
+
+def test_list_dead_letter_events_for_inbox_returns_every_status(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="evt-failed", status="failed")
+    _seed_dead_letter(conn, event_id="evt-dismissed", status="dismissed")
+    _seed_dead_letter(conn, event_id="evt-other-tenant", tenant_id="beta", status="failed")
+
+    rows = outbox_store.list_dead_letter_events_for_inbox("acme")
+
+    assert {row["event_id"] for row in rows} == {"evt-failed", "evt-dismissed"}
+
+
+def test_list_stuck_replay_dead_letter_events_filters_by_age_and_status(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="evt-stuck", status="replay_pending")
+    conn.execute(
+        "UPDATE dead_letter_events SET last_retried_at = ? WHERE event_id = ?",
+        [datetime.now(UTC) - timedelta(seconds=600), "evt-stuck"],
+    )
+    _seed_dead_letter(conn, event_id="evt-fresh", status="replay_pending")
+    conn.execute(
+        "UPDATE dead_letter_events SET last_retried_at = ? WHERE event_id = ?",
+        [datetime.now(UTC) - timedelta(seconds=5), "evt-fresh"],
+    )
+    _seed_dead_letter(conn, event_id="evt-failed", status="failed")
+
+    stuck = outbox_store.list_stuck_replay_dead_letter_events("acme", older_than_seconds=300)
+
+    assert [row["event_id"] for row in stuck] == ["evt-stuck"]
+
+
+def test_count_dead_letter_manual_actions_counts_replayed_and_dismissed_only(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    _seed_dead_letter(conn, event_id="evt-1", status="replayed")
+    _seed_dead_letter(conn, event_id="evt-2", status="dismissed")
+    _seed_dead_letter(conn, event_id="evt-3", status="failed")
+    _seed_dead_letter(conn, event_id="evt-4", tenant_id="beta", status="replayed")
+
+    assert outbox_store.count_dead_letter_manual_actions("acme") == 2
+
+
+def test_upsert_triage_finding_inserts_open_row_on_first_sight(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    # Naive (DuckDB's own TIMESTAMP round-trip, local wall-clock, is naive —
+    # an aware datetime would come back converted, breaking equality here).
+    seen_at = datetime.now()
+    store.upsert_triage_finding(
+        item_id="rc:r1:ORD-1:shipped", tenant_id="acme", source="reconciliation", seen_at=seen_at
+    )
+
+    states = store.list_triage_states(tenant_id="acme")
+    assert len(states) == 1
+    assert states[0].status == "open"
+    assert states[0].first_seen_at == seen_at
+    assert states[0].last_seen_at == seen_at
+
+
+def test_upsert_triage_finding_refreshes_last_seen_at_while_open(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    first_seen = datetime.now() - timedelta(minutes=10)
+    later = datetime.now()
+    store.upsert_triage_finding(
+        item_id="wh:hook:evt", tenant_id="acme", source="webhook_delivery", seen_at=first_seen
+    )
+    store.upsert_triage_finding(
+        item_id="wh:hook:evt", tenant_id="acme", source="webhook_delivery", seen_at=later
+    )
+
+    state = store.list_triage_states(tenant_id="acme")[0]
+    assert state.first_seen_at == first_seen
+    assert state.last_seen_at == later
+    assert state.status == "open"
+
+
+def test_upsert_triage_finding_stays_resolved_for_the_same_resolved_occurrence(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    seen_at = datetime.now(UTC) - timedelta(minutes=10)
+    store.upsert_triage_finding(
+        item_id="rc:r2:evt-9", tenant_id="acme", source="reconciliation", seen_at=seen_at
+    )
+    resolved = store.set_triage_state(item_id="rc:r2:evt-9", tenant_id="acme", status="resolved")
+    assert resolved is True
+
+    # Re-detecting the exact same (older) occurrence must not reopen it — an
+    # operator's resolve is sticky against a fact that hasn't moved.
+    store.upsert_triage_finding(
+        item_id="rc:r2:evt-9", tenant_id="acme", source="reconciliation", seen_at=seen_at
+    )
+
+    state = store.list_triage_states(tenant_id="acme")[0]
+    assert state.status == "resolved"
+
+
+def test_upsert_triage_finding_reopens_when_the_finding_reproduces_after_resolution(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    seen_at = datetime.now(UTC) - timedelta(minutes=10)
+    store.upsert_triage_finding(
+        item_id="rc:r2:evt-9", tenant_id="acme", source="reconciliation", seen_at=seen_at
+    )
+    store.set_triage_state(item_id="rc:r2:evt-9", tenant_id="acme", status="resolved")
+
+    fresh_occurrence = datetime.now()
+    store.upsert_triage_finding(
+        item_id="rc:r2:evt-9", tenant_id="acme", source="reconciliation", seen_at=fresh_occurrence
+    )
+
+    state = store.list_triage_states(tenant_id="acme")[0]
+    assert state.status == "open"
+    assert state.resolved_at is None
+    assert state.last_seen_at == fresh_occurrence
+
+
+def test_auto_resolve_missing_triage_findings_resolves_only_the_absent_rows(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    now = datetime.now(UTC)
+    store.upsert_triage_finding(
+        item_id="rc:r1:ORD-1:shipped", tenant_id="acme", source="reconciliation", seen_at=now
+    )
+    store.upsert_triage_finding(
+        item_id="rc:r1:ORD-2:shipped", tenant_id="acme", source="reconciliation", seen_at=now
+    )
+    store.upsert_triage_finding(
+        item_id="wh:hook:evt", tenant_id="acme", source="webhook_delivery", seen_at=now
+    )
+
+    resolved_at = datetime.now(UTC)
+    store.auto_resolve_missing_triage_findings(
+        tenant_id="acme",
+        source="reconciliation",
+        seen_item_ids=["rc:r1:ORD-1:shipped"],
+        resolved_at=resolved_at,
+    )
+
+    states = {state.item_id: state for state in store.list_triage_states(tenant_id="acme")}
+    assert states["rc:r1:ORD-1:shipped"].status == "open"
+    assert states["rc:r1:ORD-2:shipped"].status == "resolved"
+    assert states["rc:r1:ORD-2:shipped"].note == "auto-resolved: no longer reproduces"
+    # A different source's row is untouched by this call.
+    assert states["wh:hook:evt"].status == "open"
+
+
+def test_set_triage_state_returns_false_for_an_unknown_item(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    result = store.set_triage_state(
+        item_id="rc:does-not-exist", tenant_id="acme", status="resolved"
+    )
+    assert result is False
+
+
+def test_set_triage_state_acknowledge_then_resolve_stores_note(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    store.upsert_triage_finding(
+        item_id="wh:hook:evt",
+        tenant_id="acme",
+        source="webhook_delivery",
+        seen_at=datetime.now(UTC),
+    )
+
+    acknowledged_ok = store.set_triage_state(
+        item_id="wh:hook:evt", tenant_id="acme", status="acknowledged"
+    )
+    assert acknowledged_ok is True
+    acknowledged = store.list_triage_states(tenant_id="acme")[0]
+    assert acknowledged.status == "acknowledged"
+    assert acknowledged.resolved_at is None
+
+    assert store.set_triage_state(
+        item_id="wh:hook:evt", tenant_id="acme", status="resolved", note="fixed the webhook"
+    )
+    resolved = store.list_triage_states(tenant_id="acme")[0]
+    assert resolved.status == "resolved"
+    assert resolved.resolved_at is not None
+    assert resolved.note == "fixed the webhook"
+
+
+def test_count_triage_manual_actions_counts_acknowledged_and_resolved(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    now = datetime.now(UTC)
+    for item_id in ("rc:a", "rc:b", "rc:c"):
+        store.upsert_triage_finding(
+            item_id=item_id, tenant_id="acme", source="reconciliation", seen_at=now
+        )
+    store.set_triage_state(item_id="rc:a", tenant_id="acme", status="acknowledged")
+    store.set_triage_state(item_id="rc:b", tenant_id="acme", status="resolved")
+    # rc:c stays open.
+
+    assert store.count_triage_manual_actions("acme") == 2
+
+
+def test_count_triage_manual_actions_excludes_auto_resolved_rows(
+    store: EmbeddedControlPlaneStore,
+) -> None:
+    now = datetime.now(UTC)
+    store.upsert_triage_finding(
+        item_id="rc:auto", tenant_id="acme", source="reconciliation", seen_at=now
+    )
+    store.upsert_triage_finding(
+        item_id="rc:manual", tenant_id="acme", source="reconciliation", seen_at=now
+    )
+    # rc:auto is absent from this run's live findings -> auto-resolved.
+    store.auto_resolve_missing_triage_findings(
+        tenant_id="acme", source="reconciliation", seen_item_ids=["rc:manual"], resolved_at=now
+    )
+    store.set_triage_state(item_id="rc:manual", tenant_id="acme", status="resolved")
+
+    assert store.count_triage_manual_actions("acme") == 1
+
+
+def test_list_triage_states_filters_by_source(store: EmbeddedControlPlaneStore) -> None:
+    now = datetime.now(UTC)
+    store.upsert_triage_finding(
+        item_id="rc:x", tenant_id="acme", source="reconciliation", seen_at=now
+    )
+    store.upsert_triage_finding(
+        item_id="wh:y", tenant_id="acme", source="webhook_delivery", seen_at=now
+    )
+
+    reconciliation_states = store.list_triage_states(tenant_id="acme", source="reconciliation")
+    assert [state.item_id for state in reconciliation_states] == ["rc:x"]
+
+
 # --- structural ratchet ----------------------------------------------------------
 
 

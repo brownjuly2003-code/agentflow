@@ -55,9 +55,11 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from .store import (
+    AUTO_RESOLVE_NOTE,
     CONTROL_PLANE_PG_DSN_ENV,
     ControlPlaneStore,
     OutboxEntry,
+    TriageState,
     WebhookQueueRow,
 )
 
@@ -189,6 +191,18 @@ _SCHEMA_STATEMENTS = (
         retry_count INTEGER DEFAULT 0,
         last_retried_at TIMESTAMPTZ,
         status TEXT DEFAULT 'failed'
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ops_exception_triage (
+        item_id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        source TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        first_seen_at TIMESTAMPTZ,
+        last_seen_at TIMESTAMPTZ,
+        resolved_at TIMESTAMPTZ,
+        note TEXT
     )
     """,
     """
@@ -962,6 +976,241 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                 for hour, count in trend_rows
             ],
         }
+
+    def list_dead_letter_events_for_inbox(self, tenant_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT event_id, event_type, failure_reason, failure_detail,
+                       received_at, retry_count, last_retried_at, status
+                FROM dead_letter_events
+                WHERE COALESCE(tenant_id, 'default') = %s
+                ORDER BY received_at DESC
+                """,
+                (tenant_id,),
+            ).fetchall()
+        return [
+            {
+                "event_id": row[0],
+                "event_type": row[1],
+                "failure_reason": row[2],
+                "failure_detail": row[3],
+                "received_at": row[4],
+                "retry_count": int(row[5] or 0),
+                "last_retried_at": row[6],
+                "status": row[7],
+            }
+            for row in rows
+        ]
+
+    def list_stuck_replay_dead_letter_events(
+        self, tenant_id: str, *, older_than_seconds: float
+    ) -> list[dict]:
+        cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT event_id, event_type, failure_reason, failure_detail,
+                       received_at, retry_count, last_retried_at, status
+                FROM dead_letter_events
+                WHERE COALESCE(tenant_id, 'default') = %s
+                  AND status = 'replay_pending'
+                  AND last_retried_at IS NOT NULL
+                  AND last_retried_at < %s
+                ORDER BY last_retried_at ASC
+                """,
+                (tenant_id, cutoff),
+            ).fetchall()
+        return [
+            {
+                "event_id": row[0],
+                "event_type": row[1],
+                "failure_reason": row[2],
+                "failure_detail": row[3],
+                "received_at": row[4],
+                "retry_count": int(row[5] or 0),
+                "last_retried_at": row[6],
+                "status": row[7],
+            }
+            for row in rows
+        ]
+
+    def count_dead_letter_manual_actions(self, tenant_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) FROM dead_letter_events
+                WHERE COALESCE(tenant_id, 'default') = %s
+                  AND status IN ('replayed', 'dismissed')
+                """,
+                (tenant_id,),
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    # --- exception-inbox triage overlay ---------------------------------------
+
+    def ensure_triage_schema(self) -> None:
+        self._ensure_schema()
+
+    def list_triage_states(self, *, tenant_id: str, source: str | None = None) -> list[TriageState]:
+        select = (
+            "SELECT item_id, tenant_id, source, status, first_seen_at, "
+            "last_seen_at, resolved_at, note FROM ops_exception_triage "
+            "WHERE tenant_id = %s"
+        )
+        with self._connect() as conn:
+            if source is not None:
+                rows = conn.execute(select + " AND source = %s", (tenant_id, source)).fetchall()
+            else:
+                rows = conn.execute(select, (tenant_id,)).fetchall()
+        return [
+            TriageState(
+                item_id=row[0],
+                tenant_id=row[1],
+                source=row[2],
+                status=row[3],
+                first_seen_at=row[4],
+                last_seen_at=row[5],
+                resolved_at=row[6],
+                note=row[7],
+            )
+            for row in rows
+        ]
+
+    def upsert_triage_finding(
+        self, *, item_id: str, tenant_id: str, source: str, seen_at: datetime
+    ) -> None:
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT status FROM ops_exception_triage WHERE item_id = %s",
+                (item_id,),
+            ).fetchone()
+            if existing is None:
+                conn.execute(
+                    """
+                    INSERT INTO ops_exception_triage
+                        (item_id, tenant_id, source, status, first_seen_at, last_seen_at,
+                         resolved_at, note)
+                    VALUES (%s, %s, %s, 'open', %s, %s, NULL, NULL)
+                    """,
+                    (item_id, tenant_id, source, seen_at, seen_at),
+                )
+                return
+            (status,) = existing
+            if status != "resolved":
+                conn.execute(
+                    "UPDATE ops_exception_triage SET last_seen_at = %s WHERE item_id = %s",
+                    (seen_at, item_id),
+                )
+                return
+            # Resolved: reopen only if this occurrence is strictly after
+            # resolved_at — compared in SQL, same reasoning as the embedded
+            # adapter (keeps both adapters' comparison semantics identical
+            # regardless of whether the caller's `seen_at` is naive or aware).
+            conn.execute(
+                """
+                UPDATE ops_exception_triage
+                SET status = 'open', last_seen_at = %s, resolved_at = NULL, note = NULL
+                WHERE item_id = %s AND resolved_at IS NOT NULL AND %s > resolved_at
+                """,
+                (seen_at, item_id, seen_at),
+            )
+
+    def auto_resolve_missing_triage_findings(
+        self,
+        *,
+        tenant_id: str,
+        source: str,
+        seen_item_ids: Sequence[str],
+        resolved_at: datetime,
+    ) -> None:
+        seen = set(seen_item_ids)
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT item_id FROM ops_exception_triage
+                WHERE tenant_id = %s AND source = %s AND status != 'resolved'
+                """,
+                (tenant_id, source),
+            ).fetchall()
+            for (item_id,) in rows:
+                if item_id in seen:
+                    continue
+                conn.execute(
+                    """
+                    UPDATE ops_exception_triage
+                    SET status = 'resolved', resolved_at = %s, note = %s
+                    WHERE item_id = %s AND tenant_id = %s
+                    """,
+                    (resolved_at, AUTO_RESOLVE_NOTE, item_id, tenant_id),
+                )
+
+    def set_triage_state(
+        self, *, item_id: str, tenant_id: str, status: str, note: str | None = None
+    ) -> bool:
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM ops_exception_triage WHERE item_id = %s AND tenant_id = %s",
+                (item_id, tenant_id),
+            ).fetchone()
+            if existing is None:
+                return False
+            resolved_at = datetime.now(UTC) if status == "resolved" else None
+            conn.execute(
+                """
+                UPDATE ops_exception_triage
+                SET status = %s, resolved_at = %s, note = COALESCE(%s, note)
+                WHERE item_id = %s AND tenant_id = %s
+                """,
+                (status, resolved_at, note, item_id, tenant_id),
+            )
+            return True
+
+    def count_triage_manual_actions(self, tenant_id: str) -> int:
+        # Excludes rows auto-resolved by `auto_resolve_missing_triage_findings`
+        # (note == AUTO_RESOLVE_NOTE) — the KPI counts human decisions only.
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) FROM ops_exception_triage
+                WHERE tenant_id = %s
+                  AND (status = 'acknowledged'
+                       OR (status = 'resolved' AND (note IS NULL OR note != %s)))
+                """,
+                (tenant_id, AUTO_RESOLVE_NOTE),
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    # --- webhook dead deliveries for the exception inbox ----------------------
+
+    def list_dead_webhook_deliveries(self, tenant_id: str | None = None) -> list[dict]:
+        select = (
+            "SELECT webhook_id, event_id, tenant, event_type, body, attempts, "
+            "last_status_code, last_error, created_at, updated_at "
+            "FROM webhook_delivery_queue WHERE status = 'dead'"
+        )
+        with self._connect() as conn:
+            if tenant_id is not None:
+                rows = conn.execute(
+                    select + " AND tenant = %s ORDER BY updated_at DESC", (tenant_id,)
+                ).fetchall()
+            else:
+                rows = conn.execute(select + " ORDER BY updated_at DESC").fetchall()
+        return [
+            {
+                "webhook_id": row[0],
+                "event_id": row[1],
+                "tenant": row[2],
+                "event_type": row[3],
+                "body": row[4],
+                "attempts": row[5],
+                "last_status_code": row[6],
+                "last_error": row[7],
+                "created_at": row[8],
+                "updated_at": row[9],
+            }
+            for row in rows
+        ]
 
     # --- API usage accounting -------------------------------------------------
 

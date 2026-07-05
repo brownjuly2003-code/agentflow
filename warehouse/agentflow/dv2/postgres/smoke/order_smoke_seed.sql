@@ -104,31 +104,33 @@ ON CONFLICT (link_hk) DO NOTHING;
 -- hash_diff distinguishes SCD2 versions (msk O2 v1/v2, O4 v1/v2).
 INSERT INTO rv.sat_order_header__bitrix__msk
     (order_hk, load_ts, hash_diff, order_date, channel, order_status, total_amount, is_deleted) VALUES
- -- O1: single delivered marketplace header
- (decode(md5('mp__msk__0000001'),'hex'),   '2026-07-01 09:00:00', decode(md5('mp__msk__0000001|hdr|v1'),'hex'),   '2026-06-28 14:12:00', 'marketplace', 'delivered', 2400.00, 0),
- -- O2: two versions — pending@09:00 then shipped@12:00 (latest wins)
- (decode(md5('mp__msk__0000002'),'hex'),   '2026-07-01 09:00:00', decode(md5('mp__msk__0000002|hdr|v1'),'hex'),   '2026-06-29 10:05:00', 'marketplace', 'pending',   2600.00, 0),
- (decode(md5('mp__msk__0000002'),'hex'),   '2026-07-01 12:00:00', decode(md5('mp__msk__0000002|hdr|v2'),'hex'),   '2026-06-29 10:05:00', 'marketplace', 'shipped',   2600.00, 0),
+ -- O1: single delivered marketplace header. total_amount = subtotal (net of
+ -- VAT), mirroring satellite_seed.sql — tax lives only in the pricing sat.
+ (decode(md5('mp__msk__0000001'),'hex'),   '2026-07-01 09:00:00', decode(md5('mp__msk__0000001|hdr|v1'),'hex'),   '2026-06-28 14:12:00', 'marketplace', 'delivered', 2000.00, 0),
+ -- O2: two versions — pending@09:00 then shipped@12:00 (latest wins). Net
+ -- totals track each version's pricing subtotal (2100 -> 2166.67).
+ (decode(md5('mp__msk__0000002'),'hex'),   '2026-07-01 09:00:00', decode(md5('mp__msk__0000002|hdr|v1'),'hex'),   '2026-06-29 10:05:00', 'marketplace', 'pending',   2100.00, 0),
+ (decode(md5('mp__msk__0000002'),'hex'),   '2026-07-01 12:00:00', decode(md5('mp__msk__0000002|hdr|v2'),'hex'),   '2026-06-29 10:05:00', 'marketplace', 'shipped',   2166.67, 0),
  -- O3: D2C delivered
- (decode(md5('site__msk__0008901'),'hex'), '2026-07-01 10:00:00', decode(md5('site__msk__0008901|hdr|v1'),'hex'), '2026-06-30 18:40:00', 'd2c',         'delivered', 3500.00, 0),
+ (decode(md5('site__msk__0008901'),'hex'), '2026-07-01 10:00:00', decode(md5('site__msk__0008901|hdr|v1'),'hex'), '2026-06-30 18:40:00', 'd2c',         'delivered', 3000.00, 0),
  -- O4: active confirmed@10:00, then a soft-delete tombstone@14:00 (is_deleted=1, must NOT win)
- (decode(md5('bitrix__msk__0009181'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__msk__0009181|hdr|v1'),'hex'), '2026-06-27 09:15:00', 'b2b', 'confirmed', 60000.00, 0),
- (decode(md5('bitrix__msk__0009181'),'hex'), '2026-07-01 14:00:00', decode(md5('bitrix__msk__0009181|hdr|v2'),'hex'), '2026-06-27 09:15:00', 'b2b', 'cancelled', 60000.00, 1)
+ (decode(md5('bitrix__msk__0009181'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__msk__0009181|hdr|v1'),'hex'), '2026-06-27 09:15:00', 'b2b', 'confirmed', 50000.00, 0),
+ (decode(md5('bitrix__msk__0009181'),'hex'), '2026-07-01 14:00:00', decode(md5('bitrix__msk__0009181|hdr|v2'),'hex'), '2026-06-27 09:15:00', 'b2b', 'cancelled', 50000.00, 1)
 ON CONFLICT (order_hk, load_ts) DO NOTHING;
 
 INSERT INTO rv.sat_order_header__bitrix__spb
     (order_hk, load_ts, hash_diff, order_date, channel, order_status, total_amount, is_deleted) VALUES
- (decode(md5('bitrix__spb__0009541'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__spb__0009541|hdr|v1'),'hex'), '2026-06-26 11:00:00', 'b2b', 'delivered', 48000.00, 0)
+ (decode(md5('bitrix__spb__0009541'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__spb__0009541|hdr|v1'),'hex'), '2026-06-26 11:00:00', 'b2b', 'delivered', 40000.00, 0)
 ON CONFLICT (order_hk, load_ts) DO NOTHING;
 
 INSERT INTO rv.sat_order_header__bitrix__ekb
     (order_hk, load_ts, hash_diff, order_date, channel, order_status, total_amount, is_deleted) VALUES
- (decode(md5('bitrix__ekb__0009721'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__ekb__0009721|hdr|v1'),'hex'), '2026-06-25 16:30:00', 'b2b', 'delivered', 36000.00, 0)
+ (decode(md5('bitrix__ekb__0009721'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__ekb__0009721|hdr|v1'),'hex'), '2026-06-25 16:30:00', 'b2b', 'delivered', 30000.00, 0)
 ON CONFLICT (order_hk, load_ts) DO NOTHING;
 
 INSERT INTO rv.sat_order_header__bitrix__dxb
     (order_hk, load_ts, hash_diff, order_date, channel, order_status, total_amount, is_deleted) VALUES
- (decode(md5('bitrix__dxb__0009851'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__dxb__0009851|hdr|v1'),'hex'), '2026-06-24 08:20:00', 'b2b', 'delivered', 42000.00, 0)
+ (decode(md5('bitrix__dxb__0009851'),'hex'), '2026-07-01 10:00:00', decode(md5('bitrix__dxb__0009851|hdr|v1'),'hex'), '2026-06-24 08:20:00', 'b2b', 'delivered', 40000.00, 0)
 ON CONFLICT (order_hk, load_ts) DO NOTHING;
 
 INSERT INTO rv.sat_order_header__bitrix__ala
@@ -140,7 +142,7 @@ ON CONFLICT (order_hk, load_ts) DO NOTHING;
 -- collapse across sources — the newer Bitrix shipped@12:00 row must still win.
 INSERT INTO rv.sat_order_header__1c__msk
     (order_hk, load_ts, hash_diff, order_date, channel, order_status, total_amount, is_deleted) VALUES
- (decode(md5('mp__msk__0000002'),'hex'), '2026-07-01 08:00:00', decode(md5('mp__msk__0000002|hdr|1c'),'hex'), '2026-06-29 10:05:00', 'marketplace', 'pending', 2350.00, 0)
+ (decode(md5('mp__msk__0000002'),'hex'), '2026-07-01 08:00:00', decode(md5('mp__msk__0000002|hdr|1c'),'hex'), '2026-06-29 10:05:00', 'marketplace', 'pending', 2050.00, 0)
 ON CONFLICT (order_hk, load_ts) DO NOTHING;
 
 -- ============ ORDER PRICING (1C — RUB, per-jurisdiction VAT) ============

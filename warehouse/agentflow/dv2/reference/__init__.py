@@ -1,9 +1,9 @@
 """AgentFlow DV2 supplier / product reference.
 
-A real, reproducible grocery reference (suppliers, products, GS1 marking
-codes, sourcing) that fills the catalog / tnved / marking slots the
-transactional X5 feed leaves empty, and is published to cloud object storage
-(a Hugging Face Dataset) as the project's genuine cloud component.
+A real, reproducible kitchen-appliance reference (suppliers, products, GS1
+marking codes, sourcing) that fills the catalog / tnved / marking slots the
+transactional order feed leaves empty, and is published to cloud object
+storage (a Hugging Face Dataset) as the project's genuine cloud component.
 
 Public API:
     build_reference  -> deterministic reference tables

@@ -46,17 +46,24 @@ class ProducerConfig(BaseSettings):
     model_config = {"env_prefix": "PRODUCER_"}
 
 
+# Live catalog = the 10 pinned kitchen-appliance SKUs of the serving demo
+# (generator-spec.md §9, mirrored row-for-row in the duckdb/clickhouse seeds):
+# EN names, §3 category slugs, RUB retail prices, and each SKU's seeded
+# stock. PROD-001 (kettle) is the deliberately out-of-stock bestseller — the
+# oversell/freshness story needs it, so generate_product emits this stock
+# verbatim rather than randomising it.
+# (id, name, category slug, price ₽, stock_quantity)
 PRODUCT_CATALOG = [
-    ("PROD-001", "Wireless Headphones", "electronics", Decimal("79.99")),
-    ("PROD-002", "Running Shoes", "footwear", Decimal("129.99")),
-    ("PROD-003", "Coffee Maker", "kitchen", Decimal("49.99")),
-    ("PROD-004", "Mechanical Keyboard", "electronics", Decimal("149.99")),
-    ("PROD-005", "Yoga Mat", "fitness", Decimal("34.99")),
-    ("PROD-006", "Backpack", "accessories", Decimal("89.99")),
-    ("PROD-007", "Water Bottle", "fitness", Decimal("24.99")),
-    ("PROD-008", "Desk Lamp", "home", Decimal("44.99")),
-    ("PROD-009", "Bluetooth Speaker", "electronics", Decimal("59.99")),
-    ("PROD-010", "Sunglasses", "accessories", Decimal("119.99")),
+    ("PROD-001", "Electric Kettle 1.7L 2200W", "kettles", Decimal("2190.00"), 0),
+    ("PROD-002", "Air Fryer Grill 5.5L", "grills", Decimal("5490.00"), 58),
+    ("PROD-003", "Immersion Blender Set 800W", "blenders", Decimal("2490.00"), 203),
+    ("PROD-004", "Stand Mixer 5L Planetary", "mixers", Decimal("6990.00"), 37),
+    ("PROD-005", "Drip Coffee Maker 1.2L", "coffee", Decimal("3490.00"), 94),
+    ("PROD-006", "Waffle Maker Double", "multibakers", Decimal("2290.00"), 142),
+    ("PROD-007", "Mini Chopper 500ml", "choppers", Decimal("1490.00"), 315),
+    ("PROD-008", "Cold-Press Juicer", "juicers", Decimal("4490.00"), 72),
+    ("PROD-009", "Digital Kitchen Scale 5kg", "scales", Decimal("990.00"), 421),
+    ("PROD-010", "Vacuum Sealer Compact", "vacuum-dry", Decimal("3290.00"), 167),
 ]
 
 PAGES = ["/", "/products", "/cart", "/checkout", "/account", "/search"]
@@ -111,7 +118,7 @@ def generate_order() -> tuple[str, OrderEvent]:
         status=OrderStatus.PENDING,
         items=items,
         total_amount=total,
-        currency=Currency.USD,
+        currency=Currency.RUB,
     )
     return "orders.raw", event
 
@@ -126,8 +133,10 @@ def generate_payment(order_id: str | None = None) -> tuple[str, PaymentEvent]:
         payment_id=f"PAY-{_uuid()[:8]}",
         order_id=oid,
         user_id=f"USR-{random.randint(10000, 99999)}",
-        amount=Decimal(str(round(random.uniform(20, 500), 2))),
-        currency=Currency.USD,
+        # ₽-scale single-appliance retail range (§3 RRC band 790–7990),
+        # deliberately below the 10k–25k bimodality dead-zone (§12 #4).
+        amount=Decimal(str(round(random.uniform(790, 7990), 2))),
+        currency=Currency.RUB,
         method=random.choice(list(PaymentMethod)),
         status="initiated",
     )
@@ -155,6 +164,7 @@ def generate_click() -> tuple[str, ClickstreamEvent]:
 
 def generate_product() -> tuple[str, ProductEvent]:
     product = random.choice(PRODUCT_CATALOG)
+    stock_quantity = product[4]
     event = ProductEvent(
         event_id=_uuid(),
         event_type=EventType.PRODUCT_UPDATED,
@@ -164,9 +174,12 @@ def generate_product() -> tuple[str, ProductEvent]:
         name=product[1],
         category=product[2],
         price=product[3],
-        currency=Currency.USD,
-        in_stock=random.random() > 0.1,
-        stock_quantity=random.randint(0, 500),
+        currency=Currency.RUB,
+        # Emit the SKU's seeded stock so the out-of-stock bestseller (PROD-001)
+        # stays out of stock even under the live feed — the oversell story
+        # depends on it, and random stock would clobber the seeded витрина.
+        in_stock=stock_quantity > 0,
+        stock_quantity=stock_quantity,
     )
     return "products.cdc", event
 

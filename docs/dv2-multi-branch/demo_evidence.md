@@ -170,7 +170,8 @@ SELECT count() FROM rv.lnk_order_product;  -- 14853
 basket profile: marketplace and D2C orders are predominantly single-item,
 while the B2B dealer orders carry multi-line baskets, pulling the mean just
 above 1. `hub_product` holds **160 SKU**; `hub_marking_code` holds **12,160**
-per-unit Chestny ZNAK marking codes (issued / in-circulation / withdrawn).
+Chestny ZNAK marking codes — **160** SKU-level GTIN templates + **12,000**
+per-unit codes (issued / in-circulation / withdrawn).
 
 ## 8. Business Vault — populated views with MDM conflict resolution
 

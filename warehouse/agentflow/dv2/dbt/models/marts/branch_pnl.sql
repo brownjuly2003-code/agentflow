@@ -15,9 +15,14 @@ SELECT
     sum(toFloat64(subtotal_amount))                   AS net_revenue,
     sum(toFloat64(discount_amount))                   AS discounts,
     sum(toFloat64(shipping_cost))                     AS shipping,
-    countIf(order_status = 'returned')                AS returned_orders,
+    -- The legend has no dedicated 'returned' status (§2 vocabulary is
+    -- pending/confirmed/shipped/delivered/cancelled). Its terminal-negative
+    -- bucket 'cancelled' carries both cancellations and marketplace returns
+    -- (§2 "cancel/return allowance"; satellite_seed.sql — "marketplace cancels
+    -- dominate the last bucket"), so returns are measured off 'cancelled'.
+    countIf(order_status = 'cancelled')               AS returned_orders,
     sumIf(toFloat64(total_amount),
-          order_status = 'returned')                  AS returned_value,
+          order_status = 'cancelled')                 AS returned_value,
     round(sum(toFloat64(tax_amount)) /
           nullIf(sum(toFloat64(subtotal_amount)), 0),
           4)                                          AS effective_tax_rate

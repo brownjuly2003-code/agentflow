@@ -110,7 +110,7 @@ class ClickHouseSink:
                     "user_id": event["user_id"],
                     "status": event["status"],
                     "total_amount": float(event["total_amount"]),
-                    "currency": event.get("currency", "USD"),
+                    "currency": event.get("currency", "RUB"),
                     "created_at": datetime.fromisoformat(event["timestamp"]),
                 }
             ],

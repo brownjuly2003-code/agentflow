@@ -1,6 +1,6 @@
 {#
   customer_bk first in the sort key: the mart's serving pattern is a point
-  lookup by business key (load-test 03_customer360_point). At X5 scale the
+  lookup by business key (load-test 03_customer360_point). At benchmark scale the
   old (branch, customer_hk) key meant every bk lookup full-scanned the mart:
   p99 250-470 ms vs the 200 ms point budget.
 
@@ -49,9 +49,12 @@ order_agg AS (
         sum(toFloat64(total_amount))                 AS lifetime_value,
         min(order_date)                              AS first_order_dt,
         max(order_date)                              AS last_order_dt,
-        countIf(order_status = 'returned')           AS returned_orders,
+        -- Returns off the 'cancelled' bucket: no dedicated 'returned' status
+        -- exists in the §2 vocabulary; 'cancelled' folds cancellations and
+        -- marketplace returns together (satellite_seed.sql).
+        countIf(order_status = 'cancelled')          AS returned_orders,
         sumIf(toFloat64(total_amount),
-              order_status = 'returned')             AS returned_value
+              order_status = 'cancelled')            AS returned_value
     FROM {{ source('rv', 'bv_order_canonical_mat') }}
     WHERE customer_hk != toFixedString('', 16)
     GROUP BY customer_hk, branch

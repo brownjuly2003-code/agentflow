@@ -264,7 +264,7 @@ class IcebergSink:
             "user_id": str(record["user_id"]),
             "status": str(record["status"]),
             "total_amount": float(record["total_amount"]),
-            "currency": str(record.get("currency", "USD")),
+            "currency": str(record.get("currency", "RUB")),
             "item_count": int(
                 derived.get(
                     "item_count",
@@ -291,7 +291,7 @@ class IcebergSink:
             "order_id": str(record["order_id"]),
             "user_id": str(record["user_id"]),
             "amount": float(record["amount"]),
-            "currency": str(record.get("currency", "USD")),
+            "currency": str(record.get("currency", "RUB")),
             "method": str(record["method"]),
             "status": str(record["status"]),
             "risk_score": (float(derived["risk_score"]) if "risk_score" in derived else None),
@@ -331,7 +331,7 @@ class IcebergSink:
             "name": str(record["name"]),
             "category": str(record["category"]),
             "price": float(record["price"]),
-            "currency": str(record.get("currency", "USD")),
+            "currency": str(record.get("currency", "RUB")),
             "in_stock": bool(record["in_stock"]),
             "stock_quantity": int(record["stock_quantity"]),
             "created_at": self._coerce_timestamp(record.get("timestamp")),

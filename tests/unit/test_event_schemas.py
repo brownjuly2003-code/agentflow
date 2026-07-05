@@ -14,7 +14,7 @@ def test_order_valid_minimal(sample_order_event) -> None:
 
     event = OrderEvent.model_validate(payload)
 
-    assert event.currency is Currency.USD
+    assert event.currency is Currency.RUB
     assert event.total_amount == Decimal("209.97")
     assert event.items[0].product_id == "PROD-001"
 
@@ -50,13 +50,13 @@ def test_order_rejects_negative_amount(sample_order_event) -> None:
     )
 
 
-def test_order_currency_defaults_to_usd(sample_order_event) -> None:
+def test_order_currency_defaults_to_rub(sample_order_event) -> None:
     payload = dict(sample_order_event)
     payload.pop("currency")
 
     event = OrderEvent.model_validate(payload)
 
-    assert event.currency is Currency.USD
+    assert event.currency is Currency.RUB
 
 
 def test_order_rejects_unknown_currency(sample_order_event) -> None:

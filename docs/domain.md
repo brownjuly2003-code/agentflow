@@ -149,8 +149,10 @@ requirements:
    the ops layer.
 3. **Kill-the-five-programs triage.** Where is order X? Which orders are stuck
    between confirmation and shipment longer than the stage SLA? Which failed
-   events need a manual decision? These map to the three planned ops surfaces:
-   **Order 360 timeline**, **stuck-orders worklist**, and **exception inbox**.
+   events need a manual decision? These map to the three ops surfaces —
+   **Order 360 timeline**, **stuck-orders worklist**, and **exception inbox** —
+   now live (`GET /v1/entity/order/{id}/timeline`, `/v1/ops/stuck-orders`,
+   `/v1/ops/exceptions`).
 
 ## 5. Reinterpretation dictionary
 
@@ -224,10 +226,10 @@ the operational-layer roadmap; everything else is live API surface.
 | ------- | ------------------ | ------- |
 | **Owner / CEO** | "Revenue today vs yesterday? Orders during the НГ peak? Is AOV holding after the price move?" | `GET /v1/metrics/revenue` · `order_count` · `avg_order_value`; `POST /v1/query` (NL: "top products this week") |
 | **B2B account manager** | "What has dealer X ordered this quarter? Are they on track for the retro-bonus threshold? Which of my contacts has a birthday before March 8?" | `GET /v1/entity/user/{id}`; `POST /v1/query`; vault: `bv_customer_mdm`, `sat_customer_loyalty__bitrix__*` |
-| **E-com / marketplace manager** | "Site conversion this week? Are WB orders flowing or did the feed break? Top SKUs by orders during the sale event?" | `GET /v1/metrics/conversion_rate` · `active_sessions` · `error_rate`; `GET /v1/analytics/top-entities`; `POST /v1/query` |
+| **E-com / marketplace manager** | "Site conversion this week? Are WB orders flowing or did the feed break? Top SKUs by orders during the sale event?" | `GET /v1/metrics/conversion_rate` · `active_sessions` · `error_rate`; `GET /v1/admin/analytics/top-entities` (admin-key); `POST /v1/query` |
 | **Operations manager** | "Everything about ORD-20260404-1001 — now, in one place. Which orders are stuck pre-shipment past SLA? What failed overnight and needs a human?" | `GET /v1/entity/order/{id}`; `/v1/alerts` (+history/test); `/v1/deadletter` (+replay/dismiss); `GET /v1/entity/order/{id}/timeline`; `GET /v1/ops/stuck-orders`; `GET /v1/ops/exceptions` (+stats/acknowledge/resolve) |
 | **Category / procurement manager** | "Which SKUs sell fastest per branch? What is on hand vs reserved? When does the next container land?" | `GET /v1/search`; `GET /v1/entity/product/{id}`; `POST /v1/query`; vault: `sat_product_stock__wms__*`; container ETA — **planned** (today: `excel__*` manifests) |
-| **Data engineer / analyst** | "Which events move this metric? What is the contract and its staleness budget? What changed between contract v3 and v4? Are we inside SLO?" | `GET /v1/catalog`; `/v1/contracts/*` (+versions/diff/validate); `/v1/lineage/*`; `/v1/slo`; `/v1/analytics/*` |
+| **Data engineer / analyst** | "Which events move this metric? What is the contract and its staleness budget? What changed between contract v3 and v4? Are we inside SLO?" | `GET /v1/catalog`; `/v1/contracts/*` (+versions/diff/validate); `/v1/lineage/*`; `/v1/slo`; `/v1/admin/analytics/*` (admin-key) |
 | **AI agent / integration** | Any of the above, programmatically — the agent is one consumer, not the product | Python/TS SDKs, MCP/LangChain/LlamaIndex integrations over the same API: `POST /v1/query` + `/v1/query/explain`, `/v1/entity/*`, `POST /v1/batch`, `/v1/webhooks`, `/v1/stream` |
 | **PII officer (per jurisdiction)** | "Who can read dealer-contact PII in `dxb`? Prove RU data never crosses the border" | Not REST: DV2 governance — jurisdiction-scoped officer roles, column-limited analyst grants, per-branch row policies (`warehouse/agentflow/dv2/governance/`, ClickHouse and Postgres variants) |
 

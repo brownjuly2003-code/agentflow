@@ -360,10 +360,10 @@ const BANDS=[
 ];
 
 /* DV2 demo lane */
-const DV2={x:40,w:2280,y:1226,title:"Контур DV2.0 — Data Vault 2.0 на реальных данных X5",
+const DV2={x:40,w:2280,y:1226,title:"Контур DV2.0 — Data Vault 2.0 на синтетических данных",
  chip:"демо · kind-кластер · хост 8 GB",
  flow:[
-  {t:"X5 Retail Hero CSV",c:"45.8M строк",d:"clients · products · purchases (4.5 GB), Kaggle-датасет"},
+  {t:"Синтетический генератор",c:"кухонная легенда · ₽",d:"clients · products · purchases · детерминир. seed, масштабируемый объём"},
   {t:"loader.py",c:"pandas + clickhouse-driver",d:"чанки 50K · PartsThrottle (--max-active-parts) — backpressure по system.parts"},
   {t:"ClickHouse",c:"25.5 · k8s",d:"Raw Vault: хабы · линки · сателлиты (ReplacingMergeTree, ветки __1c__/__bitrix__); merge-throttle в config.d"},
   {t:"Business Vault",c:"SQL-вьюхи",d:"bv_order_canonical (argMax-дедуп) · bv_customer_mdm × 5 веток"},

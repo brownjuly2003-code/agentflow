@@ -5,7 +5,7 @@ primary_key: user_id
 fields:
   user_id: Unique user identifier
   total_orders: Lifetime order count
-  total_spent: Lifetime spend in USD
+  total_spent: Lifetime spend in RUB
   first_order_at: First order timestamp
   last_order_at: Most recent order timestamp
   preferred_category: Most frequently ordered category

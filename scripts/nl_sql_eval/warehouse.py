@@ -18,26 +18,27 @@ import duckdb
 
 from src.processing.local_pipeline import _ensure_tables
 
-# (order_id, user_id, status, total_amount)
+# (order_id, user_id, status, total_amount ₽)
 _ORDERS = [
-    ("ORD-1001", "USR-1", "delivered", 120.00),
-    ("ORD-1002", "USR-1", "delivered", 80.00),
-    ("ORD-1003", "USR-2", "pending", 200.00),
-    ("ORD-1004", "USR-2", "cancelled", 50.00),
-    ("ORD-1005", "USR-3", "delivered", 300.00),
-    ("ORD-1006", "USR-3", "cancelled", 75.00),
-    ("ORD-1007", "USR-1", "delivered", 45.50),
-    ("ORD-1008", "USR-4", "pending", 150.00),
+    ("ORD-1001", "USR-1", "delivered", 2490.00),
+    ("ORD-1002", "USR-1", "delivered", 1690.00),
+    ("ORD-1003", "USR-2", "pending", 4200.00),
+    ("ORD-1004", "USR-2", "cancelled", 990.00),
+    ("ORD-1005", "USR-3", "delivered", 6990.00),
+    ("ORD-1006", "USR-3", "cancelled", 1590.00),
+    ("ORD-1007", "USR-1", "delivered", 890.00),
+    ("ORD-1008", "USR-4", "pending", 3490.00),
 ]
 
-# (product_id, name, category, price, in_stock, stock_quantity)
+# (product_id, name, category, price ₽, in_stock, stock_quantity) — kitchen-appliance
+# legend, generator-spec.md §3 categories/RRC bands
 _PRODUCTS = [
-    ("PRD-1", "Wireless Mouse", "Electronics", 29.99, True, 120),
-    ("PRD-2", "Mechanical Keyboard", "Electronics", 89.99, True, 45),
-    ("PRD-3", "USB-C Hub", "Electronics", 49.99, False, 0),
-    ("PRD-4", "Standing Desk", "Home", 399.00, True, 8),
-    ("PRD-5", "Desk Lamp", "Home", 24.50, True, 60),
-    ("PRD-6", "SQL Cookbook", "Books", 39.95, False, 0),
+    ("PRD-1", "Electric Kettle 1.7L 2200W", "kettles", 2190.00, True, 120),
+    ("PRD-2", "Stand Mixer 5L Planetary", "mixers", 6990.00, True, 45),
+    ("PRD-3", "Cold-Press Juicer", "juicers", 4490.00, False, 0),
+    ("PRD-4", "Air Fryer Grill 5.5L", "grills", 5490.00, True, 8),
+    ("PRD-5", "Digital Kitchen Scale 5kg", "scales", 990.00, True, 60),
+    ("PRD-6", "Mini Chopper 500ml", "choppers", 1490.00, False, 0),
 ]
 
 # (session_id, user_id, is_conversion)
@@ -59,7 +60,7 @@ def build_demo_warehouse() -> duckdb.DuckDBPyConnection:
         conn.execute(
             "INSERT INTO orders_v2 "
             "(order_id, user_id, status, total_amount, currency, created_at) "
-            "VALUES (?, ?, ?, ?, 'USD', NOW() - INTERVAL '5 minutes')",
+            "VALUES (?, ?, ?, ?, 'RUB', NOW() - INTERVAL '5 minutes')",
             [order_id, user_id, status, amount],
         )
 

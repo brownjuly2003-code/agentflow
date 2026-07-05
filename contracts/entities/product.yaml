@@ -6,7 +6,7 @@ fields:
   product_id: Unique product identifier
   name: Product display name
   category: Product category
-  price: Current price in USD
+  price: Current price in RUB
   in_stock: Whether the product is currently available
   stock_quantity: Current inventory count
 relationships: {}

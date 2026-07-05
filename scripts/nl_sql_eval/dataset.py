@@ -122,8 +122,8 @@ GOLD_SET: list[GoldItem] = [
     ),
     GoldItem(
         id="products_in_category",
-        question="How many products are in the Electronics category?",
-        gold_sql="SELECT COUNT(*) FROM products_current WHERE category = 'Electronics'",
+        question="How many products are in the kettles category?",
+        gold_sql="SELECT COUNT(*) FROM products_current WHERE category = 'kettles'",
         category="out-of-pattern",
     ),
     GoldItem(

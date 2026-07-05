@@ -9,7 +9,7 @@ dv2_marts:
       schema: marts
       secure: false
       verify: false
-      # 1 on the 8 GB demo host: two concurrent mart builds over the X5-scale
-      # bv_order_canonical aggregation exceed the ClickHouse pod budget.
+      # 1 on the 8 GB demo host: two concurrent mart builds over large
+      # raw-vault volumes exceed the ClickHouse pod budget.
       threads: 1
   target: dev

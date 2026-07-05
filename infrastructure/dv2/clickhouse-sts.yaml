@@ -14,15 +14,17 @@ data:
   merge-throttle.xml: |
     <clickhouse>
       <!-- Cache caps for the 5Gi pod: defaults (mark cache alone is 5 GB)
-           let one full scan of the 45.8M-row X5 tables pin the pod at its
+           let one full scan of a large raw-vault table pin the pod at its
            4.5 GiB total-memory cap, after which OvercommitTracker kills
-           every later query (seen on the 2026-06-06 dbt mart runs). -->
+           every later query (seen on the 2026-06-06 dbt mart runs, against
+           a retired at-scale capture — see git history of
+           docs/dv2-multi-branch/load-test-baseline.md). -->
       <mark_cache_size>268435456</mark_cache_size>
       <index_mark_cache_size>67108864</index_mark_cache_size>
       <uncompressed_cache_size>268435456</uncompressed_cache_size>
-      <!-- X5-scale INSERT SELECTs exposed THREE false-kill modes of the
-           global memory accounting (2026-06-06/07, bv_order_canonical_mat
-           load):
+      <!-- At-scale INSERT SELECTs (a retired large-volume capture) exposed
+           THREE false-kill modes of the global memory accounting
+           (2026-06-06/07, bv_order_canonical_mat load):
            (1) the cgroup reader counts reclaimable page cache (file=1.9 GiB
            idle on this pod) toward "used" — false kill;
            (2) with correction ON and use_cgroup=0 the worker imports
@@ -77,8 +79,8 @@ data:
     </clickhouse>
 ---
 # Query-level memory protection for the 8 GB demo host: the bv_order_canonical
-# argMax view aggregates 8M+ order keys; at X5 volume a single in-memory
-# GROUP BY (let alone two dbt threads) exceeds the pod budget
+# argMax view aggregates order keys; at large raw-vault volume a single
+# in-memory GROUP BY (let alone two dbt threads) exceeds the pod budget
 # (MEMORY_LIMIT_EXCEEDED seen on the first real-volume dbt run, 2026-06-06).
 # Spilling to disk keeps mart builds slow-but-bounded instead of OOM.
 apiVersion: v1
@@ -126,8 +128,9 @@ spec:
             - containerPort: 8123
             - containerPort: 9000
           env:
-            # X5-scale spill-heavy queries cycle GiBs of short-lived buffers
-            # through jemalloc. With a muzzy-decay stage (ClickHouse's
+            # At-scale spill-heavy queries (from a retired at-scale capture)
+            # cycle GiBs of short-lived buffers through jemalloc. With a
+            # muzzy-decay stage (ClickHouse's
             # compiled default), purged pages are advised MADV_FREE — they
             # stay in VmRSS until the kernel feels pressure, so the server's
             # RSS-based hard memory check kills healthy queries: observed a
@@ -136,7 +139,7 @@ spec:
             # muzzy stage: dirty pages return via MADV_DONTNEED within 1s and
             # VmRSS tells the truth. background_thread keeps decay running
             # even when allocation stalls; narenas:2 caps per-arena retention.
-            # dirty_decay_ms:0 (2026-06-07): 1000ms was not enough — X5
+            # dirty_decay_ms:0 (2026-06-07): 1000ms was not enough — at-scale
             # aggregation hash-table churn frees GiBs/s, and within the decay
             # window the dirty backlog (counted in jemalloc resident, which
             # the memory worker reports as RSS) hit the 4.5 GiB kill threshold
@@ -172,7 +175,7 @@ spec:
             limits:
               cpu: "1"
               # 1500Mi -> 3Gi -> 5Gi (2026-06-02). 3Gi still OOM'd (Code 241) on
-              # the 45.8M X5 lnk_order_product merge (CH self-caps at 0.9x limit).
+              # a retired at-scale lnk_order_product merge (CH self-caps at 0.9x limit).
               # VM now has 6 GiB RAM + 16 GiB swap; PG/MinIO are idle during the
               # bulk load, so the pod claims 5Gi (CH max ~4.5 GiB) and merge size
               # is capped per-table so individual merges stay within budget.

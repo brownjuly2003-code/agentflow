@@ -14,11 +14,11 @@ does latency degrade as client concurrency rises?**
 
 | File | Class | What it exercises |
 |------|-------|-------------------|
-| `01_branch_pnl_adhoc.sql` | adhoc | Branch P&L rollup over `rv.bv_order_canonical` — recomputes the full business view (UNION ALL × 5 branches + argMax SCD2 collapse + 5 LEFT JOINs) on every call. Sub-second at low concurrency; the live-view recompute is the *ad-hoc* path, contrasted with the materialized mart below. |
-| `02_top_products.sql` | heavy | Top-N products per branch — `lnk_order_product` ⋈ `hub_order`, GROUP BY + ORDER BY + LIMIT. |
+| `01_branch_pnl_adhoc.sql` | adhoc (informational, c=1 only) | Branch P&L rollup over `rv.bv_order_canonical` — recomputes the full business view (UNION ALL × 5 branches + argMax SCD2 collapse + 5 LEFT JOINs) on every call. Sub-second at low concurrency; the live-view recompute is the *ad-hoc* path, contrasted with the materialized mart below. |
+| `02_top_products_adhoc.sql` | adhoc (informational, c=1 only) | Top-N products per branch — `lnk_order_product` ⋈ `hub_order`, GROUP BY + ORDER BY + LIMIT. |
 | `03_customer360_point.sql` | point | Single-customer lookup in the materialized `marts.customer_360` mart (simulates an entity GET). |
 | `04_returns_velocity.sql` | heavy | Returns-rate aggregation over `marts.returns_velocity`. |
-| `05_line_items_reach.sql` | heavy | Line-items reach — join + `uniqExact` over the largest link table. |
+| `05_line_items_reach_adhoc.sql` | adhoc (informational, c=1 only) | Line-items reach — join + `uniq` (approximate distinct) over the largest link table. |
 | `06_branch_pnl_mart.sql` | heavy | Branch P&L off the **materialized** `marts.branch_pnl` — the serving path counterpart to `01_*_adhoc`. Demonstrates the latency gap between live-view recompute and pre-materialized marts. |
 
 Each query ends in `FORMAT Null` so timing reflects server-side execution, not
@@ -77,5 +77,7 @@ kubectl -n dv2 logs job/dv2-load-test
 
 Captured results live in
 [`docs/dv2-multi-branch/load-test-baseline.md`](../../../docs/dv2-multi-branch/load-test-baseline.md).
-The current baseline is against **synthetic seed data** (~10K orders); re-run
-after loading the X5 Retail Hero subset to refresh the headline numbers.
+The current baseline is against the synthetic demo seed (~10K orders). An
+earlier at-scale capture (tens of millions of raw-vault rows, retired with
+the 2026-07-03 legend reset) is preserved in the git history of that file;
+its three engineering findings are summarized there.

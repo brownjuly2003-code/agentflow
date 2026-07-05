@@ -49,7 +49,7 @@ for f in $(ls "$QDIR"/*.sql 2>/dev/null | sort); do
   iter=$ITER
   case "$name" in
     *point*) budget=$P99_POINT ;;
-    # At X5 scale (45.8M line items) a single raw-vault recompute runs for
+    # At large raw-vault volumes a single live-view recompute can run for
     # minutes on the 2-vCPU demo host — adhoc scenarios therefore sweep
     # c=1 only, with their own (small) iteration count.
     *adhoc*) budget=$P99_ADHOC; gating=0; levels=1; iter=$ITER_ADHOC ;;

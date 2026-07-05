@@ -96,9 +96,9 @@ python -m warehouse.agentflow.dv2.reference.load_postgres \
 ```
 
 Inserts are idempotent (`ON CONFLICT DO NOTHING`) and share the
-`PostgresVaultWriter` with the X5 loader, so the reference and X5 feeds populate
-the same vault without colliding. `--dry-run` maps and prints per-table counts
-without connecting.
+`PostgresVaultWriter` with the other DV2 loaders, so every ingestion feed
+populates the same vault without colliding. `--dry-run` maps and prints
+per-table counts without connecting.
 
 ## Publish to the Hub (gated)
 

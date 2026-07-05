@@ -151,10 +151,11 @@ Pinned-Dependencies rose 0 → 4 (the pip subset is what's left).
   `container-attestation.yml` moved its `packages`/`id-token`/`attestations`
   writes from the workflow level down to the two operator-dispatched signing
   jobs (the every-PR `build-smoke` job is read-only now).
-- **Vulnerabilities (2 OSV hits):** both came from resolution floors in the
-  X5 demo loader's `requirements.txt` (`pydantic>=2.0` admits the
-  GHSA-mr82-8j83-vxmv ReDoS range; `tqdm>=4.0` admits PYSEC-2017-74). Floors
-  raised to `pydantic>=2.9` / `tqdm>=4.66.3`.
+- **Vulnerabilities (2 OSV hits):** both came from resolution floors in a
+  demo loader's `requirements.txt` (`pydantic>=2.0` admitted the
+  GHSA-mr82-8j83-vxmv ReDoS range; `tqdm>=4.0` admitted PYSEC-2017-74).
+  Floors were raised to `pydantic>=2.9` / `tqdm>=4.66.3`; the loader itself
+  was later removed from the codebase entirely (see CHANGELOG.md).
 
 ### Accepted-open (with reasons, not fabricated away)
 

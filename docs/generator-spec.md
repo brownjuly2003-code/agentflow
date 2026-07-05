@@ -12,7 +12,7 @@ Consumers, in execution order:
    (generator.py, tnved.py; gs1.py is unchanged), `synthetic_seed.sql`,
    `satellite_seed*.sql`, `postgres_oltp/seed.sql`. Faux-PII mechanics are
    preserved (§8).
-2. **Record-source rename** — `x5__*` → `mp__*` (see domain.md §5.4).
+2. **Record-source rename** — retired external-dataset prefix → `mp__*` (see domain.md §5.4).
 3. **Serving demo repin** — the four demo tables, NL demo answers, `ORD-*`
    values (§9).
 4. **Evidence regeneration** — demo_evidence and live-verify counts re-pinned
@@ -184,8 +184,7 @@ gram weights, food ТН ВЭД headings) — it is replaced wholesale:
 - **GS1 stays exactly as-is** (`gs1.py` untouched): the EAEU prefix range
   460–469 is *correct* for an own-brand importer — GTINs belong to the RU
   brand owner registered with GS1 RUS, regardless of where manufacturing
-  happens. Record this rationale in the module docstring when touching the
-  package (its current text says "X5-grocery context").
+  happens. The module docstring already records this rationale.
 - **`tnved.py`**: grocery headings → the four appliance headings of §3
   (8516, 8509, 8423, 8422) with RU descriptions close to official wording,
   heading-granularity honesty note preserved.

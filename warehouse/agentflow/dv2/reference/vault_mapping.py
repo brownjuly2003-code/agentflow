@@ -1,9 +1,14 @@
 """Map the supplier/product reference into DV2 raw-vault rows.
 
-Hash keys are computed with the *same* MD5 canonicalisation as the X5 loader
-(:mod:`warehouse.agentflow.dv2.loaders.x5_retail_hero.mappers`) so reference
-hubs/links join byte-for-byte with vault data already loaded from other
-sources. ``tests/unit/test_dv2_supplier_reference.py`` pins that equality.
+Hash keys use a fixed MD5 canonicalisation: ``md5_digest``/``composite_md5_digest``
+MD5 the canonicalised value (bytes -> hex, bool -> "true"/"false", date/datetime
+-> ISO 8601, Decimal -> plain string, else ``str(value).strip()``), joining
+multiple parts with ``"||"``; ``hash_diff`` MD5s the sorted ``key=value`` pairs
+of a satellite's descriptive attributes. This is the DV2-wide convention (every
+raw-vault hub/link/satellite hash key is computed this way) so reference
+hubs/links join byte-for-byte with vault data loaded from other sources.
+``tests/unit/test_dv2_supplier_reference.py`` pins the digests against known
+vectors.
 
 Provenance is honest: every row carries ``record_source = 'ref__global'`` and
 lands in source-segregated ``*__ref__global`` satellites, distinct from the
@@ -38,7 +43,7 @@ TABLE_SAT_SOURCING = "sat_lnk_product_supplier__ref__global"
 Hash16 = Annotated[bytes, Field(min_length=16, max_length=16)]
 
 
-# --- hashing (canonicalisation mirrors the X5 loader exactly) ----------------
+# --- hashing (the DV2-wide MD5 canonicalisation convention) ------------------
 
 
 def _canonical(value: Any) -> str:

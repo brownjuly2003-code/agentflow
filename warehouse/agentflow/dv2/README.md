@@ -42,6 +42,6 @@ string, which:
   ReplacingMergeTree deduplication;
 - silently inflates `*_hk` storage 2×.
 
-The loader (`loaders/x5_retail_hero/loader.py`) uses
+The reference loader (`reference/vault_mapping.py`) uses
 `hashlib.md5().digest()` for the same reason — keep producer and consumer
 on the raw 16-byte representation.

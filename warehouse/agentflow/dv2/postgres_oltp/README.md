@@ -16,7 +16,7 @@ second engine.
 | File | Where it runs | What it does |
 | ---- | ------------- | ------------ |
 | `seed.sql`                     | PostgreSQL | Creates `ops_msk` / `ops_dxb` schemas (`customers` + `orders`), seeds 50 + 200 (MSK) and 20 + 80 (DXB). Idempotent via `ON CONFLICT DO NOTHING`. |
-| `promote_to_raw_vault_pg.sql`  | PostgreSQL | `INSERT ... SELECT` from `ops_<branch>.{customers,orders}` into `rv.hub_customer`, `rv.hub_order`, `rv.lnk_order_customer`, `rv.sat_customer_personal__1c__{msk,dxb}`, `rv.sat_order_header__bitrix__{msk,dxb}`. Hash keys are `decode(md5(...), 'hex')` (BYTEA, join-identical to the X5 / reference feeds); `record_source = pg_ops__<branch>`. One transaction → one stable `load_ts`. |
+| `promote_to_raw_vault_pg.sql`  | PostgreSQL | `INSERT ... SELECT` from `ops_<branch>.{customers,orders}` into `rv.hub_customer`, `rv.hub_order`, `rv.lnk_order_customer`, `rv.sat_customer_personal__1c__{msk,dxb}`, `rv.sat_order_header__bitrix__{msk,dxb}`. Hash keys are `decode(md5(...), 'hex')` (BYTEA, join-identical to the other DV2 vault feeds); `record_source = pg_ops__<branch>`. One transaction → one stable `load_ts`. |
 
 ```bash
 # single-node Mac demo, after dv2/postgres/apply.sh

@@ -4,7 +4,7 @@
 
 Multi-source / multi-branch DWH own-brand импортёра малой бытовой техники (легенда: [`domain.md`](../domain.md)). 5 локаций (MSK / SPB / EKB / DXB / ALA). Источники: 1С (УТ/ЗУП), Битрикс24, WMS, Excel-логистика (контейнерные манифесты), собственный D2C-сайт, API маркетплейсов (ВБ/Озон).
 
-Naming convention основана на публичных данных и engineering-материалах крупных ритейлеров (X5 Retail Hero, Lenta BigTarget, Магнит). DDL-шаблоны — адаптация Celestinfo + Tampere DV2.0 automation patterns под ClickHouse.
+Naming convention основана на публичных engineering-материалах крупных ритейлеров (retail Data Vault case studies). DDL-шаблоны — адаптация Celestinfo + Tampere DV2.0 automation patterns под ClickHouse.
 
 ## Naming conventions
 
@@ -178,15 +178,20 @@ Idempotent re-loading через `hash_diff` — если satellite-payload не
 - **PIT tables:** для критичных pull-запросов с фиксированной датой
 - **Effectivity satellites:** open/close intervals для SCD2-tracking на links
 
-## Связь с реальными source-data
+## Связь с текущими source-data
 
-| Hub/Sat | Прототип-данные | Where to get |
+| Hub/Sat | Данные | Где взять |
 |---|---|---|
-| `hub_customer` + `sat_customer_personal__*` | X5 Retail Hero `clients.csv` | Kaggle |
-| `hub_product` + `sat_product_catalog__*` | X5 Retail Hero `products.csv` | Kaggle |
-| `lnk_order_customer` + `sat_lnk_order_product__*` | X5 Retail Hero `purchases.csv` (45.8 млн строк) | Kaggle |
-| `sat_customer_loyalty__*` | Lenta BigTarget loyalty features | Kaggle |
+| `hub_customer` + `sat_customer_personal__*` | Синтетический demo seed (customers) | `synthetic_seed.sql` |
+| `hub_product` + `sat_product_catalog__*` | Синтетический demo seed (catalog) | `synthetic_seed.sql` |
+| `lnk_order_customer` + `sat_lnk_order_product__*` | Консолидированный marketplace-фид (`mp__`) + per-branch order feed (`1c__`) | `satellite_seed_all_branches.sql` + kitchen live generator (`src/ingestion/`) |
+| `sat_customer_loyalty__*` | Синтетический seed (dealer retro-bonus state, легенда) | `satellite_seed_all_branches.sql` |
 | `sat_order_marketplace__wb__*` | Synthesize from public ВБ API docs | Wildberries |
 | `hub_marking_code` | Честный Знак GS1 examples | crpt.ru |
 
-Для PoC демо тащим X5 Retail Hero (45М транзакций) в ClickHouse через AgentFlow Argo Workflow, маппим в DV2.0 hub/link/sat, добавляем synthetic branches (привязка к store_id из X5 → искусственно распределяем по 5 локациям).
+Демо-объём фиксирован на масштабе легенды (docs/generator-spec.md §1): ~10K
+заказов / 2 500 клиентов / 160 SKU, без внешних bulk-датасетов. Raw vault
+загружается синтетическим seed (`synthetic_seed.sql` + `satellite_seed_all_branches.sql`),
+живым kitchen-генератором (`src/ingestion/`) и `reference/load_postgres.py`;
+маппинг в DV2.0 hub/link/sat остаётся тем же (per-branch satellites, синтетические
+branches по 5 локациям).

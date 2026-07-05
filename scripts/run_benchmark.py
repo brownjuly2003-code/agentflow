@@ -191,52 +191,52 @@ def seed_benchmark_fixtures(db_path: Path) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO products_current VALUES
-            ('PROD-001', 'Wireless Headphones', 'electronics', 79.99, TRUE, 142),
-            ('PROD-002', 'Running Shoes', 'footwear', 129.99, TRUE, 58),
-            ('PROD-003', 'Coffee Maker', 'kitchen', 49.99, TRUE, 203),
-            ('PROD-004', 'Mechanical Keyboard', 'electronics', 149.99, TRUE, 37),
-            ('PROD-005', 'Yoga Mat', 'fitness', 34.99, TRUE, 315),
-            ('PROD-006', 'Backpack', 'accessories', 89.99, TRUE, 94),
-            ('PROD-007', 'Water Bottle', 'fitness', 24.99, TRUE, 421),
-            ('PROD-008', 'Desk Lamp', 'home', 44.99, FALSE, 0),
-            ('PROD-009', 'Bluetooth Speaker', 'electronics', 59.99, TRUE, 167),
-            ('PROD-010', 'Sunglasses', 'accessories', 119.99, TRUE, 72)
+            ('PROD-001', 'Electric Kettle 1.7L 2200W', 'kettles', 2190.00, FALSE, 0),
+            ('PROD-002', 'Air Fryer Grill 5.5L', 'grills', 5490.00, TRUE, 58),
+            ('PROD-003', 'Immersion Blender Set 800W', 'blenders', 2490.00, TRUE, 203),
+            ('PROD-004', 'Stand Mixer 5L Planetary', 'mixers', 6990.00, TRUE, 37),
+            ('PROD-005', 'Drip Coffee Maker 1.2L', 'coffee', 3490.00, TRUE, 94),
+            ('PROD-006', 'Waffle Maker Double', 'multibakers', 2290.00, TRUE, 142),
+            ('PROD-007', 'Mini Chopper 500ml', 'choppers', 1490.00, TRUE, 315),
+            ('PROD-008', 'Cold-Press Juicer', 'juicers', 4490.00, TRUE, 72),
+            ('PROD-009', 'Digital Kitchen Scale 5kg', 'scales', 990.00, TRUE, 421),
+            ('PROD-010', 'Vacuum Sealer Compact', 'vacuum-dry', 3290.00, TRUE, 167)
             """
         )
         conn.execute(
             """
             INSERT OR REPLACE INTO orders_v2 VALUES
             ('ORD-20260404-1001', 'USR-10001', 'delivered',
-             159.98, 'USD', NOW() - INTERVAL '2 hours'),
+             76400.00, 'RUB', NOW() - INTERVAL '2 hours'),
             ('ORD-20260404-1002', 'USR-10002', 'shipped',
-             129.99, 'USD', NOW() - INTERVAL '90 minutes'),
-            ('ORD-20260404-1003', 'USR-10001', 'confirmed',
-             249.97, 'USD', NOW() - INTERVAL '1 hour'),
+             48100.00, 'RUB', NOW() - INTERVAL '90 minutes'),
+            ('ORD-20260404-1003', 'USR-10003', 'confirmed',
+             2650.00, 'RUB', NOW() - INTERVAL '1 hour'),
             ('ORD-20260404-1004', 'USR-10003', 'pending',
-             79.99, 'USD', NOW() - INTERVAL '45 minutes'),
+             1890.00, 'RUB', NOW() - INTERVAL '45 minutes'),
             ('ORD-20260404-1005', 'USR-10004', 'delivered',
-             89.99, 'USD', NOW() - INTERVAL '30 minutes'),
-            ('ORD-20260404-1006', 'USR-10002', 'cancelled',
-             34.99, 'USD', NOW() - INTERVAL '20 minutes'),
+             2290.00, 'RUB', NOW() - INTERVAL '30 minutes'),
+            ('ORD-20260404-1006', 'USR-10004', 'cancelled',
+             1590.00, 'RUB', NOW() - INTERVAL '20 minutes'),
             ('ORD-20260404-1007', 'USR-10005', 'confirmed',
-             179.98, 'USD', NOW() - INTERVAL '15 minutes'),
-            ('ORD-20260404-1008', 'USR-10003', 'pending',
-             59.99, 'USD', NOW() - INTERVAL '5 minutes')
+             2990.00, 'RUB', NOW() - INTERVAL '15 minutes'),
+            ('ORD-20260404-1008', 'USR-10005', 'pending',
+             3990.00, 'RUB', NOW() - INTERVAL '5 minutes')
             """
         )
         conn.execute(
             """
             INSERT OR REPLACE INTO users_enriched VALUES
-            ('USR-10001', 15, 2340.50, NOW() - INTERVAL '180 days',
-             NOW() - INTERVAL '1 hour', 'electronics'),
-            ('USR-10002', 8, 890.20, NOW() - INTERVAL '90 days',
-             NOW() - INTERVAL '20 minutes', 'footwear'),
-            ('USR-10003', 3, 210.00, NOW() - INTERVAL '30 days',
-             NOW() - INTERVAL '5 minutes', 'electronics'),
-            ('USR-10004', 22, 4100.75, NOW() - INTERVAL '365 days',
-             NOW() - INTERVAL '30 minutes', 'accessories'),
-            ('USR-10005', 1, 179.98, NOW() - INTERVAL '1 day',
-             NOW() - INTERVAL '15 minutes', 'electronics')
+            ('USR-10001', 34, 1200000.00, NOW() - INTERVAL '365 days',
+             NOW() - INTERVAL '2 hours', 'grills'),
+            ('USR-10002', 15, 460000.00, NOW() - INTERVAL '270 days',
+             NOW() - INTERVAL '90 minutes', 'coffee'),
+            ('USR-10003', 4, 8900.00, NOW() - INTERVAL '60 days',
+             NOW() - INTERVAL '45 minutes', 'choppers'),
+            ('USR-10004', 6, 15800.00, NOW() - INTERVAL '120 days',
+             NOW() - INTERVAL '20 minutes', 'blenders'),
+            ('USR-10005', 3, 28500.00, NOW() - INTERVAL '10 days',
+             NOW() - INTERVAL '5 minutes', 'vacuum-dry')
             """
         )
         conn.execute(

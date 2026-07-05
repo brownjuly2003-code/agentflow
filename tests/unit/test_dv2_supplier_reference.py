@@ -1,7 +1,8 @@
 """Unit tests for the DV2 supplier/product reference (no Docker).
 
 Pins the genuine standards (GS1 GTIN/GLN, RU INN, ТН ВЭД), generator
-determinism, hash-key join-compatibility with the X5/1C vault feeds, and
+determinism, hash-key stability of the reference loader's own MD5
+canonicalisation (join-compatibility with the other vault feeds), and
 raw-vault referential integrity.
 """
 
@@ -12,12 +13,6 @@ from datetime import datetime
 import pytest
 from click.testing import CliRunner
 
-from warehouse.agentflow.dv2.loaders.x5_retail_hero.mappers import (
-    composite_md5_digest as x5_composite_md5_digest,
-)
-from warehouse.agentflow.dv2.loaders.x5_retail_hero.mappers import (
-    md5_digest as x5_md5_digest,
-)
 from warehouse.agentflow.dv2.reference.build import (
     _manifest,
     _reference_frames,
@@ -128,14 +123,35 @@ def test_each_product_has_a_primary_supplier():
         assert sorted(priorities) == list(range(1, len(priorities) + 1))
 
 
-# --- hash-key join-compatibility (the critical pin) --------------------------
+# --- hash-key stability (the critical pin) -----------------------------------
 
 
-def test_hash_keys_match_x5_loader_byte_for_byte():
-    for value in ["7736207543", "RC000001", "4660000254375", "ООО «ГринФрут»", "123"]:
-        assert md5_digest(value) == x5_md5_digest(value)
+def test_md5_digest_matches_known_vectors():
+    """Pins vault_mapping's own MD5 canonicalisation against precomputed hex
+    digests, so any accidental change to ``_canonical``/``md5_digest`` is
+    caught without depending on another loader for cross-checking. These are
+    plain ``str.encode()`` MD5 sums for non-bytes/bool/date/Decimal inputs
+    (``_canonical`` is the identity on stripped strings here), so they are
+    reproducible with any MD5 implementation, not just this codebase.
+    """
+    known_hex_digests = {
+        "7736207543": "fc852a3d08d2b40d59816e071c6718f8",
+        "RC000001": "6576fe92210434947aaacd34f93d0b67",
+        "4660000254375": "05c0e20048607cb2f560713a3d42ac3f",
+        "ООО «ГринФрут»": "b0acd6a4c6189c61db1f65517de7c73c",
+        "123": "202cb962ac59075b964b07152d234b70",
+    }
+    for value, expected_hex in known_hex_digests.items():
+        assert md5_digest(value).hex() == expected_hex
+
+
+def test_composite_md5_digest_matches_known_vector():
+    # md5("a") / md5("b") are the textbook MD5 vectors; composite_md5_digest
+    # joins their hex representations with "||" and hashes that.
     left, right = md5_digest("a"), md5_digest("b")
-    assert composite_md5_digest(left, right) == x5_composite_md5_digest(left, right)
+    assert left.hex() == "0cc175b9c0f1b6a831c399e269772661"
+    assert right.hex() == "92eb5ffee6ae2fec3ad71c777531578f"
+    assert composite_md5_digest(left, right).hex() == "a2bacd576459a208e719673d377b9bd1"
 
 
 # --- vault mapping -----------------------------------------------------------

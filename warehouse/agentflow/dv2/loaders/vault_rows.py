@@ -1,6 +1,16 @@
+"""Vault-generic raw-vault row models shared by DV2 PostgreSQL ingestion.
+
+These pydantic models describe the hub / link / order-satellite shape used by
+every per-branch order feed (``sat_order_header__1c__*`` /
+``sat_order_pricing__1c__*``) and by ``PostgresVaultWriter``'s column-order /
+DDL-coverage tests. They are entity-generic (not tied to any one source
+system or dataset) — see ``reference/vault_mapping.py`` for the analogous
+models used by the supplier/product reference feed.
+"""
+
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 
@@ -65,35 +75,9 @@ class LinkOrderStore(VaultRow):
     record_source: str
 
 
-class SatCustomerPersonal(VaultRow):
-    customer_hk: Hash16
-    load_ts: datetime
-    hash_diff: Hash16
-    record_source: str
-    age: int | None
-    gender: str | None
-    first_issue_date: date | None
-    first_redeem_date: date | None
-
-
-class SatProductCatalog(VaultRow):
-    product_hk: Hash16
-    load_ts: datetime
-    hash_diff: Hash16
-    record_source: str
-    level_1: str | None
-    level_2: str | None
-    level_3: str | None
-    level_4: str | None
-    brand_id: str | None
-    segment_id: str | None
-    netto: Decimal | None
-    is_own_trademark: bool | None
-
-
 class SatOrderHeader(VaultRow):
     # Aligned to the deployed rv.sat_order_header__* DDL (order_date / channel /
-    # order_status / total_amount) so X5 orders are visible to bv_order_canonical.
+    # order_status / total_amount).
     order_hk: Hash16
     load_ts: datetime
     hash_diff: Hash16
@@ -105,8 +89,6 @@ class SatOrderHeader(VaultRow):
 
 
 class SatOrderPricing(VaultRow):
-    # Synthesized from the X5 purchase_sum (gross) with per-branch tax rates so
-    # bv_order_canonical / branch_pnl have a non-null subtotal_amount.
     order_hk: Hash16
     load_ts: datetime
     hash_diff: Hash16

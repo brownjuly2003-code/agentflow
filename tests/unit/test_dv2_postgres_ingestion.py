@@ -1,15 +1,14 @@
 """Unit tests for the DV2 PostgreSQL ingestion repoint (no Docker).
 
-The raw vault moved off ClickHouse onto PostgreSQL; these tests pin that the X5
-loader and the supplier reference can actually *feed* that PostgreSQL vault
-without a live database:
+The raw vault moved off ClickHouse onto PostgreSQL; these tests pin that the
+per-branch order feed and the supplier reference can actually *feed* that
+PostgreSQL vault without a live database:
 
 * ``build_insert_sql`` renders an idempotent, sqlglot-valid INSERT;
-* every column the loaders insert exists in the committed PostgreSQL DDL (the
+* every column the feeds insert exists in the committed PostgreSQL DDL (the
   guard that catches a model/DDL or generic-vs-entity-name drift);
 * ``PostgresVaultWriter`` streams rows through a fake DB-API connection in the
-  right column order and batches, with hash keys preserved as ``bytes``;
-* the X5 loader selects the right sink per ``--target``.
+  right column order and batches, with hash keys preserved as ``bytes``.
 
 A live apply + ``bv_order_canonical`` query against real data is a separate
 single-node Mac smoke (see dv2/postgres/README.md), mirroring the Flink and
@@ -22,21 +21,18 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-import click
 import pytest
 import sqlglot
 from click.testing import CliRunner
 from sqlglot import exp
 
 import warehouse.agentflow.dv2.loaders.pg_vault_writer as pgw
-from warehouse.agentflow.dv2.loaders import pg_vault_writer
+from warehouse.agentflow.dv2.loaders import pg_vault_writer, vault_rows
 from warehouse.agentflow.dv2.loaders.pg_vault_writer import (
     PostgresVaultWriter,
     build_insert_sql,
     satellite_hash_key,
 )
-from warehouse.agentflow.dv2.loaders.x5_retail_hero import loader
-from warehouse.agentflow.dv2.loaders.x5_retail_hero import schemas as x5
 from warehouse.agentflow.dv2.reference import load_postgres
 from warehouse.agentflow.dv2.reference.generator import build_reference
 from warehouse.agentflow.dv2.reference.vault_mapping import VAULT_DB_COLUMNS, map_reference
@@ -171,23 +167,31 @@ def test_build_insert_sql_satellite_requires_single_hash_key():
 
 # --- inserted columns exist in the committed PostgreSQL DDL -------------------
 
-# Tables the X5 loader actually emits (mappers.py), with the row model whose
+# Tables the per-branch order feed (1c) inserts into, with the row model whose
 # fields become the INSERT column list.
-X5_TABLES = [
-    ("hub_customer", "01_hubs.sql", x5.HubCustomer),
-    ("hub_product", "01_hubs.sql", x5.HubProduct),
-    ("hub_store", "01_hubs.sql", x5.HubStore),
-    ("hub_order", "01_hubs.sql", x5.HubOrder),
-    ("lnk_order_customer", "02_links.sql", x5.LinkOrderCustomer),
-    ("lnk_order_product", "02_links.sql", x5.LinkOrderProduct),
-    ("lnk_order_store", "02_links.sql", x5.LinkOrderStore),
-    ("sat_order_header__1c__msk", "satellites/sat_order_header__1c__msk.sql", x5.SatOrderHeader),
-    ("sat_order_pricing__1c__msk", "satellites/sat_order_pricing__1c__msk.sql", x5.SatOrderPricing),
+ORDER_FEED_TABLES = [
+    ("hub_customer", "01_hubs.sql", vault_rows.HubCustomer),
+    ("hub_product", "01_hubs.sql", vault_rows.HubProduct),
+    ("hub_store", "01_hubs.sql", vault_rows.HubStore),
+    ("hub_order", "01_hubs.sql", vault_rows.HubOrder),
+    ("lnk_order_customer", "02_links.sql", vault_rows.LinkOrderCustomer),
+    ("lnk_order_product", "02_links.sql", vault_rows.LinkOrderProduct),
+    ("lnk_order_store", "02_links.sql", vault_rows.LinkOrderStore),
+    (
+        "sat_order_header__1c__msk",
+        "satellites/sat_order_header__1c__msk.sql",
+        vault_rows.SatOrderHeader,
+    ),
+    (
+        "sat_order_pricing__1c__msk",
+        "satellites/sat_order_pricing__1c__msk.sql",
+        vault_rows.SatOrderPricing,
+    ),
 ]
 
 
-@pytest.mark.parametrize(("table", "ddl_file", "model"), X5_TABLES)
-def test_x5_insert_columns_exist_in_postgres_ddl(table, ddl_file, model):
+@pytest.mark.parametrize(("table", "ddl_file", "model"), ORDER_FEED_TABLES)
+def test_order_feed_insert_columns_exist_in_postgres_ddl(table, ddl_file, model):
     columns = list(model.model_fields.keys())
     ddl_columns = _columns_for(table, ddl_file)
     missing = set(columns) - ddl_columns
@@ -198,13 +202,13 @@ def test_x5_insert_columns_exist_in_postgres_ddl(table, ddl_file, model):
     assert parsed is not None
 
 
-X5_BRANCHES = ["msk", "spb", "ekb", "dxb", "ala"]
+ORDER_FEED_BRANCHES = ["msk", "spb", "ekb", "dxb", "ala"]
 
 
-@pytest.mark.parametrize("branch", X5_BRANCHES)
-def test_x5_per_branch_order_satellites_have_postgres_ddl(branch):
-    # The loader writes sat_order_header/pricing for every observed branch, so a
-    # PostgreSQL table must exist for each.
+@pytest.mark.parametrize("branch", ORDER_FEED_BRANCHES)
+def test_order_feed_per_branch_order_satellites_have_postgres_ddl(branch):
+    # The per-branch order feed writes sat_order_header/pricing for every
+    # observed branch, so a PostgreSQL table must exist for each.
     for prefix in ("sat_order_header", "sat_order_pricing"):
         path = PG_DIR / "satellites" / f"{prefix}__1c__{branch}.sql"
         assert path.exists(), f"missing PostgreSQL DDL for {prefix}__1c__{branch}"
@@ -257,9 +261,9 @@ def test_reference_generic_hub_link_fields_are_renamed():
 # --- PostgresVaultWriter ------------------------------------------------------
 
 
-def _hub_customers(n: int) -> list[x5.HubCustomer]:
+def _hub_customers(n: int) -> list[vault_rows.HubCustomer]:
     return [
-        x5.HubCustomer(
+        vault_rows.HubCustomer(
             customer_hk=bytes([i]) * 16,
             customer_bk=f"c{i}",
             load_ts=datetime(2026, 5, 29, 10, 0, 0),
@@ -365,52 +369,6 @@ def test_connect_raises_when_psycopg_missing(monkeypatch):
     monkeypatch.setattr(pg_vault_writer, "psycopg", None)
     with pytest.raises(RuntimeError, match="psycopg is required"):
         pg_vault_writer.connect("postgresql://x")
-
-
-# --- loader sink selection ---------------------------------------------------
-
-
-def _open(target: str, dry_run: bool, monkeypatch=None):
-    return loader._open_sink(
-        target=target,
-        dry_run=dry_run,
-        clickhouse_host="h",
-        clickhouse_port=9000,
-        clickhouse_database="rv",
-        clickhouse_user="u",
-        clickhouse_password="",
-        postgres_dsn="postgresql://agentflow@localhost:5432/agentflow",
-        max_active_parts=5,
-    )
-
-
-def test_open_sink_dry_run_never_connects():
-    sink, throttle = _open("postgres", dry_run=True)
-    assert isinstance(sink, loader._DryRunSink)
-    assert sink.mode == "mapped"
-    assert throttle.client is None
-
-
-def test_open_sink_postgres(monkeypatch):
-    conn = _FakeConnection()
-    monkeypatch.setattr(loader, "connect_postgres", lambda dsn: conn)
-    sink, throttle = _open("postgres", dry_run=False)
-    assert isinstance(sink, loader._PostgresSink)
-    # ClickHouse part-count backpressure is inert on PostgreSQL.
-    assert throttle.client is None
-
-
-def test_open_sink_clickhouse(monkeypatch):
-    sentinel = object()
-    monkeypatch.setattr(loader, "_connect", lambda *args: sentinel)
-    sink, throttle = _open("clickhouse", dry_run=False)
-    assert isinstance(sink, loader._ClickHouseSink)
-    assert throttle.client is sentinel
-
-
-def test_open_sink_unknown_target_raises():
-    with pytest.raises(click.ClickException):
-        _open("redis", dry_run=False)
 
 
 # --- reference load_postgres CLI ---------------------------------------------

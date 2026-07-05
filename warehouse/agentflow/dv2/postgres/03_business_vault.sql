@@ -35,8 +35,8 @@ WITH
         UNION ALL
         SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
         FROM rv.sat_order_header__bitrix__ala WHERE is_deleted = 0
-        -- 1C / X5 Retail Hero order headers (per-branch), so real X5 volume
-        -- flows through to bv_order_canonical and the branch_pnl mart.
+        -- 1C order headers (per-branch), so the full order volume flows
+        -- through to bv_order_canonical and the branch_pnl mart.
         UNION ALL
         SELECT order_hk, order_date, channel, order_status, total_amount, load_ts
         FROM rv.sat_order_header__1c__msk WHERE is_deleted = 0

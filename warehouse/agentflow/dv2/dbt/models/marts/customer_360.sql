@@ -1,6 +1,6 @@
 {#
   customer_bk first in the sort key: the mart's serving pattern is a point
-  lookup by business key (load-test 03_customer360_point). At X5 scale the
+  lookup by business key (load-test 03_customer360_point). At benchmark scale the
   old (branch, customer_hk) key meant every bk lookup full-scanned the mart:
   p99 250-470 ms vs the 200 ms point budget.
 

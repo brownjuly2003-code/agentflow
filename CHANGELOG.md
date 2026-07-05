@@ -4,6 +4,57 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Removed — X5 Retail Hero loader deleted; at-scale benchmark retired as historical (G2 S2b, 2026-07-05)
+
+- **Deleted `warehouse/agentflow/dv2/loaders/x5_retail_hero/`** in full
+  (`loader.py`, `mappers.py`, `schemas.py`, `branch_distributor.py`,
+  `README.md`, `requirements.txt`) and its dedicated test
+  `tests/unit/test_x5_retail_hero_loader.py`. Per the project owner's
+  override, the "X5 Retail Hero" dataset — a real external grocery
+  retailer's public Kaggle dataset that the demo's synthetic legend never
+  needed — must not appear anywhere in the project going forward; this
+  changelog entry is the one place that name may still be written. No
+  successor bulk generator is built (S2a decision, formerly
+  `x5-benchmark-decision.md`, deleted in this same step once executed):
+  demo-scale raw-vault data is fully covered by
+  `warehouse/agentflow/dv2/synthetic_seed.sql` +
+  `satellite_seed_all_branches.sql`, the kitchen live generator
+  (`src/ingestion/`), and `reference/load_postgres.py`.
+- **At-scale load-test benchmark retired as historical.** The 2026-06-07
+  ClickHouse capture (tens of millions of raw-vault rows, loaded from the
+  now-deleted dataset) is no longer presented as a current baseline. The
+  load-test harness (`infrastructure/dv2/load-test/`) stays fully runnable
+  and gating against the synthetic demo seed unchanged (including the
+  `P99_MS_POINT=250` budget, whose queueing rationale is preserved in
+  `job.yaml`'s comments). `docs/dv2-multi-branch/load-test-baseline.md` now
+  documents only the seed-scale baseline; the retired capture's three
+  engineering findings (`customer_360` sort key, `uniq()` vs `uniqExact()`,
+  the point-budget queueing analysis) are summarized there and the full
+  report is preserved in this file's git history.
+- **Test surgery**: the vault-generic row models used by both
+  `tests/unit/test_dv2_postgres_ingestion.py` (the only coverage for
+  `PostgresVaultWriter`) and the deleted loader now live in
+  `warehouse/agentflow/dv2/loaders/vault_rows.py`. The loader-sink tests
+  (`_open_sink` / `_DryRunSink` / `_PostgresSink` / `_ClickHouseSink`) are
+  removed along with the loader. `tests/unit/test_dv2_supplier_reference.py`'s
+  hash-equality pin now checks `vault_mapping`'s own MD5 canonicalisation
+  against precomputed known-vector digests instead of importing the deleted
+  loader; `test_dv2_business_vault_ddl.py` / `test_dv2_postgres_ddl.py` drop
+  the "`x5__` not in DDL" regression guard (the check string itself would
+  violate the no-X5-anywhere rule) and keep the positive "`mp__` in DDL"
+  assertion.
+- **De-branded** every remaining reference across `spec.yaml` (and its 10
+  generated satellite DDL files), the dbt config (`sources.yml`, `README.md`,
+  `profiles.example.yml`), `docs/domain.md`, `docs/dv2-multi-branch/{schema_dv2,demo_evidence}.md`,
+  `docs/generator-spec.md`, `docs/operations/{aws-oidc-setup,openssf-security-posture}.md`,
+  `docs/perf/vault-pii-governance-pg-verify-2026-07-0{2,3}.md`,
+  `infrastructure/dv2/{clickhouse-sts.yaml,dbt/dbt-run-job.yaml,load-test/*}`,
+  and the DV2 loader/reference Python docstrings (`pg_vault_writer.py`,
+  `vault_mapping.py`, `reference/README.md`, `reference/load_postgres.py`,
+  `postgres_oltp/README.md`, `dv2/README.md`) — no "X5" / "Retail Hero" /
+  retired at-scale row-count strings ("45.8M", "8.06M", "402K") survive
+  outside this file and git history.
+
 ### Added — Operational serving split decided; ops-surfaces spec (ADR 0011, 2026-07-03)
 
 - **New [ADR 0011](docs/decisions/0011-ops-serving-split.md)** — the design

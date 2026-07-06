@@ -306,12 +306,10 @@ cloud-provider secret takes its place.
 
 ## 10. Hot tier — Postgres OLTP + ClickHouse `PostgreSQL()` bridge
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** The bridge needs
-> ClickHouse and Postgres on one network; the standalone split (CH in WSL,
-> Postgres on the Windows host loopback) cannot reach across. Row counts and
-> the `Dasha/Egor/Fedor`-style names below are retired-seed-era and await refresh on the
-> new kitchen-legend seeds. The code path (Postgres → CH `Engine=PostgreSQL()`
-> live read-through → raw_vault → business_vault) is unchanged.
+> **Re-captured 2026-07-06** on the Mac kind stand (kitchen-legend seed,
+> current customer/order names — no `Dasha/Egor/Fedor`-style retired fixture
+> data). ClickHouse and Postgres share the `hq-demo` cluster network, so the
+> live `PostgreSQL()` read-through actually crosses pods for real.
 
 `warehouse/agentflow/dv2/postgres_oltp/seed.sql` populates Postgres with
 `ops_msk` + `ops_dxb` schemas; `bridge.sql` creates
@@ -320,6 +318,27 @@ cloud-provider secret takes its place.
 replication slot required. `promote_to_raw_vault.sql` runs the hot → warm
 step, landing `record_source = pg_ops__*` rows in `rv.hub_order` that surface
 in `bv_order_canonical` with correct branch attribution.
+
+Seed landed 50 msk customers + 200 msk orders, 20 dxb customers + 80 dxb
+orders; the live `oltp_live.*` read-through returned the identical counts
+(50/200/20/80) straight from Postgres via the `PostgreSQL()` engine. After
+`promote_to_raw_vault.sql`, `rv.hub_order FINAL` / `rv.hub_customer FINAL`
+show exactly `pg_ops__msk 200` / `pg_ops__dxb 80` and `pg_ops__msk 50` /
+`pg_ops__dxb 20` — the `ReplacingMergeTree(load_ts)` idempotency the
+architecture doc promises held in practice: this session's promotion script
+was invoked twice (the first run's client connection dropped from transport
+flakiness on this shared, CPU-contended Mac before confirming completion, so
+it was re-run to be safe) and `FINAL` collapsed the raw duplicate rows back
+to the exact expected counts, not double. A sample landed row:
+
+```
+order_bk          branch  channel  total_amount  header_source
+OLTP-DXB-000001   dxb     b2b            60355   bitrix__dxb
+```
+
+confirming the `pg_ops__*`-sourced order resolves branch, channel, amount and
+`header_source = bitrix__<branch>` through `bv_order_canonical` exactly like
+every other source in the vault.
 
 ## 11. How to re-run
 

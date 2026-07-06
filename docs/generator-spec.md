@@ -258,16 +258,29 @@ legend. Targets:
 
 ## 10. Currencies and determinism
 
-- **All seeded amounts are ₽, in every branch.** In the legend narrative dxb
-  invoices in AED and ala in KZT, but the v1 seeds and the vault store only
-  the ₽ figures of §1 — no generator or seed performs an FX conversion at
-  runtime, and cross-branch aggregates work directly in ₽. The **pinned demo
-  FX constants** (not live rates; internally consistent with a 90 ₽/USD
-  world): `AED = 24.50 ₽`, `KZT = 0.175 ₽`, `CNY = 12.40 ₽` — kept in
-  `reference/legend.py` solely as the fixed conversion basis for any
-  doc/evidence sentence that quotes a non-₽ figure (e.g. FOB in CNY). If a
-  future revision stores branch-local currencies, these are the constants it
-  must use.
+- **All seeded amounts in the main vault seeds are ₽, in every branch.**
+  `synthetic_seed.sql` and `postgres_oltp/seed.sql` (the seeds that back the
+  vault/serving demo and §1's rates) store only the ₽ figures — no generator
+  or seed in that path performs an FX conversion at runtime, and cross-branch
+  aggregates there work directly in ₽. In the legend narrative dxb invoices
+  in AED and ala in KZT, but nothing in the main seed path materializes that.
+  **Exception: `postgres_oltp/fanout/02_seed.sql`.** This is a separate,
+  intentional CDC/multi-currency replication fixture (the per-branch
+  Postgres→ClickHouse fan-out demo) — it seeds `orders.currency` as the local
+  tag per branch (msk = RUB, dxb = AED) on purpose, to prove the fan-out
+  carries a real per-row currency column through CDC.
+  `postgres_oltp/fanout/04_ch_bridge.sql` only replicates each branch's rows
+  into its own ClickHouse database, preserving whatever currency tag was
+  seeded — it never sums AED and RUB into one figure. The AED amounts there
+  are converted to ₽ only in this doc's/that file's comments, for illustrative
+  reference, using the FX constants below — never at runtime or in any
+  aggregation query. The **pinned demo FX constants** (not live rates;
+  internally consistent with a 90 ₽/USD world): `AED = 24.50 ₽`, `KZT = 0.175
+  ₽`, `CNY = 12.40 ₽` — kept in `reference/legend.py` solely as the fixed
+  conversion basis for any doc/evidence sentence that quotes a non-₽ figure
+  (e.g. FOB in CNY, or the fanout fixture's AED totals). If a future revision
+  stores branch-local currencies in the main seed path, these are the
+  constants it must use.
 - Generator seed constant stays `20260626`; everything derives
   deterministically from it. Timestamps keep today's mechanics (relative
   `NOW()` in serving demo, `load_ts = now64()` in vault seeds).

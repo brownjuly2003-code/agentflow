@@ -22,9 +22,10 @@ Consumers, in execution order:
 
 ## 1. Master matrix — baseline day
 
-All money **net of VAT, in ₽** (branch-local currency stored per §10; demo FX
-constants convert). "Baseline day" = seasonal multiplier 1.0; the seasonal
-calendar (§4) modulates it and averages to exactly 1.0 over the year.
+All money **net of VAT, in ₽** — every branch is seeded in ₽; the pinned demo
+FX constants of §10 are documentation-only. "Baseline day" = seasonal
+multiplier 1.0; the seasonal calendar (§4) modulates it and averages to
+exactly 1.0 over the year.
 
 | Channel | Branch | Orders/day | Avg check, ₽ | Revenue, ₽/day |
 | ------- | ------ | ---------: | -----------: | -------------: |
@@ -257,11 +258,16 @@ legend. Targets:
 
 ## 10. Currencies and determinism
 
-- Vault-side branch currencies: RU = RUB, dxb = AED, ala = KZT. **Pinned demo
+- **All seeded amounts are ₽, in every branch.** In the legend narrative dxb
+  invoices in AED and ala in KZT, but the v1 seeds and the vault store only
+  the ₽ figures of §1 — no generator or seed performs an FX conversion at
+  runtime, and cross-branch aggregates work directly in ₽. The **pinned demo
   FX constants** (not live rates; internally consistent with a 90 ₽/USD
-  world): `AED = 24.50 ₽`, `KZT = 0.175 ₽`, `CNY = 12.40 ₽`. All cross-branch
-  aggregates in docs/evidence use these constants; write them wherever a
-  conversion happens.
+  world): `AED = 24.50 ₽`, `KZT = 0.175 ₽`, `CNY = 12.40 ₽` — kept in
+  `reference/legend.py` solely as the fixed conversion basis for any
+  doc/evidence sentence that quotes a non-₽ figure (e.g. FOB in CNY). If a
+  future revision stores branch-local currencies, these are the constants it
+  must use.
 - Generator seed constant stays `20260626`; everything derives
   deterministically from it. Timestamps keep today's mechanics (relative
   `NOW()` in serving demo, `load_ts = now64()` in vault seeds).
@@ -281,6 +287,13 @@ Target row counts for the rebuilt `synthetic_seed.sql` + satellites
 | `hub_marking_code` | 160 SKU GTINs + ~12,000 per-unit code sample (≈ one container), statuses issued 25 / in_circulation 60 / withdrawn 15 | per-product only |
 | `hub_supplier` | 30 | 40 |
 
+Order dates spread uniformly over a ~122-hour (≈ 5.1-day) window ending at
+load time — 10,000 orders / 5.1 days ≈ **1,965 orders/day**, exactly §1's
+baseline rate. Baseline days carry seasonal multiplier 1.0 by definition, so
+§4's monthly curves are deliberately **not** encoded in this seed: a 5-day
+snapshot cannot express a 12-month shape; the seasonality belongs to the
+long-horizon generator narrative, not the vault seed.
+
 Customer→branch and order→channel assignments follow §1/§7 proportions; the
 `multiIf(number % 100 < …)` slicing technique stays, only the cut points
 move. Order `record_source` reflects the channel: `mp__msk` (marketplace
@@ -295,11 +308,19 @@ this list is the definition of "цифры взаимно согласованы
 1. Annual revenue (Σ channels × 365 × seasonal avg 1.0) ∈ **[3.5, 5.0] B ₽**.
 2. Order-count mix: marketplaces 88–90%, B2B 7–9%, D2C 2–4%.
 3. Revenue mix: B2B 65–72% of ₽; marketplaces 27–33%.
-4. Avg B2B check ∈ [30k, 80k] ₽; avg marketplace check ∈ [1.5k, 3.0k] ₽ —
-   the AOV distribution is bimodal with no mass between 10k and 25k.
+4. Order-weighted avg B2B check (all B2B branches together) ∈ [30k, 80k] ₽ —
+   §1 puts it at ≈ 54.9k. Per-branch B2B avg checks span 45k (ala) to 90k
+   (dxb): the RU + EAEU wholesale channels each sit inside [30k, 80k], while
+   dxb's 90k export-pallet check sits above that band **by design** (§1) and
+   is not a violation. Avg marketplace check ∈ [1.5k, 3.0k] ₽. The AOV
+   distribution is bimodal with no channel average between 10k and 25k.
 5. Per SKU: FOB < landed < wholesale < marketplace-net < RRC (§5 ladder).
 6. Each seasonal curve's 12 multipliers average exactly 1.0.
-7. Every GTIN passes `is_valid_gtin13`, prefix ∈ 460–469.
+7. Every GTIN passes `is_valid_gtin13`, prefix ∈ 460–469 — both the
+   reference-catalog GTINs (minted via `gs1.make_gtin13`) and the vault
+   seed's `gs1_gtin` literals in `synthetic_seed.sql`, whose check digits are
+   precomputed with the same GS1 mod-10 algorithm and pinned by the invariant
+   tests.
 8. Every `tnved_code` is one of the §3 headings, 10-digit zero-padded form.
 9. Dealer accounts × ordering frequency ⇒ 150–200 B2B orders/day.
 10. Branch revenue shares sum to 100%; msk ∈ [55%, 65%].

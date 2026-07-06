@@ -14,7 +14,7 @@ from pathlib import Path
 
 from warehouse.agentflow.dv2.reference import legend
 from warehouse.agentflow.dv2.reference.generator import build_reference
-from warehouse.agentflow.dv2.reference.gs1 import is_valid_gtin13
+from warehouse.agentflow.dv2.reference.gs1 import gtin13_check_digit, is_valid_gtin13
 from warehouse.agentflow.dv2.reference.tnved import TNVED_HEADINGS
 
 DV2_ROOT = Path(__file__).resolve().parents[2] / "warehouse" / "agentflow" / "dv2"
@@ -92,21 +92,34 @@ def test_invariant_3_revenue_mix():
 
 
 def test_invariant_4_bimodal_avg_checks_no_mass_in_gap():
-    # §1's master matrix pins dxb (re-export, "export pallets", thinner
-    # margin per §5) at a 90k avg check — outside the general [30k, 80k] B2B
-    # band the same table implies for the domestic + EAEU wholesale channels.
-    # Read narrowly: the [30k, 80k] band covers RU + ala wholesale; dxb is a
-    # documented, table-explicit outlier, not a spec violation.
+    # §12 #4's primary claim is the *order-weighted aggregate*: avg B2B check
+    # across all B2B branches together ∈ [30k, 80k] ₽ (§1 puts it at ≈54.9k).
+    # Per-branch checks span 45k (ala) to 90k (dxb export pallets) — the RU +
+    # EAEU wholesale channels each sit inside the band, dxb's 90k sits above
+    # it by design (§1) and is not a violation.
+    b2b_rows = [
+        (orders, check)
+        for channel, _, orders, check in legend.MASTER_MATRIX
+        if channel in _B2B_CHANNELS
+    ]
+    b2b_avg_check = sum(o * c for o, c in b2b_rows) / sum(o for o, _ in b2b_rows)
+    assert 30_000 <= b2b_avg_check <= 80_000
+
+    mp_rows = [
+        (orders, check)
+        for channel, _, orders, check in legend.MASTER_MATRIX
+        if channel in _MARKETPLACE_CHANNELS
+    ]
+    mp_avg_check = sum(o * c for o, c in mp_rows) / sum(o for o, _ in mp_rows)
+    assert 1_500 <= mp_avg_check <= 3_000
+
+    # per-branch letter of §12 #4: RU + EAEU wholesale inside [30k, 80k].
     domestic_b2b_checks = [
         check
         for channel, branch, _, check in legend.MASTER_MATRIX
         if channel in _B2B_CHANNELS and branch != "dxb"
     ]
-    marketplace_checks = [
-        check for channel, _, _, check in legend.MASTER_MATRIX if channel in _MARKETPLACE_CHANNELS
-    ]
     assert all(30_000 <= c <= 80_000 for c in domestic_b2b_checks)
-    assert all(1_500 <= c <= 3_000 for c in marketplace_checks)
     # no channel's avg check falls in the 10k-25k dead zone (holds for all
     # channels, including dxb)
     assert all(not (10_000 < check < 25_000) for _, _, _, check in legend.MASTER_MATRIX)
@@ -124,6 +137,12 @@ def test_invariant_5_pricing_ladder_bands_are_disjoint_and_ordered():
 
 def test_invariant_5_pricing_ladder_holds_per_sku():
     tables = build_reference()
+    # Pin the default catalog shape so the per-SKU loop cannot pass vacuously:
+    # §3 fixes 160 SKUs, §6 fixes 30 suppliers and 1-2 sources per SKU.
+    assert len(tables.products) == 160
+    assert len(tables.suppliers) == 30
+    sourced_skus = {s.product_bk for s in tables.sourcing}
+    assert sourced_skus == {p.product_bk for p in tables.products}
     rrc_by_sku = {p.product_bk: p.rrc_price for p in tables.products}
     for sourcing in tables.sourcing:
         rrc = rrc_by_sku[sourcing.product_bk]
@@ -146,9 +165,32 @@ def test_invariant_6_seasonal_curves_average_to_one():
 
 def test_invariant_7_every_gtin_valid_and_in_eaeu_range():
     tables = build_reference()
+    assert len(tables.products) == 160  # §3: fixed catalog size — loop is not vacuous
     for product in tables.products:
         assert is_valid_gtin13(product.gtin)
         assert 460 <= int(product.gtin[:3]) <= 469
+
+
+def test_invariant_7_seed_sql_gtin_check_digit_string_is_genuine():
+    """synthetic_seed.sql mints its 160 vault-seed GTIN stems as
+    ``concat(460 + k % 10, lpad(200000 + k * 617, 9, '0'))`` and appends the
+    k-th character of a pinned 160-digit string as the check digit. Recompute
+    that string with the genuine GS1 mod-10 algorithm and assert the SQL
+    carries exactly it — so the seed's GTINs satisfy §12 #7 and cannot drift
+    from ``gs1.gtin13_check_digit`` silently. If the stem formula changes,
+    the structural asserts below fail first and point here.
+    """
+    seed_sql = (DV2_ROOT / "synthetic_seed.sql").read_text(encoding="utf-8")
+    # stem formula guards (both the 160-template and the per-unit block)
+    assert "lpad(toString(200000 + number * 617), 9, '0')" in seed_sql
+    assert "lpad(toString(200000 + (number % 160) * 617), 9, '0')" in seed_sql
+    stems = [f"{460 + k % 10}{200000 + k * 617:09d}" for k in range(160)]
+    check_digits = "".join(str(gtin13_check_digit(stem)) for stem in stems)
+    assert check_digits in seed_sql
+    for stem, digit in zip(stems, check_digits, strict=True):
+        gtin = stem + digit
+        assert is_valid_gtin13(gtin)
+        assert 460 <= int(gtin[:3]) <= 469
 
 
 # --- #8 tnved headings ----------------------------------------------------------

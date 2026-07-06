@@ -166,11 +166,11 @@ SELECT
     now64(3),
     MD5(concat('bitrix__spb__', lpad(toString(number), 7, '0'), '|hdr|v1')),
     'bitrix__spb',
-    now64(3) - toIntervalHour((number * 7) % (24 * 21)),
+    now64(3) - toIntervalHour((number * 7) % 122),   -- ≈5.1-day flat window (§1/§11, see satellite_seed.sql)
     'b2b',
     multiIf(number % 100 < 8, 'pending', number % 100 < 18, 'confirmed',
             number % 100 < 30, 'shipped', number % 100 < 92, 'delivered', 'cancelled'),
-    toDecimal64(30000 + (number * 137) % 50001, 2),
+    toDecimal64(30000 + (number * 329) % 44001, 2),
     0
 FROM numbers(9720)
 WHERE number >= 9540;   -- B2B spb [9540,9720)
@@ -183,11 +183,11 @@ SELECT
     now64(3),
     MD5(concat('bitrix__ekb__', lpad(toString(number), 7, '0'), '|hdr|v1')),
     'bitrix__ekb',
-    now64(3) - toIntervalHour((number * 7) % (24 * 21)),
+    now64(3) - toIntervalHour((number * 7) % 122),   -- ≈5.1-day flat window (§1/§11, see satellite_seed.sql)
     'b2b',
     multiIf(number % 100 < 8, 'pending', number % 100 < 18, 'confirmed',
             number % 100 < 30, 'shipped', number % 100 < 92, 'delivered', 'cancelled'),
-    toDecimal64(30000 + (number * 137) % 50001, 2),
+    toDecimal64(30000 + (number * 329) % 44001, 2),
     0
 FROM numbers(9850)
 WHERE number >= 9720;   -- B2B ekb [9720,9850)
@@ -200,11 +200,11 @@ SELECT
     now64(3),
     MD5(concat('bitrix__dxb__', lpad(toString(number), 7, '0'), '|hdr|v1')),
     'bitrix__dxb',
-    now64(3) - toIntervalHour((number * 7) % (24 * 21)),
+    now64(3) - toIntervalHour((number * 7) % 122),   -- ≈5.1-day flat window (§1/§11, see satellite_seed.sql)
     'b2b',
     multiIf(number % 100 < 8, 'pending', number % 100 < 18, 'confirmed',
             number % 100 < 30, 'shipped', number % 100 < 92, 'delivered', 'cancelled'),
-    toDecimal64(60000 + (number * 191) % 70001, 2),   -- export pallets: thinner margin, bigger tickets (§5)
+    toDecimal64(60000 + (number * 355) % 60001, 2),   -- export pallets 60k-120k, mean ≈90k (§1/§5)
     0
 FROM numbers(9925)
 WHERE number >= 9850;   -- B2B dxb [9850,9925)
@@ -217,11 +217,11 @@ SELECT
     now64(3),
     MD5(concat('bitrix__ala__', lpad(toString(number), 7, '0'), '|hdr|v1')),
     'bitrix__ala',
-    now64(3) - toIntervalHour((number * 7) % (24 * 21)),
+    now64(3) - toIntervalHour((number * 7) % 122),   -- ≈5.1-day flat window (§1/§11, see satellite_seed.sql)
     'b2b',
     multiIf(number % 100 < 8, 'pending', number % 100 < 18, 'confirmed',
             number % 100 < 30, 'shipped', number % 100 < 92, 'delivered', 'cancelled'),
-    toDecimal64(25000 + (number * 151) % 45001, 2),
+    toDecimal64(25000 + (number * 263) % 40001, 2),
     0
 FROM numbers(10000)
 WHERE number >= 9925;   -- B2B ala [9925,10000)
@@ -236,9 +236,9 @@ SELECT
     now64(3),
     MD5(concat('bitrix__spb__', lpad(toString(number), 7, '0'), '|prc|v1')),
     '1c__spb',
-    toDecimal64(30000 + (number * 137) % 50001, 2),
-    toDecimal64((30000 + (number * 137) % 50001) * 0.02 * (number % 4), 2),
-    toDecimal64((30000 + (number * 137) % 50001) * 0.20, 2),
+    toDecimal64(30000 + (number * 329) % 44001, 2),
+    toDecimal64((30000 + (number * 329) % 44001) * 0.02 * (number % 4), 2),
+    toDecimal64((30000 + (number * 329) % 44001) * 0.20, 2),
     toDecimal64(500 + (number % 3) * 300, 2),
     0
 FROM numbers(9720)
@@ -252,9 +252,9 @@ SELECT
     now64(3),
     MD5(concat('bitrix__ekb__', lpad(toString(number), 7, '0'), '|prc|v1')),
     '1c__ekb',
-    toDecimal64(30000 + (number * 137) % 50001, 2),
-    toDecimal64((30000 + (number * 137) % 50001) * 0.02 * (number % 4), 2),
-    toDecimal64((30000 + (number * 137) % 50001) * 0.20, 2),
+    toDecimal64(30000 + (number * 329) % 44001, 2),
+    toDecimal64((30000 + (number * 329) % 44001) * 0.02 * (number % 4), 2),
+    toDecimal64((30000 + (number * 329) % 44001) * 0.20, 2),
     toDecimal64(500 + (number % 3) * 300, 2),
     0
 FROM numbers(9850)
@@ -268,9 +268,9 @@ SELECT
     now64(3),
     MD5(concat('bitrix__dxb__', lpad(toString(number), 7, '0'), '|prc|v1')),
     '1c__dxb',
-    toDecimal64(60000 + (number * 191) % 70001, 2),
-    toDecimal64((60000 + (number * 191) % 70001) * 0.02 * (number % 4), 2),
-    toDecimal64((60000 + (number * 191) % 70001) * 0.05, 2),   -- DXB VAT 5%
+    toDecimal64(60000 + (number * 355) % 60001, 2),
+    toDecimal64((60000 + (number * 355) % 60001) * 0.02 * (number % 4), 2),
+    toDecimal64((60000 + (number * 355) % 60001) * 0.05, 2),   -- DXB VAT 5%
     toDecimal64(500 + (number % 3) * 300, 2),
     0
 FROM numbers(9925)
@@ -284,9 +284,9 @@ SELECT
     now64(3),
     MD5(concat('bitrix__ala__', lpad(toString(number), 7, '0'), '|prc|v1')),
     '1c__ala',
-    toDecimal64(25000 + (number * 151) % 45001, 2),
-    toDecimal64((25000 + (number * 151) % 45001) * 0.02 * (number % 4), 2),
-    toDecimal64((25000 + (number * 151) % 45001) * 0.12, 2),   -- KZ VAT 12%
+    toDecimal64(25000 + (number * 263) % 40001, 2),
+    toDecimal64((25000 + (number * 263) % 40001) * 0.02 * (number % 4), 2),
+    toDecimal64((25000 + (number * 263) % 40001) * 0.12, 2),   -- KZ VAT 12%
     toDecimal64(500 + (number % 3) * 300, 2),
     0
 FROM numbers(10000)

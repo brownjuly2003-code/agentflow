@@ -4,6 +4,36 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed — spec/seed number consistency: daily rate, GTIN check digits, band centering, FX honesty (G2 S3, 2026-07-06)
+
+- **Seed daily rate now matches §1 (audit m5).** `satellite_seed*.sql` order
+  dates spread over a ~122-hour (≈ 5.1-day) flat window instead of 21 days:
+  10,000 orders ≈ 1,965/day — generator-spec §1's baseline rate. §11 now
+  documents that §4's monthly seasonality is deliberately not encoded in a
+  5-baseline-day seed (a 5-day snapshot cannot express a 12-month curve).
+- **Vault-seed GTINs are valid GTIN-13 (audit m6).** `synthetic_seed.sql`'s
+  `gs1_gtin` values now append the genuine GS1 mod-10 check digit via a
+  pinned 160-digit string, asserted against `reference/gs1.py`'s
+  `gtin13_check_digit` by a new invariant test — §12 #7 now holds for the
+  vault seed too, not only the reference catalog.
+- **Amount bands re-centered on §1's average checks (audit m7).** The old
+  equal-width bands ran ~5% (dxb: ~12%) above target; new bands are centered
+  and multipliers re-chosen so small branch slices equidistribute:
+  marketplace 1.5k–2.8k (mean ≈ 2,150), D2C 2k–4.6k (≈ 3,300), B2B RU
+  30k–74k (≈ 52k), dxb 60k–120k (≈ 90k), ala 25k–65k (≈ 45k).
+  `postgres_oltp/seed.sql` mirrors the same formulas.
+- **§12 #4 no longer contradicts §1; invariant tests tightened (audit m4).**
+  §12 #4 now claims the order-weighted aggregate B2B avg check (≈ 54.9k ∈
+  [30k, 80k]) and names dxb's 90k export-pallet check as the by-design
+  outlier. Tests now assert the aggregate averages (not only per-branch
+  proxies) and pin the spec-fixed defaults: 160 SKUs, 30 suppliers
+  (22 CN + 5 RU + 2 AE + 1 KZ), sourcing coverage for every SKU.
+- **§10 FX constants declared documentation-only (audit n2).** §1/§10 now
+  state that every branch is seeded in ₽ and no generator or seed performs an
+  FX conversion at runtime; the pinned AED/KZT/CNY constants remain in
+  `reference/legend.py` solely as the fixed basis for doc/evidence-level
+  conversions.
+
 ### Removed — X5 Retail Hero loader deleted; at-scale benchmark retired as historical (G2 S2b, 2026-07-05)
 
 - **Deleted `warehouse/agentflow/dv2/loaders/x5_retail_hero/`** in full

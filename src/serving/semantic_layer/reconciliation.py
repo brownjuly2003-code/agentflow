@@ -9,6 +9,7 @@ owns the dedupe-key -> ``item_id`` mapping (``rc:<dedupe_key>``, §4.4).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,30 @@ if TYPE_CHECKING:
     from src.serving.semantic_layer.query.engine import QueryEngine
 
 _STATUS_EVENT_PREFIX = "order.status."
+
+_DEFAULT_JOURNAL_SCAN_LIMIT = 20_000
+
+
+def journal_scan_limit() -> int:
+    """Row cap for the ops-surfaces ``orders.status`` journal scan (G2 audit
+    m13): ``fetch_pipeline_events`` with no ``limit`` is a full-table scan of
+    the whole ``pipeline_events`` journal — fine at demo scale (a few dozen
+    rows) but an unbounded-memory/DoS risk once a long-running deployment has
+    accumulated real history. Callers pair this with ``newest_first=True`` so
+    the bounded window is always the *most recent* N rows, and take the first
+    row seen per key as that key's latest state — a size safety net, not a
+    functional change, at demo scale the journal never gets close to the
+    default cap. Env-tunable via ``AGENTFLOW_OPS_JOURNAL_SCAN_LIMIT`` for
+    operators who want a different ceiling.
+    """
+    raw = (os.getenv("AGENTFLOW_OPS_JOURNAL_SCAN_LIMIT") or "").strip()
+    if not raw:
+        return _DEFAULT_JOURNAL_SCAN_LIMIT
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_JOURNAL_SCAN_LIMIT
+    return value if value > 0 else _DEFAULT_JOURNAL_SCAN_LIMIT
 
 
 @dataclass(frozen=True)
@@ -59,7 +84,10 @@ def check_journal_vs_store(
     ]
 
     stage_rows = engine.fetch_pipeline_events(
-        tenant_id=tenant_id, topic="orders.status", newest_first=False
+        tenant_id=tenant_id,
+        topic="orders.status",
+        newest_first=True,
+        limit=journal_scan_limit(),
     )
     latest_by_entity: dict[str, tuple[str, datetime | None]] = {}
     for row in stage_rows:
@@ -68,9 +96,14 @@ def check_journal_vs_store(
         if not entity_id or not event_type.startswith(_STATUS_EVENT_PREFIX):
             continue
         status = event_type[len(_STATUS_EVENT_PREFIX) :]
-        # Ascending iteration (`newest_first=False`): the last write per
-        # entity_id wins, matching the stuck-orders worklist's own scan.
-        latest_by_entity[str(entity_id)] = (status, coerce_dt(row.get("processed_at")))
+        # Descending iteration (`newest_first=True`, bounded per m13's
+        # `journal_scan_limit()`): the first row seen per entity_id is its
+        # latest status — skip once a key is already recorded, matching the
+        # stuck-orders worklist's own scan.
+        key = str(entity_id)
+        if key in latest_by_entity:
+            continue
+        latest_by_entity[key] = (status, coerce_dt(row.get("processed_at")))
     if not latest_by_entity:
         return []
 

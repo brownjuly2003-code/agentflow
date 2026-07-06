@@ -257,11 +257,9 @@ verify_live matrix above).
 
 ## 9. Cold-offload pipeline — MinIO S3 backed
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** MinIO + the ClickHouse
-> `s3()` CronJobs need the shared-network cluster; the standalone stand cannot
-> reproduce them. Row counts below are retired-seed-era and await refresh on the new
-> seeds. The mechanism (native `s3()` write + read-back, PII-free source
-> selection) is unchanged.
+> **Re-captured 2026-07-06** on the Mac kind stand (kitchen-legend seed). MinIO
+> `minio-0` (StatefulSet + Service + `cold-tier` bucket) and the ClickHouse
+> `s3()` offload ran on the live cluster; row counts below are current.
 
 `infrastructure/dv2/minio.yaml` provisions a single-node MinIO
 StatefulSet + Service + bucket-init Job. The cold-offload CronJobs
@@ -271,6 +269,33 @@ write parquet straight into the `cold-tier` bucket via ClickHouse's native
 `first_name|last_name|email|phone|birth_date|pii_flag` on the exported files
 returns 0 — the data-sovereignty contract is enforced by source selection
 (`sat_customer_anon__1c__{branch}` is the only satellite the CronJob reads).
+
+The five per-branch offloads (`INSERT INTO FUNCTION s3(...)` → `cold-tier`,
+each verified by an `s3()` read-back) landed one partitioned parquet object per
+branch. Listing straight from MinIO (`SELECT _path, count() FROM
+s3('http://minio:9000/cold-tier/**/*.parquet', …)`):
+
+```
+cold-tier/branch=ala/year=2026/month=07/customers_anon.parquet     80
+cold-tier/branch=dxb/year=2026/month=07/customers_anon.parquet     60
+cold-tier/branch=ekb/year=2026/month=07/customers_anon.parquet     70
+cold-tier/branch=msk/year=2026/month=07/customers_anon.parquet   2190
+cold-tier/branch=spb/year=2026/month=07/customers_anon.parquet    100
+```
+
+2,500 anonymized customer rows across the five branches (msk 2,190 / spb 100 /
+ekb 70 / dxb 60 / ala 80 — the §8 MDM population). `DESCRIBE` on the exported
+parquet confirms the PII-free contract at the schema level — the six columns
+are exactly the anon projection, with **0** of the PII names present:
+
+```
+customer_hk_hex   Nullable(String)
+age_bucket        Nullable(String)
+geo_region        Nullable(String)
+customer_segment  Nullable(String)
+load_ts           Nullable(DateTime64(3,'UTC'))
+record_source     Nullable(String)
+```
 
 ### Production swap path
 

@@ -5,7 +5,7 @@ replicaCount: 1
 
 image:
   repository: agentflow/api
-  tag: "1.6.0"
+  tag: "2.0.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

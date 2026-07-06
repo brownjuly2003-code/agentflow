@@ -84,7 +84,7 @@ def test_family_filters_and_limit_are_static_sql() -> None:
     ((sql, _),) = backend.calls
     assert "topic = 'events.validated'" in sql
     assert "event_type IN ('click', 'page_view', 'add_to_cart')" in sql
-    assert sql.endswith("ORDER BY processed_at DESC LIMIT 10")
+    assert sql.endswith("ORDER BY processed_at DESC, event_id DESC LIMIT 10")
 
 
 def test_missing_journal_returns_empty_without_query() -> None:

@@ -38,6 +38,9 @@ ENV AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities
 # Demo mode (mirrors deploy/fly/README.md): injected public key, admin routes
 # return 404, mutating routes blocked except POST /v1/query[/explain], DuckDB
 # seeded on first boot. Data lives under the demo user's writable home.
+# config/serving.yaml defaults to ClickHouse (ADR 0006 Phase 1); the
+# single-container demo runs none, so pin the embedded DuckDB backend.
+ENV SERVING_BACKEND=duckdb
 ENV AGENTFLOW_DEMO_MODE=true
 ENV AGENTFLOW_SEED_ON_BOOT=true
 ENV DEMO_API_KEY=demo-key

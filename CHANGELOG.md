@@ -4,6 +4,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — single-container demo deploys pin the DuckDB serving backend (G2 S7, 2026-07-06)
+
+- **`SERVING_BACKEND=duckdb` is now pinned** in `deploy/hf-space/Dockerfile`
+  (`ENV`), `deploy/fly/fly.toml` (`[env]`), and the `deploy/fly/README.md`
+  local docker-run example. `config/serving.yaml` has defaulted to ClickHouse
+  since the ADR 0006 Phase 1 cutover and ships inside the demo image, so any
+  demo built from post-cutover main crashed on boot (`BackendExecutionError:
+  connection refused` — no ClickHouse runs beside a single-container demo).
+  Caught live on the first three-node HF Space bring-up; the standalone demo
+  Space never showed it only because it still ran a pre-cutover image.
+
 ### Changed — spec/seed number consistency: daily rate, GTIN check digits, band centering, FX honesty (G2 S3, 2026-07-06)
 
 - **Seed daily rate now matches §1 (audit m5).** `satellite_seed*.sql` order

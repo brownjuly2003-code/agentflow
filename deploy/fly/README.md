@@ -70,6 +70,7 @@ curl -i -X POST \
 python -c "import tomllib, pathlib; tomllib.loads(pathlib.Path('deploy/fly/fly.toml').read_text(encoding='utf-8'))"
 docker build -t agentflow-demo -f Dockerfile.api .
 docker run --rm -p 8000:8000 \
+  -e SERVING_BACKEND=duckdb \
   -e DUCKDB_PATH=/data/agentflow-demo.duckdb \
   -e AGENTFLOW_USAGE_DB_PATH=/data/agentflow-demo-api.duckdb \
   -e AGENTFLOW_DEMO_MODE=true \

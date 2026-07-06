@@ -5,6 +5,8 @@ primary_region = "fra"
   dockerfile = "../../Dockerfile.api"
 
 [env]
+  # config/serving.yaml defaults to ClickHouse; the demo VM runs none.
+  SERVING_BACKEND = "duckdb"
   DUCKDB_PATH = "/data/agentflow-demo.duckdb"
   AGENTFLOW_USAGE_DB_PATH = "/data/agentflow-demo-api.duckdb"
   AGENTFLOW_DEMO_MODE = "true"

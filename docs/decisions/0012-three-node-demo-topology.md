@@ -150,8 +150,10 @@ choreography below. No second account, no paid tier, no organization required.
   exists (ADR 0006 Phase 1).
 - The endpoint is **allow-listed in the demo-mode guard** exactly like
   `/v1/query` (`src/serving/api/main.py:286-299`), so public callers with the
-  `demo-key` still get `403` on it; only the node token authorizes it. It is
-  mounted **only** in center role; in edge/standalone role it does not exist.
+  `demo-key` are still rejected on it by the endpoint's own bearer ladder
+  (`401` with no bearer, `403` with a wrong one); only the node token
+  authorizes it. It is mounted **only** in center role; in edge/standalone
+  role it does not exist.
 - **Push, not pull:** edges emit on their own activity (the existing background
   generator tick, reused). This is what makes sleep choreography work.
 

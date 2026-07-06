@@ -68,7 +68,8 @@ TOKEN=...   # the shared node token, from your secret store — never commit it
 # 1. All three healthy
 curl -fsS $CENTER/v1/health && curl -fsS $SPB/v1/health && curl -fsS $EKB/v1/health
 
-# 2. Public demo-key cannot push (403 — demo-guard holds)
+# 2. Public demo-key cannot push (401 — the ingest wants its own bearer,
+#    not the public key; a wrong bearer gets 403)
 curl -i -X POST -H "X-API-Key: demo-key" -H "Content-Type: application/json" \
   -d '{"origin_branch":"spb","events":[]}' $CENTER/v1/node/events
 

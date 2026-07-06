@@ -32,16 +32,15 @@ Docker:
 > `.mp4`/`.cast` media itself is pending re-recording on the Mac kind stand
 > (plan step S6) — see `demo.cast.README.md` for detail.
 
-> **⚠ Infra sections (§1–3, §9–15) are pending re-capture on the kind
-> cluster (Mac stand).** Topology, workload pinning, PVCs, the MinIO cold
-> tier, the Postgres→ClickHouse bridge, the MaterializedPostgreSQL CDC path,
-> Argo orchestration and the dbt-in-Kubernetes Job all need the single-network
-> kind cluster; the standalone WSL-CH / Windows-PG split used for this
-> re-capture cannot reproduce cross-engine networking or Kubernetes. Their
-> **mechanisms are volume- and legend-independent** and stand as previously
-> demonstrated, but the **row counts printed in those blocks reflect
-> retired-seed-era volumes** and must not be read as current. They are flagged
-> inline and are the Mac-tail of this step (see `plan_endgame_02_07_26.md`).
+> **Infra sections are being re-captured 2026-07-06 on the Mac kind stand.**
+> The `hq-demo` kind cluster (Colima `vz` VM, kind v0.27.0 / k8s v1.32.2) was
+> rebuilt and the DV2 stack redeployed on the current kitchen-legend seed
+> (10,000 orders). §1–3 (topology / workload pinning / PVCs) now carry live
+> output from this stand. §9–15 (MinIO cold tier, the Postgres→ClickHouse
+> bridge, MaterializedPostgreSQL CDC, Argo orchestration, dbt marts) each carry
+> their own capture status inline. The standalone WSL-CH / Windows-PG split used
+> for §4–8 cannot reproduce cross-engine networking or Kubernetes, which is why
+> these needed the kind cluster.
 
 ## Governance verify_live — both engines green on the new seeds
 
@@ -63,15 +62,15 @@ the count is whatever the checked-in script asserts — every probe passes.
 
 ## 1. Cluster topology — `kubectl get nodes --show-labels`
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Topology and labels are
-> legend-independent and stand as captured; re-run on the Mac kind stand for a
-> current timestamp.
+> **Re-captured 2026-07-06** on the Mac kind stand (Colima `vz` VM, kind
+> v0.27.0, `kindest/node` v1.32.2). Three-node topology from
+> `infrastructure/dv2/kind-hq-demo.yaml`, labels verbatim from the config.
 
 ```
 NAME                    STATUS   ROLES           AGE   VERSION
-hq-demo-control-plane   Ready    control-plane   77m   v1.35.0
-hq-demo-worker          Ready    <none>          76m   v1.35.0
-hq-demo-worker2         Ready    <none>          76m   v1.35.0
+hq-demo-control-plane   Ready    control-plane   14m   v1.32.2
+hq-demo-worker          Ready    <none>          14m   v1.32.2
+hq-demo-worker2         Ready    <none>          14m   v1.32.2
 ```
 
 Labels decoded:
@@ -84,7 +83,8 @@ Labels decoded:
 
 ## 2. Workload pinning — `kubectl get pods -n dv2 -o custom-columns=POD,NODE`
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.**
+> **Re-captured 2026-07-06** on the Mac kind stand. `nodeSelector` places each
+> StatefulSet on its labelled node.
 
 ```
 POD            NODE              STATUS
@@ -98,7 +98,8 @@ edge nodes (`branch=dxb`, `branch=ala`).
 
 ## 3. Persistent storage — `kubectl get pvc -n dv2`
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.**
+> **Re-captured 2026-07-06** on the Mac kind stand. Both `volumeClaimTemplates`
+> bound against the kind `standard` (rancher local-path) StorageClass.
 
 ```
 NAME                STATUS   CAPACITY   ACCESS MODES   STORAGECLASS

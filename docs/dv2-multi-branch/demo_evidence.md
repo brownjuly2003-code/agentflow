@@ -492,54 +492,132 @@ channel not-null + week not-null + `return_rate` not-null.
 
 ## 14. Push-based CDC via MaterializedPostgreSQL
 
-> **Attempted live 2026-07-06 on the Mac kind stand; honestly incomplete.**
-> `wal_level=logical` was confirmed already active on the live `postgres-0`
-> pod (`SHOW wal_level` → `logical`, no restart needed — the StatefulSet's
-> args already carry it). `postgres_oltp/cdc_setup.sql` (rep_user +
-> `REPLICATION LOGIN` + grants + `REPLICA IDENTITY DEFAULT` + table ownership
-> transfer) applied cleanly against the live Postgres pod, no errors. The
-> ClickHouse-side `CREATE DATABASE oltp_cdc ENGINE = MaterializedPostgreSQL(...)`
-> statement (`cdc_bridge.sql`) also executed without error. But the engine's
-> **initial replication snapshot never completed**: `clickhouse-server.err.log`
-> shows repeated `DatabaseMaterializedPostgreSQL (oltp_cdc): Failed to start
-> replication from PostgreSQL, will retry. Error: ... pqxx::broken_connection
-> ... connection to server at "postgres" (10.96.133.180), port 5432 failed:
-> timeout expired`, and `SHOW TABLES FROM oltp_cdc` kept returning zero rows
-> after a genuinely long retry window. This traces to host-wide contention,
-> not a config bug: the same host's `/proc/loadavg` climbed to 40+ during this
-> attempt (a 3-node kind cluster plus another project's ~9 containers sharing
-> one ~6 GiB Colima VM), and the simpler pull-based `PostgreSQL()` engine used
-> in §10 hit the identical transient connection-timeout symptom earlier in
-> this session but succeeded once retried — evidence the DDL/grants/identity
-> setup here is correct, it is the live TCP handshake that could not complete
-> reliably under this session's load. The broken, endlessly-retrying
-> `oltp_cdc` database was dropped afterward so it would not keep consuming
-> background resources. **Not fabricated: this is an honest "attempted,
-> blocked by shared-host resource contention" outcome**, not invented output.
+> **Re-captured live 2026-07-06** on the Mac kind stand (kitchen-legend seed),
+> in two passes. The first pass, made while the shared host was saturated
+> (load average 40+; a stray `clickhouse-benchmark -c 8` load-test pod from an
+> earlier session was later found still running on the control-plane node),
+> saw only `pqxx::broken_connection` timeouts and was honestly recorded as
+> blocked-by-contention. A second pass in a quieter window exposed the real,
+> deterministic blocker underneath: `cdc_setup.sql` granted `rep_user` only
+> `CONNECT`, but the engine self-bootstraps its publication with
+> `CREATE PUBLICATION ...` executed *as* `rep_user`, which requires `CREATE`
+> on the source database — the replication handler retry-looped on
+> `permission denied for database ops` (database visible in `SHOW DATABASES`,
+> but no slot, no publication, no tables). With the grant added
+> (`cdc_setup.sql` in this branch now carries it; the fan-out variant in
+> `fanout/03_cdc_setup.sql` always had it), the initial snapshot completed on
+> the same overloaded host in under a minute.
 
 The pull-based `oltp_live` bridge is replaced by a single `oltp_cdc`
-ClickHouse database backed by `MaterializedPostgreSQL`, consuming the Postgres
-WAL. `materialized_postgresql_schema_list` lets one CH database carry both
-Postgres schemas. Live E2E: an INSERT/UPDATE in Postgres surfaces in
-ClickHouse within seconds with no manual refresh; `promote_to_raw_vault_cdc.sql`
-(reading `FINAL` to dedupe ReplacingMergeTree versions) lands the `pg_ops__*`
-rows in raw_vault.
+ClickHouse database backed by `MaterializedPostgreSQL`, consuming the
+Postgres WAL — `postgres-sts.yaml` runs `wal_level=logical`, confirmed live
+(`SHOW wal_level` → `logical`, no pod restart needed).
+`materialized_postgresql_schema_list = 'ops_msk,ops_dxb'` lets one CH
+database carry both Postgres schemas. Live state after `cdc_bridge.sql`:
+
+```
+SHOW TABLES FROM oltp_cdc
+  ops_dxb.customers   ops_dxb.orders   ops_msk.customers   ops_msk.orders
+
+pg_publication:        ops_ch_publication
+pg_publication_tables: ops_dxb.customers / ops_dxb.orders /
+                       ops_msk.customers / ops_msk.orders
+pg_replication_slots:  slot "ops", database ops, active = t,
+                       confirmed_flush_lsn advancing (0/19A4D80 at capture)
+```
+
+The snapshot materialized the §10 seed through the WAL pipeline: msk
+50 customers / 200 orders, dxb 20 / 80 (the first read-back also carried one
+stale test row inserted by the interrupted first pass, replicated out again
+once its `DELETE` was applied — see the E2E below).
+
+`promote_to_raw_vault_cdc.sql` (reading `FINAL` to dedupe CDC versions) lands
+the `pg_ops__*` rows in the raw vault:
+
+```
+rv.hub_order FINAL:     pg_ops__msk 200   pg_ops__dxb 80
+rv.hub_customer FINAL:  pg_ops__msk 50    pg_ops__dxb 20
+```
+
+— identical to the §10 pull-bridge promotion: the hub hashes are the same,
+so `ReplacingMergeTree(load_ts)` collapses the pull and CDC promotion passes
+instead of double-counting. The order-header satellites gain a second SCD2
+version per `pg_ops__*` order (`hash_diff` `pg-cdc-hdr` vs `pg-hdr`) —
+additive vault history; `argMax`-latest reads are unchanged.
+
+Live E2E, no manual refresh on the CH side:
+
+- **INSERT** (`msk-c-cdc-live`) and **UPDATE** (phone on `CUST-MSK-0001`) in
+  Postgres surfaced in ClickHouse on the next FINAL read — msk customer key
+  count 50 → 51, matching Postgres row-for-row (`51` on both sides).
+- **DELETE** of the test row propagated back out: after `DELETE ... RETURNING`
+  in Postgres, a column read
+  (`... FINAL WHERE customer_id = 'msk-c-cdc-live'`) returns **0 rows**.
+- One engine-semantics note the capture surfaced: `count()` over these tables
+  with `FINAL` keeps counting a delete-marked key (the reading stayed `51`
+  after the delete), while column reads — including the promotion's
+  `INSERT ... SELECT ... FINAL` — filter it out (the promotion saw exactly 50
+  live msk customers). Row-presence checks against a
+  `MaterializedPostgreSQL` table should therefore select columns, not bare
+  `count()`.
+
+On this heavily loaded shared host the WAL apply lag ranged from seconds to
+minutes under the load spikes documented above — the mechanism is push-based
+either way; nothing was re-polled or manually refreshed.
+
+Vault hygiene after the run: the E2E test row never reached the vault
+(`rv.hub_customer FINAL WHERE customer_bk='msk-c-cdc-live'` → 0 rows — the
+promotion ran while the key's latest CDC state was delete-marked), so the §12
+hub counts (2,570 customers / 10,280 orders) are unchanged by this capture.
 
 ## 15. Per-branch CDC fan-out
 
-> **Not attempted this session.** §15 depends on the same
-> `MaterializedPostgreSQL` initial-sync mechanism that could not complete live
-> in §14 above (same root cause — ClickHouse→Postgres connection timeouts
-> under host contention; would apply identically to two more CH databases
-> subscribing to two more Postgres databases). Attempting it would only
-> reproduce the same blocker for double the setup cost. Contents below are
-> unchanged from the prior (retired-seed-era) capture and remain pending a
-> re-run on a less-contended host or a quieter window on this one.
+> **Re-captured live 2026-07-06** on the Mac kind stand. One stand-side prep
+> step the checked-in scripts assume but do not perform: creating the
+> per-branch databases themselves (`CREATE DATABASE ops_msk_db / ops_dxb_db`)
+> — `fanout/01_schema.sql` opens with `\c ops_msk_db`.
 
 Operational reality wants a single branch to be pausable, re-snapshotable and
-rotatable without touching another branch's stream. ClickHouse 25.5+ rejects a
-custom publication name on `MaterializedPostgreSQL`, so the fan-out pattern
-splits the source — one Postgres **database** per branch (`ops_msk_db`,
-`ops_dxb_db`), each with its own auto-named publication and slot, consumed by
-two independent CH `MaterializedPostgreSQL` databases (`oltp_cdc_msk`,
-`oltp_cdc_dxb`). Isolation check: the msk CH database has zero rows from dxb.
+rotatable without touching another branch's stream. ClickHouse 25.5 rejects a
+custom publication name on `MaterializedPostgreSQL`
+(`materialized_postgresql_publication_name` → `Code 115. Unknown setting`),
+so the fan-out pattern splits the source — one Postgres **database** per
+branch (`ops_msk_db`, `ops_dxb_db`), each with its own auto-named publication
+and slot, consumed by two independent CH `MaterializedPostgreSQL` databases:
+
+```
+oltp_cdc_msk: customers 10   orders 30     (02_seed.sql msk set)
+oltp_cdc_dxb: customers  8   orders 20     (02_seed.sql dxb set)
+
+pg_replication_slots (one per source database, plus §14's single-DB slot):
+  ops         ops           (single-DB pattern, §14)
+  ops_msk_db  ops_msk_db
+  ops_dxb_db  ops_dxb_db
+
+pg_publication per branch DB (auto-named by the engine, no collision):
+  ops_msk_db_ch_publication   /   ops_dxb_db_ch_publication
+```
+
+Live edit + propagation on the msk stream only: an INSERT (`msk-c-LIVE`) and
+an UPDATE (phone on `msk-c-001`) in `ops_msk_db` surfaced in `oltp_cdc_msk`
+on a FINAL read **12 seconds later** — customer count 10 → 11, both edits
+visible column-level:
+
+```
+┌─customer_id─┬─phone────────┐
+│ msk-c-001   │ +74950000000 │
+│ msk-c-LIVE  │ NULL         │
+└─────────────┴──────────────┘
+```
+
+Isolation check — the msk CH database carries zero dxb rows and vice versa:
+
+```
+dxb_rows_in_msk: 0
+msk_rows_in_dxb: 0
+```
+
+The architectural payoff is exactly the §15 claim: two publications, two
+slots, per-branch pause/re-snapshot semantics, no cross-branch coupling. For
+production-scale fan-out an external CDC tool (PeerDB / Debezium) remains the
+better operational fit — see `fanout/README.md` for the full trade-off.

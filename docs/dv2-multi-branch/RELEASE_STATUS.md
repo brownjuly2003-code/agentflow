@@ -10,7 +10,7 @@ backend-routed event scan, dedicated CI E2E lane), PII protection moves
 from the removed app-level string-parse gate to engine-enforced vault
 governance (ADR 0006 Phase 2 — fail-closed column grants,
 per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
-views; 32/32 live adversarial probes), plus the vendored NL→SQL
+views; every live adversarial probe green), plus the vendored NL→SQL
 generation engine routed through GraceKelly (ADR 0008), the DV2 raw
 vault PostgreSQL migration with `LISTEN`/`NOTIFY` freshness, the
 MinIO-backed PyIceberg catalog, ADR 0009, and the OpenSSF Scorecard

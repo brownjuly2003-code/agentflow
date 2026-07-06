@@ -82,10 +82,10 @@ actually carry PII.
 - [x] Verify: the 3 historical bypass forms (COLUMNS-expr, whole-row struct-ref,
       column-rename-list) are dead at the engine — `COLUMNS` resolves to real
       columns and hits the missing grant (`ACCESS_DENIED`); the other two are
-      not expressible on ClickHouse at all (`UNKNOWN_IDENTIFIER`). 32/32
+      not expressible on ClickHouse at all (`UNKNOWN_IDENTIFIER`). All 29
       adversarial probes green on a live 26.7 server, incl. jurisdiction
       row-scoping and admin-unaffected checks:
-      `docs/perf/vault-pii-governance-verify-2026-07-02.md`.
+      `docs/perf/vault-pii-governance-verify-2026-07-03.md`.
 - ~~Introduce a schema-execution check for the PII gate~~ /
   ~~Reclassify the app-level gate~~ — obsolete: the app-level gate was removed
   with the serving PII layer (2026-07-01); there is no app-side PII surface

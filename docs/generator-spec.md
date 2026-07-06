@@ -165,8 +165,10 @@ magnitude.
 
 ## 6. Suppliers and sourcing (reference generator)
 
-The current reference is grocery (dairy/bakery supplier stems, food brands,
-gram weights, food ТН ВЭД headings) — it is replaced wholesale:
+The reference was originally grocery-shaped (dairy/bakery supplier stems,
+food brands, gram weights, food ТН ВЭД headings); it has since been replaced
+wholesale with the kitchen-appliance reference specified below (see CHANGELOG
+for the swap):
 
 - **30 suppliers**: 22 CN contract factories (Guangdong/Zhejiang-style names,
   e.g. "Foshan …", "Ningbo …", "Cixi … Electric Appliance Co., Ltd." —
@@ -186,9 +188,9 @@ gram weights, food ТН ВЭД headings) — it is replaced wholesale:
   460–469 is *correct* for an own-brand importer — GTINs belong to the RU
   brand owner registered with GS1 RUS, regardless of where manufacturing
   happens. The module docstring already records this rationale.
-- **`tnved.py`**: grocery headings → the four appliance headings of §3
-  (8516, 8509, 8423, 8422) with RU descriptions close to official wording,
-  heading-granularity honesty note preserved.
+- **`tnved.py`**: the former grocery headings were replaced by the four
+  appliance headings of §3 (8516, 8509, 8423, 8422) with RU descriptions
+  close to official wording, heading-granularity honesty note preserved.
 
 ## 7. Customer populations
 

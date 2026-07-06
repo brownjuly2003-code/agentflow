@@ -93,7 +93,7 @@ SELECT
     now64(3)                                                           AS load_ts,
     MD5(concat(order_bk, '|hdr|v1'))                                   AS hash_diff,
     'bitrix__msk'                                                      AS record_source,
-    now64(3) - toIntervalHour((number * 7) % (24 * 21))                AS order_date,
+    now64(3) - toIntervalHour((number * 7) % 122)                      AS order_date,  -- ≈5.1-day flat window: 10,000 orders / 122 h ≈ 1,965/day (§1/§11)
     channel,
     multiIf(
       number % 100 < 8, 'pending',
@@ -113,9 +113,9 @@ FROM (
     ) AS order_bk,
     multiIf(number < 8900, 'marketplace', number < 9180, 'd2c', 'b2b') AS channel,
     multiIf(
-      number < 8900, toDecimal64(1500 + (number * 17) % 1501, 2),      -- marketplace: 1.5k-3.0k
-      number < 9180, toDecimal64(2000 + (number * 23) % 3001, 2),      -- D2C: 2.0k-5.0k
-      toDecimal64(30000 + (number * 137) % 50001, 2)                   -- B2B msk: 30k-80k
+      number < 8900, toDecimal64(1500 + (number * 17) % 1301, 2),      -- marketplace: 1.5k-2.8k, mean ≈2,150 (§1)
+      number < 9180, toDecimal64(2000 + (number * 37) % 2601, 2),      -- D2C: 2.0k-4.6k, mean ≈3,300 (§1)
+      toDecimal64(30000 + (number * 329) % 44001, 2)                   -- B2B msk: 30k-74k, mean ≈52k (§1)
     ) AS total_amount
   FROM numbers(9540)
 );
@@ -143,9 +143,9 @@ FROM (
       '__', lpad(toString(number), 7, '0')
     ) AS order_bk,
     multiIf(
-      number < 8900, toDecimal64(1500 + (number * 17) % 1501, 2),
-      number < 9180, toDecimal64(2000 + (number * 23) % 3001, 2),
-      toDecimal64(30000 + (number * 137) % 50001, 2)
+      number < 8900, toDecimal64(1500 + (number * 17) % 1301, 2),
+      number < 9180, toDecimal64(2000 + (number * 37) % 2601, 2),
+      toDecimal64(30000 + (number * 329) % 44001, 2)
     ) AS subtotal_amount
   FROM numbers(9540)
 );

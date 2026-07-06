@@ -53,10 +53,10 @@ CREATE TABLE IF NOT EXISTS ops_dxb.orders (
 
 -- ============ Seed: 50 msk customers + 200 msk orders ============
 -- Channels / statuses / amounts mirror satellite_seed.sql (generator-spec.md
--- §1/§2): msk carries the marketplace-dominant mix (marketplace 1.5k-3k, d2c
--- 2k-5k, b2b 30k-80k ₽ net-of-VAT), status ladder pending/confirmed/shipped/
--- delivered/cancelled at 8/10/12/62/8. Amounts stay clear of the 10k-25k
--- bimodality dead-zone (§12 #4).
+-- §1/§2): msk carries the marketplace-dominant mix (marketplace 1.5k-2.8k,
+-- d2c 2k-4.6k, b2b 30k-74k ₽ net-of-VAT — bands centered on §1's avg checks),
+-- status ladder pending/confirmed/shipped/delivered/cancelled at 8/10/12/62/8.
+-- Amounts stay clear of the 10k-25k bimodality dead-zone (§12 #4).
 INSERT INTO ops_msk.customers (customer_id, first_name, last_name, email, phone)
 SELECT
     'CUST-MSK-' || lpad(n::text, 4, '0'),
@@ -85,9 +85,9 @@ SELECT
         ELSE 'cancelled'
     END,
     CASE
-        WHEN n <= 186 THEN (1500 + (n * 17) % 1501)::numeric(18, 2)   -- marketplace 1.5k-3.0k
-        WHEN n <= 193 THEN (2000 + (n * 23) % 3001)::numeric(18, 2)   -- d2c 2.0k-5.0k
-        ELSE (30000 + (n * 137) % 50001)::numeric(18, 2)             -- b2b msk 30k-80k
+        WHEN n <= 186 THEN (1500 + (n * 17) % 1301)::numeric(18, 2)   -- marketplace 1.5k-2.8k
+        WHEN n <= 193 THEN (2000 + (n * 37) % 2601)::numeric(18, 2)   -- d2c 2.0k-4.6k
+        ELSE (30000 + (n * 329) % 44001)::numeric(18, 2)             -- b2b msk 30k-74k
     END
 FROM generate_series(1, 200) AS n
 ON CONFLICT (order_id) DO NOTHING;
@@ -95,8 +95,8 @@ ON CONFLICT (order_id) DO NOTHING;
 -- ============ Seed: 20 dxb customers + 80 dxb orders ============
 -- dxb is the b2b re-export branch (generator-spec.md §1: no marketplace/D2C
 -- volume). All orders are 'b2b'; amounts follow the export-pallet band
--- (60k-130k ₽ net, mirrors satellite_seed_all_branches.sql), well above the
--- 10k-25k dead-zone.
+-- (60k-120k ₽ net, centered on §1's 90k avg check, mirrors
+-- satellite_seed_all_branches.sql), well above the 10k-25k dead-zone.
 INSERT INTO ops_dxb.customers (customer_id, first_name, last_name, email, phone)
 SELECT
     'CUST-DXB-' || lpad(n::text, 4, '0'),
@@ -120,6 +120,6 @@ SELECT
         WHEN n % 100 < 92 THEN 'delivered'
         ELSE 'cancelled'
     END,
-    (60000 + (n * 191) % 70001)::numeric(18, 2)   -- b2b dxb export pallets 60k-130k
+    (60000 + (n * 355) % 60001)::numeric(18, 2)   -- b2b dxb export pallets 60k-120k
 FROM generate_series(1, 80) AS n
 ON CONFLICT (order_id) DO NOTHING;

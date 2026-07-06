@@ -88,6 +88,20 @@ def test_tnved_headings_are_real_format():
 # --- generator ---------------------------------------------------------------
 
 
+def test_build_reference_default_counts_match_spec():
+    # generator-spec.md pins the defaults: §3 — 160 SKUs; §6 — 30 suppliers
+    # split 22 CN + 5 RU + 2 AE + 1 KZ. build_reference() must reproduce them
+    # exactly (a silent tax-id collision drop in _make_suppliers would shrink
+    # the supplier list — this pin catches that too).
+    tables = build_reference()
+    assert len(tables.products) == 160
+    assert len(tables.suppliers) == 30
+    by_country: dict[str, int] = {}
+    for supplier in tables.suppliers:
+        by_country[supplier.tax_country_code] = by_country.get(supplier.tax_country_code, 0) + 1
+    assert by_country == {"CN": 22, "RU": 5, "AE": 2, "KZ": 1}
+
+
 def test_build_reference_is_deterministic():
     a = build_reference(n_suppliers=25, n_products=120, seed=7)
     b = build_reference(n_suppliers=25, n_products=120, seed=7)

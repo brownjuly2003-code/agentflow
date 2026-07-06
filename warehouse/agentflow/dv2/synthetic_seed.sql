@@ -173,9 +173,12 @@ ARRAY JOIN arrayMap(
 
 -- sat_marking_code_gs1__1c__global: status for both the 160 SKU-level
 -- templates ('issued') and the ~12,000 per-unit sample (25/60/15 split,
--- §11). gs1_gtin here is a synthetic, unverified code stem — not the
--- reference package's genuine GS1-checked GTIN (which lives in the
--- ref__global satellite via reference/build.py); serial_number carries the
+-- §11). gs1_gtin identities are synthetic (deterministic stem per SKU slot,
+-- distinct from the reference package's ref__global GTINs), but each carries
+-- the genuine GS1 mod-10 check digit so is_valid_gtin13 passes (§12 #7): the
+-- 13th char comes from the pinned 160-digit string below, precomputed over
+-- the 160 stems and asserted against reference/gs1.py's gtin13_check_digit
+-- by tests/unit/test_generator_spec_invariants.py. serial_number carries the
 -- per-unit distinction.
 INSERT INTO rv.sat_marking_code_gs1__1c__global
     (marking_code_hk, load_ts, hash_diff, record_source,
@@ -186,14 +189,22 @@ SELECT
 FROM (
   SELECT
     concat('CZ-SKU-', lpad(toString(number), 5, '0')) AS marking_code_bk,
-    concat(toString(460 + (number % 10)), lpad(toString(200000 + number * 617), 9, '0')) AS gs1_gtin,
+    concat(
+      toString(460 + (number % 10)),
+      lpad(toString(200000 + number * 617), 9, '0'),
+      substring('6520850863093096493187417410759759859852083086326086386419718742019752952985385309376309618641041041642975975208205308307631631974541874974298298598207537530960', number + 1, 1)
+    ) AS gs1_gtin,
     CAST(NULL, 'Nullable(String)') AS serial_number,
     'issued' AS marking_status
   FROM numbers(160)
   UNION ALL
   SELECT
     concat('CZU-', lpad(toString(number % 160), 5, '0'), '-', lpad(toString(intDiv(number, 160)), 7, '0')) AS marking_code_bk,
-    concat(toString(460 + ((number % 160) % 10)), lpad(toString(200000 + (number % 160) * 617), 9, '0')) AS gs1_gtin,
+    concat(
+      toString(460 + ((number % 160) % 10)),
+      lpad(toString(200000 + (number % 160) * 617), 9, '0'),
+      substring('6520850863093096493187417410759759859852083086326086386419718742019752952985385309376309618641041041642975975208205308307631631974541874974298298598207537530960', (number % 160) + 1, 1)
+    ) AS gs1_gtin,
     lpad(toString(intDiv(number, 160)), 7, '0') AS serial_number,
     multiIf(number % 100 < 25, 'issued', number % 100 < 85, 'in_circulation', 'withdrawn') AS marking_status
   FROM numbers(12000)

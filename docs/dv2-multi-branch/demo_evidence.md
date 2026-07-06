@@ -14,14 +14,15 @@ Docker:
   (schema → 8 hubs → 8 links → 48 satellites → `03_business_vault.sql`) →
   `postgres/governance/01..04.sql`.
 
-> **Legend reset (2026-07-03).** The demo no longer models an X5 retail
-> contractor. It is an own-brand ("private-label smart-kitchen") importer:
-> China-manufactured goods, RU HQ, bimodal channel economy (money in
-> wholesale, order-count on marketplaces), five branches across three
-> jurisdictions (msk / spb / ekb + dxb + ala). All prior "X5 Retail Hero /
-> 8.06M orders / USD" figures are retired. The synthetic demo seed is now
-> **2,500 customers / 10,000 orders / 160 SKU / 14,853 line items, priced in
-> ₽** — see `docs/domain.md` and `docs/generator-spec.md` for the model.
+> **Legend reset (2026-07-03).** The demo no longer models a bulk-retail
+> contractor built on a public benchmark dataset. It is an own-brand
+> ("private-label smart-kitchen") importer: China-manufactured goods, RU HQ,
+> bimodal channel economy (money in wholesale, order-count on marketplaces),
+> five branches across three jurisdictions (msk / spb / ekb + dxb + ala). All
+> prior at-scale order-count / USD figures are retired. The synthetic demo
+> seed is now **2,500 customers / 10,000 orders / 160 SKU / 14,853 line
+> items, priced in ₽** — see `docs/domain.md` and `docs/generator-spec.md`
+> for the model.
 
 > **⚠ Infra sections (§1–3, §9–15) are pending re-capture on the kind
 > cluster (Mac stand).** Topology, workload pinning, PVCs, the MinIO cold
@@ -30,8 +31,8 @@ Docker:
 > kind cluster; the standalone WSL-CH / Windows-PG split used for this
 > re-capture cannot reproduce cross-engine networking or Kubernetes. Their
 > **mechanisms are volume- and legend-independent** and stand as previously
-> demonstrated, but the **row counts printed in those blocks reflect the
-> retired X5-era volumes** and must not be read as current. They are flagged
+> demonstrated, but the **row counts printed in those blocks reflect
+> retired-seed-era volumes** and must not be read as current. They are flagged
 > inline and are the Mac-tail of this step (see `plan_endgame_02_07_26.md`).
 
 ## Governance verify_live — both engines green on the new seeds
@@ -47,8 +48,9 @@ against the freshly-built stands:
 
 The PII boundary holds in every SQL shape on both engines; row policies scope
 officers to their own jurisdiction; the msk demo seed now spans `1c__msk`,
-`pg_ops__msk` and `mp__msk` record sources (the `x5__` convention was retired
-in B2). The current CH suite defines 29 probes (earlier revisions cited 32);
+`pg_ops__msk` and `mp__msk` record sources (the legacy marketplace-seed
+prefix was retired in B2). The current CH suite defines 29 probes (earlier
+revisions cited 32);
 the count is whatever the checked-in script asserts — every probe passes.
 
 ## 1. Cluster topology — `kubectl get nodes --show-labels`
@@ -114,7 +116,7 @@ sources; full generation in `spec.yaml` + `generate_satellites.py`).
 
 ## 5. Multi-branch distribution proof
 
-The retired X5 seed spread orders 40/25/15/10/10 across branches. The current
+The retired at-scale seed spread orders 40/25/15/10/10 across branches. The current
 legend does **not** — every marketplace and e-com order is fulfilled from the
 msk hub (`mp__` is msk-only), and branch identity lives in the dealer / B2B /
 PII layers, not in the marketplace order stream. Order distribution by
@@ -157,8 +159,8 @@ branch, count() FROM rv.hub_order GROUP BY branch ORDER BY 2 DESC"`:
 This is the **demo-scale synthetic seed** (10k orders), not a load benchmark.
 The multi-million-row throughput characterisation is a separate artifact
 ([`load-test-baseline.md`](load-test-baseline.md)) and is not part of the
-synthetic demo evidence; the earlier "1.1 s over 8.06M X5 rows" block is
-retired with the X5 legend.
+synthetic demo evidence; the earlier multi-million-row latency capture is
+retired with the 2026-07-03 legend reset.
 
 ## 7. Line items reach
 
@@ -248,7 +250,7 @@ verify_live matrix above).
 
 > ⚠ **Kind-cluster section — pending Mac re-capture.** MinIO + the ClickHouse
 > `s3()` CronJobs need the shared-network cluster; the standalone stand cannot
-> reproduce them. Row counts below are X5-era and await refresh on the new
+> reproduce them. Row counts below are retired-seed-era and await refresh on the new
 > seeds. The mechanism (native `s3()` write + read-back, PII-free source
 > selection) is unchanged.
 
@@ -273,7 +275,7 @@ cloud-provider secret takes its place.
 > ⚠ **Kind-cluster section — pending Mac re-capture.** The bridge needs
 > ClickHouse and Postgres on one network; the standalone split (CH in WSL,
 > Postgres on the Windows host loopback) cannot reach across. Row counts and
-> the `Dasha/Egor/Fedor`-style names below are X5-era and await refresh on the
+> the `Dasha/Egor/Fedor`-style names below are retired-seed-era and await refresh on the
 > new kitchen-legend seeds. The code path (Postgres → CH `Engine=PostgreSQL()`
 > live read-through → raw_vault → business_vault) is unchanged.
 
@@ -315,7 +317,7 @@ bash infrastructure/dv2/bootstrap.sh   # idempotent rebuild on the kind cluster
 ## 12. Argo Workflows orchestration
 
 > ⚠ **Kind-cluster section — pending Mac re-capture.** Timings/counts below are
-> X5-era. DAG ordering (hub → link → satellite → cold-offload) is enforced by
+> retired-seed-era. DAG ordering (hub → link → satellite → cold-offload) is enforced by
 > dependencies, not clock-time; that property is legend-independent.
 
 `infrastructure/dv2/argo/` deploys Argo Workflows plus a `dv2-refresh`
@@ -332,7 +334,7 @@ are never out of sync with the warm tier.
 ## 13. dbt mart layer
 
 > ⚠ **Kind-cluster section — pending Mac re-capture.** The dbt-in-Kubernetes
-> Job and its per-branch row counts are X5-era. The three marts + 12 tests are
+> Job and its per-branch row counts are retired-seed-era. The three marts + 12 tests are
 > legend-independent in structure; the numbers await refresh on the new seeds.
 
 `warehouse/agentflow/dv2/dbt/` ships three materialized marts and 12 data
@@ -347,7 +349,7 @@ mart) — the same 12/5/20% rates verified live in §8.
 > ⚠ **Kind-cluster section — pending Mac re-capture.** MaterializedPostgreSQL
 > consumes the Postgres WAL via logical replication and needs both engines on
 > one network with `wal_level=logical`; the standalone split cannot reproduce
-> it. Contents are X5-era.
+> it. Contents are retired-seed-era.
 
 The pull-based `oltp_live` bridge is replaced by a single `oltp_cdc`
 ClickHouse database backed by `MaterializedPostgreSQL`, consuming the Postgres
@@ -359,7 +361,7 @@ rows in raw_vault.
 
 ## 15. Per-branch CDC fan-out
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Contents are X5-era.
+> ⚠ **Kind-cluster section — pending Mac re-capture.** Contents are retired-seed-era.
 
 Operational reality wants a single branch to be pausable, re-snapshotable and
 rotatable without touching another branch's stream. ClickHouse 25.5+ rejects a

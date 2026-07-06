@@ -64,8 +64,9 @@ spec:
                     schema: marts
                     secure: false
                     verify: false
-                    # 1 on the 8 GB demo host: two concurrent X5-scale mart
-                    # builds blow the ClickHouse pod's 4.5 GiB total budget.
+                    # 1 on the 8 GB demo host: two concurrent mart builds over
+                    # large raw-vault volumes blow the ClickHouse pod's
+                    # 4.5 GiB total budget.
                     threads: 1
                 target: dev
               PROF

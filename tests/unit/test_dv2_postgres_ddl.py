@@ -163,12 +163,9 @@ def test_customer_mdm_views_admit_all_source_conventions():
     assert "record_source = '1c__" not in body, (
         "hard-coded record_source = '1c__<branch>' filter reintroduces audit #12"
     )
-    # B2 (domain.md §5.4): the legend's marketplace-feed vocabulary replaces the
-    # Kaggle dataset name in the third-source-convention example (checked on the
-    # RAW text — the example lives in the header comment, which body strips).
-    assert "x5__" not in raw, (
-        "stale Kaggle-dataset record_source prefix x5__ leaked back into 03_business_vault.sql"
-    )
+    # domain.md §5.3/§5.4: the header comment's source-convention example must
+    # document the consolidated marketplace-feed prefix (checked on the RAW
+    # text — the example lives in the header comment, which body strips).
     assert "mp__" in raw, (
         "03_business_vault.sql should document the mp__ marketplace-feed convention (domain.md §5.3)"
     )

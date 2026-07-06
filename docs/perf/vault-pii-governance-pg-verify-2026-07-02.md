@@ -10,7 +10,8 @@ Vault built from the repo files verbatim via `postgres/apply.sh` (schema →
 `postgres/governance/01..04.sql`. Data: the deterministic demo seed from
 `verify_live.sh` (`SEED_DEMO=1`): hub_customer msk 8 / dxb 2 = 10 rows, msk
 rows deliberately spanning three source conventions (`1c__msk`,
-`pg_ops__msk`, `x5__msk`) so the row policies are exercised against the
+`pg_ops__msk`, and the marketplace-seed prefix later renamed `mp__msk`) so
+the row policies are exercised against the
 split_part branch derivation, not a single record_source literal. Probe
 principals are stand-local: `analyst_probe` (role `dv2_analyst`),
 `officer_msk_probe`, `officer_dxb_probe`, and `noscope_probe` (SELECT on the
@@ -60,7 +61,7 @@ attributes; nothing is pushed past the view boundary for attribution.
 
 | Probe | Result |
 | ----- | ------ |
-| `officer_msk` hub count | 8 of 8 msk rows (incl. `pg_ops__msk`, `x5__msk`) |
+| `officer_msk` hub count | 8 of 8 msk rows (incl. `pg_ops__msk`, marketplace-seed prefix later renamed `mp__msk`) |
 | `officer_dxb` hub count | 2 of 2 dxb rows |
 | `officer_dxb` counts msk rows via hub filter | 0 |
 | `officer_msk` cross-branch view / satellite | `permission denied` |

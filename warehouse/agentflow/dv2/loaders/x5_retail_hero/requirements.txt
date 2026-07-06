@@ -1,6 +1,0 @@
-clickhouse-driver>=0.2.9
-psycopg[binary]>=3.1
-pandas>=2.0
-click>=8.1
-pydantic>=2.9
-tqdm>=4.66.3

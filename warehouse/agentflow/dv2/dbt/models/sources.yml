@@ -18,6 +18,6 @@ sources:
       - name: bv_order_canonical_mat
         description: >
           Materialized snapshot of bv_order_canonical (same columns). Marts read
-          this instead of the view: at X5 scale (8M orders) re-computing the
+          this instead of the view: at large raw-vault volumes re-computing the
           argMax view inside each mart exceeds the demo host's 3 GiB query cap.
           Rebuilt per branch by business_vault/load_bv_order_canonical_mat.sh.

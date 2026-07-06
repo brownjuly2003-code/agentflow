@@ -5,10 +5,11 @@ Parquet artifact for the Hub). It maps the *same* reference into raw-vault rows
 and lands them in the ``rv`` schema through the shared
 :class:`PostgresVaultWriter`, using idempotent ``INSERT ... ON CONFLICT DO
 NOTHING``. The reference shares the vault's source-agnostic hubs/links with the
-X5 / 1C feeds (byte-identical MD5 hash keys, pinned by
+other DV2 ingestion feeds (byte-identical MD5 hash keys, pinned by
 ``tests/unit/test_dv2_supplier_reference.py``) and contributes its own
-``*__ref__global`` satellites — so loading it alongside the X5 feed populates
-the previously empty supplier/product-catalog slots without colliding.
+``*__ref__global`` satellites — so loading it alongside the other feeds
+populates the previously empty supplier/product-catalog slots without
+colliding.
 
 Run as a module (relative imports), after ``dv2/postgres/apply.sh``::
 

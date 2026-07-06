@@ -1,11 +1,10 @@
 """Idempotent PostgreSQL writer for DV2 raw-vault rows.
 
-Both ingestion feeds — the X5 retail loader and the supplier reference — map
-their source data into the same pydantic raw-vault row models keyed by target
-table name (``dict[str, list[BaseModel]]``). This module is the single PG sink
-they share: it renders one parametrised, idempotent ``INSERT`` per table
-(matching the PostgreSQL DDL in ``dv2/postgres/``) and streams rows through
-``executemany`` in batches.
+DV2 ingestion feeds map their source data into the same pydantic raw-vault
+row models keyed by target table name (``dict[str, list[BaseModel]]``). This
+module is the shared PG sink: it renders one parametrised, idempotent
+``INSERT`` per table (matching the PostgreSQL DDL in ``dv2/postgres/``) and
+streams rows through ``executemany`` in batches.
 
 Idempotency follows the table kind, exactly like the in-database promotion in
 ``postgres_oltp/promote_to_raw_vault_pg.sql``:
@@ -17,11 +16,12 @@ Idempotency follows the table kind, exactly like the in-database promotion in
   ``load_ts``) version for that hash key. Without this gate a re-run with a new
   ``load_ts`` but unchanged data inserts a duplicate version every time
   (storage bloat — see ``audit_28_06_26.md`` #10); the descriptive ``hash_diff``
-  both loaders already compute is what makes the change-detection correct.
+  each feed already computes is what makes the change-detection correct.
 
-The driver import is guarded exactly the way the X5 loader guards
-``clickhouse_driver``: psycopg is only needed for a live load (a single-node Mac
-smoke), never for the no-Docker unit tests, which drive a fake connection.
+The driver import is guarded the same way the other DV2 loaders guard the
+optional driver import: psycopg is only needed for a live load (a
+single-node Mac smoke), never for the no-Docker unit tests, which drive a
+fake connection.
 """
 
 from __future__ import annotations
@@ -153,9 +153,10 @@ class PostgresVaultWriter:
         row suppressed by the insert-on-change gate is still counted as sent.
 
         ``columns`` overrides the destination column names (same length and
-        order as the row's model fields). The X5 loader's models already carry
-        the real column names, so it passes nothing; the supplier reference uses
-        generic ``hk``/``bk``/``left_hk``/``right_hk`` hub/link fields and passes
+        order as the row's model fields). The per-branch order feed's models
+        (``vault_rows``) already carry the real column names, so it passes
+        nothing; the supplier reference uses generic
+        ``hk``/``bk``/``left_hk``/``right_hk`` hub/link fields and passes
         the entity-specific column names (see ``vault_mapping.VAULT_DB_COLUMNS``).
         """
         if not rows:

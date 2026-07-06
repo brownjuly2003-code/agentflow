@@ -23,7 +23,7 @@ satellite source-system fan-out:
   PII stays in branch, RBAC-friendly
 - `rv.bv_order_canonical_mat` — materialized snapshot of the
   `bv_order_canonical` view (UNION ALL of header + pricing across all five
-  branches with `argMax` SCD2 collapse). At X5 scale (8M orders) the live
+  branches with `argMax` SCD2 collapse). At large raw-vault volumes the live
   view exceeds the demo host's per-query memory cap when re-computed inside
   each mart, so marts read the staged materialization instead; it is rebuilt
   per branch by `business_vault/load_bv_order_canonical_mat.sh`.

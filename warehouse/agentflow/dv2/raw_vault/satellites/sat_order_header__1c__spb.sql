@@ -1,6 +1,6 @@
 /*
-Purpose: Order header from 1C / X5 Retail Hero ingest.
-Sources: 1c (X5 Retail Hero).
+Purpose: Order header from 1C / branch order feed ingest.
+Sources: 1c (branch order feed).
 Branch context: per-branch order state.
 SCD2: yes.
 Anonymization: hot.

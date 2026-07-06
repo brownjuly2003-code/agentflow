@@ -10,8 +10,9 @@ kitchen-gadget legend. Vault built from the repo files verbatim via
 `03_business_vault.sql`), then `postgres/governance/01..04.sql`. Data: the
 deterministic demo seed from `verify_live.sh` (`SEED_DEMO=1`): hub_customer
 msk 8 / dxb 2 = 10 rows, the msk rows deliberately spanning three source
-conventions — **`1c__msk`, `pg_ops__msk`, `mp__msk`** (the `x5__` convention
-was retired in B2; this run confirms `mp__msk` is what the seed now carries) —
+conventions — **`1c__msk`, `pg_ops__msk`, `mp__msk`** (the legacy
+marketplace-seed prefix was retired in B2; this run confirms `mp__msk` is
+what the seed now carries) —
 so the row policies are exercised against the `split_part` branch derivation,
 not a single record_source literal. Probe principals are stand-local:
 `analyst_probe` (role `dv2_analyst`), `officer_msk_probe`, `officer_dxb_probe`,

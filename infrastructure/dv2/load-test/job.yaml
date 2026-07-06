@@ -46,18 +46,20 @@ spec:
               value: "1 4 8"
             - name: ITERATIONS
               value: "60"
-            # adhoc (raw-vault capacity reference) scenarios run minutes per
-            # query at X5 scale — c=1 only, two iterations (see run-bench.sh).
+            # adhoc (raw-vault capacity reference) scenarios can run minutes
+            # per query at large volumes — c=1 only, two iterations (see
+            # run-bench.sh).
             - name: ITERATIONS_ADHOC
               value: "2"
             - name: P99_MS_HEAVY
               value: "1000"
             # 250 (was 200) for the 2-vCPU demo host: at c=8 the box is past
             # its concurrency design point and p99 measures queueing, not the
-            # data path (X5 capture: c=1 p99 65ms, c=8 p50 90ms with QPS
-            # plateaued 44->57 from c=4; ambient variance between runs is
-            # ~2x on sibling scenarios). The gate still catches real
-            # regressions: the pre-fix full-scan lookup ran 276-468 ms.
+            # data path (established by a retired at-scale capture — see the
+            # git history of docs/dv2-multi-branch/load-test-baseline.md;
+            # ambient variance between runs is ~2x on sibling scenarios).
+            # The gate still catches real regressions: the pre-fix full-scan
+            # lookup ran 276-468 ms.
             - name: P99_MS_POINT
               value: "250"
             - name: P99_MS_ADHOC

@@ -6,7 +6,7 @@ This archived optional guide bootstraps the AWS IAM OIDC provider and the GitHub
 
 Current project decision as of 2026-05-30: a managed-AWS / Terraform-apply production deployment is out of scope for this pre-production portfolio project — a deliberate non-goal, with the stack validated end-to-end on a local/kind demo instead. Do not treat missing AWS apply evidence as a project deficiency, active blocker, or autonomous follow-up. Reopen this path only if the operator explicitly provides an AWS account and approval to reintroduce it.
 
-For the DV2/X5 demo, use the already documented S3-compatible cold-tier path with HF Datasets or Backblaze B2 for derived/anonymized parquet. Do not require AWS/S3 for that dataset.
+For the DV2 demo, use the already documented S3-compatible cold-tier path with HF Datasets or Backblaze B2 for derived/anonymized parquet. Do not require AWS/S3 for that dataset.
 
 ## Current readiness handoff
 

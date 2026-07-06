@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Staged loader for rv.bv_order_canonical_mat (plan B of the X5-scale dbt OOM).
+# Staged loader for rv.bv_order_canonical_mat (plan B of an at-scale dbt OOM
+# from a retired at-scale capture — see git history of
+# docs/dv2-multi-branch/load-test-baseline.md).
 # Per branch, the canonical-order SELECT
 # is decomposed into SERIAL stage queries, each materializing one small
 # MergeTree helper table (pure GROUP BY, disk-spillable, no joins), and a

@@ -739,8 +739,8 @@ satellites:
     source_system: 1c
     branch_code: msk
     record_source: 1c__msk
-    purpose: Order header from 1C / X5 Retail Hero ingest.
-    sources: ["1c (X5 Retail Hero)"]
+    purpose: Order header from 1C / branch order feed ingest.
+    sources: ["1c (branch order feed)"]
     branch_context: per-branch order state
     scd2: true
     anonymization: hot
@@ -755,8 +755,8 @@ satellites:
     source_system: 1c
     branch_code: spb
     record_source: 1c__spb
-    purpose: Order header from 1C / X5 Retail Hero ingest.
-    sources: ["1c (X5 Retail Hero)"]
+    purpose: Order header from 1C / branch order feed ingest.
+    sources: ["1c (branch order feed)"]
     branch_context: per-branch order state
     scd2: true
     anonymization: hot
@@ -771,8 +771,8 @@ satellites:
     source_system: 1c
     branch_code: ekb
     record_source: 1c__ekb
-    purpose: Order header from 1C / X5 Retail Hero ingest.
-    sources: ["1c (X5 Retail Hero)"]
+    purpose: Order header from 1C / branch order feed ingest.
+    sources: ["1c (branch order feed)"]
     branch_context: per-branch order state
     scd2: true
     anonymization: hot
@@ -787,8 +787,8 @@ satellites:
     source_system: 1c
     branch_code: dxb
     record_source: 1c__dxb
-    purpose: Order header from 1C / X5 Retail Hero ingest.
-    sources: ["1c (X5 Retail Hero)"]
+    purpose: Order header from 1C / branch order feed ingest.
+    sources: ["1c (branch order feed)"]
     branch_context: per-branch order state
     scd2: true
     anonymization: hot
@@ -803,8 +803,8 @@ satellites:
     source_system: 1c
     branch_code: ala
     record_source: 1c__ala
-    purpose: Order header from 1C / X5 Retail Hero ingest.
-    sources: ["1c (X5 Retail Hero)"]
+    purpose: Order header from 1C / branch order feed ingest.
+    sources: ["1c (branch order feed)"]
     branch_context: per-branch order state
     scd2: true
     anonymization: hot

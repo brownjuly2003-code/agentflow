@@ -4,6 +4,8 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-06
+
 ### Fixed — single-container demo deploys pin the DuckDB serving backend (G2 S7, 2026-07-06)
 
 - **`SERVING_BACKEND=duckdb` is now pinned** in `deploy/hf-space/Dockerfile`
@@ -14,6 +16,26 @@ All notable changes to AgentFlow are documented in this file.
   connection refused` — no ClickHouse runs beside a single-container demo).
   Caught live on the first three-node HF Space bring-up; the standalone demo
   Space never showed it only because it still ran a pre-cutover image.
+
+### Added — Three-node demo topology: center hub + two edge branches, live on HF Spaces (ADR 0012 — F1/F2 2026-07-04, deployed G2 S7 2026-07-06)
+
+- **Node roles land in the serving API** (`AGENTFLOW_NODE_ROLE` = `center` |
+  `edge`; standalone stays byte-identical without it). The center mounts
+  `POST /v1/node/events` — bearer-token ingest, distinct from the public
+  `demo-key` and hidden from the public OpenAPI catalog, applying each pushed
+  event through the existing `_process_event` path — and
+  `GET /v1/node/branches`, the cross-branch summary (seeded baseline, live
+  delta, last-seen per branch, `waking` for silent ones). Edges run a
+  background emitter that applies each generated event locally and forwards
+  the same canonical dict to the hub; a cold hub is tolerated (bounded
+  retries, then drop). The N1–N12 node invariants are pinned as
+  unit/integration tests.
+- **Deployed as three Docker Spaces** under the `liovina` account
+  (`agentflow-center`, `agentflow-edge-spb`, `agentflow-edge-ekb`) from
+  `deploy/hf-space/three-node/` — one shared image built from public `main`,
+  role set purely by Space environment. Center + edge-spb live-verified
+  end-to-end via the §12 checklist: auth ladder (401/403), `applied:1`
+  token ingest, idempotent re-POST, cross-branch delta movement.
 
 ### Changed — spec/seed number consistency: daily rate, GTIN check digits, band centering, FX honesty (G2 S3, 2026-07-06)
 
@@ -44,6 +66,35 @@ All notable changes to AgentFlow are documented in this file.
   FX conversion at runtime; the pinned AED/KZT/CNY constants remain in
   `reference/legend.py` solely as the fixed basis for doc/evidence-level
   conversions.
+
+### Changed — demo narration and evidence re-captured live on the kitchen legend (G2 S5/S6/S8, 2026-07-05/06)
+
+- **Narration texts rewritten off the fashion-retailer legend**
+  (`demo_voiced.narration.txt`, `demo_transcript.txt`) onto the importer's
+  real pains — cross-channel oversell, container ETA, five-program triage
+  (`domain.md` §4); the voiced demo mp4 re-recorded live on the current
+  legend (the webui capture was already legend-clean).
+- **DV2 evidence re-captured on a live kind stand** (§1–3, §9, §10,
+  §12–§15), catching and fixing two real bugs in the process:
+  `cdc_setup.sql` now grants `CREATE` on the source DB to `rep_user`, and
+  the MinIO `mc`-alias setup was repaired. The load-test baseline was
+  re-captured at seed scale with an explicit host-contention caveat; the
+  live 2-pod ClickHouse cutover stage is documented as blocked by stand
+  contention, with the re-run recipe pinned
+  (`docs/clickhouse-cutover-plan.md` Phase 3, ADR 0010).
+- **Delta re-audit followups (S8)**: stale factual claims corrected (probe
+  counts, node-label narration, done-status notes), residual USD tails
+  re-pinned to ₽, the retired dataset's name dropped from provenance
+  comments.
+
+### Changed — hardening: bounded journal scans and a node-token guard (G2 S4, 2026-07-06)
+
+- **Journal scans are bounded and deterministic**: the newest-first scans in
+  `ops.py` / `reconciliation.py` carry an explicit `LIMIT` and tiebreak
+  equal timestamps on `event_id`; `fetch_pipeline_events(None)` scoping
+  tightened.
+- **`AGENTFLOW_NODE_TOKEN` may not equal the public demo key** — enforced by
+  a boot-time guard rather than convention.
 
 ### Removed — X5 Retail Hero loader deleted; at-scale benchmark retired as historical (G2 S2b, 2026-07-05)
 
@@ -95,6 +146,46 @@ All notable changes to AgentFlow are documented in this file.
   `postgres_oltp/README.md`, `dv2/README.md`) — no "X5" / "Retail Hero" /
   retired at-scale row-count strings ("45.8M", "8.06M", "402K") survive
   outside this file and git history.
+
+### Changed — residual USD/generic-catalog text swept to the kitchen/₽ legend (G2 S1, 2026-07-05)
+
+- Entity contracts (`product`, `user`) price text moved to ₽ (the stable
+  contract's `Currency` enum keeps `[RUB, USD, EUR, GBP]` with RUB default —
+  no version bump); the agent-demo notebook, EUR/GBP test fixtures,
+  `docker/postgres-source/init.sql`, the NL-SQL eval warehouse, and the
+  benchmark/load-test catalogs re-pinned to the kitchen catalog per
+  generator-spec §3/§9.
+
+### Changed — demo legend re-pinned: own-brand kitchen-appliance importer in ₽ (A1/A2 + B1–B4 + C1 2026-07-03, G2 B1 2026-07-05)
+
+- **`domain.md` becomes the business-legend source of truth** — an own-brand
+  kitchen-appliance importer selling through five sales programs — with the
+  unit-economics and data-generation specs pinned alongside (A1/A2).
+- **Generator + seeds rebuilt on the legend** (B1), `record_source` examples
+  renamed off the retired brand (B2), the serving demo store re-pinned (B3),
+  `demo_evidence.md` regenerated with a fresh `verify_live` (B4), DV2 docs
+  swept of the clothing/footwear storyline (C1), and the live generator +
+  currency defaults moved to kitchen/₽ (G2 B1 fix-batch).
+
+### Added — bv_order_canonical PostgreSQL smoke: seed + verify (G1, 2026-07-04)
+
+- `verify_bv_order.sh` seeds a canonical order into the PG raw vault and
+  verifies the business-vault projection end-to-end; transcript captured
+  live on the kind stand (17/17 checks, G2 S6, `docs/perf/`).
+
+### Added — operational read surfaces: Order 360, stuck-orders worklist, exception inbox (D2/D3/D4, 2026-07-04)
+
+- **Order 360 timeline** endpoint + stage-entry journal (D2), the
+  **stuck-orders worklist** with its SLA-stage contract block (D3), and the
+  **exception inbox** — a dead-letter/webhook overlay with R1/R2
+  reconciliation (D4): the three ops surfaces ADR 0011 splits out of the
+  agent-facing catalog.
+
+### Added — Helm PostgreSQL control-plane profile; shared TenantRouter (ADR 0010 slice 6 / E4 + E3, 2026-07-04)
+
+- The chart renders the scale profile (external PostgreSQL control plane)
+  behind the render-time scaling gate (E4); tenant routing extracted into a
+  shared `TenantRouter` module and the warehouse gitignore split (E3).
 
 ### Added — Operational serving split decided; ops-surfaces spec (ADR 0011, 2026-07-03)
 

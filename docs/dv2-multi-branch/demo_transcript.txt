@@ -11,23 +11,23 @@ $ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --passwor
 bv	6
 hub	8
 lnk	8
-sat	39
+sat	48
 
 # === Beat 3 — Multi-branch distribution (01:05) ===
 $ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --query "SELECT splitByString('__', record_source)[2] AS branch, count() AS orders, round(count()*100.0/(SELECT count() FROM rv.hub_order),1) AS pct FROM rv.hub_order GROUP BY branch ORDER BY pct DESC FORMAT PrettyCompact"
    ┌─branch─┬─orders─┬──pct─┐
-1. │ msk    │   4200 │ 40.5 │
-2. │ spb    │   2500 │ 24.1 │
-3. │ ekb    │   1500 │ 14.5 │
-4. │ dxb    │   1160 │ 11.2 │
-5. │ ala    │   1000 │  9.7 │
+1. │ msk    │   9540 │ 95.4 │
+2. │ spb    │    180 │  1.8 │
+3. │ ekb    │    130 │  1.3 │
+4. │ dxb    │     75 │  0.8 │
+5. │ ala    │     75 │  0.8 │
    └────────┴────────┴──────┘
 
 # === Beat 4 — Business Vault MDM (01:25) ===
 $ kubectl exec -n dv2 clickhouse-0 -- clickhouse-client --user default --password demo --multiline --query "SELECT 'msk' AS branch, count() AS rows, countIf(first_name != '') AS with_pii, countIf(loyalty_segment != '') AS with_loyalty FROM rv.bv_customer_mdm__msk UNION ALL SELECT 'dxb', count(), countIf(first_name != ''), countIf(loyalty_segment IS NOT NULL AND loyalty_segment != '') FROM rv.bv_customer_mdm__dxb FORMAT PrettyCompact"
    ┌─branch─┬─rows─┬─with_pii─┬─with_loyalty─┐
-1. │ dxb    │  200 │      200 │            0 │
-2. │ msk    │  800 │      800 │          640 │
+1. │ dxb    │   60 │       60 │            0 │
+2. │ msk    │ 2190 │     2190 │          152 │
    └────────┴──────┴──────────┴──────────────┘
 
 # === Beat 5a — Cold offload (01:50) ===

@@ -1,5 +1,15 @@
 # demo.cast — terminal recording of the live 2-minute pitch
 
+> **⚠ Superseded (legend reset).** `demo.cast` and `demo_voiced.mp4` were
+> captured 2026-05-23, before the kitchen-appliance-importer legend migration
+> (2026-07-03) — the video/audio still shows the retired fashion-retailer
+> framing and the old 40/25/15/10/10 branch split. The narration and transcript
+> **text** were rewritten to the current legend in the G2 S5 follow-up PR
+> (`demo_voiced.narration.txt`, `demo_transcript.txt`); the media itself is
+> pending re-recording on the Mac kind stand (plan step S6). Until that
+> re-recording happens, treat the `.cast`/`.mp4` files as stale and read the
+> text scripts (or `demo_evidence.md`) for the current numbers.
+
 `demo.cast` is an [asciinema](https://asciinema.org/) v2 recording of
 `bash demo_runner.sh` executed against the `hq-demo` cluster. Captured
 on 2026-05-23 at 130×35 with `xterm-256color`. Total runtime ~42 s
@@ -69,11 +79,17 @@ the running cluster:
 | Beat | Command | Live output |
 |------|---------|-------------|
 | 1 | `kubectl get nodes --show-labels` | 3 nodes with `branch=msk` / `nodepool` / `workload` labels |
-| 2 | CH: count tables in `rv` by prefix | bv=6, hub=8, lnk=8, sat=39 |
-| 3 | CH: `record_source` distribution from `hub_order` | msk 40.5% / spb 24.1% / ekb 14.5% / dxb 11.2% / ala 9.7% |
-| 4 | CH: BV MDM PII + loyalty per branch | msk 800/800/640, dxb 200/200/0 |
+| 2 | CH: count tables in `rv` by prefix | bv=6, hub=8, lnk=8, sat=48 |
+| 3 | CH: `record_source` distribution from `hub_order`, collapsed to branch | msk 95.4% / spb 1.8% / ekb 1.3% / dxb 0.8% / ala 0.8% |
+| 4 | CH: BV MDM PII + loyalty per branch | msk 2190/2190/152, dxb 60/60/0 |
 | 5a | `kubectl create job --from=cronjob/dv2-cold-offload-msk` | job created, succeeds in ~8 s |
 | 5b | `mc ls -r local/cold-tier` | parquet files in MinIO for all 5 branches |
+
+Beats 2–4 reflect the current kitchen-appliance-importer legend (matching
+`demo_evidence.md` §4/§5/§8, re-captured 2026-07-03). Beats 1, 5a and 5b are
+still the pre-migration `demo.cast` capture — legend-independent mechanism,
+row counts/labels pending Mac re-recording (see the superseded notice above
+and `demo_evidence.md` §1/§9).
 
 The recording was made on the `hq-demo` cluster in the multi-branch state
 described by the DV2 docs in this directory.

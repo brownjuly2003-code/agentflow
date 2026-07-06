@@ -208,13 +208,23 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
    `AGENTFLOW_CONTROLPLANE_STORE` + `AGENTFLOW_CONTROLPLANE_PG_DSN`; the scale
    profile is an overlay (`k8s/staging/values-staging-scale.yaml.example`), not
    a change to the zero-dependency default. Render side verified locally
-   (`helm template`/`lint` + `tests/unit/test_helm_values_contract.py`). The
-   **two-real-pods live run** (kind at `replicaCount=2` + the replica-correctness
-   checks above) needs Docker and is the deferred Mac/CI tail —
-   `scripts/k8s_replica_correctness_verify.sh` automates the pod-count and
-   cross-pod registration-visibility checks; the delivery/alert checks follow
-   the recipe in the cutover plan (their store-level guarantee is already
-   live-verified by slice 5's 31/31 PG probes).
+   (`helm template`/`lint` + `tests/unit/test_helm_values_contract.py`), and
+   re-verified 2026-07-06 on the Mac kind stand: the render gate correctly
+   rejects `replicaCount=2` without both halves of the gate (the exact ADR
+   error text) and correctly admits it once both are set (`replicas: 2`,
+   correct env vars). The **two-real-pods live run** (kind at
+   `replicaCount=2` + the replica-correctness checks above) needs Docker and
+   was attempted 2026-07-06 on the Mac stand — genuinely incomplete: the
+   shared host hit severe resource contention this session (co-tenant CPU
+   spikes up to 80%, this cluster's own control plane crash-looping,
+   `kube-apiserver` 10+ restarts) that stalled the `agentflow/api` image build
+   itself at near-zero CPU progress across two attempts. See
+   `docs/clickhouse-cutover-plan.md` Phase 3 for the full honest account.
+   `scripts/k8s_replica_correctness_verify.sh` remains ready to automate the
+   pod-count and cross-pod registration-visibility checks whenever the live
+   run can complete; the delivery/alert checks follow the recipe in the
+   cutover plan (their store-level guarantee is already live-verified by
+   slice 5's 31/31 PG probes).
 
 ## Consequences
 

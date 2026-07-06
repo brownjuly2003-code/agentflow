@@ -18,6 +18,13 @@ END$$;
 -- MaterializedPostgreSQL engine needs CONNECT + SELECT to snapshot
 -- existing rows before streaming the WAL.
 GRANT CONNECT ON DATABASE ops TO rep_user;
+-- The engine self-bootstraps its publication with `CREATE PUBLICATION ...`
+-- executed AS rep_user, and Postgres requires CREATE on the database for
+-- that. CONNECT alone leaves the replication handler retry-looping on
+-- "permission denied for database ops" with no slot, no publication and no
+-- materialized tables (verified live 2026-07-06 on the kind stand). The
+-- fan-out variant already carries the same grant (fanout/03_cdc_setup.sql).
+GRANT CREATE  ON DATABASE ops TO rep_user;
 GRANT USAGE   ON SCHEMA ops_msk TO rep_user;
 GRANT USAGE   ON SCHEMA ops_dxb TO rep_user;
 GRANT SELECT  ON ALL TABLES IN SCHEMA ops_msk TO rep_user;

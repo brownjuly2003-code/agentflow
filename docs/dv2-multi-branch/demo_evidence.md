@@ -24,24 +24,29 @@ Docker:
 > items, priced in ₽** — see `docs/domain.md` and `docs/generator-spec.md`
 > for the model.
 >
-> **⚠ `demo_voiced.mp4` / `demo.cast` are superseded.** Both were captured
-> 2026-05-23, before this legend reset, and still show the retired
-> fashion-retailer narration and the old 40/25/15/10/10 branch split.
-> `demo_voiced.narration.txt` and `demo_transcript.txt` (the scripts behind
-> them) were rewritten to the current legend in the G2 S5 follow-up PR; the
-> `.mp4`/`.cast` media itself is pending re-recording on the Mac kind stand
-> (plan step S6) — see `demo.cast.README.md` for detail.
+> **`demo_voiced.mp4` / `demo.cast` re-recorded 2026-07-06.** Both were
+> captured 2026-05-23 against the retired fashion-retailer narration and the
+> old 40/25/15/10/10 branch split; both are now re-recorded live on the Mac
+> `hq-demo` kind stand against the current legend (see `demo.cast.README.md`
+> for the full account, including the `mc` alias gotcha hit along the way).
+> `demo_webui.mp4` was intentionally left untouched this pass — its narration
+> was already legend-clean, and re-capturing it would need a live Argo
+> Workflows UI, which was not stood up this session (§12).
 
-> **⚠ Infra sections (§1–3, §9–15) are pending re-capture on the kind
-> cluster (Mac stand).** Topology, workload pinning, PVCs, the MinIO cold
-> tier, the Postgres→ClickHouse bridge, the MaterializedPostgreSQL CDC path,
-> Argo orchestration and the dbt-in-Kubernetes Job all need the single-network
-> kind cluster; the standalone WSL-CH / Windows-PG split used for this
-> re-capture cannot reproduce cross-engine networking or Kubernetes. Their
-> **mechanisms are volume- and legend-independent** and stand as previously
-> demonstrated, but the **row counts printed in those blocks reflect
-> retired-seed-era volumes** and must not be read as current. They are flagged
-> inline and are the Mac-tail of this step (see `plan_endgame_02_07_26.md`).
+> **Infra sections re-captured 2026-07-06 on the Mac kind stand.**
+> The `hq-demo` kind cluster (Colima `vz` VM, kind v0.27.0 / k8s v1.32.2) was
+> rebuilt and the DV2 stack redeployed on the current kitchen-legend seed
+> (10,000 orders + 280 rows from the §10 OLTP bridge). §1–3, §9, §10, §12, §13
+> carry genuine live output from this stand — each section states its own
+> capture method and, where a shortcut was taken (e.g. §12's Argo-engine
+> substitution, §13's direct-SQL substitution for `dbt run`), says so
+> explicitly. §14/15 (MaterializedPostgreSQL CDC) were re-captured live in a
+> second pass: the first attempt stalled under host resource contention and
+> was recorded as blocked, then a quieter window exposed a deterministic
+> missing-grant root cause (fixed in `cdc_setup.sql`) and both sections now
+> carry a full live capture. The standalone WSL-CH /
+> Windows-PG split used for §4–8 cannot reproduce cross-engine networking or
+> Kubernetes, which is why these needed the kind cluster.
 
 ## Governance verify_live — both engines green on the new seeds
 
@@ -63,15 +68,15 @@ the count is whatever the checked-in script asserts — every probe passes.
 
 ## 1. Cluster topology — `kubectl get nodes --show-labels`
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Topology and labels are
-> legend-independent and stand as captured; re-run on the Mac kind stand for a
-> current timestamp.
+> **Re-captured 2026-07-06** on the Mac kind stand (Colima `vz` VM, kind
+> v0.27.0, `kindest/node` v1.32.2). Three-node topology from
+> `infrastructure/dv2/kind-hq-demo.yaml`, labels verbatim from the config.
 
 ```
 NAME                    STATUS   ROLES           AGE   VERSION
-hq-demo-control-plane   Ready    control-plane   77m   v1.35.0
-hq-demo-worker          Ready    <none>          76m   v1.35.0
-hq-demo-worker2         Ready    <none>          76m   v1.35.0
+hq-demo-control-plane   Ready    control-plane   14m   v1.32.2
+hq-demo-worker          Ready    <none>          14m   v1.32.2
+hq-demo-worker2         Ready    <none>          14m   v1.32.2
 ```
 
 Labels decoded:
@@ -84,7 +89,8 @@ Labels decoded:
 
 ## 2. Workload pinning — `kubectl get pods -n dv2 -o custom-columns=POD,NODE`
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.**
+> **Re-captured 2026-07-06** on the Mac kind stand. `nodeSelector` places each
+> StatefulSet on its labelled node.
 
 ```
 POD            NODE              STATUS
@@ -98,7 +104,8 @@ edge nodes (`branch=dxb`, `branch=ala`).
 
 ## 3. Persistent storage — `kubectl get pvc -n dv2`
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.**
+> **Re-captured 2026-07-06** on the Mac kind stand. Both `volumeClaimTemplates`
+> bound against the kind `standard` (rancher local-path) StorageClass.
 
 ```
 NAME                STATUS   CAPACITY   ACCESS MODES   STORAGECLASS
@@ -256,11 +263,9 @@ verify_live matrix above).
 
 ## 9. Cold-offload pipeline — MinIO S3 backed
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** MinIO + the ClickHouse
-> `s3()` CronJobs need the shared-network cluster; the standalone stand cannot
-> reproduce them. Row counts below are retired-seed-era and await refresh on the new
-> seeds. The mechanism (native `s3()` write + read-back, PII-free source
-> selection) is unchanged.
+> **Re-captured 2026-07-06** on the Mac kind stand (kitchen-legend seed). MinIO
+> `minio-0` (StatefulSet + Service + `cold-tier` bucket) and the ClickHouse
+> `s3()` offload ran on the live cluster; row counts below are current.
 
 `infrastructure/dv2/minio.yaml` provisions a single-node MinIO
 StatefulSet + Service + bucket-init Job. The cold-offload CronJobs
@@ -271,6 +276,33 @@ write parquet straight into the `cold-tier` bucket via ClickHouse's native
 returns 0 — the data-sovereignty contract is enforced by source selection
 (`sat_customer_anon__1c__{branch}` is the only satellite the CronJob reads).
 
+The five per-branch offloads (`INSERT INTO FUNCTION s3(...)` → `cold-tier`,
+each verified by an `s3()` read-back) landed one partitioned parquet object per
+branch. Listing straight from MinIO (`SELECT _path, count() FROM
+s3('http://minio:9000/cold-tier/**/*.parquet', …)`):
+
+```
+cold-tier/branch=ala/year=2026/month=07/customers_anon.parquet     80
+cold-tier/branch=dxb/year=2026/month=07/customers_anon.parquet     60
+cold-tier/branch=ekb/year=2026/month=07/customers_anon.parquet     70
+cold-tier/branch=msk/year=2026/month=07/customers_anon.parquet   2190
+cold-tier/branch=spb/year=2026/month=07/customers_anon.parquet    100
+```
+
+2,500 anonymized customer rows across the five branches (msk 2,190 / spb 100 /
+ekb 70 / dxb 60 / ala 80 — the §8 MDM population). `DESCRIBE` on the exported
+parquet confirms the PII-free contract at the schema level — the six columns
+are exactly the anon projection, with **0** of the PII names present:
+
+```
+customer_hk_hex   Nullable(String)
+age_bucket        Nullable(String)
+geo_region        Nullable(String)
+customer_segment  Nullable(String)
+load_ts           Nullable(DateTime64(3,'UTC'))
+record_source     Nullable(String)
+```
+
 ### Production swap path
 
 The CronJob takes `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` from env
@@ -280,12 +312,10 @@ cloud-provider secret takes its place.
 
 ## 10. Hot tier — Postgres OLTP + ClickHouse `PostgreSQL()` bridge
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** The bridge needs
-> ClickHouse and Postgres on one network; the standalone split (CH in WSL,
-> Postgres on the Windows host loopback) cannot reach across. Row counts and
-> the `Dasha/Egor/Fedor`-style names below are retired-seed-era and await refresh on the
-> new kitchen-legend seeds. The code path (Postgres → CH `Engine=PostgreSQL()`
-> live read-through → raw_vault → business_vault) is unchanged.
+> **Re-captured 2026-07-06** on the Mac kind stand (kitchen-legend seed,
+> current customer/order names — no `Dasha/Egor/Fedor`-style retired fixture
+> data). ClickHouse and Postgres share the `hq-demo` cluster network, so the
+> live `PostgreSQL()` read-through actually crosses pods for real.
 
 `warehouse/agentflow/dv2/postgres_oltp/seed.sql` populates Postgres with
 `ops_msk` + `ops_dxb` schemas; `bridge.sql` creates
@@ -294,6 +324,27 @@ cloud-provider secret takes its place.
 replication slot required. `promote_to_raw_vault.sql` runs the hot → warm
 step, landing `record_source = pg_ops__*` rows in `rv.hub_order` that surface
 in `bv_order_canonical` with correct branch attribution.
+
+Seed landed 50 msk customers + 200 msk orders, 20 dxb customers + 80 dxb
+orders; the live `oltp_live.*` read-through returned the identical counts
+(50/200/20/80) straight from Postgres via the `PostgreSQL()` engine. After
+`promote_to_raw_vault.sql`, `rv.hub_order FINAL` / `rv.hub_customer FINAL`
+show exactly `pg_ops__msk 200` / `pg_ops__dxb 80` and `pg_ops__msk 50` /
+`pg_ops__dxb 20` — the `ReplacingMergeTree(load_ts)` idempotency the
+architecture doc promises held in practice: this session's promotion script
+was invoked twice (the first run's client connection dropped from transport
+flakiness on this shared, CPU-contended Mac before confirming completion, so
+it was re-run to be safe) and `FINAL` collapsed the raw duplicate rows back
+to the exact expected counts, not double. A sample landed row:
+
+```
+order_bk          branch  channel  total_amount  header_source
+OLTP-DXB-000001   dxb     b2b            60355   bitrix__dxb
+```
+
+confirming the `pg_ops__*`-sourced order resolves branch, channel, amount and
+`header_source = bitrix__<branch>` through `bv_order_canonical` exactly like
+every other source in the vault.
 
 ## 11. How to re-run
 
@@ -324,9 +375,21 @@ bash infrastructure/dv2/bootstrap.sh   # idempotent rebuild on the kind cluster
 
 ## 12. Argo Workflows orchestration
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Timings/counts below are
-> retired-seed-era. DAG ordering (hub → link → satellite → cold-offload) is enforced by
-> dependencies, not clock-time; that property is legend-independent.
+> **Re-captured 2026-07-06** on the Mac kind stand, with one honest
+> substitution: the Argo Workflows **controller + server** themselves were
+> **not installed**. The `dv2-refresh` WorkflowTemplate's `cold-offload` stage
+> fans out 5 concurrent `clickhouse-server`-image pods (one per branch) — the
+> exact shape of operation that OOM-crashed this shared, ~6 GiB Mac earlier in
+> this session when the 5 CronJob-triggered offload Jobs were run concurrently
+> (full kind-node restart needed to recover, twice, across this session).
+> Installing the Argo controller/server adds another standing subsystem on a
+> host already this tight, and would still reproduce the same 5-way
+> concurrency risk when a real Workflow ran. Instead, every step's **exact
+> command** was run directly against the live cluster, in the same dependency
+> order the WorkflowTemplate encodes, one at a time (`promote-oltp` was
+> effectively covered by §10; `cold-offload` fan-out was already covered by
+> §9, sequential per branch). This is genuine live output from the real
+> pipeline logic — just orchestrated by hand instead of by the Argo binary.
 
 `infrastructure/dv2/argo/` deploys Argo Workflows plus a `dv2-refresh`
 WorkflowTemplate that chains hot → warm → cold as one DAG:
@@ -339,11 +402,70 @@ promote-oltp → validate-hubs → {validate-links, validate-satellites}
 A failure in `validate-links` aborts the run before any S3 write, so mirrors
 are never out of sync with the warm tier.
 
+**`validate-hubs`** (row counts + hk uniqueness, `FINAL`-deduped):
+
+```
+hub_customer: rows=2570  unique_hk=2570   (2,500 synthetic + 70 §10 pg_ops__*)
+hub_order:    rows=10280 unique_hk=10280  (10,000 synthetic + 280 §10 pg_ops__*)
+hub_store:    rows=6     unique_hk=6
+hub_product:  rows=160   unique_hk=160
+```
+
+**`validate-links`** (orphan-check vs hubs): `lnk_order_customer` orphans
+(rows with no parent `hub_order`) = **0**, 10,280 rows total — every link
+resolves.
+
+**`validate-satellites`** (branch distribution post-promotion):
+
+```
+branch  rows
+ala      75
+dxb     155   (75 synthetic + 80 §10 pg_ops__dxb)
+ekb     130
+msk    9740   (9,540 synthetic + 200 §10 pg_ops__msk)
+spb     180
+```
+
+`sat_order_pricing__1c__msk` rows: 9,540 (unaffected — the OLTP bridge lands
+in Bitrix header satellites only, no 1C pricing for `pg_ops__*` orders, which
+is why `header_source` populates but `pricing_source` does not for OLTP-origin
+rows — same LEFT JOIN miss behavior as ALA in the G1 smoke).
+
+**`verify-mirrors`** (cross-check cold-tier parquet vs source satellites, all
+5 branches, source count vs mirror count):
+
+```
+branch  source  mirror  result
+msk       2190    2190   OK
+spb        100     100   OK
+ekb         70      70   OK
+dxb         60      60   OK
+ala         80      80   OK
+```
+
+All 5 mirrors match source exactly — the same invariant `verify-mirrors`
+asserts in the WorkflowTemplate, genuinely reproduced without the Argo engine
+itself running.
+
 ## 13. dbt mart layer
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** The dbt-in-Kubernetes
-> Job and its per-branch row counts are retired-seed-era. The three marts + 12 tests are
-> legend-independent in structure; the numbers await refresh on the new seeds.
+> **Re-captured 2026-07-06** on the Mac kind stand, with one honest deviation
+> from `infrastructure/dv2/dbt/dbt-run-job.yaml`: the `dbt-run-marts` Job (which
+> `pip install`s `dbt-core`/`dbt-clickhouse` inside a fresh pod) triggered a host
+> OOM on this memory-constrained shared Mac earlier in this session (5 parallel
+> cold-offload Job pods, then a heavy view recompute, each needed a full kind
+> node restart to recover — the host has ~600 MB–1 GB free with the DV2 stack
+> plus another project's containers already running). Rather than retry a
+> similarly heavy pod, the three mart **model SQL files themselves**
+> (`warehouse/agentflow/dv2/dbt/models/marts/*.sql`) were compiled by stripping
+> only the pure-templating Jinja (`{{ config(...) }}`, `{{ source('rv', X) }}`
+> → `rv.X`) — no logic changes — and run directly as `CREATE TABLE ... AS
+> SELECT` against the live `bv_order_canonical_mat` (also freshly rebuilt this
+> session from the live `bv_order_canonical` view, with frugal per-query memory
+> settings). The 12 `schema.yml` assertions (`not_null` / `accepted_values`)
+> were then run as their equivalent raw SQL. This is not a `dbt run && dbt
+> test` invocation, but every number below is genuine live output from the
+> current kitchen-legend seed, not fabricated.
 
 `warehouse/agentflow/dv2/dbt/` ships three materialized marts and 12 data
 tests on top of the business vault, run via a Kubernetes Job
@@ -352,29 +474,156 @@ per `(customer_hk, branch)`; `branch_pnl.effective_tax_rate` validates the
 per-jurisdiction wiring end-to-end (1C pricing satellites → BV view → dbt
 mart) — the same 12/5/20% rates verified live in §8.
 
+Row counts: `customer_360` 2,500 (one per customer — matches the §8
+population), `branch_pnl` 5 (one per branch, single-month seed),
+`returns_velocity` 14 (branch × channel × week grain). `branch_pnl` per
+branch:
+
+```
+branch  orders  gross_revenue  effective_tax_rate
+msk       9540       38792056                 0.2
+spb        180        9366120                 0.2
+ekb        130        6749619                 0.2
+dxb         75        6737025                0.05
+ala         75        3370575                0.12
+```
+
+10,000 total orders across the 5 `branch_pnl` rows; `effective_tax_rate`
+reproduces the §8 jurisdiction rates exactly (RU 20%, UAE 5%, KZ 12%)
+end-to-end through the mart layer. All **12/12** schema tests pass (0 failing
+rows each): `customer_360` hk/branch not-null + branch `accepted_values` +
+`return_rate` not-null; `branch_pnl` branch not-null + `accepted_values` +
+month not-null; `returns_velocity` branch not-null + `accepted_values` +
+channel not-null + week not-null + `return_rate` not-null.
+
 ## 14. Push-based CDC via MaterializedPostgreSQL
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** MaterializedPostgreSQL
-> consumes the Postgres WAL via logical replication and needs both engines on
-> one network with `wal_level=logical`; the standalone split cannot reproduce
-> it. Contents are retired-seed-era.
+> **Re-captured live 2026-07-06** on the Mac kind stand (kitchen-legend seed),
+> in two passes. The first pass, made while the shared host was saturated
+> (load average 40+; a stray `clickhouse-benchmark -c 8` load-test pod from an
+> earlier session was later found still running on the control-plane node),
+> saw only `pqxx::broken_connection` timeouts and was honestly recorded as
+> blocked-by-contention. A second pass in a quieter window exposed the real,
+> deterministic blocker underneath: `cdc_setup.sql` granted `rep_user` only
+> `CONNECT`, but the engine self-bootstraps its publication with
+> `CREATE PUBLICATION ...` executed *as* `rep_user`, which requires `CREATE`
+> on the source database — the replication handler retry-looped on
+> `permission denied for database ops` (database visible in `SHOW DATABASES`,
+> but no slot, no publication, no tables). With the grant added
+> (`cdc_setup.sql` in this branch now carries it; the fan-out variant in
+> `fanout/03_cdc_setup.sql` always had it), the initial snapshot completed on
+> the same overloaded host in under a minute.
 
 The pull-based `oltp_live` bridge is replaced by a single `oltp_cdc`
-ClickHouse database backed by `MaterializedPostgreSQL`, consuming the Postgres
-WAL. `materialized_postgresql_schema_list` lets one CH database carry both
-Postgres schemas. Live E2E: an INSERT/UPDATE in Postgres surfaces in
-ClickHouse within seconds with no manual refresh; `promote_to_raw_vault_cdc.sql`
-(reading `FINAL` to dedupe ReplacingMergeTree versions) lands the `pg_ops__*`
-rows in raw_vault.
+ClickHouse database backed by `MaterializedPostgreSQL`, consuming the
+Postgres WAL — `postgres-sts.yaml` runs `wal_level=logical`, confirmed live
+(`SHOW wal_level` → `logical`, no pod restart needed).
+`materialized_postgresql_schema_list = 'ops_msk,ops_dxb'` lets one CH
+database carry both Postgres schemas. Live state after `cdc_bridge.sql`:
+
+```
+SHOW TABLES FROM oltp_cdc
+  ops_dxb.customers   ops_dxb.orders   ops_msk.customers   ops_msk.orders
+
+pg_publication:        ops_ch_publication
+pg_publication_tables: ops_dxb.customers / ops_dxb.orders /
+                       ops_msk.customers / ops_msk.orders
+pg_replication_slots:  slot "ops", database ops, active = t,
+                       confirmed_flush_lsn advancing (0/19A4D80 at capture)
+```
+
+The snapshot materialized the §10 seed through the WAL pipeline: msk
+50 customers / 200 orders, dxb 20 / 80 (the first read-back also carried one
+stale test row inserted by the interrupted first pass, replicated out again
+once its `DELETE` was applied — see the E2E below).
+
+`promote_to_raw_vault_cdc.sql` (reading `FINAL` to dedupe CDC versions) lands
+the `pg_ops__*` rows in the raw vault:
+
+```
+rv.hub_order FINAL:     pg_ops__msk 200   pg_ops__dxb 80
+rv.hub_customer FINAL:  pg_ops__msk 50    pg_ops__dxb 20
+```
+
+— identical to the §10 pull-bridge promotion: the hub hashes are the same,
+so `ReplacingMergeTree(load_ts)` collapses the pull and CDC promotion passes
+instead of double-counting. The order-header satellites gain a second SCD2
+version per `pg_ops__*` order (`hash_diff` `pg-cdc-hdr` vs `pg-hdr`) —
+additive vault history; `argMax`-latest reads are unchanged.
+
+Live E2E, no manual refresh on the CH side:
+
+- **INSERT** (`msk-c-cdc-live`) and **UPDATE** (phone on `CUST-MSK-0001`) in
+  Postgres surfaced in ClickHouse on the next FINAL read — msk customer key
+  count 50 → 51, matching Postgres row-for-row (`51` on both sides).
+- **DELETE** of the test row propagated back out: after `DELETE ... RETURNING`
+  in Postgres, a column read
+  (`... FINAL WHERE customer_id = 'msk-c-cdc-live'`) returns **0 rows**.
+- One engine-semantics note the capture surfaced: `count()` over these tables
+  with `FINAL` keeps counting a delete-marked key (the reading stayed `51`
+  after the delete), while column reads — including the promotion's
+  `INSERT ... SELECT ... FINAL` — filter it out (the promotion saw exactly 50
+  live msk customers). Row-presence checks against a
+  `MaterializedPostgreSQL` table should therefore select columns, not bare
+  `count()`.
+
+On this heavily loaded shared host the WAL apply lag ranged from seconds to
+minutes under the load spikes documented above — the mechanism is push-based
+either way; nothing was re-polled or manually refreshed.
+
+Vault hygiene after the run: the E2E test row never reached the vault
+(`rv.hub_customer FINAL WHERE customer_bk='msk-c-cdc-live'` → 0 rows — the
+promotion ran while the key's latest CDC state was delete-marked), so the §12
+hub counts (2,570 customers / 10,280 orders) are unchanged by this capture.
 
 ## 15. Per-branch CDC fan-out
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Contents are retired-seed-era.
+> **Re-captured live 2026-07-06** on the Mac kind stand. One stand-side prep
+> step the checked-in scripts assume but do not perform: creating the
+> per-branch databases themselves (`CREATE DATABASE ops_msk_db / ops_dxb_db`)
+> — `fanout/01_schema.sql` opens with `\c ops_msk_db`.
 
 Operational reality wants a single branch to be pausable, re-snapshotable and
-rotatable without touching another branch's stream. ClickHouse 25.5+ rejects a
-custom publication name on `MaterializedPostgreSQL`, so the fan-out pattern
-splits the source — one Postgres **database** per branch (`ops_msk_db`,
-`ops_dxb_db`), each with its own auto-named publication and slot, consumed by
-two independent CH `MaterializedPostgreSQL` databases (`oltp_cdc_msk`,
-`oltp_cdc_dxb`). Isolation check: the msk CH database has zero rows from dxb.
+rotatable without touching another branch's stream. ClickHouse 25.5 rejects a
+custom publication name on `MaterializedPostgreSQL`
+(`materialized_postgresql_publication_name` → `Code 115. Unknown setting`),
+so the fan-out pattern splits the source — one Postgres **database** per
+branch (`ops_msk_db`, `ops_dxb_db`), each with its own auto-named publication
+and slot, consumed by two independent CH `MaterializedPostgreSQL` databases:
+
+```
+oltp_cdc_msk: customers 10   orders 30     (02_seed.sql msk set)
+oltp_cdc_dxb: customers  8   orders 20     (02_seed.sql dxb set)
+
+pg_replication_slots (one per source database, plus §14's single-DB slot):
+  ops         ops           (single-DB pattern, §14)
+  ops_msk_db  ops_msk_db
+  ops_dxb_db  ops_dxb_db
+
+pg_publication per branch DB (auto-named by the engine, no collision):
+  ops_msk_db_ch_publication   /   ops_dxb_db_ch_publication
+```
+
+Live edit + propagation on the msk stream only: an INSERT (`msk-c-LIVE`) and
+an UPDATE (phone on `msk-c-001`) in `ops_msk_db` surfaced in `oltp_cdc_msk`
+on a FINAL read **12 seconds later** — customer count 10 → 11, both edits
+visible column-level:
+
+```
+┌─customer_id─┬─phone────────┐
+│ msk-c-001   │ +74950000000 │
+│ msk-c-LIVE  │ NULL         │
+└─────────────┴──────────────┘
+```
+
+Isolation check — the msk CH database carries zero dxb rows and vice versa:
+
+```
+dxb_rows_in_msk: 0
+msk_rows_in_dxb: 0
+```
+
+The architectural payoff is exactly the §15 claim: two publications, two
+slots, per-branch pause/re-snapshot semantics, no cross-branch coupling. For
+production-scale fan-out an external CDC tool (PeerDB / Debezium) remains the
+better operational fit — see `fanout/README.md` for the full trade-off.

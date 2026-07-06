@@ -96,20 +96,11 @@
   <main>
     <h1>DV2.0 Multi-Branch — Live Demo</h1>
     <p class="lede">
-      42-second silent terminal recording of the 6-beat pitch executed end-to-end
-      against the live <code>hq-demo</code> Kubernetes cluster on 2026-05-23.
+      54-second silent terminal recording of the 6-beat pitch executed end-to-end
+      against the live <code>hq-demo</code> Kubernetes cluster on 2026-07-06.
       Self-hosted upstream Kubernetes, ClickHouse 25.5 + Postgres 17 + MinIO,
-      Data Vault 2.0 schema with five-branch <code>record_source</code> dimension.
-    </p>
-    <p class="lede" style="color:#a15c00">
-      <strong>Superseded — pending re-recording.</strong> The embedded
-      <code>demo.cast</code> below was captured 2026-05-23, before the
-      kitchen-appliance-importer legend migration (2026-07-03), and the beat
-      table beneath it is written to the current legend's numbers, not the
-      figures the old recording actually shows. Media re-recording on the Mac
-      kind stand is tracked as plan step S6; until then, treat the playing
-      video as stale. See <code>demo.cast.README.md</code> and
-      <code>demo_evidence.md</code>.
+      Data Vault 2.0 schema with five-branch <code>record_source</code> dimension,
+      current kitchen-appliance-importer legend.
     </p>
 
     <div class="player" id="player"></div>
@@ -119,17 +110,14 @@
       <a href="#" onclick="window.player.play(); return false;">play</a>
       <a href="#" onclick="window.player.pause(); return false;">pause</a>
       <a href="#" onclick="window.player.seek(0); window.player.play(); return false;">restart</a>
-      <span style="margin-left:auto">
-        <a href="https://asciinema.org/a/ZBTnOWGs5Jzhn7rW" target="_blank">hosted on asciinema.org</a>
-      </span>
     </div>
 
     <div class="beats">
       <div class="h">Time</div><div class="h">Beat</div><div class="h">Output</div>
       <div class="t">00:00</div><div>Cluster topology — <code>kubectl get nodes</code></div><div>3 nodes, labelled <code>branch</code> / <code>nodepool</code> / <code>workload</code></div>
       <div class="t">00:08</div><div>Model surface — table kinds in <code>rv</code></div><div>bv 6, hub 8, lnk 8, sat 48</div>
-      <div class="t">00:14</div><div>Multi-branch distribution from <code>hub_order</code></div><div>msk 95.4 / spb 1.8 / ekb 1.3 / dxb 0.8 / ala 0.8 %</div>
-      <div class="t">00:22</div><div>Business Vault MDM — PII + loyalty</div><div>msk 2190/2190/152, dxb 60/60/0</div>
+      <div class="t">00:14</div><div>Multi-branch distribution from <code>hub_order</code></div><div>msk 94.7 / spb 1.8 / dxb 1.5 / ekb 1.3 / ala 0.7 %</div>
+      <div class="t">00:22</div><div>Business Vault MDM — PII + loyalty</div><div>msk 2240/2240/152, dxb 80/80/0</div>
       <div class="t">00:30</div><div>Cold-offload <code>kubectl create job</code> + MinIO listing</div><div>parquet files for all 5 branches in <code>local/cold-tier</code></div>
       <div class="t">00:40</div><div>Closing — single bootstrap reproduces everything</div><div><code>bash infrastructure/dv2/bootstrap.sh</code></div>
     </div>

@@ -102,6 +102,21 @@ def resolve_node_config(env: Mapping[str, str] | None = None) -> NodeConfig:
             f"AGENTFLOW_NODE_TOKEN is required in role={role!r} — the center "
             "accepts ingest with it, an edge sends it — but is unset or empty."
         )
+    # n4 (G2 audit): the node token must not equal the public demo API key
+    # (``DEMO_API_KEY``, default ``demo-key`` — published in the demo docs).
+    # ``node/ingest.py``'s bearer check is already a distinct auth path from
+    # the API-key auth middleware, but nothing stopped an operator from
+    # *configuring* the same well-known value for both — which would let any
+    # public demo caller also authenticate as node-to-node federation. Fail
+    # fast at boot instead of silently accepting the collision.
+    demo_key = env.get("DEMO_API_KEY", "demo-key")
+    if demo_key and token == demo_key:
+        raise NodeConfigError(
+            "AGENTFLOW_NODE_TOKEN must not equal the public demo API key "
+            f"(DEMO_API_KEY={demo_key!r}) — that key is published in the demo "
+            "docs, so reusing it as the node token would let any public demo "
+            "caller authenticate as node-to-node federation."
+        )
 
     if role == "center":
         # The center does not emit, so AGENTFLOW_NODE_CENTER_URL is ignored.

@@ -358,6 +358,15 @@ class ClickHouseBackend(ServingBackend):
             expect_json=False,
             translate=False,
         )
+        # n4 (G2 audit): no `branch` column here, unlike the DuckDB embedded
+        # schema (ADR 0012 N4, `src/processing/local_pipeline.py`) — deferred,
+        # not an oversight. The three-node demo's node-ingest write path
+        # (`src/serving/node/ingest.py`) always applies through
+        # `_process_event(..., clickhouse_sink=None)`, i.e. it is DuckDB-only
+        # today; no ClickHouse caller reads or filters on a branch tag. Add
+        # `branch Nullable(String)` to the ALTER loop below (same
+        # additive/idempotent pattern) if/when node ingest is ever wired to
+        # write through ClickHouse.
         self._request(
             f"""
             CREATE TABLE IF NOT EXISTS {self._database}.pipeline_events (

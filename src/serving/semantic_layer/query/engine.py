@@ -112,6 +112,19 @@ class QueryEngine(
         stage clock, ops-surfaces-spec.md §1.2/§3.2) — orthogonal to
         ``event_type``/``validated_only``, usable without an ``entity_id``
         for a bulk scan across many entities in one query.
+
+        ``tenant_id=None`` is an explicit invariant, not incidental behaviour
+        (n4, G2 audit): it means "no tenant filter" — an unscoped, cross-
+        tenant scan. Two call shapes reach it deliberately: the webhook
+        dispatcher's background scan, which is intentionally tenant-agnostic
+        (it matches events against every registered webhook regardless of
+        tenant); and the ``/v1/ops/*`` and ``/v1/stream/*`` routers, whose
+        per-request ``tenant_id`` is resolved from ``request.state`` and is
+        ``None`` in exactly one situation — auth is disabled
+        (``AGENTFLOW_AUTH_DISABLED``/``app.state.auth_disabled``, dev/demo
+        mode only; ``AuthMiddleware`` always sets a concrete tenant on an
+        authenticated request). A genuinely multi-tenant deployment with auth
+        enabled never produces ``tenant_id=None`` from those routers.
         """
         # Deliberately uncached (unlike _table_columns): the journal is created
         # and widened by out-of-process writers, so a scan must see schema

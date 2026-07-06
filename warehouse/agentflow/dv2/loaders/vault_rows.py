@@ -1,11 +1,22 @@
-"""Vault-generic raw-vault row models shared by DV2 PostgreSQL ingestion.
+"""Vault-generic raw-vault row models — test fixtures, not a live write path.
 
-These pydantic models describe the hub / link / order-satellite shape used by
-every per-branch order feed (``sat_order_header__1c__*`` /
-``sat_order_pricing__1c__*``) and by ``PostgresVaultWriter``'s column-order /
-DDL-coverage tests. They are entity-generic (not tied to any one source
+These pydantic models describe the hub / link / order-satellite shape of the
+per-branch order feed (``sat_order_header__1c__*`` / ``sat_order_pricing__1c__*``).
+They were relocated here from the deleted X5 Retail Hero loader during its
+removal (G2 audit S2b) because ``PostgresVaultWriter``'s own tests
+(``tests/unit/test_dv2_postgres_ingestion.py``) needed generic row shapes to
+keep running; that test file is their only importer today.
+
+**Not a live write path**: the per-branch order feed's actual production
+writes go through the SQL script ``promote_to_raw_vault_pg.sql``, not Python.
+These models exist purely as (a) a DDL-coverage/column-shape pin — their
+fields must be a subset of the committed PostgreSQL DDL columns — and (b) a
+generic fixture shape for ``PostgresVaultWriter``'s own unit tests (column
+order, batching, hash-key handling), reusing the order-feed shape as a
+convenient stand-in. They are entity-generic (not tied to any one source
 system or dataset) — see ``reference/vault_mapping.py`` for the analogous
-models used by the supplier/product reference feed.
+models used by the supplier/product reference feed, which *is* a live
+Python write path (``reference/load_postgres.py``).
 """
 
 from __future__ import annotations

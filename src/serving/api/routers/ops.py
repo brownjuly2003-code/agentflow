@@ -29,6 +29,7 @@ from src.serving.semantic_layer.reconciliation import (
     ReconciliationFinding,
     check_journal_vs_store,
     check_stuck_replay,
+    journal_scan_limit,
 )
 from src.serving.semantic_layer.stage_clock import (
     coerce_dt,
@@ -73,6 +74,11 @@ class StuckOrdersResponse(BaseModel):
 
 
 def _resolve_tenant_id(request: Request) -> str | None:
+    # n4 (G2 audit): None here means auth is disabled (dev/demo mode) — a
+    # real authenticated request always carries a concrete `tenant_key.tenant`
+    # (AuthMiddleware). Passed through to `fetch_pipeline_events`, where
+    # tenant_id=None is the documented cross-tenant-scan invariant, not an
+    # oversight — see QueryEngine.fetch_pipeline_events's docstring.
     tenant_key = getattr(request.state, "tenant_key", None)
     tenant_id = getattr(request.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
     return cast("str | None", tenant_id)
@@ -134,19 +140,28 @@ def _build_stuck_orders_payload(
 
     order_rows = engine.fetch_orders_by_status(ladder, tenant_id=tenant_id)
     stage_rows = engine.fetch_pipeline_events(
-        tenant_id=tenant_id, topic="orders.status", newest_first=False
+        tenant_id=tenant_id,
+        topic="orders.status",
+        newest_first=True,
+        limit=journal_scan_limit(),
     )
 
     # Latest journal row per (order, event_type), matching each order's
     # *current* status — not merely the most recent row overall (§1.4).
-    # Ascending iteration means the last write for a key wins.
+    # Descending iteration (`newest_first=True`, bounded per m13's
+    # `journal_scan_limit()` — a size safety net against an unbounded scan of
+    # the whole journal at production scale): the first row seen per key is
+    # its latest — skip once a key is already recorded.
     latest_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     for row in stage_rows:
         entity_id = row.get("entity_id")
         event_type = row.get("event_type")
         if not entity_id or not event_type:
             continue
-        latest_by_key[(str(entity_id), str(event_type))] = row
+        key = (str(entity_id), str(event_type))
+        if key in latest_by_key:
+            continue
+        latest_by_key[key] = row
 
     all_items = [
         _build_stuck_order_item(

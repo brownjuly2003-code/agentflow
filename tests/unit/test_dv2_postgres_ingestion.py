@@ -1,11 +1,26 @@
 """Unit tests for the DV2 PostgreSQL ingestion repoint (no Docker).
 
-The raw vault moved off ClickHouse onto PostgreSQL; these tests pin that the
-per-branch order feed and the supplier reference can actually *feed* that
-PostgreSQL vault without a live database:
+The raw vault moved off ClickHouse onto PostgreSQL. Two genuinely different
+write paths are covered here, and it matters which is which (B3, G2 audit):
+
+* The **supplier/reference feed** is a real Python write path:
+  ``PostgresVaultWriter`` + ``reference/load_postgres.py`` actually connect
+  and insert (see ``test_reference_load_writes_all_tables``).
+* The **per-branch order feed** (``hub_customer``/``hub_order``/
+  ``sat_order_header__1c__*``/...) is *not* written by Python in production
+  — its live path is the SQL script ``promote_to_raw_vault_pg.sql`` (covered
+  separately below, "PostgreSQL-native OLTP -> vault promotion"). The
+  ``vault_rows`` Pydantic models used in ``ORDER_FEED_TABLES`` below exist
+  only as (a) a DDL-coverage/column-shape pin (model fields vs. the
+  committed DDL) and (b) a generic fixture shape for ``PostgresVaultWriter``'s
+  own unit tests, which exercise its column-order/batching mechanics against
+  a fake DB-API connection — reusing the order-feed shape as a stand-in, not
+  because the order feed itself calls the writer.
+
+This file otherwise pins:
 
 * ``build_insert_sql`` renders an idempotent, sqlglot-valid INSERT;
-* every column the feeds insert exists in the committed PostgreSQL DDL (the
+* every column a feed inserts exists in the committed PostgreSQL DDL (the
   guard that catches a model/DDL or generic-vs-entity-name drift);
 * ``PostgresVaultWriter`` streams rows through a fake DB-API connection in the
   right column order and batches, with hash keys preserved as ``bytes``.
@@ -167,8 +182,11 @@ def test_build_insert_sql_satellite_requires_single_hash_key():
 
 # --- inserted columns exist in the committed PostgreSQL DDL -------------------
 
-# Tables the per-branch order feed (1c) inserts into, with the row model whose
-# fields become the INSERT column list.
+# DDL-coverage pin, not a live write path (see module docstring): the tables
+# the per-branch order feed (1c) logically owns, with the vault_rows model
+# whose fields must be a subset of each table's committed DDL columns. The
+# feed's actual live writes go through promote_to_raw_vault_pg.sql, not these
+# models.
 ORDER_FEED_TABLES = [
     ("hub_customer", "01_hubs.sql", vault_rows.HubCustomer),
     ("hub_product", "01_hubs.sql", vault_rows.HubProduct),

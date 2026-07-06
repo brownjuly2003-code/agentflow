@@ -42,6 +42,20 @@ MAX_EVENTS_PER_BATCH = 500
 # one process = one lock.
 _INGEST_LOCK = threading.Lock()
 
+# n4 (G2 audit): idempotency (`_existing_event_ids` below, N5) is a Python
+# check-then-act filter, not a DB-level constraint — deliberately deferred,
+# not an oversight. It is safe today because `_INGEST_LOCK` already
+# serializes every ingest write within the single center process (ADR 0012's
+# topology has exactly one center; there is no concurrent-writer scenario to
+# race). A DB-level backstop is not a clean fit either: the idempotency scope
+# is `event_id` unique *within* `topic IN ('events.validated',
+# 'events.deadletter')` only (derived rows such as the `orders.status`
+# journal entry intentionally reuse the same event_id with an `-status`
+# suffix), and DuckDB does not support partial/filtered unique indexes — a
+# table-wide `UNIQUE(event_id)` would over-constrain the journal beyond what
+# this check actually needs. Revisit if a multi-center topology (concurrent
+# writers) is ever built.
+
 
 class NodeEventBatch(BaseModel):
     """One edge->center push. ``origin_branch`` is constrained to the live edge

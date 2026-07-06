@@ -184,8 +184,9 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > string parse in the serving tier. **Executed 2026-07-02 (ADR 0006 Phase 2):**
 > `warehouse/agentflow/dv2/governance/` — fail-closed column grants for `dv2_analyst`,
 > per-jurisdiction `dv2_pii_officer__<branch>` roles, row policies on `hub_customer`,
-> `SQL SECURITY DEFINER` MDM views, PII-free `customer_360`; verified live 32/32
-> (`docs/perf/vault-pii-governance-verify-2026-07-02.md`). `sql_guard` remains, scoped
+> `SQL SECURITY DEFINER` MDM views, PII-free `customer_360`; verified live, 29/29
+> probes on the current script (`docs/perf/vault-pii-governance-verify-2026-07-03.md`).
+> `sql_guard` remains, scoped
 > to what it can actually enforce: SELECT-only, no DML, the tenant table allow-list, and
 > the recursive-CTE shadow reject. Tracked in `road-to-9.8.md`.
 >

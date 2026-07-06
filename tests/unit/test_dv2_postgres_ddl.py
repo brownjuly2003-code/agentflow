@@ -44,8 +44,9 @@ def _strip_comments(sql: str) -> str:
     return sql
 
 
-# B2 (brand-neutral restoration of a guard dropped during X5 removal, G2
-# audit): the header comment's illustrative "which source conventions does
+# B2 (brand-neutral restoration of a guard dropped when the retired benchmark
+# dataset and its loader were removed — G2 audit, dataset named in
+# CHANGELOG.md): the header comment's illustrative "which source conventions does
 # this admit" example must only ever name known-good record_source prefixes.
 # Checked against an explicit allowlist rather than a literal bad string, so
 # this test never itself has to spell out the retired dataset's prefix to

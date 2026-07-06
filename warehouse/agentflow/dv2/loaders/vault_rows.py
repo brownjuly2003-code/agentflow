@@ -2,8 +2,9 @@
 
 These pydantic models describe the hub / link / order-satellite shape of the
 per-branch order feed (``sat_order_header__1c__*`` / ``sat_order_pricing__1c__*``).
-They were relocated here from the deleted X5 Retail Hero loader during its
-removal (G2 audit S2b) because ``PostgresVaultWriter``'s own tests
+They were relocated here from the now-deleted legacy external-dataset loader
+during its removal (G2 audit S2b; the dataset is named in CHANGELOG.md)
+because ``PostgresVaultWriter``'s own tests
 (``tests/unit/test_dv2_postgres_ingestion.py``) needed generic row shapes to
 keep running; that test file is their only importer today.
 

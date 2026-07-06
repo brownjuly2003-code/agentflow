@@ -183,7 +183,7 @@ audit-closure sprint:
   ClickHouse), PII protection moves from the removed app-level string-parse
   gate to engine-enforced vault governance (fail-closed column grants,
   per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
-  views — 32/32 live adversarial probes), plus the vendored NL→SQL
+  views — every live adversarial probe green), plus the vendored NL→SQL
   generation engine (LangGraph, routed through GraceKelly), the DV2 raw
   vault on PostgreSQL with `LISTEN`/`NOTIFY` freshness, the MinIO-backed
   PyIceberg catalog, and the OpenSSF Scorecard channel (5.8 → 7.0).

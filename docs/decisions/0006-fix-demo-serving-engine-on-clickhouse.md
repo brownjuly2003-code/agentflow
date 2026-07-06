@@ -109,8 +109,8 @@ Concretely:
   `marts.customer_360`. The separate schema-execution app check became moot
   when the app-level gate was removed with the empty serving PII surface:
   access control on resolved columns *is* the engine ground-truth. Verified
-  live, 32/32 adversarial probes:
-  `docs/perf/vault-pii-governance-verify-2026-07-02.md`.
+  live, 29/29 adversarial probes:
+  `docs/perf/vault-pii-governance-verify-2026-07-03.md`.
 - The semantic layer **keeps emitting DuckDB-flavored SQL** and relies on
   `ClickHouseBackend._translate_sql` to transpile — this stays a deliberate,
   documented layer rather than an accident. Making the semantic layer emit

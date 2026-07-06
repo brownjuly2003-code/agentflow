@@ -1,31 +1,35 @@
-# Release status — v1.6.0 PUBLISHED
+# Release status — v2.0.0 PUBLISHED
 
-**Status (verified 2026-07-02 via live registry queries):** v1.1.0
-through v1.6.0 are all published on the three registries (PyPI
+**Status (verified 2026-07-06 via live registry queries):** v1.1.0
+through v2.0.0 are all published on the three registries (PyPI
 `agentflow-runtime` + `agentflow-client`, npm
-`@yuliaedomskikh/agentflow-client`). v1.6.0 is the architecture-fixing
-release: ClickHouse becomes the shipped serving engine (ADR 0006
-Phase 1 — pipeline sink, `ReplacingMergeTree` row versions,
-backend-routed event scan, dedicated CI E2E lane), PII protection moves
-from the removed app-level string-parse gate to engine-enforced vault
-governance (ADR 0006 Phase 2 — fail-closed column grants,
-per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
-views; every live adversarial probe green), plus the vendored NL→SQL
-generation engine routed through GraceKelly (ADR 0008), the DV2 raw
-vault PostgreSQL migration with `LISTEN`/`NOTIFY` freshness, the
-MinIO-backed PyIceberg catalog, ADR 0009, and the OpenSSF Scorecard
-channel (published score 5.8 → 7.0).
+`@yuliaedomskikh/agentflow-client`). v2.0.0 is the major release that
+re-founds the demo universe and ships the scale path: the business
+legend re-pinned end-to-end to an own-brand kitchen-appliance importer
+in ₽ (breaking for the retired fashion-retail/USD surfaces), the
+external real-retailer dataset removed outright (breaking: loader
+deleted, its at-scale benchmark retired as historical), the control
+plane externalized to PostgreSQL behind the `ControlPlaneStore` port
+(ADR 0010, slices 1–6 incl. the Helm scale profile), three operational
+read surfaces split out of the agent catalog (ADR 0011), the three-node
+demo topology implemented and deployed live on HF Spaces (ADR 0012),
+and the G2 audit closure (spec/seed consistency, journal-scan
+hardening, live evidence re-captures, demo serving-backend pin).
 
-v1.5.0 is a security & correctness hardening release: argon2id key
-hashing with an O(1) peppered lookup index, an NL→SQL guard bypass fix
-(typed `read_csv` / `read_parquet` scan functions denied in projection
-position), `sqlglot` control-byte and mutation-target repairs, and a
-strict-`mypy` expansion. No public API changes from v1.4.0.
+v1.6.0 was the architecture-fixing release: ClickHouse became the
+shipped serving engine (ADR 0006 Phase 1), PII protection moved to
+engine-enforced vault governance (ADR 0006 Phase 2), plus the vendored
+NL→SQL generation engine (ADR 0008), the DV2 raw vault PostgreSQL
+migration, the MinIO-backed PyIceberg catalog, and the OpenSSF
+Scorecard channel (5.8 → 7.0).
 
 ## Live registry state
 
 | Registry | Package | Version | Upload time (UTC) | Tag commit |
 |----------|---------|---------|-------------------|------------|
+| PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/2.0.0/) | 2.0.0 | 2026-07-06 16:23 | `a47d000` |
+| PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/2.0.0/)   | 2.0.0 | 2026-07-06 16:23 | `a47d000` |
+| npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/2.0.0) | 2.0.0 | 2026-07-06 16:23 | `a47d000` |
 | PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.6.0/) | 1.6.0 | 2026-07-02 00:55 | `734132a` |
 | PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.6.0/)   | 1.6.0 | 2026-07-02 00:55 | `734132a` |
 | npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.6.0) | 1.6.0 | 2026-07-02 00:55 | `734132a` |
@@ -55,21 +59,22 @@ the package registries. Backfills are metadata only — no re-publish: the
 PyPI/npm artifacts and Trusted Publishing runs predate those Release objects
 and remain the package source of truth (the publish workflows trigger on tag
 push, not on `release`). GitHub Releases and the PyPI/npm registries are now
-consistent through `v1.6.0`, with `v1.6.0` marked Latest.
+consistent through `v2.0.0`, with `v2.0.0` marked Latest (created 2026-07-06
+alongside the tag; no backfills were needed this cycle).
 
 ## Re-verify
 
 ```bash
 # PyPI metadata
-curl -sf "https://pypi.org/pypi/agentflow-runtime/1.6.0/json" -o /dev/null && echo OK
-curl -sf "https://pypi.org/pypi/agentflow-client/1.6.0/json"  -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-runtime/2.0.0/json" -o /dev/null && echo OK
+curl -sf "https://pypi.org/pypi/agentflow-client/2.0.0/json"  -o /dev/null && echo OK
 
 # npm metadata
-npm view "@yuliaedomskikh/agentflow-client@1.6.0" version dist.tarball
+npm view "@yuliaedomskikh/agentflow-client@2.0.0" version dist.tarball
 
 # Install smoke
 python -m venv /tmp/.afcheck && . /tmp/.afcheck/bin/activate
-pip install agentflow-runtime==1.6.0 agentflow-client==1.6.0
+pip install agentflow-runtime==2.0.0 agentflow-client==2.0.0
 python -c "from importlib.metadata import version; print(version('agentflow-runtime'), version('agentflow-client'))"
 ```
 
@@ -149,7 +154,14 @@ shows the changes. The high-level shape:
 
 ## How the release fired
 
-Tag `v1.6.0` on commit `734132a` triggered both
+Tag `v2.0.0` on commit `a47d000` (PR #166, the exact 10-file v1.6.0 cut
+pattern) triggered both publish workflows on 2026-07-06; both runs
+completed `success` and the packages were visible in the registries at
+2026-07-06T16:23Z (verified live). The `test_version` gotcha applied as
+documented: `pip install -e ./sdk` re-run before the local gate (full
+unit suite, 1670 passed).
+
+Previous cycle: tag `v1.6.0` on commit `734132a` triggered both
 [`publish-pypi.yml`](../../.github/workflows/publish-pypi.yml) (OIDC
 Trusted Publishing, no token) and
 [`publish-npm.yml`](../../.github/workflows/publish-npm.yml) (npm
@@ -173,6 +185,7 @@ same one.
 | v1.4.0     | `e58693b` | published  |
 | v1.5.0     | `c99d094` | published  |
 | v1.6.0     | `734132a` | published  |
+| v2.0.0     | `a47d000` | published  |
 
 The next release should follow the same recipe:
 bump 5 files (root `pyproject.toml`, `sdk/pyproject.toml`,

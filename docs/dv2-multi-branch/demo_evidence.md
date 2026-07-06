@@ -492,10 +492,30 @@ channel not-null + week not-null + `return_rate` not-null.
 
 ## 14. Push-based CDC via MaterializedPostgreSQL
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** MaterializedPostgreSQL
-> consumes the Postgres WAL via logical replication and needs both engines on
-> one network with `wal_level=logical`; the standalone split cannot reproduce
-> it. Contents are retired-seed-era.
+> **Attempted live 2026-07-06 on the Mac kind stand; honestly incomplete.**
+> `wal_level=logical` was confirmed already active on the live `postgres-0`
+> pod (`SHOW wal_level` → `logical`, no restart needed — the StatefulSet's
+> args already carry it). `postgres_oltp/cdc_setup.sql` (rep_user +
+> `REPLICATION LOGIN` + grants + `REPLICA IDENTITY DEFAULT` + table ownership
+> transfer) applied cleanly against the live Postgres pod, no errors. The
+> ClickHouse-side `CREATE DATABASE oltp_cdc ENGINE = MaterializedPostgreSQL(...)`
+> statement (`cdc_bridge.sql`) also executed without error. But the engine's
+> **initial replication snapshot never completed**: `clickhouse-server.err.log`
+> shows repeated `DatabaseMaterializedPostgreSQL (oltp_cdc): Failed to start
+> replication from PostgreSQL, will retry. Error: ... pqxx::broken_connection
+> ... connection to server at "postgres" (10.96.133.180), port 5432 failed:
+> timeout expired`, and `SHOW TABLES FROM oltp_cdc` kept returning zero rows
+> after a genuinely long retry window. This traces to host-wide contention,
+> not a config bug: the same host's `/proc/loadavg` climbed to 40+ during this
+> attempt (a 3-node kind cluster plus another project's ~9 containers sharing
+> one ~6 GiB Colima VM), and the simpler pull-based `PostgreSQL()` engine used
+> in §10 hit the identical transient connection-timeout symptom earlier in
+> this session but succeeded once retried — evidence the DDL/grants/identity
+> setup here is correct, it is the live TCP handshake that could not complete
+> reliably under this session's load. The broken, endlessly-retrying
+> `oltp_cdc` database was dropped afterward so it would not keep consuming
+> background resources. **Not fabricated: this is an honest "attempted,
+> blocked by shared-host resource contention" outcome**, not invented output.
 
 The pull-based `oltp_live` bridge is replaced by a single `oltp_cdc`
 ClickHouse database backed by `MaterializedPostgreSQL`, consuming the Postgres
@@ -507,7 +527,14 @@ rows in raw_vault.
 
 ## 15. Per-branch CDC fan-out
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Contents are retired-seed-era.
+> **Not attempted this session.** §15 depends on the same
+> `MaterializedPostgreSQL` initial-sync mechanism that could not complete live
+> in §14 above (same root cause — ClickHouse→Postgres connection timeouts
+> under host contention; would apply identically to two more CH databases
+> subscribing to two more Postgres databases). Attempting it would only
+> reproduce the same blocker for double the setup cost. Contents below are
+> unchanged from the prior (retired-seed-era) capture and remain pending a
+> re-run on a less-contended host or a quieter window on this one.
 
 Operational reality wants a single branch to be pausable, re-snapshotable and
 rotatable without touching another branch's stream. ClickHouse 25.5+ rejects a

@@ -222,7 +222,7 @@ class QueryEngine(
             sql = f"{sql} WHERE {' AND '.join(where_clauses)}"
         order_column = time_column or "event_id"
         if newest_first:
-            sql = f"{sql} ORDER BY {order_column} DESC"
+            sql = f"{sql} ORDER BY {order_column} DESC, event_id DESC"
         else:
             sql = f"{sql} ORDER BY {order_column} ASC, event_id ASC"
         if limit is not None:

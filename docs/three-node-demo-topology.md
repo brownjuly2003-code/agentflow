@@ -69,8 +69,9 @@ Content-Type: application/json
 }
 
 200 OK  -> { "accepted": N, "applied": N, "dead_lettered": M }
-401     -> missing/malformed bearer
-403     -> wrong token, OR demo-key/public caller (demo-guard), OR role != center
+401     -> missing/malformed bearer (a public demo-key caller sends none, so it lands here)
+403     -> bearer present but wrong (including the demo-key offered as a bearer)
+404     -> role != center (N2 - the role gate runs before the auth ladder)
 422     -> body shape invalid (not the per-event schema - that dead-letters, see below)
 ```
 
@@ -78,8 +79,9 @@ Content-Type: application/json
   (reuse the pattern in `src/serving/api/auth/`); **not** the `demo-key` path.
 - The demo-guard (`main.py:286-299`) blocks `POST` for the public key on every
   path except the allow-list; adding `/v1/node/events` to that set lets the
-  **token-authenticated** node call through while the public `demo-key` still
-  gets `403` (N3).
+  **token-authenticated** node call through, and the endpoint's own bearer
+  ladder still rejects the public `demo-key` caller — `401` without a bearer,
+  `403` with a wrong one (N3).
 - Apply each event via `local_pipeline._process_event(conn, event, clickhouse_sink=...)`
   on the center's serving connection - **no new serving logic**. A per-event schema
   failure dead-letters exactly as in-process events do (that path already writes
@@ -199,7 +201,8 @@ Bring-up order: **center first** (edges need its URL live), then the two edges.
 ## 12. Verify-live checklist (F2 done-gate)
 
 - `curl {center}/v1/health`, `{edge-spb}/v1/health`, `{edge-ekb}/v1/health` -> all 200.
-- Public demo-key `POST {center}/v1/node/events` -> `403` (demo-guard holds, N3).
+- Public demo-key `POST {center}/v1/node/events` -> `401` (it carries no bearer;
+  a wrong bearer gets `403` — the ingest never honors the public key, N3).
 - `POST {center}/v1/node/events` with the node token, one seeded `spb` order ->
   `200 applied:1`; then a center cross-branch read shows `spb` last-seen set and the
   metric moved (N4).
@@ -215,8 +218,9 @@ Machine-checkable; each is a unit/integration test F2 must add (mirrors
 - **N1** Standalone role (no `AGENTFLOW_NODE_ROLE`): `/v1/node/events` is not mounted
   (`404`), no emitter task; behavior byte-identical to today's demo.
 - **N2** `/v1/node/events` mounted iff role=`center`; edge/standalone => `404`.
-- **N3** Ingest rejects the public `demo-key` (`403`, demo-guard) and missing/wrong
-  bearer (`401`/`403`); accepts the correct `AGENTFLOW_NODE_TOKEN`.
+- **N3** Ingest rejects the public `demo-key` (`401` — it sends no bearer; `403` if
+  offered as one) and missing/wrong bearer (`401`/`403`); accepts the correct
+  `AGENTFLOW_NODE_TOKEN`.
 - **N4** A valid POSTed event is applied via `_process_event`, lands in
   `pipeline_events` tagged `branch=<origin>`, and moves the matching center metric.
 - **N5** Idempotency: the same `event_id` POSTed twice does not double-count.

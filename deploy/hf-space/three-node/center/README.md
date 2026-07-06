@@ -70,7 +70,7 @@ curl -fsS $SPACE/v1/health
 # Cross-branch view (public demo key)
 curl -fsS -H "X-API-Key: demo-key" $SPACE/v1/node/branches
 
-# Public callers cannot push events — the node token is required (403)
+# Public callers cannot push events — the node token is required (401)
 curl -i -X POST -H "X-API-Key: demo-key" -H "Content-Type: application/json" \
   -d '{"origin_branch":"spb","events":[]}' $SPACE/v1/node/events
 ```

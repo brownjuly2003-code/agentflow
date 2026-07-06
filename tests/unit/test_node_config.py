@@ -195,3 +195,43 @@ def test_config_is_frozen() -> None:
     cfg = NodeConfig(role="standalone")
     with pytest.raises((AttributeError, TypeError)):
         cfg.role = "center"  # type: ignore[misc]
+
+
+def test_center_token_equal_to_default_demo_key_fails_fast() -> None:
+    # n4 (G2 audit): the well-known public demo API key must never double as
+    # the node-federation bearer token.
+    with pytest.raises(NodeConfigError, match="demo API key"):
+        resolve_node_config({"AGENTFLOW_NODE_ROLE": "center", "AGENTFLOW_NODE_TOKEN": "demo-key"})
+
+
+def test_edge_token_equal_to_default_demo_key_fails_fast() -> None:
+    with pytest.raises(NodeConfigError, match="demo API key"):
+        resolve_node_config(
+            {
+                "AGENTFLOW_NODE_ROLE": "edge",
+                "AGENTFLOW_NODE_BRANCH": "spb",
+                "AGENTFLOW_NODE_CENTER_URL": "https://example.test",
+                "AGENTFLOW_NODE_TOKEN": "demo-key",
+            }
+        )
+
+
+def test_token_equal_to_custom_demo_api_key_env_fails_fast() -> None:
+    # DEMO_API_KEY overrides the default "demo-key" (src/serving/api/main.py) —
+    # the guard must compare against whatever value is actually configured,
+    # not just the hardcoded default.
+    with pytest.raises(NodeConfigError, match="demo API key"):
+        resolve_node_config(
+            {
+                "AGENTFLOW_NODE_ROLE": "center",
+                "AGENTFLOW_NODE_TOKEN": "custom-demo-value",
+                "DEMO_API_KEY": "custom-demo-value",
+            }
+        )
+
+
+def test_token_distinct_from_demo_key_is_fine() -> None:
+    cfg = resolve_node_config(
+        {"AGENTFLOW_NODE_ROLE": "center", "AGENTFLOW_NODE_TOKEN": _NODE_TOKEN}
+    )
+    assert cfg.token == _NODE_TOKEN

@@ -369,9 +369,21 @@ bash infrastructure/dv2/bootstrap.sh   # idempotent rebuild on the kind cluster
 
 ## 12. Argo Workflows orchestration
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** Timings/counts below are
-> retired-seed-era. DAG ordering (hub → link → satellite → cold-offload) is enforced by
-> dependencies, not clock-time; that property is legend-independent.
+> **Re-captured 2026-07-06** on the Mac kind stand, with one honest
+> substitution: the Argo Workflows **controller + server** themselves were
+> **not installed**. The `dv2-refresh` WorkflowTemplate's `cold-offload` stage
+> fans out 5 concurrent `clickhouse-server`-image pods (one per branch) — the
+> exact shape of operation that OOM-crashed this shared, ~6 GiB Mac earlier in
+> this session when the 5 CronJob-triggered offload Jobs were run concurrently
+> (full kind-node restart needed to recover, twice, across this session).
+> Installing the Argo controller/server adds another standing subsystem on a
+> host already this tight, and would still reproduce the same 5-way
+> concurrency risk when a real Workflow ran. Instead, every step's **exact
+> command** was run directly against the live cluster, in the same dependency
+> order the WorkflowTemplate encodes, one at a time (`promote-oltp` was
+> effectively covered by §10; `cold-offload` fan-out was already covered by
+> §9, sequential per branch). This is genuine live output from the real
+> pipeline logic — just orchestrated by hand instead of by the Argo binary.
 
 `infrastructure/dv2/argo/` deploys Argo Workflows plus a `dv2-refresh`
 WorkflowTemplate that chains hot → warm → cold as one DAG:
@@ -383,6 +395,51 @@ promote-oltp → validate-hubs → {validate-links, validate-satellites}
 
 A failure in `validate-links` aborts the run before any S3 write, so mirrors
 are never out of sync with the warm tier.
+
+**`validate-hubs`** (row counts + hk uniqueness, `FINAL`-deduped):
+
+```
+hub_customer: rows=2570  unique_hk=2570   (2,500 synthetic + 70 §10 pg_ops__*)
+hub_order:    rows=10280 unique_hk=10280  (10,000 synthetic + 280 §10 pg_ops__*)
+hub_store:    rows=6     unique_hk=6
+hub_product:  rows=160   unique_hk=160
+```
+
+**`validate-links`** (orphan-check vs hubs): `lnk_order_customer` orphans
+(rows with no parent `hub_order`) = **0**, 10,280 rows total — every link
+resolves.
+
+**`validate-satellites`** (branch distribution post-promotion):
+
+```
+branch  rows
+ala      75
+dxb     155   (75 synthetic + 80 §10 pg_ops__dxb)
+ekb     130
+msk    9740   (9,540 synthetic + 200 §10 pg_ops__msk)
+spb     180
+```
+
+`sat_order_pricing__1c__msk` rows: 9,540 (unaffected — the OLTP bridge lands
+in Bitrix header satellites only, no 1C pricing for `pg_ops__*` orders, which
+is why `header_source` populates but `pricing_source` does not for OLTP-origin
+rows — same LEFT JOIN miss behavior as ALA in the G1 smoke).
+
+**`verify-mirrors`** (cross-check cold-tier parquet vs source satellites, all
+5 branches, source count vs mirror count):
+
+```
+branch  source  mirror  result
+msk       2190    2190   OK
+spb        100     100   OK
+ekb         70      70   OK
+dxb         60      60   OK
+ala         80      80   OK
+```
+
+All 5 mirrors match source exactly — the same invariant `verify-mirrors`
+asserts in the WorkflowTemplate, genuinely reproduced without the Argo engine
+itself running.
 
 ## 13. dbt mart layer
 

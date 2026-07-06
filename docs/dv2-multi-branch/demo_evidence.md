@@ -367,9 +367,23 @@ are never out of sync with the warm tier.
 
 ## 13. dbt mart layer
 
-> ⚠ **Kind-cluster section — pending Mac re-capture.** The dbt-in-Kubernetes
-> Job and its per-branch row counts are retired-seed-era. The three marts + 12 tests are
-> legend-independent in structure; the numbers await refresh on the new seeds.
+> **Re-captured 2026-07-06** on the Mac kind stand, with one honest deviation
+> from `infrastructure/dv2/dbt/dbt-run-job.yaml`: the `dbt-run-marts` Job (which
+> `pip install`s `dbt-core`/`dbt-clickhouse` inside a fresh pod) triggered a host
+> OOM on this memory-constrained shared Mac earlier in this session (5 parallel
+> cold-offload Job pods, then a heavy view recompute, each needed a full kind
+> node restart to recover — the host has ~600 MB–1 GB free with the DV2 stack
+> plus another project's containers already running). Rather than retry a
+> similarly heavy pod, the three mart **model SQL files themselves**
+> (`warehouse/agentflow/dv2/dbt/models/marts/*.sql`) were compiled by stripping
+> only the pure-templating Jinja (`{{ config(...) }}`, `{{ source('rv', X) }}`
+> → `rv.X`) — no logic changes — and run directly as `CREATE TABLE ... AS
+> SELECT` against the live `bv_order_canonical_mat` (also freshly rebuilt this
+> session from the live `bv_order_canonical` view, with frugal per-query memory
+> settings). The 12 `schema.yml` assertions (`not_null` / `accepted_values`)
+> were then run as their equivalent raw SQL. This is not a `dbt run && dbt
+> test` invocation, but every number below is genuine live output from the
+> current kitchen-legend seed, not fabricated.
 
 `warehouse/agentflow/dv2/dbt/` ships three materialized marts and 12 data
 tests on top of the business vault, run via a Kubernetes Job
@@ -377,6 +391,28 @@ tests on top of the business vault, run via a Kubernetes Job
 per `(customer_hk, branch)`; `branch_pnl.effective_tax_rate` validates the
 per-jurisdiction wiring end-to-end (1C pricing satellites → BV view → dbt
 mart) — the same 12/5/20% rates verified live in §8.
+
+Row counts: `customer_360` 2,500 (one per customer — matches the §8
+population), `branch_pnl` 5 (one per branch, single-month seed),
+`returns_velocity` 14 (branch × channel × week grain). `branch_pnl` per
+branch:
+
+```
+branch  orders  gross_revenue  effective_tax_rate
+msk       9540       38792056                 0.2
+spb        180        9366120                 0.2
+ekb        130        6749619                 0.2
+dxb         75        6737025                0.05
+ala         75        3370575                0.12
+```
+
+10,000 total orders across the 5 `branch_pnl` rows; `effective_tax_rate`
+reproduces the §8 jurisdiction rates exactly (RU 20%, UAE 5%, KZ 12%)
+end-to-end through the mart layer. All **12/12** schema tests pass (0 failing
+rows each): `customer_360` hk/branch not-null + branch `accepted_values` +
+`return_rate` not-null; `branch_pnl` branch not-null + `accepted_values` +
+month not-null; `returns_velocity` branch not-null + `accepted_values` +
+channel not-null + week not-null + `return_rate` not-null.
 
 ## 14. Push-based CDC via MaterializedPostgreSQL
 

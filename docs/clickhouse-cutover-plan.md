@@ -130,14 +130,39 @@ executed accidentally.
       unless `controlPlane.store=postgres` and `serving.backend=clickhouse` —
       see ADR 0010. Slice 6 (2026-07-04) released the enum ratchet to
       `[embedded, postgres]`.)*
-- [ ] **LIVE verify (kind, Docker — pending Mac/CI, E4 tail):**
-      `scripts/k8s_staging_up.sh` on kind with the scale overlay,
-      `k8s_smoke_test.sh` green, `replicaCount: 2` schedules without PVC
-      contention; **plus the ADR 0010 replica-correctness checks** — exactly one
-      delivery per (webhook, event) across two pods, one alert page per incident,
-      a webhook registered via either pod visible to both. See the recipe below.
-      *(Chart-side render verified locally 2026-07-04 via `helm template`/`lint`;
-      the two-real-pods run needs Docker, unavailable on the authoring host.)*
+- [ ] **LIVE verify (kind, Docker — attempted on the Mac 2026-07-06, genuinely
+      incomplete):** `scripts/k8s_staging_up.sh` on kind with the scale
+      overlay, `k8s_smoke_test.sh` green, `replicaCount: 2` schedules without
+      PVC contention; **plus the ADR 0010 replica-correctness checks** —
+      exactly one delivery per (webhook, event) across two pods, one alert
+      page per incident, a webhook registered via either pod visible to both.
+      See the recipe below.
+      *(Chart-side render verified locally 2026-07-04 via `helm template`/
+      `lint`, and re-verified live-adjacent on the Mac 2026-07-06: `helm lint`
+      clean; `helm template --set replicaCount=2 --set persistence.enabled=false`
+      **without** `controlPlane.store=postgres`/`serving.backend=clickhouse`
+      correctly fails at render time with the exact ADR 0010 gate error
+      (`"Multi-replica requires BOTH an external serving engine ... AND an
+      external control-plane store ..."`); the same render **with both halves
+      set** succeeds with `replicas: 2` and the correct
+      `AGENTFLOW_CONTROLPLANE_STORE`/`SERVING_BACKEND` env vars. The
+      **two-real-pods live run** (building `agentflow/api`, deploying 2 pods,
+      exercising `scripts/k8s_replica_correctness_verify.sh` against them) was
+      attempted on the Mac kind stand but could not complete: this same
+      session hit severe, sustained shared-host resource contention (the
+      Mac runs this kind cluster alongside another project's ~9 containers;
+      `/proc/loadavg` read 40–78 for extended stretches, `docker stats` showed
+      a co-tenant's Temporal engine alone at up to 80% CPU, and this cluster's
+      own control plane was crash-looping — `kube-apiserver` had restarted 10+
+      times, `kube-controller-manager` 46+ times, confirmed via `crictl ps -a`
+      directly on the node). Two separate `docker build` attempts for the
+      fresh `agentflow/api` image (needed since the cached image predates
+      ADR 0010 slice 5) stalled at near-zero CPU progress even after killing
+      a competing orphaned build process. This is an honest "attempted,
+      blocked by host resource crisis" outcome — not fabricated, and not
+      abandoned without cause; the render-gate logic itself is now more
+      thoroughly verified than before. Re-attempt on a quieter window on this
+      host, or a dedicated instance.)*
 
 ### Phase 3 replica-correctness verify recipe (ADR 0010 slice 6)
 

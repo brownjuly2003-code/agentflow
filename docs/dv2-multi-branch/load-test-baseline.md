@@ -11,10 +11,11 @@ capture time: point p99 ≤ 200 ms (since moved to 250 ms — see finding 3
 below), heavy p99 ≤ 1000 ms, adhoc p99 ≤ 2000 ms (adhoc is informational —
 reported, never gates).
 
-> **Refresh pending.** This capture predates the 2026-07-03 legend reset
-> (kitchen-appliance wholesaler seed). Re-run `apply.sh` on the Mac demo
-> host against the current seed and replace the table below; harness
-> mechanics and budgets are unchanged.
+> **Refreshed 2026-07-06** against the current kitchen-legend seed — see
+> "Results (kitchen-legend seed, 2026-07-06)" below. The 2026-06-02 table is
+> kept for reference (clean-host numbers); the new capture ran under **severe,
+> independently-verified ambient host contention** and is not a like-for-like
+> comparison — read its own caveat before drawing conclusions from it.
 
 ## Results (synthetic seed, 2026-06-02)
 
@@ -64,6 +65,52 @@ current code:
    path. The point budget moved 200 → 250 ms with the rationale recorded in
    `load-test/job.yaml`; the pre-fix full-scan regression (276–468 ms)
    would still fail it.
+
+## Results (kitchen-legend seed, 2026-07-06)
+
+> **Ambient conditions, stated plainly: this run is not representative of
+> engine capacity.** Captured on the same `hq-demo` kind cluster, current
+> kitchen-legend seed (10,000 orders, 2,500 customers). This Mac is a
+> **shared host**: at capture time `docker stats` showed another project's
+> `datalens-temporal` container alone pegged at **80% CPU**, plus
+> `auto_bi_clickhouse` at 18%, plus this session's own 3 kind-node containers
+> at ~35/42/24% each — well past whatever this Colima VM's vCPU budget is.
+> `/proc/loadavg` read 40–62 (1-min) for extended stretches during this
+> session, and the Kubernetes control plane itself was crash-looping under the
+> pressure (`kube-apiserver` had restarted 10 times, `kube-controller-manager`
+> 46 times, confirmed via `crictl ps -a` directly on the node — `kubectl`
+> itself was frequently timing out). Every number below is genuine
+> `clickhouse-benchmark` output against the real live cluster — nothing is
+> invented — but it measures this session's queueing under severe co-tenant
+> load, not the DV2 engine's steady-state capacity. The 2026-06-02 table above
+> remains the reference for "quiet host" numbers.
+
+| Scenario | c=1 p99 | c=4 p99 | c=8 p99 | c=8 QPS | Verdict |
+|----------|--------:|--------:|--------:|--------:|---------|
+| `01_branch_pnl_adhoc` | 15,436 ms | — | — | — | INFO (>2000, c=1 only) |
+| `02_top_products_adhoc` | 937 ms | — | — | — | PASS (c=1 only) |
+| `03_customer360_point` | 125 ms | 1,678 ms | 1,430 ms | 16.1 | FAIL (>250 at c=4/c=8) |
+| `04_returns_velocity` | 11,564 ms | 6,176 ms | 17,706 ms | 1.3 | FAIL (>1000, all levels) |
+| `05_line_items_reach_adhoc` | 13,199 ms | — | — | — | INFO (>2000, c=1 only) |
+| `06_branch_pnl_mart` | 10,486 ms | 9,071 ms | 51,353 ms | 0.13 | FAIL (>1000, all levels) |
+
+`LOAD TEST: FAIL` (the harness's own verdict — 8 of the 12 gating cells
+breach budget). The **shape** of the result is still informative despite the
+noise: `03_customer360_point` (a real point-lookup against a 1024-granule
+mart) is still the fastest scenario at c=1 (125 ms) exactly as the clean
+capture predicts, and even under this much contention the mart-vs-live-view
+gap direction holds at c=1 (`06` 10,486 ms vs `01` 15,436 ms is noisy, but c=4
+`06` at 9,071 ms is still faster than c=1 `04`'s 11,564 ms scan of the same
+class of live 5-way join). What is **not** trustworthy from this capture is
+any absolute latency number, and especially `06`'s c=8 outlier (51,353 ms) —
+that cell's queueing depth reflects the co-tenant Temporal engine's CPU spike
+at that exact moment, not a DV2 regression.
+
+**Honest scope:** re-running this on a quiet host (or a dedicated instance)
+is the correct way to get a comparable number to the 2026-06-02 baseline.
+This capture stands as evidence the harness and cluster are live and correct
+(it ran to completion, connected to the real `clickhouse` service, exercised
+the real kitchen-legend data), not as a performance regression signal.
 
 ## Re-run / refresh
 

@@ -23,6 +23,14 @@ Docker:
 > seed is now **2,500 customers / 10,000 orders / 160 SKU / 14,853 line
 > items, priced in ₽** — see `docs/domain.md` and `docs/generator-spec.md`
 > for the model.
+>
+> **⚠ `demo_voiced.mp4` / `demo.cast` are superseded.** Both were captured
+> 2026-05-23, before this legend reset, and still show the retired
+> fashion-retailer narration and the old 40/25/15/10/10 branch split.
+> `demo_voiced.narration.txt` and `demo_transcript.txt` (the scripts behind
+> them) were rewritten to the current legend in the G2 S5 follow-up PR; the
+> `.mp4`/`.cast` media itself is pending re-recording on the Mac kind stand
+> (plan step S6) — see `demo.cast.README.md` for detail.
 
 > **⚠ Infra sections (§1–3, §9–15) are pending re-capture on the kind
 > cluster (Mac stand).** Topology, workload pinning, PVCs, the MinIO cold

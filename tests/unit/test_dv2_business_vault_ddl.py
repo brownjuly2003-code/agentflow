@@ -36,6 +36,30 @@ def _strip_comments(sql: str) -> str:
     return sql
 
 
+# B2 (brand-neutral restoration of a guard dropped during X5 removal, G2
+# audit): the header comment's illustrative "which source conventions does
+# this admit" example must only ever name known-good record_source prefixes.
+# Checked against an explicit allowlist rather than a literal bad string, so
+# this test never itself has to spell out the retired dataset's prefix to
+# guard against it reappearing.
+_RECORD_SOURCE_PREFIX_ALLOWLIST = {"1c__", "mp__", "pg_ops__", "wms__", "ref__"}
+_SOURCE_CONVENTION_PAREN_RE = re.compile(r"source convention\s*\(([^)]*)\)", re.IGNORECASE)
+_SOURCE_AGNOSTIC_RE = re.compile(r"source-agnostic:\s*([^;]*);", re.IGNORECASE)
+_PREFIX_TOKEN_RE = re.compile(r"([a-z0-9](?:[a-z0-9]|_(?!_))*)__")
+
+
+def _record_source_example_prefixes(raw: str) -> set[str]:
+    """Prefix tokens (``1c__``, ``mp__``, ...) named in a DDL header comment's
+    illustrative "source convention"/"source-agnostic" example list — not
+    every record_source value the file's views/tables actually use, just the
+    documented examples."""
+    prefixes: set[str] = set()
+    for pattern in (_SOURCE_CONVENTION_PAREN_RE, _SOURCE_AGNOSTIC_RE):
+        for match in pattern.finditer(raw):
+            prefixes.update(f"{token}__" for token in _PREFIX_TOKEN_RE.findall(match.group(1)))
+    return prefixes
+
+
 def _bv_sql_files() -> list[Path]:
     return [Path(p) for p in sorted(glob.glob(str(BV_DIR / "*.sql")))]
 
@@ -88,4 +112,15 @@ def test_customer_mdm_views_admit_all_source_conventions():
         # strips).
         assert "mp__" in raw, (
             f"bv_customer_mdm__{branch}.sql should document the mp__ marketplace-feed convention (domain.md §5.3)"
+        )
+        example_prefixes = _record_source_example_prefixes(raw)
+        assert example_prefixes, (
+            f"bv_customer_mdm__{branch}.sql should document its record_source "
+            "source-convention examples in the header comment"
+        )
+        assert example_prefixes <= _RECORD_SOURCE_PREFIX_ALLOWLIST, (
+            f"bv_customer_mdm__{branch}.sql documents unexpected record_source "
+            f"prefix(es) {sorted(example_prefixes - _RECORD_SOURCE_PREFIX_ALLOWLIST)} "
+            f"outside the allowlist {sorted(_RECORD_SOURCE_PREFIX_ALLOWLIST)} — a "
+            "stale/regressed dataset prefix may have leaked back into the header comment"
         )

@@ -71,7 +71,7 @@ def build_order_event(amount: Decimal, sequence: int) -> dict:
         status=OrderStatus.PENDING,
         items=[OrderItem(product_id="PROD-001", quantity=1, unit_price=amount)],
         total_amount=amount,
-        currency=Currency.USD,
+        currency=Currency.RUB,
     )
     return json.loads(event.model_dump_json())
 

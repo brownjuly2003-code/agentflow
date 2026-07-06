@@ -64,7 +64,7 @@ jobs:
                       INSERT INTO "{schema}".orders_v2 VALUES
                       (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                       ''',
-                      [f"ORD-{schema.upper()}-001", f"USR-{schema.upper()}", "confirmed", 42.0, "USD"],
+                      [f"ORD-{schema.upper()}-001", f"USR-{schema.upper()}", "confirmed", 42.0, "RUB"],
                   )
           finally:
               conn.close()

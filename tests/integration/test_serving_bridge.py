@@ -60,15 +60,21 @@ def backend() -> ClickHouseBackend:
 
 
 def _flink_shaped_order() -> dict:
-    """The payload Flink writes to `events.validated` for an order.created."""
-    suffix = uuid.uuid4().hex[:8]
+    """The payload Flink writes to `events.validated` for an order.created.
+
+    The ids must satisfy the canonical schema (`order_id` matches
+    `^ORD-\\d{8}-\\d{4,}$`) — the bridge revalidates, and an id that only *looks*
+    unique would be dead-lettered rather than applied. The 9-prefixed sequence
+    keeps these clear of the demo seed's 4-digit ids.
+    """
+    suffix = uuid.uuid4().int % 100000
     event = {
         "event_id": str(uuid.uuid4()),
         "event_type": "order.created",
         "timestamp": datetime.now(UTC).isoformat(),
         "source": "integration-test",
-        "order_id": f"ORD-BRIDGE-{suffix}",
-        "user_id": f"USR-BRIDGE-{suffix}",
+        "order_id": f"ORD-{datetime.now(UTC):%Y%m%d}-9{suffix:05d}",
+        "user_id": f"USR-9{suffix:05d}",
         "status": "confirmed",
         "items": [
             {"product_id": "PROD-001", "quantity": 2, "unit_price": "79.99"},

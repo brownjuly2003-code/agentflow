@@ -37,12 +37,11 @@ journal — S6 design). Steps 1–4 were pure cost on the production path.
 Idempotency, offset-after-apply, and dead-letter semantics unchanged.
 Unit pin: `test_clickhouse_path_skips_scratch_duckdb_on_apply`.
 
-## What this does *not* yet do
+## Q1.3 follow-up (same day)
 
-- **Batch CH inserts** (`BRIDGE_BATCH_MAX` still applies one HTTP multi-call
-  sequence per event). Next lever if re-measure is still ≪ 80 eps.
-- **Remove user-aggregate re-read** on every order upsert (extra CH round-trip).
-- Live S10/S8 re-numbers — must run on Mac; do not claim ×10 until measured.
+- `apply_serving_batch`: multi-row order + journal inserts; aggregate once per
+  unique user; journal last for crash-replay safety.
+- Still sequential: session RMW, Flink hop.
 
 ## Measured effect (Mac, warm)
 

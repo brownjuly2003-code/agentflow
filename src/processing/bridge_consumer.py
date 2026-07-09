@@ -59,7 +59,11 @@ from src.processing.bridge_metrics import (
     start_metrics_server,
 )
 from src.processing.clickhouse_sink import ClickHouseSink
-from src.processing.local_pipeline import _ensure_tables, _process_event
+from src.processing.local_pipeline import (
+    _ensure_tables,
+    _process_event,
+    apply_serving_batch,
+)
 
 logger = structlog.get_logger()
 
@@ -185,6 +189,7 @@ class ServingBridge:
         if events:
             batch_ids = [str(event["event_id"]) for event in events]
             seen = self._existing_serving_event_ids(batch_ids)
+            to_apply: list[dict] = []
             for event in events:
                 event_id = str(event["event_id"])
                 if event_id in seen:
@@ -195,18 +200,31 @@ class ServingBridge:
                     EVENTS_DUPLICATE.inc()
                     duplicates += 1
                     continue
-                success, reason = self._process(event)
-                if success:
-                    EVENTS_APPLIED.inc()
-                    applied += 1
-                    applied_event_ids.append(event_id)
-                    seen.add(event_id)
+                to_apply.append(event)
+
+            if to_apply:
+                # Production path: ClickHouse-only batch apply (Q1.3).
+                # DuckDB is never used when sink is set — only the demo/unit path.
+                if self._sink is not None:
+                    outcomes = self._process_batch_clickhouse(to_apply)
                 else:
-                    # Flink already validated this; a failure here means the
-                    # bridge's schema has drifted from Flink's.
-                    EVENTS_DEADLETTER.labels(reason=reason.split(":", 1)[0]).inc()
-                    dead_lettered += 1
-                    logger.warning("bridge_event_dead_lettered", event_id=event_id, reason=reason)
+                    outcomes = [
+                        (str(event["event_id"]), *self._process(event)) for event in to_apply
+                    ]
+                for event_id, success, reason in outcomes:
+                    if success:
+                        EVENTS_APPLIED.inc()
+                        applied += 1
+                        applied_event_ids.append(event_id)
+                        seen.add(event_id)
+                    else:
+                        # Flink already validated this; a failure here means the
+                        # bridge's schema has drifted from Flink's.
+                        EVENTS_DEADLETTER.labels(reason=reason.split(":", 1)[0]).inc()
+                        dead_lettered += 1
+                        logger.warning(
+                            "bridge_event_dead_lettered", event_id=event_id, reason=reason
+                        )
 
         if applied:
             self._last_apply_monotonic = time.monotonic()
@@ -219,25 +237,21 @@ class ServingBridge:
             applied_event_ids=applied_event_ids,
         )
 
-    def _process(self, event: dict) -> tuple[bool, str]:
-        # ClickHouse path: skip the throwaway DuckDB scratch (Q1.2 / S10).
-        # Dual-write was correctness-preserving but paid BEGIN/COMMIT + local
-        # upserts the API never reads. DuckDB demo path keeps the lock + lake.
-        skip_local = self._sink is not None
+    def _process_batch_clickhouse(self, events: list[dict]) -> list[tuple[str, bool, str]]:
+        """ClickHouse-only batch apply — no DuckDB (production bridge)."""
+        assert self._sink is not None
         if self._write_lock is None:
-            return _process_event(
-                self._lake_conn,
-                event,
-                clickhouse_sink=self._sink,
-                skip_local_store=skip_local,
-            )
+            return apply_serving_batch(events, self._sink)
         with self._write_lock:
-            return _process_event(
-                self._lake_conn,
-                event,
-                clickhouse_sink=self._sink,
-                skip_local_store=skip_local,
-            )
+            return apply_serving_batch(events, self._sink)
+
+    def _process(self, event: dict) -> tuple[bool, str]:
+        # DuckDB demo / unit path only (no ClickHouse sink). Production bridge
+        # uses _process_batch_clickhouse → apply_serving_batch.
+        if self._write_lock is None:
+            return _process_event(self._lake_conn, event, clickhouse_sink=self._sink)
+        with self._write_lock:
+            return _process_event(self._lake_conn, event, clickhouse_sink=self._sink)
 
     # -- consume loop -----------------------------------------------------
 

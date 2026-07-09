@@ -116,8 +116,7 @@ class ClickHouseSink:
         entity_id: str | None = None,
         processed_at: datetime | None = None,
     ) -> None:
-        self._backend.insert_rows(
-            "pipeline_events",
+        self.record_pipeline_events(
             [
                 {
                     "event_id": event_id,
@@ -128,28 +127,80 @@ class ClickHouseSink:
                     "latency_ms": latency_ms,
                     "processed_at": processed_at or datetime.now(UTC),
                 }
-            ],
+            ]
         )
 
-    def upsert_order(self, event: dict) -> None:
-        self._backend.insert_rows(
-            "orders_v2",
-            [
+    def record_pipeline_events(self, rows: list[dict[str, Any]]) -> None:
+        """Multi-row journal write (Q1.3). One HTTP insert for the whole list."""
+        if not rows:
+            return
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            normalized.append(
                 {
-                    "order_id": event["order_id"],
-                    "user_id": event["user_id"],
-                    "status": event["status"],
-                    "total_amount": float(event["total_amount"]),
-                    "currency": event.get("currency", "RUB"),
-                    "created_at": datetime.fromisoformat(event["timestamp"]),
+                    "event_id": row["event_id"],
+                    "topic": row["topic"],
+                    "tenant_id": row["tenant_id"],
+                    "entity_id": row.get("entity_id"),
+                    "event_type": row["event_type"],
+                    "latency_ms": row.get("latency_ms"),
+                    "processed_at": row.get("processed_at") or datetime.now(UTC),
                 }
-            ],
-        )
-        self._refresh_user_aggregate(str(event["user_id"]))
+            )
+        self._backend.insert_rows("pipeline_events", normalized)
+
+    def upsert_order(self, event: dict, *, refresh_user: bool = True) -> None:
+        """Append one order version. Optionally refresh ``users_enriched``.
+
+        ``refresh_user=False`` is for the bridge batch path (Q1.3): many orders
+        share a user; the bridge calls :meth:`refresh_user_aggregates` once per
+        unique user after the multi-row order insert.
+        """
+        self.insert_orders([event])
+        if refresh_user:
+            self._refresh_user_aggregate(str(event["user_id"]))
+
+    def insert_orders(self, events: list[dict]) -> None:
+        """Multi-row ``orders_v2`` insert (ReplacingMergeTree append versions)."""
+        if not events:
+            return
+        rows = [
+            {
+                "order_id": event["order_id"],
+                "user_id": event["user_id"],
+                "status": event["status"],
+                "total_amount": float(event["total_amount"]),
+                "currency": event.get("currency", "RUB"),
+                "created_at": datetime.fromisoformat(event["timestamp"]),
+            }
+            for event in events
+        ]
+        self._backend.insert_rows("orders_v2", rows)
+
+    def insert_products(self, events: list[dict]) -> None:
+        if not events:
+            return
+        rows = [
+            {
+                "product_id": event["product_id"],
+                "name": event["name"],
+                "category": event["category"],
+                "price": float(event["price"]),
+                "in_stock": bool(event["in_stock"]),
+                "stock_quantity": int(event["stock_quantity"]),
+            }
+            for event in events
+        ]
+        self._backend.insert_rows("products_current", rows)
+
+    def refresh_user_aggregates(self, user_ids: set[str] | list[str]) -> None:
+        """Recompute ``users_enriched`` once per user (amortized batch end)."""
+        for user_id in sorted({str(uid) for uid in user_ids if uid}):
+            self._refresh_user_aggregate(user_id)
 
     def _refresh_user_aggregate(self, user_id: str) -> None:
-        # Same aggregate the DuckDB path materializes in _upsert_order; written
-        # as an append of a new users_enriched row version.
+        # Same aggregate the dual-write path materializes in _upsert_order;
+        # written as an append of a new users_enriched row version on ClickHouse.
         rows = self._backend.execute(
             "SELECT user_id, COUNT(*) AS total_orders, SUM(total_amount) AS total_spent, "
             "MIN(created_at) AS first_order_at, MAX(created_at) AS last_order_at "
@@ -174,19 +225,7 @@ class ClickHouseSink:
         )
 
     def upsert_product(self, event: dict) -> None:
-        self._backend.insert_rows(
-            "products_current",
-            [
-                {
-                    "product_id": event["product_id"],
-                    "name": event["name"],
-                    "category": event["category"],
-                    "price": float(event["price"]),
-                    "in_stock": bool(event["in_stock"]),
-                    "stock_quantity": int(event["stock_quantity"]),
-                }
-            ],
-        )
+        self.insert_products([event])
 
     def upsert_session(self, event: dict) -> None:
         session_id = str(event.get("session_id", "unknown"))

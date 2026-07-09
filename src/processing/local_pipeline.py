@@ -333,81 +333,138 @@ def _process_event_serving_only(
     event: dict,
     clickhouse_sink: ClickHouseSink,
 ) -> tuple[bool, str]:
-    """Apply one event to the ClickHouse serving store without a DuckDB lake.
+    """Apply one event to ClickHouse only (no DuckDB). Thin wrapper on batch."""
+    results = apply_serving_batch([event], clickhouse_sink)
+    _, success, reason = results[0]
+    return success, reason
 
-    Same routing and journal semantics as the dual-write path, minus the
-    scratch-lake transaction. Used by ``ServingBridge`` when ``sink`` is set.
-    Failures raise (caller rewinds Kafka offsets) except schema/semantic
-    rejects, which dead-letter into the serving journal and return False.
+
+def apply_serving_batch(
+    events: list[dict],
+    clickhouse_sink: ClickHouseSink,
+) -> list[tuple[str, bool, str]]:
+    """Batch-apply events to **ClickHouse only** (Q1.3 / production bridge path).
+
+    No DuckDB. Production serving store is ClickHouse; the dual-write demo path
+    still uses :func:`_process_event` with a lake connection for local tests.
+
+    Per batch this issues:
+    - one multi-row ``orders_v2`` insert (all successful orders)
+    - one multi-row ``products_current`` insert
+    - sequential session upserts (read-modify-write on CH)
+    - one multi-row ``pipeline_events`` journal insert
+    - one ``users_enriched`` recompute **per unique user** (not per order)
+
+    Returns ``(event_id, success, reason)`` in input order. Schema/semantic
+    rejects are dead-lettered into the journal and counted as failures without
+    raising; hard CH errors raise so the bridge can rewind Kafka offsets.
     """
-    event_type = event.get("event_type", "")
-    event_id = event.get("event_id", "unknown")
-    tenant_id = _event_tenant(event)
-    entity_id = _derive_entity_id(event, event_type)
+    if not events:
+        return []
 
-    schema_result = validate_event(event)
-    if not schema_result.is_valid:
-        clickhouse_sink.record_pipeline_event(
-            event_id=str(event_id),
-            topic="events.deadletter",
-            tenant_id=tenant_id,
-            entity_id=entity_id,
-            event_type=event_type,
-            latency_ms=0,
+    results: list[tuple[str, bool, str]] = []
+    order_events: list[dict] = []
+    product_events: list[dict] = []
+    session_events: list[dict] = []
+    journal_rows: list[dict] = []
+    pending_users: set[str] = set()
+    now = datetime.now(UTC)
+
+    for event in events:
+        event_type = event.get("event_type", "")
+        event_id = str(event.get("event_id", "unknown"))
+        tenant_id = _event_tenant(event)
+        entity_id = _derive_entity_id(event, event_type)
+
+        schema_result = validate_event(event)
+        if not schema_result.is_valid:
+            journal_rows.append(
+                {
+                    "event_id": event_id,
+                    "topic": "events.deadletter",
+                    "tenant_id": tenant_id,
+                    "entity_id": entity_id,
+                    "event_type": event_type,
+                    "latency_ms": 0,
+                    "processed_at": now,
+                }
+            )
+            results.append((event_id, False, f"schema: {schema_result.errors[0]}"))
+            continue
+
+        semantic_result = validate_semantics(event)
+        error_issues = [i for i in semantic_result.issues if i.severity == "error"]
+        if error_issues:
+            journal_rows.append(
+                {
+                    "event_id": event_id,
+                    "topic": "events.deadletter",
+                    "tenant_id": tenant_id,
+                    "entity_id": entity_id,
+                    "event_type": event_type,
+                    "latency_ms": 0,
+                    "processed_at": now,
+                }
+            )
+            results.append((event_id, False, f"semantic: {error_issues[0].rule}"))
+            continue
+
+        working = event
+        if event_type.startswith("order."):
+            working = enrich_order(event)
+            order_events.append(working)
+            pending_users.add(str(working["user_id"]))
+            journal_rows.append(
+                {
+                    "event_id": f"{event_id}-status",
+                    "topic": "orders.status",
+                    "tenant_id": tenant_id,
+                    "entity_id": str(working["order_id"]),
+                    "event_type": f"order.status.{working['status']}",
+                    "latency_ms": None,
+                    "processed_at": now,
+                }
+            )
+            entity_id = str(working["order_id"])
+        elif event_type in ("click", "page_view", "add_to_cart"):
+            working = enrich_clickstream(event)
+            session_events.append(working)
+        elif event_type.startswith("payment."):
+            working = compute_payment_risk_score(event)
+        elif event_type.startswith("product."):
+            product_events.append(working)
+
+        ts = working.get("timestamp", "")
+        try:
+            event_ts = datetime.fromisoformat(ts)
+            if event_ts.tzinfo is None:
+                event_ts = event_ts.replace(tzinfo=UTC)
+            latency_ms = int((datetime.now(UTC) - event_ts).total_seconds() * 1000)
+        except (ValueError, TypeError):
+            latency_ms = 0
+
+        journal_rows.append(
+            {
+                "event_id": event_id,
+                "topic": "events.validated",
+                "tenant_id": tenant_id,
+                "entity_id": entity_id,
+                "event_type": event_type,
+                "latency_ms": latency_ms,
+                "processed_at": now,
+            }
         )
-        return False, f"schema: {schema_result.errors[0]}"
+        results.append((event_id, True, "ok"))
 
-    semantic_result = validate_semantics(event)
-    error_issues = [i for i in semantic_result.issues if i.severity == "error"]
-    if error_issues:
-        clickhouse_sink.record_pipeline_event(
-            event_id=str(event_id),
-            topic="events.deadletter",
-            tenant_id=tenant_id,
-            entity_id=entity_id,
-            event_type=event_type,
-            latency_ms=0,
-        )
-        return False, f"semantic: {error_issues[0].rule}"
-
-    if event_type.startswith("order."):
-        event = enrich_order(event)
-        clickhouse_sink.upsert_order(event)
-        clickhouse_sink.record_pipeline_event(
-            event_id=f"{event_id}-status",
-            topic="orders.status",
-            tenant_id=tenant_id,
-            entity_id=str(event["order_id"]),
-            event_type=f"order.status.{event['status']}",
-            latency_ms=None,
-            processed_at=datetime.now(UTC),
-        )
-    elif event_type in ("click", "page_view", "add_to_cart"):
-        event = enrich_clickstream(event)
-        clickhouse_sink.upsert_session(event)
-    elif event_type.startswith("payment."):
-        event = compute_payment_risk_score(event)
-    elif event_type.startswith("product."):
-        clickhouse_sink.upsert_product(event)
-
-    ts = event.get("timestamp", "")
-    try:
-        event_ts = datetime.fromisoformat(ts)
-        if event_ts.tzinfo is None:
-            event_ts = event_ts.replace(tzinfo=UTC)
-        latency_ms = int((datetime.now(UTC) - event_ts).total_seconds() * 1000)
-    except (ValueError, TypeError):
-        latency_ms = 0
-
-    clickhouse_sink.record_pipeline_event(
-        event_id=str(event_id),
-        topic="events.validated",
-        tenant_id=tenant_id,
-        entity_id=entity_id,
-        event_type=event_type,
-        latency_ms=latency_ms,
-    )
-    return True, "ok"
+    # Durable writes — all ClickHouse (no DuckDB). Journal last so a crash
+    # mid-batch leaves events replayable (idempotency guard has not seen them).
+    clickhouse_sink.insert_orders(order_events)
+    clickhouse_sink.insert_products(product_events)
+    for session_event in session_events:
+        clickhouse_sink.upsert_session(session_event)
+    clickhouse_sink.refresh_user_aggregates(pending_users)
+    clickhouse_sink.record_pipeline_events(journal_rows)
+    return results
 
 
 def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:

@@ -78,8 +78,8 @@ instead mark it done forever.
 
 | Serving backend | Bridge form | Why |
 |---|---|---|
-| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | ClickHouse is out-of-process and multi-writer safe. Keeping a sustained writer out of the API process is the lesson of [`perf/usage-write-bifurcation-2026-07-09.md`](perf/usage-write-bifurcation-2026-07-09.md): a serialized writer on the API's hot path capped throughput at `1 / commit_latency`. **Q1.2 (2026-07-09):** apply uses `_process_event(..., skip_local_store=True)` — validation/enrichment in-process, entity + journal writes only to ClickHouse. Live re-measure: warm apply **~11.4 eps** (was ~8) — see [`perf/throughput-realpath-q12-2026-07-09.md`](perf/throughput-realpath-q12-2026-07-09.md). Remaining ceiling is CH HTTP multi-call / Flink hop, not scratch DuckDB. |
-| `duckdb` (local demo, tests) | thread inside the API process, behind `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | A DuckDB file admits a single writer and `:memory:` cannot be reached from another process at all. The thread shares one write lock with the node-ingest endpoint (`src/serving/write_lock.py`). Parity and tests, not throughput. |
+| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user). Live: ~11.4 eps post-Q1.2, **~22.9 eps post-Q1.3** — see [`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md). |
+| `duckdb` (local demo / unit tests only) | in-process thread, `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | **Not production.** Demo and unit tests. Never the S8/S10 real-path store the API reads. |
 
 The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-three-node-demo-topology.md)); its edges push events to the center over HTTPS. The bridge is absent there by design.
 

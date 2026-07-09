@@ -26,3 +26,10 @@ HTTP_REQUESTS = Counter(
     "HTTP requests served by the API, labelled by method, route template, and status code.",
     labelnames=("method", "route", "status"),
 )
+
+# Usage accounting is a side-channel: a dropped row must never fail the request
+# it was counting. Non-zero means per-tenant request counters under-report.
+USAGE_RECORD_FAILURES = Counter(
+    "agentflow_usage_record_failures_total",
+    "Authenticated requests served without their api_usage row being written.",
+)

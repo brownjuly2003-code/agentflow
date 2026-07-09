@@ -246,8 +246,10 @@ class TestRotatorHelpers:
     def test_usage_query_retries_on_transient_duckdb_error(
         self, manager: AuthManager, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # ADR 0010 slice 4: the retry-loop-with-connect for these usage-stat
-        # queries now lives in EmbeddedControlPlaneStore, not key_rotation.py.
+        # ADR 0010 slice 4: the retry loop for these usage-stat queries lives in
+        # EmbeddedControlPlaneStore, not key_rotation.py. The usage db is opened
+        # once per process, so drop the cached connection first — otherwise the
+        # store never reaches `connect_duckdb` and the fault is never injected.
         real_connect = embedded_module.connect_duckdb
         calls = {"n": 0}
 
@@ -257,11 +259,15 @@ class TestRotatorHelpers:
                 raise duckdb.Error("database is locked")
             return real_connect(path)
 
+        embedded_module.close_usage_connections()
         monkeypatch.setattr(embedded_module, "connect_duckdb", flaky_connect)
 
         # list_keys_with_usage runs the usage queries; the first connect raises
         # a transient error and the store must retry rather than propagate.
-        manager.list_keys_with_usage()
+        try:
+            manager.list_keys_with_usage()
+        finally:
+            embedded_module.close_usage_connections()
 
         assert calls["n"] >= 2
 
@@ -277,11 +283,15 @@ class TestRotatorHelpers:
                 raise duckdb.Error("database is locked")
             return real_connect(path)
 
+        embedded_module.close_usage_connections()
         monkeypatch.setattr(embedded_module, "connect_duckdb", flaky_connect)
 
-        # old_key_usage_last_hour runs its own connect+query with the same retry
-        # guard; a transient error on the first attempt must be retried.
-        assert manager._key_rotator.old_key_usage_last_hour("acme-agent-xyz") == 0
+        # old_key_usage_last_hour runs its own query with the same retry guard;
+        # a transient error on the first attempt must be retried.
+        try:
+            assert manager._key_rotator.old_key_usage_last_hour("acme-agent-xyz") == 0
+        finally:
+            embedded_module.close_usage_connections()
         assert calls["n"] >= 2
 
 

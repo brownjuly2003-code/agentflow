@@ -4,6 +4,33 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — a usage-accounting write could turn a served request into a 500
+
+- **The usage database is now opened once per process.** Every authenticated
+  request appends an `api_usage` row from a worker thread, and the
+  analytics/admin routers build a throwaway `EmbeddedControlPlaneStore` per
+  request; each of those used to call `duckdb.connect()` on the same file. The
+  last close destroys the DuckDB instance, so a close racing an open left the
+  file briefly attached by two instances and DuckDB raised
+  `BinderException: Unique file handle conflict`. `EmbeddedControlPlaneStore`
+  now keeps one owning connection per usage-db path and hands out `.cursor()`
+  children — the shape `DuckDBPool` already uses for the serving database.
+  Callers are unchanged: they still `close()` what they are given, and closing
+  a cursor leaves the connection alive. Measured on the store's own path: 80
+  concurrent usage writes went from 80 physical connects to 1.
+- **The exception no longer reaches the client.** `record_api_usage` still
+  raises on exhausted retries — `record_usage` depends on that to skip its
+  audit publish — but `AuthMiddleware` now catches it, increments the new
+  `agentflow_usage_record_failures_total` counter, logs
+  `api_usage_record_skipped`, and serves the request. Accounting is a
+  side-channel; a dropped row must not fail the request it was counting.
+- Caught by the Load Test on `main` (2026-07-09): 19 of 1712 requests returned
+  500 across all six endpoints, each with `record_api_usage → connect_duckdb`
+  in the traceback. Regression tests pin both invariants
+  (`tests/unit/test_usage_db_connection_reuse.py`,
+  `tests/unit/test_auth_usage_write_failure.py`); the race's timing reproduces
+  only on the CI runner, so the tests pin the mechanism that removes it.
+
 ### Changed — one Flink version across pip extra and container runtime (audit 07.07 F2)
 
 - **The Docker runtime moves 2.2.1 → 2.3.0**, matching the `[flink]` extra

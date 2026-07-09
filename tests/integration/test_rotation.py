@@ -138,7 +138,9 @@ def test_rotation_status_retries_transient_usage_db_lock(
     key_id = manager.list_keys_with_usage()[0]["key_id"]
     # ADR 0010 slice 4: the usage-stat connect now happens in
     # EmbeddedControlPlaneStore (control_plane/embedded.py), not
-    # key_rotation.py directly.
+    # key_rotation.py directly. The usage db is opened once per process and
+    # reused, so drop the cached connection before injecting the fault —
+    # otherwise the store never calls duckdb.connect at all.
     real_connect = embedded_module.duckdb.connect
     attempts = 0
 
@@ -149,12 +151,16 @@ def test_rotation_status_retries_transient_usage_db_lock(
             raise duckdb.IOException("usage db is locked")
         return real_connect(path)
 
+    embedded_module.close_usage_connections()
     monkeypatch.setattr(embedded_module.duckdb, "connect", flaky_connect)
 
-    response = client.get(
-        f"/v1/admin/keys/{key_id}/rotation-status",
-        headers={"X-Admin-Key": "admin-secret"},
-    )
+    try:
+        response = client.get(
+            f"/v1/admin/keys/{key_id}/rotation-status",
+            headers={"X-Admin-Key": "admin-secret"},
+        )
+    finally:
+        embedded_module.close_usage_connections()
 
     assert response.status_code == 200
     assert response.json()["requests_on_old_key_last_hour"] == 0

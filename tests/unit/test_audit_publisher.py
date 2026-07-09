@@ -115,32 +115,43 @@ def test_record_usage_skips_publish_when_all_inserts_fail(
     from src.serving.control_plane import embedded as embedded_module
 
     real_connect = embedded_module.connect_duckdb
-    call_count = {"n": 0}
+    insert_attempts = {"n": 0}
 
     class _InsertFailingConn:
         def __init__(self, inner):  # type: ignore[no-untyped-def]
             self._inner = inner
 
+        def cursor(self):  # type: ignore[no-untyped-def]
+            # The store takes a cursor per attempt off one owning connection.
+            return _InsertFailingConn(self._inner.cursor())
+
         def execute(self, sql, *args, **kwargs):  # type: ignore[no-untyped-def]
             if "INSERT INTO api_usage" in sql:
+                insert_attempts["n"] += 1
                 raise duckdb.Error("simulated transient lock")
             return self._inner.execute(sql, *args, **kwargs)
 
         def close(self) -> None:
             self._inner.close()
 
-    def _always_fail_insert(db_path):  # type: ignore[no-untyped-def]
-        call_count["n"] += 1
-        return _InsertFailingConn(real_connect(db_path))
+    def _failing_connect(db_path, **kwargs):  # type: ignore[no-untyped-def]
+        return _InsertFailingConn(real_connect(db_path, **kwargs))
 
-    # ADR 0010 slice 4: record_usage's retry-loop-with-connect now lives in
-    # EmbeddedControlPlaneStore.record_api_usage, not usage_table.py.
-    monkeypatch.setattr(embedded_module, "connect_duckdb", _always_fail_insert)
+    # ADR 0010 slice 4: record_usage's retry loop lives in
+    # EmbeddedControlPlaneStore.record_api_usage, not usage_table.py. The
+    # connection itself is opened once per process and reused (see
+    # test_usage_db_connection_reuse), so the retry budget is counted in
+    # INSERT attempts rather than in connects.
+    embedded_module.close_usage_connections()
+    monkeypatch.setattr(embedded_module, "connect_duckdb", _failing_connect)
     # Also speed up the retry loop so the test does not spend ~0.55s sleeping.
     monkeypatch.setattr(embedded_module.time, "sleep", lambda _seconds: None)
 
-    with pytest.raises(duckdb.Error):
-        record_usage(manager, tenant_key, "/v1/entity/order")
+    try:
+        with pytest.raises(duckdb.Error):
+            record_usage(manager, tenant_key, "/v1/entity/order")
+    finally:
+        embedded_module.close_usage_connections()
 
     assert publisher.calls == 0, "publish must not run when insert never succeeded"
-    assert call_count["n"] == 10, "expected the 10-attempt retry budget to be exhausted"
+    assert insert_attempts["n"] == 10, "expected the 10-attempt retry budget to be exhausted"

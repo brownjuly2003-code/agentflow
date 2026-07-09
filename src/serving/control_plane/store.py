@@ -528,7 +528,12 @@ class ControlPlaneStore(ABC):
     ) -> None:
         """Append one ``api_usage`` row for a completed authenticated
         request. Raises on exhausted retries — a caller (``record_usage``)
-        depends on the exception to skip its post-insert audit publish."""
+        depends on the exception to skip its post-insert audit publish.
+
+        The exception stops there: ``AuthMiddleware`` catches it, increments
+        ``agentflow_usage_record_failures_total`` and serves the request
+        anyway. Accounting is a side-channel and must not fail the request it
+        was counting."""
 
     @abstractmethod
     def get_usage_by_tenant(self) -> list[dict]:

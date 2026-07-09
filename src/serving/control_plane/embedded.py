@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
@@ -31,6 +32,60 @@ from src.serving.duckdb_connection import connect_duckdb
 from .store import AUTO_RESOLVE_NOTE, ControlPlaneStore, OutboxEntry, TriageState, WebhookQueueRow
 
 logger = structlog.get_logger()
+
+# One owning DuckDB connection per usage-db path, kept open for the life of the
+# process; callers work through `.cursor()` children of it.
+#
+# Every authenticated request writes an `api_usage` row from a worker thread,
+# and the analytics/admin routers build a throwaway store per request. Opening
+# a fresh `duckdb.connect(path)` for each of those races DuckDB's instance
+# cache: when the last connection to a file closes while another is opening,
+# the file is momentarily attached by two database instances and DuckDB raises
+# `BinderException: Unique file handle conflict`. That escaped the auth
+# middleware as a 500 on requests which had otherwise succeeded (2026-07-09
+# Load Test: 19 of 1712). Holding the connection open removes the
+# destroy/recreate window; a cursor is DuckDB's thread-safe unit, the same
+# shape `DuckDBPool` uses for the serving database.
+_USAGE_CONNECTIONS: dict[str, duckdb.DuckDBPyConnection] = {}
+_USAGE_CONNECTIONS_LOCK = threading.Lock()
+
+
+def _usage_connection(path: str) -> duckdb.DuckDBPyConnection:
+    conn = _USAGE_CONNECTIONS.get(path)
+    if conn is not None:
+        return conn
+    with _USAGE_CONNECTIONS_LOCK:
+        conn = _USAGE_CONNECTIONS.get(path)
+        if conn is None:
+            conn = connect_duckdb(path)
+            _USAGE_CONNECTIONS[path] = conn
+    return conn
+
+
+def _drop_usage_connection(path: str) -> None:
+    """Forget a connection whose instance may be unusable, so the next caller
+    reopens it instead of inheriting the failure."""
+    with _USAGE_CONNECTIONS_LOCK:
+        conn = _USAGE_CONNECTIONS.pop(path, None)
+    if conn is not None:
+        try:
+            conn.close()
+        except duckdb.Error:  # pragma: no cover - closing an already-dead handle
+            pass
+
+
+def close_usage_connections() -> None:
+    """Close every cached usage-db connection. Tests that delete their temp
+    database files call this first — Windows will not unlink an open file."""
+    with _USAGE_CONNECTIONS_LOCK:
+        connections = list(_USAGE_CONNECTIONS.values())
+        _USAGE_CONNECTIONS.clear()
+    for conn in connections:
+        try:
+            conn.close()
+        except duckdb.Error:  # pragma: no cover
+            pass
+
 
 try:
     import yaml
@@ -1331,6 +1386,23 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     # --- API usage accounting -------------------------------------------------
 
+    def _usage_cursor(self) -> duckdb.DuckDBPyConnection:
+        """A cursor on the process-wide connection for this store's usage db.
+
+        Drop-in for the old per-call ``connect_duckdb``: callers still own the
+        handle and still ``close()`` it, but closing a cursor leaves the owning
+        connection — and therefore the DuckDB instance — alive. The path is
+        resolved on every call so the Windows fallback in
+        ``ensure_usage_schema`` (which swaps ``_usage_db_path_override``
+        mid-flight) lands on the new file.
+        """
+        path = str(self._usage_db_path)
+        try:
+            return _usage_connection(path).cursor()
+        except duckdb.Error:
+            _drop_usage_connection(path)
+            raise
+
     def ensure_usage_schema(self) -> None:
         # Moved verbatim from auth/usage_table.py's ensure_usage_table
         # (ADR 0010 slice 4), including the Windows file-lock fallback: if
@@ -1338,7 +1410,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
         # per-process temp file and stick with it for this store's lifetime.
         for attempt in range(10):
             try:
-                conn = connect_duckdb(self._usage_db_path)
+                conn = self._usage_cursor()
             except duckdb.IOException as exc:
                 if (
                     os.getenv("AGENTFLOW_USAGE_DB_PATH") is None
@@ -1355,7 +1427,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
                         error=str(exc),
                     )
                     self._usage_db_path_override = fallback_path
-                    conn = connect_duckdb(self._usage_db_path)
+                    conn = self._usage_cursor()
                 else:
                     if attempt == 9:
                         raise
@@ -1388,7 +1460,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
     ) -> None:
         for attempt in range(10):
             try:
-                conn = connect_duckdb(self._usage_db_path)
+                conn = self._usage_cursor()
             except duckdb.Error:
                 if attempt == 9:
                     raise
@@ -1412,7 +1484,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
                 conn.close()
 
     def get_usage_by_tenant(self) -> list[dict]:
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             rows = conn.execute(
                 """
@@ -1433,7 +1505,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
     def get_usage_by_key(self) -> dict[tuple[str, str], int]:
         for attempt in range(10):
             try:
-                conn = connect_duckdb(self._usage_db_path)
+                conn = self._usage_cursor()
             except duckdb.Error:
                 if attempt == 9:
                     raise
@@ -1464,7 +1536,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
     def get_old_key_usage_by_key_id(self) -> dict[str, int]:
         for attempt in range(10):
             try:
-                conn = connect_duckdb(self._usage_db_path)
+                conn = self._usage_cursor()
             except duckdb.Error:
                 if attempt == 9:
                     raise
@@ -1496,7 +1568,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
     def record_api_session(self, request_id: str, record: dict) -> None:
         for attempt in range(10):
             try:
-                conn = connect_duckdb(self._usage_db_path)
+                conn = self._usage_cursor()
             except duckdb.Error as exc:
                 if attempt == 9:
                     logger.warning(
@@ -1571,7 +1643,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     def get_usage_analytics(self, *, window: str = "24h", tenant: str | None = None) -> dict:
         interval = _window_to_interval(window)
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             if tenant:
@@ -1643,7 +1715,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     def get_top_queries(self, *, limit: int = 10, window: str = "24h") -> dict:
         interval = _window_to_interval(window)
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             rows = conn.execute(
@@ -1669,7 +1741,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     def get_top_entities(self, *, limit: int = 10, window: str = "24h") -> dict:
         interval = _window_to_interval(window)
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             rows = conn.execute(
@@ -1700,7 +1772,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     def get_latency_analytics(self, *, window: str = "24h") -> dict:
         interval = _window_to_interval(window)
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             rows = conn.execute(
@@ -1736,7 +1808,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     def get_anomalies(self, *, window: str = "24h") -> dict:
         interval = _window_to_interval(window)
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             rows = conn.execute(
@@ -1813,7 +1885,7 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
             conn.close()
 
     def get_queries_per_second_last_minute(self) -> float:
-        conn = connect_duckdb(self._usage_db_path)
+        conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             row = conn.execute(

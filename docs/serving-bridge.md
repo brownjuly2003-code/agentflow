@@ -27,13 +27,18 @@ runtime the repo pins), 2026-07-09:
 
 - An `order.created` produced to `orders.raw` traversed the real Flink job, the
   bridge and ClickHouse, and was served by `GET /v1/entity/order/{id}` **3.26 s
-  later** — the first time this path has been closed end to end.
+  later** — the first time this path has been closed end to end (S6 live probe).
+- **S8 (same day, full distribution):** the same path through to
+  `GET /v1/metrics/revenue` measured **3.02 s p50 / 5.70 s p95** (n=20, 1
+  warmup miss) with Redis push invalidation active. Report:
+  [`perf/freshness-e2e-realpath.md`](perf/freshness-e2e-realpath.md);
+  driver: `scripts/benchmark_freshness_e2e.py`.
 - The in-process (DuckDB) arm served the same shape of event **1.1 s** after it
-  was produced to `events.validated`.
+  was produced to `events.validated` (not the full produce→metric claim).
 - Replaying an already-applied `event_id` against live Kafka + ClickHouse
   produced exactly one order row and one journal row
   (`tests/integration/test_serving_bridge.py`, 2 passed).
-- Bridge counters after the run: `consumed 5 · applied 3 · duplicate 2 ·
+- Bridge counters after the S6 probe: `consumed 5 · applied 3 · duplicate 2 ·
   apply_failures 0 · lag 0`. The two duplicates are the guard collapsing
   re-delivered messages, which is what it is for.
 

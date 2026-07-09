@@ -93,13 +93,15 @@ jobs:
           # redis auto-construct line is env-gated), so the 90% gate keeps a
           # cushion on a mutmut target.
           #
-          # Uses `coverage run` + `coverage report --include` rather than
-          # `pytest --cov=<module>`. pytest-cov's process-exit teardown of the
-          # redis asyncio client has SIGSEGV'd (exit 139) on ubuntu-latest
-          # after a green 12/12 + 98% report (PR #174, 2026-07-09); the auth/
-          # outbox gates already use this split form for a related native-teardown
-          # class of failures.
-          python -m coverage run -m pytest tests/unit/test_rate_limiter.py -v --tb=short -p no:schemathesis
+          # Uses `coverage run` + `coverage report --include` (auth/outbox pattern).
+          # Scope is pure RateLimiter tests only (`-k "not auth_middleware"`): the
+          # three middleware+TestClient cases still run in the main unit suite,
+          # but under coverage they tear down redis.asyncio + Starlette and have
+          # SIGSEGV'd (exit 139) on ubuntu-latest after a green 12/12 report
+          # (PR #174). Pure module coverage stays ≥90% without those three.
+          # Also disable the pytest-cov plugin so it cannot double-instrument.
+          python -m coverage run -m pytest tests/unit/test_rate_limiter.py \
+            -k "not auth_middleware" -v --tb=short -p no:schemathesis -p no:cov
           python -m coverage report --include="*/serving/api/rate_limiter.py" --show-missing --fail-under=90
       - name: Run auth manager coverage gate
         run: |

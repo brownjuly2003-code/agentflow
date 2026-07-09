@@ -87,6 +87,7 @@ class _RecordingSink:
         self.pipeline_events: list[dict] = []
         self.insert_orders_calls = 0
         self.journal_batch_calls = 0
+        self.session_batches: list[list[dict]] = []
         self.user_refresh_ids: set[str] = set()
         self._raise_on_order = raise_on_order
 
@@ -114,6 +115,10 @@ class _RecordingSink:
 
     def upsert_session(self, event: dict) -> None:  # pragma: no cover - not exercised here
         pass
+
+    def upsert_sessions(self, events: list[dict]) -> None:
+        if events:
+            self.session_batches.append(events)
 
     def refresh_user_aggregates(self, user_ids) -> None:
         self.user_refresh_ids.update(str(uid) for uid in user_ids)
@@ -158,6 +163,26 @@ def _flink_shaped_order(event_id: str | None = None, order_id: str | None = None
     }
     event["_partition_key"] = event["user_id"]
     event["tenant"] = "default"
+    return event
+
+
+def _flink_shaped_page_view(session_id: str, page_url: str) -> dict:
+    """A clickstream event as Flink sinks it to `events.validated`."""
+    from src.processing.transformations.enrichment import enrich_clickstream
+
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "event_type": "page_view",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "source": "unit-test",
+        "session_id": session_id,
+        "user_id": "USR-90102",
+        "page_url": page_url,
+        "user_agent": "pytest/1.0",
+        "viewport_width": 1280,
+    }
+    event = enrich_clickstream(event)
+    event["_partition_key"] = session_id
     return event
 
 
@@ -291,6 +316,28 @@ def test_clickhouse_batch_one_multi_row_order_insert(lake):
     # Unique users A,B,C — not 5 per-order aggregate refreshes.
     assert sink.user_refresh_ids == {"USR-A", "USR-B", "USR-C"}
     assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
+
+
+def test_clickhouse_batch_folds_sessions_in_one_call(lake):
+    """Q1.4: a mixed batch hands *all* its clickstream events to the sink as one
+    ``upsert_sessions`` call — the per-event RMW loop is gone."""
+    events = [
+        _flink_shaped_order(order_id="ORD-20260709-9201"),
+        _flink_shaped_page_view("SES-Q14-A", "/products/1"),
+        _flink_shaped_page_view("SES-Q14-B", "/checkout"),
+        _flink_shaped_page_view("SES-Q14-A", "/cart"),
+    ]
+    sink = _RecordingSink()
+    consumer = _FakeConsumer([[_Message(e, offset=i) for i, e in enumerate(events)]])
+
+    result = _bridge(consumer, sink=sink, lake_conn=lake).run_once()
+
+    assert result.applied == 4
+    assert len(sink.session_batches) == 1, "one batched fold, not one RMW per event"
+    batch = sink.session_batches[0]
+    assert [event["session_id"] for event in batch] == ["SES-Q14-A", "SES-Q14-B", "SES-Q14-A"]
+    assert sink.insert_orders_calls == 1
+    assert sink.journal_batch_calls == 1
 
 
 def test_applied_event_ids_feed_the_s7_seam(lake):

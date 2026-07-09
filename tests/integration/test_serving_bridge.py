@@ -93,6 +93,31 @@ def _flink_shaped_order() -> dict:
     return event
 
 
+def _flink_shaped_page_view(session_id: str, page_url: str) -> dict:
+    """The payload Flink writes to `events.validated` for a page_view."""
+    from src.processing.transformations.enrichment import enrich_clickstream
+
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "event_type": "page_view",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "source": "integration-test",
+        "session_id": session_id,
+        "user_id": "USR-910001",
+        "page_url": page_url,
+        "user_agent": "pytest-integration/1.0",
+        "viewport_width": 1280,
+    }
+    event = enrich_clickstream(event)
+    event["_enriched"] = {
+        "processing_time": datetime.now(UTC).isoformat(),
+        "pipeline_latency_ms": 12,
+        "processor_version": "1.0.0",
+    }
+    event["_partition_key"] = session_id
+    return event
+
+
 def _ensure_topic(bootstrap_servers: str) -> None:
     admin = AdminClient({"bootstrap.servers": bootstrap_servers})
     futures = admin.create_topics(
@@ -195,6 +220,48 @@ class TestServingBridgeLive:
         assert len(orders) == 1, orders
         assert orders[0]["user_id"] == event["user_id"]
         assert _journal_rows(backend, event["event_id"]) == 1
+
+    def test_clickstream_batch_folds_one_session_version(self, kafka_bootstrap, backend):
+        """Q1.4: the batched session fold must land the same state on a real
+        ClickHouse as the per-event RMW did — one visible row per session
+        (``final=1``), the event count summed, the funnel stage at its furthest
+        point — whether the bridge saw the events in one poll or several."""
+        session_id = f"SES-9{uuid.uuid4().hex[:10]}"
+        events = [
+            _flink_shaped_page_view(session_id, "/"),
+            _flink_shaped_page_view(session_id, "/products/42"),
+            _flink_shaped_page_view(session_id, "/checkout"),
+        ]
+        _ensure_topic(kafka_bootstrap)
+        for event in events:
+            _publish(kafka_bootstrap, event)
+
+        lake = duckdb.connect(":memory:")
+        _ensure_tables(lake)
+        consumer = _consumer(kafka_bootstrap, f"bridge-live-{uuid.uuid4()}")
+        bridge = ServingBridge(consumer, sink=ClickHouseSink(backend), lake_conn=lake)
+        pending = {event["event_id"] for event in events}
+        deadline = time.monotonic() + 60.0
+        try:
+            while pending and time.monotonic() < deadline:
+                result = bridge.run_once()
+                if result is not None:
+                    pending -= set(result.applied_event_ids)
+        finally:
+            consumer.close()
+            lake.close()
+        assert not pending, f"bridge never applied {pending} within 60s"
+
+        rows = backend.execute(
+            "SELECT event_count, funnel_stage, is_conversion FROM sessions_aggregated "
+            f"WHERE session_id = '{session_id}'"
+        )
+        assert len(rows) == 1, rows
+        assert int(rows[0]["event_count"]) == 3
+        assert rows[0]["funnel_stage"] == "checkout"
+        assert int(rows[0]["is_conversion"]) == 1
+        for event in events:
+            assert _journal_rows(backend, event["event_id"]) == 1
 
     def test_replayed_event_is_not_applied_twice(self, kafka_bootstrap, backend):
         """At-least-once in, effectively-once out: the same event_id delivered

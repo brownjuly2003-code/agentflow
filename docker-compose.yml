@@ -47,7 +47,7 @@ services:
 
   # ── Flink ─────────────────────────────────────────────────────
   flink-jobmanager:
-    image: flink:2.2.1-java17
+    image: flink:2.3.0-java17
     ports:
       - "8081:8081"
     command: jobmanager
@@ -73,7 +73,7 @@ services:
       retries: 5
 
   flink-taskmanager:
-    image: flink:2.2.1-java17
+    image: flink:2.3.0-java17
     depends_on:
       flink-jobmanager:
         condition: service_healthy

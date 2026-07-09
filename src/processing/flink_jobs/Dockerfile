@@ -1,7 +1,11 @@
 FROM python:3.11-slim-bookworm@sha256:721dc13fd1be0a771e54b72097634291d628d0007dee9da777e2ce676a9c998f
 
-ARG FLINK_VERSION=2.2.1
+ARG FLINK_VERSION=2.3.0
 ARG SCALA_VERSION=2.12
+# The externalised Kafka connector is versioned <connector>-<flink minor> and
+# its newest published build is 5.0.0-2.2 — there is no -2.3 artifact. Flink
+# keeps @Public API stable inside a major, so the 2.2 build runs on a 2.3
+# cluster; flink-smoke submits the real job against it to keep that honest.
 ARG PYFLINK_KAFKA_JAR_VERSION=5.0.0-2.2
 
 RUN apt-get update \

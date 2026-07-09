@@ -4,6 +4,32 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed — one Flink version across pip extra and container runtime (audit 07.07 F2)
+
+- **The Docker runtime moves 2.2.1 → 2.3.0**, matching the `[flink]` extra
+  (`apache-flink==2.3.0`, bumped in #87 and smoke-validated since): the
+  `flink_jobs` image ARG (`FLINK_VERSION`, which also drives the pip install
+  and the `flink-s3-fs-hadoop` plugin symlink) and both official cluster
+  images in `docker-compose.yml` (`flink:2.3.0-java17`). Developing locally
+  against a 2.3.0 PyFlink while the cluster ran 2.2.1 could surface behaviour
+  that did not exist on the deployed minor; the two lines are now one.
+- **The Kafka connector stays `flink-sql-connector-kafka-5.0.0-2.2`** — the
+  externalised connector is versioned `<connector>-<flink minor>` and no
+  `-2.3` build is published. Flink keeps `@Public` API stable within a major,
+  so the 2.2 artifact runs on a 2.3 cluster; the Dockerfile says so, and
+  `flink-smoke` submits `stream_processor.py` to a real Kafka+MinIO+Flink
+  cluster on every PR, so the combination is asserted rather than assumed.
+- `docs/architecture.md` Technology Choices now reads Flink 2.3. Historical
+  records (CHANGELOG entries, `docs/perf/freshness-realpath-2026-06-30.md`)
+  keep the version they were measured on.
+
+### Changed — the published SDK is under the same lint gate as `src/` (audit 07.07 F1)
+
+- `ci.yml` runs `ruff check` and `ruff format --check` over `sdk/` as well;
+  the one-off reformat touched `async_client.py`, `cli.py`, `client.py`
+  (line-collapse only). `make lint` / `make format` now cover
+  `src/ tests/ scripts/ sdk/`, so local and CI agree.
+
 ## [2.0.0] - 2026-07-06
 
 ### Fixed — single-container demo deploys pin the DuckDB serving backend (G2 S7, 2026-07-06)

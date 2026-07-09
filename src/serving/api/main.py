@@ -322,11 +322,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     # the channel drops metric keys. Same-process: schedule a
                     # local invalidate so we do not wait for the pub/sub round-trip.
                     publish_metrics_invalidate(redis_url, event_ids)
-                    loop.call_soon_threadsafe(
-                        lambda ids=list(event_ids): asyncio.create_task(
-                            controller.notify_batch_applied(ids)
-                        )
-                    )
+                    applied = list(event_ids)
+
+                    def _schedule_local_invalidate() -> None:
+                        asyncio.create_task(controller.notify_batch_applied(applied))
+
+                    loop.call_soon_threadsafe(_schedule_local_invalidate)
 
                 bridge, stop_event, _thread = start_in_process_bridge(
                     lake_conn=app.state.query_engine._conn,

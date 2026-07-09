@@ -75,6 +75,36 @@ class ClickHouseSink:
             )
         )
 
+    def existing_event_ids(self, event_ids: list[str]) -> set[str]:
+        """Which of ``event_ids`` the serving journal has already seen.
+
+        The idempotency guard for the S6 bridge. Scoped exactly like the
+        node-ingest guard (``src/serving/node/ingest.py``): ``event_id`` is
+        unique only *within* the two ingest topics, because derived rows such
+        as the ``orders.status`` journal entry deliberately reuse the same
+        ``event_id`` with a suffix.
+
+        Unlike node-ingest, this filters by the batch's ids in SQL rather than
+        scanning the whole journal and intersecting in Python: the bridge is a
+        sustained writer, so an O(table) read per batch would grow without
+        bound. ``event_id`` is not the leading key of the ClickHouse sort order
+        (``clickhouse_backend.ensure_schema``), so this is not a point lookup —
+        but it is bounded by the batch, not by the table.
+
+        This asks the *serving* store, not the bridge's scratch lake: on the
+        ClickHouse path the serving-store mirror happens after the local
+        commit, so a crash in between must leave the event replayable.
+        """
+        if not event_ids:
+            return set()
+        quoted = ", ".join(_quote_literal(str(event_id)) for event_id in event_ids)
+        rows = self._backend.execute(
+            "SELECT DISTINCT event_id FROM pipeline_events "  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
+            f"WHERE event_id IN ({quoted}) "
+            "AND topic IN ('events.validated', 'events.deadletter')"
+        )
+        return {str(row["event_id"]) for row in rows}
+
     def record_pipeline_event(
         self,
         *,

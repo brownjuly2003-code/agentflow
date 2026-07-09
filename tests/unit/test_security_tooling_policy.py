@@ -56,7 +56,17 @@ _ALLOWED_B608_SITES = {
     # — the journal scan moved there from stream.py / webhook_dispatcher.py,
     # whose sites are gone; clickhouse_backend gained the insert_rows header
     # (identifiers regex-validated).
-    "src/processing/clickhouse_sink.py": 2,
+    # S6 (reviewed 2026-07-09): +1 site — ClickHouseSink.existing_event_ids, the
+    # serving bridge's idempotency guard. It interpolates _quote_literal-escaped
+    # `event_id`s that originate in Kafka payloads, i.e. attacker-influenced if
+    # a producer is compromised. Contained by the same mechanism as the other
+    # two sites and pinned by
+    # test_serving_bridge.py::test_hostile_event_id_cannot_escape_the_guard_literal,
+    # which asserts structurally (parse the translated SQL as ClickHouse) that
+    # quote/backslash/newline/UNION payloads stay one statement, one literal, and
+    # round-trip to the original value. ClickHouse's `execute(params=...)` is a
+    # documented no-op, so binding is not an option on this backend.
+    "src/processing/clickhouse_sink.py": 3,
     "src/serving/api/routers/lineage.py": 1,
     "src/serving/api/routers/slo.py": 4,
     # ADR 0010 slice 5 (reviewed 2026-07-03): _replace_record_set interpolates

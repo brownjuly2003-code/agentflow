@@ -26,6 +26,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from src.logger import configure_logging
+from src.processing.bridge_consumer import start_in_process_bridge
 from src.processing.outbox import OutboxProcessor
 from src.quality.monitors.metrics_collector import HealthCollector
 from src.serving.api.alert_dispatcher import AlertDispatcher
@@ -94,6 +95,10 @@ def _env_int(name: str, fallback: int) -> int:
         return int(os.environ[name])
     except (KeyError, ValueError):
         return fallback
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @asynccontextmanager
@@ -284,6 +289,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.node_emitter.start()
         app.state.node_emitter_task = app.state.node_emitter.task
 
+    # Serving bridge (S6), in-process arm. Only the DuckDB backend needs it:
+    # `:memory:` (and a DuckDB file's single writer) cannot be reached from the
+    # standalone bridge process, which is what the ClickHouse backend uses.
+    # Off unless asked for — a demo without Kafka must not try to reach a broker.
+    app.state.serving_bridge = None
+    app.state.serving_bridge_stop = None
+    if _truthy(os.getenv("AGENTFLOW_SERVING_BRIDGE_ENABLED", "false")):
+        if app.state.query_engine._backend_name != "duckdb":
+            logger.warning("in_process_bridge_skipped_non_duckdb_backend")
+        else:
+            try:
+                bridge, stop_event, _thread = start_in_process_bridge(
+                    lake_conn=app.state.query_engine._conn,
+                    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                )
+                app.state.serving_bridge = bridge
+                app.state.serving_bridge_stop = stop_event
+            except Exception:
+                # A missing broker degrades freshness, it does not take the API
+                # down: every read path still serves.
+                logger.warning("in_process_bridge_start_failed", exc_info=True)
+
     auth_mode = (
         "multi_tenant_api_keys"
         if app.state.auth_manager.has_configured_keys()
@@ -310,6 +337,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.webhook_dispatcher.stop()
     if getattr(app.state, "node_emitter", None) is not None:
         await app.state.node_emitter.stop()
+    if getattr(app.state, "serving_bridge_stop", None) is not None:
+        app.state.serving_bridge_stop.set()
     await app.state.query_cache.close()
     # Drain the queued api_usage rows before the process goes away; they are
     # written off the request path and would otherwise die with the queue.

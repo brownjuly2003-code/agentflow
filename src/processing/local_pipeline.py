@@ -348,12 +348,15 @@ def apply_serving_batch(
     No DuckDB. Production serving store is ClickHouse; the dual-write demo path
     still uses :func:`_process_event` with a lake connection for local tests.
 
-    Per batch this issues:
+    Per batch this issues a *constant* number of ClickHouse round-trips (Q1.4),
+    independent of batch size:
     - one multi-row ``orders_v2`` insert (all successful orders)
     - one multi-row ``products_current`` insert
-    - sequential session upserts (read-modify-write on CH)
+    - one batched session fold: one SELECT over the batch's session ids + one
+      multi-row versions insert (was: SELECT + INSERT per clickstream event)
+    - one batched ``users_enriched`` recompute: one grouped SELECT over the
+      batch's user ids + one multi-row insert (was: SELECT + INSERT per user)
     - one multi-row ``pipeline_events`` journal insert
-    - one ``users_enriched`` recompute **per unique user** (not per order)
 
     Returns ``(event_id, success, reason)`` in input order. Schema/semantic
     rejects are dead-lettered into the journal and counted as failures without
@@ -460,8 +463,7 @@ def apply_serving_batch(
     # mid-batch leaves events replayable (idempotency guard has not seen them).
     clickhouse_sink.insert_orders(order_events)
     clickhouse_sink.insert_products(product_events)
-    for session_event in session_events:
-        clickhouse_sink.upsert_session(session_event)
+    clickhouse_sink.upsert_sessions(session_events)
     clickhouse_sink.refresh_user_aggregates(pending_users)
     clickhouse_sink.record_pipeline_events(journal_rows)
     return results

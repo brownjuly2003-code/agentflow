@@ -158,7 +158,7 @@ class ClickHouseSink:
         """
         self.insert_orders([event])
         if refresh_user:
-            self._refresh_user_aggregate(str(event["user_id"]))
+            self.refresh_user_aggregates({str(event["user_id"])})
 
     def insert_orders(self, events: list[dict]) -> None:
         """Multi-row ``orders_v2`` insert (ReplacingMergeTree append versions)."""
@@ -194,22 +194,29 @@ class ClickHouseSink:
         self._backend.insert_rows("products_current", rows)
 
     def refresh_user_aggregates(self, user_ids: set[str] | list[str]) -> None:
-        """Recompute ``users_enriched`` once per user (amortized batch end)."""
-        for user_id in sorted({str(uid) for uid in user_ids if uid}):
-            self._refresh_user_aggregate(user_id)
+        """Recompute ``users_enriched`` for a batch's users (Q1.4).
 
-    def _refresh_user_aggregate(self, user_id: str) -> None:
-        # Same aggregate the dual-write path materializes in _upsert_order;
-        # written as an append of a new users_enriched row version on ClickHouse.
+        One grouped SELECT over the id list plus one multi-row insert — two
+        round-trips per batch instead of two per user. After Q1.3 this loop was
+        the last O(batch) round-trip term on the order path: the S10 driver
+        produces orders with near-unique users, so "once per unique user" still
+        meant two ClickHouse HTTP calls per order. Same aggregate the dual-write
+        path materializes in ``_upsert_order``; users whose only orders are
+        cancelled return no group row and are skipped, exactly like the
+        per-user recompute did.
+        """
+        ids = sorted({str(uid) for uid in user_ids if uid})
+        if not ids:
+            return
+        quoted = ", ".join(_quote_literal(uid) for uid in ids)
         rows = self._backend.execute(
             "SELECT user_id, COUNT(*) AS total_orders, SUM(total_amount) AS total_spent, "
             "MIN(created_at) AS first_order_at, MAX(created_at) AS last_order_at "
-            f"FROM orders_v2 WHERE user_id = {_quote_literal(user_id)} "  # nosec B608 - quoted literal, re-escaped structurally by the backend transpile
+            f"FROM orders_v2 WHERE user_id IN ({quoted}) "  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
             "AND status != 'cancelled' GROUP BY user_id"
         )
         if not rows:
             return
-        row = rows[0]
         self._backend.insert_rows(
             "users_enriched",
             [
@@ -221,6 +228,7 @@ class ClickHouseSink:
                     "last_order_at": row["last_order_at"],
                     "preferred_category": None,
                 }
+                for row in sorted(rows, key=lambda row: str(row["user_id"]))
             ],
         )
 
@@ -228,53 +236,74 @@ class ClickHouseSink:
         self.insert_products([event])
 
     def upsert_session(self, event: dict) -> None:
-        session_id = str(event.get("session_id", "unknown"))
-        derived = event.get("_derived", {})
-        page_cat = derived.get("page_category", "other")
-        new_stage_val = _FUNNEL_STAGE_ORDER.get(page_cat, 0)
+        self.upsert_sessions([event])
 
+    def upsert_sessions(self, events: list[dict]) -> None:
+        """Fold a batch of clickstream events into session versions (Q1.4).
+
+        One SELECT over the batch's session ids plus one multi-row insert —
+        two round-trips per batch instead of two per event. The fold reproduces
+        the per-event upsert exactly: the first event of an unseen session
+        *sets* the funnel stage (no comparison), every later event bumps
+        ``event_count`` and only advances the stage on a strictly higher
+        ``_FUNNEL_STAGE_ORDER`` value, and the batch appends a single new row
+        version per session rather than one per event — the intermediate
+        versions were never readable anyway (``final=1`` reads collapse to the
+        latest version per ``session_id``).
+        """
+        if not events:
+            return
+        grouped: dict[str, list[dict]] = {}
+        for event in events:
+            grouped.setdefault(str(event.get("session_id", "unknown")), []).append(event)
+
+        quoted = ", ".join(_quote_literal(session_id) for session_id in grouped)
         existing_rows = self._backend.execute(
             "SELECT session_id, user_id, started_at, ended_at, duration_seconds, "
             "event_count, unique_pages, funnel_stage, is_conversion "
-            f"FROM sessions_aggregated WHERE session_id = {_quote_literal(session_id)} "  # nosec B608 - quoted literal, re-escaped structurally by the backend transpile
-            "LIMIT 1"
+            f"FROM sessions_aggregated WHERE session_id IN ({quoted})"  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
         )
-        if existing_rows:
-            existing: dict[str, Any] = existing_rows[0]
-            old_stage = str(existing.get("funnel_stage") or "bounce")
-            old_count = int(existing.get("event_count") or 0)
-            old_stage_val = _FUNNEL_STAGE_ORDER.get(old_stage, 0)
-            funnel = page_cat if new_stage_val > old_stage_val else old_stage
-            self._backend.insert_rows(
-                "sessions_aggregated",
-                [
-                    {
-                        "session_id": session_id,
-                        "user_id": existing.get("user_id"),
-                        "started_at": existing.get("started_at"),
-                        "ended_at": existing.get("ended_at"),
-                        "duration_seconds": existing.get("duration_seconds"),
-                        "event_count": old_count + 1,
-                        "unique_pages": int(existing.get("unique_pages") or 1),
-                        "funnel_stage": funnel,
-                        "is_conversion": funnel == "checkout",
-                    }
-                ],
-            )
-        else:
-            self._backend.insert_rows(
-                "sessions_aggregated",
-                [
-                    {
-                        "session_id": session_id,
-                        "user_id": event.get("user_id"),
-                        "started_at": datetime.now(UTC),
-                        "ended_at": None,
-                        "duration_seconds": 0,
-                        "event_count": 1,
-                        "unique_pages": 1,
-                        "funnel_stage": page_cat,
-                        "is_conversion": page_cat == "checkout",
-                    }
-                ],
-            )
+        existing_by_id: dict[str, dict[str, Any]] = {
+            str(row["session_id"]): row for row in existing_rows
+        }
+
+        now = datetime.now(UTC)
+        versions: list[dict[str, Any]] = []
+        for session_id, session_events in grouped.items():
+            existing = existing_by_id.get(session_id)
+            if existing is not None:
+                funnel = str(existing.get("funnel_stage") or "bounce")
+                count = int(existing.get("event_count") or 0)
+                to_fold = session_events
+                version: dict[str, Any] = {
+                    "session_id": session_id,
+                    "user_id": existing.get("user_id"),
+                    "started_at": existing.get("started_at"),
+                    "ended_at": existing.get("ended_at"),
+                    "duration_seconds": existing.get("duration_seconds"),
+                    "unique_pages": int(existing.get("unique_pages") or 1),
+                }
+            else:
+                first_derived = session_events[0].get("_derived", {})
+                funnel = first_derived.get("page_category", "other")
+                count = 1
+                to_fold = session_events[1:]
+                version = {
+                    "session_id": session_id,
+                    "user_id": session_events[0].get("user_id"),
+                    "started_at": now,
+                    "ended_at": None,
+                    "duration_seconds": 0,
+                    "unique_pages": 1,
+                }
+            for event in to_fold:
+                page_cat = event.get("_derived", {}).get("page_category", "other")
+                if _FUNNEL_STAGE_ORDER.get(page_cat, 0) > _FUNNEL_STAGE_ORDER.get(funnel, 0):
+                    funnel = page_cat
+                count += 1
+            version["event_count"] = count
+            version["funnel_stage"] = funnel
+            version["is_conversion"] = funnel == "checkout"
+            versions.append(version)
+
+        self._backend.insert_rows("sessions_aggregated", versions)

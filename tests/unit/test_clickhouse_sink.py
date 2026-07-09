@@ -190,6 +190,117 @@ def test_upsert_session_existing_bumps_count_and_keeps_furthest_stage() -> None:
     assert row["started_at"] == "2026-07-02 09:00:00"
 
 
+def test_upsert_sessions_one_select_one_insert_for_the_batch() -> None:
+    """Q1.4: the batch fold must cost two round-trips total, not two per event."""
+    existing = {
+        "session_id": "SES-A",
+        "user_id": "USR-1",
+        "started_at": "2026-07-09 09:00:00",
+        "ended_at": None,
+        "duration_seconds": None,
+        "event_count": "4",
+        "unique_pages": 3,
+        "funnel_stage": "cart",
+        "is_conversion": 0,
+    }
+    sink, backend = _sink(execute_results=[[existing]])
+    sink.upsert_sessions(
+        [
+            {"session_id": "SES-A", "user_id": "USR-1", "_derived": {"page_category": "home"}},
+            {"session_id": "SES-B", "user_id": "USR-2", "_derived": {"page_category": "search"}},
+            {"session_id": "SES-A", "user_id": "USR-1", "_derived": {"page_category": "checkout"}},
+            {"session_id": "SES-B", "user_id": "USR-2", "_derived": {"page_category": "home"}},
+        ]
+    )
+
+    assert len(backend.executed) == 1, "one SELECT for the whole batch"
+    assert "IN" in backend.executed[0]
+    ((table, rows),) = backend.inserts
+    assert table == "sessions_aggregated"
+    assert len(rows) == 2, "one folded version per session, not one per event"
+
+    by_id = {row["session_id"]: row for row in rows}
+    folded_a = by_id["SES-A"]
+    # 4 existing + 2 batch events; checkout(4) outranks cart(3); metadata kept.
+    assert folded_a["event_count"] == 6
+    assert folded_a["funnel_stage"] == "checkout"
+    assert folded_a["is_conversion"] is True
+    assert folded_a["started_at"] == "2026-07-09 09:00:00"
+    assert folded_a["unique_pages"] == 3
+
+    folded_b = by_id["SES-B"]
+    # New session: first event *sets* search(1); home(0) must not regress it.
+    assert folded_b["event_count"] == 2
+    assert folded_b["funnel_stage"] == "search"
+    assert folded_b["is_conversion"] is False
+    assert folded_b["user_id"] == "USR-2"
+    assert folded_b["duration_seconds"] == 0
+    assert folded_b["unique_pages"] == 1
+
+
+def test_upsert_sessions_first_event_sets_stage_even_at_zero_rank() -> None:
+    """The first event of a new session assigns its stage with no comparison —
+    a fold seeded from 'bounce' would wrongly keep 'bounce' for rank-0 pages."""
+    sink, backend = _sink(execute_results=[[]])
+    sink.upsert_sessions(
+        [{"session_id": "SES-1", "user_id": "USR-1", "_derived": {"page_category": "home"}}]
+    )
+    ((_, rows),) = backend.inserts
+    assert rows[0]["funnel_stage"] == "home"
+    assert rows[0]["event_count"] == 1
+
+
+def test_upsert_sessions_empty_batch_is_a_no_op() -> None:
+    sink, backend = _sink()
+    sink.upsert_sessions([])
+    assert backend.executed == []
+    assert backend.inserts == []
+
+
+def test_refresh_user_aggregates_one_query_for_the_batch() -> None:
+    """Q1.4: near-unique users per batch made the per-user recompute the
+    dominant term of the apply ceiling — it must be one grouped SELECT now."""
+    sink, backend = _sink(
+        execute_results=[
+            [
+                {
+                    "user_id": "USR-2",
+                    "total_orders": "1",
+                    "total_spent": "10.00",
+                    "first_order_at": "2026-07-09 10:00:00",
+                    "last_order_at": "2026-07-09 10:00:00",
+                },
+                {
+                    "user_id": "USR-1",
+                    "total_orders": "3",
+                    "total_spent": "459.97",
+                    "first_order_at": "2026-01-01 00:00:00",
+                    "last_order_at": "2026-07-02 10:00:00",
+                },
+            ]
+        ]
+    )
+    # USR-3 has only cancelled orders: the grouped SELECT returns no row for it.
+    sink.refresh_user_aggregates({"USR-1", "USR-2", "USR-3"})
+
+    assert len(backend.executed) == 1, "one grouped SELECT for the whole user set"
+    assert "IN" in backend.executed[0]
+    assert "status != 'cancelled'" in backend.executed[0]
+    ((table, rows),) = backend.inserts
+    assert table == "users_enriched"
+    assert [row["user_id"] for row in rows] == ["USR-1", "USR-2"], "deterministic order"
+    assert rows[0]["total_orders"] == 3
+    assert rows[0]["total_spent"] == pytest.approx(459.97)
+
+
+def test_refresh_user_aggregates_empty_ids_is_a_no_op() -> None:
+    sink, backend = _sink()
+    sink.refresh_user_aggregates(set())
+    sink.refresh_user_aggregates([""])
+    assert backend.executed == []
+    assert backend.inserts == []
+
+
 def test_upsert_product_inserts_row() -> None:
     sink, backend = _sink()
     sink.upsert_product(

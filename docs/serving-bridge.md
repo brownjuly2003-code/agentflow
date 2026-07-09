@@ -78,7 +78,7 @@ instead mark it done forever.
 
 | Serving backend | Bridge form | Why |
 |---|---|---|
-| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user). Live: ~11.4 eps post-Q1.2, **~22.9 eps post-Q1.3** — see [`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md). |
+| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live: ~11.4 eps post-Q1.2, **~22.9 eps post-Q1.3** — see [`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md); post-Q1.4 not yet re-measured on the stand. |
 | `duckdb` (local demo / unit tests only) | in-process thread, `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | **Not production.** Demo and unit tests. Never the S8/S10 real-path store the API reads. |
 
 The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-three-node-demo-topology.md)); its edges push events to the center over HTTPS. The bridge is absent there by design.
@@ -106,6 +106,7 @@ writing to a store nobody reads.
 | `agentflow_bridge_events_duplicate_total` | Replays and Flink duplicates collapsing. Non-zero is normal. |
 | `agentflow_bridge_events_deadletter_total{reason}` | Should be flat at ~0 — Flink already validated these. Sustained growth means schema drift between Flink and the bridge, or a non-canonical event type being routed here. |
 | `agentflow_bridge_apply_failures_total` | The sink is refusing writes. Offsets are *not* advancing, so nothing is lost; the batch replays. |
+| `agentflow_bridge_apply_batch_size` | Events applied per non-empty batch (histogram). p50 > 1 under sustained load is the constant-round-trips apply path (Q1.3/Q1.4) actually amortizing; p50 = 1 means the bridge outruns the producers (healthy idle). |
 | `agentflow_bridge_seconds_since_last_apply` | Liveness. |
 
 A healthy bridge has partitions assigned, bounded or falling lag, flat
@@ -121,22 +122,27 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
   `agentflow_bridge_events_deadletter_total{reason="non_canonical_event_type"}`
   instead of half-applying them. Routing CDC into serving is a separate change.
 - **Idempotent `sessions_aggregated.event_count` on ClickHouse.** That column is
-  a read-modify-write (`old_count + 1`) across non-transactional mirror writes.
-  A crash between the session write and the journal marker lets a replay add one
-  extra. Orders, products and `users_enriched` are unaffected (the last is a
-  full recompute). The clean fix is to derive the count from the deduplicated
-  journal rather than increment it; that is a serving-schema change, not a
-  bridge change. On DuckDB the marker and the increment share one transaction,
-  so the problem does not arise.
+  a read-modify-write (existing count + the batch's events, folded in one
+  version since Q1.4) across non-transactional writes. A crash between the
+  session-versions insert and the journal insert lets a replay re-add that
+  batch's per-session increments. Orders, products and `users_enriched` are
+  unaffected (the last is a full recompute). The clean fix is to derive the
+  count from the deduplicated journal rather than increment it; that is a
+  serving-schema change, not a bridge change. On DuckDB the marker and the
+  increment share one transaction, so the problem does not arise.
 - **Global ordering.** Order holds per partition; serving upserts are
   last-write-wins per key, which is what `ReplacingMergeTree` already does.
-- **High throughput.** Applying through `_process_event` costs one DuckDB commit
-  per event even on the ClickHouse path (the scratch lake). Delivery semantics
-  do not depend on it, so the write mechanism can be swapped without re-deciding
-  anything here. **Measured (S10, Mac/Colima, 2026-07-09):** bridge apply
-  **≈ 8 events/s** sustained after a 400–500 event burst (produce ~500–700
-  events/s); peak bridge lag hundreds of messages. Report:
-  [`perf/throughput-realpath.md`](perf/throughput-realpath.md).
+- **High throughput.** The apply path has been amortized in steps — Q1.2
+  dropped the per-event DuckDB scratch commit, Q1.3 made orders/journal
+  multi-row, Q1.4 batched the session fold and the user recompute — so a batch
+  now costs a constant number of ClickHouse round-trips. Delivery semantics
+  never depended on the write mechanism, which is what made those swaps safe.
+  **Last measured (S10 re-run, Mac/Colima, 2026-07-09, post-Q1.3): ~22.9
+  events/s** sustained bridge apply after a 400-event burst (produce ~650
+  events/s) — an honest ceiling, not "hundreds". History: ~8 eps baseline
+  ([`perf/throughput-realpath.md`](perf/throughput-realpath.md)) → 11.4
+  (Q1.2) → 22.9 ([`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md)).
+  Post-Q1.4 numbers await the next stand session.
 
 ## Cache invalidation (S7)
 

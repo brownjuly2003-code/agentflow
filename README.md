@@ -198,8 +198,9 @@ audit-closure sprint:
   (ADR 0011: Order 360, stuck-orders worklist, exception inbox), and the
   three-node demo topology (ADR 0012) implemented and deployed to Hugging
   Face Spaces (the `center` hub and the `spb` edge answer live; `ekb` and
-  the standalone demo Space are paused — the free tier keeps three
-  `cpu-basic` Spaces awake) — plus the G2 audit closure (spec/seed
+  the standalone demo Space are paused — the free tier caps how many
+  `cpu-basic` Spaces one account runs at once, and other projects hold the
+  rest) — plus the G2 audit closure (spec/seed
   consistency, journal-scan hardening, live evidence re-captures).
 
 The tagged line and `main` are in sync as of `v2.0.0`. See the

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from src.serving.api.analytics import (
     get_anomalies,
@@ -34,7 +35,8 @@ async def create_api_key(payload: KeyCreateRequest, request: Request) -> dict[st
 @router.get("/keys", response_model=None)
 async def list_api_keys(request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
-    return {"keys": manager.list_keys_with_usage()}
+    # Blocking: flushes the usage writer, then reads DuckDB. Off the loop.
+    return {"keys": await run_in_threadpool(manager.list_keys_with_usage)}
 
 
 @router.post("/keys/{key_id}/rotate", response_model=None)
@@ -88,7 +90,8 @@ async def revoke_api_key(api_key: str, request: Request) -> Response:
 @router.get("/usage", response_model=None)
 async def get_usage(request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
-    return {"usage": manager.usage_by_tenant()}
+    # Blocking: flushes the usage writer, then reads DuckDB. Off the loop.
+    return {"usage": await run_in_threadpool(manager.usage_by_tenant)}
 
 
 @router.get("/analytics/usage", response_model=None)

@@ -191,8 +191,12 @@ class AuthManager:
         if rate_limiter is None and resolved_redis_url is None:
             self.rate_limiter._redis = None
         from .key_rotation import KeyRotator
+        from .usage_writer import UsageWriter
 
         self._key_rotator: KeyRotator = KeyRotator(self)
+        # Constructed eagerly, but its thread starts on the first submitted row
+        # — most AuthManagers (tests, CLI) never record a request.
+        self._usage_writer = UsageWriter(self.store, self.audit_publisher)
 
     def load(self) -> None:
         with self._config_lock:
@@ -444,16 +448,42 @@ class AuthManager:
         return entity_type in tenant_key.allowed_entity_types
 
     def record_usage(self, tenant_key: TenantKey, endpoint: str) -> None:
+        """Write the row synchronously and durably. Kept for callers that want
+        the row on disk when this returns; the request path uses
+        ``submit_usage`` instead."""
         from .usage_table import record_usage
 
         record_usage(self, tenant_key, endpoint)
 
+    def submit_usage(self, tenant_key: TenantKey, endpoint: str) -> bool:
+        """Hand the row to the off-path writer. Never blocks, never raises."""
+        from src.serving.control_plane.store import UsageRow
+
+        return self._usage_writer.submit(
+            UsageRow(
+                tenant=tenant_key.tenant,
+                key_name=tenant_key.name,
+                endpoint=endpoint,
+                key_id=tenant_key.key_id,
+                key_slot=tenant_key.matched_slot,
+            )
+        )
+
+    def flush_usage(self, timeout: float = 5.0) -> bool:
+        """Block until queued usage rows are written — read-your-writes."""
+        return self._usage_writer.flush(timeout)
+
+    def close_usage_writer(self, timeout: float = 5.0) -> None:
+        self._usage_writer.close(timeout)
+
     def list_keys_with_usage(self) -> list[dict]:
+        # KeyRotator._usage_by_key flushes — every api_usage reader does.
         return self._key_rotator.list_keys_with_usage()
 
     def usage_by_tenant(self) -> list[dict]:
         from .usage_table import usage_by_tenant
 
+        self.flush_usage()
         return usage_by_tenant(self)
 
     def create_key(self, payload: KeyCreateRequest) -> TenantKey:

@@ -29,7 +29,14 @@ import structlog
 from src.db_concurrency import catalog_ddl_lock
 from src.serving.duckdb_connection import connect_duckdb
 
-from .store import AUTO_RESOLVE_NOTE, ControlPlaneStore, OutboxEntry, TriageState, WebhookQueueRow
+from .store import (
+    AUTO_RESOLVE_NOTE,
+    ControlPlaneStore,
+    OutboxEntry,
+    TriageState,
+    UsageRow,
+    WebhookQueueRow,
+)
 
 logger = structlog.get_logger()
 
@@ -1475,6 +1482,51 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
                     """,
                     [tenant, key_name, endpoint, key_id, key_slot],
                 )
+                return
+            except duckdb.Error:
+                if attempt == 9:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+            finally:
+                conn.close()
+
+    def record_api_usage_batch(self, rows: Sequence[UsageRow]) -> None:
+        """One ``executemany`` inside one transaction, so a batch of N rows
+        costs one commit rather than N.
+
+        DuckDB serializes writers, so the per-row form put a commit — an fsync
+        — on the critical path of every authenticated request, capping the API
+        at ``1 / commit_latency`` requests per second. Batching lifts the
+        accounting ceiling to ``len(rows) / commit_latency``, which is what
+        lets the writer keep up with the request rate off the request path
+        (docs/perf/usage-write-bifurcation-2026-07-09.md).
+        """
+        if not rows:
+            return
+        params = [[r.tenant, r.key_name, r.endpoint, r.key_id, r.key_slot] for r in rows]
+        for attempt in range(10):
+            try:
+                conn = self._usage_cursor()
+            except duckdb.Error:
+                if attempt == 9:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+                continue
+
+            try:
+                conn.execute("BEGIN TRANSACTION")
+                try:
+                    conn.executemany(
+                        """
+                        INSERT INTO api_usage (tenant, key_name, endpoint, key_id, key_slot)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        params,
+                    )
+                except duckdb.Error:
+                    conn.execute("ROLLBACK")
+                    raise
+                conn.execute("COMMIT")
                 return
             except duckdb.Error:
                 if attempt == 9:

@@ -122,6 +122,17 @@ class WebhookQueueRow:
 
 
 @dataclass(frozen=True)
+class UsageRow:
+    """One ``api_usage`` row owed for a served authenticated request."""
+
+    tenant: str
+    key_name: str
+    endpoint: str
+    key_id: str | None
+    key_slot: str
+
+
+@dataclass(frozen=True)
 class OutboxEntry:
     """One pending replay-outbox row (a Kafka message owed to a topic)."""
 
@@ -530,10 +541,31 @@ class ControlPlaneStore(ABC):
         request. Raises on exhausted retries — a caller (``record_usage``)
         depends on the exception to skip its post-insert audit publish.
 
-        The exception stops there: ``AuthMiddleware`` catches it, increments
-        ``agentflow_usage_record_failures_total`` and serves the request
-        anyway. Accounting is a side-channel and must not fail the request it
-        was counting."""
+        The exception stops there: the usage writer catches it, increments
+        ``agentflow_usage_record_failures_total`` and drops the row.
+        Accounting is a side-channel and must not fail the request it was
+        counting."""
+
+    def record_api_usage_batch(self, rows: Sequence[UsageRow]) -> None:
+        """Append many ``api_usage`` rows as **one** unit of work.
+
+        A backend that pays a per-commit cost (an fsync, a round trip) should
+        override this so a batch costs one, not ``len(rows)``. The embedded
+        DuckDB store does; without it the accounting throughput ceiling is
+        ``1 / commit_latency`` rows per second, which on a slow disk is below
+        the request rate the API can otherwise serve (2026-07-09).
+
+        Same failure contract as ``record_api_usage``: raise, and the caller
+        drops the batch and counts it.
+        """
+        for row in rows:
+            self.record_api_usage(
+                tenant=row.tenant,
+                key_name=row.key_name,
+                endpoint=row.endpoint,
+                key_id=row.key_id,
+                key_slot=row.key_slot,
+            )
 
     @abstractmethod
     def get_usage_by_tenant(self) -> list[dict]:

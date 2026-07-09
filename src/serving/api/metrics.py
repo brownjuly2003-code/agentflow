@@ -33,3 +33,11 @@ USAGE_RECORD_FAILURES = Counter(
     "agentflow_usage_record_failures_total",
     "Authenticated requests served without their api_usage row being written.",
 )
+
+# Backpressure, not failure: the writer's queue was full, so the row was shed
+# rather than made to stall the request it was counting. Sustained non-zero
+# means the writer cannot keep up with the request rate.
+USAGE_ROWS_DROPPED = Counter(
+    "agentflow_usage_rows_dropped_total",
+    "api_usage rows dropped because the off-path writer queue was full.",
+)

@@ -9,10 +9,9 @@ from typing import cast
 import structlog
 from fastapi import Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from starlette.concurrency import run_in_threadpool
 
 from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS, FAILED_AUTH_WINDOW_SECONDS
-from src.serving.api.metrics import AUTH_FAILURES, USAGE_RECORD_FAILURES
+from src.serving.api.metrics import AUTH_FAILURES
 from src.serving.api.security import redact_sensitive_headers
 
 from .manager import _CURRENT_TENANT_ID, TenantKey, get_auth_manager
@@ -107,28 +106,25 @@ class AuthMiddleware:
             )
 
         manager.clear_failed_auth(client_ip)
-        # record_usage opens a DuckDB connection, writes, and retries with a
-        # blocking sleep; running it inline froze the event loop on every
-        # authenticated request. Offload to a worker thread. (audit_28_06_26.md #13)
+        # Usage accounting is a side-channel: it may not fail the request it is
+        # counting, and it may not pace it either. Writing the row here — even
+        # offloaded to a worker thread — put a serialized DuckDB commit on the
+        # critical path of every authenticated request, capping the API at
+        # `1 / commit_latency` rps and tipping the CI load test into a
+        # saturated equilibrium whenever the runner's disk was slow
+        # (docs/perf/usage-write-bifurcation-2026-07-09.md).
         #
-        # Usage accounting is a side-channel. The store deliberately raises on
-        # exhausted retries (`ControlPlaneStore.record_api_usage`) so that
-        # `record_usage` skips its audit publish — but that exception used to
-        # escape here and turn an otherwise-successful request into a 500
-        # (seen under load, 2026-07-09). Count the dropped row and serve the
-        # request; the counter is the thing to alert on, not the client.
-        try:
-            await run_in_threadpool(manager.record_usage, tenant_key, path)
-        except Exception:
+        # Hand the row to the writer thread and move on. A full queue sheds the
+        # row and counts it; a failed write counts it too. Both counters are
+        # what to alert on, never the client.
+        if not manager.submit_usage(tenant_key, path):
             from src.serving.api import auth as auth_package
 
-            USAGE_RECORD_FAILURES.inc()
             auth_package.logger.warning(
                 "api_usage_record_skipped",
                 tenant=tenant_key.tenant,
                 key_name=tenant_key.name,
                 path=path,
-                exc_info=True,
             )
         is_allowed, remaining, reset_at = await manager.check_rate_limit(tenant_key)
         rate_limit_headers = {

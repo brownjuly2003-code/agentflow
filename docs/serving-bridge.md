@@ -131,10 +131,12 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
 - **Global ordering.** Order holds per partition; serving upserts are
   last-write-wins per key, which is what `ReplacingMergeTree` already does.
 - **High throughput.** Applying through `_process_event` costs one DuckDB commit
-  per event even on the ClickHouse path (the scratch lake). That is the
-  serialized-writer ceiling of a few hundred events/sec. Delivery semantics do
-  not depend on it, so the write mechanism can be swapped without re-deciding
-  anything here.
+  per event even on the ClickHouse path (the scratch lake). Delivery semantics
+  do not depend on it, so the write mechanism can be swapped without re-deciding
+  anything here. **Measured (S10, Mac/Colima, 2026-07-09):** bridge apply
+  **≈ 8 events/s** sustained after a 400–500 event burst (produce ~500–700
+  events/s); peak bridge lag hundreds of messages. Report:
+  [`perf/throughput-realpath.md`](perf/throughput-realpath.md).
 
 ## Cache invalidation (S7)
 

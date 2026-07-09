@@ -85,15 +85,29 @@ class _RecordingSink:
         self.journal = set(journal or ())
         self.orders: list[dict] = []
         self.pipeline_events: list[dict] = []
+        self.insert_orders_calls = 0
+        self.journal_batch_calls = 0
+        self.user_refresh_ids: set[str] = set()
         self._raise_on_order = raise_on_order
 
     def existing_event_ids(self, event_ids: list[str]) -> set[str]:
         return {event_id for event_id in event_ids if event_id in self.journal}
 
-    def upsert_order(self, event: dict) -> None:
+    def upsert_order(self, event: dict, *, refresh_user: bool = True) -> None:
         if self._raise_on_order:
             raise RuntimeError("clickhouse unreachable")
         self.orders.append(event)
+        if refresh_user:
+            self.user_refresh_ids.add(str(event["user_id"]))
+
+    def insert_orders(self, events: list[dict]) -> None:
+        if self._raise_on_order:
+            raise RuntimeError("clickhouse unreachable")
+        self.insert_orders_calls += 1
+        self.orders.extend(events)
+
+    def insert_products(self, events: list[dict]) -> None:  # pragma: no cover
+        pass
 
     def upsert_product(self, event: dict) -> None:  # pragma: no cover - not exercised here
         pass
@@ -101,9 +115,18 @@ class _RecordingSink:
     def upsert_session(self, event: dict) -> None:  # pragma: no cover - not exercised here
         pass
 
+    def refresh_user_aggregates(self, user_ids) -> None:
+        self.user_refresh_ids.update(str(uid) for uid in user_ids)
+
     def record_pipeline_event(self, **kwargs) -> None:
         self.pipeline_events.append(kwargs)
         self.journal.add(str(kwargs["event_id"]))
+
+    def record_pipeline_events(self, rows: list[dict]) -> None:
+        self.journal_batch_calls += 1
+        for row in rows:
+            self.pipeline_events.append(row)
+            self.journal.add(str(row["event_id"]))
 
 
 def _flink_shaped_order(event_id: str | None = None, order_id: str | None = None) -> dict:
@@ -230,7 +253,7 @@ def test_guard_reads_the_serving_journal_not_the_scratch_lake(lake):
 
 
 def test_clickhouse_path_skips_scratch_duckdb_on_apply(lake):
-    """Q1.2: CH bridge writes serving store only — no per-event lake BEGIN/COMMIT."""
+    """Q1.2/Q1.3: CH bridge is ClickHouse-only — lake stays empty."""
     event = _flink_shaped_order()
     sink = _RecordingSink()
     consumer = _FakeConsumer([[_Message(event)]])
@@ -240,10 +263,33 @@ def test_clickhouse_path_skips_scratch_duckdb_on_apply(lake):
     assert result.applied == 1
     assert len(sink.orders) == 1
     assert sink.orders[0]["order_id"] == event["order_id"]
-    # Journal + status rows land on the sink, never the throwaway lake.
+    # Journal + status rows land on the sink, never DuckDB.
     assert event["event_id"] in sink.journal
     assert f"{event['event_id']}-status" in sink.journal
     assert lake.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0] == 0
+    assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
+
+
+def test_clickhouse_batch_one_multi_row_order_insert(lake):
+    """Q1.3: many orders → one insert_orders call, aggregates once per user."""
+    events = [_flink_shaped_order(order_id=f"ORD-20260709-91{i:02d}") for i in range(5)]
+    # Force two distinct users so aggregate refresh is counted.
+    events[0]["user_id"] = "USR-A"
+    events[1]["user_id"] = "USR-A"
+    events[2]["user_id"] = "USR-B"
+    events[3]["user_id"] = "USR-B"
+    events[4]["user_id"] = "USR-C"
+    sink = _RecordingSink()
+    consumer = _FakeConsumer([[_Message(e, offset=i) for i, e in enumerate(events)]])
+
+    result = _bridge(consumer, sink=sink, lake_conn=lake).run_once()
+
+    assert result.applied == 5
+    assert sink.insert_orders_calls == 1
+    assert len(sink.orders) == 5
+    assert sink.journal_batch_calls == 1
+    # Unique users A,B,C — not 5 per-order aggregate refreshes.
+    assert sink.user_refresh_ids == {"USR-A", "USR-B", "USR-C"}
     assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
 
 

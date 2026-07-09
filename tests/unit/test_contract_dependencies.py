@@ -172,9 +172,15 @@ def test_docker_build_contexts_prepare_root_package_metadata():
             assert "wheel==0.47.0" in text
             assert "COPY contracts /app/contracts" in text
             assert "AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities" in text
+            # Q0.2 / S9: scale profile needs Postgres control-plane driver baked in
+            # (kind 2-pod previously required a docker-commit psycopg hack).
+            assert "[cloud,postgres]" in text
         else:
             assert "COPY README.md /app/README.md" in text, (
                 f"{relative_path} must copy README.md before installing the root package"
+            )
+            assert '".[postgres]"' in text or "[postgres]" in text, (
+                f"{relative_path} must install the postgres extra (psycopg) for scale profile"
             )
 
 

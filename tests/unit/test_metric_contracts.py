@@ -71,7 +71,10 @@ def test_metric_contracts_declare_a_freshness_budget():
         assert contract.freshness is not None, name
         budget = contract.freshness["p95_staleness_budget_seconds"]
         assert budget > 0, name
-        assert "freshness-benchmark" in contract.freshness["basis"], name
+        # Q0.3: product promise is the real path (S8); demo arm stays documented.
+        basis = contract.freshness["basis"]
+        assert "freshness-e2e-realpath" in basis, name
+        assert "freshness-benchmark" in basis, name
 
 
 def test_contract_to_dict_exposes_lineage_additively():
@@ -84,7 +87,7 @@ def test_contract_to_dict_exposes_lineage_additively():
         "order.cancelled",
     ]
     assert metric_payload["source_table"] == "orders_v2"
-    assert metric_payload["freshness"]["p95_staleness_budget_seconds"] == 2.5
+    assert metric_payload["freshness"]["p95_staleness_budget_seconds"] == 8.0
 
     # Entity contracts predate lineage and must keep their payload unchanged.
     order_payload = registry.get_contract("order", "2").to_dict()

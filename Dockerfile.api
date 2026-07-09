@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --upgrade setuptools==82.0.1 wheel==0.47.0 \
     && pip install --no-cache-dir -r requirements.txt \
     && wheel="$(find /tmp/dist -name '*.whl' -print -quit)" \
-    && pip install --no-cache-dir "${wheel}[cloud]" \
+    && pip install --no-cache-dir "${wheel}[cloud,postgres]" \
     && pip install --no-cache-dir bcrypt PyYAML sqlglot \
     && rm -rf /tmp/dist
 

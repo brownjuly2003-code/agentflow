@@ -23,5 +23,6 @@ source_events:
 - order.cancelled
 source_table: orders_v2
 freshness:
-  p95_staleness_budget_seconds: 2.5
-  basis: docs/freshness-benchmark.md (event_driven arm, production defaults)
+  p95_staleness_budget_seconds: 8.0
+  basis: docs/perf/freshness-e2e-realpath.md (S8 real path p95 5.70s + headroom; demo
+    arm still in docs/freshness-benchmark.md)

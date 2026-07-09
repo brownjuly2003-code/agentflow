@@ -89,7 +89,7 @@ def test_ci_has_scoped_rate_limiter_coverage_gate() -> None:
     # Split form (same as auth/outbox gates). Pure RateLimiter tests only —
     # middleware+TestClient cases SIGSEGV on coverage teardown (PR #174).
     assert "coverage run -m pytest" in gate_step["run"]
-    assert 'not auth_middleware' in gate_step["run"] or "not auth_middleware" in gate_step["run"]
+    assert "not auth_middleware" in gate_step["run"]
     assert "*/serving/api/rate_limiter.py" in gate_step["run"]
     assert "--fail-under=90" in gate_step["run"]
 

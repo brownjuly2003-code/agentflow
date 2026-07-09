@@ -12,9 +12,10 @@ deleted, its at-scale benchmark retired as historical), the control
 plane externalized to PostgreSQL behind the `ControlPlaneStore` port
 (ADR 0010, slices 1–6 incl. the Helm scale profile), three operational
 read surfaces split out of the agent catalog (ADR 0011), the three-node
-demo topology implemented and deployed live on HF Spaces (ADR 0012),
-and the G2 audit closure (spec/seed consistency, journal-scan
-hardening, live evidence re-captures, demo serving-backend pin).
+demo topology implemented and deployed to HF Spaces (ADR 0012 — see
+"Live demo surfaces" below for which nodes are awake), and the G2 audit
+closure (spec/seed consistency, journal-scan hardening, live evidence
+re-captures, demo serving-backend pin).
 
 v1.6.0 was the architecture-fixing release: ClickHouse became the
 shipped serving engine (ADR 0006 Phase 1), PII protection moved to
@@ -48,6 +49,25 @@ Scorecard channel (5.8 → 7.0).
 | PyPI     | [`agentflow-runtime`](https://pypi.org/project/agentflow-runtime/1.1.0/) | 1.1.0 | 2026-04-29 09:07 | `2c72387` |
 | PyPI     | [`agentflow-client`](https://pypi.org/project/agentflow-client/1.1.0/)   | 1.1.0 | 2026-04-29 09:07 | `2c72387` |
 | npm      | [`@yuliaedomskikh/agentflow-client`](https://www.npmjs.com/package/@yuliaedomskikh/agentflow-client/v/1.1.0) | 1.1.0 | 2026-05-01 03:42 | `2c72387` |
+
+## Live demo surfaces
+
+Four Docker Spaces exist under `liovina`, all built from the same image.
+The free tier keeps **three** `cpu-basic` Spaces awake at a time, and the
+account runs other projects, so the three-node topology is deployed but not
+fully awake. A paused Space answers `503` until it is restarted; nothing
+about the deployment is missing, only the compute quota.
+
+| Space | Role | Runtime stage | `/v1/health` |
+|-------|------|---------------|--------------|
+| [`agentflow-center`](https://liovina-agentflow-center.hf.space) | center hub (ADR 0012) | RUNNING | `200` |
+| [`agentflow-edge-spb`](https://liovina-agentflow-edge-spb.hf.space) | edge branch `spb` | RUNNING | `200` |
+| [`agentflow-edge-ekb`](https://liovina-agentflow-edge-ekb.hf.space) | edge branch `ekb` | PAUSED | `503` |
+| [`agentflow-demo`](https://liovina-agentflow-demo.hf.space) | standalone demo | PAUSED | `503` |
+
+Probed 2026-07-09 (`GET /v1/health` + `GET /api/spaces/liovina/{name}`).
+The cross-node evidence ("Verify live" in `deploy/hf-space/three-node/DEPLOY.md`)
+was captured on 2026-07-06 while `ekb` was awake.
 
 ## GitHub Releases note
 

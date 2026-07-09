@@ -196,9 +196,11 @@ audit-closure sprint:
   `ControlPlaneStore` port (ADR 0010, six slices incl. the Helm scale
   profile), three operational read surfaces split out of the agent catalog
   (ADR 0011: Order 360, stuck-orders worklist, exception inbox), and the
-  three-node demo topology (ADR 0012) implemented and deployed live on
-  Hugging Face Spaces — plus the G2 audit closure (spec/seed consistency,
-  journal-scan hardening, live evidence re-captures).
+  three-node demo topology (ADR 0012) implemented and deployed to Hugging
+  Face Spaces (the `center` hub and the `spb` edge answer live; `ekb` and
+  the standalone demo Space are paused — the free tier keeps three
+  `cpu-basic` Spaces awake) — plus the G2 audit closure (spec/seed
+  consistency, journal-scan hardening, live evidence re-captures).
 
 The tagged line and `main` are in sync as of `v2.0.0`. See the
 [changelog](CHANGELOG.md) for full detail.

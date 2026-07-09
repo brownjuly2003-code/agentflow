@@ -68,6 +68,12 @@ DuckDB shortcut and not HTTP load-test RPS of the API.
 
 ≈ **8 events/s** bridge apply is stable across both runs on this stand.
 
+> **Post-Q1.2 re-measure (same day, `main` @ `5a7ed6f`):** after skipping the
+> scratch DuckDB path, warm apply rose to **~11.4 events/s** — modest gain,
+> not ×10. Full write-up:
+> [`throughput-realpath-q12-2026-07-09.md`](throughput-realpath-q12-2026-07-09.md).
+> Keep **this file** as the pre-Q1.2 S10 baseline.
+
 ## Reading the numbers
 
 - **Produce rate (~700 events/s)** is what the driver put on Kafka. It is not

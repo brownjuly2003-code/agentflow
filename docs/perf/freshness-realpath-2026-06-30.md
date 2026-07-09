@@ -6,6 +6,13 @@
 
 Measured: `2026-06-30`
 
+> **Update 2026-07-09.** The missing link this document reports — "nothing
+> bridges `events.validated` into the serving store" — has since been built:
+> see [`../serving-bridge.md`](../serving-bridge.md). The numbers below are the
+> streaming-hop measurement as taken on 2026-06-30 and are left untouched; an
+> end-to-end *event → serving metric* measurement on the real path is a separate
+> run and is not reported here.
+
 ## Why this exists
 
 `docs/freshness-benchmark.md` measures freshness through the **in-process
@@ -69,12 +76,14 @@ tighten the tail percentiles; the p50 is stable.
 - The two columns measure **complementary segments, not the same thing.** The
   DuckDB shortcut measures *event → serving metric* (and is dominated by the 2 s
   cache-invalidation poll); this benchmark measures *Kafka produce → validated
-  event on Kafka* through the real Flink operators. The serving/DuckDB metric
-  store is **not wired to the real streaming path** (Flink sinks to
-  `events.validated`; nothing bridges that topic into the serving DuckDB — that
-  is a deliberate demo shortcut, production target is a ClickHouse sink). So
-  there is no honest single "event → metric on the real path" number on this
-  stand; this is the real **streaming-hop** number.
+  event on Kafka* through the real Flink operators. **At the time of this
+  measurement** the serving store was not wired to the real streaming path
+  (Flink sank to `events.validated`; nothing bridged that topic into serving).
+  So there was no honest single "event → metric on the real path" number on this
+  stand; this is the real **streaming-hop** number. The bridge that closes the
+  remaining segment landed on 2026-07-09
+  ([`../serving-bridge.md`](../serving-bridge.md)); measuring the full path
+  end-to-end is a separate run.
 - The real path's ~2.5 s p50 is the same order of magnitude as the headline
   freshness claim. The extra ~1.4 s over the shortcut is the real cost of the
   streaming hop: Kafka produce + source poll + the **Beam Python portability

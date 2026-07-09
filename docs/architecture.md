@@ -44,7 +44,8 @@ Consumers are anything that needs the current number at the moment of decision: 
 2. **Processing**: Flink validates (schema + semantic), enriches, deduplicates, and routes events
 3. **Storage**: Valid events land in Iceberg tables; production uses AWS Glue as the catalog over object storage
 4. **Quality**: Pre-storage gates check schema + semantic rules. Failures → dead letter topic
-5. **Serving**: Agent API reads from the configured serving backend; the checked-in paths are DuckDB by default and optional ClickHouse for higher read concurrency, while Iceberg remains the lakehouse storage layer
+5. **Bridge**: A consumer of `events.validated` applies each event to the serving store, idempotently by `event_id` — this is what makes the serving store move when a real Kafka event happens. See [Serving Bridge](serving-bridge.md)
+6. **Serving**: Agent API reads from the configured serving backend; the checked-in paths are DuckDB by default and optional ClickHouse for higher read concurrency, while Iceberg remains the lakehouse storage layer
 
 For CDC sources, Debezium/Kafka Connect handles source capture while a shared normalizer converts Postgres/MySQL envelopes into one canonical AgentFlow CDC contract before validation. See [ADR 0005](decisions/0005-cdc-ingestion-strategy.md).
 

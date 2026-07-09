@@ -138,7 +138,15 @@ services:
     image: clickhouse/clickhouse-server:24.8
     ports:
       - "127.0.0.1:8123:8123"
-      - "127.0.0.1:9000:9000"
+      # ClickHouse's native protocol, published on 9010 rather than its default
+      # 9000: MinIO already owns host 9000 in this file, and config/iceberg.yaml
+      # points the S3 endpoint at localhost:9000. Publishing both collided, so
+      # the Flink/MinIO lake path and the ClickHouse serving backend could not
+      # be brought up together — which is exactly the topology the serving
+      # bridge needs (Flink -> events.validated -> bridge -> ClickHouse).
+      # Nothing in the project speaks the native protocol; every ClickHouse
+      # client here uses HTTP on 8123 (config/serving.yaml, CLICKHOUSE_PORT).
+      - "127.0.0.1:9010:9000"
     environment:
       CLICKHOUSE_DB: agentflow
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}

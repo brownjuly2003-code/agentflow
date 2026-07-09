@@ -140,9 +140,11 @@ services:
           echo "waiting for minio (attempt $$attempt)"
           sleep 2
         done
-        mc mb --ignore-existing lake/agentflow-lake
-        mc mb --ignore-existing -p lake/agentflow-lake/warehouse
-        mc mb --ignore-existing -p lake/agentflow-lake/checkpoints
+        # `-p` IS `--ignore-existing` in mc (one flag, two spellings); passing
+        # both is a hard error.
+        mc mb -p lake/agentflow-lake
+        mc mb -p lake/agentflow-lake/warehouse
+        mc mb -p lake/agentflow-lake/checkpoints
         mc ls lake/agentflow-lake
         echo "MinIO buckets created."
 

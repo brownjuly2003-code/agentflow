@@ -89,10 +89,20 @@ jobs:
       - name: Run rate limiter coverage gate
         run: |
           # Security-critical sliding-window rate limiter (Redis + in-memory
-          # fail-open fallback); local module coverage is 98% (only the optional
+          # fail-closed fallback); local module coverage is 98% (only the optional
           # redis auto-construct line is env-gated), so the 90% gate keeps a
           # cushion on a mutmut target.
-          python -m pytest tests/unit/test_rate_limiter.py -v --tb=short --cov=src.serving.api.rate_limiter --cov-report=term-missing --cov-fail-under=90
+          #
+          # Uses `coverage run` + `coverage report --include` (auth/outbox pattern).
+          # Scope is pure RateLimiter tests only (`-k "not auth_middleware"`): the
+          # three middleware+TestClient cases still run in the main unit suite,
+          # but under coverage they tear down redis.asyncio + Starlette and have
+          # SIGSEGV'd (exit 139) on ubuntu-latest after a green 12/12 report
+          # (PR #174). Pure module coverage stays ≥90% without those three.
+          # Also disable the pytest-cov plugin so it cannot double-instrument.
+          python -m coverage run -m pytest tests/unit/test_rate_limiter.py \
+            -k "not auth_middleware" -v --tb=short -p no:schemathesis -p no:cov
+          python -m coverage report --include="*/serving/api/rate_limiter.py" --show-missing --fail-under=90
       - name: Run auth manager coverage gate
         run: |
           # Security-critical auth manager (key match/verify, tenant isolation,

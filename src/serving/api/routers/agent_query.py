@@ -377,13 +377,14 @@ def _build_order_timeline(request: Request, order_id: str) -> dict[str, Any] | N
     entered_at = None
     clock = "fallback"
     target_event_type = f"order.status.{current_status}"
+    store_backend = getattr(engine, "_backend_name", None)
     for row in reversed(stage_rows):
         if row.get("event_type") == target_event_type:
-            entered_at = coerce_dt(row.get("processed_at"))
+            entered_at = coerce_dt(row.get("processed_at"), backend_name=store_backend)
             clock = "journal"
             break
     if entered_at is None:
-        entered_at = coerce_dt(order_row.get("created_at"))
+        entered_at = coerce_dt(order_row.get("created_at"), backend_name=store_backend)
 
     in_stage_seconds, sla_minutes, breached = resolve_breach(entered_at=entered_at, budget=budget)
 

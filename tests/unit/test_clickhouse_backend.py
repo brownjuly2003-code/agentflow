@@ -604,6 +604,32 @@ def test_assert_scope_preserved_fails_closed_on_dropped_qualifier(backend):
     backend._assert_scope_preserved(source, 'SELECT * FROM "acme_corp"."orders_v2"')
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        'SELECT * FROM "acme"."orders_v2" o JOIN "acme"."users_enriched" u ON o.user_id = u.user_id',
+        'WITH t AS (SELECT * FROM "acme"."orders_v2") SELECT * FROM t',
+        'SELECT * FROM (SELECT order_id FROM "acme"."orders_v2") s',
+        'SELECT * FROM "acme"."orders_v2" WHERE order_id IN (SELECT order_id FROM "acme"."orders_v2")',
+    ],
+)
+def test_translate_preserves_tenant_refs_through_joins_ctes_subqueries(backend, sql: str):
+    """S12: rewrite-after-guard must keep schema quals on complex shapes."""
+    translated = backend._translate_sql(sql)
+    assert '"acme"' in translated or "acme" in translated
+    # No unscoped physical orders/users tables appear without the tenant qual.
+    # (CTE alias `t` / subquery alias `s` are not physical tables.)
+    reparsed = sqlglot.parse_one(translated, read="clickhouse")
+    physical = [
+        ((t.db or "").lower(), (t.name or "").lower())
+        for t in reparsed.find_all(sqlglot.exp.Table)
+        if t.name and t.name.lower() not in {"t", "s"}
+    ]
+    for db, name in physical:
+        if name in {"orders_v2", "users_enriched"}:
+            assert db == "acme", f"lost tenant qual on {name}: {translated}"
+
+
 def test_create_database_bootstrap_does_not_set_session_database(backend):
     """Found live (2026-07-02, bare single-binary server): sending
     `?database=agentflow` on the CREATE DATABASE bootstrap statement fails with

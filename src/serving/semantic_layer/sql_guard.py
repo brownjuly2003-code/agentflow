@@ -26,6 +26,7 @@ _FORBIDDEN_NODE_TYPES = (
 )
 
 _FORBIDDEN_FUNCTION_NAMES = {
+    # Filesystem / remote-scan surfaces (historical A-class findings).
     "delta_scan",
     "glob",
     "iceberg_scan",
@@ -44,6 +45,19 @@ _FORBIDDEN_FUNCTION_NAMES = {
     "read_text",
     "sqlite_scan",
     "st_read",
+    # Extension / environment surfaces (S12 2026-07-09 adversarial pass).
+    # Most of these are not real DuckDB *scalar* functions today
+    # (LOAD/INSTALL are statements and already rejected as non-SELECT), but
+    # sqlglot accepts them as anonymous calls and the guard must fail closed
+    # before a future DuckDB or dialect change turns a no-op into a hole.
+    "current_setting",  # session secrets (s3 keys) are live-readable today
+    "exec",
+    "getenv",
+    "install_extension",
+    "load_extension",
+    "query_table",  # table-function form is already rejected; scalar form is not
+    "shell",
+    "system",
 }
 
 

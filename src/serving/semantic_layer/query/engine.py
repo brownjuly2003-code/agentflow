@@ -88,8 +88,8 @@ class QueryEngine(
     ) -> list[dict]:
         """Read the ``pipeline_events`` journal through the serving backend.
 
-        This is the freshness-critical scan: the webhook dispatcher (and,
-        wrapped around it, metric-cache invalidation) and the SSE stream watch
+        This is the freshness-critical scan: the webhook dispatcher, the S7
+        MetricCacheController journal fallback, and the SSE stream watch
         the journal *of the store the API serves from*. Going through
         ``self._backend`` — instead of the embedded DuckDB connection — is what
         keeps event-driven freshness alive when the serving engine is external

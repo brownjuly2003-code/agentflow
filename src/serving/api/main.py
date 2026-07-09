@@ -54,6 +54,10 @@ from src.serving.api.versioning import (
 )
 from src.serving.api.webhook_dispatcher import WebhookDispatcher
 from src.serving.cache import QueryCache
+from src.serving.cache_invalidation import (
+    MetricCacheController,
+    publish_metrics_invalidate,
+)
 from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
 from src.serving.db_pool import DuckDBPool
 from src.serving.node import resolve_node_config
@@ -94,6 +98,10 @@ def _env_int(name: str, fallback: int) -> int:
         return int(os.environ[name])
     except (KeyError, ValueError):
         return fallback
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @asynccontextmanager
@@ -245,15 +253,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # per process, so a stray local DuckDB file would be dead weight.
         ensure_analytics_table(app.state.auth_manager.db_path)
     app.state.webhook_dispatcher = WebhookDispatcher(app)
-    original_dispatch_new_events = app.state.webhook_dispatcher.dispatch_new_events
+    # S7: metric-cache invalidation is a first-class controller (push from the
+    # bridge + independent journal scan). It always starts — even when the
+    # webhook dispatcher is held back for tests — so event-driven freshness is
+    # not hostage to delivery-loop autostart. The historical monkey-patch over
+    # dispatch_new_events is gone.
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-    async def dispatch_new_events_with_cache_invalidation() -> None:
-        seen_before = len(app.state.webhook_dispatcher.seen_event_ids)
-        await original_dispatch_new_events()
-        if len(app.state.webhook_dispatcher.seen_event_ids) > seen_before:
-            await app.state.query_cache.invalidate_metrics()
+    def _fetch_pipeline_events_for_cache() -> list[dict]:
+        return list(app.state.query_engine.fetch_pipeline_events(limit=200) or [])
 
-    app.state.webhook_dispatcher.dispatch_new_events = dispatch_new_events_with_cache_invalidation
+    app.state.metric_cache_controller = MetricCacheController(
+        app.state.query_cache,
+        redis_url=redis_url,
+        fetch_pipeline_events=_fetch_pipeline_events_for_cache,
+    )
+    app.state.metric_cache_controller.start()
     if getattr(app.state, "webhook_dispatcher_autostart", True):
         app.state.webhook_dispatcher.start()
     app.state.alert_dispatcher = AlertDispatcher(app)
@@ -284,6 +299,48 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.node_emitter.start()
         app.state.node_emitter_task = app.state.node_emitter.task
 
+    # Serving bridge (S6), in-process arm. Only the DuckDB backend needs it:
+    # `:memory:` (and a DuckDB file's single writer) cannot be reached from the
+    # standalone bridge process, which is what the ClickHouse backend uses.
+    # Off unless asked for — a demo without Kafka must not try to reach a broker.
+    # Import is lazy so unit/coverage gates that never enable the bridge do not
+    # pull confluent-kafka (and its native teardown) into every API import.
+    app.state.serving_bridge = None
+    app.state.serving_bridge_stop = None
+    if _truthy(os.getenv("AGENTFLOW_SERVING_BRIDGE_ENABLED", "false")):
+        if app.state.query_engine._backend_name != "duckdb":
+            logger.warning("in_process_bridge_skipped_non_duckdb_backend")
+        else:
+            try:
+                from src.processing.bridge_consumer import start_in_process_bridge
+
+                loop = asyncio.get_running_loop()
+                controller = app.state.metric_cache_controller
+
+                def _on_batch_applied(event_ids: list[str]) -> None:
+                    # Cross-process / multi-replica: every API pod listening on
+                    # the channel drops metric keys. Same-process: schedule a
+                    # local invalidate so we do not wait for the pub/sub round-trip.
+                    publish_metrics_invalidate(redis_url, event_ids)
+                    applied = list(event_ids)
+
+                    def _schedule_local_invalidate() -> None:
+                        asyncio.create_task(controller.notify_batch_applied(applied))
+
+                    loop.call_soon_threadsafe(_schedule_local_invalidate)
+
+                bridge, stop_event, _thread = start_in_process_bridge(
+                    lake_conn=app.state.query_engine._conn,
+                    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                    on_batch_applied=_on_batch_applied,
+                )
+                app.state.serving_bridge = bridge
+                app.state.serving_bridge_stop = stop_event
+            except Exception:
+                # A missing broker degrades freshness, it does not take the API
+                # down: every read path still serves.
+                logger.warning("in_process_bridge_start_failed", exc_info=True)
+
     auth_mode = (
         "multi_tenant_api_keys"
         if app.state.auth_manager.has_configured_keys()
@@ -308,8 +365,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pass
     await app.state.alert_dispatcher.stop()
     await app.state.webhook_dispatcher.stop()
+    if getattr(app.state, "metric_cache_controller", None) is not None:
+        await app.state.metric_cache_controller.stop()
     if getattr(app.state, "node_emitter", None) is not None:
         await app.state.node_emitter.stop()
+    if getattr(app.state, "serving_bridge_stop", None) is not None:
+        app.state.serving_bridge_stop.set()
     await app.state.query_cache.close()
     # Drain the queued api_usage rows before the process goes away; they are
     # written off the request path and would otherwise die with the queue.

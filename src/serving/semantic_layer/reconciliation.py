@@ -103,7 +103,10 @@ def check_journal_vs_store(
         key = str(entity_id)
         if key in latest_by_entity:
             continue
-        latest_by_entity[key] = (status, coerce_dt(row.get("processed_at")))
+        latest_by_entity[key] = (
+            status,
+            coerce_dt(row.get("processed_at"), backend_name=getattr(engine, "_backend_name", None)),
+        )
     if not latest_by_entity:
         return []
 

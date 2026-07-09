@@ -36,6 +36,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
+        set -e
         echo "Creating Kafka topics..."
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.raw --partitions 6 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.raw --partitions 6 --replication-factor 1
@@ -43,6 +44,16 @@ services:
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic products.cdc --partitions 3 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.validated --partitions 6 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.deadletter --partitions 3 --replication-factor 1
+        # The stream processor's KafkaSource subscribes to the CDC topics too
+        # (src/processing/flink_jobs/stream_processor.py). Kafka refuses to hand
+        # out metadata for a topic that does not exist, so the job dies in a
+        # restart loop -- "Failed to get metadata for topics [...]" -- before it
+        # ever reads orders.raw. Debezium creates these in a full deployment;
+        # locally they stay empty, and empty is fine. Absent is not.
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.postgres.public.orders_v2 --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.postgres.public.users_enriched --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql.agentflow_demo.products_current --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic cdc.mysql.agentflow_demo.sessions_aggregated --partitions 1 --replication-factor 1
         echo "Topics created."
 
   # ── Flink ─────────────────────────────────────────────────────
@@ -117,10 +128,24 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        mc alias set local http://minio:9000 minio minio123
-        mc mb local/agentflow-lake --ignore-existing
-        mc mb local/agentflow-lake/warehouse --ignore-existing
-        mc mb local/agentflow-lake/checkpoints --ignore-existing
+        set -e
+        # `local` is one of mc's BUILT-IN aliases (http://localhost:9000). When
+        # `alias set local` failed, every `mc mb local/...` below silently went
+        # to the mc container's own loopback, failed too, and the script still
+        # printed success -- leaving Flink to block forever on a checkpoint
+        # bucket that did not exist. Use a name mc does not ship, and let a
+        # failure fail the container.
+        for attempt in $$(seq 1 30); do
+          mc alias set lake http://minio:9000 minio minio123 && break
+          echo "waiting for minio (attempt $$attempt)"
+          sleep 2
+        done
+        # `-p` IS `--ignore-existing` in mc (one flag, two spellings); passing
+        # both is a hard error.
+        mc mb -p lake/agentflow-lake
+        mc mb -p lake/agentflow-lake/warehouse
+        mc mb -p lake/agentflow-lake/checkpoints
+        mc ls lake/agentflow-lake
         echo "MinIO buckets created."
 
   redis:
@@ -138,7 +163,15 @@ services:
     image: clickhouse/clickhouse-server:24.8
     ports:
       - "127.0.0.1:8123:8123"
-      - "127.0.0.1:9000:9000"
+      # ClickHouse's native protocol, published on 9010 rather than its default
+      # 9000: MinIO already owns host 9000 in this file, and config/iceberg.yaml
+      # points the S3 endpoint at localhost:9000. Publishing both collided, so
+      # the Flink/MinIO lake path and the ClickHouse serving backend could not
+      # be brought up together — which is exactly the topology the serving
+      # bridge needs (Flink -> events.validated -> bridge -> ClickHouse).
+      # Nothing in the project speaks the native protocol; every ClickHouse
+      # client here uses HTTP on 8123 (config/serving.yaml, CLICKHOUSE_PORT).
+      - "127.0.0.1:9010:9000"
     environment:
       CLICKHOUSE_DB: agentflow
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import secrets
-import threading
 from typing import Literal
 
 import duckdb
@@ -28,6 +27,7 @@ from starlette.concurrency import run_in_threadpool
 
 from src.processing.local_pipeline import _process_event
 from src.serving.node.view import CROSS_BRANCH_HINT, cross_branch_summary
+from src.serving.write_lock import SERVING_WRITE_LOCK
 
 logger = structlog.get_logger()
 
@@ -38,9 +38,10 @@ router = APIRouter(prefix="/v1/node", tags=["node"])
 MAX_EVENTS_PER_BATCH = 500
 
 # Ingest writes go through the shared serving write-connection; serialize them
-# so two concurrent POSTs never interleave BEGIN/COMMIT on it. One center =
-# one process = one lock.
-_INGEST_LOCK = threading.Lock()
+# so two concurrent POSTs never interleave BEGIN/COMMIT on it. The lock is
+# process-wide and shared with the in-process serving bridge (S6), which writes
+# the same connection — see src/serving/write_lock.py.
+_INGEST_LOCK = SERVING_WRITE_LOCK
 
 # n4 (G2 audit): idempotency (`_existing_event_ids` below, N5) is a Python
 # check-then-act filter, not a DB-level constraint — deliberately deferred,

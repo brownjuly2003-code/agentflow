@@ -127,6 +127,26 @@ class MetricCacheController:
                 self._seen_event_ids.add(str(event_id))
         await self.invalidate()
 
+    async def scan_once(self) -> int:
+        """One journal pass: mark new event_ids seen and invalidate if any.
+
+        Used by the background fallback loop and by tests that assert
+        invalidation without webhooks (S7). Returns the number of newly
+        seen event_ids.
+        """
+        if self._fetch_pipeline_events is None:
+            return 0
+        new_count = 0
+        for event in self._fetch_pipeline_events():
+            event_id = str(event.get("event_id") or "")
+            if not event_id or event_id in self._seen_event_ids:
+                continue
+            self._seen_event_ids.add(event_id)
+            new_count += 1
+        if new_count:
+            await self.invalidate()
+        return new_count
+
     def start(self) -> None:
         if self._push_task is None or self._push_task.done():
             self._stop.clear()
@@ -210,18 +230,9 @@ class MetricCacheController:
                 logger.debug("cache_invalidate_push_teardown_failed", error=str(exc))
 
     async def _run_scan_fallback(self) -> None:
-        assert self._fetch_pipeline_events is not None
         while not self._stop.is_set():
             try:
-                grew = False
-                for event in self._fetch_pipeline_events():
-                    event_id = str(event.get("event_id") or "")
-                    if not event_id or event_id in self._seen_event_ids:
-                        continue
-                    self._seen_event_ids.add(event_id)
-                    grew = True
-                if grew:
-                    await self.invalidate()
+                await self.scan_once()
             except Exception as exc:
                 logger.warning("cache_invalidate_scan_failed", error=str(exc))
             try:

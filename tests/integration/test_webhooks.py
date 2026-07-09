@@ -363,13 +363,13 @@ class TestWebhooksAPI:
         client,
         httpx_mock,
     ):
-        """Regression (BACKLOG #25): the invalidation scan must not depend on
-        webhook registration. With zero webhooks, new pipeline events still get
-        marked seen and the metric cache is still invalidated."""
+        """Regression (BACKLOG #25 / S7): invalidation must not depend on
+        webhook registration. MetricCacheController owns the journal scan —
+        with zero webhooks, new pipeline events still drop metric keys."""
         _disable_auth(client)
         _prepare_pipeline_events(client)
-        dispatcher = client.app.state.webhook_dispatcher
-        dispatcher.seen_event_ids.clear()
+        controller = client.app.state.metric_cache_controller
+        controller.seen_event_ids.clear()
 
         invalidations: list[bool] = []
 
@@ -377,20 +377,20 @@ class TestWebhooksAPI:
             async def invalidate_metrics(self) -> None:
                 invalidations.append(True)
 
-        previous_cache = client.app.state.query_cache
-        client.app.state.query_cache = _RecordingCache()
+        previous_cache = controller._cache
+        controller._cache = _RecordingCache()
         try:
-            # The lifespan-wrapped dispatch: scan -> invalidate on growth.
-            await dispatcher.dispatch_new_events()
+            new_count = await controller.scan_once()
         finally:
-            client.app.state.query_cache = previous_cache
+            controller._cache = previous_cache
 
+        assert new_count > 0
         assert invalidations, "metric cache was not invalidated with zero webhooks"
         assert {
-            "default:evt-order-1",
-            "default:evt-payment-1",
-            "default:evt-order-2",
-        } <= dispatcher.seen_event_ids
+            "evt-order-1",
+            "evt-payment-1",
+            "evt-order-2",
+        } <= controller.seen_event_ids
         assert httpx_mock.requests == []
 
     @pytest.mark.asyncio

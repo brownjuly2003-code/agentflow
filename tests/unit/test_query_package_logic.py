@@ -300,8 +300,9 @@ def test_get_entity_at_literal_backend_inlines_history_filters(literal_host: _Ho
     result = literal_host.get_entity_at("order", "ORD-1", as_of=AWARE_TS)
 
     assert result is not None
-    # event_time is not a datetime -> normalized time falls back to as_of.
-    assert result["_last_updated"] == AWARE_TS.isoformat()
+    # ClickHouse returns naive wall-clock strings; N2 coerces them as UTC
+    # rather than falling back to as_of (which would re-introduce the offset bug).
+    assert result["_last_updated"] == "2026-04-01T10:00:00+00:00"
     sql = literal_host._backend.execute.call_args.args[0]
     assert "entity_type = 'order'" in sql
     assert "entity_id = 'ORD-1'" in sql

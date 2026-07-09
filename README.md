@@ -154,7 +154,9 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 **`v2.0.0` is the current release line** — PyPI `agentflow-runtime` /
 `agentflow-client` and npm `@yuliaedomskikh/agentflow-client`, all
 published via OIDC Trusted Publishers with SLSA provenance attestations.
-CI on `main` is green across all 13 required checks.
+CI on `main` is green across all 13 required checks. The living
+engineering status — what is proven, what is in progress, what is next —
+is tracked in [docs/STATUS.md](docs/STATUS.md).
 
 The `v1.1.0` → `v2.0.0` arc landed in seven increments on top of a security
 audit-closure sprint:

@@ -109,8 +109,19 @@ def fetch_text(url: str, timeout: float = 5.0) -> str:
         conn.close()
 
 
-def parse_prom_counter(text: str, metric: str, labels_substr: str | None = None) -> float:
-    """Sum matching sample lines for a Prometheus counter/gauge (no labels or filter)."""
+def parse_prom_counter(
+    text: str,
+    metric: str,
+    labels_substr: str | None = None,
+    *,
+    default: float | None = None,
+) -> float:
+    """Sum matching sample lines for a Prometheus counter/gauge (no labels or filter).
+
+    Counters with labels (e.g. consumed{topic=...}) only appear after the first
+    sample; treat missing as ``default`` when set so a freshly started bridge
+    scrapes as zeros rather than hard-failing the benchmark.
+    """
     total = 0.0
     found = False
     for line in text.splitlines():
@@ -138,20 +149,32 @@ def parse_prom_counter(text: str, metric: str, labels_substr: str | None = None)
         except (ValueError, IndexError):
             continue
     if not found:
+        if default is not None:
+            return default
         raise RuntimeError(f"metric {metric!r} not found in scrape")
     return total
 
 
 def read_bridge_snapshot(metrics_url: str) -> dict[str, float]:
     text = fetch_text(metrics_url)
+    # Probe that the bridge metrics endpoint is live (any agentflow_bridge_*).
+    if "agentflow_bridge_" not in text:
+        raise RuntimeError("bridge metrics endpoint returned no agentflow_bridge_* series")
     return {
         "consumed": parse_prom_counter(
-            text, "agentflow_bridge_events_consumed_total", 'topic="events.validated"'
+            text,
+            "agentflow_bridge_events_consumed_total",
+            'topic="events.validated"',
+            default=0.0,
         ),
-        "applied": parse_prom_counter(text, "agentflow_bridge_events_applied_total"),
-        "duplicates": parse_prom_counter(text, "agentflow_bridge_events_duplicate_total"),
-        "apply_failures": parse_prom_counter(text, "agentflow_bridge_apply_failures_total"),
-        "lag": parse_prom_counter(text, "agentflow_bridge_consumer_lag"),
+        "applied": parse_prom_counter(text, "agentflow_bridge_events_applied_total", default=0.0),
+        "duplicates": parse_prom_counter(
+            text, "agentflow_bridge_events_duplicate_total", default=0.0
+        ),
+        "apply_failures": parse_prom_counter(
+            text, "agentflow_bridge_apply_failures_total", default=0.0
+        ),
+        "lag": parse_prom_counter(text, "agentflow_bridge_consumer_lag", default=0.0),
     }
 
 

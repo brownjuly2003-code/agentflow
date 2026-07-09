@@ -78,7 +78,7 @@ instead mark it done forever.
 
 | Serving backend | Bridge form | Why |
 |---|---|---|
-| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB on this path. Q1.2 removed the throwaway scratch lake; **Q1.3** uses `apply_serving_batch` (multi-row order/journal inserts, `users_enriched` once per unique user). Lesson on keeping writers out of the API process: [`perf/usage-write-bifurcation-2026-07-09.md`](perf/usage-write-bifurcation-2026-07-09.md). |
+| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user). Live: ~11.4 eps post-Q1.2, **~22.9 eps post-Q1.3** — see [`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md). |
 | `duckdb` (local demo / unit tests only) | in-process thread, `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | **Not production.** Demo and unit tests. Never the S8/S10 real-path store the API reads. |
 
 The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-three-node-demo-topology.md)); its edges push events to the center over HTTPS. The bridge is absent there by design.

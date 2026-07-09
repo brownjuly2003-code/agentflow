@@ -1,8 +1,9 @@
 # Q1.1 / Q1.2 — bridge write path: CH-native apply (code slice)
 
 **Date:** 2026-07-09  
-**Code:** `skip_local_store` on ClickHouse bridge path  
-**Live re-measure:** pending Mac/Colima (`scripts/benchmark_throughput_realpath.py`)
+**Code:** `skip_local_store` on ClickHouse bridge path (`main` @ `5a7ed6f`)  
+**Live re-measure:** **done** — warm apply **11.4 eps** (was ~8). See
+[`throughput-realpath-q12-2026-07-09.md`](throughput-realpath-q12-2026-07-09.md).
 
 ## Diagnosis (Q1.1, from code + S10)
 
@@ -42,12 +43,12 @@ Unit pin: `test_clickhouse_path_skips_scratch_duckdb_on_apply`.
   unique user; journal last for crash-replay safety.
 - Still sequential: session RMW, Flink hop.
 
-## Expected effect
+## Measured effect (Mac, warm)
 
-| Hypothesis | How to falsify |
-|------------|----------------|
-| Scratch DuckDB was a large fraction of the 8 eps | S10 re-run apply rate jumps materialy (×2+) |
-| CH HTTP multi-call dominates | Rate stays ~8–15 eps → next: batch insert + amortize aggregate |
+| Hypothesis | Result |
+|------------|--------|
+| Scratch DuckDB was a large fraction of the 8 eps | **Partial** — ~8 → **11.4 eps** (~1.4×), not ×2+ |
+| CH HTTP multi-call dominates | **Confirmed** — rate stays low-teens; Flink hop = bridge apply |
 
 ## Verify
 
@@ -55,7 +56,6 @@ Unit pin: `test_clickhouse_path_skips_scratch_duckdb_on_apply`.
 # Unit (Windows-safe)
 pytest tests/unit/test_serving_bridge.py tests/unit/test_local_pipeline_clickhouse_mirror.py -p no:schemathesis -q
 
-# Live (Mac)
-python scripts/benchmark_throughput_realpath.py ...
-# write docs/perf/throughput-realpath-2026-….md next to the old 8 eps report
+# Live (Mac) — already run; report:
+# docs/perf/throughput-realpath-q12-2026-07-09.md
 ```

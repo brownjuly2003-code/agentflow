@@ -186,6 +186,28 @@ def test_rows_are_durable_after_flush(tmp_path: Path) -> None:
     manager.close_usage_writer()
 
 
+def test_every_api_usage_reader_drains_the_writer_first(tmp_path: Path) -> None:
+    """Each of the three readers of `api_usage` must flush, or it counts a
+    stale total. `rotation_status` was missed on the first pass and CI's
+    integration suite caught it as `assert 1 == 2`."""
+    app = _build_app(tmp_path)
+    manager = app.state.auth_manager
+
+    with TestClient(app) as client:
+        for _ in range(3):
+            client.get("/v1/metrics/revenue", headers={"X-API-Key": API_KEY})
+
+        # No explicit flush anywhere below: each reader owns that. Called
+        # through the reader seam, never through `manager.store` directly —
+        # a store call would be served by whatever the previous reader
+        # happened to flush.
+        assert manager._key_rotator._usage_by_key()[("acme", "Order Agent")] == 3
+        assert manager._key_rotator.old_key_usage_by_key_id() == {}
+        assert manager.usage_by_tenant() == [{"tenant": "acme", "requests_last_24h": 3}]
+
+    manager.close_usage_writer()
+
+
 def test_a_full_queue_sheds_the_row_and_serves_the_request(tmp_path: Path) -> None:
     """Backpressure is bounded and never blocking: the counter moves, the
     client does not wait."""

@@ -196,6 +196,9 @@ class KeyRotator:
     def old_key_usage_by_key_id(self) -> dict[str, int]:
         # ADR 0010 slice 4: routed through the ControlPlaneStore port —
         # was a direct connect_duckdb(self._manager.db_path) query.
+        # api_usage rows are written off the request path, so every reader of
+        # the table drains the writer first or it counts a stale total.
+        self._manager.flush_usage()
         return self._manager.store.get_old_key_usage_by_key_id()
 
     def old_key_usage_last_hour(self, key_id: str) -> int:
@@ -204,6 +207,7 @@ class KeyRotator:
     def _usage_by_key(self) -> dict[tuple[str, str], int]:
         # ADR 0010 slice 4: routed through the ControlPlaneStore port —
         # was a direct connect_duckdb(self._manager.db_path) query.
+        self._manager.flush_usage()
         return self._manager.store.get_usage_by_key()
 
     def write_config(self, config: ApiKeysConfig) -> None:

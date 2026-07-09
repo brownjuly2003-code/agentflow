@@ -477,7 +477,7 @@ class AuthManager:
         self._usage_writer.close(timeout)
 
     def list_keys_with_usage(self) -> list[dict]:
-        self.flush_usage()
+        # KeyRotator._usage_by_key flushes — every api_usage reader does.
         return self._key_rotator.list_keys_with_usage()
 
     def usage_by_tenant(self) -> list[dict]:

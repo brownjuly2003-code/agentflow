@@ -185,17 +185,22 @@ def test_rate_limit_is_isolated_per_key(api_keys_path: Path, db_path: Path):
 
 
 def test_authenticated_requests_log_usage(api_keys_path: Path, db_path: Path):
-    client = TestClient(_build_app(api_keys_path, db_path))
+    app = _build_app(api_keys_path, db_path)
+    client = TestClient(app)
 
     response = client.get("/v1/metrics/revenue", headers={"X-API-Key": "tenant-ops-key"})
 
     assert response.status_code == 200
+    # The row is written off the request path, so a reader that must see it
+    # waits for the writer — exactly as `GET /v1/admin/usage` does.
+    assert app.state.auth_manager.flush_usage(timeout=5.0)
     rows = (
         duckdb.connect(str(db_path))
         .execute("SELECT tenant, key_name, endpoint FROM api_usage")
         .fetchall()
     )
     assert rows == [("acme", "Ops Agent", "/v1/metrics/revenue")]
+    app.state.auth_manager.close_usage_writer()
 
 
 def test_admin_endpoints_require_admin_key(api_keys_path: Path, db_path: Path):

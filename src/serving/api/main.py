@@ -311,6 +311,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if getattr(app.state, "node_emitter", None) is not None:
         await app.state.node_emitter.stop()
     await app.state.query_cache.close()
+    # Drain the queued api_usage rows before the process goes away; they are
+    # written off the request path and would otherwise die with the queue.
+    app.state.auth_manager.close_usage_writer()
     app.state.db_pool.close()
     logger.info("api_shutting_down")
 

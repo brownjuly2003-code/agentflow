@@ -148,8 +148,22 @@ def _process_event(
     event: dict,
     iceberg_sink: IcebergSink | None = None,
     clickhouse_sink: ClickHouseSink | None = None,
+    *,
+    skip_local_store: bool = False,
 ) -> tuple[bool, str]:
-    """Validate, enrich, and store a single event. Returns (success, reason)."""
+    """Validate, enrich, and store a single event. Returns (success, reason).
+
+    ``skip_local_store=True`` is the ClickHouse bridge path (Q1.2): the serving
+    store is the only durable writer, so the per-event DuckDB BEGIN/COMMIT on a
+    throwaway scratch lake is pure ceiling (~8 eps on S10). Validation and
+    enrichment still run in-process; journal + entity writes go only to
+    ``clickhouse_sink``. Requires ``clickhouse_sink is not None``.
+    """
+    if skip_local_store:
+        if clickhouse_sink is None:
+            raise ValueError("skip_local_store requires clickhouse_sink")
+        return _process_event_serving_only(event, clickhouse_sink)
+
     event_type = event.get("event_type", "")
     event_id = event.get("event_id", "unknown")
     tenant_id = _event_tenant(event)
@@ -313,6 +327,87 @@ def _process_event(
         # Transaction rollback must happen before unexpected errors propagate.
         conn.execute("ROLLBACK")
         raise
+
+
+def _process_event_serving_only(
+    event: dict,
+    clickhouse_sink: ClickHouseSink,
+) -> tuple[bool, str]:
+    """Apply one event to the ClickHouse serving store without a DuckDB lake.
+
+    Same routing and journal semantics as the dual-write path, minus the
+    scratch-lake transaction. Used by ``ServingBridge`` when ``sink`` is set.
+    Failures raise (caller rewinds Kafka offsets) except schema/semantic
+    rejects, which dead-letter into the serving journal and return False.
+    """
+    event_type = event.get("event_type", "")
+    event_id = event.get("event_id", "unknown")
+    tenant_id = _event_tenant(event)
+    entity_id = _derive_entity_id(event, event_type)
+
+    schema_result = validate_event(event)
+    if not schema_result.is_valid:
+        clickhouse_sink.record_pipeline_event(
+            event_id=str(event_id),
+            topic="events.deadletter",
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            event_type=event_type,
+            latency_ms=0,
+        )
+        return False, f"schema: {schema_result.errors[0]}"
+
+    semantic_result = validate_semantics(event)
+    error_issues = [i for i in semantic_result.issues if i.severity == "error"]
+    if error_issues:
+        clickhouse_sink.record_pipeline_event(
+            event_id=str(event_id),
+            topic="events.deadletter",
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            event_type=event_type,
+            latency_ms=0,
+        )
+        return False, f"semantic: {error_issues[0].rule}"
+
+    if event_type.startswith("order."):
+        event = enrich_order(event)
+        clickhouse_sink.upsert_order(event)
+        clickhouse_sink.record_pipeline_event(
+            event_id=f"{event_id}-status",
+            topic="orders.status",
+            tenant_id=tenant_id,
+            entity_id=str(event["order_id"]),
+            event_type=f"order.status.{event['status']}",
+            latency_ms=None,
+            processed_at=datetime.now(UTC),
+        )
+    elif event_type in ("click", "page_view", "add_to_cart"):
+        event = enrich_clickstream(event)
+        clickhouse_sink.upsert_session(event)
+    elif event_type.startswith("payment."):
+        event = compute_payment_risk_score(event)
+    elif event_type.startswith("product."):
+        clickhouse_sink.upsert_product(event)
+
+    ts = event.get("timestamp", "")
+    try:
+        event_ts = datetime.fromisoformat(ts)
+        if event_ts.tzinfo is None:
+            event_ts = event_ts.replace(tzinfo=UTC)
+        latency_ms = int((datetime.now(UTC) - event_ts).total_seconds() * 1000)
+    except (ValueError, TypeError):
+        latency_ms = 0
+
+    clickhouse_sink.record_pipeline_event(
+        event_id=str(event_id),
+        topic="events.validated",
+        tenant_id=tenant_id,
+        entity_id=entity_id,
+        event_type=event_type,
+        latency_ms=latency_ms,
+    )
+    return True, "ok"
 
 
 def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:

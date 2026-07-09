@@ -229,6 +229,24 @@ def test_guard_reads_the_serving_journal_not_the_scratch_lake(lake):
     assert lake.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0] == 0
 
 
+def test_clickhouse_path_skips_scratch_duckdb_on_apply(lake):
+    """Q1.2: CH bridge writes serving store only — no per-event lake BEGIN/COMMIT."""
+    event = _flink_shaped_order()
+    sink = _RecordingSink()
+    consumer = _FakeConsumer([[_Message(event)]])
+
+    result = _bridge(consumer, sink=sink, lake_conn=lake).run_once()
+
+    assert result.applied == 1
+    assert len(sink.orders) == 1
+    assert sink.orders[0]["order_id"] == event["order_id"]
+    # Journal + status rows land on the sink, never the throwaway lake.
+    assert event["event_id"] in sink.journal
+    assert f"{event['event_id']}-status" in sink.journal
+    assert lake.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0] == 0
+    assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
+
+
 def test_applied_event_ids_feed_the_s7_seam(lake):
     event = _flink_shaped_order()
     consumer = _FakeConsumer([[_Message(event)]])

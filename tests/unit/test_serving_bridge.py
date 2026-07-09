@@ -340,6 +340,30 @@ def test_clickhouse_batch_folds_sessions_in_one_call(lake):
     assert sink.journal_batch_calls == 1
 
 
+def test_apply_batch_size_histogram_observes_applied_count(lake):
+    """Q1.3 DoD leftover: the amortization only pays off if batches are >1 —
+    the histogram is what the S10 rerun reads to prove that."""
+    from src.processing.bridge_metrics import APPLY_BATCH_SIZE
+
+    def totals() -> tuple[float, float]:
+        samples = APPLY_BATCH_SIZE.collect()[0].samples
+        count = next(s.value for s in samples if s.name.endswith("_count"))
+        total = next(s.value for s in samples if s.name.endswith("_sum"))
+        return count, total
+
+    events = [_flink_shaped_order(order_id=f"ORD-20260709-93{i:02d}") for i in range(3)]
+    sink = _RecordingSink()
+    consumer = _FakeConsumer([[_Message(e, offset=i) for i, e in enumerate(events)]])
+
+    count_before, sum_before = totals()
+    result = _bridge(consumer, sink=sink, lake_conn=lake).run_once()
+    count_after, sum_after = totals()
+
+    assert result.applied == 3
+    assert count_after == count_before + 1, "one observation per non-empty batch"
+    assert sum_after == sum_before + 3, "the observation is the applied count"
+
+
 def test_applied_event_ids_feed_the_s7_seam(lake):
     event = _flink_shaped_order()
     consumer = _FakeConsumer([[_Message(event)]])

@@ -106,6 +106,7 @@ writing to a store nobody reads.
 | `agentflow_bridge_events_duplicate_total` | Replays and Flink duplicates collapsing. Non-zero is normal. |
 | `agentflow_bridge_events_deadletter_total{reason}` | Should be flat at ~0 — Flink already validated these. Sustained growth means schema drift between Flink and the bridge, or a non-canonical event type being routed here. |
 | `agentflow_bridge_apply_failures_total` | The sink is refusing writes. Offsets are *not* advancing, so nothing is lost; the batch replays. |
+| `agentflow_bridge_apply_batch_size` | Events applied per non-empty batch (histogram). p50 > 1 under sustained load is the constant-round-trips apply path (Q1.3/Q1.4) actually amortizing; p50 = 1 means the bridge outruns the producers (healthy idle). |
 | `agentflow_bridge_seconds_since_last_apply` | Liveness. |
 
 A healthy bridge has partitions assigned, bounded or falling lag, flat

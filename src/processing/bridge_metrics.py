@@ -15,7 +15,7 @@ offsets are (correctly) not advancing.
 from __future__ import annotations
 
 import structlog
-from prometheus_client import Counter, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 
 logger = structlog.get_logger()
 
@@ -50,6 +50,17 @@ EVENTS_DEADLETTER = Counter(
 APPLY_FAILURES = Counter(
     "agentflow_bridge_apply_failures_total",
     "Batches that raised while being applied; their offsets were not committed.",
+)
+
+# The whole point of the Q1.3/Q1.4 amortization is that a batch costs a
+# constant number of sink round-trips — which only pays off if batches are
+# actually bigger than one. Under sustained load p50 here should sit well
+# above 1; a p50 of 1 means the bridge is draining faster than events arrive
+# (healthy idle) or the poll is misconfigured (batch_max too low for the lag).
+APPLY_BATCH_SIZE = Histogram(
+    "agentflow_bridge_apply_batch_size",
+    "Events applied per non-empty batch.",
+    buckets=(1, 2, 4, 8, 16, 32, 64, 128, 256, 512),
 )
 
 CONSUMER_LAG = Gauge(

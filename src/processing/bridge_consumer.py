@@ -49,6 +49,7 @@ import duckdb
 import structlog
 
 from src.processing.bridge_metrics import (
+    APPLY_BATCH_SIZE,
     APPLY_FAILURES,
     CONSUMER_LAG,
     EVENTS_APPLIED,
@@ -228,6 +229,9 @@ class ServingBridge:
 
         if applied:
             self._last_apply_monotonic = time.monotonic()
+            # p50 > 1 under sustained load is what makes the constant
+            # round-trips-per-batch apply path (Q1.3/Q1.4) actually amortize.
+            APPLY_BATCH_SIZE.observe(applied)
 
         return BatchResult(
             consumed=len(messages),

@@ -121,19 +121,38 @@ def _consumer(bootstrap_servers: str, group_id: str) -> Consumer:
     return consumer
 
 
-def _drain_until_applied(bridge: ServingBridge, event_id: str, timeout: float = 30.0) -> int:
-    """Poll until the bridge reports the event applied (or skipped as a dup)."""
+def _drain_until_applied(bridge: ServingBridge, event_id: str, timeout: float = 60.0) -> None:
+    """Poll until the bridge reports *this* event applied.
+
+    The topic is shared: `test_kafka_pipeline` publishes its own events to
+    `events.validated` against the same session-scoped broker, and a consumer
+    reading from `earliest` sees them too. So never assert on a batch's
+    aggregate counters — only on whether **this** ``event_id`` was applied.
+    """
     deadline = time.monotonic() + timeout
-    applied = duplicates = 0
     while time.monotonic() < deadline:
+        result = bridge.run_once()
+        if result is not None and event_id in result.applied_event_ids:
+            return
+    raise AssertionError(f"bridge never applied {event_id} within {timeout}s")
+
+
+def _drain_expecting_no_apply(
+    bridge: ServingBridge, event_id: str, backend: ClickHouseBackend, timeout: float = 60.0
+) -> None:
+    """Poll until the replayed ``event_id`` has been read past, asserting it is
+    never re-applied. Other events on the shared topic may legitimately apply."""
+    deadline = time.monotonic() + timeout
+    saw_duplicate = False
+    while time.monotonic() < deadline and not saw_duplicate:
         result = bridge.run_once()
         if result is None:
             continue
-        applied += result.applied
-        duplicates += result.duplicates
-        if event_id in result.applied_event_ids or duplicates:
-            return applied
-    raise AssertionError(f"bridge never applied {event_id} within {timeout}s")
+        assert event_id not in result.applied_event_ids, "a replayed event must never re-apply"
+        if result.duplicates:
+            saw_duplicate = True
+    assert saw_duplicate, f"bridge never collapsed the replay of {event_id} within {timeout}s"
+    assert _journal_rows(backend, event_id) == 1
 
 
 def _journal_rows(backend: ClickHouseBackend, event_id: str) -> int:
@@ -161,12 +180,10 @@ class TestServingBridgeLive:
         consumer = _consumer(kafka_bootstrap, f"bridge-live-{uuid.uuid4()}")
         bridge = ServingBridge(consumer, sink=ClickHouseSink(backend), lake_conn=lake)
         try:
-            applied = _drain_until_applied(bridge, event["event_id"])
+            _drain_until_applied(bridge, event["event_id"])
         finally:
             consumer.close()
             lake.close()
-
-        assert applied == 1
 
         orders = _order_rows(backend, event["order_id"])
         assert len(orders) == 1, orders
@@ -201,20 +218,12 @@ class TestServingBridgeLive:
         replay_lake = duckdb.connect(":memory:")
         _ensure_tables(replay_lake)
         second = _consumer(kafka_bootstrap, f"bridge-live-{uuid.uuid4()}")
-        duplicates = 0
         try:
             replay = ServingBridge(second, sink=sink, lake_conn=replay_lake)
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline and duplicates == 0:
-                result = replay.run_once()
-                if result is not None:
-                    duplicates += result.duplicates
-                    assert result.applied == 0, "a replayed event must never re-apply"
+            _drain_expecting_no_apply(replay, event["event_id"], backend)
         finally:
             second.close()
             replay_lake.close()
             lake.close()
 
-        assert duplicates >= 1
-        assert _journal_rows(backend, event["event_id"]) == 1
         assert len(_order_rows(backend, event["order_id"])) == 1

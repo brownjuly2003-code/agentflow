@@ -124,10 +124,7 @@ def _scaffold_project(
             continue
         relative_path = source_path.relative_to(template_dir)
         target_path = project_dir.joinpath(
-            *[
-                part[:-5] if part.endswith(".tmpl") else part
-                for part in relative_path.parts
-            ]
+            *[part[:-5] if part.endswith(".tmpl") else part for part in relative_path.parts]
         )
         target_path.parent.mkdir(parents=True, exist_ok=True)
         rendered = _render_template(

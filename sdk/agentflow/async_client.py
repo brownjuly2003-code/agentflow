@@ -197,9 +197,7 @@ class AsyncAgentFlowClient:
         self._last_server_version = headers.get("X-AgentFlow-Version")
         self._last_latest_version = headers.get("X-AgentFlow-Latest-Version")
         self._last_deprecated = headers.get("X-AgentFlow-Deprecated")
-        self._last_deprecation_warning = headers.get(
-            "X-AgentFlow-Deprecation-Warning"
-        )
+        self._last_deprecation_warning = headers.get("X-AgentFlow-Deprecation-Warning")
 
     async def _get_entity(
         self,
@@ -219,9 +217,7 @@ class AsyncAgentFlowClient:
             return {}
         entity, separator, version = contract_version.partition(":")
         if not separator or not entity or not version:
-            raise ValueError(
-                "contract_version must use '<entity>:<version>' format."
-            )
+            raise ValueError("contract_version must use '<entity>:<version>' format.")
         return {entity: version[1:] if version.startswith("v") else version}
 
     async def _apply_contract_version(
@@ -234,27 +230,14 @@ class AsyncAgentFlowClient:
             return payload
         contract = await self._get_contract(entity_type, version)
         fields = contract.get("fields", [])
-        required_fields = [
-            field["name"]
-            for field in fields
-            if field.get("required")
-        ]
-        missing_fields = [
-            field_name
-            for field_name in required_fields
-            if field_name not in payload
-        ]
+        required_fields = [field["name"] for field in fields if field.get("required")]
+        missing_fields = [field_name for field_name in required_fields if field_name not in payload]
         if missing_fields:
             raise AgentFlowError(
-                "Contract validation failed. Missing required fields: "
-                + ", ".join(missing_fields)
+                "Contract validation failed. Missing required fields: " + ", ".join(missing_fields)
             )
         allowed_fields = {field["name"] for field in fields}
-        return {
-            name: value
-            for name, value in payload.items()
-            if name in allowed_fields
-        }
+        return {name: value for name, value in payload.items() if name in allowed_fields}
 
     async def _get_contract(self, entity_type: str, version: str) -> dict[str, Any]:
         cache_key = (entity_type, version)
@@ -355,11 +338,7 @@ class AsyncAgentFlowClient:
             payload["limit"] = limit
         if cursor is not None:
             payload["cursor"] = cursor
-        headers = (
-            {"Idempotency-Key": idempotency_key}
-            if idempotency_key is not None
-            else None
-        )
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
         return await self._request("POST", "/v1/query", json=payload, headers=headers)
 
     async def query(
@@ -404,8 +383,7 @@ class AsyncAgentFlowClient:
     async def list_contracts(self) -> list[ContractSummary]:
         payload = await self._request("GET", "/v1/contracts")
         return [
-            ContractSummary.model_validate(contract)
-            for contract in payload.get("contracts", [])
+            ContractSummary.model_validate(contract) for contract in payload.get("contracts", [])
         ]
 
     async def get_contract(
@@ -438,11 +416,7 @@ class AsyncAgentFlowClient:
         *,
         idempotency_key: str | None = None,
     ) -> ContractValidation:
-        headers = (
-            {"Idempotency-Key": idempotency_key}
-            if idempotency_key is not None
-            else None
-        )
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
         response = await self._request(
             "POST",
             f"/v1/contracts/{entity}/validate",
@@ -500,11 +474,7 @@ class AsyncAgentFlowClient:
         *,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        headers = (
-            {"Idempotency-Key": idempotency_key}
-            if idempotency_key is not None
-            else None
-        )
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
         return await self._request(
             "POST",
             "/v1/batch",

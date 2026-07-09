@@ -105,13 +105,13 @@ perf-plot:
 # ── Code Quality ──────────────────────────────────────────────────
 
 lint:
-	ruff check src/ tests/
-	ruff format --check src/ tests/
+	ruff check src/ tests/ scripts/ sdk/
+	ruff format --check src/ tests/ scripts/ sdk/
 	mypy src/
 
 format:
-	ruff format src/ tests/
-	ruff check --fix src/ tests/
+	ruff format src/ tests/ scripts/ sdk/
+	ruff check --fix src/ tests/ scripts/ sdk/
 
 # ── Build & Deploy ────────────────────────────────────────────────
 

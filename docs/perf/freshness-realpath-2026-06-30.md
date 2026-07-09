@@ -107,13 +107,16 @@ surfaced three latent pyflink-2.x / Docker issues:
    → `AttributeError` crashed the Python worker on every event. Fix:
    `Time.minutes(10)` (same class of bug as the already-fixed watermark
    `timedelta`→`Duration`).
-3. **`ctx.output` side output (found, not yet fixed).** `ValidateAndEnrich`
-   routes invalid events with `ctx.output(DEAD_LETTER_TAG, …)` — the Java side-
-   output API; in pyflink the `ProcessFunction` context has no `.output()`
-   (`AttributeError: 'InternalProcessFunctionContext' object has no attribute
-   'output'`). **Valid** events are unaffected (this benchmark measures valid
-   events), but the dead-letter path is currently broken. Left as a follow-up so
-   the streaming-freshness measurement isn't blocked on it.
+3. **`ctx.output` side output (fixed since; re-verified 2026-07-09).**
+   `ValidateAndEnrich` used to route invalid events with
+   `ctx.output(DEAD_LETTER_TAG, …)` — the Java side-output API; in pyflink the
+   `ProcessFunction` context has no `.output()`. It now `yield`s
+   `(DEAD_LETTER_TAG, payload)` pairs, which is the pyflink idiom, and the
+   dead-letter path works on a live cluster: a schema-invalid `order.created`
+   produced to `orders.raw` lands on `events.deadletter` (payload
+   `{event_id, error, stage: "schema_validation"}`) and never reaches
+   `events.validated`. Verified on the Mac stand while gating the serving
+   bridge.
 
 ## Reproduce
 

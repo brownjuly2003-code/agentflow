@@ -27,11 +27,12 @@ expires after ten minutes, so duplicates reach us by design.
   a single writer — no other process can reach it. Off by default; see
   :func:`start_in_process_bridge`.
 
-**Cache invalidation** needs no wiring here: the API's webhook dispatcher scans
-``pipeline_events`` *through the serving backend*
-(``QueryEngine.fetch_pipeline_events``), so the journal rows this bridge writes
-are what it already watches. ``on_batch_applied`` is the seam S7 will use to
-replace that 2-second poll with a push.
+**Cache invalidation (S7).** After a successful apply the bridge publishes on
+``agentflow:cache:metrics_invalidate`` (and, on the in-process arm, calls
+``on_batch_applied``). The API's ``MetricCacheController`` listens for that
+push and also keeps an independent journal scan so writers that do not push
+(node-ingest, seed) still drop stale metric keys — even when the webhook
+dispatcher is not running.
 """
 
 from __future__ import annotations
@@ -250,8 +251,20 @@ class ServingBridge:
             return None
 
         self._consumer.commit(asynchronous=False)
-        if self._on_batch_applied is not None and result.applied_event_ids:
-            self._on_batch_applied(result.applied_event_ids)
+        if result.applied_event_ids:
+            # S7 push: always publish so multi-replica API pods drop metric keys.
+            # Local ``on_batch_applied`` is optional extra (in-process arm).
+            try:
+                from src.serving.cache_invalidation import publish_metrics_invalidate
+
+                publish_metrics_invalidate(
+                    os.getenv("REDIS_URL", "redis://localhost:6379"),
+                    result.applied_event_ids,
+                )
+            except Exception:  # pragma: no cover - publish is best-effort
+                logger.warning("bridge_cache_invalidate_publish_failed", exc_info=True)
+            if self._on_batch_applied is not None:
+                self._on_batch_applied(result.applied_event_ids)
         logger.info(
             "bridge_batch_applied",
             consumed=result.consumed,
@@ -335,6 +348,7 @@ def start_in_process_bridge(
     group_id: str = DEFAULT_GROUP_ID,
     topics: Sequence[str] = (VALIDATED_TOPIC,),
     offset_reset: str = "latest",
+    on_batch_applied: Callable[[list[str]], None] | None = None,
 ) -> tuple[ServingBridge, threading.Event, threading.Thread]:
     """Run the bridge as a daemon thread against the API's DuckDB connection.
 
@@ -343,6 +357,10 @@ def start_in_process_bridge(
     the node-ingest endpoint. Default ``offset_reset='latest'``: an in-memory
     demo store is re-seeded on boot, so replaying the topic's backlog into it
     would be noise, not recovery.
+
+    ``on_batch_applied`` is the S7 in-process push seam: the API schedules
+    metric-cache invalidation on the event loop without waiting for the journal
+    poll. The Redis publish still happens inside ``run_once`` for multi-replica.
     """
     from confluent_kafka import Consumer
 
@@ -357,7 +375,13 @@ def start_in_process_bridge(
         }
     )
     consumer.subscribe(list(topics))
-    bridge = ServingBridge(consumer, sink=None, lake_conn=lake_conn, write_lock=SERVING_WRITE_LOCK)
+    bridge = ServingBridge(
+        consumer,
+        sink=None,
+        lake_conn=lake_conn,
+        write_lock=SERVING_WRITE_LOCK,
+        on_batch_applied=on_batch_applied,
+    )
     stop_event = threading.Event()
     thread = threading.Thread(
         target=bridge.run_forever,

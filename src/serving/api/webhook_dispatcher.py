@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -134,6 +135,17 @@ class WebhookDispatcher:
         self.redrive_batch_size = 100
         self.seen_event_ids: set[str] = set()
         self._task: asyncio.Task | None = None
+        # S7: first-class subscribers notified when the journal scan marks new
+        # events seen. Replaces the historical monkey-patch over
+        # ``dispatch_new_events`` in main.py. Cache invalidation is owned by
+        # ``MetricCacheController`` (push + independent scan); this hook is
+        # kept for co-located side effects that want the webhook scan's
+        # timing without wrapping methods.
+        self._on_new_events: list[Callable[[], Awaitable[None]]] = []
+
+    def add_new_events_listener(self, callback: Callable[[], Awaitable[None]]) -> None:
+        """Register a side-effect that runs when the seen-set grows this pass."""
+        self._on_new_events.append(callback)
 
     def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -182,10 +194,11 @@ class WebhookDispatcher:
             webhooks_by_tenant.setdefault(webhook.tenant, []).append(webhook)
 
         # Scan ALL new pipeline events, not just tenants with registered
-        # webhooks: marking events seen is what drives metric-cache
-        # invalidation (main.py wraps this method and invalidates on growth),
-        # and that must work with zero webhooks registered. Delivery stays
-        # tenant-scoped below.
+        # webhooks: marking events seen still runs with zero webhooks so
+        # subscribers (via ``add_new_events_listener``) see journal growth.
+        # Delivery stays tenant-scoped below. Metric-cache invalidation is
+        # owned by MetricCacheController (S7) and does not require this loop.
+        newly_seen = 0
         for event in self._fetch_pipeline_events():
             event_id = str(event.get("event_id") or "")
             seen_key = _seen_event_key(event)
@@ -235,11 +248,18 @@ class WebhookDispatcher:
                     )
 
             # Mark the event seen only once every matching webhook is durably
-            # enqueued. This also drives metric-cache invalidation (main.py wraps
-            # this method and invalidates on seen-set growth), so it still runs
-            # for events with zero matching webhooks (enqueued_all stays True).
+            # enqueued. Still runs for events with zero matching webhooks
+            # (enqueued_all stays True) so the scan progresses and listeners fire.
             if enqueued_all:
                 self.seen_event_ids.add(seen_key)
+                newly_seen += 1
+
+        if newly_seen:
+            for listener in self._on_new_events:
+                try:
+                    await listener()
+                except Exception as exc:
+                    logger.warning("webhook_new_events_listener_failed", error=str(exc))
 
     async def deliver(self, webhook: WebhookRegistration, event: dict) -> dict:
         """Deliver one event now (the ``/test`` endpoint and the inline dispatch

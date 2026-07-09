@@ -131,13 +131,16 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
   not depend on it, so the write mechanism can be swapped without re-deciding
   anything here.
 
-## Extension point
+## Cache invalidation (S7)
 
-`ServingBridge(..., on_batch_applied=callback)` receives the `event_id`s a batch
-applied. It is unused today: the API's webhook dispatcher already scans
-`pipeline_events` *through the serving backend*
-(`QueryEngine.fetch_pipeline_events`), so it sees the bridge's journal rows on
-its existing 2-second poll and invalidates the metric cache. Replacing that poll
-with a push is the next step, and this callback is where it attaches. Note that
-for the standalone bridge the callback runs in the bridge's process, so a push
-to the API's cache needs a cross-process transport.
+Metric-cache drops are **push-driven**, not hostage to the webhook loop.
+
+| Feed | Path | When |
+|---|---|---|
+| **Push** | After a successful apply the bridge publishes on Redis channel `agentflow:cache:metrics_invalidate` (payload `{"event_ids":[…]}`). Every API pod's `MetricCacheController` is subscribed and runs `QueryCache.invalidate_metrics()`. | Primary path for the bridge (standalone and in-process). |
+| **In-process callback** | `ServingBridge(..., on_batch_applied=callback)` — the API schedules a local invalidate on the event loop so the DuckDB arm does not wait for the pub/sub round-trip. | Same-process only. |
+| **Journal scan fallback** | `MetricCacheController` polls `QueryEngine.fetch_pipeline_events` independently of `WebhookDispatcher`. | Writers that do not push (node-ingest, seed); also covers `webhook_dispatcher_autostart=False`. |
+
+The historical monkey-patch that wrapped `WebhookDispatcher.dispatch_new_events`
+in `main.py` is gone. Webhooks keep their own scan for delivery; cache
+invalidation is a first-class controller in `src/serving/cache_invalidation.py`.

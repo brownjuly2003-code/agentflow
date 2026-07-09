@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.serving.backends import BackendExecutionError, BackendMissingTableError
+from src.serving.semantic_layer.stage_clock import coerce_dt, naive_store_tz
 
 from .contracts import QueryExecutionHost
 
@@ -50,8 +51,8 @@ class EntityQueryMixin:
             raise ValueError(f"Entity lookup failed: {e}") from e
 
         entity = dict(result[0])
-        local_tz = datetime.now().astimezone().tzinfo or UTC
-
+        # N2: naive timestamps mean different things per backend — DuckDB local
+        # wall-clock, ClickHouse UTC. coerce_dt owns that convention.
         for candidate in (
             "updated_at",
             "last_updated",
@@ -61,23 +62,11 @@ class EntityQueryMixin:
             "created_at",
         ):
             value = entity.get(candidate)
-            if isinstance(value, datetime):
-                entity["_last_updated"] = (
-                    value.astimezone(UTC)
-                    if value.tzinfo is not None
-                    else value.replace(tzinfo=local_tz).astimezone(UTC)
-                ).isoformat()
-                break
-            if isinstance(value, str):
-                try:
-                    parsed = datetime.fromisoformat(value)
-                except ValueError:
-                    continue
-                entity["_last_updated"] = (
-                    parsed.astimezone(UTC)
-                    if parsed.tzinfo is not None
-                    else parsed.replace(tzinfo=local_tz).astimezone(UTC)
-                ).isoformat()
+            if value is None:
+                continue
+            coerced = coerce_dt(value, backend_name=self._backend_name)
+            if coerced is not None:
+                entity["_last_updated"] = coerced.isoformat()
                 break
 
         return entity
@@ -144,8 +133,11 @@ class EntityQueryMixin:
         if not entity_def:
             return None
 
-        local_tz = datetime.now().astimezone().tzinfo or UTC
-        anchor = as_of.astimezone(local_tz).replace(tzinfo=None)
+        # Compare as_of to store timestamps in the store's own naive convention
+        # (DuckDB local wall-clock, ClickHouse UTC) so historical cuts do not
+        # shift by the host offset (N2).
+        store_tz = naive_store_tz(self._backend_name)
+        anchor = as_of.astimezone(store_tz).replace(tzinfo=None)
         pipeline_table = self._qualify_table("pipeline_events", tenant_id)
         event_columns = self._table_columns(pipeline_table)
         use_query_params = self._backend_name == self._duckdb_backend.name
@@ -208,16 +200,9 @@ class EntityQueryMixin:
                         raise ValueError(f"Historical entity payload is invalid JSON: {e}") from e
 
                     if isinstance(entity, dict):
-                        if isinstance(event_time, datetime):
-                            normalized_time = (
-                                event_time.astimezone(UTC)
-                                if event_time.tzinfo is not None
-                                else event_time.replace(tzinfo=local_tz).astimezone(UTC)
-                            )
-                        else:
-                            normalized_time = as_of
+                        coerced = coerce_dt(event_time, backend_name=self._backend_name)
                         historical = dict(entity)
-                        historical["_last_updated"] = normalized_time.isoformat()
+                        historical["_last_updated"] = (coerced or as_of).isoformat()
                         return historical
 
         table_name = self._qualify_table(entity_def.table, tenant_id)
@@ -265,10 +250,7 @@ class EntityQueryMixin:
 
         entity = dict(rows[0])
         value = entity.get(time_column)
-        if isinstance(value, datetime):
-            entity["_last_updated"] = (
-                value.astimezone(UTC)
-                if value.tzinfo is not None
-                else value.replace(tzinfo=local_tz).astimezone(UTC)
-            ).isoformat()
+        coerced = coerce_dt(value, backend_name=self._backend_name)
+        if coerced is not None:
+            entity["_last_updated"] = coerced.isoformat()
         return entity

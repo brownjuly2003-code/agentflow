@@ -6,28 +6,52 @@ Budgets come from exactly one place: the catalog entity's `stages` block
 single place that reads a budget entry and turns it into breach arithmetic,
 so no stage-name or budget literal needs to be duplicated between the
 timeline endpoint and the worklist endpoint (invariant I2).
+
+Also owns the **store-timestamp convention** (N2): how to interpret naive
+datetimes returned by each serving backend. Getting this wrong makes
+``freshness_seconds`` lie by the host UTC offset on ClickHouse.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 
-def coerce_dt(value: object) -> datetime | None:
+def naive_store_tz(backend_name: str | None = None) -> tzinfo:
+    """Timezone assumed for *naive* timestamps from a serving backend.
+
+    * **DuckDB** converts aware values to local wall-clock on insert
+      (``datetime.now()``-shaped). A naive read is therefore local time.
+    * **ClickHouse** ``DateTime`` columns store UTC wall-clock naively
+      (server ``timezone()='UTC'``). A naive read is therefore UTC.
+
+    CI, containers and HF Spaces run in UTC, so both conventions coincide
+    there — the bug only shows on a non-UTC API host reading ClickHouse.
+    """
+    if (backend_name or "").lower() == "clickhouse":
+        return UTC
+    return datetime.now().astimezone().tzinfo or UTC
+
+
+def coerce_dt(
+    value: object,
+    *,
+    backend_name: str | None = None,
+    naive_tz: tzinfo | None = None,
+) -> datetime | None:
     """Parse a journal/order timestamp (datetime or ISO string) to aware UTC.
 
-    Naive DuckDB timestamps are local wall-clock (DuckDB's ``NOW()``), not
-    UTC — same ``local_tz`` convention as ``EntityQueryMixin.get_entity``'s
-    ``_last_updated``. On non-DuckDB backends timestamps arrive as
-    ISO-format strings (JSON transport), not datetimes.
+    Naive values are interpreted with ``naive_tz`` if given, otherwise with
+    :func:`naive_store_tz` for ``backend_name`` (DuckDB → local, ClickHouse → UTC).
+    Aware values are converted to UTC regardless.
     """
-    local_tz = datetime.now().astimezone().tzinfo or UTC
+    assumed = naive_tz if naive_tz is not None else naive_store_tz(backend_name)
     if isinstance(value, datetime):
         return (
             value.astimezone(UTC)
             if value.tzinfo is not None
-            else value.replace(tzinfo=local_tz).astimezone(UTC)
+            else value.replace(tzinfo=assumed).astimezone(UTC)
         )
     if isinstance(value, str):
         try:
@@ -37,7 +61,7 @@ def coerce_dt(value: object) -> datetime | None:
         return (
             parsed.astimezone(UTC)
             if parsed.tzinfo is not None
-            else parsed.replace(tzinfo=local_tz).astimezone(UTC)
+            else parsed.replace(tzinfo=assumed).astimezone(UTC)
         )
     return None
 

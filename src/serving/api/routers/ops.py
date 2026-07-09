@@ -88,12 +88,18 @@ def _build_stuck_order_item(
     order_row: dict[str, Any],
     latest_stage_row: dict[str, Any] | None,
     budget: dict[str, Any] | None,
+    *,
+    backend_name: str | None = None,
 ) -> dict[str, Any]:
     """One order's worklist row: stage clock per §1.4, breach per §1.5."""
-    entered_at = coerce_dt(latest_stage_row.get("processed_at")) if latest_stage_row else None
+    entered_at = (
+        coerce_dt(latest_stage_row.get("processed_at"), backend_name=backend_name)
+        if latest_stage_row
+        else None
+    )
     clock = "journal" if entered_at is not None else "fallback"
     if entered_at is None:
-        entered_at = coerce_dt(order_row.get("created_at"))
+        entered_at = coerce_dt(order_row.get("created_at"), backend_name=backend_name)
 
     in_stage_seconds, sla_minutes, breached = resolve_breach(entered_at=entered_at, budget=budget)
     overshoot_ratio = (
@@ -163,6 +169,7 @@ def _build_stuck_orders_payload(
             continue
         latest_by_key[key] = row
 
+    store_backend = getattr(engine, "_backend_name", None)
     all_items = [
         _build_stuck_order_item(
             order_row,
@@ -170,6 +177,7 @@ def _build_stuck_orders_payload(
                 (str(order_row.get("order_id")), f"order.status.{order_row.get('status')}")
             ),
             stage_budget(stage_budgets, order_row.get("status")),
+            backend_name=store_backend,
         )
         for order_row in order_rows
     ]

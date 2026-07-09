@@ -611,6 +611,24 @@ def test_assert_scope_preserved_fails_closed_on_dropped_qualifier(backend):
         'WITH t AS (SELECT * FROM "acme"."orders_v2") SELECT * FROM t',
         'SELECT * FROM (SELECT order_id FROM "acme"."orders_v2") s',
         'SELECT * FROM "acme"."orders_v2" WHERE order_id IN (SELECT order_id FROM "acme"."orders_v2")',
+        # S12 remainder — metric-shaped FILTER / INTERVAL under tenant schema.
+        (
+            "SELECT CAST(COUNT(*) FILTER (WHERE status = 'paid') AS FLOAT) "
+            "/ NULLIF(COUNT(*), 0) AS value "
+            'FROM "acme"."orders_v2" '
+            "WHERE created_at >= NOW() - INTERVAL '24 hours'"
+        ),
+        (
+            'SELECT o.order_id FROM "acme"."orders_v2" o '
+            'LEFT JOIN "acme"."users_enriched" u ON o.user_id = u.user_id '
+            "WHERE u.segment = 'vip'"
+        ),
+        (
+            'WITH paid AS (SELECT * FROM "acme"."orders_v2" WHERE status = \'paid\'), '
+            'vip AS (SELECT * FROM "acme"."users_enriched") '
+            "SELECT COUNT(*) FROM paid p JOIN vip v ON p.user_id = v.user_id"
+        ),
+        ('SELECT * FROM "acme"."orders_v2" WHERE order_id = \'ORD\\\' OR 1=1 --\''),
     ],
 )
 def test_translate_preserves_tenant_refs_through_joins_ctes_subqueries(backend, sql: str):
@@ -618,16 +636,41 @@ def test_translate_preserves_tenant_refs_through_joins_ctes_subqueries(backend, 
     translated = backend._translate_sql(sql)
     assert '"acme"' in translated or "acme" in translated
     # No unscoped physical orders/users tables appear without the tenant qual.
-    # (CTE alias `t` / subquery alias `s` are not physical tables.)
+    # (CTE alias `t` / subquery alias `s` / CTE names are not physical tables.)
     reparsed = sqlglot.parse_one(translated, read="clickhouse")
+    skip_aliases = {"t", "s", "o", "u", "p", "v", "paid", "vip"}
     physical = [
         ((t.db or "").lower(), (t.name or "").lower())
         for t in reparsed.find_all(sqlglot.exp.Table)
-        if t.name and t.name.lower() not in {"t", "s"}
+        if t.name and t.name.lower() not in skip_aliases
     ]
     for db, name in physical:
         if name in {"orders_v2", "users_enriched"}:
             assert db == "acme", f"lost tenant qual on {name}: {translated}"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [v for v in CLICKHOUSE_ATTACK_VECTORS if "\x00" not in v],
+)
+def test_translate_keeps_injection_payload_inside_string_literal(backend, payload: str):
+    """S12: transpile must not let injection payloads escape string context."""
+    # Build a single-quoted literal the same way the serving layer does:
+    # double any embedded single quotes, then wrap.
+    escaped = payload.replace("'", "''")
+    sql = f'SELECT * FROM "acme"."orders_v2" WHERE order_id = \'{escaped}\''
+    translated = backend._translate_sql(sql)
+    reparsed = sqlglot.parse_one(translated, read="clickhouse")
+    physical = list(reparsed.find_all(exp.Table))
+    assert any(
+        (t.db or "").lower() == "acme" and (t.name or "").lower() == "orders_v2" for t in physical
+    ), translated
+    # Exactly one statement after transpile (multi-statement refused earlier).
+    assert len(sqlglot.parse(translated, read="clickhouse")) == 1
+    # DROP/DELETE keywords may appear inside the *literal*, not as statements.
+    assert not translated.strip().upper().startswith("DROP")
+    head = translated.upper().split("WHERE", 1)[0]
+    assert "DELETE FROM" not in head
 
 
 def test_create_database_bootstrap_does_not_set_session_database(backend):

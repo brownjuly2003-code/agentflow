@@ -83,7 +83,7 @@ COPY contracts /app/contracts
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt \
  && pip install --no-cache-dir bcrypt \
- && pip install --no-cache-dir -e . \
+ && pip install --no-cache-dir -e ".[postgres]" \
  && pip install --no-cache-dir pyiceberg
 RUN cat > /app/host_loopback_proxy.py <<'PY'
 import asyncio

@@ -220,10 +220,24 @@ class ServingBridge:
         )
 
     def _process(self, event: dict) -> tuple[bool, str]:
+        # ClickHouse path: skip the throwaway DuckDB scratch (Q1.2 / S10).
+        # Dual-write was correctness-preserving but paid BEGIN/COMMIT + local
+        # upserts the API never reads. DuckDB demo path keeps the lock + lake.
+        skip_local = self._sink is not None
         if self._write_lock is None:
-            return _process_event(self._lake_conn, event, clickhouse_sink=self._sink)
+            return _process_event(
+                self._lake_conn,
+                event,
+                clickhouse_sink=self._sink,
+                skip_local_store=skip_local,
+            )
         with self._write_lock:
-            return _process_event(self._lake_conn, event, clickhouse_sink=self._sink)
+            return _process_event(
+                self._lake_conn,
+                event,
+                clickhouse_sink=self._sink,
+                skip_local_store=skip_local,
+            )
 
     # -- consume loop -----------------------------------------------------
 

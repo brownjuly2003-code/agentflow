@@ -57,13 +57,18 @@ PIPELINE_SOURCE_EVENTS = (
     "add_to_cart",
     "product.updated",
 )
-# The staleness budget a cached metric read is allowed to carry on production
-# defaults (event-driven invalidation at a 2 s dispatcher poll). Measured:
-# 1.99 s p95 end-to-end (docs/freshness-benchmark.md); the budget adds query
-# headroom on top of the poll bound rather than restating the measurement.
+# Product-axis staleness budget for cached metric reads on the *real* path
+# (Kafka → Flink → bridge → ClickHouse → metric). S8 measured 5.70 s p95
+# (docs/perf/freshness-e2e-realpath.md, n=20, 2026-07-09). Budget = measured
+# p95 + headroom for host jitter / queue RTT — not the demo DuckDB arm
+# (1.99 s p95 in docs/freshness-benchmark.md), which remains a pedagogy path.
 METRIC_FRESHNESS = {
-    "p95_staleness_budget_seconds": 2.5,
-    "basis": "docs/freshness-benchmark.md (event_driven arm, production defaults)",
+    "p95_staleness_budget_seconds": 8.0,
+    "basis": (
+        "docs/perf/freshness-e2e-realpath.md "
+        "(S8 real path p95 5.70s + headroom; "
+        "demo arm still in docs/freshness-benchmark.md)"
+    ),
 }
 
 

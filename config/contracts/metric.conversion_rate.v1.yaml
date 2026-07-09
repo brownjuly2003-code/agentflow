@@ -23,5 +23,6 @@ source_events:
 - add_to_cart
 source_table: sessions_aggregated
 freshness:
-  p95_staleness_budget_seconds: 2.5
-  basis: docs/freshness-benchmark.md (event_driven arm, production defaults)
+  p95_staleness_budget_seconds: 8.0
+  basis: docs/perf/freshness-e2e-realpath.md (S8 real path p95 5.70s + headroom; demo
+    arm still in docs/freshness-benchmark.md)

@@ -5,6 +5,15 @@
 
 Generated: `2026-06-06T10:10:41+03:00`
 
+> **S7 note (2026-07-09, not yet re-measured):** cache invalidation is no
+> longer hostage to the webhook dispatcher poll. Production wiring is push
+> from the serving bridge (Redis channel `agentflow:cache:metrics_invalidate`)
+> plus an independent journal scan in `MetricCacheController` — see
+> [`serving-bridge.md`](serving-bridge.md#cache-invalidation-s7). The numbers
+> below still describe the pre-S7 poll path. **S8** will re-run this benchmark
+> end-to-end on the real Kafka→Flink→bridge path (and must use the N2-aware
+> ClickHouse timestamp convention).
+
 ## What is measured
 
 The end-to-end delay between an event entering the pipeline (schema
@@ -17,9 +26,8 @@ Metric reads are authenticated (tenant-scoped cache path — unauthenticated
 requests bypass the metric cache when multi-tenancy is configured) and
 served through the production `QueryCache` (Redis semantics via in-process
 `fakeredis`; localhost RTT to a real Redis is sub-millisecond and
-excluded). Cache invalidation is driven by the webhook dispatcher poll
-loop seeing new pipeline events — the same wiring as
-`src/serving/api/main.py` production defaults.
+excluded). At measurement time, cache invalidation was driven by the webhook
+dispatcher poll loop seeing new pipeline events.
 
 ## System Under Test
 
@@ -39,7 +47,7 @@ loop seeing new pipeline events — the same wiring as
 
 ## Reading the numbers
 
-- `event_driven` is the production configuration: staleness is bounded by the 2 s dispatcher poll, not the 30 s cache TTL.
+- `event_driven` was the production configuration at measurement time: staleness was bounded by the 2 s dispatcher poll, not the 30 s cache TTL. Post-S7 the production path is push-driven (see note above); these numbers are the pre-S7 baseline.
 - A TTL-only cache at the production TTL (30 s) would sit at ~U(0, TTL) staleness — p50 ≈ 15 s (linear scaling of the measured ttl_only arm: 2.75 s at TTL 5 s ⇒ ≈ 16.51 s at TTL 30 s). Event-driven invalidation measured 1.06 s p50 / 1.99 s p95 on the same pipeline.
 - `fast_poll` shows the same wiring with the dispatcher poll tuned to 0.25 s — freshness is a configuration knob, not an architectural ceiling.
 - `no_cache` is the floor: with the cache off every read hits the store directly, so the measured delay collapses to this script's 25 ms read granularity plus one query.

@@ -67,6 +67,22 @@ UNSAFE_SQL = [
         "SELECT * FROM orders_v2",
         "Recursive CTE shadows",
     ),
+    # S12 (2026-07-09): extension / env / session-secret surfaces that sqlglot
+    # accepts as anonymous Func nodes. `current_setting` is live-readable in
+    # DuckDB today (threads, and any session s3_* keys); the others are
+    # fail-closed denylist entries for dialect drift.
+    ("SELECT load_extension('httpfs')", "Forbidden function"),
+    ("SELECT install_extension('httpfs')", "Forbidden function"),
+    ("SELECT current_setting('s3_access_key_id')", "Forbidden function"),
+    ("SELECT getenv('PATH')", "Forbidden function"),
+    ("SELECT system('id')", "Forbidden function"),
+    ("SELECT shell('id')", "Forbidden function"),
+    ("SELECT exec('id')", "Forbidden function"),
+    ("SELECT query_table('SELECT 1')", "Forbidden function"),
+    (
+        "SELECT * FROM orders_v2 WHERE current_setting('s3_secret_access_key') IS NOT NULL",
+        "Forbidden function",
+    ),
 ]
 
 

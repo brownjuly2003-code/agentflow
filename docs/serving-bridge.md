@@ -22,19 +22,25 @@ orders.raw ──► Flink (validate → enrich → dedup) ──► events.vali
 
 ## Verified
 
-On the Mac stand (Colima, 6 GiB, single TaskManager), 2026-07-09:
+On the Mac stand (Colima, 6 GiB, single TaskManager, Flink **2.3.0** — the
+runtime the repo pins), 2026-07-09:
 
 - An `order.created` produced to `orders.raw` traversed the real Flink job, the
-  bridge and ClickHouse, and was served by `GET /v1/entity/order/{id}` **2.30 s
+  bridge and ClickHouse, and was served by `GET /v1/entity/order/{id}` **3.26 s
   later** — the first time this path has been closed end to end.
 - The in-process (DuckDB) arm served the same shape of event **1.1 s** after it
   was produced to `events.validated`.
 - Replaying an already-applied `event_id` against live Kafka + ClickHouse
   produced exactly one order row and one journal row
   (`tests/integration/test_serving_bridge.py`, 2 passed).
+- Bridge counters after the run: `consumed 5 · applied 3 · duplicate 2 ·
+  apply_failures 0 · lag 0`. The two duplicates are the guard collapsing
+  re-delivered messages, which is what it is for.
 
-The Flink runtime on that stand was 2.2.1 with the current job code; the 2.3.0
-runtime the repo pins is exercised by the `flink-smoke` CI gate.
+> Both arms default to the same consumer group (`agentflow-serving-bridge`).
+> Running the standalone process and the in-process thread against one broker
+> makes them steal partitions from each other — pick one per cluster, or give
+> the second a distinct `AGENTFLOW_BRIDGE_GROUP_ID`.
 
 ## Guarantee
 

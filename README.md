@@ -1,6 +1,6 @@
 # AgentFlow
 
-> Event-native metrics layer: business metrics that move when events happen — measured **1.1 s p50** event-to-metric freshness on production defaults. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery for people, dashboards, services, and AI agents alike.
+> Event-native metrics layer: business metrics that move when events happen — measured **3.0 s p50** event-to-metric on the real Kafka→Flink→bridge path, **1.1 s p50** on the in-process demo shortcut. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery for people, dashboards, services, and AI agents alike.
 
 [![Release gate](https://img.shields.io/badge/release_gate-v2.0_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
 [![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
@@ -11,7 +11,7 @@
 
 BI on a replica answers yesterday's questions. Support, ops, and merch workflows need *current* orders, metrics, and health signals at the moment of decision — not a stale warehouse snapshot, not a pile of one-off service adapters, and not a cache that quietly serves 30-second-old numbers.
 
-AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([docs/freshness-benchmark.md](docs/freshness-benchmark.md)). One serving boundary on top of that axis:
+AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([docs/freshness-benchmark.md](docs/freshness-benchmark.md), [real-path S8](docs/perf/freshness-e2e-realpath.md)). One serving boundary on top of that axis:
 
 - streaming ingestion for operational events (validated, enriched, journaled)
 - a semantic layer that exposes entities, metrics, lineage, and query endpoints
@@ -22,7 +22,10 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 
 ## Highlights
 
-- **Measured event-to-metric freshness** — an event entering the pipeline is reflected in `GET /v1/metrics/*` in **1.06 s p50 / 1.99 s p95** on production defaults (event-driven cache invalidation, no webhook registration), tunable to **238 ms p50**; a plain TTL cache on the same pipeline sits at ~15 s. Reproducible via `python scripts/benchmark_freshness.py` → [freshness benchmark](docs/freshness-benchmark.md)
+- **Measured event-to-metric freshness** — two measured arms, not one number:
+  - **Real path** (Kafka → Flink 2.3.0 → serving bridge → ClickHouse → `GET /v1/metrics/*` with Redis push invalidation): **3.02 s p50 / 5.70 s p95** (n=20, Mac/Colima) — [S8 e2e](docs/perf/freshness-e2e-realpath.md), `python scripts/benchmark_freshness_e2e.py`
+  - **In-process demo shortcut** (`local_pipeline` → DuckDB, no Kafka/Flink): **1.06 s p50 / 1.99 s p95**, tunable to **238 ms p50**; TTL-only ~15 s — [demo benchmark](docs/freshness-benchmark.md), `python scripts/benchmark_freshness.py`
+  Do not present the 1.06 s figure as the production streaming path.
 - **Lineage as a contract** — all six metrics declare their source events, serving table, and a 2.5 s p95 staleness budget in versioned contracts, exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
 - **Published release line through `v2.0.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
 - **Tested and gated** — 1,500+ unit tests plus a broad Windows no-Docker suite; CI enforces 13 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract, build-smoke) through branch protection

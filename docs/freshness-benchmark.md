@@ -5,14 +5,16 @@
 
 Generated: `2026-06-06T10:10:41+03:00`
 
-> **S7 note (2026-07-09, not yet re-measured):** cache invalidation is no
-> longer hostage to the webhook dispatcher poll. Production wiring is push
-> from the serving bridge (Redis channel `agentflow:cache:metrics_invalidate`)
-> plus an independent journal scan in `MetricCacheController` — see
+> **S7/S8 note (2026-07-09):** cache invalidation is no longer hostage to the
+> webhook dispatcher poll. Production wiring is push from the serving bridge
+> (Redis channel `agentflow:cache:metrics_invalidate`) plus an independent
+> journal scan in `MetricCacheController` — see
 > [`serving-bridge.md`](serving-bridge.md#cache-invalidation-s7). The numbers
-> below still describe the pre-S7 poll path. **S8** will re-run this benchmark
-> end-to-end on the real Kafka→Flink→bridge path (and must use the N2-aware
-> ClickHouse timestamp convention).
+> **below** still describe the **in-process DuckDB shortcut** (pre-S7 poll-era
+> measurement of that arm). The full real path was re-measured in **S8**:
+> **3.02 s p50 / 5.70 s p95** event → `GET /v1/metrics/revenue` via
+> Kafka→Flink→bridge→ClickHouse — see
+> [`perf/freshness-e2e-realpath.md`](perf/freshness-e2e-realpath.md).
 
 ## What is measured
 

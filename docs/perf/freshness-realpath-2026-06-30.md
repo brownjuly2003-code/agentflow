@@ -8,10 +8,11 @@ Measured: `2026-06-30`
 
 > **Update 2026-07-09.** The missing link this document reports — "nothing
 > bridges `events.validated` into the serving store" — has since been built:
-> see [`../serving-bridge.md`](../serving-bridge.md). The numbers below are the
-> streaming-hop measurement as taken on 2026-06-30 and are left untouched; an
-> end-to-end *event → serving metric* measurement on the real path is a separate
-> run and is not reported here.
+> see [`../serving-bridge.md`](../serving-bridge.md). The numbers below remain
+> the streaming-hop measurement (produce → `events.validated`) as taken on
+> 2026-06-30. Full *event → metric* on the real path is **S8**:
+> [`freshness-e2e-realpath.md`](freshness-e2e-realpath.md) — **3.02 s p50 /
+> 5.70 s p95** to `GET /v1/metrics/revenue`.
 
 ## Why this exists
 

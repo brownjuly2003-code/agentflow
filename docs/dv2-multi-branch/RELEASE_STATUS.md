@@ -53,10 +53,16 @@ Scorecard channel (5.8 → 7.0).
 ## Live demo surfaces
 
 Four Docker Spaces exist under `liovina`, all built from the same image.
-The free tier keeps **three** `cpu-basic` Spaces awake at a time, and the
-account runs other projects, so the three-node topology is deployed but not
-fully awake. A paused Space answers `503` until it is restarted; nothing
-about the deployment is missing, only the compute quota.
+The free tier caps how many `cpu-basic` Spaces one account may run at once;
+that cap is currently reached by **four** running Spaces on this account, two of
+which serve other projects. `POST .../restart` on a paused Space is refused
+outright (`403`, "you've reached your cpu-basic quota limit"), and a second
+account is not a way around it — creating an additional free Docker Space is
+refused too (`POST /api/repos/create` → `402`; only static Spaces are free).
+
+So the three-node topology is deployed but not fully awake. A paused Space
+answers `503` until a running one is paused to make room; nothing about the
+deployment is missing, only the concurrent-compute quota.
 
 | Space | Role | Runtime stage | `/v1/health` |
 |-------|------|---------------|--------------|
@@ -65,7 +71,8 @@ about the deployment is missing, only the compute quota.
 | [`agentflow-edge-ekb`](https://liovina-agentflow-edge-ekb.hf.space) | edge branch `ekb` | PAUSED | `503` |
 | [`agentflow-demo`](https://liovina-agentflow-demo.hf.space) | standalone demo | PAUSED | `503` |
 
-Probed 2026-07-09 (`GET /v1/health` + `GET /api/spaces/liovina/{name}`).
+Probed 2026-07-09 (`GET /v1/health` + `GET /api/spaces/liovina/{name}`; the two
+quota errors above were reproduced the same day).
 The cross-node evidence ("Verify live" in `deploy/hf-space/three-node/DEPLOY.md`)
 was captured on 2026-07-06 while `ekb` was awake.
 

@@ -43,14 +43,20 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
 
 ## Known issues
 
-- **API process RSS grows without bound under steady load** (175 MB → 1.67 GB
-  over the 4 h soak; the bridge stayed flat) — found by the S11 soak, see the
-  [soak report](perf/soak-s11-2026-07-10.md); tracked as a GitHub issue.
+- **API RSS growth under steady load — root-caused and fixed at unit scale**
+  (was 175 MB → 1.67 GB over the 4 h soak; the bridge stayed flat). The
+  webhook dispatcher re-materialized the whole `pipeline_events` journal every
+  2 s and the scan/push dedup sets grew one entry per event forever; journal
+  scans are now cursor-bounded and the seen-sets capped (issue #183, details
+  in [serving-bridge.md](serving-bridge.md#journal-scans-are-bounded-issue-183)).
+  Measured at unit scale: per-scan allocation flat ≤ 0.8 MB against a journal
+  growing 50 k → 400 k rows (was 35.5 → 283.6 MB). **Live stand
+  re-verification is still pending** — scheduled for the next stand window.
 
 ## Next
 
-1. **API RSS leak triage** — reproduce at unit scale, profile the suspects
-   (usage writer queue, metric cache, ClickHouse client sessions).
+1. **Live re-verification of the API leak fix** — re-run a soak-profile RSS
+   sample on the Docker stand alongside the S13 scale work.
 2. **At-scale proof on own data** — volume + query latency + correctness
    spot-checks on the project's synthetic generator.
 3. **Delivery topology** — exactly-one webhook delivery across replicas

@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
 from src.serving.backends import BackendExecutionError
 from src.serving.control_plane import get_control_plane_store
+from src.serving.seen_events import BoundedSeenSet
 
 try:
     import yaml
@@ -124,7 +125,13 @@ def deactivate_webhook(app: FastAPI, webhook_id: str, tenant: str) -> bool:
 
 
 class WebhookDispatcher:
-    def __init__(self, app: FastAPI, poll_interval_seconds: float = 2.0) -> None:
+    def __init__(
+        self,
+        app: FastAPI,
+        poll_interval_seconds: float = 2.0,
+        scan_batch_size: int = 1000,
+        seen_cache_size: int = 50_000,
+    ) -> None:
         self.app = app
         self.poll_interval_seconds = poll_interval_seconds
         self.backoff_seconds = [1.0, 5.0, 25.0]
@@ -133,7 +140,20 @@ class WebhookDispatcher:
         # processes (bounded so the pass never blocks the loop on a large queue).
         self.max_delivery_attempts = 5
         self.redrive_batch_size = 100
-        self.seen_event_ids: set[str] = set()
+        # Journal scan is incremental and bounded (issue #183): each pass reads
+        # at most `scan_batch_size` rows at/after `_scan_cursor` instead of the
+        # whole journal — the unbounded scan is what grew the API process to
+        # 1.67 GB over the 4 h S11 soak. `scan_batch_size` must exceed the
+        # largest same-second event cohort the pipeline produces (journal
+        # timestamps are second-granular on ClickHouse; at the measured
+        # 87 eps a cohort is ~100 rows, so 1000 leaves ×10 headroom) — an
+        # all-seen full batch advances the cursor, so a cohort smaller than
+        # one batch can never pin the window. The seen-set is capped too:
+        # eviction is safe because enqueue is idempotent on its primary key
+        # and inline delivery fires only for freshly inserted rows.
+        self.scan_batch_size = scan_batch_size
+        self.seen_event_ids: BoundedSeenSet = BoundedSeenSet(maxlen=seen_cache_size)
+        self._scan_cursor: str | None = None
         self._task: asyncio.Task | None = None
         # S7: first-class subscribers notified when the journal scan marks new
         # events seen. Replaces the historical monkey-patch over
@@ -179,13 +199,26 @@ class WebhookDispatcher:
             await asyncio.sleep(self.poll_interval_seconds)
 
     def mark_existing_events_seen(self) -> None:
+        """Initialize the scan frontier at the journal tail.
+
+        Startup semantics are unchanged — events already in the journal are
+        not delivered — but the initialization is O(scan_batch_size), not
+        O(journal): the newest batch seeds the seen-set and the cursor, and
+        everything older is excluded by the cursor's ``>=`` bound instead of
+        by enumerating it (issue #183).
+        """
         try:
-            for event in self._fetch_pipeline_events():
-                event_id = str(event.get("event_id") or "")
-                if event_id:
-                    self.seen_event_ids.add(_seen_event_key(event))
+            events = self._fetch_pipeline_events(newest_first=True, limit=self.scan_batch_size)
         except (duckdb.Error, BackendExecutionError) as exc:
             logger.warning("webhook_seen_init_failed", error=str(exc))
+            return
+        for event in events:
+            event_id = str(event.get("event_id") or "")
+            if event_id:
+                self.seen_event_ids.add(_seen_event_key(event))
+        if events:
+            # newest_first — the first row is the journal tail.
+            self._scan_cursor = _cursor_timestamp(events[0]) or self._scan_cursor
 
     async def dispatch_new_events(self) -> None:
         webhooks = [webhook for webhook in load_webhooks(self.app) if webhook.active]
@@ -198,11 +231,27 @@ class WebhookDispatcher:
         # subscribers (via ``add_new_events_listener``) see journal growth.
         # Delivery stays tenant-scoped below. Metric-cache invalidation is
         # owned by MetricCacheController (S7) and does not require this loop.
+        #
+        # The scan is incremental (issue #183): a bounded batch at/after the
+        # cursor, ASC. The cursor advances over the contiguous prefix of rows
+        # that end this pass seen (previously or newly), and freezes at the
+        # first row left unseen (an enqueue failure) so that row is re-fetched
+        # and retried next pass — the retry-forever semantics the full scan
+        # provided, without materializing the whole journal every 2 s.
         newly_seen = 0
-        for event in self._fetch_pipeline_events():
+        advance: str | None = None
+        frozen = False
+        for event in self._fetch_pipeline_events(
+            limit=self.scan_batch_size, min_processed_at=self._scan_cursor
+        ):
             event_id = str(event.get("event_id") or "")
             seen_key = _seen_event_key(event)
             if not event_id or event_id in self.seen_event_ids or seen_key in self.seen_event_ids:
+                # Handled earlier (or unidentifiable — nothing to retry): let
+                # the cursor move over it so a frontier of already-seen rows
+                # cannot pin the scan window.
+                if not frozen:
+                    advance = _cursor_timestamp(event) or advance
                 continue
 
             tenant = str(event.get("tenant_id") or "default")
@@ -253,6 +302,13 @@ class WebhookDispatcher:
             if enqueued_all:
                 self.seen_event_ids.add(seen_key)
                 newly_seen += 1
+                if not frozen:
+                    advance = _cursor_timestamp(event) or advance
+            else:
+                frozen = True
+
+        if advance is not None:
+            self._scan_cursor = advance
 
         if newly_seen:
             for listener in self._on_new_events:
@@ -383,12 +439,24 @@ class WebhookDispatcher:
             "attempts": attempts,
         }
 
-    def _fetch_pipeline_events(self, tenant: str | None = None) -> list[dict]:
+    def _fetch_pipeline_events(
+        self,
+        tenant: str | None = None,
+        *,
+        limit: int | None = None,
+        newest_first: bool = False,
+        min_processed_at: str | None = None,
+    ) -> list[dict]:
         # Scan the journal through the serving backend, not the embedded DuckDB
         # connection: when serving is ClickHouse (ADR 0006) the events that
         # matter arrive from an out-of-process writer, and this scan is what
         # drives both webhook delivery and metric-cache invalidation.
-        events: list[dict] = self.app.state.query_engine.fetch_pipeline_events(tenant_id=tenant)
+        events: list[dict] = self.app.state.query_engine.fetch_pipeline_events(
+            tenant_id=tenant,
+            limit=limit,
+            newest_first=newest_first,
+            min_processed_at=min_processed_at,
+        )
         return events
 
     def _enqueue_delivery(self, webhook: WebhookRegistration, event: dict) -> bool:
@@ -489,6 +557,27 @@ def _seen_event_key(event: dict) -> str:
     event_id = str(event.get("event_id") or "")
     tenant_id = str(event.get("tenant_id") or "default")
     return f"{tenant_id}:{event_id}"
+
+
+def _cursor_timestamp(event: dict) -> str | None:
+    """Normalize a journal row's ``processed_at`` into a scan-cursor string.
+
+    Returns ``YYYY-MM-DD HH:MM:SS`` (second precision — the journal's own
+    granularity on ClickHouse) or ``None`` when the value is missing or does
+    not round-trip through strict parsing, so a malformed row can degrade one
+    cursor advance but never poison the next scan's SQL.
+    """
+    value = event.get("processed_at")
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    text = str(value).strip().replace("T", " ").split(".", 1)[0]
+    try:
+        datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    return text
 
 
 def _event_type_matches(event_type: str, requested: str) -> bool:

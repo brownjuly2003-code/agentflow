@@ -13,6 +13,7 @@ from src.serving.cache import QueryCache
 from src.serving.cache_invalidation import (
     METRICS_INVALIDATE_CHANNEL,
     MetricCacheController,
+    journal_scan_fetch,
     publish_metrics_invalidate,
 )
 
@@ -230,6 +231,85 @@ async def test_webhook_listener_hook_fires_on_new_events():
 
     assert hits == [1]
     assert "acme:e-new" in dispatcher.seen_event_ids
+
+
+# --- bounded scan window / bounded seen-set (issue #183) ----------------------
+
+
+def _duckdb_engine_with_journal(row_count: int):
+    import duckdb
+
+    from src.serving.backends.duckdb_backend import DuckDBBackend
+    from src.serving.semantic_layer.query import QueryEngine
+
+    conn = duckdb.connect(":memory:")
+    conn.execute(
+        """
+        CREATE TABLE pipeline_events (
+            event_id VARCHAR, topic VARCHAR, tenant_id VARCHAR DEFAULT 'default',
+            event_type VARCHAR, processed_at TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        f"""
+        INSERT INTO pipeline_events
+        SELECT 'evt-' || i, 'events.validated', 'default', 'order.created',
+               TIMESTAMP '2026-07-10 00:00:00' + INTERVAL 1 SECOND * i
+        FROM range({row_count}) t(i)
+        """
+    )
+    engine = QueryEngine.__new__(QueryEngine)
+    backend = DuckDBBackend(db_path=":memory:", connection=conn)
+    engine._duckdb_backend = backend
+    engine._backend = backend
+    engine._backend_name = backend.name
+    engine._conn = conn
+    return conn, engine
+
+
+@pytest.mark.asyncio
+async def test_scan_fallback_sees_new_events_when_journal_outgrows_the_window():
+    """Regression (issue #183): the lifespan wired the fallback with an
+    ascending limited scan — the oldest rows — a window that stops changing
+    once the journal outgrows it, silently killing scan-driven invalidation.
+    ``journal_scan_fetch`` must read the tail window instead."""
+    redis = FakeRedis()
+    redis.data = {"metric:revenue:1h:now": json.dumps({"value": 9})}
+    cache = QueryCache(redis_client=redis)
+    conn, engine = _duckdb_engine_with_journal(row_count=250)
+    try:
+        controller = MetricCacheController(
+            cache,
+            redis_client=redis,
+            fetch_pipeline_events=journal_scan_fetch(engine, limit=200),
+        )
+        controller._mark_existing_seen()
+        assert await controller.scan_once() == 0  # steady journal — no drop
+
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES "
+            "('evt-fresh', 'events.validated', 'default', 'order.created', "
+            "TIMESTAMP '2026-07-10 01:00:00')"
+        )
+
+        assert await controller.scan_once() == 1
+        assert any("metric:revenue:1h:now" in keys for keys in redis.deleted)
+        assert "evt-fresh" in controller.seen_event_ids
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_push_path_seen_ids_stay_bounded():
+    redis = FakeRedis()
+    cache = QueryCache(redis_client=redis)
+    controller = MetricCacheController(cache, redis_client=redis, seen_cache_size=5)
+
+    await controller.notify_batch_applied([f"evt-{i}" for i in range(20)])
+
+    assert len(controller.seen_event_ids) == 5  # capped — one entry per event forever was the leak
+    assert "evt-19" in controller.seen_event_ids
 
 
 def test_parse_event_ids_tolerates_garbage():

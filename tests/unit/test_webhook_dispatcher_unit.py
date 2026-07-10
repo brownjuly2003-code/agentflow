@@ -244,6 +244,207 @@ def test_mark_existing_events_seen_populates_seen_ids(
     assert dispatcher.seen_event_ids == {"acme:e1", "acme:e2", "other:e3"}
 
 
+# --- bounded incremental journal scan (issue #183) ----------------------------
+
+
+def _journal_conn(rows: list[tuple[str, str, str, str]]) -> duckdb.DuckDBPyConnection:
+    """pipeline_events with explicit timestamps: (event_id, tenant, event_type, ts)."""
+    conn = duckdb.connect(":memory:")
+    conn.execute(
+        """
+        CREATE TABLE pipeline_events (
+            event_id VARCHAR, topic VARCHAR, tenant_id VARCHAR DEFAULT 'default',
+            event_type VARCHAR, processed_at TIMESTAMP
+        )
+        """
+    )
+    for event_id, tenant, event_type, ts in rows:
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES (?, 'orders.raw', ?, ?, ?)",
+            [event_id, tenant, event_type, ts],
+        )
+    return conn
+
+
+def test_mark_existing_events_seen_is_bounded_and_sets_cursor() -> None:
+    conn = _journal_conn(
+        [
+            ("old", "acme", "order.created", "2026-07-10 10:00:00"),
+            ("mid", "acme", "order.created", "2026-07-10 10:00:05"),
+            ("new", "acme", "order.created", "2026-07-10 10:00:10"),
+        ]
+    )
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn), scan_batch_size=2)
+
+        dispatcher.mark_existing_events_seen()
+
+        # O(batch), not O(journal): only the newest batch seeds the set...
+        assert dispatcher.seen_event_ids == {"acme:mid", "acme:new"}
+        # ...and the cursor sits at the journal tail, excluding older rows.
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:10"
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scans_a_bounded_window_after_the_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = _journal_conn(
+        [
+            ("e-old", "acme", "order.created", "2026-07-10 10:00:00"),
+            ("e-new", "acme", "order.created", "2026-07-10 10:00:10"),
+        ]
+    )
+    try:
+        app = _stub_app(conn)
+        dispatcher = WebhookDispatcher(app)
+        dispatcher.mark_existing_events_seen()
+
+        captured: list[dict] = []
+        real_fetch = app.state.query_engine.fetch_pipeline_events
+
+        def spy_fetch(**kwargs: object) -> list[dict]:
+            captured.append(kwargs)
+            return real_fetch(**kwargs)
+
+        monkeypatch.setattr(app.state.query_engine, "fetch_pipeline_events", spy_fetch)
+
+        await dispatcher.dispatch_new_events()
+
+        (kwargs,) = captured
+        assert kwargs["limit"] == dispatcher.scan_batch_size
+        assert kwargs["min_processed_at"] == "2026-07-10 10:00:10"
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_advances_cursor_over_newly_seen_events() -> None:
+    conn = _journal_conn([("e1", "acme", "order.created", "2026-07-10 10:00:00")])
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+
+        await dispatcher.dispatch_new_events()
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:00"
+
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES "
+            "('e2', 'orders.raw', 'acme', 'order.paid', '2026-07-10 10:00:07')"
+        )
+        await dispatcher.dispatch_new_events()
+
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:07"
+        assert "acme:e2" in dispatcher.seen_event_ids
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_advances_cursor_over_an_all_seen_full_batch() -> None:
+    # Livelock guard: a full batch of already-seen rows must still move the
+    # cursor, otherwise a seen frontier wider than one batch pins the window.
+    conn = _journal_conn(
+        [
+            (f"e{i}", "acme", "order.created", f"2026-07-10 10:00:0{i}")
+            for i in range(1, 5)  # e1..e4 at :01..:04
+        ]
+    )
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn), scan_batch_size=2)
+        for i in range(1, 5):
+            dispatcher.seen_event_ids.add(f"acme:e{i}")
+
+        await dispatcher.dispatch_new_events()  # window [start, e2] — all seen
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:02"
+
+        await dispatcher.dispatch_new_events()  # window [e2, e3] — all seen
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:03"
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_cursor_freezes_on_enqueue_failure_then_retries(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An event whose durable enqueue fails must stay inside the scan window
+    # (the retry-forever semantics the full scan provided): the cursor freezes
+    # before it, and the next pass re-fetches and retries it.
+    conn = _journal_conn(
+        [
+            ("e-fail", "acme", "order.created", "2026-07-10 10:00:01"),
+            ("e-ok", "acme", "order.created", "2026-07-10 10:00:02"),
+        ]
+    )
+    try:
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        create_webhook(app, url="https://a.test/h", tenant="acme", filters=WebhookFilters())
+        dispatcher = WebhookDispatcher(app)
+
+        delivered: list[str] = []
+
+        async def _deliver(webhook: object, event: dict) -> dict:
+            delivered.append(str(event["event_id"]))
+            return {"success": True, "status_code": 200, "event_id": event["event_id"]}
+
+        monkeypatch.setattr(dispatcher, "deliver", _deliver)
+
+        real_enqueue = dispatcher._enqueue_delivery
+        fail_once = {"armed": True}
+
+        def flaky_enqueue(webhook: object, event: dict) -> bool:
+            if event.get("event_id") == "e-fail" and fail_once["armed"]:
+                raise RuntimeError("store down")
+            return real_enqueue(webhook, event)
+
+        monkeypatch.setattr(dispatcher, "_enqueue_delivery", flaky_enqueue)
+
+        await dispatcher.dispatch_new_events()
+
+        # e-fail is not seen and the cursor did not advance past it; e-ok was
+        # durably enqueued and delivered, so it is seen.
+        assert "acme:e-fail" not in dispatcher.seen_event_ids
+        assert "acme:e-ok" in dispatcher.seen_event_ids
+        assert dispatcher._scan_cursor is None
+        assert delivered == ["e-ok"]
+
+        fail_once["armed"] = False
+        await dispatcher.dispatch_new_events()
+
+        assert "acme:e-fail" in dispatcher.seen_event_ids
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:02"
+        # e-ok's durable row already existed (idempotent enqueue), so the
+        # retry pass delivered exactly the failed event — no duplicate POST.
+        assert delivered == ["e-ok", "e-fail"]
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_seen_set_stays_bounded_across_scans() -> None:
+    conn = _journal_conn(
+        [
+            (f"e{i}", "acme", "order.created", f"2026-07-10 10:00:{i:02d}")
+            for i in range(1, 8)  # 7 events
+        ]
+    )
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn), seen_cache_size=3)
+
+        await dispatcher.dispatch_new_events()
+
+        assert len(dispatcher.seen_event_ids) == 3  # capped, not 7
+        # The cursor, not the seen-set, is what keeps old rows out of the
+        # window — it reached the journal tail even though early ids were
+        # evicted.
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:07"
+    finally:
+        conn.close()
+
+
 def test_delivery_logs_roundtrip() -> None:
     conn = duckdb.connect(":memory:")
     try:

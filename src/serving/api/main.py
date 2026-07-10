@@ -56,6 +56,7 @@ from src.serving.api.webhook_dispatcher import WebhookDispatcher
 from src.serving.cache import QueryCache
 from src.serving.cache_invalidation import (
     MetricCacheController,
+    journal_scan_fetch,
     publish_metrics_invalidate,
 )
 from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
@@ -260,13 +261,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # dispatch_new_events is gone.
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-    def _fetch_pipeline_events_for_cache() -> list[dict]:
-        return list(app.state.query_engine.fetch_pipeline_events(limit=200) or [])
-
     app.state.metric_cache_controller = MetricCacheController(
         app.state.query_cache,
         redis_url=redis_url,
-        fetch_pipeline_events=_fetch_pipeline_events_for_cache,
+        # newest_first window — an ascending limited scan reads the oldest
+        # rows and goes blind once the journal outgrows it (issue #183).
+        fetch_pipeline_events=journal_scan_fetch(app.state.query_engine),
     )
     app.state.metric_cache_controller.start()
     if getattr(app.state, "webhook_dispatcher_autostart", True):

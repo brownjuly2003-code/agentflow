@@ -157,8 +157,43 @@ Metric-cache drops are **push-driven**, not hostage to the webhook loop.
 |---|---|---|
 | **Push** | After a successful apply the bridge publishes on Redis channel `agentflow:cache:metrics_invalidate` (payload `{"event_ids":[…]}`). Every API pod's `MetricCacheController` is subscribed and runs `QueryCache.invalidate_metrics()`. | Primary path for the bridge (standalone and in-process). |
 | **In-process callback** | `ServingBridge(..., on_batch_applied=callback)` — the API schedules a local invalidate on the event loop so the DuckDB arm does not wait for the pub/sub round-trip. | Same-process only. |
-| **Journal scan fallback** | `MetricCacheController` polls `QueryEngine.fetch_pipeline_events` independently of `WebhookDispatcher`. | Writers that do not push (node-ingest, seed); also covers `webhook_dispatcher_autostart=False`. |
+| **Journal scan fallback** | `MetricCacheController` polls `QueryEngine.fetch_pipeline_events` independently of `WebhookDispatcher` — a `newest_first` window of 200 rows (`journal_scan_fetch`), so detection stays O(window) and correct however large the journal grows. | Writers that do not push (node-ingest, seed); also covers `webhook_dispatcher_autostart=False`. |
 
 The historical monkey-patch that wrapped `WebhookDispatcher.dispatch_new_events`
 in `main.py` is gone. Webhooks keep their own scan for delivery; cache
 invalidation is a first-class controller in `src/serving/cache_invalidation.py`.
+
+### Journal scans are bounded (issue #183)
+
+The S11 soak caught the API process at 1.67 GB RSS after 4 h: the webhook
+dispatcher's poll re-materialized the **entire** `pipeline_events` journal
+every 2 s (unlimited `fetch_pipeline_events`), and the seen-sets that dedup
+scans and pushes kept one entry per event forever. All journal consumers are
+now bounded:
+
+- **Webhook dispatcher** — incremental cursor scan: each pass fetches at most
+  `scan_batch_size` (1000) rows at/after the `processed_at` high-water mark
+  (`min_processed_at`, inclusive — the journal is second-granular on
+  ClickHouse, and the seen-set dedups the re-fetched cursor second). The
+  cursor advances over the contiguous prefix of rows that end the pass seen
+  and **freezes at the first row whose durable enqueue failed**, so that row
+  is re-fetched and retried next pass — the retry-forever semantics the full
+  scan provided. An all-seen full batch still advances the cursor, so a seen
+  frontier wider than one batch cannot pin the window. Startup
+  (`mark_existing_events_seen`) seeds the cursor from the newest batch instead
+  of enumerating the journal.
+- **Seen-sets** — `BoundedSeenSet` (`src/serving/seen_events.py`): capped,
+  FIFO-with-refresh eviction. Eviction is safe because webhook enqueue is
+  idempotent on its primary key (inline delivery fires only for freshly
+  inserted rows) and a redundant metric-cache invalidate just repopulates on
+  the next read.
+- **Cache scan fallback** — the lifespan used to wire an *ascending* limited
+  scan: the oldest 200 rows, a window that stops changing once the journal
+  outgrows it, which silently disabled scan-driven invalidation on grown
+  journals (push kept the soak honest). `journal_scan_fetch` reads the tail
+  window instead.
+
+Unit-scale measurement (DuckDB backend, same mechanism): one dispatcher scan
+allocated 35.5 → 283.6 MB as the journal grew 50 k → 400 k rows before the
+fix, flat ≤ 0.8 MB after; live stand re-verification is scheduled for the next
+stand window.

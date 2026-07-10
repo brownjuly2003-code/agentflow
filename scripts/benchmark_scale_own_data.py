@@ -604,14 +604,16 @@ def analyst_queries(db: str, bands: Bands) -> dict[str, str]:
             f"SELECT record_source, sum(total_amount) AS revenue, count() AS orders "
             f"FROM {db}.v_order_header_all GROUP BY record_source ORDER BY revenue DESC"
         ),
+        # IN-subquery shape, not JOIN: a point lookup must resolve through the
+        # sats' (order_hk, …) primary index instead of hashing a multi-million
+        # row right side — the same access pattern the serving layer uses.
         "order_360_point_lookup": (
-            f"SELECT h.order_bk, hdr.order_date, hdr.order_status, hdr.total_amount, "
-            f"count(lp.product_hk) AS line_count "
-            f"FROM {db}.hub_order AS h "
-            f"INNER JOIN {db}.v_order_header_all AS hdr ON hdr.order_hk = h.order_hk "
-            f"LEFT JOIN {db}.lnk_order_product AS lp ON lp.order_hk = h.order_hk "
-            f"WHERE h.order_bk = '{probe_bk}' "
-            f"GROUP BY h.order_bk, hdr.order_date, hdr.order_status, hdr.total_amount"
+            f"SELECT order_date, order_status, total_amount, "
+            f"(SELECT count() FROM {db}.lnk_order_product WHERE order_hk IN "
+            f"(SELECT order_hk FROM {db}.hub_order WHERE order_bk = '{probe_bk}')) AS line_count "
+            f"FROM {db}.v_order_header_all "
+            f"WHERE order_hk IN "
+            f"(SELECT order_hk FROM {db}.hub_order WHERE order_bk = '{probe_bk}')"
         ),
         "marking_status_distribution": (
             f"SELECT marking_status, count() AS codes "

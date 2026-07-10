@@ -286,3 +286,67 @@ async def test_stream_events_returns_event_stream_media_type() -> None:
     response = await stream_events(_StreamReq(disconnect_after=0))
     assert response.media_type == "text/event-stream"
     assert response.headers["Cache-Control"] == "no-cache"
+
+
+async def test_stream_seen_set_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Issue #183 follow-up: the per-connection dedup cache must be a
+    # BoundedSeenSet at SEEN_CACHE_SIZE, not a bare set that grows one entry
+    # per distinct event for the lifetime of the connection.
+    created: list[int] = []
+    real = stream_module.BoundedSeenSet
+
+    def spy(maxlen: int) -> Any:
+        created.append(maxlen)
+        return real(maxlen=maxlen)
+
+    monkeypatch.setattr(stream_module, "BoundedSeenSet", spy)
+
+    async def fake_fetch(**_kwargs: Any) -> list[dict[str, object]]:
+        return []
+
+    monkeypatch.setattr(stream_module, "fetch_recent_events", fake_fetch)
+    await _drain(await stream_events(_StreamReq(disconnect_after=1)))
+
+    assert created == [stream_module.SEEN_CACHE_SIZE]
+
+
+async def test_stream_dedup_survives_eviction_of_older_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # With a tiny cache, ids evicted long after leaving the newest-`limit`
+    # scan window must not resurface as duplicates: the window only ever
+    # contains the most recent ids, which are exactly the ones still cached.
+    monkeypatch.setattr(stream_module, "SEEN_CACHE_SIZE", 3)
+
+    batches = iter(
+        [
+            [{"event_id": "e1", "topic": "events.validated"}],
+            [
+                {"event_id": "e3", "topic": "events.validated"},
+                {"event_id": "e2", "topic": "events.validated"},
+            ],
+            [
+                {"event_id": "e5", "topic": "events.validated"},
+                {"event_id": "e4", "topic": "events.validated"},
+            ],
+            # e1 has been evicted (cache holds e3..e5) but the scan window has
+            # long moved past it — the stream still emits each id exactly once.
+            [
+                {"event_id": "e5", "topic": "events.validated"},
+                {"event_id": "e4", "topic": "events.validated"},
+            ],
+        ]
+    )
+
+    async def fake_fetch(**_kwargs: Any) -> list[dict[str, object]]:
+        return next(batches, [])
+
+    monkeypatch.setattr(stream_module, "fetch_recent_events", fake_fetch)
+
+    # 4 fetch iterations: 5 emits + 3 window-top checks + dedup pass; the
+    # disconnect budget is generous enough to drain all batches.
+    response = await stream_events(_StreamReq(disconnect_after=12))
+    text = await _drain(response)
+
+    for event_id in ("e1", "e2", "e3", "e4", "e5"):
+        assert text.count(f'"event_id": "{event_id}"') == 1

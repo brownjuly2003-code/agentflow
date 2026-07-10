@@ -10,8 +10,19 @@ from fastapi.responses import StreamingResponse
 from opentelemetry import trace
 from starlette.concurrency import run_in_threadpool
 
+from src.serving.seen_events import BoundedSeenSet
+
 router = APIRouter(prefix="/v1/stream", tags=["stream"])
 tracer = trace.get_tracer("agentflow.api")
+
+# Dedup cache per open SSE connection. Bounded for the same reason as the
+# webhook dispatcher's seen-set (issue #183): a connection can stay open for
+# hours under sustained traffic, and an unbounded set grows one entry per
+# distinct event forever. Eviction cannot re-emit an event: the scan window is
+# the newest `limit` (10) rows, so an id leaves the window after 10 newer
+# events but leaves the cache only after SEEN_CACHE_SIZE newer distinct ids —
+# by then it can never re-enter the window.
+SEEN_CACHE_SIZE = 10_000
 
 
 async def fetch_recent_events(
@@ -52,7 +63,7 @@ async def stream_events(
     """Server-Sent Events stream of validated pipeline events."""
 
     async def event_generator() -> AsyncIterator[str]:
-        seen_event_ids: set[str] = set()
+        seen_event_ids = BoundedSeenSet(maxlen=SEEN_CACHE_SIZE)
         events_sent = 0
 
         with tracer.start_as_current_span("sse_stream") as span:

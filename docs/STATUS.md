@@ -19,6 +19,7 @@ passed ones (endurance, scale, delivery topology).
 | In-process demo freshness | 1.06 s p50 / 1.99 s p95 | [freshness-benchmark.md](freshness-benchmark.md) |
 | Real-path throughput measured | produce ~700 eps; bridge apply is the ceiling (see below) | [perf/throughput-realpath.md](perf/throughput-realpath.md) |
 | 2-pod control plane on kind | webhook registered on pod A visible on pod B; verify script PASS | [perf/e4-2pod-topology-2026-07-09.md](perf/e4-2pod-topology-2026-07-09.md) |
+| 4 h endurance soak (real path + API reads) | bounded lag (peak 2 915 → 0), bridge RSS/FD flat, one faulted batch replayed exactly-once by the journal guard, **zero cache drift** | [perf/soak-s11-2026-07-10.md](perf/soak-s11-2026-07-10.md) |
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
 
 ## Bridge write-path throughput — burst target met
@@ -34,16 +35,22 @@ measured steps on the same stand:
 | Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | **87.4 eps** | measured — [perf/throughput-realpath-q14-2026-07-10.md](perf/throughput-realpath-q14-2026-07-10.md) |
 
 The series target of **≥ 80 eps** is met on the 400-burst profile (peak lag 0 —
-the burst drains inside one catch-up window). Still open: the *sustained*
-figure over hours (soak), and the ≥ 100 eps stretch bar. Semantics of the
-batched path (fold rules, idempotency, replay) are in
-[serving-bridge.md](serving-bridge.md).
+the burst drains inside one catch-up window). The 4 h soak then held the
+delivered produce rate (~47 eps avg) with bounded lag and no bridge leak —
+the apply path idled between batches, so the burst ceiling was never
+stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
+(fold rules, idempotency, replay) are in [serving-bridge.md](serving-bridge.md).
+
+## Known issues
+
+- **API process RSS grows without bound under steady load** (175 MB → 1.67 GB
+  over the 4 h soak; the bridge stayed flat) — found by the S11 soak, see the
+  [soak report](perf/soak-s11-2026-07-10.md); tracked as a GitHub issue.
 
 ## Next
 
-1. **Endurance soak** — multi-hour Kafka → Flink → bridge → ClickHouse run with
-   API read traffic; criteria: bounded lag, flat RSS, zero apply-failure growth.
-   This also turns the burst throughput number into a sustained one.
+1. **API RSS leak triage** — reproduce at unit scale, profile the suspects
+   (usage writer queue, metric cache, ClickHouse client sessions).
 2. **At-scale proof on own data** — volume + query latency + correctness
    spot-checks on the project's synthetic generator.
 3. **Delivery topology** — exactly-one webhook delivery across replicas

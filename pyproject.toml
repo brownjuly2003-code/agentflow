@@ -143,6 +143,13 @@ ignore = ["S101", "S311"]
     "S603",
     "S607",
 ]
+# Benchmark harness builds ClickHouse SQL from internal literals only
+# (band cut points, table names from the checked-in DDL list) and opens a
+# fixed http:// endpoint given on the CLI — S608/S310 have no external input.
+"scripts/benchmark_scale_own_data.py" = [
+    "S608",
+    "S310",
+]
 "tests/**/*.py" = [
     "S603",
     "S607",

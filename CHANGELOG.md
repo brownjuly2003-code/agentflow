@@ -33,11 +33,27 @@ All notable changes to AgentFlow are documented in this file.
   (Redis push kept the soak drift-free, which masked it). `journal_scan_fetch`
   now reads the `newest_first` tail window; a regression test pins detection
   on a journal larger than the window.
-- Live stand re-verification (soak-profile RSS sample) is scheduled for the
-  next stand window; the mechanism is pinned at the unit layer in
-  `tests/unit/test_webhook_dispatcher_unit.py`,
+- **Verified live 2026-07-11:** 97 min at the soak read/apply profile against
+  a journal preloaded to 1.37 M rows (2.5× the size that exposed the leak) —
+  RSS slope **+7.5 MB/h, plateaued** (was ~+370 MB/h monotonic); FDs pinned;
+  0 read errors (`docs/perf/rss-reverify-183-2026-07-11.md`). The mechanism
+  is pinned at the unit layer in `tests/unit/test_webhook_dispatcher_unit.py`,
   `tests/unit/test_cache_invalidation.py`, `tests/unit/test_seen_events.py`,
   and `tests/unit/test_pipeline_events_scan.py`.
+
+### Added — S13: at-scale proof on the project's own generator
+
+- **`scripts/benchmark_scale_own_data.py`** scales the kitchen-legend history
+  in-database (ClickHouse `numbers()` INSERT-SELECT, deterministic, the real
+  checked-in raw-vault DDL) and measures load rate, analyst-query latency,
+  and the generator-spec §12 invariants in SQL at volume. Run on the stand at
+  `--days 1460`: **51.2 M rows / 2.87 M orders / 10.66 M marking codes**
+  generated at 845 k rows/s, analyst queries 20–730 ms median, **all 17
+  correctness checks pass** including a full-scan GS1 mod-10 validation of
+  every GTIN (`docs/perf/scale-own-data-2026-07-11.md`). The at-scale claim
+  retired with the external dataset (G2 S2b, 2026-07-05) is thereby restored
+  on own data. CI exercises the harness end-to-end at `--days 2` in the
+  live-ClickHouse job (`tests/integration/test_scale_own_data_smoke.py`).
 
 ### Fixed — a usage-accounting write could turn a served request into a 500
 

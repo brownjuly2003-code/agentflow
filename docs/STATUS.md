@@ -1,8 +1,9 @@
 # Engineering Status
 
-> Updated: **2026-07-10** · release line **`v2.0.0`** · `main` green across all
-> 13 required checks. Numbers below come only from measured, in-repo evidence —
-> see the linked reports for methodology and reproduction commands.
+> Updated: **2026-07-10** (post Q1.4 re-measure) · release line **`v2.0.0`** ·
+> `main` green across all 13 required checks. Numbers below come only from
+> measured, in-repo evidence — see the linked reports for methodology and
+> reproduction commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → Flink → serving bridge → ClickHouse → API with Redis push
@@ -20,31 +21,32 @@ passed ones (endurance, scale, delivery topology).
 | 2-pod control plane on kind | webhook registered on pod A visible on pod B; verify script PASS | [perf/e4-2pod-topology-2026-07-09.md](perf/e4-2pod-topology-2026-07-09.md) |
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
 
-## In progress — bridge write-path throughput
+## Bridge write-path throughput — burst target met
 
-The bridge apply rate is the honest product ceiling and is being raised in
+The bridge apply rate is the honest product ceiling; it has been raised in
 measured steps on the same stand:
 
 | Step | Bridge apply | State |
 |------|-------------:|-------|
 | Baseline (per-event apply) | ~8 eps | measured |
 | Q1.2 — ClickHouse-only sink, no scratch lake | 11.4 eps | measured |
-| Q1.3 — multi-row batch apply | **22.9 eps** | measured — [perf/throughput-realpath-q13-2026-07-09.md](perf/throughput-realpath-q13-2026-07-09.md) |
-| Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | merged (`main`); **not yet re-measured** | next stand window |
+| Q1.3 — multi-row batch apply | 22.9 eps | measured — [perf/throughput-realpath-q13-2026-07-09.md](perf/throughput-realpath-q13-2026-07-09.md) |
+| Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | **87.4 eps** | measured — [perf/throughput-realpath-q14-2026-07-10.md](perf/throughput-realpath-q14-2026-07-10.md) |
 
-Target for this series: **≥ 80 eps** sustained apply on the same stand.
-Semantics of the batched path (fold rules, idempotency, replay) are in
+The series target of **≥ 80 eps** is met on the 400-burst profile (peak lag 0 —
+the burst drains inside one catch-up window). Still open: the *sustained*
+figure over hours (soak), and the ≥ 100 eps stretch bar. Semantics of the
+batched path (fold rules, idempotency, replay) are in
 [serving-bridge.md](serving-bridge.md).
 
 ## Next
 
-1. **Throughput re-measure** after the Q1.4 apply path (new report next to the
-   old ones, never overwritten).
-2. **Endurance soak** — multi-hour Kafka → Flink → bridge → ClickHouse run with
+1. **Endurance soak** — multi-hour Kafka → Flink → bridge → ClickHouse run with
    API read traffic; criteria: bounded lag, flat RSS, zero apply-failure growth.
-3. **At-scale proof on own data** — volume + query latency + correctness
+   This also turns the burst throughput number into a sustained one.
+2. **At-scale proof on own data** — volume + query latency + correctness
    spot-checks on the project's synthetic generator.
-4. **Delivery topology** — exactly-one webhook delivery across replicas
+3. **Delivery topology** — exactly-one webhook delivery across replicas
    (store-level behavior is already unit-proven; the topology-level proof is
    scripted next).
 

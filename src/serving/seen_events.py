@@ -21,6 +21,9 @@ turn every fallback scan into a spurious "new events" signal.
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, MutableSet
+from typing import TypeVar
+
+_S = TypeVar("_S")
 
 
 class BoundedSeenSet(MutableSet[str]):
@@ -43,10 +46,11 @@ class BoundedSeenSet(MutableSet[str]):
         return self._maxlen
 
     @classmethod
-    def _from_iterable(cls, it: Iterable[str]) -> set[str]:
+    def _from_iterable(cls, it: Iterable[_S]) -> set[_S]:
         # Set-algebra operators (&, |, -) build their result through this
         # hook; a plain set is the right result type — the cap belongs to the
-        # long-lived instance, not to derived values.
+        # long-lived instance, not to derived values. Signature stays generic
+        # to match the supertype (mypy override check).
         return set(it)
 
     def add(self, value: str) -> None:

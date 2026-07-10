@@ -10,6 +10,10 @@ inlined as escaped literals — the same convention the entity/metric mixins use
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+import pytest
+
 from src.serving.semantic_layer.query import QueryEngine
 
 _ALL_COLUMNS = {
@@ -93,3 +97,58 @@ def test_missing_journal_returns_empty_without_query() -> None:
 
     assert engine.fetch_pipeline_events() == []
     assert backend.calls == []
+
+
+# --- min_processed_at incremental-scan cursor (issue #183) ---------------------
+
+
+def test_min_processed_at_renders_inclusive_typed_bound() -> None:
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(min_processed_at="2026-07-10T12:34:56.789", limit=500)
+
+    ((sql, _),) = backend.calls
+    # Inclusive, second-floored, typed — the poller's seen-set dedups the
+    # re-fetched cursor second.
+    assert "processed_at >= CAST('2026-07-10 12:34:56' AS TIMESTAMP)" in sql
+    assert sql.endswith("LIMIT 500")
+
+
+def test_min_processed_at_accepts_datetime_and_floors_microseconds() -> None:
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(min_processed_at=datetime(2026, 7, 10, 12, 0, 0, 999999))
+
+    ((sql, _),) = backend.calls
+    assert "processed_at >= CAST('2026-07-10 12:00:00' AS TIMESTAMP)" in sql
+
+
+def test_min_processed_at_rejects_free_text_before_any_query() -> None:
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    with pytest.raises(ValueError):
+        engine.fetch_pipeline_events(min_processed_at="1970-01-01' OR 1=1 --")
+    assert backend.calls == [], "an unparseable cursor must never reach the backend"
+
+
+def test_min_processed_at_rejects_timezone_aware_datetime() -> None:
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    with pytest.raises(ValueError):
+        engine.fetch_pipeline_events(min_processed_at=datetime(2026, 7, 10, 12, 0, tzinfo=UTC))
+    assert backend.calls == []
+
+
+def test_min_processed_at_ignored_when_journal_has_no_time_column() -> None:
+    backend = FakeExternalBackend(columns={"event_id", "topic"})
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(min_processed_at="2026-07-10 12:00:00", limit=50)
+
+    ((sql, _),) = backend.calls
+    assert "CAST" not in sql, "no time column to bound on — the scan stays limit-bounded"
+    assert sql.endswith("LIMIT 50")

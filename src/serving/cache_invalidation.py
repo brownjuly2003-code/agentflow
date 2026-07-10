@@ -27,6 +27,7 @@ from typing import Any
 import structlog
 
 from src.serving.cache import QueryCache
+from src.serving.seen_events import BoundedSeenSet
 
 logger = structlog.get_logger()
 
@@ -35,6 +36,36 @@ METRICS_INVALIDATE_CHANNEL = "agentflow:cache:metrics_invalidate"
 
 # How often the journal fallback re-scans when no push has landed.
 DEFAULT_SCAN_INTERVAL_SECONDS = 2.0
+
+# One scan window: enough to always contain the journal tail between two
+# 2-second passes with an order of magnitude to spare (87 eps measured × 2 s
+# ≈ 175 rows), small enough to stay O(1) against a journal of any size.
+DEFAULT_SCAN_WINDOW_ROWS = 200
+
+# Dedup memory cap. Eviction is harmless here: a re-detected old event only
+# causes one redundant invalidate, and the metric cache repopulates on the
+# next read. What matters is that push feeds (one entry per applied event)
+# can no longer grow the set with the journal (issue #183).
+DEFAULT_SEEN_CACHE_SIZE = 10_000
+
+
+def journal_scan_fetch(
+    query_engine: Any, limit: int = DEFAULT_SCAN_WINDOW_ROWS
+) -> Callable[[], list[dict]]:
+    """Build the journal-scan callable the controller polls.
+
+    ``newest_first`` is essential, not cosmetic: the fallback detects fresh
+    events by scanning a bounded window, and only the *tail* window is
+    guaranteed to contain them. An ascending scan with a limit reads the
+    oldest rows — a window that stops changing once the journal outgrows it,
+    which silently killed the fallback on any long-running deployment
+    (found while fixing issue #183).
+    """
+
+    def _fetch() -> list[dict]:
+        return list(query_engine.fetch_pipeline_events(limit=limit, newest_first=True) or [])
+
+    return _fetch
 
 
 def publish_metrics_invalidate(
@@ -97,6 +128,7 @@ class MetricCacheController:
         scan_interval_seconds: float = DEFAULT_SCAN_INTERVAL_SECONDS,
         fetch_pipeline_events: Callable[[], Sequence[dict]] | None = None,
         redis_client: Any | None = None,
+        seen_cache_size: int = DEFAULT_SEEN_CACHE_SIZE,
     ) -> None:
         self._cache = cache
         self._redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -105,14 +137,16 @@ class MetricCacheController:
         # Prefer an injected client (tests, shared pool). Fall back to the
         # cache's own Redis handle, then to none (push listener no-ops).
         self._redis = redis_client if redis_client is not None else getattr(cache, "_redis", None)
-        self._seen_event_ids: set[str] = set()
+        # Bounded (issue #183): the push path adds every applied event's id,
+        # which is one entry per pipeline event forever on an unbounded set.
+        self._seen_event_ids: BoundedSeenSet = BoundedSeenSet(maxlen=seen_cache_size)
         self._push_task: asyncio.Task | None = None
         self._scan_task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._invalidate_lock = asyncio.Lock()
 
     @property
-    def seen_event_ids(self) -> set[str]:
+    def seen_event_ids(self) -> BoundedSeenSet:
         return self._seen_event_ids
 
     async def invalidate(self) -> None:

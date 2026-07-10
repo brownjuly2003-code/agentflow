@@ -4,6 +4,7 @@ import os
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
@@ -19,6 +20,31 @@ from .entity_queries import EntityQueryMixin
 from .metric_queries import MetricQueryMixin
 from .nl_queries import NLQueryMixin
 from .sql_builder import SQLBuilderMixin
+
+
+def _coerce_journal_timestamp(value: datetime | str) -> datetime:
+    """Parse a journal-scan cursor into a naive, second-precision datetime.
+
+    Accepts what the journal itself hands back: ``datetime`` objects (DuckDB
+    rows) or ``YYYY-MM-DD HH:MM:SS[.ffffff]`` strings, ``T``-separated or not
+    (ClickHouse JSON transport). Anything else raises ``ValueError`` — the
+    cursor is interpolated into SQL, so it must never pass through as free
+    text. Sub-second precision is floored: journal timestamps are
+    second-granular on ClickHouse, and an inclusive ``>=`` re-fetch of the
+    cursor second is what the callers' seen-sets are for.
+
+    Timezone-aware input is rejected rather than converted: journal
+    timestamps are stored naive (N2 — UTC on ClickHouse, local on DuckDB),
+    and a cursor must round-trip within the one store it came from, not go
+    through timezone arithmetic here.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            raise ValueError("journal-scan cursor must be naive (store-local) time")
+        return value.replace(microsecond=0)
+    text = str(value).strip().replace("T", " ")
+    base = text.split(".", 1)[0]
+    return datetime.strptime(base, "%Y-%m-%d %H:%M:%S")
 
 
 class QueryEngine(
@@ -85,6 +111,7 @@ class QueryEngine(
         limit: int | None = None,
         validated_only: bool = False,
         newest_first: bool = False,
+        min_processed_at: datetime | str | None = None,
     ) -> list[dict]:
         """Read the ``pipeline_events`` journal through the serving backend.
 
@@ -112,6 +139,14 @@ class QueryEngine(
         stage clock, ops-surfaces-spec.md §1.2/§3.2) — orthogonal to
         ``event_type``/``validated_only``, usable without an ``entity_id``
         for a bulk scan across many entities in one query.
+
+        ``min_processed_at`` is the incremental-scan cursor (issue #183): an
+        inclusive lower bound on the journal time column, accepting the
+        ``datetime``/string forms the journal itself returns (strictly parsed
+        — see ``_coerce_journal_timestamp``). Pair it with ``limit`` so a
+        poller re-reads only the frontier of a large journal instead of
+        materializing all of it on every pass. Ignored when the journal has
+        no time column (the scan then stays bounded by ``limit`` alone).
 
         ``tenant_id=None`` is an explicit invariant, not incidental behaviour
         (n4, G2 audit): it means "no tenant filter" — an unscoped, cross-
@@ -215,6 +250,13 @@ class QueryEngine(
             if "entity_id" not in columns:
                 return []
             where_clauses.append(f"entity_id = {render(entity_id)}")
+        if min_processed_at is not None and time_column is not None:
+            cursor = _coerce_journal_timestamp(min_processed_at)
+            rendered = render(cursor.strftime("%Y-%m-%d %H:%M:%S"))
+            # CAST keeps the comparison typed on both engines (DuckDB binds a
+            # VARCHAR param; the ClickHouse transpile maps TIMESTAMP to
+            # DateTime).
+            where_clauses.append(f"{time_column} >= CAST({rendered} AS TIMESTAMP)")
 
         # column names come from the schema allowlist above
         sql = f"SELECT {', '.join(select_columns)} FROM pipeline_events"  # nosec B608

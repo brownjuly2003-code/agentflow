@@ -4,6 +4,41 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — API journal scans are bounded; steady-load RSS no longer grows with the journal (issue #183)
+
+- **The webhook dispatcher's 2-second poll re-materialized the entire
+  `pipeline_events` journal on every pass** (`fetch_pipeline_events` with no
+  limit). The S11 endurance soak grew the journal to ~683 k rows and the API
+  process to **1.67 GB RSS in 4 h** while the bridge on the same host stayed
+  flat. Measured at unit scale: one scan allocated 35.5 → 283.6 MB as the
+  journal grew 50 k → 400 k rows. The scan is now incremental and bounded — at
+  most `scan_batch_size` (1000) rows at/after a `processed_at` cursor
+  (`min_processed_at`, new `fetch_pipeline_events` parameter; strictly parsed,
+  inclusive, second-floored). The cursor freezes at the first event whose
+  durable enqueue failed, preserving the retry-forever delivery semantics of
+  the full scan, and an all-seen full batch still advances it, so a wide seen
+  frontier cannot pin the window. Post-fix the same measurement is flat
+  ≤ 0.8 MB per scan. Startup seeding (`mark_existing_events_seen`) is
+  O(batch), not O(journal).
+- **The scan/push dedup sets kept one entry per event forever** — both
+  `WebhookDispatcher.seen_event_ids` and `MetricCacheController`'s seen ids
+  (which the Redis push feed grows with every applied batch). Both are now
+  `BoundedSeenSet`s (`src/serving/seen_events.py`) — capped, FIFO-with-refresh
+  eviction; safe because webhook enqueue is idempotent on its primary key and
+  a redundant cache invalidate merely repopulates on the next read.
+- **Found while fixing: the metric-cache journal-scan fallback was dead on
+  grown journals.** The lifespan wired it as an ascending limited scan — the
+  *oldest* 200 rows, a window that stops changing once the journal outgrows
+  it — so scan-driven invalidation silently stopped detecting new events
+  (Redis push kept the soak drift-free, which masked it). `journal_scan_fetch`
+  now reads the `newest_first` tail window; a regression test pins detection
+  on a journal larger than the window.
+- Live stand re-verification (soak-profile RSS sample) is scheduled for the
+  next stand window; the mechanism is pinned at the unit layer in
+  `tests/unit/test_webhook_dispatcher_unit.py`,
+  `tests/unit/test_cache_invalidation.py`, `tests/unit/test_seen_events.py`,
+  and `tests/unit/test_pipeline_events_scan.py`.
+
 ### Fixed — a usage-accounting write could turn a served request into a 500
 
 - **The usage database is now opened once per process.** Every authenticated

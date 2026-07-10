@@ -192,6 +192,11 @@ now bounded:
   outgrows it, which silently disabled scan-driven invalidation on grown
   journals (push kept the soak honest). `journal_scan_fetch` reads the tail
   window instead.
+- **SSE stream** (`/v1/stream/events`) — the per-connection dedup cache is a
+  `BoundedSeenSet` too (was a bare set growing one entry per distinct event
+  for the connection's lifetime). Eviction cannot re-emit: the scan window is
+  the newest `limit` (10) rows, so an id leaves the window thousands of
+  distinct events before it leaves the cache.
 
 Unit-scale measurement (DuckDB backend, same mechanism): one dispatcher scan
 allocated 35.5 → 283.6 MB as the journal grew 50 k → 400 k rows before the

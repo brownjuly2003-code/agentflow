@@ -4,6 +4,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — SSE per-connection dedup cache is bounded (issue #183 follow-up)
+
+- **`/v1/stream/events` kept a bare per-connection seen-set** that grew one
+  entry per distinct event for as long as the SSE connection stayed open —
+  the same disease as #183, scoped to a connection (hours of sustained
+  traffic ⇒ hundreds of MB per open stream). Now a `BoundedSeenSet`
+  (`SEEN_CACHE_SIZE` = 10 000). Eviction cannot re-emit an event: the scan
+  window is the newest 10 rows, so an id leaves the window after 10 newer
+  events but leaves the cache only after 10 000 newer distinct ids. Unit
+  tests pin the bounded cache and the eviction-safety behavior.
+
 ### Fixed — API journal scans are bounded; steady-load RSS no longer grows with the journal (issue #183)
 
 - **The webhook dispatcher's 2-second poll re-materialized the entire

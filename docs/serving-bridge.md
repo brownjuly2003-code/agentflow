@@ -144,7 +144,10 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
   ([`perf/throughput-realpath.md`](perf/throughput-realpath.md)) → 11.4
   (Q1.2) → 22.9 ([`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md)) → 87.4
   ([`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md)).
-  The *sustained* figure (hours, not a burst) is still the soak run's to prove.
+  Endurance: a 4 h soak at ~47 eps delivered held bounded lag with flat
+  RSS/FDs, survived a live broker/Redis fault with an exactly-once batch
+  replay, and ended with zero cache drift —
+  [`perf/soak-s11-2026-07-10.md`](perf/soak-s11-2026-07-10.md).
 
 ## Cache invalidation (S7)
 

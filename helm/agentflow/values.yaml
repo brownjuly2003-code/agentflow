@@ -133,6 +133,25 @@ serving:
     user: default
     existingSecret: ""
     passwordKey: clickhouse-password
+    # Provisioning is a separate identity from serving (audit P0-2). The API
+    # only reads: give `user` SELECT and nothing else, and let the pre-install
+    # migration Job connect as an account that holds CREATE/ALTER. Both fall
+    # back to the serving credentials when unset, which is the single-account
+    # setup the demo uses.
+    migrationUser: ""
+    migrationPasswordKey: ""
+
+# Schema provisioning for an external serving store. The API used to create its
+# own tables on boot, so the serving identity needed CREATE/ALTER and several
+# booting replicas raced on the same DDL (audit P0-2). It is a pre-install /
+# pre-upgrade Job now: a failed migration blocks the release instead of letting
+# pods come up against a store they would have silently created. Rendered only
+# on serving.backend=clickhouse — the embedded DuckDB profile has no external
+# store to provision, each pod creates its own in-process.
+provision:
+  enabled: true
+  backoffLimit: 3
+  resources: {}
 
 # Control-plane state (ADR 0009 / ADR 0010): webhook queue+log, registrations,
 # alert rules and history, outbox, dead-letter and usage accounting.

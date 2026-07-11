@@ -90,9 +90,38 @@ def test_engine_health_read_connection_and_idempotent_close() -> None:
     assert engine._closed is True
 
 
-def test_engine_initializes_demo_data_on_non_duckdb_backend(
+def test_engine_never_provisions_the_external_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The constructor used to run DDL and seed demo rows on whatever external
+    # store was configured, on every boot and regardless of the demo flags: the
+    # serving identity therefore needed CREATE/ALTER/INSERT, booting replicas
+    # raced each other on the seed, and a production ClickHouse got demo orders
+    # because it happened to be empty (audit P0-2). Even with the embedded demo
+    # seed switched on, the external backend must stay untouched.
+    import src.serving.semantic_layer.query.engine as engine_module
+
+    promoted = Mock()
+    promoted.name = "clickhouse"
+    monkeypatch.setattr(engine_module, "create_backend", lambda duckdb_backend: promoted)
+
+    engine = engine_module.QueryEngine(
+        catalog=DataCatalog(), db_path=":memory:", seed_demo_data=True
+    )
+    try:
+        promoted.ensure_schema.assert_not_called()
+        promoted.seed_demo_data.assert_not_called()
+        promoted.initialize_demo_data.assert_not_called()
+        assert engine._backend_name == "clickhouse"
+    finally:
+        engine.close()
+
+
+def test_provision_external_demo_store_is_the_explicit_way_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The demo profile still needs a provisioned external store — it just has to
+    # ask for it now.
     import src.serving.semantic_layer.query.engine as engine_module
 
     promoted = Mock()
@@ -101,10 +130,8 @@ def test_engine_initializes_demo_data_on_non_duckdb_backend(
 
     engine = engine_module.QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     try:
-        # A backend other than the DuckDB one must get its own demo-data
-        # initialization call.
+        engine.provision_external_demo_store()
         promoted.initialize_demo_data.assert_called_once_with()
-        assert engine._backend_name == "clickhouse"
     finally:
         engine.close()
 

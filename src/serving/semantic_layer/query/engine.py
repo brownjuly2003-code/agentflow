@@ -61,6 +61,8 @@ class QueryEngine(
         db_path: str | None = None,
         tenants_config_path: str | Path | None = None,
         db_pool: DuckDBPool | None = None,
+        *,
+        seed_demo_data: bool | None = None,
     ):
         self.catalog = catalog
         self._db_path: str = db_path or os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
@@ -80,11 +82,42 @@ class QueryEngine(
             db_pool=self._db_pool,
             connection=self._conn,
         )
-        self._duckdb_backend.initialize_demo_data()
+        # The embedded store belongs to this process — no other provisioner,
+        # nothing to migrate from — so its schema is laid down here and the
+        # control-plane/lake reads have tables to hit.
+        self._duckdb_backend.ensure_schema()
+        if seed_demo_data is None:
+            # Off unless asked. Demo rows used to land in the store on every
+            # boot, before anything read a flag, so a fresh store got them for
+            # no better reason than being empty (audit P0-2).
+            seed_demo_data = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+        if seed_demo_data:
+            self._duckdb_backend.seed_demo_data()
+
+        # The external serving backend is deliberately not provisioned here.
+        # This constructor used to run its DDL and seed it with demo rows on
+        # every boot, whatever the demo flags said: that forced the serving
+        # identity to hold CREATE/ALTER/INSERT, let several booting replicas
+        # race on the same seed, and dropped demo orders into whichever
+        # production store was configured, just because it was empty (audit
+        # P0-2). External stores are provisioned out of band — `python -m
+        # src.serving.provision`, or the bridge writer — and /health/ready says
+        # so loudly when that has not happened.
         self._backend = create_backend(duckdb_backend=self._duckdb_backend)
         self._backend_name = self._backend.name
-        if self._backend_name != self._duckdb_backend.name:
-            self._backend.initialize_demo_data()
+
+    def provision_external_demo_store(self) -> None:
+        """Provision and seed the *external* serving backend — demo profile only.
+
+        The rule is that the API issues no DDL and no demo DML against a store
+        it does not own (audit P0-2). This is the one documented exception, and
+        the caller must have decided that an explicit demo profile is active —
+        nothing here checks. A no-op on the embedded profile, whose schema the
+        constructor already laid down.
+        """
+        if self._backend_name == self._duckdb_backend.name:
+            return
+        self._backend.initialize_demo_data()
 
     @contextmanager
     def _read_connection(self) -> Iterator[duckdb.DuckDBPyConnection]:

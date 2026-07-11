@@ -1,0 +1,74 @@
+{{- if and .Values.provision.enabled (eq .Values.serving.backend "clickhouse") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "agentflow.fullname" . }}-provision
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+  annotations:
+    # The API no longer creates the serving schema on boot (audit P0-2): a
+    # serving identity should not have to hold CREATE/ALTER, and several booting
+    # replicas would otherwise race on the same DDL. Provisioning runs here,
+    # before the pods that need the tables, and a failed migration fails the
+    # release — instead of letting the API come up against a store it would have
+    # quietly created and seeded for itself.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.provision.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentflow.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "agentflow.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: provision
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - python
+            - -m
+            - src.serving.provision
+            - --schema
+          env:
+            - name: SERVING_BACKEND
+              value: {{ .Values.serving.backend | quote }}
+            - name: CLICKHOUSE_HOST
+              value: {{ required "serving.clickhouse.host is required when serving.backend=clickhouse" .Values.serving.clickhouse.host | quote }}
+            - name: CLICKHOUSE_PORT
+              value: {{ .Values.serving.clickhouse.port | quote }}
+            - name: CLICKHOUSE_DATABASE
+              value: {{ .Values.serving.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.serving.clickhouse.migrationUser | default .Values.serving.clickhouse.user | quote }}
+            {{- if .Values.serving.clickhouse.existingSecret }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.serving.clickhouse.existingSecret | quote }}
+                  key: {{ .Values.serving.clickhouse.migrationPasswordKey | default .Values.serving.clickhouse.passwordKey | quote }}
+            {{- end }}
+            # The Job provisions the external store and nothing else. The
+            # embedded DuckDB is per-pod and created in-process; there is no
+            # shared copy of it for a Job to reach, so :memory: keeps this
+            # container from writing a file nobody will ever open.
+            - name: DUCKDB_PATH
+              value: ":memory:"
+          resources:
+            {{- toYaml .Values.provision.resources | nindent 12 }}
+{{- end }}

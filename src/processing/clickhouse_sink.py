@@ -46,10 +46,16 @@ class ClickHouseSink:
 
     def __init__(self, backend: ClickHouseBackend) -> None:
         self._backend = backend
-        # Idempotent: creates the schema and seeds the canonical demo rows only
-        # when the store is empty, so the documented demo entities
-        # (ORD-20260404-1001, ...) exist regardless of bring-up order.
-        backend.initialize_demo_data()
+        # The writer owns the schema: it holds the write grants, and it is the
+        # one process that cannot function without the tables. Idempotent DDL,
+        # so bring-up order does not matter.
+        #
+        # It no longer seeds demo rows. Seeding on "the store looks empty" put
+        # demo orders into whichever ClickHouse a bridge first connected to,
+        # production included (audit P0-2). Demo rows now come from an explicit
+        # `python -m src.serving.provision --schema --seed`, which the demo
+        # bring-up runs and a real deployment does not.
+        backend.ensure_schema()
 
     @classmethod
     def from_serving_config(cls, config_path: str | None = None) -> ClickHouseSink | None:

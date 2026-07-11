@@ -4,6 +4,40 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed — provisioning is a writer privilege, not a boot side effect (audit P0-2)
+
+**Breaking for operators of the ClickHouse profile: the API no longer creates
+its own tables.** Run `python -m src.serving.provision --schema` once before the
+first boot (Compose and Helm now do it for you — see below).
+
+- **`QueryEngine.__init__` ran DDL and seeded demo rows on every boot**, against
+  the embedded store *and* whatever external backend was configured — before
+  anything read `AGENTFLOW_DEMO_MODE`, which is why the flag appeared to do
+  nothing. Consequences: the serving identity needed CREATE/ALTER/INSERT on the
+  production store, several booting replicas could each see an empty table and
+  seed it, and a fresh production ClickHouse got demo orders for no better
+  reason than being empty.
+- The constructor now only lays down the *embedded* schema (that store is
+  created in-process and has no other provisioner). It sends **nothing** to an
+  external backend — pinned by a test that fails if a single statement reaches
+  ClickHouse on boot. An API image can run against a read-only ClickHouse user.
+- Seeding is opt-in via `AGENTFLOW_SEED_ON_BOOT` (default off), independent of
+  `AGENTFLOW_DEMO_MODE`, which keeps its own meaning (public demo key +
+  read-only guard).
+- **New: `python -m src.serving.provision [--schema] [--seed]`** — idempotent,
+  re-runnable, and provisions every store the API reads (on the ClickHouse
+  profile the embedded DuckDB still holds control-plane state, so both get their
+  schema). Wired into `make demo`, a `serving-init` one-shot service in
+  `docker-compose.prod.yml`, and a Helm `pre-install`/`pre-upgrade` migration
+  Job. A failed migration now fails the release instead of letting pods come up
+  against a store they would have silently created.
+- Helm gained `serving.clickhouse.migrationUser` / `migrationPasswordKey` so the
+  DDL identity can be separate from the serving one, and `provision.enabled` /
+  `provision.backoffLimit`.
+- **The bridge writer no longer seeds either.** `ClickHouseSink` still ensures
+  the schema — it holds the write grants and cannot run without the tables — but
+  it does not decide an empty store deserves demo rows.
+
 ### Security — `/v1/search` enforced the entity allowlist on nothing (audit P0-4)
 
 - **A scoped API key could read every entity type through `/v1/search`.**

@@ -152,11 +152,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         catalog=app.state.catalog,
         db_path=os.getenv("DUCKDB_PATH", ":memory:"),
         db_pool=app.state.db_pool,
+        # Seeding is an opt-in, and off by default. It used to run inside the
+        # constructor on every boot — before this flag was ever read — so a
+        # production store got demo orders for no better reason than being empty
+        # (audit P0-2).
+        seed_demo_data=app.state.demo_seed_on_boot,
     )
+    if app.state.demo_seed_on_boot:
+        # The one path on which the API writes to a store it does not own, and
+        # it takes an explicit opt-in. Otherwise the external backend is
+        # read-only from here: its schema comes from
+        # `python -m src.serving.provision` (or the bridge writer), and readiness
+        # fails loudly when that never happened instead of quietly creating it.
+        app.state.query_engine.provision_external_demo_store()
     if app.state.demo_mode and app.state.demo_seed_on_boot:
-        app.state.query_engine._duckdb_backend.initialize_demo_data()
-        if app.state.query_engine._backend_name != app.state.query_engine._duckdb_backend.name:
-            app.state.query_engine._backend.initialize_demo_data()
         # Three-node topology (ADR 0012 §7): lay down the per-branch journal
         # baseline (center = all branches, edge = its own, standalone = none)
         # so a center-first visitor sees a coherent cross-branch picture.

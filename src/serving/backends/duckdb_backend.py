@@ -120,7 +120,10 @@ class DuckDBBackend(ServingBackend):
         except duckdb.Error as exc:
             raise BackendExecutionError(str(exc)) from exc
 
-    def initialize_demo_data(self) -> None:
+    def ensure_schema(self) -> None:
+        # The embedded store is this process's own: :memory: by default, with no
+        # other provisioner and nothing to migrate from. Creating its tables is
+        # not the external-store DDL that audit P0-2 forbids the API to issue.
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS orders_v2 (
                 order_id VARCHAR PRIMARY KEY,
@@ -189,6 +192,7 @@ class DuckDBBackend(ServingBackend):
         # the journal; NULL for the standalone demo's in-process events.
         self._conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS branch VARCHAR")
 
+    def seed_demo_data(self) -> None:
         row = self._conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
         count = row[0] if row else 0
         if count > 0:

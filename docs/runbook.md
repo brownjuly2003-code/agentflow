@@ -15,11 +15,28 @@
 
 ## Local Pipeline Operations
 
-### Start the local demo (Docker Redis only)
+### Start the local demo (Docker Redis + ClickHouse)
 
 ```bash
-make demo          # Seeds 500 events, starts Redis via Docker Compose, starts API
+make demo          # Starts Redis + ClickHouse, provisions the serving store,
+                   # seeds 500 events through the pipeline, starts the API
 ```
+
+The API does not create or seed a serving store on boot — a serving identity
+should not hold CREATE/ALTER/INSERT, and an empty production store should not be
+handed demo rows for being empty (audit P0-2). `make demo` therefore runs the
+provisioning step explicitly:
+
+```bash
+python -m src.serving.provision --schema --seed   # demo bring-up
+python -m src.serving.provision --schema          # what a real deployment runs
+```
+
+Both are idempotent and re-runnable, and they provision every store the API
+reads: on the ClickHouse profile that is ClickHouse *and* the embedded DuckDB,
+which still carries the control-plane state (webhook queue, dead-letter inbox).
+Compose runs it as the `serving-init` one-shot service; Helm runs it as a
+`pre-install`/`pre-upgrade` Job.
 
 ### Run continuous local pipeline
 

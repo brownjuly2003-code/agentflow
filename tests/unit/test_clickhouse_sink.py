@@ -22,10 +22,18 @@ class FakeBackend:
         self.inserts: list[tuple[str, list[dict]]] = []
         self.executed: list[str] = []
         self._execute_results = list(execute_results or [])
-        self.initialized = False
+        self.schema_ensured = False
+        self.seeded = False
+
+    def ensure_schema(self) -> None:
+        self.schema_ensured = True
+
+    def seed_demo_data(self) -> None:
+        self.seeded = True
 
     def initialize_demo_data(self) -> None:
-        self.initialized = True
+        self.ensure_schema()
+        self.seed_demo_data()
 
     def insert_rows(self, table_name: str, rows: list[dict]) -> None:
         self.inserts.append((table_name, rows))
@@ -43,13 +51,17 @@ def _sink(execute_results: list[list[dict]] | None = None) -> tuple[ClickHouseSi
     return ClickHouseSink(backend), backend  # type: ignore[arg-type]
 
 
-def test_sink_bootstraps_demo_data_on_construction() -> None:
+def test_sink_provisions_the_schema_but_never_seeds_demo_rows() -> None:
+    # The writer owns the schema: it holds the write grants and cannot function
+    # without the tables, and the DDL is idempotent, so bring-up order does not
+    # matter. It used to seed the canonical demo rows as well, whenever the
+    # store looked empty — which put demo orders into whichever ClickHouse a
+    # bridge first connected to, a fresh production one included (audit P0-2).
+    # Demo rows now come from `python -m src.serving.provision --schema --seed`.
     sink, backend = _sink()
     del sink
-    assert backend.initialized, (
-        "the sink must seed the canonical demo rows so the documented demo "
-        "entities exist regardless of bring-up order"
-    )
+    assert backend.schema_ensured
+    assert not backend.seeded
 
 
 def test_from_serving_config_returns_none_on_duckdb(tmp_path) -> None:

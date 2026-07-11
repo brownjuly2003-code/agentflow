@@ -442,9 +442,7 @@ class ClickHouseBackend(ServingBackend):
         )
         self._request(statement, expect_json=False, translate=False)
 
-    def initialize_demo_data(self) -> None:
-        self.ensure_schema()
-
+    def seed_demo_data(self) -> None:
         # database name comes from trusted backend config
         existing_rows = self.scalar(f"SELECT COUNT(*) AS value FROM {self._database}.orders_v2")  # nosec B608
         if existing_rows is not None and int(existing_rows) > 0:

@@ -49,6 +49,11 @@ demo:
 	docker compose up -d redis clickhouse
 	python scripts/wait_for_clickhouse.py
 	@echo ""
+	@echo "Step 0.5: Provisioning the serving store (schema + demo rows)..."
+	@echo "  The API does not create or seed a store on boot any more (audit P0-2)."
+	@echo "  A real deployment runs this same command WITHOUT --seed, from a job."
+	DUCKDB_PATH=agentflow_demo.duckdb python -m src.serving.provision --schema --seed
+	@echo ""
 	@echo "Step 1: Seeding 500 events through the full pipeline..."
 	python -m src.processing.local_pipeline --burst 500
 	@echo ""

@@ -29,6 +29,7 @@
     "podDisruptionBudget",
     "networkPolicy",
     "serving",
+    "provision",
     "controlPlane"
   ],
   "allOf": [
@@ -434,8 +435,31 @@
             "passwordKey": {
               "type": "string",
               "minLength": 1
+            },
+            "migrationUser": {
+              "type": "string"
+            },
+            "migrationPasswordKey": {
+              "type": "string"
             }
           }
+        }
+      }
+    },
+    "provision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "backoffLimit"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resources": {
+          "type": "object"
         }
       }
     },

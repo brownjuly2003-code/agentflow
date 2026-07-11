@@ -101,7 +101,6 @@ def test_execute_nl_query_rejects_unsafe_translated_sql(monkeypatch: pytest.Monk
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     backend = Mock()
     backend.name = "duckdb"
     engine._backend = backend
@@ -122,7 +121,6 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     backend = Mock()
     backend.name = "duckdb"
     backend.execute.return_value = [{"order_id": "ORD-1"}]

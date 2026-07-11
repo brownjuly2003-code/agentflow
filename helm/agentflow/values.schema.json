@@ -585,7 +585,6 @@
                   "id",
                   "display_name",
                   "kafka_topic_prefix",
-                  "duckdb_schema",
                   "max_events_per_day",
                   "max_api_keys"
                 ],
@@ -604,7 +603,8 @@
                   },
                   "duckdb_schema": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "description": "Ignored. Tenants are isolated by the tenant_id column in each serving table's write key (ADR-004), not by a schema. Still accepted so values written for the old model keep validating; the runtime does not read it."
                   },
                   "max_events_per_day": {
                     "type": "integer",

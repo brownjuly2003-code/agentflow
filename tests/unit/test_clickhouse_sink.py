@@ -309,9 +309,7 @@ def test_refresh_user_aggregates_one_query_for_the_batch() -> None:
         ]
     )
     # USR-3 has only cancelled orders: the grouped SELECT returns no row for it.
-    sink.refresh_user_aggregates(
-        {("default", "USR-1"), ("default", "USR-2"), ("default", "USR-3")}
-    )
+    sink.refresh_user_aggregates({("default", "USR-1"), ("default", "USR-2"), ("default", "USR-3")})
 
     assert len(backend.executed) == 1, "one grouped SELECT for the whole user set"
     assert "(tenant_id, user_id) IN" in backend.executed[0]

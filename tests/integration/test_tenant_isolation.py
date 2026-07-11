@@ -48,14 +48,12 @@ def _write_tenants(path: Path) -> None:
             "  - id: acme\n"
             '    display_name: "Acme Corp"\n'
             '    kafka_topic_prefix: "acme"\n'
-            '    duckdb_schema: "acme"\n'
             "    max_events_per_day: 1000000\n"
             "    max_api_keys: 10\n"
             "    allowed_entity_types: null\n"
             "  - id: demo\n"
             '    display_name: "Demo Tenant"\n'
             '    kafka_topic_prefix: "demo"\n'
-            '    duckdb_schema: "demo"\n'
             "    max_events_per_day: 10000\n"
             "    max_api_keys: 2\n"
             "    allowed_entity_types:\n"

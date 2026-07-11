@@ -64,8 +64,16 @@ predicate on every read.**
 - Aggregates group by it. `refresh_user_aggregates` takes `(tenant, user)` pairs
   and groups by `tenant_id, user_id`; a global `GROUP BY user_id` would have
   summed two tenants' orders into one total and written it back to both.
-- Schema-per-tenant is **gone**, not kept as a second layer. `duckdb_schema` in
-  `config/tenants.yaml` is no longer an isolation mechanism.
+- Schema-per-tenant is **gone**, not kept as a second layer. `duckdb_schema` is
+  removed from `TenantDefinition`, from `config/tenants.yaml` and from the chart's
+  shipped values, and `TenantRouter.get_duckdb_schema()` is deleted: a field that
+  names an isolation boundary, that nothing reads and that nothing provisions, is
+  a trap for whoever configures the next tenant. Two compatibility seams remain,
+  deliberately: pydantic ignores unknown keys, so an existing `config/tenants.yaml`
+  still loads; and the Helm values schema still *accepts* `duckdb_schema` (tenant
+  items are `additionalProperties: false`, so dropping it outright would reject
+  values written for the old model) with a description saying it is ignored.
+  Accepted and inert, not required and pretending.
 
 `tenant_id = NULL` means an unscoped read — but not an unconditional one. The
 fail-closed guard survives the model change: if the table holds rows of any

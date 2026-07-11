@@ -36,7 +36,6 @@ class _Host(
         self.catalog = DataCatalog()
         self._tenant_router = Mock()
         self._tenant_router.has_config.return_value = False
-        self._tenant_router.get_duckdb_schema.return_value = None
         self._backend = Mock()
         self._backend.name = backend_name
         self._backend_name = backend_name

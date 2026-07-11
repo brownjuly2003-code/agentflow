@@ -45,13 +45,20 @@ Evidence: `src/serving/api/auth/manager.py`, `src/serving/api/auth/middleware.py
 
 ## 3. Tenant Isolation
 
-Tenant isolation is not only a naming convention in this codebase. The serving layer includes explicit tenant routing through `TenantRouter`, which maps tenant IDs to Kafka topic prefixes and DuckDB schema names. The SQL builder qualifies known tables with the tenant schema and fails closed when tenant-scoped tables exist but no tenant context is available.
+**This section previously described a mechanism that did not work.** It said the boundary was a schema qualification — `TenantRouter` mapping a tenant to a DuckDB schema name, and the SQL builder qualifying tables into `"acme"."orders_v2"`. Nothing in `src/` ever issued `CREATE SCHEMA`, so that relation did not exist at runtime and every authenticated entity read failed; on ClickHouse the same qualification named a database nobody creates. The suite was green because the shipped keys named a tenant absent from `config/tenants.yaml`, so the qualification resolved to nothing and silently did not apply. A boundary no test can tell apart from its own absence is not a boundary. See ADR-004.
 
-This is stronger than soft application filtering because the query builder rewrites table references before execution. Integration tests show that the same logical order ID can resolve to different rows for different tenants and that cross-tenant lookups return `404` rather than leaking another tenant's data.
+The boundary is now the `tenant_id` **column**, on both stores, and it is part of each serving table's **write key** — `ORDER BY (tenant_id, <pk>)` on ClickHouse, `PRIMARY KEY (tenant_id, <pk>)` on DuckDB. That distinction is load-bearing: with a single-column key, two tenants' rows sharing an `order_id` are two versions of *one* ReplacingMergeTree row, and the later insert destroys the earlier. No read-side filter can undo that, so a filter alone was never sufficient.
 
-The current evidence supports the claim "tenant-scoped DuckDB schemas with fail-closed query resolution." It does not support broader claims such as end-to-end isolation across every external dependency.
+Reads pass through one chokepoint. `SQLBuilderMixin._qualify_table` returns a tenant-filtered sub-select rather than a name, `_scope_sql` performs the same substitution inside metric templates and NL-generated SQL via the sqlglot AST, the search index carries the tenant on each document and filters before scoring, and the journal applies its own predicate. An unscoped read against a store that holds more than one tenant's rows is refused (`503`), not answered.
 
-Evidence: `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/query/engine.py`, `tests/integration/test_tenant_isolation.py`
+What the evidence supports today:
+
+- **DuckDB** — proven. Two tenants with identical `order_id` resolve to different rows; cross-tenant lookups return `404`; aggregates sum only the caller's rows; an unscoped read fails closed. Property tests assert the invariant over generated tenant and entity ids, not just the two-tenant example.
+- **ClickHouse** — the same model is implemented and provisioned (`assert_tenant_key()` refuses to serve a store still on the old sorting key; `provision --migrate` rebuilds one). The adversarial two-tenant suite for it is `tests/integration/test_clickhouse_tenant_isolation_live.py`, which requires a live server and runs on the CI integration job. **Until that suite is green on a real server, treat multi-tenant ClickHouse as unproven and do not claim it.**
+
+It does not support broader claims such as end-to-end isolation across every external dependency.
+
+Evidence: `docs/decisions/004-tenant-id-column-over-schema-per-tenant.md`, `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/backends/clickhouse_backend.py`, `tests/integration/test_tenant_isolation.py`, `tests/property/test_tenant_isolation_properties.py`, `tests/integration/test_clickhouse_tenant_isolation_live.py`
 
 ## 4. Input Validation and Contract Safety
 

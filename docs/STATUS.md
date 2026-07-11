@@ -44,6 +44,26 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
 
 ## Known issues
 
+- **Multi-tenant ClickHouse — implemented, not yet proven live.** Tenant
+  isolation used to be a schema qualification that nothing provisioned: no
+  `CREATE SCHEMA` existed anywhere in `src/`, so on DuckDB every *authenticated*
+  entity read failed on a relation that was never created, and on ClickHouse the
+  same name meant a database nobody creates. With the qualification dropped, two
+  tenants sharing an `order_id` were two versions of one `ReplacingMergeTree`
+  row and the later insert destroyed the earlier — data loss no read filter can
+  undo. The boundary is now the `tenant_id` **column**, leading each serving
+  table's write key on both stores
+  ([ADR-004](decisions/004-tenant-id-column-over-schema-per-tenant.md)).
+  **DuckDB is proven**: two tenants with identical entity ids resolve to
+  different rows, cross-tenant lookups 404, aggregates sum only the caller's
+  rows, and an unscoped read against a shared store is refused — asserted both
+  by example (`tests/integration/test_tenant_isolation.py`) and over generated
+  tenant/entity ids (`tests/property/test_tenant_isolation_properties.py`).
+  **ClickHouse is not**: its adversarial two-tenant suite
+  (`tests/integration/test_clickhouse_tenant_isolation_live.py`) needs a live
+  server and has not been run yet. Until it is green, multi-tenant ClickHouse is
+  not a supported claim; the single-tenant profile is unaffected.
+
 - **API RSS growth under steady load — fixed and verified live** (was 175 MB
   → 1.67 GB over the 4 h soak; the bridge stayed flat). The webhook
   dispatcher re-materialized the whole `pipeline_events` journal every 2 s

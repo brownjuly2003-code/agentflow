@@ -27,10 +27,16 @@ def default_tenants_config_path() -> Path:
 
 
 class TenantDefinition(BaseModel):
+    # `duckdb_schema` used to live here and is deliberately absent (ADR-004). It
+    # named the isolation mechanism — the schema a tenant's tables supposedly
+    # lived in — and nothing in `src/` ever created that schema, so the boundary
+    # it named did not exist. The boundary is now the `tenant_id` column, in the
+    # write key of every serving table. Configs written for the old model still
+    # load: pydantic ignores unknown keys, so the field is accepted and has no
+    # effect, which is the truth about it.
     id: str
     display_name: str
     kafka_topic_prefix: str
-    duckdb_schema: str
     max_events_per_day: int
     max_api_keys: int
     allowed_entity_types: list[str] | None = None
@@ -76,12 +82,6 @@ class TenantRouter:
             if tenant.id == tenant_id:
                 return tenant
         return None
-
-    def get_duckdb_schema(self, tenant_id: str | None) -> str | None:
-        tenant = self.get_tenant(tenant_id)
-        if tenant is None:
-            return None
-        return tenant.duckdb_schema
 
     def route_topic(self, topic: str, tenant_id: str | None) -> str:
         tenant = self.get_tenant(tenant_id)

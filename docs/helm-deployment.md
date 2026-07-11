@@ -57,11 +57,17 @@ config:
       - id: acme-corp
         display_name: "Acme Corp"
         kafka_topic_prefix: "acme"
-        duckdb_schema: "acme"
         max_events_per_day: 1000000
         max_api_keys: 10
         allowed_entity_types: null
 ```
+
+A tenant is isolated by the `tenant_id` column in each serving table's write key
+([ADR-004](decisions/004-tenant-id-column-over-schema-per-tenant.md)), so there
+is nothing to provision per tenant and nothing further to declare here. The
+`duckdb_schema` field this block used to carry named the old schema-per-tenant
+mechanism; the chart still accepts it so existing values keep validating, but
+the runtime ignores it.
 
 The existing Secret must contain `admin-key` and `api_keys.yaml`.
 `api_keys.yaml` must use the same structured shape as `config/api_keys.yaml`.

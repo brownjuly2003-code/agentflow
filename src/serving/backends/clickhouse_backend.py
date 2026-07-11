@@ -337,15 +337,19 @@ class ClickHouseBackend(ServingBackend):
     def _assert_scope_preserved(self, source: exp.Expr, translated: str) -> None:
         """Fail closed if the transpile changed any table reference.
 
-        Tenant isolation is enforced upstream by ``_scope_sql`` as a *schema
-        qualification* on the table name (``"tenant_schema"."table"``), and this
-        backend rewrites the SQL *after* that guard ran. The rewrite must
-        therefore never add, drop, or rename a table reference — otherwise a
-        transpiler regression could silently unqualify a tenant-scoped table and
-        read another tenant's rows (the same rewrite-after-guard seam that
-        produced the historical PII bypasses). Parse the *generated string* back
-        rather than trusting the rewritten AST, so generation-level quoting bugs
-        are caught too.
+        Tenant isolation is enforced upstream by ``_scope_sql``, which replaces
+        every physical table reference with a tenant-filtered sub-select aliased
+        back to the table's own name (ADR-004). This backend rewrites the SQL
+        *after* that guard ran, so the rewrite must never add, drop, or rename a
+        table reference — otherwise a transpiler regression could silently drop
+        the scoped relation and read another tenant's rows (the same
+        rewrite-after-guard seam that produced the historical PII bypasses).
+
+        The check still holds under the column model: the table reference the
+        guard compares lives *inside* the sub-select, and the transpile leaves it
+        alone (``EXCLUDE`` becomes ClickHouse's ``EXCEPT``, the reference does
+        not move). Parse the *generated string* back rather than trusting the
+        rewritten AST, so generation-level quoting bugs are caught too.
         """
         try:
             reparsed = sqlglot.parse_one(translated, read="clickhouse")

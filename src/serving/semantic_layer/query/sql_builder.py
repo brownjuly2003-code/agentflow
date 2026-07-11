@@ -24,7 +24,12 @@ TENANT_COLUMN = "tenant_id"
 # shape a tenant id may actually have. Config-sourced, never request data — but
 # the table-scoping predicate is the isolation boundary itself, so it validates
 # rather than trusts.
-_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+#
+# Matched with `fullmatch`, not `match`: Python's `$` also matches *before* a
+# trailing newline, so an anchored `match()` accepted `"acme\n"` — a string that
+# is a different tenant than `"acme"` and would have quietly become its own
+# partition. Caught by tests/property/test_tenant_isolation_properties.py.
+_TENANT_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 
 class SQLBuilderMixin:
@@ -70,7 +75,7 @@ class SQLBuilderMixin:
         resolved = self._resolve_tenant_id(tenant_id)
         if resolved is None:
             return None
-        if _TENANT_ID_RE.match(resolved) is None:
+        if _TENANT_ID_RE.fullmatch(resolved) is None:
             raise ValueError(f"Invalid tenant id {resolved!r}.")
         return f"{TENANT_COLUMN} = {quote_sql_literal(resolved)}"
 

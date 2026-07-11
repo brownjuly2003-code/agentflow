@@ -130,33 +130,31 @@ class _Catalog:
         self.entities = {table: _Entity(table) for table in tables}
 
 
-class _Tenant:
-    def __init__(self, duckdb_schema: str) -> None:
-        self.duckdb_schema = duckdb_schema
-
-
 class _TenantsConfig:
-    def __init__(self, tenants: tuple[_Tenant, ...]) -> None:
+    def __init__(self, tenants: tuple[object, ...]) -> None:
         self.tenants = tenants
 
 
 class _TenantRouter:
+    """Only `has_config()` is left of what the SQL builder asks a router.
+
+    Scoping a table is a predicate now, not a schema lookup (ADR-004), so there
+    is no `get_duckdb_schema` to stub and no per-tenant config to consult — the
+    builder needs the router for exactly one thing: is this a deployment that
+    names tenants at all, or a single-tenant one whose rows are all `default`.
+    """
+
     def __init__(
         self,
         *,
         has_config: bool = False,
-        schema_by_tenant: dict[str | None, str] | None = None,
-        tenants: tuple[_Tenant, ...] = (),
+        tenants: tuple[object, ...] = (),
     ) -> None:
         self._has_config = has_config
-        self._schema_by_tenant = dict(schema_by_tenant or {})
         self._tenants = tenants
 
     def has_config(self) -> bool:
         return self._has_config
-
-    def get_duckdb_schema(self, tenant_id: str | None) -> str | None:
-        return self._schema_by_tenant.get(tenant_id)
 
     def load(self) -> _TenantsConfig:
         return _TenantsConfig(self._tenants)
@@ -346,7 +344,7 @@ def test_quote_literal_string_is_quoted_and_escaped():
 # --------------------------------------------------------------------------- #
 
 SCOPED_ORDERS_ACME = (
-    '(SELECT * EXCLUDE (tenant_id) FROM orders WHERE tenant_id = \'acme\') AS "orders"'
+    "(SELECT * EXCLUDE (tenant_id) FROM orders WHERE tenant_id = 'acme') AS \"orders\""
 )
 SCOPED_ORDERS_UNSCOPED = '(SELECT * EXCLUDE (tenant_id) FROM orders) AS "orders"'
 

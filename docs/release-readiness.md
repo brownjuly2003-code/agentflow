@@ -40,7 +40,12 @@ and documented in
 - God-class split completed for auth, alerts, and query modules with
   compatibility imports preserved.
 - SQL injection exposure closed via parameterized queries and `sqlglot` AST
-  validation; tenant isolation enforced on every read surface.
+  validation. Tenant scoping is applied at every read surface, but the mechanism
+  behind it was rebuilt after this release: what shipped here was a schema
+  qualification that nothing provisioned, so it isolated nothing. The boundary is
+  now a `tenant_id` column in each table's write key
+  ([ADR-004](decisions/004-tenant-id-column-over-schema-per-tenant.md)); see
+  [STATUS.md](STATUS.md#known-issues) for what is proven on which store.
 - Flink critical paths covered by unit tests (`session_aggregator`,
   `stream_processor`).
 

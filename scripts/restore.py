@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import shutil
 import tarfile
 import tempfile
@@ -62,18 +61,49 @@ def _extract_archive(backup_path: Path) -> tuple[Path, dict]:
     return extracted_root, manifest
 
 
-def _expected_tenant_schemas(tenants_path: Path) -> set[str]:
-    if not tenants_path.exists():
-        return set()
-    content = tenants_path.read_text(encoding="utf-8")
-    return {
-        match.group(1).strip()
-        for match in re.finditer(
-            r'^\s*duckdb_schema:\s*["\']?([^"\']+)["\']?\s*$',
-            content,
-            flags=re.MULTILINE,
+# The serving tables whose rows belong to a tenant. The boundary is the
+# `tenant_id` column, which leads each table's primary key (ADR-004).
+_TENANT_SCOPED_TABLES = (
+    "orders_v2",
+    "products_current",
+    "sessions_aggregated",
+    "users_enriched",
+    "pipeline_events",
+)
+
+
+def _assert_tenant_boundary(connection: duckdb.DuckDBPyConnection) -> None:
+    """A restored store must come back with its tenant boundary intact.
+
+    This used to look for a *schema per tenant*, parsed out of the
+    `duckdb_schema` field of `config/tenants.yaml`. That model is gone (ADR-004),
+    and it never worked: nothing outside the backup workflow's own fixture ever
+    created those schemas, so the check passed only because the fixture had
+    fabricated exactly what it then went looking for. When the field was removed,
+    the regex matched nothing, the expected set went empty, and the whole check
+    silently became a no-op — a restore invariant that cannot fail is not one.
+
+    So: assert the thing that actually carries the boundary now, and refuse to
+    pass when there is nothing to assert it against.
+    """
+    rows = connection.execute(
+        "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'main'"
+    ).fetchall()
+    columns_by_table: dict[str, set[str]] = {}
+    for table_name, column_name in rows:
+        columns_by_table.setdefault(str(table_name), set()).add(str(column_name))
+
+    present = [table for table in _TENANT_SCOPED_TABLES if table in columns_by_table]
+    if not present:
+        raise ValueError(
+            "Restored pipeline store holds none of the tenant-scoped serving tables "
+            f"({', '.join(_TENANT_SCOPED_TABLES)}); there is nothing to restore a "
+            "tenant boundary into."
         )
-    }
+
+    unscoped = sorted(table for table in present if "tenant_id" not in columns_by_table[table])
+    if unscoped:
+        raise ValueError("Restored tables have no tenant_id column: " + ", ".join(unscoped))
 
 
 def _smoke_test(target_root: Path, manifest: dict) -> tuple[int, int]:
@@ -87,7 +117,6 @@ def _smoke_test(target_root: Path, manifest: dict) -> tuple[int, int]:
         raise FileNotFoundError(f"Missing restored config files: {', '.join(missing_config)}")
 
     checked_databases = 0
-    expected_tenants = _expected_tenant_schemas(target_root / "config" / "tenants.yaml")
     for item in manifest.get("files", []):
         if item["category"] != "duckdb":
             continue
@@ -98,18 +127,8 @@ def _smoke_test(target_root: Path, manifest: dict) -> tuple[int, int]:
         connection = duckdb.connect(str(db_path), read_only=True)
         try:
             connection.execute("SELECT 1").fetchone()
-            if item.get("role") == "pipeline" and expected_tenants:
-                existing_schemas = {
-                    row[0]
-                    for row in connection.execute(
-                        "SELECT schema_name FROM information_schema.schemata"
-                    ).fetchall()
-                }
-                missing_schemas = sorted(expected_tenants - existing_schemas)
-                if missing_schemas:
-                    raise ValueError(
-                        "Missing tenant schemas after restore: " + ", ".join(missing_schemas)
-                    )
+            if item.get("role") == "pipeline":
+                _assert_tenant_boundary(connection)
             if item.get("role") == "usage":
                 usage_table = connection.execute(
                     """

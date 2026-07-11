@@ -4,6 +4,67 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — tenant isolation was a schema that nobody created (audit P0-1)
+
+**Breaking for operators: every serving table's key changes.** `tenant_id` now
+leads the ClickHouse sorting key and the DuckDB primary key. ClickHouse cannot
+prepend to an existing sorting key and `CREATE TABLE IF NOT EXISTS` silently
+keeps the old one, so a store provisioned before this change is refused at
+startup (`assert_tenant_key()`) rather than served. Migrate with
+`python -m src.serving.provision --migrate`; a file-backed DuckDB store has no
+in-place migration and must be rebuilt (`:memory:`, the default, is created
+correctly). See [ADR-004](docs/decisions/004-tenant-id-column-over-schema-per-tenant.md).
+
+- **The boundary did not exist.** Isolation was expressed as a *schema
+  qualification* — `TenantRouter` mapped a tenant to a `duckdb_schema`, and the
+  SQL builder rewrote `orders_v2` into `"acme"."orders_v2"`. Nothing in `src/`
+  ever issued `CREATE SCHEMA`: only test fixtures did. So on DuckDB every
+  *authenticated* entity read died on a relation that was never created, and on
+  ClickHouse the same name meant a database nobody creates. The suite was green
+  because the shipped keys named `acme-corp`, a tenant absent from
+  `config/tenants.yaml` — the qualification resolved to nothing and silently did
+  not apply. A boundary no test can tell apart from its own absence is not one.
+- **Worse than a leak: data loss.** Drop the qualification and both tenants share
+  one `ReplacingMergeTree` key — two rows with the same `order_id` are two
+  *versions of one row*, and the later insert destroys the earlier. No read-side
+  filter can undo that, which is why the boundary is now in the physical schema
+  and the write key rather than only in a predicate.
+- **One model, both stores.** `tenant_id` is a column on all five serving tables.
+  Reads go through a single chokepoint: `_qualify_table` returns a tenant-filtered
+  sub-select (`SELECT * EXCLUDE (tenant_id) ... WHERE tenant_id = ...`) aliased
+  back to the table's own name, and `_scope_sql` performs the same substitution
+  inside metric templates and NL-generated SQL over the sqlglot AST. Writes stamp
+  the tenant (`event_tenant()`); aggregates group by it — a global
+  `GROUP BY user_id` had been summing two tenants' orders into one total and
+  writing it back to both. Search carries the tenant on each document and filters
+  before scoring. An unscoped read against a store holding foreign-tenant rows is
+  refused (503), not answered.
+- **`duckdb_schema` is gone** from `TenantDefinition`, `config/tenants.yaml` and
+  the chart's shipped values; `TenantRouter.get_duckdb_schema()` is deleted. The
+  Helm values schema still *accepts* the key (tenant items are
+  `additionalProperties: false`, so removing it would reject values written for
+  the old model) and its description says it is ignored.
+- **Proven, per store.** DuckDB: two tenants with identical entity ids resolve to
+  different rows, cross-tenant lookups 404, aggregates scope, unscoped reads are
+  refused — by example (`tests/integration/test_tenant_isolation.py`) and over
+  generated tenant/entity ids (`tests/property/test_tenant_isolation_properties.py`).
+  ClickHouse: `tests/integration/test_clickhouse_tenant_isolation_live.py` plants
+  both tenants in one live store with the same `order_id`, `user_id`,
+  `session_id` and `product_id`, then drives entity, timeline, metric, historical,
+  NL, pagination, batch, search, lineage and SLO under both keys, plus qualified-SQL,
+  CTE-shadowing and recursive-CTE escape attempts.
+- The tenant-id validator accepted `"acme\n"`: Python's `$` also matches *before*
+  a trailing newline, so an anchored `.match()` let a string that is a different
+  tenant than `acme` through, to become its own silent partition. It uses
+  `fullmatch` now. Found by the property suite, which is the point of having one.
+- `scripts/restore.py` asserted that a restored store had a *schema per tenant*,
+  parsed out of the `duckdb_schema` field — and the backup workflow's fixture
+  fabricated exactly those schemas, so the check passed only because the fixture
+  had made it pass. Both now use the product's own DDL: the fixture writes two
+  tenants into one `tenant_id`-keyed table, and restore asserts that the serving
+  tables come back carrying the column — and **refuses a pipeline store with no
+  serving tables at all**, which the old check accepted in silence.
+
 ### Fixed — half the API answered from a store nobody was serving (audit P0-3)
 
 **Breaking for operators: the Kubernetes probes and the Compose healthcheck move
@@ -42,6 +103,11 @@ off `/v1/health`.** Readiness is now `/health/ready` and liveness `/health/live`
   (audit P1-6).
 - ClickHouse transpile gained `quantile_cont(col, q)` → `quantile(q)(col)`: the
   SLO latency SLI was the one journal read with no valid ClickHouse translation.
+- The image's own `HEALTHCHECK` moved off `/v1/health` too. Helm and
+  `docker-compose.prod.yml` had been switched, but `Dockerfile.api` still asked
+  the endpoint that always answers 200 — so a standalone container reported
+  itself healthy while its serving backend was unreachable and every read was
+  failing. It asks `/health/ready` now, which can say no.
 
 ### Changed — provisioning is a writer privilege, not a boot side effect (audit P0-2)
 
@@ -241,6 +307,68 @@ first boot (Compose and Helm now do it for you — see below).
   the one-off reformat touched `async_client.py`, `cli.py`, `client.py`
   (line-collapse only). `make lint` / `make format` now cover
   `src/ tests/ scripts/ sdk/`, so local and CI agree.
+
+### Fixed — the standalone API image could bake in secret-bearing config and ran as root (audit P1-4)
+
+- `Dockerfile.api` did `COPY config /app/config` with no allowlist, while
+  `pyproject.toml` already excludes `config/api_keys.yaml`,
+  `config/webhooks.yaml` and `config/tenants.yaml` from the sdist for the
+  same reason — they carry credential material (bcrypt key hashes, webhook
+  signing secrets) or tenant routing data. `.dockerignore` didn't mirror that
+  exclusion, so a future plaintext secret in one of those files would have
+  been baked into an immutable image layer. `.dockerignore` now excludes the
+  same three paths `scripts/check_release_artifacts.py` already treats as
+  forbidden release-artifact members, so the existing `COPY config
+  /app/config` can no longer see them. Compose and Helm are unaffected:
+  Compose bind-mounts `./config:/app/config:ro` over the image, and Helm
+  never reads `/app/config` at all — it mounts the real config/secret
+  through a ConfigMap/Secret at `/etc/agentflow/config` and
+  `/etc/agentflow/secret`.
+- **The image ran as root by default.** Helm compensates
+  (`containerSecurityContext.runAsUser: 10001`), but `docker run` without
+  Helm did not. `Dockerfile.api` now creates a non-root `agentflow` user
+  (uid/gid 10001, matching the Helm value) after all install steps and
+  switches to it, pre-creating and chowning `/app/data` so a fresh Compose
+  named volume mounted there inherits the right ownership on first use.
+- New `tests/unit/test_docker_secret_policy.py` (static — Docker isn't
+  available on this host): fails if `.dockerignore` ever stops excluding the
+  three secret config paths, if `Dockerfile.api` ever `COPY`s one of them by
+  name, or if the final image stage's last `USER` is root/uid 0.
+
+### Changed — "Nightly Backup" is a regression test, not a backup, and now says so (audit P1-2)
+
+**The workflow never touched a deployed environment.** It built synthetic
+DuckDB fixtures on an ephemeral GitHub runner, tarred them, and uploaded a
+7-day Actions artifact — a real check that the backup/restore code path
+still works, but no evidence a live environment can be recovered. Calling it
+"Nightly Backup" and citing an RPO/RTO in `docs/disaster-recovery.md` on the
+strength of it was a false claim.
+
+- The workflow is renamed **`Backup/Restore Regression Test`**
+  (`.github/workflows/backup.yml`) and says up front, in a comment, what it
+  actually is. Its GitHub Actions artifact is renamed from
+  `agentflow-nightly-backup` to
+  `agentflow-backup-restore-regression-fixture`. The job id (`backup`) is
+  unchanged — `pyproject.toml`'s
+  `[[tool.agentflow.dependency-profiles.targets]]` registry references it by
+  `path` + `job`.
+- `docs/disaster-recovery.md` no longer states a flat RPO/RTO. It says
+  plainly what exists today — a DuckDB file/config backup+restore code path,
+  exercised nightly against synthetic fixtures — and what does not:
+  no ClickHouse backup, no PostgreSQL control-plane backup, and no restore
+  ever measured against a real staging environment.
+- `scripts/backup.py` swept all of `config/` into the archive, including
+  `config/api_keys.yaml` — bcrypt key hashes, credential material — with no
+  exclusion. It now reuses
+  `scripts/check_release_artifacts.FORBIDDEN_MEMBER_PATTERNS` (the same list
+  the Python release-artifact check already enforces) to skip
+  `config/api_keys.yaml`, `config/webhooks.yaml` and `config/tenants.yaml`,
+  plus anything else matching the same "secret" / `secrets/` patterns.
+  `tests/unit/test_backup.py` builds an archive from a fixture tree
+  containing all three, asserts none are archive members, cross-checks the
+  result with `find_forbidden_members()`, and round-trips it through
+  `scripts/verify_backup.py` and `scripts/restore.py` to confirm the rest of
+  the pipeline still works without them.
 
 ## [2.0.0] - 2026-07-06
 

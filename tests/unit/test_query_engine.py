@@ -19,7 +19,6 @@ def engine(tmp_path: Path) -> QueryEngine:
             "  - id: tenant_a\n"
             "    display_name: Tenant A\n"
             "    kafka_topic_prefix: tenant-a\n"
-            "    duckdb_schema: tenant_a\n"
             "    max_events_per_day: 1000\n"
             "    max_api_keys: 10\n"
             "    allowed_entity_types: null\n"

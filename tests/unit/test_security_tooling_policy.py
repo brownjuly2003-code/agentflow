@@ -90,7 +90,15 @@ _ALLOWED_B608_SITES = {
     # seed-block sites — a static f-string of hardcoded demo ids and
     # ts()-formatted (trusted, generated) timestamps, no request-derived
     # input.
-    "src/serving/backends/clickhouse_backend.py": 8,
+    # audit P0-1 (reviewed 2026-07-11): +2 sites, both DDL-time and neither
+    # reachable from a request. (1) the tenant-key migration's `INSERT INTO
+    # <staging> (...) SELECT 'default', ... FROM <table> FINAL` — every
+    # interpolated fragment is a module constant (the table name and column list
+    # come from this file's own SERVING_TABLE_DDL / SERVING_TABLE_COLUMNS).
+    # (2) `sorting_keys()`, which reads system.tables to detect a table that
+    # predates the tenant key; it interpolates only the database name from
+    # trusted backend config, quoted as a literal.
+    "src/serving/backends/clickhouse_backend.py": 10,
     "src/serving/backends/duckdb_backend.py": 2,
     "src/serving/semantic_layer/nl_engine.py": 6,
     "src/serving/semantic_layer/query/engine.py": 1,
@@ -105,6 +113,18 @@ _ALLOWED_B608_SITES = {
     # search_index.py's own site is gone with it.
     "src/serving/semantic_layer/query/entity_queries.py": 5,
     "src/serving/semantic_layer/query/nl_queries.py": 3,
+    # audit P0-1 (reviewed 2026-07-11): the tenant boundary itself, 2 sites.
+    # (1) _qualify_table builds the scoped relation every entity read goes through
+    # — `(SELECT * EXCLUDE (tenant_id) FROM <table> WHERE tenant_id = '<tenant>')`.
+    # (2) _holds_foreign_tenant_rows probes whether a table carries rows of a
+    # tenant other than the default, which is what makes an unscoped read
+    # fail closed; it interpolates the same catalog table name and a module
+    # constant. In both, the table name is a catalog identifier and the tenant id
+    # is validated against _TENANT_ID_RE before being _quote_literal-escaped (and
+    # re-escaped structurally by the ClickHouse transpile, whose
+    # execute(params=...) is a documented no-op, so binding is not available
+    # here). Any further site would be a second boundary — there must not be one.
+    "src/serving/semantic_layer/query/sql_builder.py": 2,
 }
 
 

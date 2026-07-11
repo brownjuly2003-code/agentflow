@@ -53,6 +53,13 @@ class SearchDocument:
     snippet: str
     tokens: Counter[str]
     boost: float = 1.0
+    # Whose row this document was built from. One index serves every tenant (it
+    # is built once per process), so the tenant travels *on the document* and
+    # `search` filters by it — without this, a shared ClickHouse table would let
+    # one tenant's query return another's ids and snippets (audit P0-1).
+    # ``None`` on documents that describe the catalog rather than a row (metric,
+    # catalog_field): those are the same for everyone.
+    tenant_id: str | None = None
 
 
 class SearchHit(TypedDict):
@@ -124,6 +131,7 @@ class SearchIndex:
         limit: int = 10,
         entity_types: list[str] | None = None,
         authorized_entity_types: Iterable[str] | None = None,
+        tenant_id: str | None = None,
     ) -> list[SearchHit]:
         """Score indexed documents against ``query``.
 
@@ -135,6 +143,13 @@ class SearchIndex:
         enters the candidate set — filtering it out of the response afterwards
         would still let it consume a ``limit`` slot and crowd out the rows the
         key is allowed to see (audit_gpt_11_07_26.md P0-4).
+
+        ``tenant_id`` is the calling tenant. The index is global — one corpus per
+        process, holding every tenant's rows — so this is what keeps a shared
+        serving table from answering one tenant with another's ids and snippets
+        (audit P0-1). Enforced before scoring, for the same reason as the
+        allowlist. ``None`` means an unscoped read, reachable only with auth
+        disabled, exactly as on every other read surface.
         """
         query_tokens = self._tokenize(query)
         if not query_tokens:
@@ -147,6 +162,16 @@ class SearchIndex:
         max_score = 0.0
 
         for document in self._documents:
+            # Documents built from a row belong to the tenant that wrote it.
+            # Catalog documents (metric, catalog_field) carry no tenant — they
+            # describe the schema, which is the same for everyone.
+            if (
+                tenant_id is not None
+                and document.tenant_id is not None
+                and document.tenant_id != tenant_id
+            ):
+                continue
+
             # Entity and catalog_field documents describe one entity type and
             # are reachable only by a key allowed that type. Metric documents
             # carry no entity_type: /v1/metrics/* is not entity-scoped, so they
@@ -224,7 +249,12 @@ class SearchIndex:
             )
 
         documents = []
-        for payload in rows:
+        for row in rows:
+            # The tenant travels on the document, not in it: strip the column
+            # before the row is turned into snippet and tokens, so a tenant id
+            # never leaks into search text (P0-1).
+            tenant_id = str(row.get("tenant_id") or "default")
+            payload = {key: value for key, value in row.items() if key != "tenant_id"}
             entity_id = str(payload.get(entity.primary_key, ""))
             if not entity_id:
                 continue
@@ -251,6 +281,7 @@ class SearchIndex:
                     snippet=snippet,
                     tokens=Counter(self._tokenize(search_text)),
                     boost=1.0,
+                    tenant_id=tenant_id,
                 )
             )
         return documents

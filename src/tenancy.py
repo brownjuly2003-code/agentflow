@@ -12,6 +12,16 @@ except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
 
+# The tenant a row belongs to when nothing names one (ADR-004). It is a real
+# tenant, not a null object: it is the value the serving tables are keyed by
+# (ClickHouse sorting key, DuckDB PRIMARY KEY), the one the demo seed writes
+# under, and the one the journal has defaulted to since it grew the column. Both
+# the write path (`src/processing/event_tenant.py`) and the read path
+# (`SQLBuilderMixin`) resolve to it, so it lives here — the module they can both
+# reach without either importing the other.
+DEFAULT_TENANT = "default"
+
+
 def default_tenants_config_path() -> Path:
     return Path(os.getenv("AGENTFLOW_TENANTS_FILE", "config/tenants.yaml"))
 

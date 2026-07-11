@@ -32,7 +32,7 @@ def _set_auth(client: TestClient, key: str = "explain-test-key") -> str:
         key: TenantKey(
             key=key,
             name="explain-agent",
-            tenant="acme",
+            tenant="default",
             rate_limit_rpm=100,
             allowed_entity_types=None,
             created_at=datetime.now(UTC).date(),
@@ -124,4 +124,8 @@ def test_query_explain_reports_llm_engine_when_llm_translation_is_used(client, m
     assert response.status_code == 200
     payload = response.json()
     assert payload["engine"] == "llm"
-    assert payload["sql"] == "SELECT order_id FROM orders_v2 LIMIT 5"
+    # The SQL reported is the SQL that would run — tenant-scoped (ADR-004), not
+    # the raw string the model produced.
+    assert payload["sql"] == (
+        'SELECT order_id FROM (SELECT * EXCLUDE (tenant_id) FROM orders_v2) AS "orders_v2" LIMIT 5'
+    )

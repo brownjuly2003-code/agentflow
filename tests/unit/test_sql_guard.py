@@ -138,7 +138,11 @@ def test_execute_nl_query_executes_safe_sql(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result["data"] == [{"order_id": "ORD-1"}]
     assert result["row_count"] == 1
-    # execute_nl_query wraps the validated SQL in a bounded LIMIT (audit #8).
+    # execute_nl_query wraps the validated SQL in a bounded LIMIT (audit #8), and
+    # the table it names is read through its tenant-scoped relation (ADR-004).
+    scoped_orders = (
+        "(SELECT * EXCLUDE (tenant_id) FROM orders_v2 WHERE tenant_id = 'default') AS \"orders_v2\""
+    )
     backend.execute.assert_called_once_with(
-        "SELECT * FROM (SELECT order_id FROM orders_v2) AS bounded_nl_query LIMIT 1000"
+        f"SELECT * FROM (SELECT order_id FROM {scoped_orders}) AS bounded_nl_query LIMIT 1000"
     )

@@ -82,11 +82,18 @@ async def search(
     else:
         search_entity_types = normalized_entity_types
 
+    # The index holds every tenant's rows (it is built once per process), so the
+    # calling tenant has to reach it or a shared serving table answers one tenant
+    # with another's ids and snippets (audit P0-1). None only with auth disabled.
+    tenant_key = getattr(req.state, "tenant_key", None)
+    tenant_id = getattr(req.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
+
     hits: list[SearchHit] = search_index.search(
         q,
         limit=limit,
         entity_types=search_entity_types,
         authorized_entity_types=authorized_entity_types,
+        tenant_id=tenant_id,
     )
     if authorized_entity_types is not None:
         # Defense in depth. The index already dropped unauthorized documents

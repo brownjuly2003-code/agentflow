@@ -33,7 +33,7 @@ def _set_auth(
         key: TenantKey(
             key=key,
             name="search-agent",
-            tenant="acme",
+            tenant="default",
             rate_limit_rpm=100,
             allowed_entity_types=allowed_entity_types,
             created_at=datetime.now(UTC).date(),

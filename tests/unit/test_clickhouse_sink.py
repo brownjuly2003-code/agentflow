@@ -104,6 +104,7 @@ def test_upsert_order_appends_version_and_recomputes_user_aggregate() -> None:
         execute_results=[
             [
                 {
+                    "tenant_id": "default",
                     "user_id": "USR-1",
                     "total_orders": "3",  # ClickHouse JSON quotes UInt64
                     "total_spent": "459.97",  # and Decimal aggregates
@@ -129,8 +130,12 @@ def test_upsert_order_appends_version_and_recomputes_user_aggregate() -> None:
     order_row = backend.inserts[0][1][0]
     assert order_row["order_id"] == "ORD-1"
     assert order_row["total_amount"] == pytest.approx(159.99)
+    # Every serving row carries its tenant; an event that names none belongs to
+    # 'default' (audit P0-1, ADR-004).
+    assert order_row["tenant_id"] == "default"
     aggregate_row = backend.inserts[1][1][0]
     assert aggregate_row == {
+        "tenant_id": "default",
         "user_id": "USR-1",
         "total_orders": 3,
         "total_spent": pytest.approx(459.97),
@@ -138,8 +143,12 @@ def test_upsert_order_appends_version_and_recomputes_user_aggregate() -> None:
         "last_order_at": "2026-07-02 10:00:00",
         "preferred_category": None,
     }
-    # The recompute must exclude cancelled orders, like the DuckDB path.
+    # The recompute must exclude cancelled orders, like the DuckDB path, and it
+    # must be scoped and grouped by tenant — a global GROUP BY user_id would sum
+    # two tenants' orders into one total and write it back to both.
     assert "status != 'cancelled'" in backend.executed[0]
+    assert "GROUP BY tenant_id, user_id" in backend.executed[0]
+    assert "(tenant_id, user_id) IN (('default', 'USR-1'))" in backend.executed[0]
 
 
 def test_upsert_order_with_only_cancelled_orders_skips_aggregate() -> None:
@@ -176,6 +185,7 @@ def test_upsert_session_new_session_inserts_fresh_row() -> None:
 
 def test_upsert_session_existing_bumps_count_and_keeps_furthest_stage() -> None:
     existing = {
+        "tenant_id": "default",
         "session_id": "SES-1",
         "user_id": "USR-1",
         "started_at": "2026-07-02 09:00:00",
@@ -205,6 +215,7 @@ def test_upsert_session_existing_bumps_count_and_keeps_furthest_stage() -> None:
 def test_upsert_sessions_one_select_one_insert_for_the_batch() -> None:
     """Q1.4: the batch fold must cost two round-trips total, not two per event."""
     existing = {
+        "tenant_id": "default",
         "session_id": "SES-A",
         "user_id": "USR-1",
         "started_at": "2026-07-09 09:00:00",
@@ -226,7 +237,10 @@ def test_upsert_sessions_one_select_one_insert_for_the_batch() -> None:
     )
 
     assert len(backend.executed) == 1, "one SELECT for the whole batch"
-    assert "IN" in backend.executed[0]
+    # The fold is keyed by (tenant, session): a session id is unique only within
+    # a tenant, so a lookup on session_id alone would fold two tenants'
+    # clickstreams into one session (audit P0-1).
+    assert "(tenant_id, session_id) IN" in backend.executed[0]
     ((table, rows),) = backend.inserts
     assert table == "sessions_aggregated"
     assert len(rows) == 2, "one folded version per session, not one per event"
@@ -276,6 +290,7 @@ def test_refresh_user_aggregates_one_query_for_the_batch() -> None:
         execute_results=[
             [
                 {
+                    "tenant_id": "default",
                     "user_id": "USR-2",
                     "total_orders": "1",
                     "total_spent": "10.00",
@@ -283,6 +298,7 @@ def test_refresh_user_aggregates_one_query_for_the_batch() -> None:
                     "last_order_at": "2026-07-09 10:00:00",
                 },
                 {
+                    "tenant_id": "default",
                     "user_id": "USR-1",
                     "total_orders": "3",
                     "total_spent": "459.97",
@@ -293,22 +309,62 @@ def test_refresh_user_aggregates_one_query_for_the_batch() -> None:
         ]
     )
     # USR-3 has only cancelled orders: the grouped SELECT returns no row for it.
-    sink.refresh_user_aggregates({"USR-1", "USR-2", "USR-3"})
+    sink.refresh_user_aggregates(
+        {("default", "USR-1"), ("default", "USR-2"), ("default", "USR-3")}
+    )
 
     assert len(backend.executed) == 1, "one grouped SELECT for the whole user set"
-    assert "IN" in backend.executed[0]
+    assert "(tenant_id, user_id) IN" in backend.executed[0]
+    assert "GROUP BY tenant_id, user_id" in backend.executed[0]
     assert "status != 'cancelled'" in backend.executed[0]
     ((table, rows),) = backend.inserts
     assert table == "users_enriched"
     assert [row["user_id"] for row in rows] == ["USR-1", "USR-2"], "deterministic order"
+    assert rows[0]["tenant_id"] == "default"
     assert rows[0]["total_orders"] == 3
     assert rows[0]["total_spent"] == pytest.approx(459.97)
+
+
+def test_refresh_user_aggregates_keeps_two_tenants_sharing_a_user_id_apart() -> None:
+    # A user id is unique only within a tenant. Before the tenant key, this
+    # grouped recompute summed both tenants' orders into one total and wrote that
+    # total back to both — a background job manufacturing cross-tenant data
+    # (audit P0-1).
+    sink, backend = _sink(
+        execute_results=[
+            [
+                {
+                    "tenant_id": "acme",
+                    "user_id": "USR-1",
+                    "total_orders": "2",
+                    "total_spent": "200.00",
+                    "first_order_at": "2026-01-01 00:00:00",
+                    "last_order_at": "2026-07-02 10:00:00",
+                },
+                {
+                    "tenant_id": "demo",
+                    "user_id": "USR-1",
+                    "total_orders": "1",
+                    "total_spent": "10.00",
+                    "first_order_at": "2026-07-09 10:00:00",
+                    "last_order_at": "2026-07-09 10:00:00",
+                },
+            ]
+        ]
+    )
+    sink.refresh_user_aggregates({("acme", "USR-1"), ("demo", "USR-1")})
+
+    ((_, rows),) = backend.inserts
+    assert [(row["tenant_id"], row["total_spent"]) for row in rows] == [
+        ("acme", pytest.approx(200.00)),
+        ("demo", pytest.approx(10.00)),
+    ]
 
 
 def test_refresh_user_aggregates_empty_ids_is_a_no_op() -> None:
     sink, backend = _sink()
     sink.refresh_user_aggregates(set())
-    sink.refresh_user_aggregates([""])
+    sink.refresh_user_aggregates([("default", "")])
     assert backend.executed == []
     assert backend.inserts == []
 

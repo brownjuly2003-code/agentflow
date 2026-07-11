@@ -25,6 +25,18 @@ from src.serving.duckdb_connection import connect_duckdb
 _IDENTIFIER_PART = r'(?:[A-Za-z_][A-Za-z0-9_]*|"(?:[^"]|"")+")'
 _IDENTIFIER_RE = re.compile(rf"^{_IDENTIFIER_PART}(?:\.{_IDENTIFIER_PART})?$")
 
+# The tenant boundary in the embedded store, mirroring the ClickHouse sorting
+# keys (`TENANT_SORTING_KEYS`): `tenant_id` leads every entity table's PRIMARY
+# KEY, so the pipeline's INSERT OR REPLACE upsert resolves per tenant and one
+# tenant cannot overwrite another's row of the same id (audit P0-1).
+# `pipeline_events` is append-only and has no key.
+TENANT_PRIMARY_KEYS: dict[str, tuple[str, ...]] = {
+    "orders_v2": ("tenant_id", "order_id"),
+    "products_current": ("tenant_id", "product_id"),
+    "sessions_aggregated": ("tenant_id", "session_id"),
+    "users_enriched": ("tenant_id", "user_id"),
+}
+
 
 class DuckDBBackend(ServingBackend):
     name = "duckdb"
@@ -124,29 +136,41 @@ class DuckDBBackend(ServingBackend):
         # The embedded store is this process's own: :memory: by default, with no
         # other provisioner and nothing to migrate from. Creating its tables is
         # not the external-store DDL that audit P0-2 forbids the API to issue.
+        #
+        # Every entity table carries `tenant_id` and leads its PRIMARY KEY with
+        # it (audit P0-1), the same boundary the ClickHouse store expresses in
+        # its sorting key. The key matters as much as the read predicate here:
+        # the pipeline upserts with INSERT OR REPLACE, which resolves against
+        # the PRIMARY KEY, so a single-column key would let one tenant's order
+        # *overwrite* another tenant's order that happens to share an id.
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS orders_v2 (
-                order_id VARCHAR PRIMARY KEY,
+                tenant_id VARCHAR NOT NULL DEFAULT 'default',
+                order_id VARCHAR,
                 user_id VARCHAR,
                 status VARCHAR,
                 total_amount DECIMAL(10,2),
                 currency VARCHAR DEFAULT 'RUB',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (tenant_id, order_id)
             )
         """)
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS products_current (
-                product_id VARCHAR PRIMARY KEY,
+                tenant_id VARCHAR NOT NULL DEFAULT 'default',
+                product_id VARCHAR,
                 name VARCHAR,
                 category VARCHAR,
                 price DECIMAL(10,2),
                 in_stock BOOLEAN DEFAULT TRUE,
-                stock_quantity INTEGER DEFAULT 0
+                stock_quantity INTEGER DEFAULT 0,
+                PRIMARY KEY (tenant_id, product_id)
             )
         """)
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions_aggregated (
-                session_id VARCHAR PRIMARY KEY,
+                tenant_id VARCHAR NOT NULL DEFAULT 'default',
+                session_id VARCHAR,
                 user_id VARCHAR,
                 started_at TIMESTAMP,
                 ended_at TIMESTAMP,
@@ -154,17 +178,20 @@ class DuckDBBackend(ServingBackend):
                 event_count INTEGER,
                 unique_pages INTEGER,
                 funnel_stage VARCHAR,
-                is_conversion BOOLEAN DEFAULT FALSE
+                is_conversion BOOLEAN DEFAULT FALSE,
+                PRIMARY KEY (tenant_id, session_id)
             )
         """)
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS users_enriched (
-                user_id VARCHAR PRIMARY KEY,
+                tenant_id VARCHAR NOT NULL DEFAULT 'default',
+                user_id VARCHAR,
                 total_orders INTEGER DEFAULT 0,
                 total_spent DECIMAL(10,2) DEFAULT 0,
                 first_order_at TIMESTAMP,
                 last_order_at TIMESTAMP,
-                preferred_category VARCHAR
+                preferred_category VARCHAR,
+                PRIMARY KEY (tenant_id, user_id)
             )
         """)
         self._conn.execute("""
@@ -192,14 +219,59 @@ class DuckDBBackend(ServingBackend):
         # the journal; NULL for the standalone demo's in-process events.
         self._conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS branch VARCHAR")
 
+        self.assert_tenant_key()
+
+    def assert_tenant_key(self) -> None:
+        """Refuse to serve a store whose entity tables predate the tenant key (P0-1).
+
+        Only a *file-backed* store can reach this: ``CREATE TABLE IF NOT EXISTS``
+        is a no-op against a table that already exists, and DuckDB cannot change
+        a PRIMARY KEY in place, so a store provisioned before the tenant key
+        keeps its single-column key and would let one tenant's ``INSERT OR
+        REPLACE`` overwrite another tenant's row of the same id. The default
+        ``:memory:`` store is created fresh in-process and always satisfies this.
+
+        There is no in-place migration: rebuild the file (delete it and re-run
+        ``python -m src.serving.provision --schema``). Saying so beats serving a
+        store that silently cannot keep two tenants apart.
+        """
+        rows = self._conn.execute(
+            "SELECT table_name, constraint_column_names FROM duckdb_constraints() "
+            "WHERE constraint_type = 'PRIMARY KEY'"
+        ).fetchall()
+        actual = {str(table): tuple(columns) for table, columns in rows}
+        stale = {
+            table: actual[table]
+            for table, expected in TENANT_PRIMARY_KEYS.items()
+            if table in actual and actual[table] != expected
+        }
+        if not stale:
+            return
+        detail = "; ".join(
+            f"{table}: PRIMARY KEY {list(found)}, expected {list(TENANT_PRIMARY_KEYS[table])}"
+            for table, found in sorted(stale.items())
+        )
+        raise BackendExecutionError(
+            "DuckDB serving tables predate the tenant primary key (audit P0-1) "
+            f"and cannot be altered in place — {detail}. Rebuild the store: "
+            "delete the DUCKDB_PATH file and re-run "
+            "`python -m src.serving.provision --schema [--seed]`."
+        )
+
     def seed_demo_data(self) -> None:
         row = self._conn.execute("SELECT COUNT(*) FROM orders_v2").fetchone()
         count = row[0] if row else 0
         if count > 0:
             return
 
+        # Columns are listed explicitly so `tenant_id` takes its DEFAULT
+        # ('default'): the demo rows belong to the same tenant the live demo
+        # stream writes under (`_event_tenant` falls back to 'default') and the
+        # same one the seeded journal rows below already carry (P0-1).
         self._conn.execute("""
-            INSERT INTO products_current VALUES
+            INSERT INTO products_current
+                (product_id, name, category, price, in_stock, stock_quantity)
+            VALUES
             ('PROD-001', 'Electric Kettle 1.7L 2200W', 'kettles', 2190.00, FALSE, 0),
             ('PROD-002', 'Air Fryer Grill 5.5L', 'grills', 5490.00, TRUE, 58),
             ('PROD-003', 'Immersion Blender Set 800W', 'blenders', 2490.00, TRUE, 203),
@@ -213,7 +285,9 @@ class DuckDBBackend(ServingBackend):
         """)
 
         self._conn.execute("""
-            INSERT INTO orders_v2 VALUES
+            INSERT INTO orders_v2
+                (order_id, user_id, status, total_amount, currency, created_at)
+            VALUES
             ('ORD-20260404-1001', 'USR-10001', 'delivered',
              76400.00, 'RUB', NOW() - INTERVAL '2 hours'),
             ('ORD-20260404-1002', 'USR-10002', 'shipped',
@@ -233,7 +307,10 @@ class DuckDBBackend(ServingBackend):
         """)
 
         self._conn.execute("""
-            INSERT INTO users_enriched VALUES
+            INSERT INTO users_enriched
+                (user_id, total_orders, total_spent, first_order_at, last_order_at,
+                 preferred_category)
+            VALUES
             ('USR-10001', 34, 1200000.00, NOW() - INTERVAL '365 days',
              NOW() - INTERVAL '2 hours', 'grills'),
             ('USR-10002', 15, 460000.00, NOW() - INTERVAL '270 days',
@@ -247,7 +324,10 @@ class DuckDBBackend(ServingBackend):
         """)
 
         self._conn.execute("""
-            INSERT INTO sessions_aggregated VALUES
+            INSERT INTO sessions_aggregated
+                (session_id, user_id, started_at, ended_at, duration_seconds,
+                 event_count, unique_pages, funnel_stage, is_conversion)
+            VALUES
             ('SES-a1b2c3', 'USR-10005',
              NOW() - INTERVAL '2 hours',
              NOW() - INTERVAL '100 minutes',

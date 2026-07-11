@@ -151,58 +151,41 @@ def test_quote_literal_covers_every_type_branch(host: _Host) -> None:
     assert host._quote_literal("O'Brien") == "'O''Brien'"
 
 
-def test_get_tenant_schema_rejects_non_identifier_schema(host: _Host) -> None:
-    host._tenant_router.get_duckdb_schema.return_value = "bad-schema;"
-
-    with pytest.raises(ValueError, match="Invalid DuckDB schema"):
-        host._get_tenant_schema("tenant_a")
-
-
-def test_qualify_table_returns_cached_qualified_name(host: _Host) -> None:
-    host._qualified_table_cache[("orders_v2", "tenant_a")] = '"cached"."orders_v2"'
-
-    assert host._qualify_table("orders_v2", "tenant_a") == '"cached"."orders_v2"'
-    host._tenant_router.get_duckdb_schema.assert_not_called()
+def test_tenant_predicate_rejects_a_tenant_id_that_could_break_the_literal(host: _Host) -> None:
+    # The predicate is the isolation boundary and is inlined as a literal on the
+    # ClickHouse path, so the id is validated rather than trusted (ADR-004).
+    with pytest.raises(ValueError, match="Invalid tenant id"):
+        host._tenant_predicate("bad-tenant';--")
 
 
-def test_qualify_table_requires_tenant_for_tenant_scoped_table(host: _Host) -> None:
-    host._tenant_router.has_config.return_value = True
-    host._tenant_router.get_duckdb_schema.return_value = None
-    tenant = Mock()
-    tenant.duckdb_schema = "tenant_a"
-    host._tenant_router.load.return_value = Mock(tenants=[tenant])
-    host._columns_by_table['"tenant_a"."orders_v2"'] = {"order_id"}
+def test_qualify_table_returns_cached_relation(host: _Host) -> None:
+    host._qualified_table_cache[("orders_v2", "tenant_id = 'tenant_a'")] = "CACHED"
 
-    with pytest.raises(ValueError, match="Tenant context is required"):
-        host._qualify_table("orders_v2", None)
+    assert host._qualify_table("orders_v2", "tenant_a") == "CACHED"
 
 
-def test_qualify_table_rejects_non_identifier_schema(host: _Host) -> None:
-    host._tenant_router.get_duckdb_schema.return_value = "drop table;"
+def test_qualify_table_filters_by_tenant_and_caches_the_relation(host: _Host) -> None:
+    scoped = host._qualify_table("orders_v2", "tenant_a")
 
-    with pytest.raises(ValueError, match="Invalid DuckDB schema"):
-        host._qualify_table("orders_v2", "tenant_a")
-
-
-def test_qualify_table_qualifies_and_caches_tenant_schema(host: _Host) -> None:
-    host._tenant_router.get_duckdb_schema.return_value = "tenant_a"
-
-    qualified = host._qualify_table("orders_v2", "tenant_a")
-
-    assert qualified == '"tenant_a"."orders_v2"'
-    assert host._qualified_table_cache[("orders_v2", "tenant_a")] == qualified
+    assert scoped == (
+        "(SELECT * EXCLUDE (tenant_id) FROM orders_v2 WHERE tenant_id = 'tenant_a') "
+        'AS "orders_v2"'
+    )
+    assert host._qualified_table_cache[("orders_v2", "tenant_id = 'tenant_a'")] == scoped
 
 
-def test_scope_sql_without_schema_still_validates_known_tables(host: _Host) -> None:
-    # The schema-None branch must still call _qualify_table for each known
-    # unqualified table (tenant-context enforcement), then return sql as-is.
-    # Without tenant config the resolved tenant falls back to "demo".
-    # unknown_table is not in the catalog, so the loop must skip it.
+def test_scope_sql_scopes_known_tables_and_leaves_unknown_ones_alone(host: _Host) -> None:
+    # Every known table is rewritten into its tenant-scoped relation; a table that
+    # is not in the catalog is not a serving table and is left as it is. Without a
+    # tenants config the resolved tenant falls back to DEFAULT_TENANT.
     sql = "SELECT * FROM orders_v2, unknown_table"
 
-    assert host._scope_sql(sql, None) == sql
-    assert ("orders_v2", "demo") in host._qualified_table_cache
-    assert ("unknown_table", "demo") not in host._qualified_table_cache
+    scoped = host._scope_sql(sql, None)
+
+    assert "EXCLUDE (tenant_id) FROM orders_v2 WHERE tenant_id = 'default'" in scoped
+    assert "unknown_table" in scoped
+    assert ("orders_v2", "tenant_id = 'default'") in host._qualified_table_cache
+    assert ("unknown_table", "tenant_id = 'default'") not in host._qualified_table_cache
 
 
 # ---------------------------------------------------------------------------

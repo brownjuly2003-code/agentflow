@@ -78,11 +78,17 @@ class _QualificationHost(SQLBuilderMixin):
         return set()
 
 
-def test_table_qualification_reuses_no_tenant_resolution() -> None:
+def test_table_qualification_needs_no_tenant_scan() -> None:
+    # Scoping a table is now a predicate, not a schema lookup, so building the
+    # relation touches neither the tenants config nor the store: no `load()` to
+    # find out which schema owns the table, no `_table_columns` probe per tenant
+    # to detect an ambiguous read. With no tenant resolved the relation carries
+    # no predicate — an unscoped read, reachable only with auth disabled (ADR-004).
     host = _QualificationHost()
+    unscoped = '(SELECT * EXCLUDE (tenant_id) FROM orders_v2) AS "orders_v2"'
 
-    assert host._qualify_table("orders_v2", tenant_id=None) == "orders_v2"
-    assert host._qualify_table("orders_v2", tenant_id=None) == "orders_v2"
+    assert host._qualify_table("orders_v2", tenant_id=None) == unscoped
+    assert host._qualify_table("orders_v2", tenant_id=None) == unscoped
 
-    assert host.tenant_router_stub.load_calls == 1
-    assert host.table_column_calls == ['"acme"."orders_v2"', '"demo"."orders_v2"']
+    assert host.tenant_router_stub.load_calls == 0
+    assert host.table_column_calls == []

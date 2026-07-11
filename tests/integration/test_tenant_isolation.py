@@ -2,13 +2,13 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import duckdb
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from src.serving.api.main import app
 from src.serving.api.routers.agent_query import router as agent_router
+from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.cache import QueryCache
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
@@ -68,40 +68,33 @@ def _write_tenants(path: Path) -> None:
 
 
 def _seed_tenant_data(db_path: Path) -> None:
-    conn = duckdb.connect(str(db_path))
-    try:
-        for schema in ("acme", "demo"):
-            conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-            conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {schema}.orders_v2 (
-                    order_id VARCHAR PRIMARY KEY,
-                    user_id VARCHAR,
-                    status VARCHAR,
-                    total_amount DECIMAL(10,2),
-                    currency VARCHAR,
-                    created_at TIMESTAMP
-                )
-                """
-            )
-            conn.execute(f"DELETE FROM {schema}.orders_v2")
+    """Two tenants in one table, sharing an entity id (ADR-004, audit P0-1).
 
+    ``ORD-SHARED`` exists for both, with different rows behind it: that is the
+    case a `tenant_id` column has to get right, and the case the old
+    schema-per-tenant model never actually reached (nothing in `src/` created
+    the schemas, so an authenticated read hit a relation that did not exist).
+    The composite PRIMARY KEY `(tenant_id, order_id)` is what keeps these two
+    ``ORD-SHARED`` rows from being one row that the second INSERT overwrites.
+    """
+    backend = DuckDBBackend(db_path=str(db_path))
+    try:
+        backend.ensure_schema()
+        conn = backend.connection
+        conn.execute("DELETE FROM orders_v2")
         conn.execute(
             """
-            INSERT INTO acme.orders_v2 VALUES
-            ('ORD-SHARED', 'USR-ACME', 'confirmed', 125.50, 'USD', NOW()),
-            ('ORD-ACME', 'USR-ACME-2', 'delivered', 80.00, 'USD', NOW())
-            """
-        )
-        conn.execute(
-            """
-            INSERT INTO demo.orders_v2 VALUES
-            ('ORD-SHARED', 'USR-DEMO', 'confirmed', 15.00, 'USD', NOW()),
-            ('ORD-DEMO', 'USR-DEMO-2', 'pending', 25.00, 'USD', NOW())
+            INSERT INTO orders_v2
+                (tenant_id, order_id, user_id, status, total_amount, currency, created_at)
+            VALUES
+            ('acme', 'ORD-SHARED', 'USR-ACME', 'confirmed', 125.50, 'USD', NOW()),
+            ('acme', 'ORD-ACME', 'USR-ACME-2', 'delivered', 80.00, 'USD', NOW()),
+            ('demo', 'ORD-SHARED', 'USR-DEMO', 'confirmed', 15.00, 'USD', NOW()),
+            ('demo', 'ORD-DEMO', 'USR-DEMO-2', 'pending', 25.00, 'USD', NOW())
             """
         )
     finally:
-        conn.close()
+        backend.connection.close()
 
 
 @pytest.fixture
@@ -137,7 +130,7 @@ def test_tenant_router_prefixes_topics(tenant_paths: tuple[Path, Path, Path]):
     assert router.route_topic("events.raw", tenant_id="acme") == "acme.events.raw"
 
 
-def test_query_engine_scopes_entity_reads_to_requested_schema(
+def test_query_engine_scopes_entity_reads_to_requested_tenant(
     tenant_paths: tuple[Path, Path, Path],
 ):
     db_path, _, tenants_path = tenant_paths
@@ -156,7 +149,7 @@ def test_query_engine_scopes_entity_reads_to_requested_schema(
     assert demo_order["user_id"] == "USR-DEMO"
 
 
-def test_query_engine_scopes_metrics_to_requested_schema(
+def test_query_engine_scopes_metrics_to_requested_tenant(
     tenant_paths: tuple[Path, Path, Path],
 ):
     db_path, _, tenants_path = tenant_paths
@@ -173,7 +166,7 @@ def test_query_engine_scopes_metrics_to_requested_schema(
     assert demo_metric["value"] == 40.0
 
 
-def test_tenant_api_key_reads_only_own_schema(client: TestClient):
+def test_tenant_api_key_reads_only_own_tenant(client: TestClient):
     response = client.get("/v1/entity/order/ORD-ACME", headers={"X-API-Key": "acme-key"})
 
     assert response.status_code == 200
@@ -205,7 +198,7 @@ def test_tenant_api_key_reads_own_order_timeline(client: TestClient):
     assert data["order"]["user_id"] == "USR-ACME-2"
 
 
-def test_cross_tenant_stuck_orders_are_scoped_to_tenant_schema(client: TestClient):
+def test_cross_tenant_stuck_orders_are_scoped_to_tenant(client: TestClient):
     # ops-surfaces-spec.md §1.7 / invariant I8: the stuck-orders worklist
     # scopes the open-orders read by the request tenant, same as the entity
     # route and the Order 360 timeline.

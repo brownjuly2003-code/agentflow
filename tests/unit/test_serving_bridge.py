@@ -120,8 +120,9 @@ class _RecordingSink:
         if events:
             self.session_batches.append(events)
 
-    def refresh_user_aggregates(self, user_ids) -> None:
-        self.user_refresh_ids.update(str(uid) for uid in user_ids)
+    def refresh_user_aggregates(self, users) -> None:
+        # (tenant, user) pairs: a user id is only unique within a tenant (P0-1).
+        self.user_refresh_ids.update((str(tenant), str(user)) for tenant, user in users)
 
     def record_pipeline_event(self, **kwargs) -> None:
         self.pipeline_events.append(kwargs)
@@ -313,8 +314,13 @@ def test_clickhouse_batch_one_multi_row_order_insert(lake):
     assert sink.insert_orders_calls == 1
     assert len(sink.orders) == 5
     assert sink.journal_batch_calls == 1
-    # Unique users A,B,C — not 5 per-order aggregate refreshes.
-    assert sink.user_refresh_ids == {"USR-A", "USR-B", "USR-C"}
+    # Unique users A,B,C — not 5 per-order aggregate refreshes — each carrying
+    # the tenant its events were written under.
+    assert sink.user_refresh_ids == {
+        ("default", "USR-A"),
+        ("default", "USR-B"),
+        ("default", "USR-C"),
+    }
     assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
 
 

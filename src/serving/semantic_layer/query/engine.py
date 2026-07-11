@@ -70,6 +70,9 @@ class QueryEngine(
         self._tenant_router = TenantRouter(tenants_config_path)
         self._table_columns_cache: dict[str, set[str]] = {}
         self._qualified_table_cache: dict[tuple[str, str | None], str] = {}
+        # One probe per table: does it hold rows of more than the default tenant?
+        # Drives the fail-closed guard on an unscoped read (SQLBuilderMixin).
+        self._foreign_tenant_cache: dict[str, bool] = {}
         self._db_pool = db_pool
         self._owns_connection = self._db_pool is None
         self._closed = False

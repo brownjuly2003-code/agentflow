@@ -68,6 +68,18 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         manager.load()
         manager.ensure_usage_table()
         c.app.state.auth_manager = manager
+        # These keys belong to `acme` and `globex`, and reads are scoped to the
+        # calling tenant (ADR-004) — so give those tenants the demo rows, or every
+        # request here 404s and the usage analytics under test measure nothing but
+        # errors. The demo seed writes under the default tenant.
+        c.app.state.query_engine.backend.execute(
+            "INSERT INTO orders_v2 "
+            "(tenant_id, order_id, user_id, status, total_amount, currency, created_at) "
+            "SELECT t.tenant, o.order_id, o.user_id, o.status, o.total_amount, o.currency, "
+            "o.created_at FROM orders_v2 AS o "
+            "CROSS JOIN (SELECT 'acme' AS tenant UNION ALL SELECT 'globex') AS t "
+            "WHERE o.tenant_id = 'default'"
+        )
         yield c
 
 

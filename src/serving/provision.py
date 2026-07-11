@@ -11,6 +11,7 @@ bring-up.
     python -m src.serving.provision --schema         # idempotent DDL
     python -m src.serving.provision --seed           # demo rows, only if empty
     python -m src.serving.provision --schema --seed  # full demo bring-up
+    python -m src.serving.provision --migrate        # rebuild pre-tenant-key tables
 
 The target is whatever ``SERVING_BACKEND``/``config/serving.yaml`` selects, so
 the same command provisions the ClickHouse profile and the file-backed DuckDB
@@ -37,6 +38,7 @@ def provision(
     *,
     schema: bool,
     seed: bool,
+    migrate: bool = False,
     config_path: str | None = None,
 ) -> int:
     db_path = os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
@@ -69,6 +71,23 @@ def provision(
             return 2
 
         for target in targets:
+            # Migration comes before schema: `ensure_schema` refuses to serve a
+            # store whose tables predate the tenant key (P0-1), so on such a
+            # store `--schema` alone can only fail, by design.
+            if migrate:
+                migrate_tenant_key = getattr(target, "migrate_tenant_key", None)
+                if migrate_tenant_key is None:
+                    # The embedded store has no in-place migration: DuckDB cannot
+                    # change a PRIMARY KEY. `assert_tenant_key` says so, and says
+                    # to rebuild the file.
+                    logger.info("provision_migrate_not_applicable", backend=target.name)
+                else:
+                    rebuilt = migrate_tenant_key()
+                    logger.info(
+                        "provision_tenant_key_migrated",
+                        backend=target.name,
+                        tables=rebuilt or "none (already keyed by tenant)",
+                    )
             if schema:
                 target.ensure_schema()
                 logger.info("provision_schema_applied", backend=target.name)
@@ -99,16 +118,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="insert the canonical demo rows, and only when the store is empty",
     )
     parser.add_argument(
+        "--migrate",
+        action="store_true",
+        help=(
+            "rebuild serving tables that predate the tenant sorting key (P0-1); "
+            "idempotent, and a no-op on a store that is already keyed by tenant"
+        ),
+    )
+    parser.add_argument(
         "--config",
         default=None,
         help="path to serving.yaml (defaults to AGENTFLOW_SERVING_CONFIG)",
     )
     args = parser.parse_args(argv)
 
-    if not args.schema and not args.seed:
-        parser.error("nothing to do: pass --schema, --seed, or both")
+    if not args.schema and not args.seed and not args.migrate:
+        parser.error("nothing to do: pass --schema, --seed, --migrate, or a combination")
 
-    return provision(schema=args.schema, seed=args.seed, config_path=args.config)
+    return provision(
+        schema=args.schema,
+        seed=args.seed,
+        migrate=args.migrate,
+        config_path=args.config,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

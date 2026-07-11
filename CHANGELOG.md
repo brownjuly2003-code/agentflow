@@ -4,6 +4,33 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added — Flink state backend is configurable (unblocks stand throughput runs)
+
+- The Flink `state.backend.type` in `docker-compose.yml` is now
+  `${FLINK_STATE_BACKEND:-rocksdb}` for both JobManager and TaskManager.
+  Production and CI keep the RocksDB default (incremental checkpoints, off-heap
+  state); a stand can export `FLINK_STATE_BACKEND=hashmap` to run the small
+  dedup/TTL state in heap. Offered as a candidate workaround for a
+  RocksDB-async-checkpoint native TaskManager crash observed on a constrained
+  macOS/Lima Intel VM during a sustained-throughput window (root cause
+  unconfirmed — may be the VM kernel, so this is a lever to try on the stand,
+  not a proven fix). The default is unchanged, so CI `flink-smoke` keeps
+  exercising RocksDB.
+
+### Fixed — webhook dedup and cache-scan window (audit #184-186)
+
+- **Webhook dispatcher** dropped a dead bare-`event_id` membership test — the
+  seen-set only ever holds `tenant:event_id`, so dedup is strictly per-tenant
+  (regression test added).
+- **Startup scan cursor** now seeds from the newest journal row whose
+  `processed_at` parses, not blindly the newest row: a malformed newest
+  timestamp left the cursor `None`, which made the first scan fetch from the
+  oldest row and re-deliver the seeded batch.
+- **Metric-cache scan window** raised 200 → 2000 rows
+  (`DEFAULT_SCAN_WINDOW_ROWS`). At the ≥100 eps target the pre-merge journal
+  emits ~2 rows/event, so 200 left no margin for a non-pushing writer; push
+  feeds still cover writers that publish.
+
 ### Fixed — SSE per-connection dedup cache is bounded (issue #183 follow-up)
 
 - **`/v1/stream/events` kept a bare per-connection seen-set** that grew one

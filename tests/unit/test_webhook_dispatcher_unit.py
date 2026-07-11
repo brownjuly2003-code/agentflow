@@ -445,6 +445,51 @@ async def test_seen_set_stays_bounded_across_scans() -> None:
         conn.close()
 
 
+def test_mark_existing_seeds_cursor_past_a_malformed_newest_timestamp() -> None:
+    # Defensive seed-edge (audit #185): if the newest journal row's processed_at
+    # does not parse, the cursor must fall back to the next parseable row rather
+    # than stay None. A None cursor makes the first dispatch fetch with
+    # min_processed_at=None (from the oldest journal row) and re-deliver the
+    # whole batch mark_existing_events_seen just marked seen.
+    events = [
+        {"event_id": "new", "tenant_id": "acme", "processed_at": "not-a-timestamp"},
+        {"event_id": "mid", "tenant_id": "acme", "processed_at": "2026-07-10 10:00:05"},
+        {"event_id": "old", "tenant_id": "acme", "processed_at": "2026-07-10 10:00:00"},
+    ]
+    app = SimpleNamespace(
+        state=SimpleNamespace(
+            query_engine=SimpleNamespace(fetch_pipeline_events=lambda **kwargs: list(events))
+        )
+    )
+    dispatcher = WebhookDispatcher(app)
+
+    dispatcher.mark_existing_events_seen()
+
+    # newest row's ts is malformed -> cursor falls back to the next parseable row
+    assert dispatcher._scan_cursor == "2026-07-10 10:00:05"
+    # every row is marked seen regardless of ts validity (id-keyed, not ts-keyed)
+    assert dispatcher.seen_event_ids == {"acme:new", "acme:mid", "acme:old"}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_does_not_dedup_same_event_id_across_tenants() -> None:
+    # Dedup is strictly on tenant:event_id (audit #184 removed the dead bare
+    # `event_id in seen` check). The same event_id already seen for one tenant
+    # must not suppress that id for another tenant — they are distinct events.
+    conn = _journal_conn([("e1", "other", "order.created", "2026-07-10 10:00:00")])
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn))
+        dispatcher.seen_event_ids.add("acme:e1")  # same id, different tenant, already seen
+
+        await dispatcher.dispatch_new_events()
+
+        # 'other:e1' is processed (marked seen) despite 'acme:e1' being seen
+        assert "other:e1" in dispatcher.seen_event_ids
+        assert dispatcher._scan_cursor == "2026-07-10 10:00:00"
+    finally:
+        conn.close()
+
+
 def test_delivery_logs_roundtrip() -> None:
     conn = duckdb.connect(":memory:")
     try:

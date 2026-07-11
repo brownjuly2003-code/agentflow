@@ -157,7 +157,7 @@ Metric-cache drops are **push-driven**, not hostage to the webhook loop.
 |---|---|---|
 | **Push** | After a successful apply the bridge publishes on Redis channel `agentflow:cache:metrics_invalidate` (payload `{"event_ids":[…]}`). Every API pod's `MetricCacheController` is subscribed and runs `QueryCache.invalidate_metrics()`. | Primary path for the bridge (standalone and in-process). |
 | **In-process callback** | `ServingBridge(..., on_batch_applied=callback)` — the API schedules a local invalidate on the event loop so the DuckDB arm does not wait for the pub/sub round-trip. | Same-process only. |
-| **Journal scan fallback** | `MetricCacheController` polls `QueryEngine.fetch_pipeline_events` independently of `WebhookDispatcher` — a `newest_first` window of 200 rows (`journal_scan_fetch`), so detection stays O(window) and correct however large the journal grows. | Writers that do not push (node-ingest, seed); also covers `webhook_dispatcher_autostart=False`. |
+| **Journal scan fallback** | `MetricCacheController` polls `QueryEngine.fetch_pipeline_events` independently of `WebhookDispatcher` — a `newest_first` window of 2000 rows (`journal_scan_fetch`), sized to hold the tail a non-pushing writer can produce between two passes at the ≥100 eps target (~2 physical rows/event pre-merge), so detection stays O(window) and correct however large the journal grows. | Writers that do not push (node-ingest, seed); also covers `webhook_dispatcher_autostart=False`. |
 
 The historical monkey-patch that wrapped `WebhookDispatcher.dispatch_new_events`
 in `main.py` is gone. Webhooks keep their own scan for delivery; cache
@@ -188,10 +188,11 @@ now bounded:
   inserted rows) and a redundant metric-cache invalidate just repopulates on
   the next read.
 - **Cache scan fallback** — the lifespan used to wire an *ascending* limited
-  scan: the oldest 200 rows, a window that stops changing once the journal
+  scan: the oldest rows, a window that stops changing once the journal
   outgrows it, which silently disabled scan-driven invalidation on grown
   journals (push kept the soak honest). `journal_scan_fetch` reads the tail
-  window instead.
+  window instead, and it is sized (`DEFAULT_SCAN_WINDOW_ROWS = 2000`) to hold a
+  full ≥100 eps burst between two passes rather than clip it.
 - **SSE stream** (`/v1/stream/events`) — the per-connection dedup cache is a
   `BoundedSeenSet` too (was a bare set growing one entry per distinct event
   for the connection's lifetime). Eviction cannot re-emit: the scan window is

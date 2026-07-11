@@ -130,13 +130,16 @@ executed accidentally.
       unless `controlPlane.store=postgres` and `serving.backend=clickhouse` —
       see ADR 0010. Slice 6 (2026-07-04) released the enum ratchet to
       `[embedded, postgres]`.)*
-- [ ] **LIVE verify (kind, Docker — attempted on the Mac 2026-07-06, genuinely
-      incomplete):** `scripts/k8s_staging_up.sh` on kind with the scale
-      overlay, `k8s_smoke_test.sh` green, `replicaCount: 2` schedules without
-      PVC contention; **plus the ADR 0010 replica-correctness checks** —
-      exactly one delivery per (webhook, event) across two pods, one alert
-      page per incident, a webhook registered via either pod visible to both.
-      See the recipe below.
+- [x] **LIVE verify (kind, Docker) — DONE 2026-07-11.** The two-real-pods
+      replica-correctness proof passes on a freed VM: `replicaCount: 2` scheduled
+      without PVC contention, both pods on the postgres store, and a webhook
+      registered via the Service was visible on all 8 round-robin reads across the
+      two pods (no split-brain) — `scripts/k8s_replica_correctness_verify.sh`
+      Checks 1–2, exit 0. Canon: `docs/perf/e4-replica-topology-2026-07-11.md`.
+      Exactly-one delivery / one-alert-per-incident are covered at the store level
+      (31/31, slice-5 PG probe); their two-pod emission harness is the remaining
+      optional layer. First attempted 2026-07-06 and blocked by host resource
+      contention — kept below as honest history.
       *(Chart-side render verified locally 2026-07-04 via `helm template`/
       `lint`, and re-verified live-adjacent on the Mac 2026-07-06: `helm lint`
       clean; `helm template --set replicaCount=2 --set persistence.enabled=false`

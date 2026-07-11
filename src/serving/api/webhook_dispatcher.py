@@ -217,8 +217,19 @@ class WebhookDispatcher:
             if event_id:
                 self.seen_event_ids.add(_seen_event_key(event))
         if events:
-            # newest_first — the first row is the journal tail.
-            self._scan_cursor = _cursor_timestamp(events[0]) or self._scan_cursor
+            # newest_first — seed the cursor from the newest row whose
+            # processed_at parses. If the very newest row's timestamp is
+            # malformed, fall back to the next parseable row rather than
+            # leaving the cursor None: a None cursor makes the next scan fetch
+            # with min_processed_at=None (from the oldest journal row), which
+            # re-delivers the whole batch we just seeded (audit #185, defensive
+            # seed-edge). All rows in this batch are already in the seen-set, so
+            # advancing to any of their timestamps drops nothing.
+            for event in events:
+                seeded = _cursor_timestamp(event)
+                if seeded is not None:
+                    self._scan_cursor = seeded
+                    break
 
     async def dispatch_new_events(self) -> None:
         webhooks = [webhook for webhook in load_webhooks(self.app) if webhook.active]
@@ -246,7 +257,13 @@ class WebhookDispatcher:
         ):
             event_id = str(event.get("event_id") or "")
             seen_key = _seen_event_key(event)
-            if not event_id or event_id in self.seen_event_ids or seen_key in self.seen_event_ids:
+            # Dedup is keyed on ``seen_key`` (``tenant:event_id``) — the only
+            # shape the seen-set ever stores (see mark_existing_events_seen and
+            # the add below). A bare-``event_id`` membership test never matched
+            # and dropped here as dead (audit #184); cross-tenant collisions on
+            # the same event_id must stay distinct, so the namespaced key is the
+            # correct and only check.
+            if not event_id or seen_key in self.seen_event_ids:
                 # Handled earlier (or unidentifiable — nothing to retry): let
                 # the cursor move over it so a frontier of already-seen rows
                 # cannot pin the scan window.

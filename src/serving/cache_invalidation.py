@@ -37,10 +37,16 @@ METRICS_INVALIDATE_CHANNEL = "agentflow:cache:metrics_invalidate"
 # How often the journal fallback re-scans when no push has landed.
 DEFAULT_SCAN_INTERVAL_SECONDS = 2.0
 
-# One scan window: enough to always contain the journal tail between two
-# 2-second passes with an order of magnitude to spare (87 eps measured × 2 s
-# ≈ 175 rows), small enough to stay O(1) against a journal of any size.
-DEFAULT_SCAN_WINDOW_ROWS = 200
+# One scan window must contain every journal row that lands between two
+# 2-second passes, or the newest-first window slides past the middle of a
+# burst and a non-pushing writer's events are never marked seen. Sizing at the
+# ≥100 eps target, with the journal's pre-merge ReplacingMergeTree emitting
+# ~2 physical rows per applied event: 100 eps × 2 rows × 2 s ≈ 400 tail rows,
+# so 2000 keeps a ~5× margin (the earlier 200 left none — 87 eps already
+# produced ~350 physical rows/pass). Still O(window) against a journal of any
+# size. Push feeds (bridge apply) cover writers that publish; this window is
+# the fallback that must not silently under-scan the ones that do not.
+DEFAULT_SCAN_WINDOW_ROWS = 2000
 
 # Dedup memory cap. Eviction is harmless here: a re-detected old event only
 # causes one redundant invalidate, and the metric cache repopulates on the

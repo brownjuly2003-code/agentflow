@@ -1,9 +1,8 @@
 from typing import Any
 
+from agentflow import AgentFlowClient
 from crewai_tools import BaseTool
 from pydantic import ConfigDict, Field
-
-from agentflow import AgentFlowClient
 
 
 class AgentFlowCrewAITool(BaseTool):

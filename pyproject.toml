@@ -126,6 +126,22 @@ exclude = [
     "/.dora/**",
 ]
 
+[tool.uv]
+# Audit P1-3: `requires-python = ">=3.11"` above has no upper bound, so a
+# plain `uv lock` builds one universal resolution covering every Python
+# version that floor implies — including hypothetical future interpreters.
+# The [flink] extra's apache-flink==2.3.0 -> apache-beam chain only
+# conflicts with the core `pyarrow>=17,<25` pin on those hypothetical
+# versions (observed split: python_full_version >= 3.15), never on a Python
+# this project actually ships, tests, or documents. Restrict resolution to
+# the versions README/CI claim (3.11-3.13) so the lock reflects what is
+# real instead of failing on a phantom future release.
+environments = [
+    "python_version == '3.11'",
+    "python_version == '3.12'",
+    "python_version == '3.13'",
+]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

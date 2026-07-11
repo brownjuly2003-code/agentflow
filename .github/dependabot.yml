@@ -6,9 +6,17 @@ version: 2
 # matches CONTRIBUTING.md, and a grouped minor+patch PR so the review
 # queue does not get spammed. Major bumps stay individual.
 #
-# Security advisories from GitHub bypass the schedule and open
-# immediately regardless of group / interval — that is Dependabot
-# default and is what we want.
+# Dependabot version updates (the schedule below) are a different feature
+# from Dependabot SECURITY updates. Security updates are a separate
+# repo-level toggle, and audit P1-3 (2026-07-11) confirmed via the GitHub
+# API that it is currently DISABLED on this repo — an advisory on any
+# ecosystem below waits for the next scheduled run like any other bump; it
+# does not open a PR "immediately" as an earlier version of this comment
+# claimed. Enabling it is a repo-settings change gated on the repo owner:
+#
+#   gh api --method PUT repos/brownjuly2003-code/agentflow/automated-security-fixes
+#
+# This file cannot flip that toggle by itself.
 
 updates:
   # ── Python: root runtime (agentflow-runtime) ───────────────────────

@@ -50,6 +50,7 @@ jobs:
     # never blocks docker-free PRs.
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -89,6 +90,7 @@ jobs:
   build-push-sign-attest:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'SIGN' && inputs.mode == 'build-and-sign' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: write
@@ -133,6 +135,7 @@ jobs:
   attest-and-sign:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'SIGN' && inputs.mode == 'sign-existing-digest' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write

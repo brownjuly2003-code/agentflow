@@ -81,6 +81,9 @@ mutants/
 /more_help.md
 /About_DE_project.md
 /audit_*.md
+# Session handoff for the next agent: working notes, not product docs. Untracked
+# but unignored is one `git add -A` away from a public repo, so name it.
+/_NEXT_SESSION.md
 /RELEASING.md
 sdk/agentflow/**/__pycache__/
 sdk/agentflow/**/*.py[cod]

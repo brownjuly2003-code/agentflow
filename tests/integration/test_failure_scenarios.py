@@ -8,8 +8,31 @@ from src.processing.local_pipeline import _ensure_tables, _process_event
 from src.quality.monitors.metrics_collector import HealthCollector, HealthStatus
 from src.serving.api.auth import AuthManager
 from src.serving.api.main import app
+from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.semantic_layer.journal import JournalReader
 
 pytestmark = pytest.mark.integration
+
+
+def _journal(conn: duckdb.DuckDBPyConnection) -> JournalReader:
+    """The health checks read the journal through the *active* serving backend
+    now (audit P0-3) — they used to open their own read-only DuckDB at
+    DUCKDB_PATH, which on the ClickHouse profile is an unrelated database."""
+    return JournalReader(DuckDBBackend(db_path=":memory:", connection=conn))
+
+
+class _ExplodingBackend(DuckDBBackend):
+    """A backend that fails in a way the health checks do not expect."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(db_path=":memory:", connection=duckdb.connect(":memory:"))
+        self._message = message
+
+    def table_columns(self, table_name: str) -> set[str]:
+        return {"event_id", "topic", "processed_at"}
+
+    def execute(self, sql: str, params: list | None = None) -> list[dict]:
+        raise RuntimeError(self._message)
 
 
 @pytest.fixture
@@ -211,7 +234,7 @@ class TestDataQuality:
 
         assert row == ("unknown.type",)
 
-    def test_health_shows_degraded_when_no_recent_events(self, tmp_path, monkeypatch):
+    def test_health_shows_degraded_when_no_recent_events(self, tmp_path):
         db_path = tmp_path / "health.duckdb"
         conn = duckdb.connect(str(db_path))
         try:
@@ -219,29 +242,24 @@ class TestDataQuality:
                 "CREATE TABLE pipeline_events ("
                 "event_id VARCHAR, topic VARCHAR, processed_at TIMESTAMP)"
             )
+
+            collector = HealthCollector(journal=_journal(conn))
+            collector._checks = [collector._check_freshness]
+            health = collector.collect()
         finally:
             conn.close()
-
-        monkeypatch.setenv("DUCKDB_PATH", str(db_path))
-
-        collector = HealthCollector()
-        collector._checks = [collector._check_freshness]
-        health = collector.collect()
 
         assert health.overall == HealthStatus.DEGRADED
         assert health.components[0].status == HealthStatus.DEGRADED
         assert health.components[0].metrics["last_event_age_seconds"] is None
 
-    def test_health_freshness_propagates_unexpected_errors(self, monkeypatch):
-        def raise_unexpected(*args, **kwargs):
-            raise RuntimeError("unexpected freshness failure")
+    def test_health_freshness_propagates_unexpected_errors(self):
+        collector = HealthCollector(journal=JournalReader(_ExplodingBackend("boom: freshness")))
 
-        monkeypatch.setattr(duckdb, "connect", raise_unexpected)
+        with pytest.raises(RuntimeError, match="boom: freshness"):
+            collector._check_freshness()
 
-        with pytest.raises(RuntimeError, match="unexpected freshness failure"):
-            HealthCollector()._check_freshness()
-
-    def test_quality_score_counts_deadletters(self, tmp_path, monkeypatch):
+    def test_quality_score_counts_deadletters(self, tmp_path):
         db_path = tmp_path / "quality.duckdb"
         conn = duckdb.connect(str(db_path))
         now = datetime.now().replace(microsecond=0)
@@ -262,26 +280,21 @@ class TestDataQuality:
                     for index in range(10)
                 ],
             )
+
+            quality = HealthCollector(journal=_journal(conn))._check_quality_score()
         finally:
             conn.close()
-
-        monkeypatch.setenv("DUCKDB_PATH", str(db_path))
-
-        quality = HealthCollector()._check_quality_score()
 
         assert quality.status == HealthStatus.UNHEALTHY
         assert quality.metrics["rejected_events"] == 2
         assert quality.metrics["total_events"] == 10
         assert quality.metrics["pass_rate"] == 0.8
 
-    def test_quality_score_propagates_unexpected_errors(self, monkeypatch):
-        def raise_unexpected(*args, **kwargs):
-            raise RuntimeError("unexpected quality failure")
+    def test_quality_score_propagates_unexpected_errors(self):
+        collector = HealthCollector(journal=JournalReader(_ExplodingBackend("boom: quality")))
 
-        monkeypatch.setattr(duckdb, "connect", raise_unexpected)
-
-        with pytest.raises(RuntimeError, match="unexpected quality failure"):
-            HealthCollector()._check_quality_score()
+        with pytest.raises(RuntimeError, match="boom: quality"):
+            collector._check_quality_score()
 
     def test_health_collect_propagates_unexpected_check_errors(self):
         collector = HealthCollector()

@@ -10,6 +10,25 @@ from .contracts import QueryExecutionHost
 
 
 class EntityQueryMixin:
+    def scan_entity_rows(
+        self: QueryExecutionHost,
+        table_name: str,
+        *,
+        limit: int,
+    ) -> list[dict]:
+        """Bulk-read an entity table through the active backend.
+
+        The search index used to run its own ``SELECT *`` on the raw DuckDB
+        connection, so on the ClickHouse profile it indexed a store nobody was
+        serving from (audit P0-3). It is bounded because the index materializes
+        every row it gets, and an unbounded scan grows with the serving data —
+        the next RSS-growth candidate after the webhook poller (audit P1-6).
+        """
+        return self._backend.execute(
+            # table_name is a catalog-defined identifier, never request data.
+            f"SELECT * FROM {table_name} LIMIT {int(limit)}"  # nosec B608
+        )
+
     def get_entity(
         self: QueryExecutionHost,
         entity_type: str,

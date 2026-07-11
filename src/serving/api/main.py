@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import State
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -185,7 +186,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.search_index_rebuild_task = asyncio.create_task(
         app.state.search_index.rebuild_periodically(interval_seconds=60)
     )
-    app.state.health_collector = HealthCollector()
+    app.state.health_collector = HealthCollector(journal=app.state.query_engine.journal)
     try:
         app.state.health_cache_ttl_seconds = float(
             os.getenv("AGENTFLOW_HEALTH_CACHE_TTL_SECONDS", "5")
@@ -509,11 +510,88 @@ async def catalog(request: Request) -> dict:
     }
 
 
+@app.get("/health/live", response_model=None)
+async def health_live() -> dict:
+    """Liveness: this process is up. No dependencies, by design.
+
+    Kubernetes restarts a container that fails liveness, so a dependency must
+    never appear here — a ClickHouse outage would otherwise roll every pod.
+    """
+    return {"status": "alive"}
+
+
+def _readiness_checks(app_state: State) -> list[dict]:
+    """Can this replica serve? Serving store first, then the control plane."""
+    checks: list[dict] = []
+
+    backend = app_state.query_engine.backend
+    payload = backend.health()
+    serving_ok = payload.get("status") == "ok"
+    checks.append(
+        {
+            "name": "serving_backend",
+            "status": "ok" if serving_ok else "error",
+            "backend": backend.name,
+            "detail": None if serving_ok else str(payload.get("error", "unreachable")),
+        }
+    )
+
+    if serving_ok:
+        # An external store nobody migrated is the failure mode this exists for:
+        # the API used to create the tables itself on boot, so a missing schema
+        # was invisible (audit P0-2). Now it is a readiness error, not a silent
+        # CREATE TABLE.
+        provisioned = bool(backend.table_columns("orders_v2"))
+        checks.append(
+            {
+                "name": "serving_schema",
+                "status": "ok" if provisioned else "error",
+                "backend": backend.name,
+                "detail": None
+                if provisioned
+                else "serving tables are missing — run `python -m src.serving.provision --schema`",
+            }
+        )
+
+    store = app_state.control_plane_store
+    if store is not None:
+        try:
+            store.ping()
+            checks.append({"name": "control_plane", "status": "ok", "detail": None})
+        except Exception as exc:  # noqa: BLE001 - any failure means not ready
+            checks.append({"name": "control_plane", "status": "error", "detail": str(exc)})
+
+    return checks
+
+
+@app.get("/health/ready", response_model=None)
+async def health_ready(request: Request) -> Response:
+    """Readiness: the dependencies this replica needs to answer a request.
+
+    Non-200 when the serving store is unreachable or unprovisioned, so
+    Kubernetes takes the pod out of the Service instead of routing traffic to a
+    replica that can only fail. `/v1/health` cannot do this job: it always
+    answered 200 (payload-only status), and both k8s probes and the Compose
+    healthcheck pointed at it — so an API with a dead ClickHouse looked healthy
+    to every orchestrator watching it (audit P0-3).
+    """
+    checks = await run_in_threadpool(_readiness_checks, request.app.state)
+    ready = all(check["status"] == "ok" for check in checks)
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"status": "ready" if ready else "not_ready", "checks": checks},
+    )
+
+
 @app.get("/v1/health", response_model=None)
 async def health(request: Request) -> dict:
     """Pipeline health check - agents should call this before answering time-sensitive queries.
 
-    Returns overall pipeline status and per-component health.
+    Returns overall pipeline status and per-component health. Informational and
+    always 200: an agent asking "is the data fresh enough to answer with?" wants
+    the payload, not an HTTP error. Orchestrators use /health/live and
+    /health/ready, which do fail.
+
     If status != "healthy", agents should caveat their answers with data freshness warnings.
     """
     now = asyncio.get_running_loop().time()

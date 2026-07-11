@@ -283,6 +283,16 @@ class PostgresControlPlaneStore(ControlPlaneStore):
 
     # --- connection / schema plumbing ----------------------------------------
 
+    def ping(self) -> None:
+        """Reach the database, so `/health/ready` fails when it cannot be reached.
+
+        Deliberately goes through `_connect()`, which lazily applies the schema:
+        a replica pointed at a PostgreSQL it can open but not migrate is not
+        ready either.
+        """
+        with self._connect() as conn:
+            conn.execute("SELECT 1")
+
     def _connect(self) -> AbstractContextManager[Any]:
         # One connection = one transaction: psycopg's connection context
         # manager commits on clean exit and rolls back on exception, which is

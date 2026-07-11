@@ -33,6 +33,10 @@ def _rewrite_for_clickhouse(node: exp.Expr) -> exp.Expr:
       aggregates the semantic layer uses to native -If combinators
       (`COUNT(*) FILTER (WHERE c)` → `countIf(c)`). Unknown aggregates are
       left untouched so ClickHouse rejects them loudly server-side.
+    - DuckDB's two-argument `quantile_cont(col, q)` transpiles to
+      `PERCENTILE_CONT(col, q)`, which ClickHouse does not have: its quantile is
+      parametric, `quantile(q)(col)`. Without this the SLO latency SLI would
+      have been the one journal read that could not leave DuckDB (audit P0-3).
     - DuckDB `FLOAT` is a 4-byte float and would transpile to `Float32`;
       widen to DOUBLE so the backend keeps its historical Float64
       semantics for ratio metrics.
@@ -46,6 +50,8 @@ def _rewrite_for_clickhouse(node: exp.Expr) -> exp.Expr:
         if isinstance(aggregate, exp.Count):
             return exp.func(combinator, condition)
         return exp.func(combinator, aggregate.this, condition)
+    if isinstance(node, exp.PercentileCont):
+        return exp.Quantile(this=node.this, quantile=node.expression)
     if isinstance(node, exp.DataType) and node.this == exp.DataType.Type.FLOAT:
         return exp.DataType.build("DOUBLE")
     return node

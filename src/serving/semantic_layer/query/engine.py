@@ -9,11 +9,12 @@ from pathlib import Path
 
 import duckdb
 
-from src.serving.backends import create_backend
+from src.serving.backends import ServingBackend, create_backend
 from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.db_pool import DuckDBPool
 from src.serving.duckdb_connection import connect_duckdb
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.serving.semantic_layer.journal import JournalReader
 from src.tenancy import TenantRouter
 
 from .entity_queries import EntityQueryMixin
@@ -105,6 +106,23 @@ class QueryEngine(
         # so loudly when that has not happened.
         self._backend = create_backend(duckdb_backend=self._duckdb_backend)
         self._backend_name = self._backend.name
+        self._journal = JournalReader(self._backend)
+
+    @property
+    def backend(self) -> ServingBackend:
+        """The store the API actually serves from.
+
+        Public on purpose: read surfaces used to reach into ``_conn`` and read
+        the embedded DuckDB whatever the configured backend was (audit P0-3).
+        A ratchet test now fails on any private reach outside the composition
+        root, so there has to be a front door.
+        """
+        return self._backend
+
+    @property
+    def journal(self) -> JournalReader:
+        """Reads of ``pipeline_events`` through the active backend."""
+        return self._journal
 
     def provision_external_demo_store(self) -> None:
         """Provision and seed the *external* serving backend — demo profile only.

@@ -232,11 +232,14 @@ services:
       - agentflow-api-data:/app/data
       - ./config:/app/config:ro
     healthcheck:
+      # /v1/health always answers 200 — its status is in the payload — so this
+      # check reported "healthy" for a container whose serving store was dead
+      # (audit P0-3). /health/ready answers 503 instead, and urlopen raises.
       test:
         - CMD
         - python
         - -c
-        - import urllib.request; urllib.request.urlopen("http://localhost:8000/v1/health")
+        - import urllib.request; urllib.request.urlopen("http://localhost:8000/health/ready")
       interval: 10s
       timeout: 10s
       retries: 10

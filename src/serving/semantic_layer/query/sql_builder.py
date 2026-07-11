@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import cast
 
 import sqlglot
@@ -9,6 +8,7 @@ from sqlglot import exp
 from sqlglot.optimizer.scope import traverse_scope
 
 from src.serving.api.auth import get_current_tenant_id
+from src.serving.semantic_layer.sql_literals import quote_sql_literal
 
 from .contracts import SQLBuilderHost
 
@@ -33,15 +33,7 @@ class SQLBuilderMixin:
         return '"' + value.replace('"', '""') + '"'
 
     def _quote_literal(self, value: object) -> str:
-        if value is None:
-            return "NULL"
-        if isinstance(value, bool):
-            return "TRUE" if value else "FALSE"
-        if isinstance(value, int | float):
-            return str(value)
-        if isinstance(value, datetime):
-            return f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'"
-        return "'" + str(value).replace("'", "''") + "'"
+        return quote_sql_literal(value)
 
     def _qualify_table(self: SQLBuilderHost, table_name: str, tenant_id: str | None) -> str:
         resolved_tenant_id = self._resolve_tenant_id(tenant_id)

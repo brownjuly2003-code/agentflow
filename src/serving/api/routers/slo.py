@@ -9,6 +9,8 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from src.serving.semantic_layer.journal import JournalReader
+
 try:
     import yaml
 except ImportError:  # pragma: no cover
@@ -60,123 +62,32 @@ def load_slos(path: Path) -> list[SLODefinition]:
     return SLOConfig.model_validate(data or {}).slos
 
 
-def _pipeline_event_columns(request: Request) -> set[str]:
-    cursor = request.app.state.query_engine._conn.cursor()
-    try:
-        return {row[1] for row in cursor.execute("PRAGMA table_info('pipeline_events')").fetchall()}
-    finally:
-        cursor.close()
-
-
-def _time_column(columns: set[str]) -> str | None:
-    if "processed_at" in columns:
-        return "processed_at"
-    if "created_at" in columns:
-        return "created_at"
-    return None
-
-
 def _tenant_id(request: Request) -> str | None:
     tenant_key = getattr(request.state, "tenant_key", None)
     return getattr(request.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
 
 
-def _tenant_filter(columns: set[str], tenant_id: str | None) -> tuple[str, list[object]]:
-    if tenant_id is None:
-        return "", []
-    if "tenant_id" in columns:
-        return " AND COALESCE(tenant_id, 'default') = ?", [tenant_id]
-    if tenant_id != "default":
-        return " AND 1 = 0", []
-    return "", []
-
-
 def _measurement_value(
-    request: Request,
+    journal: JournalReader,
     definition: SLODefinition,
-    columns: set[str],
-    time_column: str | None,
+    tenant_id: str | None,
 ) -> float | None:
-    if time_column is None:
-        return None
-
-    # A dedicated cursor (not the shared connection object) keeps concurrent
-    # /v1/slo requests — offloaded to worker threads by get_slos — from
-    # colliding on the connection. (audit_30_06_26.md A2)
-    conn = request.app.state.query_engine._conn.cursor()
     window = f"{definition.window_days} days"
-    tenant_sql, tenant_params = _tenant_filter(columns, _tenant_id(request))
 
     if definition.measurement == "p95_latency_ms":
-        if "latency_ms" not in columns:
-            return None
-        row = conn.execute(
-            (
-                # time_column is chosen from the fixed pipeline_events allowlist
-                "SELECT quantile_cont(latency_ms, 0.95) "  # nosec B608
-                "FROM pipeline_events "
-                f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL) "
-                f"{tenant_sql} "
-                "AND latency_ms IS NOT NULL"
-            ),
-            [window, *tenant_params],
-        ).fetchone()
-        return float(row[0]) if row and row[0] is not None else None
+        return journal.latency_quantile_ms(quantile=0.95, window=window, tenant_id=tenant_id)
 
     if definition.measurement == "freshness_seconds":
-        row = conn.execute(
-            (
-                # time_column is chosen from the fixed pipeline_events allowlist
-                f"SELECT MAX({time_column}) "  # nosec B608
-                "FROM pipeline_events "
-                f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
-                f"{tenant_sql}"
-            ),
-            [window, *tenant_params],
-        ).fetchone()
-        if not row or row[0] is None:
-            return None
-        age = conn.execute(
-            "SELECT EXTRACT(EPOCH FROM (NOW() - CAST(? AS TIMESTAMP)))",
-            [row[0]],
-        ).fetchone()
-        return float(age[0]) if age and age[0] is not None else None
+        # Against the store's own clock: the two stores keep journal timestamps
+        # in different zones, so only the store can say how old its newest row
+        # is (see semantic_layer/journal.py).
+        return journal.freshness(window=window, tenant_id=tenant_id).age_seconds
 
     if definition.measurement == "error_rate_percent":
-        if "status_code" in columns:
-            row = conn.execute(
-                (
-                    # time_column is chosen from the fixed pipeline_events allowlist
-                    "SELECT "  # nosec B608
-                    "COUNT(*) FILTER (WHERE status_code IS NOT NULL), "
-                    "COUNT(*) FILTER (WHERE status_code >= 500) "
-                    "FROM pipeline_events "
-                    f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
-                    f"{tenant_sql}"
-                ),
-                [window, *tenant_params],
-            ).fetchone()
-            total = int(row[0]) if row and row[0] is not None else 0
-            errors = int(row[1]) if row and row[1] is not None else 0
-            if total > 0:
-                return (errors / total) * 100.0
-
-        row = conn.execute(
-            (
-                # time_column is chosen from the fixed pipeline_events allowlist
-                "SELECT COUNT(*), "  # nosec B608
-                "COUNT(*) FILTER (WHERE topic = 'events.deadletter') "
-                "FROM pipeline_events "
-                f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
-                f"{tenant_sql}"
-            ),
-            [window, *tenant_params],
-        ).fetchone()
-        total = int(row[0]) if row and row[0] is not None else 0
-        errors = int(row[1]) if row and row[1] is not None else 0
-        if total == 0:
+        counts = journal.event_counts(window=window, tenant_id=tenant_id)
+        if counts is None or counts.total == 0:
             return None
-        return (errors / total) * 100.0
+        return (counts.errors / counts.total) * 100.0
 
     raise HTTPException(
         status_code=500,
@@ -204,19 +115,21 @@ def _error_budget_remaining(target: float, current: float) -> float:
 
 def _compute_slo_statuses(request: Request, definitions: list[SLODefinition]) -> list[SLOStatus]:
     # Runs on a worker thread (get_slos offloads it) so the per-SLO aggregate
-    # scans can't block the event loop for every tenant on the worker. The
-    # helpers each open their own short-lived cursor, so concurrent /v1/slo
-    # requests on different threads never collide on the shared connection.
+    # scans can't block the event loop for every tenant on the worker.
     # (audit_30_06_26.md A2)
-    columns = _pipeline_event_columns(request)
-    time_column = _time_column(columns)
+    #
+    # Every aggregate goes through the active backend. These ran on a private
+    # DuckDB cursor, so a ClickHouse deployment computed its SLOs — and its
+    # error budget — from an embedded store nothing was writing to (audit P0-3).
+    journal = request.app.state.query_engine.journal
+    tenant_id = _tenant_id(request)
     statuses = []
 
     for definition in definitions:
         current = round(
             _current_compliance(
                 definition,
-                _measurement_value(request, definition, columns, time_column),
+                _measurement_value(journal, definition, tenant_id),
             ),
             4,
         )

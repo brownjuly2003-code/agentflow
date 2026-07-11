@@ -67,8 +67,18 @@ _ALLOWED_B608_SITES = {
     # round-trip to the original value. ClickHouse's `execute(params=...)` is a
     # documented no-op, so binding is not an option on this backend.
     "src/processing/clickhouse_sink.py": 3,
-    "src/serving/api/routers/lineage.py": 1,
-    "src/serving/api/routers/slo.py": 4,
+    # audit P0-3 (reviewed 2026-07-11): the five journal sites moved OUT of
+    # routers/lineage.py (1) and routers/slo.py (4) and into
+    # semantic_layer/journal.py, which reads pipeline_events through the active
+    # backend instead of a private DuckDB cursor. Same surface, one place. Every
+    # interpolated fragment is an identifier taken from a live schema probe
+    # (`table_columns`) against a fixed allowlist — the time column, the
+    # nullable-column fallbacks — plus the SLO quantile, a float from
+    # config/slo.yaml formatted with :g. Values never interpolate: `_value()`
+    # binds them as `?` on DuckDB and _quote_literal-escapes them on ClickHouse,
+    # whose execute(params=...) is a documented no-op. So `entity_id` from the
+    # URL path still binds exactly as it did before the move.
+    "src/serving/semantic_layer/journal.py": 5,
     # ADR 0010 slice 5 (reviewed 2026-07-03): _replace_record_set interpolates
     # only its `table` argument, a module literal at exactly two call sites
     # (save_webhook_registrations / save_alert_rules); every value binds via
@@ -89,9 +99,12 @@ _ALLOWED_B608_SITES = {
     # table name comes from the catalog allowlist (_qualify_table), and every
     # status value binds as a query param on DuckDB or is
     # _quote_literal-escaped on the non-binding ClickHouse path.
-    "src/serving/semantic_layer/query/entity_queries.py": 4,
+    # audit P0-3 (reviewed 2026-07-11): +1 site — scan_entity_rows, the bulk
+    # entity read the search index used to run on the raw DuckDB connection.
+    # Interpolates a catalog-defined table name and an int() limit; no values.
+    # search_index.py's own site is gone with it.
+    "src/serving/semantic_layer/query/entity_queries.py": 5,
     "src/serving/semantic_layer/query/nl_queries.py": 3,
-    "src/serving/semantic_layer/search_index.py": 1,
 }
 
 

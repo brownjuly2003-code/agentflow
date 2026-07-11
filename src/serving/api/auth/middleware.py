@@ -216,6 +216,10 @@ def _is_exempt_path(path: str) -> bool:
         or path
         in {
             "/health",
+            # Kubernetes probes and the Compose healthcheck carry no API key
+            # (audit P0-3 split them out of the always-200 /v1/health).
+            "/health/live",
+            "/health/ready",
             "/v1/health",
             # Node federation ingest (ADR 0012) authenticates with its own
             # bearer node-token, not an X-API-Key; the endpoint does the check.

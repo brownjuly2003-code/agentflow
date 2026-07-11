@@ -4,6 +4,45 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — half the API answered from a store nobody was serving (audit P0-3)
+
+**Breaking for operators: the Kubernetes probes and the Compose healthcheck move
+off `/v1/health`.** Readiness is now `/health/ready` and liveness `/health/live`;
+`/v1/health` stays as the agent-facing informational payload.
+
+- **`/v1/lineage`, `/v1/slo`, `/v1/search` and the health collector read the
+  embedded DuckDB directly**, whatever `SERVING_BACKEND` said. On the ClickHouse
+  profile the API therefore split in half: entity and metric answered from
+  ClickHouse, while lineage reconstructed provenance, SLO computed an error
+  budget, and health reported freshness — all from a DuckDB that held nothing
+  but demo rows. Lineage even labelled the enrichment layer `system="duckdb"` on
+  a ClickHouse deployment. A plausible wrong answer is worse than an outage.
+- New `semantic_layer/journal.py` (`JournalReader`): every `pipeline_events`
+  read goes through `ServingBackend`. `QueryEngine.backend` / `.journal` are the
+  public front doors, and a **static ratchet test now fails on any private reach**
+  (`query_engine._conn`) from a read surface. A behavioural test injects a
+  backend holding rows that exist nowhere in DuckDB and asserts every surface
+  returns *those* rows.
+- **The health collector never checked the serving store at all** — it checked
+  Kafka, Flink and Iceberg, and opened its own read-only DuckDB at `DUCKDB_PATH`
+  for freshness and quality (an unrelated database on the ClickHouse profile, a
+  brand-new empty one on the `:memory:` default). It now has a `serving`
+  component and reads the journal through the active backend.
+- **`/v1/health` always answered 200** — its status lives in the payload — and
+  both Kubernetes probes *and* the Compose healthcheck pointed at it, so a
+  replica with a dead ClickHouse looked healthy to every orchestrator watching
+  it. `/health/ready` answers 503 when the serving store is unreachable *or
+  unprovisioned* (the readiness error that P0-2's removal of boot-time DDL makes
+  possible); `/health/live` stays dependency-free, so a ClickHouse outage cannot
+  roll every pod. `ControlPlaneStore.ping()` added (no-op on embedded,
+  `SELECT 1` on PostgreSQL).
+- The search index's entity scan is bounded (`AGENTFLOW_SEARCH_SCAN_LIMIT`,
+  default 10 000) and logs truncation. It was an unbounded `SELECT *` that grew
+  with the serving data — the next RSS-growth candidate after the webhook poller
+  (audit P1-6).
+- ClickHouse transpile gained `quantile_cont(col, q)` → `quantile(q)(col)`: the
+  SLO latency SLI was the one journal read with no valid ClickHouse translation.
+
 ### Changed — provisioning is a writer privilege, not a boot side effect (audit P0-2)
 
 **Breaking for operators of the ClickHouse profile: the API no longer creates

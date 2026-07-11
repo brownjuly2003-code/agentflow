@@ -1,5 +1,6 @@
 import asyncio
 import math
+import os
 import re
 from collections import Counter
 from collections.abc import Iterable
@@ -7,14 +8,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, TypedDict
 
-import duckdb
 import structlog
 from starlette.concurrency import run_in_threadpool
 
+from src.serving.backends import BackendExecutionError
 from src.serving.semantic_layer.catalog import DataCatalog, EntityDefinition, MetricDefinition
 from src.serving.semantic_layer.query_engine import QueryEngine
 
 logger = structlog.get_logger()
+
+# The index materializes every row it reads, and holds the old and the new set
+# at once during a rebuild. The scan used to be an unbounded `SELECT *`, which
+# grows with the serving data — so it is capped, and truncation is logged rather
+# than a partial index being served as if it were whole (audit P1-6).
+DEFAULT_ENTITY_SCAN_LIMIT = int(os.getenv("AGENTFLOW_SEARCH_SCAN_LIMIT", "10000"))
 
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 STOP_WORDS = {
@@ -63,9 +70,16 @@ class SearchHit(TypedDict):
 
 
 class SearchIndex:
-    def __init__(self, catalog: DataCatalog, query_engine: QueryEngine) -> None:
+    def __init__(
+        self,
+        catalog: DataCatalog,
+        query_engine: QueryEngine,
+        *,
+        entity_scan_limit: int = DEFAULT_ENTITY_SCAN_LIMIT,
+    ) -> None:
         self.catalog = catalog
         self.query_engine = query_engine
+        self._entity_scan_limit = entity_scan_limit
         self._documents: list[SearchDocument] = []
         self._document_frequency: dict[str, int] = {}
         self._rebuilt_at: datetime | None = None
@@ -191,18 +205,26 @@ class SearchIndex:
 
     def _entity_documents(self, entity: EntityDefinition) -> list[SearchDocument]:
         try:
-            rows = self.query_engine._conn.execute(
-                # entity.table comes from the catalog definition
-                f"SELECT * FROM {entity.table}"  # nosec B608
-            ).fetchall()
-            columns = [description[0] for description in self.query_engine._conn.description]
-        except duckdb.Error:
+            # Through the active backend. This scan ran on the raw DuckDB
+            # connection, so on the ClickHouse profile /v1/search indexed — and
+            # answered from — a store nobody was serving (audit P0-3).
+            rows = self.query_engine.scan_entity_rows(
+                entity.table,
+                limit=self._entity_scan_limit,
+            )
+        except BackendExecutionError:
             logger.exception("search_index_entity_scan_failed", entity_type=entity.name)
             return []
 
+        if len(rows) >= self._entity_scan_limit:
+            logger.warning(
+                "search_index_entity_scan_truncated",
+                entity_type=entity.name,
+                limit=self._entity_scan_limit,
+            )
+
         documents = []
-        for row in rows:
-            payload = dict(zip(columns, row, strict=False))
+        for payload in rows:
             entity_id = str(payload.get(entity.primary_key, ""))
             if not entity_id:
                 continue

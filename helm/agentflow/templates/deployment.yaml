@@ -139,9 +139,15 @@ spec:
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          # Both probes pointed at /v1/health, which always answers 200 — its
+          # status lives in the payload. So a pod with an unreachable serving
+          # store stayed Ready and kept taking traffic, and liveness could never
+          # fire either (audit P0-3). Readiness now fails when the store is
+          # unreachable or unprovisioned; liveness stays dependency-free, so a
+          # ClickHouse outage cannot roll every pod.
           readinessProbe:
             httpGet:
-              path: /v1/health
+              path: /health/ready
               port: http
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
@@ -149,7 +155,7 @@ spec:
             failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
           livenessProbe:
             httpGet:
-              path: /v1/health
+              path: /health/live
               port: http
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}

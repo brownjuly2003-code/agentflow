@@ -3,9 +3,14 @@
 The live HTTP path is covered by the integration suite; these tests pin the
 router's own logic at the unit layer: the pure compliance/error-budget/tenant
 helpers, ``load_slos`` config parsing (tmp files), the schema-adaptive
-``_measurement_value`` queries (p95 latency / freshness / error rate, against a
-real in-memory DuckDB), and the ``get_slos`` healthy/at_risk/breached status
-assembly.
+measurements (p95 latency / freshness / error rate, against a real in-memory
+DuckDB), and the ``get_slos`` healthy/at_risk/breached status assembly.
+
+The measurements moved behind ``JournalReader`` (audit P0-3): they used to run
+on the router's own DuckDB cursor, so a ClickHouse deployment computed its error
+budget from an embedded store nothing was writing to. The schema-adaptive
+behaviour they pin is unchanged — it now lives in the journal reader, and these
+tests exercise it through a real DuckDB backend rather than a raw connection.
 """
 
 from __future__ import annotations
@@ -24,13 +29,13 @@ from src.serving.api.routers.slo import (
     _current_compliance,
     _error_budget_remaining,
     _measurement_value,
-    _tenant_filter,
     _tenant_id,
-    _time_column,
     get_slo_config_path,
     get_slos,
     load_slos,
 )
+from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.semantic_layer.journal import JournalReader
 
 
 def _definition(**overrides: Any) -> SLODefinition:
@@ -49,12 +54,6 @@ def _definition(**overrides: Any) -> SLODefinition:
 # ── pure helpers ─────────────────────────────────────────────────
 
 
-def test_time_column_prefers_processed_at_then_created_at_then_none() -> None:
-    assert _time_column({"processed_at", "created_at"}) == "processed_at"
-    assert _time_column({"created_at"}) == "created_at"
-    assert _time_column({"event_id"}) is None
-
-
 def test_tenant_id_from_request_state_then_key_then_none() -> None:
     assert _tenant_id(SimpleNamespace(state=SimpleNamespace(tenant_id="acme"))) == "acme"
     via_key = SimpleNamespace(
@@ -62,16 +61,6 @@ def test_tenant_id_from_request_state_then_key_then_none() -> None:
     )
     assert _tenant_id(via_key) == "beta"
     assert _tenant_id(SimpleNamespace(state=SimpleNamespace(tenant_id=None))) is None
-
-
-def test_tenant_filter_branches() -> None:
-    assert _tenant_filter({"tenant_id"}, None) == ("", [])
-    assert _tenant_filter({"tenant_id"}, "acme") == (
-        " AND COALESCE(tenant_id, 'default') = ?",
-        ["acme"],
-    )
-    assert _tenant_filter(set(), "acme") == (" AND 1 = 0", [])
-    assert _tenant_filter(set(), "default") == ("", [])
 
 
 def test_current_compliance_branches() -> None:
@@ -131,7 +120,7 @@ def test_get_slo_config_path_uses_state_override_then_default() -> None:
     assert isinstance(get_slo_config_path(bare), Path)
 
 
-# ── DuckDB-backed measurement paths ──────────────────────────────
+# ── journal-backed measurement paths (real in-memory DuckDB) ─────
 
 
 def _conn(schema: str, inserts: list[str]) -> duckdb.DuckDBPyConnection:
@@ -142,8 +131,13 @@ def _conn(schema: str, inserts: list[str]) -> duckdb.DuckDBPyConnection:
     return connection
 
 
+def _journal(conn: duckdb.DuckDBPyConnection) -> JournalReader:
+    return JournalReader(DuckDBBackend(db_path=":memory:", connection=conn))
+
+
 def _req(conn: duckdb.DuckDBPyConnection, *, tenant_id: Any = None) -> SimpleNamespace:
-    app = SimpleNamespace(state=SimpleNamespace(query_engine=SimpleNamespace(_conn=conn)))
+    engine = SimpleNamespace(journal=_journal(conn))
+    app = SimpleNamespace(state=SimpleNamespace(query_engine=engine))
     return SimpleNamespace(app=app, state=SimpleNamespace(tenant_id=tenant_id, tenant_key=None))
 
 
@@ -168,13 +162,54 @@ def full_conn() -> Iterator[duckdb.DuckDBPyConnection]:
         connection.close()
 
 
-def test_measurement_value_none_when_no_time_column(full_conn: duckdb.DuckDBPyConnection) -> None:
-    assert _measurement_value(_req(full_conn), _definition(), set(), None) is None
+def test_journal_time_column_prefers_processed_at_then_created_at_then_none() -> None:
+    for schema, expected in (
+        (
+            "CREATE TABLE pipeline_events (processed_at TIMESTAMP, created_at TIMESTAMP)",
+            "processed_at",
+        ),
+        ("CREATE TABLE pipeline_events (created_at TIMESTAMP)", "created_at"),
+        ("CREATE TABLE pipeline_events (event_id VARCHAR)", None),
+    ):
+        conn = _conn(schema, [])
+        try:
+            assert _journal(conn).time_column() == expected
+        finally:
+            conn.close()
+
+
+def test_a_tenant_gets_nothing_from_a_journal_that_cannot_scope_by_tenant() -> None:
+    # No tenant_id column and a tenant that is not 'default': the read must
+    # return nothing rather than every tenant's rows.
+    conn = _conn(
+        "CREATE TABLE pipeline_events (event_id VARCHAR, topic VARCHAR, processed_at TIMESTAMP)",
+        ["INSERT INTO pipeline_events VALUES ('e1','events.deadletter', NOW())"],
+    )
+    try:
+        journal = _journal(conn)
+
+        foreign = journal.event_counts(window="30 days", tenant_id="acme")
+        assert foreign is not None
+        assert foreign.total == 0
+
+        # 'default' is the unscoped legacy tenant and still sees the row.
+        counts = journal.event_counts(window="30 days", tenant_id="default")
+        assert counts is not None
+        assert counts.total == 1
+    finally:
+        conn.close()
+
+
+def test_measurement_value_none_when_no_time_column() -> None:
+    conn = _conn("CREATE TABLE pipeline_events (event_id VARCHAR)", [])
+    try:
+        assert _measurement_value(_journal(conn), _definition(), None) is None
+    finally:
+        conn.close()
 
 
 def test_measurement_p95_latency(full_conn: duckdb.DuckDBPyConnection) -> None:
-    cols = {"processed_at", "latency_ms", "tenant_id", "status_code", "topic"}
-    value = _measurement_value(_req(full_conn), _definition(), cols, "processed_at")
+    value = _measurement_value(_journal(full_conn), _definition(), None)
     assert value is not None
     assert value > 0
 
@@ -185,25 +220,21 @@ def test_measurement_p95_latency_none_without_latency_column() -> None:
         ["INSERT INTO pipeline_events VALUES ('e1', NOW())"],
     )
     try:
-        assert (
-            _measurement_value(_req(conn), _definition(), {"processed_at"}, "processed_at") is None
-        )
+        assert _measurement_value(_journal(conn), _definition(), None) is None
     finally:
         conn.close()
 
 
 def test_measurement_freshness(full_conn: duckdb.DuckDBPyConnection) -> None:
     definition = _definition(measurement="freshness_seconds", threshold=600.0)
-    cols = {"processed_at", "latency_ms", "tenant_id", "status_code", "topic"}
-    value = _measurement_value(_req(full_conn), definition, cols, "processed_at")
+    value = _measurement_value(_journal(full_conn), definition, None)
     assert value is not None
     assert value >= 0.0
 
 
 def test_measurement_error_rate_with_status_code(full_conn: duckdb.DuckDBPyConnection) -> None:
     definition = _definition(measurement="error_rate_percent", threshold=1.0)
-    cols = {"processed_at", "latency_ms", "tenant_id", "status_code", "topic"}
-    value = _measurement_value(_req(full_conn), definition, cols, "processed_at")
+    value = _measurement_value(_journal(full_conn), definition, None)
     # 1 of 3 rows has status_code >= 500
     assert value == pytest.approx(100.0 / 3.0)
 
@@ -218,9 +249,7 @@ def test_measurement_error_rate_deadletter_fallback() -> None:
     )
     try:
         definition = _definition(measurement="error_rate_percent", threshold=1.0)
-        value = _measurement_value(
-            _req(conn), definition, {"processed_at", "topic"}, "processed_at"
-        )
+        value = _measurement_value(_journal(conn), definition, None)
         assert value == pytest.approx(50.0)
     finally:
         conn.close()
@@ -230,7 +259,7 @@ def test_measurement_freshness_none_when_no_rows_in_window() -> None:
     conn = _conn("CREATE TABLE pipeline_events (event_id VARCHAR, processed_at TIMESTAMP)", [])
     try:
         definition = _definition(measurement="freshness_seconds", threshold=600.0)
-        assert _measurement_value(_req(conn), definition, {"processed_at"}, "processed_at") is None
+        assert _measurement_value(_journal(conn), definition, None) is None
     finally:
         conn.close()
 
@@ -241,19 +270,15 @@ def test_measurement_error_rate_deadletter_none_when_no_rows() -> None:
     )
     try:
         definition = _definition(measurement="error_rate_percent", threshold=1.0)
-        assert (
-            _measurement_value(_req(conn), definition, {"processed_at", "topic"}, "processed_at")
-            is None
-        )
+        assert _measurement_value(_journal(conn), definition, None) is None
     finally:
         conn.close()
 
 
 def test_measurement_unsupported_raises_500(full_conn: duckdb.DuckDBPyConnection) -> None:
     definition = _definition(measurement="made_up_metric")
-    cols = {"processed_at", "latency_ms"}
     with pytest.raises(HTTPException) as exc:
-        _measurement_value(_req(full_conn), definition, cols, "processed_at")
+        _measurement_value(_journal(full_conn), definition, None)
     assert exc.value.status_code == 500
 
 

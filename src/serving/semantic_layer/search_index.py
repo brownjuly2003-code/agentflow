@@ -2,9 +2,10 @@ import asyncio
 import math
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, TypedDict
 
 import duckdb
 import structlog
@@ -45,6 +46,20 @@ class SearchDocument:
     snippet: str
     tokens: Counter[str]
     boost: float = 1.0
+
+
+class SearchHit(TypedDict):
+    """A serialized search result. A ``TypedDict``, not an object: reading it
+    with attribute access silently disabled the router's entity allowlist
+    (audit_gpt_11_07_26.md P0-4), so the mapping shape is now part of the
+    signature and mypy rejects ``hit.entity_type``."""
+
+    type: Literal["entity", "metric", "catalog_field"]
+    id: str
+    entity_type: str | None
+    score: float
+    snippet: str
+    endpoint: str
 
 
 class SearchIndex:
@@ -94,21 +109,45 @@ class SearchIndex:
         *,
         limit: int = 10,
         entity_types: list[str] | None = None,
-    ) -> list[dict]:
+        authorized_entity_types: Iterable[str] | None = None,
+    ) -> list[SearchHit]:
+        """Score indexed documents against ``query``.
+
+        ``entity_types`` is the caller's optional narrowing filter.
+
+        ``authorized_entity_types`` is the API key's allowlist: ``None`` means
+        unrestricted, an empty collection means no entity-scoped document at
+        all. It is enforced here, before scoring, so a forbidden document never
+        enters the candidate set — filtering it out of the response afterwards
+        would still let it consume a ``limit`` slot and crowd out the rows the
+        key is allowed to see (audit_gpt_11_07_26.md P0-4).
+        """
         query_tokens = self._tokenize(query)
         if not query_tokens:
             return []
 
-        allowed_entity_types = set(entity_types or [])
+        authorized = None if authorized_entity_types is None else set(authorized_entity_types)
+        requested_entity_types = set(entity_types or [])
         query_counts = Counter(query_tokens)
         scored_documents: list[tuple[float, SearchDocument]] = []
         max_score = 0.0
 
         for document in self._documents:
-            if allowed_entity_types:
+            # Entity and catalog_field documents describe one entity type and
+            # are reachable only by a key allowed that type. Metric documents
+            # carry no entity_type: /v1/metrics/* is not entity-scoped, so they
+            # stay visible to scoped keys.
+            if (
+                authorized is not None
+                and document.entity_type is not None
+                and document.entity_type not in authorized
+            ):
+                continue
+
+            if requested_entity_types:
                 if document.doc_type == "metric":
                     continue
-                if document.entity_type not in allowed_entity_types:
+                if document.entity_type not in requested_entity_types:
                     continue
 
             matched = 0
@@ -130,7 +169,7 @@ class SearchIndex:
 
         scored_documents.sort(key=lambda item: (-item[0], item[1].doc_type, item[1].doc_id))
 
-        results = []
+        results: list[SearchHit] = []
         for score, document in scored_documents[:limit]:
             normalized_score = round(score / max_score, 4) if max_score else 0.0
             results.append(

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
 from src.serving.api.auth.manager import tenant_key_allowed_tables
+from src.serving.semantic_layer.search_index import SearchHit
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["search"])
@@ -66,38 +67,39 @@ async def search(
 ) -> SearchResponse:
     search_index = req.app.state.search_index
     normalized_entity_types = _normalize_entity_types(entity_types)
-    allowed_entity_types = _allowed_entity_types(req)
-    if allowed_entity_types is not None:
-        allowed = set(allowed_entity_types)
-        if normalized_entity_types is None:
-            # Caller did not request a filter — let SearchIndex.search() return
-            # both metric and entity matches, then drop entity rows that are
-            # outside the key allowlist below. Treating the allowlist as an
-            # entity_types filter would silently exclude every metric document
-            # for scoped keys (review P2 on /v1/search).
-            search_entity_types: list[str] | None = None
-        else:
-            search_entity_types = [t for t in normalized_entity_types if t in allowed]
-            if not search_entity_types:
-                return SearchResponse(query=q, results=[])
+    # The key allowlist is authorization, the query filter is a preference. They
+    # are passed to the index separately: folding the allowlist into
+    # `entity_types` would drop every metric document for a scoped key, because
+    # an entity_types filter means "entities only".
+    authorized_entity_types = _allowed_entity_types(req)
+    if authorized_entity_types is not None and normalized_entity_types is not None:
+        narrowed = [t for t in normalized_entity_types if t in set(authorized_entity_types)]
+        if not narrowed:
+            # Asking only for types this key cannot read is an empty result set,
+            # not a 403: /v1/entity already answers 403 for the direct lookup.
+            return SearchResponse(query=q, results=[])
+        search_entity_types: list[str] | None = narrowed
     else:
         search_entity_types = normalized_entity_types
-    results = search_index.search(
+
+    hits: list[SearchHit] = search_index.search(
         q,
         limit=limit,
         entity_types=search_entity_types,
+        authorized_entity_types=authorized_entity_types,
     )
-    if allowed_entity_types is not None and normalized_entity_types is None:
-        allowed = set(allowed_entity_types)
-        results = [
-            result
-            for result in results
-            if getattr(result, "entity_type", None) is None or result.entity_type in allowed
-        ]
+    if authorized_entity_types is not None:
+        # Defense in depth. The index already dropped unauthorized documents
+        # before scoring; re-check the serialized hits so a future index change
+        # cannot leak one. Hits are mappings — the previous post-filter read
+        # them with getattr(), always got None, and passed every forbidden row
+        # through (audit_gpt_11_07_26.md P0-4).
+        allowed = set(authorized_entity_types)
+        hits = [hit for hit in hits if hit["entity_type"] is None or hit["entity_type"] in allowed]
     logger.info(
         "semantic_search_executed",
         query=q,
-        results=len(results),
+        results=len(hits),
         entity_types=normalized_entity_types,
     )
-    return SearchResponse(query=q, results=results)
+    return SearchResponse(query=q, results=[SearchResult(**hit) for hit in hits])

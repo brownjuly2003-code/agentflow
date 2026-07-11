@@ -4,6 +4,29 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — `/v1/search` enforced the entity allowlist on nothing (audit P0-4)
+
+- **A scoped API key could read every entity type through `/v1/search`.**
+  `SearchIndex.search()` returns mappings; the router post-filtered them with
+  `getattr(result, "entity_type", None)`, which is always `None` for a `dict`,
+  so the `or` short-circuited and every forbidden row passed. A key limited to
+  `order` got `user`, `product` and `session` ids **and snippets** back whenever
+  it sent no explicit `entity_types` filter. The direct entity endpoints kept
+  answering 403 — only search leaked. Reproduced against the real index (not a
+  mock) before the fix: `assert {'product', 'session', 'user'} == set()`.
+- The allowlist is now enforced **inside the index, before scoring**, so a
+  forbidden document never enters the candidate set. This also closes a second
+  defect: the old post-filter ran *after* `[:limit]`, so forbidden documents
+  consumed result slots and could crowd out every row the key was allowed to
+  see.
+- Policy is now explicit and tested: entity and `catalog_field` documents follow
+  the key allowlist; metric documents stay visible to scoped keys because
+  `/v1/metrics/*` is not entity-scoped; an empty allowlist returns no
+  entity-scoped document at all.
+- `SearchIndex.search()` returns `list[SearchHit]` (a `TypedDict`) instead of
+  `list[dict]`, so mypy now rejects the attribute access that silently disabled
+  the filter.
+
 ### Added — Flink state backend is configurable (unblocks stand throughput runs)
 
 - The Flink `state.backend.type` in `docker-compose.yml` is now

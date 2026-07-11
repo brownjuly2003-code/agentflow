@@ -22,7 +22,14 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities
+# Non-root HOME (see USER below): anything that defaults to ~/.cache has
+# somewhere writable to fall back to instead of the container's root `/`.
+ENV HOME=/app
 
+# .dockerignore drops config/api_keys.yaml, config/webhooks.yaml and
+# config/tenants.yaml from the build context (audit P1-4): this COPY cannot
+# see them, so they cannot land in an image layer. Runtime gets the real
+# files from a compose bind mount or a Helm Secret mount instead.
 COPY requirements.txt /app/requirements.txt
 COPY config /app/config
 COPY contracts /app/contracts
@@ -36,8 +43,29 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir bcrypt PyYAML sqlglot \
     && rm -rf /tmp/dist
 
+# Non-root runtime (audit P1-4): this image ran as root by default. Helm
+# already compensates (values.yaml containerSecurityContext.runAsUser:
+# 10001); this gives the standalone image the same uid/gid so both paths
+# agree. /app/data is pre-created and chowned so a fresh docker-compose named
+# volume mounted there inherits agentflow ownership (Docker seeds a new named
+# volume from the image directory it overlays, permissions included), and
+# AGENTFLOW_USAGE_DB_PATH's default (agentflow_api.duckdb, relative to
+# WORKDIR) can still be created directly under /app.
+RUN groupadd --gid 10001 agentflow \
+    && useradd --uid 10001 --gid agentflow --no-create-home --shell /usr/sbin/nologin agentflow \
+    && mkdir -p /app/data \
+    && chown -R agentflow:agentflow /app
+
+USER agentflow:agentflow
+
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=3).read()" || exit 1
+# /health/ready, not /v1/health (audit P0-3). /v1/health always answers 200 and
+# puts its verdict in the payload, so a healthcheck against it reports a
+# container as healthy while the serving backend is unreachable and every read
+# is failing. /health/ready answers 503 in that state and urlopen raises.
+# docker-compose.prod.yml and the Helm probes already say this; the standalone
+# image was the one place still asking the question that cannot get a no.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).read()" || exit 1
 
 CMD ["uvicorn", "src.serving.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

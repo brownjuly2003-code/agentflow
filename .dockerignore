@@ -4,6 +4,15 @@
 .env.*
 *.pem
 *.key
+# Secret-bearing config: mirrors pyproject.toml's sdist exclude and
+# scripts/check_release_artifacts.py's FORBIDDEN_MEMBER_PATTERNS (audit
+# P1-4). Dockerfile.api does `COPY config /app/config`; without these entries
+# that copy would bake credential material (bcrypt key hashes, webhook
+# secrets) into an immutable image layer. Runtime supplies the real files via
+# a docker-compose bind mount or a Helm Secret mount, never from the image.
+config/api_keys.yaml
+config/webhooks.yaml
+config/tenants.yaml
 *.duckdb
 *.duckdb.*
 .artifacts

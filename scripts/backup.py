@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
@@ -13,6 +14,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import duckdb
+
+from scripts.check_release_artifacts import FORBIDDEN_MEMBER_PATTERNS
 
 DEFAULT_PIPELINE_DB = "agentflow_demo.duckdb"
 DEFAULT_USAGE_DB = "agentflow_api.duckdb"
@@ -138,16 +141,28 @@ def _duckdb_sources(project_root: Path, pipeline_db_path: Path, usage_db_path: P
     return sources
 
 
+def _is_secret_config(archive_path: str) -> bool:
+    # Same patterns scripts/check_release_artifacts.py enforces on the sdist
+    # and packaged release artifacts (audit P1-2): api_keys.yaml carries
+    # bcrypt hashes, webhooks.yaml carries signing secrets, tenants.yaml
+    # carries routing/quota data. A backup archive is not exempt from that
+    # policy just because it is a tar.gz instead of a wheel.
+    return any(fnmatch.fnmatchcase(archive_path, pattern) for pattern in FORBIDDEN_MEMBER_PATTERNS)
+
+
 def _config_sources(project_root: Path) -> list[dict]:
     config_dir = project_root / "config"
     if not config_dir.exists():
         raise FileNotFoundError(f"Config directory not found: {config_dir}")
     items = []
     for file_path in sorted(path for path in config_dir.rglob("*") if path.is_file()):
+        archive_path = file_path.relative_to(project_root).as_posix()
+        if _is_secret_config(archive_path):
+            continue
         items.append(
             {
                 "path": file_path,
-                "archive_path": file_path.relative_to(project_root).as_posix(),
+                "archive_path": archive_path,
                 "role": None,
                 "category": "config",
             }

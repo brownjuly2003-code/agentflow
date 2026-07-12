@@ -201,8 +201,19 @@ jobs:
           # references @langchain/google-cloud-sql-pg (npm) but is matched
           # against Python langchain<1.2.24, which does not exist (latest is
           # 1.2.15). Remove this ignore when PyUp corrects the entry.
+          #
+          # SFTY-20260217-93940 (CVE-2026-25087): pyarrow use-after-free when
+          # decoding malformed IPC files, fixed in 23.0.1. Only the Flink
+          # runtime bucket is affected: apache-flink's beam chain caps
+          # pyarrow<17, so the fixed version cannot install there (the API
+          # image and every extra run pyarrow>=23.0.1 via uv.lock, gated by
+          # pip-audit). The Flink jobs only exchange Arrow IPC that beam
+          # itself produces inside the pipeline, never operator-supplied IPC
+          # files. Remove when apache-flink/beam raise their pyarrow floor
+          # past 23.0.1.
           safety check \
             --ignore 88512 \
+            --ignore SFTY-20260217-93940 \
             -r .tmp-security/requirements-main.txt \
             -r .tmp-security/requirements-sdk.txt \
             -r .tmp-security/requirements-integrations.txt \
@@ -293,6 +304,13 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          # Without this, trivy-action builds the SARIF "with all severities"
+          # and drops BOTH filters above from the scan the exit code comes
+          # from — an unfixable MEDIUM in the base image (e.g. liblzma5
+          # CVE-2026-34743, no Debian fix available) fails the gate that
+          # declares itself HIGH,CRITICAL-only. This makes the declared
+          # filters real for the SARIF scan too.
+          limit-severities-for-sarif: true
       - name: Upload Trivy scan results
         if: always()
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0

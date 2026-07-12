@@ -566,6 +566,73 @@ def test_search_still_finds_the_tenants_own_rows(client: TestClient, tenant: str
     assert any(own_term in hit["snippet"] for hit in entity_hits)
 
 
+def test_incremental_refresh_indexes_a_new_row_for_its_tenant_only(
+    client: TestClient, live_clickhouse: ClickHouseBackend
+) -> None:
+    """Audit P1-6, the live half: a row that lands in ClickHouse after boot is
+    picked up by the journal-cursor refresh — the targeted ``IN`` re-read
+    through the real backend's sqlglot round trip, not a full rescan — and is
+    visible to its own tenant only."""
+    index = client.app.state.search_index
+    # Everything seeded so far predates the boot rebuild's cursor.
+    assert index.refresh() in {"noop", "incremental"}
+
+    try:
+        live_clickhouse.insert_rows(
+            "orders_v2",
+            [
+                {
+                    "tenant_id": ACME,
+                    "order_id": "ORD-REFRESH-1",
+                    "user_id": "USR-ACME-9",
+                    "status": "refreshtastic",
+                    "total_amount": 42.00,
+                    "currency": "USD",
+                    "created_at": _ts(0),
+                }
+            ],
+        )
+        live_clickhouse.insert_rows(
+            "pipeline_events",
+            [
+                {
+                    "event_id": "EVT-REFRESH-1",
+                    "topic": "orders.raw",
+                    "tenant_id": ACME,
+                    "entity_id": "ORD-REFRESH-1",
+                    "event_type": "order.created",
+                    "latency_ms": 5,
+                    "processed_at": _ts(0),
+                }
+            ],
+        )
+
+        assert index.refresh() == "incremental"
+
+        response = client.get("/v1/search?q=refreshtastic", headers=_headers(ACME))
+        assert response.status_code == 200
+        entity_hits = [hit for hit in response.json()["results"] if hit["type"] == "entity"]
+        assert [hit["id"] for hit in entity_hits] == ["ORD-REFRESH-1"]
+
+        response = client.get("/v1/search?q=refreshtastic", headers=_headers(DEMO))
+        assert response.status_code == 200
+        assert [hit for hit in response.json()["results"] if hit["type"] == "entity"] == []
+    finally:
+        # The escape probes below assert EXACT row sets (their fixture warns a
+        # stale row is indistinguishable from a leak) — take the rows back out,
+        # synchronously, before any of them runs.
+        _ddl(
+            live_clickhouse,
+            "ALTER TABLE orders_v2 DELETE WHERE order_id = 'ORD-REFRESH-1' "
+            "SETTINGS mutations_sync = 1",
+        )
+        _ddl(
+            live_clickhouse,
+            "ALTER TABLE pipeline_events DELETE WHERE event_id = 'EVT-REFRESH-1' "
+            "SETTINGS mutations_sync = 1",
+        )
+
+
 # --- lineage, SLO ------------------------------------------------------------
 
 

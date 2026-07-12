@@ -23,6 +23,25 @@ logger = structlog.get_logger()
 # than a partial index being served as if it were whole (audit P1-6).
 DEFAULT_ENTITY_SCAN_LIMIT = int(os.getenv("AGENTFLOW_SEARCH_SCAN_LIMIT", "10000"))
 
+# Incremental refresh (audit P1-6). Each periodic tick reads the journal past
+# the cursor instead of full-scanning every entity table: no new events means
+# no work at all, a small change-set means a targeted re-read of exactly those
+# rows. A full rebuild still happens when the journal window overflows (the
+# tick can no longer prove it saw every change), when the changed-id set is
+# large enough that targeted reads stop being cheaper, and unconditionally
+# every FULL_REBUILD_TICKS ticks — the safety net for writers that bypass the
+# journal (batch loads) and for row deletions the journal never mentions.
+DEFAULT_REFRESH_WINDOW_ROWS = int(os.getenv("AGENTFLOW_SEARCH_REFRESH_WINDOW", "1000"))
+DEFAULT_CHANGED_IDS_LIMIT = int(os.getenv("AGENTFLOW_SEARCH_CHANGED_IDS_LIMIT", "512"))
+DEFAULT_FULL_REBUILD_TICKS = int(os.getenv("AGENTFLOW_SEARCH_FULL_REBUILD_TICKS", "10"))
+
+# Journal columns that can carry an id of a row in SOME entity table. The
+# refresh does not map event families to tables: it collects every id-shaped
+# value and asks each entity table which of them it owns (a bounded IN scan).
+# An order event therefore refreshes both the order row it names and the
+# users_enriched aggregate it moved, without a fragile family->table map.
+_EVENT_ID_COLUMNS = ("entity_id", "order_id", "user_id", "product_id", "session_id")
+
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 STOP_WORDS = {
     "a",
@@ -83,42 +102,133 @@ class SearchIndex:
         query_engine: QueryEngine,
         *,
         entity_scan_limit: int = DEFAULT_ENTITY_SCAN_LIMIT,
+        refresh_window_rows: int = DEFAULT_REFRESH_WINDOW_ROWS,
+        changed_ids_limit: int = DEFAULT_CHANGED_IDS_LIMIT,
+        full_rebuild_ticks: int = DEFAULT_FULL_REBUILD_TICKS,
     ) -> None:
         self.catalog = catalog
         self.query_engine = query_engine
         self._entity_scan_limit = entity_scan_limit
-        self._documents: list[SearchDocument] = []
-        self._document_frequency: dict[str, int] = {}
+        self._refresh_window_rows = refresh_window_rows
+        self._changed_ids_limit = changed_ids_limit
+        self._full_rebuild_ticks = full_rebuild_ticks
+        self._documents: dict[tuple[str, str | None, str | None, str], SearchDocument] = {}
+        self._document_frequency: Counter[str] = Counter()
         self._rebuilt_at: datetime | None = None
+        # Incremental state: the journal watermark the last pass is known to
+        # have covered, and how many ticks ago the last FULL pass ran.
+        self._journal_cursor: datetime | None = None
+        self._ticks_since_full_rebuild = 0
+
+    @staticmethod
+    def _document_key(document: SearchDocument) -> tuple[str, str | None, str | None, str]:
+        # tenant_id is part of identity: two tenants may legitimately hold
+        # rows with the same primary key (audit P0-1), and each gets its own
+        # document.
+        return (document.doc_type, document.entity_type, document.tenant_id, document.doc_id)
 
     def rebuild(self) -> None:
-        documents: list[SearchDocument] = []
+        # Probe the journal frontier BEFORE scanning: events that land during
+        # the scan fall after the cursor and get re-processed by the next
+        # refresh (an idempotent upsert), instead of being skipped forever.
+        cursor_candidate = self._journal_frontier()
 
+        documents: dict[tuple[str, str | None, str | None, str], SearchDocument] = {}
         for entity in self.catalog.entities.values():
-            documents.extend(self._entity_documents(entity))
-            documents.extend(self._catalog_field_documents(entity))
+            for document in self._entity_documents(entity):
+                documents[self._document_key(document)] = document
+            for document in self._catalog_field_documents(entity):
+                documents[self._document_key(document)] = document
 
         for metric in self.catalog.metrics.values():
-            documents.append(self._metric_document(metric))
+            document = self._metric_document(metric)
+            documents[self._document_key(document)] = document
 
         document_frequency: Counter[str] = Counter()
-        for document in documents:
+        for document in documents.values():
             document_frequency.update(document.tokens.keys())
 
         self._documents = documents
-        self._document_frequency = dict(document_frequency)
+        self._document_frequency = document_frequency
         self._rebuilt_at = datetime.now()
+        self._journal_cursor = cursor_candidate
+        self._ticks_since_full_rebuild = 0
         logger.info("search_index_rebuilt", documents=len(documents))
+
+    def refresh(self) -> str:
+        """One periodic maintenance tick (audit P1-6). Returns what it did:
+
+        - ``"noop"`` — the journal shows nothing new past the cursor; the
+          tick cost one bounded journal read and zero table scans.
+        - ``"incremental"`` — a small change-set was re-read row-by-row
+          (``scan_entity_rows_by_ids``) and upserted in place; document
+          frequencies are maintained incrementally.
+        - ``"full:*"`` — a full rebuild ran, and the suffix says why:
+          ``scheduled`` (every ``full_rebuild_ticks`` ticks — the safety net
+          for journal-bypassing writers and deletions), ``overflow`` (more
+          new events than the journal window, so completeness is unprovable),
+          ``changed-set`` (targeted reads would not be cheaper any more), or
+          ``cold`` (no cursor yet).
+        """
+        self._ticks_since_full_rebuild += 1
+        if self._journal_cursor is None:
+            self.rebuild()
+            return "full:cold"
+        if self._ticks_since_full_rebuild >= self._full_rebuild_ticks:
+            self.rebuild()
+            return "full:scheduled"
+
+        events = list(
+            self.query_engine.fetch_pipeline_events(
+                limit=self._refresh_window_rows,
+                newest_first=True,
+                min_processed_at=self._journal_cursor,
+            )
+            or []
+        )
+        # min_processed_at is inclusive, so the boundary rows come back every
+        # tick — advance strictly past the cursor or do nothing.
+        fresh: list[dict] = []
+        frontier = self._journal_cursor
+        for event in events:
+            processed_at = self._parse_processed_at(event.get("processed_at"))
+            if processed_at is None or processed_at <= self._journal_cursor:
+                continue
+            fresh.append(event)
+            frontier = max(frontier, processed_at)
+        if not fresh:
+            return "noop"
+        if len(events) >= self._refresh_window_rows:
+            self.rebuild()
+            return "full:overflow"
+
+        changed_ids: set[str] = set()
+        for event in fresh:
+            for column in _EVENT_ID_COLUMNS:
+                value = event.get(column)
+                if value:
+                    changed_ids.add(str(value))
+        if len(changed_ids) > self._changed_ids_limit:
+            self.rebuild()
+            return "full:changed-set"
+
+        self._apply_changed_ids(changed_ids)
+        self._journal_cursor = frontier
+        return "incremental"
 
     async def rebuild_periodically(self, interval_seconds: int = 60) -> None:
         while True:
             try:
                 await asyncio.sleep(interval_seconds)
-                # rebuild() full-scans and re-tokenizes every entity table and
-                # runs a live metric query per metric; running it inline froze
-                # the event loop for the whole scan every interval. Offload it to
-                # a worker thread. (audit_28_06_26.md #16)
-                await run_in_threadpool(self.rebuild)
+                # A tick full-scanned and re-tokenized every entity table and
+                # ran a live metric query per metric, every 60 seconds, per
+                # replica (audit P1-6). refresh() reads the journal past the
+                # cursor instead and falls back to the full pass only when it
+                # must. Still off the event loop: even the incremental path
+                # does synchronous backend I/O. (audit_28_06_26.md #16)
+                outcome = await run_in_threadpool(self.refresh)
+                if outcome != "noop":
+                    logger.info("search_index_refreshed", outcome=outcome)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -161,7 +271,7 @@ class SearchIndex:
         scored_documents: list[tuple[float, SearchDocument]] = []
         max_score = 0.0
 
-        for document in self._documents:
+        for document in self._documents.values():
             # Documents built from a row belong to the tenant that wrote it.
             # Catalog documents (metric, catalog_field) carry no tenant — they
             # describe the schema, which is the same for everyone.
@@ -228,6 +338,87 @@ class SearchIndex:
         frequency = self._document_frequency.get(token, 0)
         return math.log((1 + total_documents) / (1 + frequency)) + 1.0
 
+    # --- incremental maintenance (audit P1-6) ---------------------------------
+
+    def _journal_frontier(self) -> datetime | None:
+        """Newest journal timestamp, or None when the journal is empty or
+        unreadable (the next refresh then goes ``full:cold`` — fail toward
+        rebuilding, never toward silently skipping changes)."""
+        try:
+            newest = self.query_engine.fetch_pipeline_events(limit=1, newest_first=True)
+        except Exception:
+            logger.exception("search_index_journal_frontier_failed")
+            return None
+        if not newest:
+            return None
+        return self._parse_processed_at(newest[0].get("processed_at"))
+
+    @staticmethod
+    def _parse_processed_at(value: object) -> datetime | None:
+        # DuckDB hands back datetimes, external backends ISO strings (JSON
+        # transport) — same duality fetch_pipeline_events documents.
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                return None
+        return None
+
+    def _apply_changed_ids(self, changed_ids: set[str]) -> None:
+        """Re-read exactly the rows the journal named and upsert their
+        documents. No event-family -> table map: every table is asked which
+        of the changed ids it owns (bounded IN scans). An id a table returns
+        no row for, while the index still holds its document, is a deletion.
+
+        Copy-on-write, like rebuild(): search() runs on the event loop while
+        this runs in a worker thread, so the live dict is never mutated — a
+        shallow copy takes the batch and swaps in atomically. The copies
+        share the (immutable-in-practice) document objects, so the cost is
+        the dict itself, not the corpus.
+        """
+        documents = dict(self._documents)
+        frequency = self._document_frequency.copy()
+        ids = sorted(changed_ids)
+        for entity in self.catalog.entities.values():
+            try:
+                rows = self.query_engine.scan_entity_rows_by_ids(
+                    entity.table,
+                    primary_key=entity.primary_key,
+                    ids=ids,
+                )
+            except BackendExecutionError:
+                logger.exception("search_index_incremental_scan_failed", entity_type=entity.name)
+                continue
+            returned: set[tuple[str | None, str]] = set()
+            for row in rows:
+                document = self._entity_document_from_row(entity, row)
+                if document is None:
+                    continue
+                key = self._document_key(document)
+                previous = documents.pop(key, None)
+                if previous is not None:
+                    frequency.subtract(previous.tokens.keys())
+                documents[key] = document
+                frequency.update(document.tokens.keys())
+                returned.add((document.tenant_id, document.doc_id))
+            stale = [
+                key
+                for key in documents
+                if key[0] == "entity"
+                and key[1] == entity.name
+                and key[3] in changed_ids
+                and (key[2], key[3]) not in returned
+            ]
+            for key in stale:
+                previous = documents.pop(key)
+                frequency.subtract(previous.tokens.keys())
+        # Counter.subtract keeps zero/negative entries alive; compact once per
+        # batch so the frequency table shrinks with the corpus.
+        self._documents = documents
+        self._document_frequency = +frequency
+
     def _entity_documents(self, entity: EntityDefinition) -> list[SearchDocument]:
         try:
             # Through the active backend. This scan ran on the raw DuckDB
@@ -250,41 +441,46 @@ class SearchIndex:
 
         documents = []
         for row in rows:
-            # The tenant travels on the document, not in it: strip the column
-            # before the row is turned into snippet and tokens, so a tenant id
-            # never leaks into search text (P0-1).
-            tenant_id = str(row.get("tenant_id") or "default")
-            payload = {key: value for key, value in row.items() if key != "tenant_id"}
-            entity_id = str(payload.get(entity.primary_key, ""))
-            if not entity_id:
-                continue
-
-            snippet = self._entity_snippet(entity, payload)
-            search_text = " ".join(
-                part
-                for part in (
-                    entity.name,
-                    self._pluralize(entity.name),
-                    entity.description,
-                    snippet,
-                    self._payload_text(payload),
-                    self._entity_tags(entity, payload),
-                )
-                if part
-            )
-            documents.append(
-                SearchDocument(
-                    doc_type="entity",
-                    doc_id=entity_id,
-                    entity_type=entity.name,
-                    endpoint=f"/v1/entity/{entity.name}/{entity_id}",
-                    snippet=snippet,
-                    tokens=Counter(self._tokenize(search_text)),
-                    boost=1.0,
-                    tenant_id=tenant_id,
-                )
-            )
+            document = self._entity_document_from_row(entity, row)
+            if document is not None:
+                documents.append(document)
         return documents
+
+    def _entity_document_from_row(
+        self, entity: EntityDefinition, row: dict
+    ) -> SearchDocument | None:
+        # The tenant travels on the document, not in it: strip the column
+        # before the row is turned into snippet and tokens, so a tenant id
+        # never leaks into search text (P0-1).
+        tenant_id = str(row.get("tenant_id") or "default")
+        payload = {key: value for key, value in row.items() if key != "tenant_id"}
+        entity_id = str(payload.get(entity.primary_key, ""))
+        if not entity_id:
+            return None
+
+        snippet = self._entity_snippet(entity, payload)
+        search_text = " ".join(
+            part
+            for part in (
+                entity.name,
+                self._pluralize(entity.name),
+                entity.description,
+                snippet,
+                self._payload_text(payload),
+                self._entity_tags(entity, payload),
+            )
+            if part
+        )
+        return SearchDocument(
+            doc_type="entity",
+            doc_id=entity_id,
+            entity_type=entity.name,
+            endpoint=f"/v1/entity/{entity.name}/{entity_id}",
+            snippet=snippet,
+            tokens=Counter(self._tokenize(search_text)),
+            boost=1.0,
+            tenant_id=tenant_id,
+        )
 
     def _catalog_field_documents(self, entity: EntityDefinition) -> list[SearchDocument]:
         documents = []

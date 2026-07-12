@@ -38,6 +38,35 @@ class EntityQueryMixin:
             f"SELECT * FROM {physical} LIMIT {int(limit)}"  # nosec B608
         )
 
+    def scan_entity_rows_by_ids(
+        self: QueryExecutionHost,
+        table_name: str,
+        *,
+        primary_key: str,
+        ids: list[str],
+    ) -> list[dict]:
+        """Targeted companion to ``scan_entity_rows`` for the incremental
+        search refresh (audit P1-6): re-read only the rows whose primary key
+        appears in the journal's changed-id set, instead of full-scanning the
+        table because one row moved.
+
+        Same deliberate shape as the bulk scan: through the active backend,
+        ``tenant_id`` included, NOT tenant-scoped — the caller is the
+        process-global index and stamps the tenant onto each document.
+        ``table_name`` and ``primary_key`` are catalog-defined identifiers;
+        the id values are event-shaped data and go through ``_quote_literal``
+        (single-quote escaping the backend's sqlglot round-trip re-escapes
+        structurally).
+        """
+        if not ids:
+            return []
+        physical = self._physical_table(table_name)
+        quoted = ", ".join(self._quote_literal(value) for value in ids)
+        return self._backend.execute(
+            # table/primary_key are catalog identifiers; every id is quoted.
+            f"SELECT * FROM {physical} WHERE {primary_key} IN ({quoted})"  # nosec B608
+        )
+
     def get_entity(
         self: QueryExecutionHost,
         entity_type: str,

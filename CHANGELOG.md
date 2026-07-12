@@ -4,6 +4,28 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Scale — search maintenance reads the journal, not the world (audit P1-6)
+
+- **The periodic tick is a `refresh()`, not a rebuild.** It reads
+  `pipeline_events` past a cursor: a quiet journal costs one bounded read and
+  zero table scans; a small change-set costs targeted `IN` re-reads of
+  exactly the rows the journal named (`scan_entity_rows_by_ids`, through the
+  active backend), upserted copy-on-write so a concurrent search never sees a
+  half-applied batch. Document frequencies are maintained incrementally, and
+  the result is pinned byte-equivalent to a full rebuild.
+- **The full pass survives where it is honest**: on a cold cursor, when the
+  journal window overflows (completeness would be a guess), when the
+  change-set outgrows targeted reads, and unconditionally every
+  `AGENTFLOW_SEARCH_FULL_REBUILD_TICKS` ticks — the bounded-staleness safety
+  net for journal-bypassing writers and deletions. Knobs:
+  `AGENTFLOW_SEARCH_REFRESH_WINDOW` (default 1000),
+  `AGENTFLOW_SEARCH_CHANGED_IDS_LIMIT` (512),
+  `AGENTFLOW_SEARCH_FULL_REBUILD_TICKS` (10).
+- **Measured, not asserted**: the scale probe shows a 10-row refresh over a
+  3000-row corpus allocating under a fifth of a rebuild's peak with zero
+  wholesale scans, and the live ClickHouse suite proves a post-boot row is
+  picked up incrementally and stays visible to its own tenant only.
+
 ### Scale — the PostgreSQL control plane grows up (audit P1-1)
 
 - **Bounded connection pool.** `PostgresControlPlaneStore` checks connections

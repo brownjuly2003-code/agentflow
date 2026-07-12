@@ -111,7 +111,11 @@ _ALLOWED_B608_SITES = {
     # entity read the search index used to run on the raw DuckDB connection.
     # Interpolates a catalog-defined table name and an int() limit; no values.
     # search_index.py's own site is gone with it.
-    "src/serving/semantic_layer/query/entity_queries.py": 5,
+    # audit P1-6 (reviewed 2026-07-12): +1 site — scan_entity_rows_by_ids, the
+    # incremental search refresh's targeted read. Table and primary key are
+    # catalog identifiers; every id value goes through _quote_literal (and the
+    # ClickHouse transpile re-escapes structurally).
+    "src/serving/semantic_layer/query/entity_queries.py": 6,
     "src/serving/semantic_layer/query/nl_queries.py": 3,
     # audit P0-1 (reviewed 2026-07-11): the tenant boundary itself, 2 sites.
     # (1) _qualify_table builds the scoped relation every entity read goes through

@@ -225,6 +225,18 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
    run can complete; the delivery/alert checks follow the recipe in the
    cutover plan (their store-level guarantee is already live-verified by
    slice 5's 31/31 PG probes).
+7. **Storage-layer hardening (2026-07-12, audit P1-1)** — the follow-ups
+   slice 4 deliberately left open, executed: connections come from a bounded
+   `psycopg_pool.ConnectionPool` (per-process budget + checkout timeout +
+   `agentflow_pg_pool_*` gauges; the `postgres` extra becomes
+   `psycopg[binary,pool]`), `record_api_usage_batch` is one
+   `executemany` transaction instead of a commit per row, schema DDL is a
+   versioned migration ledger (`control_plane_schema_version`, advisory-lock
+   serialized, baseline stamps pre-versioning stores in place), and
+   `AGENTFLOW_PROCESS_ROLE` splits serving replicas from the one worker
+   process that runs the delivery loops. Live-verified: 37/37 probes on
+   PostgreSQL 17.10, including pool-bound-under-concurrency, one-xmin batch,
+   racing-replica migration serialization, and the role-split boot shapes.
 
 ## Consequences
 

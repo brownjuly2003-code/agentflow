@@ -4,6 +4,37 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Scale — the PostgreSQL control plane grows up (audit P1-1)
+
+- **Bounded connection pool.** `PostgresControlPlaneStore` checks connections
+  out of a `psycopg_pool.ConnectionPool` (min/max/timeout via
+  `AGENTFLOW_CONTROLPLANE_PG_POOL_*`, default 1/10/10s) instead of
+  `psycopg.connect()` per method call — the per-process PostgreSQL footprint
+  is now a budget, not a function of request rate. Transaction semantics are
+  unchanged (checkout = one transaction, commit/rollback on exit). Pool
+  pressure is scrapeable (`agentflow_pg_pool_connections{state}`,
+  `agentflow_pg_pool_requests_waiting`, `agentflow_pg_pool_max_size`) and
+  alertable (`ControlPlanePoolSaturated`, `UsageRowsDropped` in
+  `monitoring/alerting/rules.yml`). The `postgres` extra becomes
+  `psycopg[binary,pool]`; the store closes its pool on lifespan shutdown.
+- **`record_api_usage_batch` is one transaction.** The base-class fallback
+  paid a connection and a commit per row — a 256-row batch could open 256
+  connections. Now: one checkout, one `executemany`, one transaction; the
+  live probe proves every row of a 256-row batch shares one `xmin`.
+- **Versioned migrations.** Schema DDL moved from a flat
+  `CREATE TABLE IF NOT EXISTS` pile to a monotonic `_MIGRATIONS` ledger
+  recorded in `control_plane_schema_version`; concurrent replicas serialize
+  on a transaction-scoped advisory lock (live probe: four replicas race a
+  fresh database, one applies, ledger stays single). A pre-versioning
+  database upgrades in place: migration 1 is the baseline, pure
+  `IF NOT EXISTS`, and gets stamped without touching data.
+- **Process roles.** `AGENTFLOW_PROCESS_ROLE=api` serves requests and runs
+  no delivery loops (webhook/alert dispatchers, outbox processor);
+  `worker` runs the loops and skips the serving-side caches; default `all`
+  keeps the single-process shape. Split roles refuse the embedded profile
+  loudly — there the loops exist nowhere else. Scaling API replicas now
+  scales request capacity, not the number of PostgreSQL scanners.
+
 ### Build — the dependency set is now a fact, not a weather report (audit P1-3)
 
 - **`uv.lock` is the single resolution** for Python 3.11–3.13 (the versions CI

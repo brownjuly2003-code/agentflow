@@ -44,7 +44,9 @@ postgres = [
     # ADR 0010 slice 5: PostgresControlPlaneStore (scale profile). Optional
     # exactly like redis — the embedded default profile needs none of it,
     # and control_plane/postgres.py degrades to a clear boot error without it.
-    "psycopg[binary]>=3.2,<4",
+    # The pool extra ships psycopg_pool: the store's connections come from a
+    # bounded ConnectionPool (audit P1-1), not one connect() per method call.
+    "psycopg[binary,pool]>=3.2,<4",
 ]
 load = [
     "locust>=2.29,<3",

@@ -120,6 +120,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.node_config = resolve_node_config()
     app.state.node_role = app.state.node_config.role
     app.state.node_branch = app.state.node_config.branch
+    # Process role (audit P1-1): 'all' (default) runs serving and the delivery
+    # loops in one process — the single-pod shape. On the scale profile, 'api'
+    # replicas serve requests and skip the delivery loops (webhook/alert
+    # dispatchers, outbox processor), while one 'worker' process runs the
+    # loops and skips the serving-side caches (periodic search rebuild,
+    # metric-cache invalidation) that only matter to a process taking
+    # requests. Scaling API replicas then scales request capacity, not the
+    # number of processes scanning PostgreSQL to re-deliver the same work.
+    process_role = (os.getenv("AGENTFLOW_PROCESS_ROLE") or "all").strip().lower()
+    if process_role not in {"all", "api", "worker"}:
+        raise ValueError(
+            f"AGENTFLOW_PROCESS_ROLE must be 'all', 'api' or 'worker', got {process_role!r}."
+        )
+    if process_role != "all" and control_plane_store_kind() == "embedded":
+        # Split roles need shared state: on the embedded profile the delivery
+        # loops exist nowhere else, so an 'api' process would silently
+        # deliver nothing and a 'worker' would scan a store nobody shares.
+        raise ValueError(
+            "AGENTFLOW_PROCESS_ROLE=api/worker requires the postgres control plane "
+            "(AGENTFLOW_CONTROLPLANE_STORE=postgres); the embedded profile is "
+            "single-process — leave the role unset."
+        )
+    app.state.process_role = process_role
+    runs_delivery_loops = process_role in {"all", "worker"}
+    serves_requests = process_role in {"all", "api"}
     # Reset the auth-disabled bypass flag on every lifespan startup. This is a
     # process-wide attribute and tests may toggle it; without an explicit
     # reset a later TestClient lifespan with no configured keys would silently
@@ -183,8 +208,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.search_index.rebuild()
     except Exception:
         logger.warning("search_index_initial_rebuild_failed", exc_info=True)
-    app.state.search_index_rebuild_task = asyncio.create_task(
-        app.state.search_index.rebuild_periodically(interval_seconds=60)
+    app.state.search_index_rebuild_task = (
+        asyncio.create_task(app.state.search_index.rebuild_periodically(interval_seconds=60))
+        if serves_requests
+        else None
     )
     app.state.health_collector = HealthCollector(journal=app.state.query_engine.journal)
     try:
@@ -278,11 +305,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # rows and goes blind once the journal outgrows it (issue #183).
         fetch_pipeline_events=journal_scan_fetch(app.state.query_engine),
     )
-    app.state.metric_cache_controller.start()
-    if getattr(app.state, "webhook_dispatcher_autostart", True):
+    if serves_requests:
+        app.state.metric_cache_controller.start()
+    if runs_delivery_loops and getattr(app.state, "webhook_dispatcher_autostart", True):
         app.state.webhook_dispatcher.start()
     app.state.alert_dispatcher = AlertDispatcher(app)
-    if getattr(app.state, "alert_dispatcher_autostart", True):
+    if runs_delivery_loops and getattr(app.state, "alert_dispatcher_autostart", True):
         app.state.alert_dispatcher.start()
     if shared_control_plane_store is not None:
         app.state.outbox_processor = OutboxProcessor(store=shared_control_plane_store)
@@ -292,7 +320,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.outbox_processor = OutboxProcessor(
             duckdb_path=app.state.query_engine._db_path,
         )
-    app.state.outbox_processor_task = asyncio.create_task(app.state.outbox_processor.run_forever())
+    app.state.outbox_processor_task = (
+        asyncio.create_task(app.state.outbox_processor.run_forever())
+        if runs_delivery_loops
+        else None
+    )
 
     # Edge role (ADR 0012): start the slow generator->forward emitter. Off in
     # center/standalone; tests disable it with AGENTFLOW_NODE_EMITTER_ENABLED=false.
@@ -361,18 +393,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         entities=len(app.state.catalog.entities),
         auth=auth_mode,
         configured_keys=app.state.auth_manager.configured_key_count,
+        process_role=process_role,
     )
     yield
-    app.state.search_index_rebuild_task.cancel()
-    try:
-        await app.state.search_index_rebuild_task
-    except asyncio.CancelledError:
-        pass
-    app.state.outbox_processor_task.cancel()
-    try:
-        await app.state.outbox_processor_task
-    except asyncio.CancelledError:
-        pass
+    if app.state.search_index_rebuild_task is not None:
+        app.state.search_index_rebuild_task.cancel()
+        try:
+            await app.state.search_index_rebuild_task
+        except asyncio.CancelledError:
+            pass
+    if app.state.outbox_processor_task is not None:
+        app.state.outbox_processor_task.cancel()
+        try:
+            await app.state.outbox_processor_task
+        except asyncio.CancelledError:
+            pass
     await app.state.alert_dispatcher.stop()
     await app.state.webhook_dispatcher.stop()
     if getattr(app.state, "metric_cache_controller", None) is not None:
@@ -385,6 +420,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Drain the queued api_usage rows before the process goes away; they are
     # written off the request path and would otherwise die with the queue.
     app.state.auth_manager.close_usage_writer()
+    # After the drain: the usage writer's last batch needs the store's pool.
+    # Embedded stores expose no close(); the postgres store's releases its
+    # pooled connections and stops the pool's worker threads.
+    control_plane_close = getattr(getattr(app.state, "control_plane_store", None), "close", None)
+    if control_plane_close is not None:
+        control_plane_close()
     app.state.db_pool.close()
     logger.info("api_shutting_down")
 

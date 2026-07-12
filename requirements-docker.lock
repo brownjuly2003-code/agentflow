@@ -955,6 +955,10 @@ psycopg-binary==3.3.4 ; python_full_version < '3.14' and implementation_name != 
     --hash=sha256:ee17a2cf4943cde261adfad1bbc5bf38d6b3776d7afff74c7cabcbeaeb08c260 \
     --hash=sha256:fbd1d4ed566895ad2d3bf4ddfd8bae90026930ddf29df3b9d91d32c8c47866a7
     # via psycopg
+psycopg-pool==3.3.1 ; python_full_version < '3.14' \
+    --hash=sha256:2af5b432941c4c9ad5c87b3fa410aec910ec8f7c122855897983a06c45f2e4b5 \
+    --hash=sha256:b10b10b7a175d5cc1592147dc5b7eec8a9e0834eb3ed2c4a92c858e2f51eb63c
+    # via psycopg
 pyarrow==24.0.0 ; python_full_version < '3.14' \
     --hash=sha256:02b001b3ed4723caa44f6cd1af2d5c86aa2cf9971dacc2ffa55b21237713dfba \
     --hash=sha256:04920d6a71aabd08a0417709efce97d45ea8e6fb733d9ca9ecffb13c67839f68 \
@@ -1475,6 +1479,7 @@ typing-extensions==4.16.0 ; python_full_version < '3.14' \
     #   opentelemetry-semantic-conventions
     #   pandera
     #   psycopg
+    #   psycopg-pool
     #   pydantic
     #   pydantic-core
     #   sqlalchemy

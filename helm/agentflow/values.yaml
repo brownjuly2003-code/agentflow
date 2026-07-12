@@ -167,6 +167,17 @@ provision:
 # when the store that makes scaling correct exists. The chart never ships a
 # PostgreSQL service (mirroring ClickHouse) — the operator provides the DSN in
 # a Secret referenced by postgres.existingSecret / postgres.dsnKey.
+#
+# Pool shape and process role (audit P1-1) tune via extraEnv:
+#   AGENTFLOW_CONTROLPLANE_PG_POOL_MIN / _MAX (default 1/10) — the per-pod
+#     connection budget; _MAX * replicas must stay under the server's
+#     max_connections.
+#   AGENTFLOW_CONTROLPLANE_PG_POOL_TIMEOUT_SECONDS (default 10) — checkout wait.
+#   AGENTFLOW_PROCESS_ROLE — 'api' pods serve requests and run NO delivery
+#     loops; ONE 'worker' pod runs webhook/alert dispatch + outbox. Default
+#     'all' is the single-pod shape. A dedicated worker Deployment template
+#     is a follow-up; until then run a second release (replicaCount: 1,
+#     extraEnv role=worker) against the same DSN.
 controlPlane:
   store: embedded
   postgres:

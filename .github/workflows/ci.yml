@@ -31,6 +31,36 @@ jobs:
       - name: Type check
         run: mypy src/ --ignore-missing-imports
 
+  # Audit P1-3: the lock chain stays honest end to end — uv.lock matches
+  # pyproject.toml, requirements-docker.lock (what Dockerfile.api actually
+  # installs) matches uv.lock, and a fresh hash-verified install from it is
+  # a consistent environment per pip check. Runs independently of lint: a
+  # dependency drift should be visible even while lint is red.
+  lock-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        # Exact pin: a newer uv may rewrite the lock format and turn this
+        # gate into noise. Bump deliberately, together with uv.lock.
+        run: pip install uv==0.8.23
+      - name: uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: requirements-docker.lock matches uv.lock
+        run: |
+          uv export --format requirements-txt --extra cloud --extra postgres \
+            --no-emit-project -o requirements-docker.lock
+          git diff --exit-code requirements-docker.lock
+      - name: Locked install is consistent
+        run: |
+          python -m venv /tmp/lockenv
+          /tmp/lockenv/bin/pip install --quiet --require-hashes -r requirements-docker.lock
+          /tmp/lockenv/bin/pip check
+
   schema-check:
     runs-on: ubuntu-latest
     needs: lint

@@ -4,6 +4,29 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Build — the dependency set is now a fact, not a weather report (audit P1-3)
+
+- **`uv.lock` is the single resolution** for Python 3.11–3.13 (the versions CI
+  actually tests; `[tool.uv].environments`). `requirements-docker.lock` is its
+  hash-pinned export for the production image (extras `cloud,postgres`), and
+  `Dockerfile.api` installs third-party packages only from it with
+  `--require-hashes`, then the project wheel with `--no-deps`, then proves the
+  result with `pip check` inside the build. Two builds from the same inputs now
+  install the same bytes.
+- **CI keeps the chain honest** (`ci.yml` job `lock-check`): `uv lock --check`
+  against `pyproject.toml`, re-export diffed against the committed
+  `requirements-docker.lock`, and a fresh hash-verified install that must pass
+  `pip check`. `security.yml` gains a `pip-audit` job over the locked pins
+  (`--no-deps` — nothing to resolve, which is what used to time out).
+- **The `[flink]` extra is gone because it never existed.** apache-flink 2.3.0 →
+  apache-beam ≤2.61 caps `pyarrow<17` while core pins `pyarrow>=17`: a fresh
+  `pip install .[flink]` could not resolve at all, and a lock covering it is
+  mathematically impossible. The Flink job runs in its own interpreter inside
+  the cluster image and imports nothing from agentflow; its manifest is now
+  `src/processing/flink_jobs/requirements.txt` (the image build asserts the
+  apache-flink pin matches `ARG FLINK_VERSION`), and the Safety scan reads that
+  file instead of the extra.
+
 ### Security — tenant isolation was a schema that nobody created (audit P0-1)
 
 **Breaking for operators: every serving table's key changes.** `tenant_id` now

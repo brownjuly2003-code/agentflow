@@ -30,9 +30,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-flink = [
-    "apache-flink==2.3.0",
-]
+# There is deliberately no [flink] extra. apache-flink 2.3.0 -> apache-beam
+# <=2.61 caps pyarrow<17 while the core dependencies pin pyarrow>=17, so an
+# extra could never resolve in one environment (a fresh
+# `pip install .[flink]` fails outright). The Flink job runs in its own
+# interpreter inside the cluster image and imports nothing from agentflow;
+# its manifest is src/processing/flink_jobs/requirements.txt.
 cloud = [
     "boto3>=1.35,<2",
     "pyiceberg[pyiceberg-core]>=0.7,<1",
@@ -130,12 +133,8 @@ exclude = [
 # Audit P1-3: `requires-python = ">=3.11"` above has no upper bound, so a
 # plain `uv lock` builds one universal resolution covering every Python
 # version that floor implies — including hypothetical future interpreters.
-# The [flink] extra's apache-flink==2.3.0 -> apache-beam chain only
-# conflicts with the core `pyarrow>=17,<25` pin on those hypothetical
-# versions (observed split: python_full_version >= 3.15), never on a Python
-# this project actually ships, tests, or documents. Restrict resolution to
-# the versions README/CI claim (3.11-3.13) so the lock reflects what is
-# real instead of failing on a phantom future release.
+# Restrict resolution to the versions README/CI actually ship and test
+# (3.11-3.13) so the lock stays scoped to what is real.
 environments = [
     "python_version == '3.11'",
     "python_version == '3.12'",

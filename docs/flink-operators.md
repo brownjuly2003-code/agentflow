@@ -27,7 +27,12 @@ This allows session state to survive a job restart after the latest completed ch
 
 ## Local Run
 
-1. Install the Flink extra: `pip install -e .[flink]`
+1. Install the Flink runtime manifest **in its own venv**:
+   `pip install -r src/processing/flink_jobs/requirements.txt`.
+   There is no `[flink]` extra: apache-flink's beam chain caps `pyarrow<17`
+   while the core package pins `pyarrow>=17`, so the two can never share one
+   environment. The job imports nothing from agentflow, so it does not need
+   the package.
 2. Export `KAFKA_BOOTSTRAP_SERVERS` and optionally `FLINK_CHECKPOINT_DIR`
 3. Submit the job: `flink run -py src/processing/flink_jobs/session_aggregation.py`
 

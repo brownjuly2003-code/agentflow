@@ -1,0 +1,19 @@
+# Python dependencies of the Flink runtime image (Dockerfile next door) and
+# of a local PyFlink development venv.
+#
+# This is deliberately NOT an extra of agentflow-runtime: apache-flink 2.3.0
+# depends on apache-beam<=2.61, which caps pyarrow<17, while the core package
+# pins pyarrow>=17 — the two can never co-install in one environment, so a
+# `[flink]` extra could never resolve (and never did; pip only "installed" it
+# by ignoring the conflict across separate invocations). The Flink job runs
+# in its own interpreter inside the Flink cluster image and imports nothing
+# from agentflow, so it gets its own manifest instead.
+#
+# apache-flink must match ARG FLINK_VERSION in the Dockerfile (the pinned
+# Flink binary distribution); the image build asserts this. The shared
+# libraries carry the same bounds as core pyproject.toml so both runtimes
+# accept the same model/config payloads.
+apache-flink==2.3.0
+confluent-kafka>=2.5,<3
+pydantic>=2.9,<3
+structlog>=24.4,<27

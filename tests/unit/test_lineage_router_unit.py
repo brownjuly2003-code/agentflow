@@ -27,6 +27,8 @@ from src.serving.api.routers.lineage import (
     _source_topic_for_entity,
     get_lineage,
 )
+from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.semantic_layer.journal import JournalReader
 
 # ── pure helpers ─────────────────────────────────────────────────
 
@@ -101,9 +103,12 @@ def _req(
     catalog = SimpleNamespace(
         entities=entities if entities is not None else {"order": SimpleNamespace(table="orders")}
     )
-    app = SimpleNamespace(
-        state=SimpleNamespace(catalog=catalog, query_engine=SimpleNamespace(_conn=conn))
-    )
+    # The endpoint reads the journal through the active backend now, not through
+    # a private DuckDB cursor (audit P0-3) — so the fake engine exposes the same
+    # front door the real one does.
+    backend = DuckDBBackend(db_path=":memory:", connection=conn)
+    engine = SimpleNamespace(journal=JournalReader(backend), backend=backend)
+    app = SimpleNamespace(state=SimpleNamespace(catalog=catalog, query_engine=engine))
     return SimpleNamespace(
         app=app, state=SimpleNamespace(tenant_key=tenant_key, tenant_id=tenant_id)
     )

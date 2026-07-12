@@ -133,6 +133,37 @@ serving:
     user: default
     existingSecret: ""
     passwordKey: clickhouse-password
+    # TLS to the external ClickHouse (audit P2-3). secure=true switches the
+    # client to HTTPS with certificate AND hostname verification — the server
+    # cert must match `host`. For a private CA, point tls.caSecret at a Secret
+    # holding the PEM bundle; it is mounted read-only and CLICKHOUSE_CA_CERT
+    # then REPLACES the system trust store for this connection. Note the app
+    # side: AGENTFLOW_PROFILE=production refuses to boot when an external
+    # ClickHouse is plaintext (escape hatch: AGENTFLOW_INSECURE_TRANSPORT_OK
+    # via extraEnv for deliberate in-cluster plaintext).
+    secure: false
+    tls:
+      caSecret: ""
+      caKey: ca.crt
+    # Provisioning is a separate identity from serving (audit P0-2). The API
+    # only reads: give `user` SELECT and nothing else, and let the pre-install
+    # migration Job connect as an account that holds CREATE/ALTER. Both fall
+    # back to the serving credentials when unset, which is the single-account
+    # setup the demo uses.
+    migrationUser: ""
+    migrationPasswordKey: ""
+
+# Schema provisioning for an external serving store. The API used to create its
+# own tables on boot, so the serving identity needed CREATE/ALTER and several
+# booting replicas raced on the same DDL (audit P0-2). It is a pre-install /
+# pre-upgrade Job now: a failed migration blocks the release instead of letting
+# pods come up against a store they would have silently created. Rendered only
+# on serving.backend=clickhouse — the embedded DuckDB profile has no external
+# store to provision, each pod creates its own in-process.
+provision:
+  enabled: true
+  backoffLimit: 3
+  resources: {}
 
 # Control-plane state (ADR 0009 / ADR 0010): webhook queue+log, registrations,
 # alert rules and history, outbox, dead-letter and usage accounting.
@@ -148,6 +179,17 @@ serving:
 # when the store that makes scaling correct exists. The chart never ships a
 # PostgreSQL service (mirroring ClickHouse) — the operator provides the DSN in
 # a Secret referenced by postgres.existingSecret / postgres.dsnKey.
+#
+# Pool shape and process role (audit P1-1) tune via extraEnv:
+#   AGENTFLOW_CONTROLPLANE_PG_POOL_MIN / _MAX (default 1/10) — the per-pod
+#     connection budget; _MAX * replicas must stay under the server's
+#     max_connections.
+#   AGENTFLOW_CONTROLPLANE_PG_POOL_TIMEOUT_SECONDS (default 10) — checkout wait.
+#   AGENTFLOW_PROCESS_ROLE — 'api' pods serve requests and run NO delivery
+#     loops; ONE 'worker' pod runs webhook/alert dispatch + outbox. Default
+#     'all' is the single-pod shape. A dedicated worker Deployment template
+#     is a follow-up; until then run a second release (replicaCount: 1,
+#     extraEnv role=worker) against the same DSN.
 controlPlane:
   store: embedded
   postgres:
@@ -155,6 +197,11 @@ controlPlane:
     dsnKey: controlplane-pg-dsn
 
 config:
+  # Deployment profile handed to the app as AGENTFLOW_PROFILE (audit P2-3).
+  # "" keeps the app default (dev; demo when AGENTFLOW_DEMO_MODE=true).
+  # "production" makes the boot refuse insecure transport to external
+  # ClickHouse/Redis/PostgreSQL and refuse the demo surface outright.
+  profile: ""
   duckdbPath: /data/agentflow.duckdb
   usageDbPath: /data/agentflow_api.duckdb
   apiKeysPath: /etc/agentflow/secret/api_keys.yaml
@@ -174,14 +221,12 @@ config:
       - id: acme-corp
         display_name: "Acme Corp"
         kafka_topic_prefix: "acme"
-        duckdb_schema: "acme"
         max_events_per_day: 1000000
         max_api_keys: 10
         allowed_entity_types: null
       - id: demo
         display_name: "Demo Tenant"
         kafka_topic_prefix: "demo"
-        duckdb_schema: "demo"
         max_events_per_day: 10000
         max_api_keys: 2
         allowed_entity_types:
@@ -231,7 +276,10 @@ config:
           - type: additive
             description: "Added meta.is_historical to entity responses"
           - type: additive
-            description: "Added X-PII-Masked response header"
+            description: >-
+              Added X-PII-Masked response header (retired 2026-07-01 — the
+              serving tier holds no PII, so the current build never emits it;
+              the name stays reserved)
 
 secrets:
   create: true

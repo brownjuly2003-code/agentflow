@@ -21,9 +21,11 @@ in the same DuckDB-flavored SQL as the semantic layer and go through the same
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
+from src.processing.event_tenant import event_tenant
 from src.serving.backends import load_serving_backend_config
 from src.serving.backends.clickhouse_backend import ClickHouseBackend
 
@@ -46,10 +48,16 @@ class ClickHouseSink:
 
     def __init__(self, backend: ClickHouseBackend) -> None:
         self._backend = backend
-        # Idempotent: creates the schema and seeds the canonical demo rows only
-        # when the store is empty, so the documented demo entities
-        # (ORD-20260404-1001, ...) exist regardless of bring-up order.
-        backend.initialize_demo_data()
+        # The writer owns the schema: it holds the write grants, and it is the
+        # one process that cannot function without the tables. Idempotent DDL,
+        # so bring-up order does not matter.
+        #
+        # It no longer seeds demo rows. Seeding on "the store looks empty" put
+        # demo orders into whichever ClickHouse a bridge first connected to,
+        # production included (audit P0-2). Demo rows now come from an explicit
+        # `python -m src.serving.provision --schema --seed`, which the demo
+        # bring-up runs and a real deployment does not.
+        backend.ensure_schema()
 
     @classmethod
     def from_serving_config(cls, config_path: str | None = None) -> ClickHouseSink | None:
@@ -158,7 +166,7 @@ class ClickHouseSink:
         """
         self.insert_orders([event])
         if refresh_user:
-            self.refresh_user_aggregates({str(event["user_id"])})
+            self.refresh_user_aggregates({(event_tenant(event), str(event["user_id"]))})
 
     def insert_orders(self, events: list[dict]) -> None:
         """Multi-row ``orders_v2`` insert (ReplacingMergeTree append versions)."""
@@ -166,6 +174,7 @@ class ClickHouseSink:
             return
         rows = [
             {
+                "tenant_id": event_tenant(event),
                 "order_id": event["order_id"],
                 "user_id": event["user_id"],
                 "status": event["status"],
@@ -182,6 +191,7 @@ class ClickHouseSink:
             return
         rows = [
             {
+                "tenant_id": event_tenant(event),
                 "product_id": event["product_id"],
                 "name": event["name"],
                 "category": event["category"],
@@ -193,7 +203,7 @@ class ClickHouseSink:
         ]
         self._backend.insert_rows("products_current", rows)
 
-    def refresh_user_aggregates(self, user_ids: set[str] | list[str]) -> None:
+    def refresh_user_aggregates(self, users: Iterable[tuple[str, str]]) -> None:
         """Recompute ``users_enriched`` for a batch's users (Q1.4).
 
         One grouped SELECT over the id list plus one multi-row insert — two
@@ -204,16 +214,25 @@ class ClickHouseSink:
         path materializes in ``_upsert_order``; users whose only orders are
         cancelled return no group row and are skipped, exactly like the
         per-user recompute did.
+
+        Takes ``(tenant_id, user_id)`` pairs, and both the filter and the
+        GROUP BY carry the tenant (audit P0-1). A user id is only unique within
+        a tenant: grouping on ``user_id`` alone over a shared ``orders_v2`` would
+        sum two tenants' orders into one total and then write that total back to
+        both — a background job silently manufacturing cross-tenant data.
         """
-        ids = sorted({str(uid) for uid in user_ids if uid})
-        if not ids:
+        pairs = sorted({(str(tenant), str(user)) for tenant, user in users if user})
+        if not pairs:
             return
-        quoted = ", ".join(_quote_literal(uid) for uid in ids)
+        quoted = ", ".join(
+            f"({_quote_literal(tenant)}, {_quote_literal(user)})" for tenant, user in pairs
+        )
         rows = self._backend.execute(
-            "SELECT user_id, COUNT(*) AS total_orders, SUM(total_amount) AS total_spent, "
+            "SELECT tenant_id, user_id, COUNT(*) AS total_orders, "
+            "SUM(total_amount) AS total_spent, "
             "MIN(created_at) AS first_order_at, MAX(created_at) AS last_order_at "
-            f"FROM orders_v2 WHERE user_id IN ({quoted}) "  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
-            "AND status != 'cancelled' GROUP BY user_id"
+            f"FROM orders_v2 WHERE (tenant_id, user_id) IN ({quoted}) "  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
+            "AND status != 'cancelled' GROUP BY tenant_id, user_id"
         )
         if not rows:
             return
@@ -221,6 +240,7 @@ class ClickHouseSink:
             "users_enriched",
             [
                 {
+                    "tenant_id": str(row["tenant_id"]),
                     "user_id": str(row["user_id"]),
                     "total_orders": int(row["total_orders"]),
                     "total_spent": float(row["total_spent"]),
@@ -228,7 +248,9 @@ class ClickHouseSink:
                     "last_order_at": row["last_order_at"],
                     "preferred_category": None,
                 }
-                for row in sorted(rows, key=lambda row: str(row["user_id"]))
+                for row in sorted(
+                    rows, key=lambda row: (str(row["tenant_id"]), str(row["user_id"]))
+                )
             ],
         )
 
@@ -253,29 +275,37 @@ class ClickHouseSink:
         """
         if not events:
             return
-        grouped: dict[str, list[dict]] = {}
+        # Keyed by (tenant, session): a session id is only unique within a
+        # tenant, and folding two tenants' events into one session version would
+        # merge their clickstreams (audit P0-1).
+        grouped: dict[tuple[str, str], list[dict]] = {}
         for event in events:
-            grouped.setdefault(str(event.get("session_id", "unknown")), []).append(event)
+            key = (event_tenant(event), str(event.get("session_id", "unknown")))
+            grouped.setdefault(key, []).append(event)
 
-        quoted = ", ".join(_quote_literal(session_id) for session_id in grouped)
-        existing_rows = self._backend.execute(
-            "SELECT session_id, user_id, started_at, ended_at, duration_seconds, "
-            "event_count, unique_pages, funnel_stage, is_conversion "
-            f"FROM sessions_aggregated WHERE session_id IN ({quoted})"  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
+        quoted = ", ".join(
+            f"({_quote_literal(tenant)}, {_quote_literal(session_id)})"
+            for tenant, session_id in grouped
         )
-        existing_by_id: dict[str, dict[str, Any]] = {
-            str(row["session_id"]): row for row in existing_rows
+        existing_rows = self._backend.execute(
+            "SELECT tenant_id, session_id, user_id, started_at, ended_at, duration_seconds, "
+            "event_count, unique_pages, funnel_stage, is_conversion "
+            f"FROM sessions_aggregated WHERE (tenant_id, session_id) IN ({quoted})"  # nosec B608 - quoted literals, re-escaped structurally by the backend transpile
+        )
+        existing_by_id: dict[tuple[str, str], dict[str, Any]] = {
+            (str(row["tenant_id"]), str(row["session_id"])): row for row in existing_rows
         }
 
         now = datetime.now(UTC)
         versions: list[dict[str, Any]] = []
-        for session_id, session_events in grouped.items():
-            existing = existing_by_id.get(session_id)
+        for (tenant_id, session_id), session_events in grouped.items():
+            existing = existing_by_id.get((tenant_id, session_id))
             if existing is not None:
                 funnel = str(existing.get("funnel_stage") or "bounce")
                 count = int(existing.get("event_count") or 0)
                 to_fold = session_events
                 version: dict[str, Any] = {
+                    "tenant_id": tenant_id,
                     "session_id": session_id,
                     "user_id": existing.get("user_id"),
                     "started_at": existing.get("started_at"),
@@ -289,6 +319,7 @@ class ClickHouseSink:
                 count = 1
                 to_fold = session_events[1:]
                 version = {
+                    "tenant_id": tenant_id,
                     "session_id": session_id,
                     "user_id": session_events[0].get("user_id"),
                     "started_at": now,

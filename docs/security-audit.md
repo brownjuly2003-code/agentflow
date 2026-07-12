@@ -3,11 +3,12 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
+**Last updated:** 2026-07-12 (PII-masking references aligned with the 2026-07-01 removal)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
 
-AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integrations. The current repository shows a security posture centered on typed request validation, tenant-scoped access control, API-key authentication, rate limiting, PII masking on responses, SQL safety guards for NL-to-SQL, and CI-based dependency and image scanning.
+AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integrations. The current repository shows a security posture centered on typed request validation, tenant-scoped access control, API-key authentication, rate limiting, SQL safety guards for NL-to-SQL, and CI-based dependency and image scanning. Response-side PII masking is no longer on this list: it was removed 2026-07-01 because the demo serving warehouse holds no PII, and real PII is governed engine-side in the DV2 vault (see section 7).
 
 The codebase is strongest at application-layer controls that can be validated directly in source: auth, authorization, request filtering, security headers, contract evolution, replay safety, and auditability of API usage. The weakest areas are the controls that typically require external infrastructure or third-party attestation. In this repository snapshot there is no evidence of an external penetration test or demonstrated generalized secrets manager integration. Local DuckDB files can be opened through an optional encrypted attach path when an operator supplies encryption key material, but the default remains backward-compatible and unencrypted.
 
@@ -45,13 +46,20 @@ Evidence: `src/serving/api/auth/manager.py`, `src/serving/api/auth/middleware.py
 
 ## 3. Tenant Isolation
 
-Tenant isolation is not only a naming convention in this codebase. The serving layer includes explicit tenant routing through `TenantRouter`, which maps tenant IDs to Kafka topic prefixes and DuckDB schema names. The SQL builder qualifies known tables with the tenant schema and fails closed when tenant-scoped tables exist but no tenant context is available.
+**This section previously described a mechanism that did not work.** It said the boundary was a schema qualification — `TenantRouter` mapping a tenant to a DuckDB schema name, and the SQL builder qualifying tables into `"acme"."orders_v2"`. Nothing in `src/` ever issued `CREATE SCHEMA`, so that relation did not exist at runtime and every authenticated entity read failed; on ClickHouse the same qualification named a database nobody creates. The suite was green because the shipped keys named a tenant absent from `config/tenants.yaml`, so the qualification resolved to nothing and silently did not apply. A boundary no test can tell apart from its own absence is not a boundary. See ADR-004.
 
-This is stronger than soft application filtering because the query builder rewrites table references before execution. Integration tests show that the same logical order ID can resolve to different rows for different tenants and that cross-tenant lookups return `404` rather than leaking another tenant's data.
+The boundary is now the `tenant_id` **column**, on both stores, and it is part of each serving table's **write key** — `ORDER BY (tenant_id, <pk>)` on ClickHouse, `PRIMARY KEY (tenant_id, <pk>)` on DuckDB. That distinction is load-bearing: with a single-column key, two tenants' rows sharing an `order_id` are two versions of *one* ReplacingMergeTree row, and the later insert destroys the earlier. No read-side filter can undo that, so a filter alone was never sufficient.
 
-The current evidence supports the claim "tenant-scoped DuckDB schemas with fail-closed query resolution." It does not support broader claims such as end-to-end isolation across every external dependency.
+Reads pass through one chokepoint. `SQLBuilderMixin._qualify_table` returns a tenant-filtered sub-select rather than a name, `_scope_sql` performs the same substitution inside metric templates and NL-generated SQL via the sqlglot AST, the search index carries the tenant on each document and filters before scoring, and the journal applies its own predicate. An unscoped read against a store that holds more than one tenant's rows is refused (`503`), not answered.
 
-Evidence: `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/query/engine.py`, `tests/integration/test_tenant_isolation.py`
+What the evidence supports today:
+
+- **DuckDB** — proven. Two tenants with identical `order_id` resolve to different rows; cross-tenant lookups return `404`; aggregates sum only the caller's rows; an unscoped read fails closed. Property tests assert the invariant over generated tenant and entity ids, not just the two-tenant example.
+- **ClickHouse** — the same model is implemented and provisioned (`assert_tenant_key()` refuses to serve a store still on the old sorting key; `provision --migrate` rebuilds one). The adversarial two-tenant suite for it is `tests/integration/test_clickhouse_tenant_isolation_live.py`, which requires a live server and runs on the CI integration job. **Until that suite is green on a real server, treat multi-tenant ClickHouse as unproven and do not claim it.**
+
+It does not support broader claims such as end-to-end isolation across every external dependency.
+
+Evidence: `docs/decisions/004-tenant-id-column-over-schema-per-tenant.md`, `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/backends/clickhouse_backend.py`, `tests/integration/test_tenant_isolation.py`, `tests/property/test_tenant_isolation_properties.py`, `tests/integration/test_clickhouse_tenant_isolation_live.py`
 
 ## 4. Input Validation and Contract Safety
 
@@ -81,6 +89,8 @@ Audit finding A-4 flagged the dynamic-SQL surface as "one careless edit away fro
 - Interpolated **values** are either bound as `?` parameters, fixed literals, integers, or regex-extracted tokens that exclude SQL metacharacters and are additionally quoted via `_quote_literal` / `_sql_str_literal`.
 
 No site interpolates unbound, unquoted request data. There are **no Class-A (migratable value-interpolation) sites remaining**: the hot entity/metric paths already bind values (`use_query_params` on DuckDB, `_quote_literal` elsewhere) and the operational routers already pass values through `?`. The remaining suppressions are Class-B (identifiers / structural fragments that cannot be parameterized). The `PostgresControlPlaneStore` sites added by ADR 0010 slice 5 (`control_plane/postgres.py`, reviewed 2026-07-03) interpolate only a table name that is a module literal at exactly two call sites; every value binds via `%s`.
+
+**audit P0-3 (2026-07-11).** The five journal sites moved out of `routers/lineage.py` (1) and `routers/slo.py` (4) into `semantic_layer/journal.py`, which reads `pipeline_events` through the *active* serving backend instead of a private DuckDB cursor. The interpolated surface is unchanged in kind, and smaller in spread: every fragment is an identifier taken from a live schema probe (`table_columns`) against a fixed allowlist — the time column, the nullable-column fallbacks — plus the SLO quantile, a float from `config/slo.yaml`. **Values still never interpolate:** `JournalReader._value()` binds them as `?` on DuckDB and `_quote_literal`-escapes them on ClickHouse, whose `execute(params=...)` is a documented no-op. So `entity_id`, which arrives in the URL path, binds exactly as it did before the move. The one exception is the time window (`'7 days'`), inlined on both backends because `INTERVAL ?` is a DuckDB syntax error and `CAST(? AS INTERVAL)` has no ClickHouse translation — it is derived from an `int` in `config/slo.yaml` and is never request data. `entity_queries.py` gained the bulk entity scan the search index used to run on the raw connection (catalog-defined table name, `int()` limit, no values).
 
 The number of suppressions per file is pinned by `test_interpolated_sql_nosec_surface_is_pinned` — a new site (even inside an already-listed file) or a new file fails CI and forces a review. Each suppression's per-line rationale comment is enforced by `test_nosec_comments_carry_reason`.
 
@@ -124,7 +134,7 @@ Evidence: `src/serving/api/rate_limiter.py`, `src/serving/api/auth/middleware.py
 > and is governed engine-side there (ClickHouse row/column policies — ADR 0006
 > Phase 2). The paragraph below is retained as the point-in-time record.
 
-Response-side PII masking is implemented in `PiiMasker` and applied on entity responses and NL-query results. Masking behavior is configured through `config/pii_fields.yaml`, supports multiple strategies (`partial`, `full`, `hash`), and allows explicit tenant exemptions for internal tenants. When masking is applied, the API sets `X-PII-Masked: true`.
+Response-side PII masking was implemented in a `PiiMasker` module and applied on entity responses and NL-query results. Masking behavior was configured through a `pii_fields` config file, supported multiple strategies (`partial`, `full`, `hash`), and allowed explicit tenant exemptions for internal tenants. When masking was applied, the API set `X-PII-Masked: true`. The module, its config, and its tests are gone from the tree; the removal is recorded in the CHANGELOG (2026-07-01) and the engine-side replacement in ADR 0006 Phase 2.
 
 Security headers are applied centrally and include:
 - `Strict-Transport-Security`
@@ -135,7 +145,7 @@ Security headers are applied centrally and include:
 
 These controls improve baseline browser-facing hardening for docs/admin surfaces. TLS termination is intentionally delegated to an upstream edge or ingress layer; the FastAPI application applies HTTP-layer security controls behind that boundary.
 
-Evidence: `src/serving/masking.py`, `src/serving/api/routers/agent_query.py`, `src/serving/api/security.py`, `tests/unit/test_masking.py`
+Evidence: `src/serving/api/security.py` (security headers, still current); the removed masker's history lives in the CHANGELOG (2026-07-01) and `docs/decisions/0006-fix-demo-serving-engine-on-clickhouse.md` Phase 2.
 
 ## 8. Supply Chain and CI Controls
 
@@ -185,7 +195,7 @@ The current implementation has several material limitations:
 
 ### GDPR
 
-Partial readiness. The repo supports response-time PII masking, tenant scoping, and usage auditing. That helps with least-privilege data exposure and auditability. However, GDPR readiness is incomplete without documented data retention policies, deletion workflows, subject access procedures, and infrastructure evidence for storage/backup handling.
+Partial readiness. The repo supports tenant scoping, usage auditing, and engine-side PII governance in the DV2 vault (fail-closed column grants, row policies — ADR 0006 Phase 2). That helps with least-privilege data exposure and auditability. However, GDPR readiness is incomplete without documented data retention policies, deletion workflows, subject access procedures, and infrastructure evidence for storage/backup handling.
 
 ### SOC 2
 
@@ -202,7 +212,7 @@ For an engineering-led v1 product, AgentFlow shows an above-average application 
 - practical tenant isolation
 - real SQL safety controls
 - concrete key rotation mechanics
-- response-time privacy masking
+- engine-side PII governance in the DV2 vault (the serving tier holds no PII)
 - usable audit trail and CI scanning
 
 The main gap is not the app layer. It is the absence of externally verifiable infrastructure and governance controls. These gaps do not block continued development, package publication, or demos, but they do block enterprise-facing security claims:

@@ -18,6 +18,7 @@ concurrency:
 jobs:
   bandit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -32,6 +33,7 @@ jobs:
 
   safety:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -121,6 +123,40 @@ jobs:
               output_dir / "requirements-integrations.txt",
           )
 
+          def load_optional_dependencies(pyproject_path: Path, extra: str) -> list[str]:
+              if not pyproject_path.exists():
+                  return []
+              data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+              return list(data.get("project", {}).get("optional-dependencies", {}).get(extra, []))
+
+          # Audit P1-3: scan every published/deployed extra, not just the
+          # unconditional core dependencies — cloud, postgres, the root
+          # "integrations" extra (langchain/langgraph/llama-index; distinct
+          # from the standalone integrations/pyproject.toml package resolved
+          # above), load, and contract. Each extra resolves in its own
+          # venv, same as main/sdk/integrations above, so unrelated extras
+          # never have to share one dependency graph. Safety only reads the
+          # frozen pins below, so the buckets do not need to be mutually
+          # installable.
+          extras_counts: dict[str, int] = {}
+          for extra_name in ("cloud", "postgres", "integrations", "load", "contract"):
+              extras_counts[extra_name] = resolve_requirements(
+                  f"extra-{extra_name}",
+                  load_optional_dependencies(root / "pyproject.toml", extra_name),
+                  output_dir / f"requirements-extra-{extra_name}.txt",
+              )
+
+          # The Flink runtime is not an extra (its beam chain can never
+          # co-install with core pyarrow>=17) — its manifest lives next to
+          # the Flink image Dockerfile. Scan it as its own bucket.
+          flink_count = resolve_requirements(
+              "flink-runtime",
+              load_requirements(
+                  root / "src" / "processing" / "flink_jobs" / "requirements.txt"
+              ),
+              output_dir / "requirements-flink-runtime.txt",
+          )
+
           summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
           if summary_path:
               summary = Path(summary_path)
@@ -134,6 +170,13 @@ jobs:
                   )
                   handle.write(
                       f"- Integrations runtime: resolved install of `integrations/pyproject.toml` `[project.dependencies]` ({integrations_count} packages)\n"
+                  )
+                  for extra_name, extra_count in extras_counts.items():
+                      handle.write(
+                          f"- Extra `[{extra_name}]` (root `pyproject.toml`): resolved install ({extra_count} packages)\n"
+                      )
+                  handle.write(
+                      f"- Flink runtime (`src/processing/flink_jobs/requirements.txt`): resolved install ({flink_count} packages)\n"
                   )
                   handle.write("- Exclusions: dev/CI/test extras, local tooling, and unrelated Docker image packages\n")
           PY
@@ -158,14 +201,50 @@ jobs:
           # references @langchain/google-cloud-sql-pg (npm) but is matched
           # against Python langchain<1.2.24, which does not exist (latest is
           # 1.2.15). Remove this ignore when PyUp corrects the entry.
+          #
+          # SFTY-20260217-93940 (CVE-2026-25087): pyarrow use-after-free when
+          # decoding malformed IPC files, fixed in 23.0.1. Only the Flink
+          # runtime bucket is affected: apache-flink's beam chain caps
+          # pyarrow<17, so the fixed version cannot install there (the API
+          # image and every extra run pyarrow>=23.0.1 via uv.lock, gated by
+          # pip-audit). The Flink jobs only exchange Arrow IPC that beam
+          # itself produces inside the pipeline, never operator-supplied IPC
+          # files. Remove when apache-flink/beam raise their pyarrow floor
+          # past 23.0.1.
           safety check \
             --ignore 88512 \
+            --ignore SFTY-20260217-93940 \
             -r .tmp-security/requirements-main.txt \
             -r .tmp-security/requirements-sdk.txt \
-            -r .tmp-security/requirements-integrations.txt
+            -r .tmp-security/requirements-integrations.txt \
+            -r .tmp-security/requirements-extra-cloud.txt \
+            -r .tmp-security/requirements-extra-postgres.txt \
+            -r .tmp-security/requirements-extra-integrations.txt \
+            -r .tmp-security/requirements-flink-runtime.txt \
+            -r .tmp-security/requirements-extra-load.txt \
+            -r .tmp-security/requirements-extra-contract.txt
+
+  # Audit P1-3: pip-audit against the hash-pinned export of uv.lock. The
+  # unlocked run could not even finish resolving in three minutes; with the
+  # complete pinned set (ci.yml lock-check proves completeness) there is
+  # nothing to resolve — every pin is checked against the advisory DBs
+  # directly.
+  pip-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip "pip-audit>=2.7,<3"
+      - name: Audit the locked production dependency set
+        run: pip-audit --no-deps -r requirements-docker.lock
 
   npm-audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -180,6 +259,7 @@ jobs:
 
   trivy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       security-events: write
@@ -224,6 +304,13 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          # Without this, trivy-action builds the SARIF "with all severities"
+          # and drops BOTH filters above from the scan the exit code comes
+          # from — an unfixable MEDIUM in the base image (e.g. liblzma5
+          # CVE-2026-34743, no Debian fix available) fails the gate that
+          # declares itself HIGH,CRITICAL-only. This makes the declared
+          # filters real for the SARIF scan too.
+          limit-severities-for-sarif: true
       - name: Upload Trivy scan results
         if: always()
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0

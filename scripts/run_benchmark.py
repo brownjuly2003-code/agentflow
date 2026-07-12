@@ -186,11 +186,18 @@ def ensure_locust_available() -> None:
 
 
 def seed_benchmark_fixtures(db_path: Path) -> None:
+    # The schema is laid down by the canonical owner before this runs (the
+    # local pipeline / DuckDBBackend.ensure_schema), and it leads every
+    # serving table with a tenant_id column (audit P0-1). Columns are listed
+    # explicitly so tenant_id takes its DEFAULT — positional VALUES would
+    # count against the 7-column physical table.
     conn = duckdb.connect(str(db_path))
     try:
         conn.execute(
             """
-            INSERT OR REPLACE INTO products_current VALUES
+            INSERT OR REPLACE INTO products_current
+            (product_id, name, category, price, in_stock, stock_quantity)
+            VALUES
             ('PROD-001', 'Electric Kettle 1.7L 2200W', 'kettles', 2190.00, FALSE, 0),
             ('PROD-002', 'Air Fryer Grill 5.5L', 'grills', 5490.00, TRUE, 58),
             ('PROD-003', 'Immersion Blender Set 800W', 'blenders', 2490.00, TRUE, 203),
@@ -205,7 +212,9 @@ def seed_benchmark_fixtures(db_path: Path) -> None:
         )
         conn.execute(
             """
-            INSERT OR REPLACE INTO orders_v2 VALUES
+            INSERT OR REPLACE INTO orders_v2
+            (order_id, user_id, status, total_amount, currency, created_at)
+            VALUES
             ('ORD-20260404-1001', 'USR-10001', 'delivered',
              76400.00, 'RUB', NOW() - INTERVAL '2 hours'),
             ('ORD-20260404-1002', 'USR-10002', 'shipped',
@@ -226,7 +235,10 @@ def seed_benchmark_fixtures(db_path: Path) -> None:
         )
         conn.execute(
             """
-            INSERT OR REPLACE INTO users_enriched VALUES
+            INSERT OR REPLACE INTO users_enriched
+            (user_id, total_orders, total_spent, first_order_at, last_order_at,
+             preferred_category)
+            VALUES
             ('USR-10001', 34, 1200000.00, NOW() - INTERVAL '365 days',
              NOW() - INTERVAL '2 hours', 'grills'),
             ('USR-10002', 15, 460000.00, NOW() - INTERVAL '270 days',
@@ -241,7 +253,10 @@ def seed_benchmark_fixtures(db_path: Path) -> None:
         )
         conn.execute(
             """
-            INSERT OR REPLACE INTO sessions_aggregated VALUES
+            INSERT OR REPLACE INTO sessions_aggregated
+            (session_id, user_id, started_at, ended_at, duration_seconds,
+             event_count, unique_pages, funnel_stage, is_conversion)
+            VALUES
             ('SES-a1b2c3', 'USR-10001',
              NOW() - INTERVAL '2 hours',
              NOW() - INTERVAL '100 minutes',

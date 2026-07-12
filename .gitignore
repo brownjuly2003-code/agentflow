@@ -10,6 +10,10 @@ build/
 .env.local
 *.pem
 *.key
+# The one deliberate exception to the *.pem guard: a checked-in test CA
+# CERTIFICATE (public half only, no key anywhere) for the TLS-context unit
+# tests. Certificates are public by construction; the guard exists for keys.
+!tests/fixtures/tls/test-ca.pem
 
 # Local secrets — copy from .example and fill with real values
 docker/kafka-connect/secrets/postgres.properties
@@ -81,6 +85,9 @@ mutants/
 /more_help.md
 /About_DE_project.md
 /audit_*.md
+# Session handoff for the next agent: working notes, not product docs. Untracked
+# but unignored is one `git add -A` away from a public repo, so name it.
+/_NEXT_SESSION.md
 /RELEASING.md
 sdk/agentflow/**/__pycache__/
 sdk/agentflow/**/*.py[cod]

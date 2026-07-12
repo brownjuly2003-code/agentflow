@@ -49,6 +49,11 @@ demo:
 	docker compose up -d redis clickhouse
 	python scripts/wait_for_clickhouse.py
 	@echo ""
+	@echo "Step 0.5: Provisioning the serving store (schema + demo rows)..."
+	@echo "  The API does not create or seed a store on boot any more (audit P0-2)."
+	@echo "  A real deployment runs this same command WITHOUT --seed, from a job."
+	DUCKDB_PATH=agentflow_demo.duckdb python -m src.serving.provision --schema --seed
+	@echo ""
 	@echo "Step 1: Seeding 500 events through the full pipeline..."
 	python -m src.processing.local_pipeline --burst 500
 	@echo ""
@@ -118,11 +123,18 @@ format:
 build:
 	docker compose build
 
+# Per-environment state keys (audit P2-4): the backend block carries no key,
+# so init MUST name the environment's own state object — a bare
+# `terraform init` fails instead of silently sharing one state across envs.
 deploy-dev:
-	cd infrastructure/terraform && terraform init && terraform plan -var-file=dev.tfvars
+	cd infrastructure/terraform && terraform init -backend-config="key=env/dev/terraform.tfstate" && terraform plan -var-file=dev.tfvars
 
 deploy-prod:
-	cd infrastructure/terraform && terraform init && terraform plan -var-file=prod.tfvars
+	@test -f infrastructure/terraform/environments/prod.tfvars || { \
+		echo "infrastructure/terraform/environments/prod.tfvars is operator-provided"; \
+		echo "(copy prod.tfvars.example and fill real values; never commit it)."; \
+		exit 1; }
+	cd infrastructure/terraform && terraform init -backend-config="key=env/production/terraform.tfstate" && terraform plan -var-file=environments/prod.tfvars
 	@echo "Review the plan above. Run 'terraform apply' manually to proceed."
 
 # ── Cleanup ───────────────────────────────────────────────────────

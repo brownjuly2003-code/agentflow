@@ -42,7 +42,8 @@ environment hints, AWS config, or AWS credentials file; `aws`, `terraform`, and
 `tofu` are not installed in `PATH`; real
 `infrastructure/terraform/environments/staging.tfvars` and
 `infrastructure/terraform/environments/prod.tfvars` remain absent; and the
-GitHub Actions API reports `total_count: 0` for `Terraform Apply` workflow runs,
+GitHub Actions API reports `total_count: 0` for runs of the Terraform workflow
+(`terraform-apply.yml`, now named `Terraform (streaming-infrastructure-reference)`),
 so there is no apply/preflight run or CloudTrail evidence to cite.
 
 Historical evidence recheck on 2026-05-30 kept the blocker external. Repository variables
@@ -56,12 +57,13 @@ availability is not AWS role, tfvars, CloudTrail, approval, or apply evidence.
 Under the current out-of-scope decision this is expected and should not be
 rechecked without an explicit decision to reintroduce AWS.
 
-The tracked root-level `infrastructure/terraform/dev.tfvars` and
-`infrastructure/terraform/prod.tfvars` are not proof of H4 readiness. The
-current workflow resolves only `environments/staging.tfvars` and
-`environments/prod.tfvars`, and the root files still contain placeholder-shaped
-VPC, subnet, and SNS values. Treat them as local scaffold inputs, not as an
-owner-approved apply packet.
+The tracked root-level `infrastructure/terraform/dev.tfvars` is not proof of
+H4 readiness: it is the local sandbox scaffold with placeholder-shaped VPC,
+subnet, and SNS values. The root `prod.tfvars` was removed (audit P2-4) —
+production inputs exist only as the operator-provided
+`environments/prod.tfvars` (never committed; template in
+`environments/prod.tfvars.example`), which is what both the workflow and
+`make deploy-prod` resolve.
 
 Local readiness update on 2026-05-06 added a no-apply preflight. It improves
 evidence intake but does not close H4 because no AWS role ARN, real tfvars,
@@ -135,7 +137,7 @@ workflow with `confirm=PREFLIGHT`. That path does not call `terraform apply`;
 it only checks repository variables, real tfvars presence, and Terraform local
 validation.
 
-1. Open the `Terraform Apply` workflow and confirm the run includes `aws-actions/configure-aws-credentials@v4`.
+1. Open the `Terraform (streaming-infrastructure-reference)` workflow (`terraform-apply.yml`) and confirm the run includes `aws-actions/configure-aws-credentials@v4`.
 2. Confirm the workflow uses repository variables `AWS_TERRAFORM_ROLE_ARN` and `AWS_REGION`, not AWS access key secrets.
 3. Inspect the AWS CloudTrail event for `AssumeRoleWithWebIdentity` and confirm the federated principal is `token.actions.githubusercontent.com`.
 4. Confirm the job has `permissions.id-token: write`.

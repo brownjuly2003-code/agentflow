@@ -1,6 +1,7 @@
 """Data lineage API endpoints."""
 
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -67,63 +68,23 @@ def _quality_score(rows: list[dict], *, default: float | None = None) -> float |
 
 
 def _fetch_matching_events(request: Request, entity_type: str, entity_id: str) -> list[dict]:
-    # Runs on a worker thread (get_lineage offloads it) so the full-scan can't
-    # block the event loop and starve every other tenant on the worker. Use a
-    # dedicated cursor rather than the shared connection object so concurrent
-    # reads don't collide on it. (audit_30_06_26.md A2)
-    cursor = request.app.state.query_engine._conn.cursor()
-    try:
-        columns = {
-            row[1] for row in cursor.execute("PRAGMA table_info('pipeline_events')").fetchall()
-        }
-        if "entity_id" not in columns:
-            return []
-
-        tenant_id = getattr(request.state, "tenant_id", None)
-        if tenant_id is not None and "tenant_id" not in columns and tenant_id != "default":
-            return []
-        time_column = "processed_at" if "processed_at" in columns else "created_at"
-        select_columns = [
-            "event_id",
-            "topic",
-            f"{time_column} AS processed_at",
-            (
-                "COALESCE(tenant_id, 'default') AS tenant_id"
-                if "tenant_id" in columns
-                else "'default' AS tenant_id"
-            ),
-            "event_type" if "event_type" in columns else "NULL AS event_type",
-            "entity_id",
-            "latency_ms" if "latency_ms" in columns else "NULL AS latency_ms",
-        ]
-        where_clauses = ["entity_id = ?"]
-        params: list[object] = [entity_id]
-        if "entity_type" in columns:
-            where_clauses.append("entity_type = ?")
-            params.append(entity_type)
-        if tenant_id is not None and "tenant_id" in columns:
-            where_clauses.append("COALESCE(tenant_id, 'default') = ?")
-            params.append(str(tenant_id))
-        if "topic" in columns:
-            # ops-surfaces-spec.md §1.1: orders.status rows are the warehouse
-            # stage clock, not the ingestion pipeline trail this endpoint
-            # reconstructs — excluded so they don't hijack source_topic /
-            # earliest_at (Order 360's timeline shows stage history instead).
-            where_clauses.append("topic != 'orders.status'")
-
-        cursor.execute(
-            (
-                # selected columns come from the schema allowlist
-                f"SELECT {', '.join(select_columns)} "  # nosec B608
-                "FROM pipeline_events "
-                f"WHERE {' AND '.join(where_clauses)} ORDER BY {time_column} ASC"
-            ),
-            params,
-        )
-        result_columns = [description[0] for description in cursor.description]
-        return [dict(zip(result_columns, row, strict=False)) for row in cursor.fetchall()]
-    finally:
-        cursor.close()
+    # Runs on a worker thread (get_lineage offloads it) so a journal scan cannot
+    # block the event loop and starve every other tenant on the worker.
+    # (audit_30_06_26.md A2)
+    #
+    # Reads the journal through the *active* backend. This endpoint used to open
+    # its own DuckDB cursor, so on the ClickHouse profile it reconstructed
+    # lineage from a store nobody was serving from — demo rows, confidently
+    # presented as provenance (audit P0-3).
+    journal = request.app.state.query_engine.journal
+    return cast(
+        "list[dict]",
+        journal.lineage_events(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            tenant_id=getattr(request.state, "tenant_id", None),
+        ),
+    )
 
 
 @router.get(
@@ -215,7 +176,9 @@ async def get_lineage(entity_type: str, entity_id: str, request: Request) -> Lin
         ),
         LineageNode(
             layer="enrichment",
-            system="duckdb",
+            # The store that actually served this, not a hardcoded "duckdb" —
+            # which is what a ClickHouse deployment used to be told (audit P0-3).
+            system=request.app.state.query_engine.backend.name,
             table_or_topic=entity.table,
             processed_at=latest_at,
             quality_score=_quality_score(validated_rows, default=1.0 if validated else None),

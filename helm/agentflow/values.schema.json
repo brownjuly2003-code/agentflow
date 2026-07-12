@@ -29,6 +29,7 @@
     "podDisruptionBudget",
     "networkPolicy",
     "serving",
+    "provision",
     "controlPlane"
   ],
   "allOf": [
@@ -434,8 +435,48 @@
             "passwordKey": {
               "type": "string",
               "minLength": 1
+            },
+            "secure": {
+              "type": "boolean"
+            },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["caSecret", "caKey"],
+              "properties": {
+                "caSecret": {
+                  "type": "string"
+                },
+                "caKey": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "migrationUser": {
+              "type": "string"
+            },
+            "migrationPasswordKey": {
+              "type": "string"
             }
           }
+        }
+      }
+    },
+    "provision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "backoffLimit"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resources": {
+          "type": "object"
         }
       }
     },
@@ -472,6 +513,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "profile",
         "duckdbPath",
         "usageDbPath",
         "apiKeysPath",
@@ -492,6 +534,10 @@
         "apiVersions"
       ],
       "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["", "demo", "dev", "production"]
+        },
         "duckdbPath": {
           "type": "string",
           "minLength": 1
@@ -561,7 +607,6 @@
                   "id",
                   "display_name",
                   "kafka_topic_prefix",
-                  "duckdb_schema",
                   "max_events_per_day",
                   "max_api_keys"
                 ],
@@ -580,7 +625,8 @@
                   },
                   "duckdb_schema": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "description": "Ignored. Tenants are isolated by the tenant_id column in each serving table's write key (ADR-004), not by a schema. Still accepted so values written for the old model keep validating; the runtime does not read it."
                   },
                   "max_events_per_day": {
                     "type": "integer",

@@ -26,7 +26,6 @@ def test_get_entity_passes_entity_id_as_query_param(payload: str) -> None:
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     backend = Mock()
     backend.name = "duckdb"
     backend.execute.return_value = []
@@ -50,7 +49,6 @@ def test_get_entity_at_passes_history_filters_as_query_params(payload: str) -> N
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     backend = Mock()
     backend.name = "duckdb"
     backend.table_columns.return_value = {"entity_id", "entity_data", "entity_type", "processed_at"}
@@ -82,7 +80,6 @@ def test_get_metric_passes_as_of_anchor_as_query_params() -> None:
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     backend = Mock()
     backend.name = "duckdb"
     backend.scalar.return_value = 12.5
@@ -128,7 +125,6 @@ def test_get_entity_clickhouse_path_keeps_payload_inert(payload: str) -> None:
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     ch_backend = ClickHouseBackend(host="ch", port=8123, user="u", password="p", database="db")
     engine._backend = ch_backend
     # name != the duckdb backend's name → use_query_params is False (inline path)

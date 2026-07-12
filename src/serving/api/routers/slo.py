@@ -9,6 +9,8 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from src.serving.semantic_layer.journal import JournalReader
+
 try:
     import yaml
 except ImportError:  # pragma: no cover
@@ -33,16 +35,44 @@ class SLOConfig(BaseModel):
 
 
 class SLOStatus(BaseModel):
+    """One SLO, reported as a real SLI (audit P2-2): ``current`` is the share
+    of good units among valid units over the SLO window — a fraction of
+    events for latency/error SLIs, a fraction of observed time for the
+    freshness SLI — never a rescaled point aggregate. ``None`` means the
+    window holds no valid units: *unknown*, deliberately distinct from 0.0
+    (an empty journal is not a breached SLO)."""
+
     name: str
     target: float
-    current: float
-    error_budget_remaining: float
-    status: Literal["healthy", "at_risk", "breached"]
+    current: float | None
+    error_budget_remaining: float | None
+    status: Literal["healthy", "at_risk", "breached", "unknown"]
     window_days: int
+    # The SLI's own numerator and denominator, so the number is auditable
+    # from the response instead of taken on faith.
+    good: float | None
+    valid: float | None
+    unit: Literal["events", "seconds"]
+    # Error-budget burn rates over the standard multi-window pairs
+    # (Google SRE workbook): (1h, 6h) pages at >14.4, (6h, 3d) warns at >6.
+    # burn = (1 - sli_window) / (1 - target); None where the window is empty.
+    burn_rates: dict[str, float | None]
+    # The old point aggregate, kept as what it always was: a diagnostic.
+    diagnostic: dict[str, float | None]
 
 
 class SLOResponse(BaseModel):
     slos: list[SLOStatus]
+
+
+# Multi-window burn-rate alerting (audit P2-2): the fast pair catches a sharp
+# burn quickly, the slow pair catches a slow leak; requiring BOTH windows of a
+# pair over the threshold is what keeps a brief spike from paging.
+_BURN_WINDOWS = {"1h": "1 hours", "6h": "6 hours", "3d": "3 days"}
+_FAST_PAIR = ("1h", "6h")
+_SLOW_PAIR = ("6h", "3d")
+_FAST_BURN_THRESHOLD = 14.4
+_SLOW_BURN_THRESHOLD = 6.0
 
 
 def get_slo_config_path(app: FastAPI) -> Path:
@@ -60,123 +90,52 @@ def load_slos(path: Path) -> list[SLODefinition]:
     return SLOConfig.model_validate(data or {}).slos
 
 
-def _pipeline_event_columns(request: Request) -> set[str]:
-    cursor = request.app.state.query_engine._conn.cursor()
-    try:
-        return {row[1] for row in cursor.execute("PRAGMA table_info('pipeline_events')").fetchall()}
-    finally:
-        cursor.close()
-
-
-def _time_column(columns: set[str]) -> str | None:
-    if "processed_at" in columns:
-        return "processed_at"
-    if "created_at" in columns:
-        return "created_at"
-    return None
-
-
 def _tenant_id(request: Request) -> str | None:
     tenant_key = getattr(request.state, "tenant_key", None)
     return getattr(request.state, "tenant_id", None) or getattr(tenant_key, "tenant", None)
 
 
-def _tenant_filter(columns: set[str], tenant_id: str | None) -> tuple[str, list[object]]:
-    if tenant_id is None:
-        return "", []
-    if "tenant_id" in columns:
-        return " AND COALESCE(tenant_id, 'default') = ?", [tenant_id]
-    if tenant_id != "default":
-        return " AND 1 = 0", []
-    return "", []
-
-
-def _measurement_value(
-    request: Request,
+def _sli(
+    journal: JournalReader,
     definition: SLODefinition,
-    columns: set[str],
-    time_column: str | None,
-) -> float | None:
-    if time_column is None:
-        return None
-
-    # A dedicated cursor (not the shared connection object) keeps concurrent
-    # /v1/slo requests — offloaded to worker threads by get_slos — from
-    # colliding on the connection. (audit_30_06_26.md A2)
-    conn = request.app.state.query_engine._conn.cursor()
-    window = f"{definition.window_days} days"
-    tenant_sql, tenant_params = _tenant_filter(columns, _tenant_id(request))
-
+    tenant_id: str | None,
+    window: str,
+) -> tuple[float | None, float | None, float | None]:
+    """``(share, good, valid)`` of the SLI over ``window`` — the fraction of
+    good units among valid units (audit P2-2), or Nones when the window
+    holds no valid units and the honest answer is *unknown*."""
     if definition.measurement == "p95_latency_ms":
-        if "latency_ms" not in columns:
-            return None
-        row = conn.execute(
-            (
-                # time_column is chosen from the fixed pipeline_events allowlist
-                "SELECT quantile_cont(latency_ms, 0.95) "  # nosec B608
-                "FROM pipeline_events "
-                f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL) "
-                f"{tenant_sql} "
-                "AND latency_ms IS NOT NULL"
-            ),
-            [window, *tenant_params],
-        ).fetchone()
-        return float(row[0]) if row and row[0] is not None else None
+        # Latency SLI: share of events at or under the threshold. The p95
+        # itself is a diagnostic, not the SLI — a p95 of 2x the threshold
+        # says nothing about how MANY requests were slow.
+        counts = journal.latency_within(
+            threshold_ms=definition.threshold, window=window, tenant_id=tenant_id
+        )
+        if counts is None or counts.total == 0:
+            return (None, None, None)
+        good = counts.total - counts.errors
+        return (good / counts.total, float(good), float(counts.total))
 
     if definition.measurement == "freshness_seconds":
-        row = conn.execute(
-            (
-                # time_column is chosen from the fixed pipeline_events allowlist
-                f"SELECT MAX({time_column}) "  # nosec B608
-                "FROM pipeline_events "
-                f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
-                f"{tenant_sql}"
-            ),
-            [window, *tenant_params],
-        ).fetchone()
-        if not row or row[0] is None:
-            return None
-        age = conn.execute(
-            "SELECT EXTRACT(EPOCH FROM (NOW() - CAST(? AS TIMESTAMP)))",
-            [row[0]],
-        ).fetchone()
-        return float(age[0]) if age and age[0] is not None else None
+        # Freshness SLI, time-weighted: of the observed window, the share of
+        # seconds during which the newest row was at most threshold old —
+        # not the instantaneous age, which only describes this moment.
+        pair = journal.freshness_within(
+            threshold_seconds=definition.threshold, window=window, tenant_id=tenant_id
+        )
+        if pair is None:
+            return (None, None, None)
+        fresh_seconds, observed_seconds = pair
+        if observed_seconds <= 0.0:
+            return (None, fresh_seconds, observed_seconds)
+        return (fresh_seconds / observed_seconds, fresh_seconds, observed_seconds)
 
     if definition.measurement == "error_rate_percent":
-        if "status_code" in columns:
-            row = conn.execute(
-                (
-                    # time_column is chosen from the fixed pipeline_events allowlist
-                    "SELECT "  # nosec B608
-                    "COUNT(*) FILTER (WHERE status_code IS NOT NULL), "
-                    "COUNT(*) FILTER (WHERE status_code >= 500) "
-                    "FROM pipeline_events "
-                    f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
-                    f"{tenant_sql}"
-                ),
-                [window, *tenant_params],
-            ).fetchone()
-            total = int(row[0]) if row and row[0] is not None else 0
-            errors = int(row[1]) if row and row[1] is not None else 0
-            if total > 0:
-                return (errors / total) * 100.0
-
-        row = conn.execute(
-            (
-                # time_column is chosen from the fixed pipeline_events allowlist
-                "SELECT COUNT(*), "  # nosec B608
-                "COUNT(*) FILTER (WHERE topic = 'events.deadletter') "
-                "FROM pipeline_events "
-                f"WHERE {time_column} >= NOW() - CAST(? AS INTERVAL)"
-                f"{tenant_sql}"
-            ),
-            [window, *tenant_params],
-        ).fetchone()
-        total = int(row[0]) if row and row[0] is not None else 0
-        errors = int(row[1]) if row and row[1] is not None else 0
-        if total == 0:
-            return None
-        return (errors / total) * 100.0
+        counts = journal.event_counts(window=window, tenant_id=tenant_id)
+        if counts is None or counts.total == 0:
+            return (None, None, None)
+        good = counts.total - counts.errors
+        return (good / counts.total, float(good), float(counts.total))
 
     raise HTTPException(
         status_code=500,
@@ -184,17 +143,30 @@ def _measurement_value(
     )
 
 
-def _current_compliance(definition: SLODefinition, measured: float | None) -> float:
-    if measured is None:
-        return 0.0
-    if definition.measurement == "error_rate_percent":
-        return max(0.0, min(1.0, 1.0 - (measured / 100.0)))
-    if measured <= definition.threshold:
-        return 1.0
-    return max(0.0, min(1.0, definition.threshold / measured))
+def _diagnostic(
+    journal: JournalReader,
+    definition: SLODefinition,
+    tenant_id: str | None,
+    window: str,
+) -> dict[str, float | None]:
+    """The old point aggregate, demoted to what it always was."""
+    if definition.measurement == "p95_latency_ms":
+        return {
+            "p95_latency_ms": journal.latency_quantile_ms(
+                quantile=0.95, window=window, tenant_id=tenant_id
+            )
+        }
+    if definition.measurement == "freshness_seconds":
+        return {"age_seconds": journal.freshness(window=window, tenant_id=tenant_id).age_seconds}
+    counts = journal.event_counts(window=window, tenant_id=tenant_id)
+    if counts is None or counts.total == 0:
+        return {"error_rate_percent": None}
+    return {"error_rate_percent": (counts.errors / counts.total) * 100.0}
 
 
-def _error_budget_remaining(target: float, current: float) -> float:
+def _error_budget_remaining(target: float, current: float | None) -> float | None:
+    if current is None:
+        return None
     if target >= 1.0:
         return 1.0 if current >= 1.0 else 0.0
     budget = 1.0 - target
@@ -202,35 +174,67 @@ def _error_budget_remaining(target: float, current: float) -> float:
     return max(0.0, min(1.0, 1.0 - consumed))
 
 
+def _burn_rate(target: float, share: float | None) -> float | None:
+    """How many times faster than sustainable the error budget burns:
+    ``(1 - sli) / (1 - target)``. 1.0 spends exactly the budget over the SLO
+    window; ``None`` when the window is empty or the target leaves no budget.
+    """
+    if share is None or target >= 1.0:
+        return None
+    return round((1.0 - share) / (1.0 - target), 2)
+
+
+def _pair_burns(burn_rates: dict[str, float | None], pair: tuple[str, str], limit: float) -> bool:
+    first, second = (burn_rates.get(name) for name in pair)
+    return first is not None and second is not None and first > limit and second > limit
+
+
 def _compute_slo_statuses(request: Request, definitions: list[SLODefinition]) -> list[SLOStatus]:
     # Runs on a worker thread (get_slos offloads it) so the per-SLO aggregate
-    # scans can't block the event loop for every tenant on the worker. The
-    # helpers each open their own short-lived cursor, so concurrent /v1/slo
-    # requests on different threads never collide on the shared connection.
+    # scans can't block the event loop for every tenant on the worker.
     # (audit_30_06_26.md A2)
-    columns = _pipeline_event_columns(request)
-    time_column = _time_column(columns)
+    #
+    # Every aggregate goes through the active backend. These ran on a private
+    # DuckDB cursor, so a ClickHouse deployment computed its SLOs — and its
+    # error budget — from an embedded store nothing was writing to (audit P0-3).
+    #
+    # Cost shape: per SLO, one SLI aggregate over the SLO window, one per burn
+    # window, and one diagnostic — bounded, indexed journal aggregates on an
+    # admin surface that already runs off the event loop.
+    journal = request.app.state.query_engine.journal
+    tenant_id = _tenant_id(request)
     statuses = []
 
     for definition in definitions:
-        current = round(
-            _current_compliance(
-                definition,
-                _measurement_value(request, definition, columns, time_column),
-            ),
-            4,
-        )
-        error_budget_remaining = round(
-            _error_budget_remaining(definition.target, current),
-            4,
-        )
-        status: Literal["healthy", "at_risk", "breached"]
-        if current < definition.target:
+        window = f"{definition.window_days} days"
+        share, good, valid = _sli(journal, definition, tenant_id, window)
+        current = round(share, 4) if share is not None else None
+        error_budget_remaining = _error_budget_remaining(definition.target, current)
+        if error_budget_remaining is not None:
+            error_budget_remaining = round(error_budget_remaining, 4)
+
+        burn_rates = {
+            label: _burn_rate(
+                definition.target,
+                _sli(journal, definition, tenant_id, burn_window)[0],
+            )
+            for label, burn_window in _BURN_WINDOWS.items()
+        }
+
+        status: Literal["healthy", "at_risk", "breached", "unknown"]
+        if current is None:
+            status = "unknown"
+        elif current < definition.target:
             status = "breached"
-        elif error_budget_remaining < 0.2:
+        elif (
+            _pair_burns(burn_rates, _FAST_PAIR, _FAST_BURN_THRESHOLD)
+            or _pair_burns(burn_rates, _SLOW_PAIR, _SLOW_BURN_THRESHOLD)
+            or (error_budget_remaining is not None and error_budget_remaining < 0.2)
+        ):
             status = "at_risk"
         else:
             status = "healthy"
+
         statuses.append(
             SLOStatus(
                 name=definition.name,
@@ -239,6 +243,11 @@ def _compute_slo_statuses(request: Request, definitions: list[SLODefinition]) ->
                 error_budget_remaining=error_budget_remaining,
                 status=status,
                 window_days=definition.window_days,
+                good=round(good, 2) if good is not None else None,
+                valid=round(valid, 2) if valid is not None else None,
+                unit="seconds" if definition.measurement == "freshness_seconds" else "events",
+                burn_rates=burn_rates,
+                diagnostic=_diagnostic(journal, definition, tenant_id, window),
             )
         )
 

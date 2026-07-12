@@ -1,5 +1,11 @@
-name: Nightly Backup
+name: Backup/Restore Regression Test
 
+# This does not back up a deployed environment. It builds synthetic DuckDB
+# fixtures on an ephemeral runner, backs *those* up, verifies the manifest,
+# and restores into a scratch directory — a regression test for
+# scripts/backup.py, scripts/verify_backup.py and scripts/restore.py, not a
+# disaster-recovery control (audit P1-2). See docs/disaster-recovery.md for
+# what backup coverage actually exists today.
 on:
   schedule:
     - cron: "0 2 * * *"
@@ -22,10 +28,11 @@ jobs:
       - name: Prepare backup fixture
         run: |
           python - <<'PY'
-          import re
           from pathlib import Path
 
           import duckdb
+
+          from src.serving.backends.duckdb_backend import DuckDBBackend
 
           pipeline_db = Path("agentflow_demo.duckdb")
           usage_db = Path("agentflow_api.duckdb")
@@ -36,36 +43,28 @@ jobs:
               if wal_path.exists():
                   wal_path.unlink()
 
-          tenants_content = Path("config/tenants.yaml").read_text(encoding="utf-8")
-          tenant_schemas = re.findall(
-              r'^\s*duckdb_schema:\s*["\']?([^"\']+)["\']?\s*$',
-              tenants_content,
-              flags=re.MULTILINE,
-          )
-
-          conn = duckdb.connect(str(pipeline_db))
+          # The product's own DDL, not a copy of it. This step used to hand-write
+          # a `CREATE SCHEMA` per tenant, parsed out of the `duckdb_schema` field
+          # of config/tenants.yaml -- the schema-per-tenant model that ADR-004
+          # retired. Nothing in src/ ever created those schemas, so the fixture
+          # was fabricating the very thing the restore smoke test then went
+          # looking for. Two tenants now share one table, keyed by `tenant_id`,
+          # which is what a restored store actually has to bring back.
+          backend = DuckDBBackend(db_path=str(pipeline_db))
+          backend.ensure_schema()
+          conn = backend.connection
           try:
-              for schema in tenant_schemas:
-                  conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-                  conn.execute(
-                      f'''
-                      CREATE TABLE IF NOT EXISTS "{schema}".orders_v2 (
-                          order_id VARCHAR PRIMARY KEY,
-                          user_id VARCHAR,
-                          status VARCHAR,
-                          total_amount DECIMAL(10,2),
-                          currency VARCHAR,
-                          created_at TIMESTAMP
-                      )
-                      '''
-                  )
-                  conn.execute(
-                      f'''
-                      INSERT INTO "{schema}".orders_v2 VALUES
-                      (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                      ''',
-                      [f"ORD-{schema.upper()}-001", f"USR-{schema.upper()}", "confirmed", 42.0, "RUB"],
-                  )
+              conn.execute(
+                  """
+                  INSERT OR REPLACE INTO orders_v2
+                      (tenant_id, order_id, user_id, status, total_amount, currency, created_at)
+                  VALUES
+                      ('acme-corp', 'ORD-ACME-001', 'USR-ACME', 'confirmed', 42.00, 'RUB',
+                       CURRENT_TIMESTAMP),
+                      ('demo', 'ORD-DEMO-001', 'USR-DEMO', 'confirmed', 17.00, 'RUB',
+                       CURRENT_TIMESTAMP)
+                  """
+              )
           finally:
               conn.close()
 
@@ -90,7 +89,7 @@ jobs:
           finally:
               conn.close()
           PY
-      - name: Create backup archive
+      - name: Create backup archive (synthetic fixture)
         run: python scripts/backup.py --output backup-artifacts
       - name: Resolve backup path
         id: backup
@@ -105,9 +104,9 @@ jobs:
           python scripts/restore.py \
             --backup "${{ steps.backup.outputs.archive_path }}" \
             --target-root /tmp/agentflow-restore
-      - name: Upload backup artifact
+      - name: Upload regression-test archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: agentflow-nightly-backup
+          name: agentflow-backup-restore-regression-fixture
           path: ${{ steps.backup.outputs.archive_path }}
           retention-days: 7

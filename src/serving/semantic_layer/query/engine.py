@@ -9,11 +9,12 @@ from pathlib import Path
 
 import duckdb
 
-from src.serving.backends import create_backend
+from src.serving.backends import ServingBackend, create_backend
 from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.db_pool import DuckDBPool
 from src.serving.duckdb_connection import connect_duckdb
 from src.serving.semantic_layer.catalog import DataCatalog
+from src.serving.semantic_layer.journal import JournalReader
 from src.tenancy import TenantRouter
 
 from .entity_queries import EntityQueryMixin
@@ -61,12 +62,17 @@ class QueryEngine(
         db_path: str | None = None,
         tenants_config_path: str | Path | None = None,
         db_pool: DuckDBPool | None = None,
+        *,
+        seed_demo_data: bool | None = None,
     ):
         self.catalog = catalog
         self._db_path: str = db_path or os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
         self._tenant_router = TenantRouter(tenants_config_path)
         self._table_columns_cache: dict[str, set[str]] = {}
         self._qualified_table_cache: dict[tuple[str, str | None], str] = {}
+        # One probe per table: does it hold rows of more than the default tenant?
+        # Drives the fail-closed guard on an unscoped read (SQLBuilderMixin).
+        self._foreign_tenant_cache: dict[str, bool] = {}
         self._db_pool = db_pool
         self._owns_connection = self._db_pool is None
         self._closed = False
@@ -80,11 +86,59 @@ class QueryEngine(
             db_pool=self._db_pool,
             connection=self._conn,
         )
-        self._duckdb_backend.initialize_demo_data()
+        # The embedded store belongs to this process — no other provisioner,
+        # nothing to migrate from — so its schema is laid down here and the
+        # control-plane/lake reads have tables to hit.
+        self._duckdb_backend.ensure_schema()
+        if seed_demo_data is None:
+            # Off unless asked. Demo rows used to land in the store on every
+            # boot, before anything read a flag, so a fresh store got them for
+            # no better reason than being empty (audit P0-2).
+            seed_demo_data = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+        if seed_demo_data:
+            self._duckdb_backend.seed_demo_data()
+
+        # The external serving backend is deliberately not provisioned here.
+        # This constructor used to run its DDL and seed it with demo rows on
+        # every boot, whatever the demo flags said: that forced the serving
+        # identity to hold CREATE/ALTER/INSERT, let several booting replicas
+        # race on the same seed, and dropped demo orders into whichever
+        # production store was configured, just because it was empty (audit
+        # P0-2). External stores are provisioned out of band — `python -m
+        # src.serving.provision`, or the bridge writer — and /health/ready says
+        # so loudly when that has not happened.
         self._backend = create_backend(duckdb_backend=self._duckdb_backend)
         self._backend_name = self._backend.name
-        if self._backend_name != self._duckdb_backend.name:
-            self._backend.initialize_demo_data()
+        self._journal = JournalReader(self._backend)
+
+    @property
+    def backend(self) -> ServingBackend:
+        """The store the API actually serves from.
+
+        Public on purpose: read surfaces used to reach into ``_conn`` and read
+        the embedded DuckDB whatever the configured backend was (audit P0-3).
+        A ratchet test now fails on any private reach outside the composition
+        root, so there has to be a front door.
+        """
+        return self._backend
+
+    @property
+    def journal(self) -> JournalReader:
+        """Reads of ``pipeline_events`` through the active backend."""
+        return self._journal
+
+    def provision_external_demo_store(self) -> None:
+        """Provision and seed the *external* serving backend — demo profile only.
+
+        The rule is that the API issues no DDL and no demo DML against a store
+        it does not own (audit P0-2). This is the one documented exception, and
+        the caller must have decided that an explicit demo profile is active —
+        nothing here checks. A no-op on the embedded profile, whose schema the
+        constructor already laid down.
+        """
+        if self._backend_name == self._duckdb_backend.name:
+            return
+        self._backend.initialize_demo_data()
 
     @contextmanager
     def _read_connection(self) -> Iterator[duckdb.DuckDBPyConnection]:

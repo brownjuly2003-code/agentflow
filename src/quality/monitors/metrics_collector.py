@@ -4,19 +4,26 @@ Aggregates metrics from Kafka consumer groups, Flink jobs,
 and quality checks into a unified health status.
 """
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import duckdb
 import httpx
 import structlog
 import yaml
 from confluent_kafka import KafkaException
 from prometheus_client import Gauge
 from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
+
+from src.serving.backends import BackendExecutionError
+
+if TYPE_CHECKING:
+    from src.serving.semantic_layer.journal import JournalReader
 
 logger = structlog.get_logger()
 
@@ -79,12 +86,23 @@ class PipelineHealth:
 
 
 class HealthCollector:
-    """Aggregates health from all pipeline components."""
+    """Aggregates health from all pipeline components.
 
-    def __init__(self) -> None:
+    ``journal`` is the store the API actually serves from. Without it the
+    data-plane checks report ``placeholder`` rather than inventing a store to
+    read: freshness and quality used to open their own read-only DuckDB at
+    ``DUCKDB_PATH``, which on the ClickHouse profile is an unrelated database
+    and on the default ``:memory:`` is a brand-new empty one — so they described
+    a store nobody was serving from, and never checked the one that mattered
+    (audit P0-3).
+    """
+
+    def __init__(self, journal: JournalReader | None = None) -> None:
+        self._journal = journal
         self._checks: list = [
             self._check_kafka,
             self._check_flink,
+            self._check_serving,
             self._check_freshness,
             self._check_quality_score,
             self._check_iceberg,
@@ -201,49 +219,83 @@ class HealthCollector:
             metrics={"running_jobs": running, "failed_jobs": failed},
         )
 
+    def _no_journal(self, name: str, metric_key: str) -> ComponentHealth:
+        return ComponentHealth(
+            name=name,
+            status=HealthStatus.DEGRADED,
+            message="No serving store wired into the health collector",
+            last_check=datetime.now(UTC),
+            metrics={metric_key: None},
+            source=CheckSource.PLACEHOLDER,
+        )
+
+    def _check_serving(self) -> ComponentHealth:
+        """Check the store the API actually serves from.
+
+        There was no such check: health reported on Kafka, Flink and Iceberg,
+        and read freshness and quality out of a DuckDB file it opened itself —
+        so a ClickHouse deployment could have a dead serving store and a green
+        /v1/health (audit P0-3).
+        """
+        if self._journal is None:
+            return self._no_journal("serving", "backend")
+
+        payload = self._journal.backend_health()
+        status = HealthStatus.HEALTHY if payload.get("status") == "ok" else HealthStatus.UNHEALTHY
+        backend = payload.get("backend", "unknown")
+        message = (
+            f"{backend} reachable"
+            if status is HealthStatus.HEALTHY
+            else f"{backend} unreachable: {payload.get('error', 'unknown error')}"
+        )
+        return ComponentHealth(
+            name="serving",
+            status=status,
+            message=message,
+            last_check=datetime.now(UTC),
+            metrics={"backend": backend},
+            source=CheckSource.LIVE,
+        )
+
     def _check_freshness(self) -> ComponentHealth:
         """Check data freshness from the most recent pipeline event."""
+        if self._journal is None:
+            return self._no_journal("freshness", "last_event_age_seconds")
+
+        # Through the active backend, against the store's own clock. This check
+        # used to open its own read-only DuckDB at DUCKDB_PATH — which on the
+        # ClickHouse profile is an unrelated (usually empty) store, so freshness
+        # described a database nobody was writing to (audit P0-3).
         try:
-            db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
-            conn = duckdb.connect(db_path, read_only=True)
-            row = conn.execute("SELECT MAX(processed_at) FROM pipeline_events").fetchone()
-            conn.close()
-
-            if row and row[0]:
-                last_event = row[0]
-                if hasattr(last_event, "timestamp"):
-                    age_s = (datetime.now(UTC) - last_event.replace(tzinfo=UTC)).total_seconds()
-                else:
-                    age_s = -1.0
-
-                sla = int(os.getenv("FRESHNESS_SLA_SECONDS", "30"))
-                if age_s <= sla:
-                    status = HealthStatus.HEALTHY
-                    msg = f"Last event {age_s:.0f}s ago (SLA: {sla}s)"
-                elif age_s <= sla * 3:
-                    status = HealthStatus.DEGRADED
-                    msg = f"Last event {age_s:.0f}s ago (SLA: {sla}s)"
-                else:
-                    status = HealthStatus.UNHEALTHY
-                    msg = f"Last event {age_s:.0f}s ago (SLA: {sla}s)"
-
-                return ComponentHealth(
-                    name="freshness",
-                    status=status,
-                    message=msg,
-                    last_check=datetime.now(UTC),
-                    metrics={
-                        "last_event_age_seconds": round(age_s, 1),
-                        "sla_seconds": sla,
-                    },
-                    source=CheckSource.LIVE,
-                )
-        except duckdb.Error as exc:
+            age_s = self._journal.freshness().age_seconds
+        except BackendExecutionError as exc:
             logger.warning(
                 "freshness_check_unavailable",
-                db_path=db_path,
+                backend=self._journal.backend_name,
                 error=str(exc),
                 exc_info=True,
+            )
+            age_s = None
+
+        if age_s is not None:
+            sla = int(os.getenv("FRESHNESS_SLA_SECONDS", "30"))
+            if age_s <= sla:
+                status = HealthStatus.HEALTHY
+            elif age_s <= sla * 3:
+                status = HealthStatus.DEGRADED
+            else:
+                status = HealthStatus.UNHEALTHY
+
+            return ComponentHealth(
+                name="freshness",
+                status=status,
+                message=f"Last event {age_s:.0f}s ago (SLA: {sla}s)",
+                last_check=datetime.now(UTC),
+                metrics={
+                    "last_event_age_seconds": round(age_s, 1),
+                    "sla_seconds": sla,
+                },
+                source=CheckSource.LIVE,
             )
 
         return ComponentHealth(
@@ -257,48 +309,40 @@ class HealthCollector:
 
     def _check_quality_score(self) -> ComponentHealth:
         """Check data quality from dead letter ratio in pipeline events."""
+        if self._journal is None:
+            return self._no_journal("quality", "pass_rate")
+
         try:
-            db_path = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
-            conn = duckdb.connect(db_path, read_only=True)
-            row = conn.execute("""
-                SELECT
-                    COUNT(*) as total,
-                    COUNT(*) FILTER (
-                        WHERE topic = 'events.deadletter'
-                    ) as dead
-                FROM pipeline_events
-                WHERE processed_at >= NOW() - INTERVAL '1 hour'
-            """).fetchone()
-            conn.close()
-
-            if row and row[0] and row[0] > 0:
-                total, dead = row[0], row[1]
-                pass_rate = (total - dead) / total
-                if pass_rate >= 0.99:
-                    status = HealthStatus.HEALTHY
-                elif pass_rate >= 0.95:
-                    status = HealthStatus.DEGRADED
-                else:
-                    status = HealthStatus.UNHEALTHY
-
-                return ComponentHealth(
-                    name="quality",
-                    status=status,
-                    message=f"Pass rate: {pass_rate:.1%} ({dead}/{total} rejected)",
-                    last_check=datetime.now(UTC),
-                    metrics={
-                        "pass_rate": round(pass_rate, 4),
-                        "total_events": total,
-                        "rejected_events": dead,
-                    },
-                    source=CheckSource.LIVE,
-                )
-        except duckdb.Error as exc:
+            counts = self._journal.event_counts(window="1 hour")
+        except BackendExecutionError as exc:
             logger.warning(
                 "quality_check_unavailable",
-                db_path=db_path,
+                backend=self._journal.backend_name,
                 error=str(exc),
                 exc_info=True,
+            )
+            counts = None
+
+        if counts is not None and counts.total > 0:
+            pass_rate = (counts.total - counts.errors) / counts.total
+            if pass_rate >= 0.99:
+                status = HealthStatus.HEALTHY
+            elif pass_rate >= 0.95:
+                status = HealthStatus.DEGRADED
+            else:
+                status = HealthStatus.UNHEALTHY
+
+            return ComponentHealth(
+                name="quality",
+                status=status,
+                message=f"Pass rate: {pass_rate:.1%} ({counts.errors}/{counts.total} rejected)",
+                last_check=datetime.now(UTC),
+                metrics={
+                    "pass_rate": round(pass_rate, 4),
+                    "total_events": counts.total,
+                    "rejected_events": counts.errors,
+                },
+                source=CheckSource.LIVE,
             )
 
         return ComponentHealth(

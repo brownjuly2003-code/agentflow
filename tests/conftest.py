@@ -12,6 +12,14 @@ import pytest
 # ClickHouse test lane still override it via SERVING_BACKEND.
 os.environ.setdefault("SERVING_BACKEND", "duckdb")
 
+# The suite asserts on the canonical demo entities (PROD-001, ORD-20260404-1001,
+# the two seeded dead-letter rows), so it runs the seeded profile. The *shipped*
+# default is off: seeding used to happen inside QueryEngine's constructor on
+# every boot, before any flag was read, which put demo rows into whatever store
+# the API was pointed at (audit P0-2). Tests that pin the shipped default
+# monkeypatch this back off — see tests/unit/test_serving_provisioning.py.
+os.environ.setdefault("AGENTFLOW_SEED_ON_BOOT", "true")
+
 
 @pytest.fixture
 def sample_order_event() -> dict:

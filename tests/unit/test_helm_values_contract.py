@@ -55,9 +55,30 @@ def test_chart_declares_values_schema_for_runtime_contracts():
     assert "created_at" in api_key_item["required"]
     assert "id" in tenant_item["required"]
     assert "display_name" in tenant_item["required"]
-    assert "duckdb_schema" in tenant_item["required"]
     assert "create" in schema["properties"]["secrets"]["required"]
     assert "existingSecret" in schema["properties"]["secrets"]["required"]
+
+
+def test_tenant_schema_does_not_require_the_retired_duckdb_schema_field():
+    """`duckdb_schema` is accepted, ignored, and no longer demanded (ADR-004).
+
+    It named the isolation mechanism back when isolation was supposed to be a
+    schema per tenant. Nothing creates those schemas and nothing reads the field
+    now — the boundary is the `tenant_id` column in each table's write key — so
+    requiring operators to declare one would be asking them to name a thing that
+    does not exist. The property stays in the schema (tenant items are
+    `additionalProperties: false`, so removing it would reject values written for
+    the old model) and says so in its description.
+    """
+    schema = json.loads(
+        (PROJECT_ROOT / "helm" / "agentflow" / "values.schema.json").read_text(encoding="utf-8")
+    )
+    tenant_item = schema["properties"]["config"]["properties"]["tenants"]["properties"]["tenants"][
+        "items"
+    ]
+
+    assert "duckdb_schema" not in tenant_item["required"]
+    assert "Ignored" in tenant_item["properties"]["duckdb_schema"]["description"]
 
 
 def test_chart_defaults_use_structured_api_keys_and_tenants():
@@ -75,9 +96,10 @@ def test_chart_defaults_use_structured_api_keys_and_tenants():
         assert tenant["id"]
         assert tenant["display_name"]
         assert tenant["kafka_topic_prefix"]
-        assert tenant["duckdb_schema"]
         assert tenant["max_events_per_day"] >= 1
         assert tenant["max_api_keys"] >= 1
+        # The chart must not ship an example of a field the runtime ignores.
+        assert "duckdb_schema" not in tenant
 
 
 def test_chart_defaults_do_not_embed_production_shaped_api_key_hashes():
@@ -358,3 +380,49 @@ def test_postgres_store_still_gated_without_clickhouse_backend():
     output = _combined_output(result)
     assert result.returncode != 0, output
     assert "Multi-replica requires BOTH" in output
+
+
+def test_serving_clickhouse_tls_render_is_first_class():
+    """audit P2-3: TLS to an external ClickHouse must not require extraEnv.
+    secure=true flows to CLICKHOUSE_SECURE in BOTH consumers of the wire (API
+    deployment and provision job); a private CA secret is mounted read-only
+    and CLICKHOUSE_CA_CERT points inside the mount. The profile knob rides
+    along so the app-side production gate can be armed from values."""
+    rendered = _run_helm_template(
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.secure=true",
+        "--set",
+        "serving.clickhouse.tls.caSecret=agentflow-clickhouse-ca",
+        "--set",
+        "config.profile=production",
+    )
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+    assert output.count('name: CLICKHOUSE_SECURE\n              value: "true"') == 2
+    assert output.count("value: /etc/agentflow/tls/clickhouse/ca.crt") == 2
+    assert output.count('secretName: "agentflow-clickhouse-ca"') == 2
+    assert output.count('value: "production"') == 2
+
+    # The default render stays plaintext-off-by-default and mounts nothing.
+    default = _run_helm_template()
+    default_output = _combined_output(default)
+    assert default.returncode == 0, default_output
+    assert "CLICKHOUSE_CA_CERT" not in default_output
+    assert "clickhouse-ca" not in default_output
+    assert "AGENTFLOW_PROFILE" not in default_output
+
+    # Schema stays strict: the tls block accepts nothing undeclared. The exact
+    # message wording belongs to helm's schema validator and changed across
+    # helm releases ("Additional property bogus is not allowed" vs
+    # "additional properties 'bogus' not allowed"), so assert the meaning,
+    # not the phrasing.
+    bogus = _run_helm_template("--set", "serving.clickhouse.tls.bogus=1")
+    assert bogus.returncode != 0
+    bogus_output = _combined_output(bogus)
+    assert "bogus" in bogus_output, bogus_output
+    assert "additional propert" in bogus_output.lower(), bogus_output
+    assert "not allowed" in bogus_output, bogus_output

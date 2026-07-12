@@ -23,7 +23,6 @@ class _MinimalQueryHost(
         self.catalog = DataCatalog()
         self._tenant_router = Mock()
         self._tenant_router.has_config.return_value = False
-        self._tenant_router.get_duckdb_schema.return_value = None
         self._backend = Mock()
         self._backend.name = "duckdb"
         self._backend_name = self._backend.name
@@ -86,10 +85,16 @@ def test_execute_nl_query_runs_against_minimal_host_contract(host: _MinimalQuery
 
     result = host.execute_nl_query("show orders")
 
+    scoped_orders = (
+        "(SELECT * EXCLUDE (tenant_id) FROM orders_v2 WHERE tenant_id = 'default') AS \"orders_v2\""
+    )
+
     assert result["data"] == [{"order_id": "ORD-1"}]
-    assert result["sql"] == "SELECT order_id FROM orders_v2"
-    # the executed SQL is wrapped in a bounded LIMIT (audit #8); result["sql"]
-    # still reports the logical query.
+    # NL SQL is tenant-scoped before it runs (ADR-004): the table it names is
+    # replaced by the caller's scoped relation, and result["sql"] reports the SQL
+    # that actually executed, not the one the model wrote.
+    assert result["sql"] == f"SELECT order_id FROM {scoped_orders}"
+    # the executed SQL is wrapped in a bounded LIMIT (audit #8).
     host._backend.execute.assert_called_once_with(
-        "SELECT * FROM (SELECT order_id FROM orders_v2) AS bounded_nl_query LIMIT 1000"
+        f"SELECT * FROM (SELECT order_id FROM {scoped_orders}) AS bounded_nl_query LIMIT 1000"
     )

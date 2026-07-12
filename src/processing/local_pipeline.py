@@ -29,6 +29,7 @@ from src.ingestion.producers.event_producer import (
 )
 from src.logger import configure_logging
 from src.processing.clickhouse_sink import ClickHouseSink
+from src.processing.event_tenant import event_tenant
 from src.processing.iceberg_sink import IcebergSink
 from src.processing.transformations.enrichment import (
     compute_payment_risk_score,
@@ -37,79 +38,28 @@ from src.processing.transformations.enrichment import (
 )
 from src.quality.validators.schema_validator import validate_event
 from src.quality.validators.semantic_validator import validate_semantics
+from src.serving.backends.duckdb_backend import DuckDBBackend
 
 DB_PATH = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
 
 
 def _ensure_tables(conn: duckdb.DuckDBPyConnection) -> None:
-    """Create all tables if they don't exist."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS orders_v2 (
-            order_id VARCHAR PRIMARY KEY,
-            user_id VARCHAR,
-            status VARCHAR,
-            total_amount DECIMAL(10,2),
-            currency VARCHAR DEFAULT 'RUB',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS products_current (
-            product_id VARCHAR PRIMARY KEY,
-            name VARCHAR,
-            category VARCHAR,
-            price DECIMAL(10,2),
-            in_stock BOOLEAN DEFAULT TRUE,
-            stock_quantity INTEGER DEFAULT 0
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS sessions_aggregated (
-            session_id VARCHAR PRIMARY KEY,
-            user_id VARCHAR,
-            started_at TIMESTAMP,
-            ended_at TIMESTAMP,
-            duration_seconds FLOAT,
-            event_count INTEGER,
-            unique_pages INTEGER,
-            funnel_stage VARCHAR,
-            is_conversion BOOLEAN DEFAULT FALSE
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users_enriched (
-            user_id VARCHAR PRIMARY KEY,
-            total_orders INTEGER DEFAULT 0,
-            total_spent DECIMAL(10,2) DEFAULT 0,
-            first_order_at TIMESTAMP,
-            last_order_at TIMESTAMP,
-            preferred_category VARCHAR
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pipeline_events (
-            event_id VARCHAR,
-            topic VARCHAR,
-            tenant_id VARCHAR DEFAULT 'default',
-            event_type VARCHAR,
-            latency_ms INTEGER,
-            processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute(
-        "ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS tenant_id VARCHAR DEFAULT 'default'"
-    )
-    conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS entity_id VARCHAR")
-    # ADR 0012 N4: originating branch of a federated node event (NULL for
-    # in-process events).
-    conn.execute("ALTER TABLE pipeline_events ADD COLUMN IF NOT EXISTS branch VARCHAR")
+    """Create the tables this pipeline writes, if they don't exist.
+
+    One DDL for the whole DuckDB store: ``DuckDBBackend.ensure_schema`` owns it,
+    and this used to keep a second, hand-maintained copy of the same five tables.
+    They had already drifted (the copy's ``pipeline_events`` was missing columns
+    the other one declared, and only got them back through ALTERs), and the
+    tenant key — the boundary itself (ADR-004) — is exactly the kind of thing a
+    second copy silently omits. So there is no second copy.
+    """
+    DuckDBBackend(db_path=DB_PATH, connection=conn).ensure_schema()
 
 
 def _event_tenant(event: dict) -> str:
-    source_metadata = event.get("source_metadata", {})
-    metadata_tenant = source_metadata.get("tenant") if isinstance(source_metadata, dict) else None
-    tenant = event.get("tenant") or metadata_tenant
-    return str(tenant) if tenant else "default"
+    # Shared with the ClickHouse sink, which stamps the same tenant onto the
+    # serving rows it writes (P0-1) and cannot import this module.
+    return event_tenant(event)
 
 
 def _event_branch(event: dict) -> str | None:
@@ -370,7 +320,9 @@ def apply_serving_batch(
     product_events: list[dict] = []
     session_events: list[dict] = []
     journal_rows: list[dict] = []
-    pending_users: set[str] = set()
+    # (tenant, user): a user id is only unique within a tenant, so the aggregate
+    # recompute has to be keyed by both (audit P0-1).
+    pending_users: set[tuple[str, str]] = set()
     now = datetime.now(UTC)
 
     for event in events:
@@ -416,7 +368,7 @@ def apply_serving_batch(
         if event_type.startswith("order."):
             working = enrich_order(event)
             order_events.append(working)
-            pending_users.add(str(working["user_id"]))
+            pending_users.add((tenant_id, str(working["user_id"])))
             journal_rows.append(
                 {
                     "event_id": f"{event_id}-status",
@@ -470,13 +422,15 @@ def apply_serving_batch(
 
 
 def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
+    tenant_id = _event_tenant(event)
     conn.execute(
         """
         INSERT OR REPLACE INTO orders_v2
-        (order_id, user_id, status, total_amount, currency, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (tenant_id, order_id, user_id, status, total_amount, currency, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
         [
+            tenant_id,
             event["order_id"],
             event["user_id"],
             event["status"],
@@ -485,13 +439,16 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
             datetime.fromisoformat(event["timestamp"]),
         ],
     )
-    # Update user aggregate
+    # Update user aggregate. Scoped and grouped by tenant: a user id is unique
+    # only within a tenant, so a global GROUP BY user_id would sum two tenants'
+    # orders into one total and write it back to both (audit P0-1).
     conn.execute(
         """
         INSERT OR REPLACE INTO users_enriched
-        (user_id, total_orders, total_spent,
+        (tenant_id, user_id, total_orders, total_spent,
          first_order_at, last_order_at, preferred_category)
         SELECT
+            tenant_id,
             user_id,
             COUNT(*) as total_orders,
             SUM(total_amount) as total_spent,
@@ -499,10 +456,10 @@ def _upsert_order(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
             MAX(created_at),
             NULL
         FROM orders_v2
-        WHERE user_id = ? AND status != 'cancelled'
-        GROUP BY user_id
+        WHERE tenant_id = ? AND user_id = ? AND status != 'cancelled'
+        GROUP BY tenant_id, user_id
     """,
-        [event["user_id"]],
+        [tenant_id, event["user_id"]],
     )
 
 
@@ -539,10 +496,11 @@ def _upsert_product(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
     conn.execute(
         """
         INSERT OR REPLACE INTO products_current
-        (product_id, name, category, price, in_stock, stock_quantity)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (tenant_id, product_id, name, category, price, in_stock, stock_quantity)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
         [
+            _event_tenant(event),
             event["product_id"],
             event["name"],
             event["category"],
@@ -569,9 +527,14 @@ def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
     }
     new_stage_val = stage_order.get(page_cat, 0)
 
+    # A session id is unique only within a tenant, so both the lookup and the
+    # update are keyed by (tenant, session) — otherwise one tenant's clickstream
+    # folds into another's session (audit P0-1).
+    tenant_id = _event_tenant(event)
     existing = conn.execute(
-        "SELECT funnel_stage, event_count FROM sessions_aggregated WHERE session_id = ?",
-        [session_id],
+        "SELECT funnel_stage, event_count FROM sessions_aggregated "
+        "WHERE tenant_id = ? AND session_id = ?",
+        [tenant_id, session_id],
     ).fetchone()
 
     if existing:
@@ -585,12 +548,13 @@ def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
             SET event_count = ?,
                 funnel_stage = ?,
                 is_conversion = ?
-            WHERE session_id = ?
+            WHERE tenant_id = ? AND session_id = ?
         """,
             [
                 old_count + 1,
                 funnel,
                 funnel == "checkout",
+                tenant_id,
                 session_id,
             ],
         )
@@ -598,12 +562,13 @@ def _upsert_session(conn: duckdb.DuckDBPyConnection, event: dict) -> None:
         conn.execute(
             """
             INSERT INTO sessions_aggregated
-            (session_id, user_id, started_at, ended_at,
+            (tenant_id, session_id, user_id, started_at, ended_at,
              duration_seconds, event_count, unique_pages,
              funnel_stage, is_conversion)
-            VALUES (?, ?, ?, NULL, 0, 1, 1, ?, ?)
+            VALUES (?, ?, ?, ?, NULL, 0, 1, 1, ?, ?)
         """,
             [
+                tenant_id,
                 session_id,
                 event.get("user_id"),
                 datetime.now(UTC),

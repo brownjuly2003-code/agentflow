@@ -5,7 +5,7 @@ keys:
   - key_hash: "$2b$12$UNE9Vh.YivKR7Zt7xIZweebebjkcVaQv240rqabzG/H3dWoljplcO"
     key_lookup: "74d5be89c3e4f32b4403dea15ea11bdace14413816e91c6b61bf6e5eee035ae0"
     name: "Support Agent"
-    tenant: "acme-corp"
+    tenant: "default"
     rate_limit_rpm: 60
     allowed_entity_types:
       - "order"
@@ -14,7 +14,7 @@ keys:
   - key_hash: "$2b$12$V3xTQLf35Snz15N.cNS8yOPkR/1TWIJXt4jLNZeGXlIbHXsvYC8jW"
     key_lookup: "3cab52364d4c5acda193f94ebb2a1e46d0f909cce5479349ad3abb69f21efa97"
     name: "Ops Agent"
-    tenant: "acme-corp"
+    tenant: "default"
     rate_limit_rpm: 300
     allowed_entity_types: null
     created_at: "2026-04-10"

@@ -8,9 +8,18 @@ terraform {
     }
   }
 
+  # Scope: streaming-infrastructure-reference — Kafka, Flink, object storage
+  # and monitoring only. The API runtime, ClickHouse, PostgreSQL, Redis and
+  # ingress are operator-owned dependencies (audit P2-4); apply stays gated in
+  # .github/workflows/terraform-apply.yml.
+  #
+  # The state KEY is deliberately absent: every environment owns its own state
+  # object, supplied at init time —
+  #   terraform init -backend-config="key=env/<environment>/terraform.tfstate"
+  # (see Makefile deploy-* and the terraform-apply workflow). One shared key
+  # would let a dev plan run against production state (audit P2-4).
   backend "s3" {
     bucket         = "agentflow-terraform-state"
-    key            = "infrastructure/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "agentflow-terraform-locks"
     encrypt        = true

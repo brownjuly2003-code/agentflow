@@ -764,10 +764,17 @@ def test_get_store_postgres_resolves_the_adapter_and_caches_it(
     from src.serving.control_plane import postgres as postgres_module
     from src.serving.control_plane.postgres import PostgresControlPlaneStore
 
-    # The selection seam is under test, not psycopg: stub the module object so
-    # this resolves identically whether or not the optional dependency is
-    # installed (the CI unit job installs no optional extras).
+    # The selection seam is under test, not psycopg: stub the module objects so
+    # this resolves identically whether or not the optional dependencies are
+    # installed (the CI unit job installs no optional extras). The pool stub
+    # returns an inert object — the constructor builds the pool with open=False,
+    # so no pool method is touched before a first real call.
     monkeypatch.setattr(postgres_module, "psycopg", SimpleNamespace())
+    monkeypatch.setattr(
+        postgres_module,
+        "psycopg_pool",
+        SimpleNamespace(ConnectionPool=lambda *args, **kwargs: SimpleNamespace()),
+    )
     monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
     monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
     app = _stub_app(conn)
@@ -790,6 +797,23 @@ def test_get_store_postgres_fails_loudly_without_psycopg(
     monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
     monkeypatch.setattr(postgres_module, "psycopg", None)
     with pytest.raises(RuntimeError, match="psycopg"):
+        get_control_plane_store(_stub_app(conn))  # type: ignore[arg-type]
+
+
+def test_get_store_postgres_fails_loudly_without_psycopg_pool(
+    conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # psycopg alone is not enough for the scale profile any more: the store's
+    # connections come from a bounded psycopg_pool.ConnectionPool (audit
+    # P1-1), and a missing pool package must fail the boot with the same
+    # loudness as missing psycopg — never degrade to connection-per-call.
+    from src.serving.control_plane import postgres as postgres_module
+
+    monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
+    monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
+    monkeypatch.setattr(postgres_module, "psycopg", SimpleNamespace())
+    monkeypatch.setattr(postgres_module, "psycopg_pool", None)
+    with pytest.raises(RuntimeError, match="psycopg_pool"):
         get_control_plane_store(_stub_app(conn))  # type: ignore[arg-type]
 
 

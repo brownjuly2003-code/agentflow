@@ -32,7 +32,7 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 - **Published release line through `v2.0.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
 - **Tested and gated** — 1,500+ unit tests plus a broad Windows no-Docker suite; CI enforces 13 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract, build-smoke) through branch protection
 - **Dual SDK parity** across Python and TypeScript — retries, circuit breakers, batching, pagination, contract pinning, idempotency keys, `as_of` historical reads — over sub-second entity lookups (p50 `38–55 ms`, p99 `167 ms` on local hardware)
-- **Security in the hot path** — tenant isolation on every read surface, parameterized queries, `sqlglot` AST validation for NL-to-SQL, fail-closed auth, secret scrubbing, and a Bandit gate for new findings
+- **Security in the hot path** — a tenant boundary that lives in each serving table's write key and is applied at a single read chokepoint ([ADR-004](docs/decisions/004-tenant-id-column-over-schema-per-tenant.md); proven against DuckDB, [not yet proven on ClickHouse](docs/STATUS.md#known-issues)), parameterized queries, `sqlglot` AST validation for NL-to-SQL, fail-closed auth, secret scrubbing, and a Bandit gate for new findings
 - **Production-shaped extras** — two CDC paths (hardened Debezium/Kafka Connect + a ClickHouse per-branch fan-out), on-call [runbooks](docs/runbooks/README.md), and a [narrated demo](docs/dv2-multi-branch/) of the DV2 multi-branch warehouse
 
 ## Quick start

@@ -10,6 +10,63 @@ from .contracts import QueryExecutionHost
 
 
 class EntityQueryMixin:
+    def scan_entity_rows(
+        self: QueryExecutionHost,
+        table_name: str,
+        *,
+        limit: int,
+    ) -> list[dict]:
+        """Bulk-read an entity table through the active backend, ``tenant_id`` included.
+
+        The search index used to run its own ``SELECT *`` on the raw DuckDB
+        connection, so on the ClickHouse profile it indexed a store nobody was
+        serving from (audit P0-3). It is bounded because the index materializes
+        every row it gets, and an unbounded scan grows with the serving data —
+        the next RSS-growth candidate after the webhook poller (audit P1-6).
+
+        Deliberately *not* tenant-scoped, and the one entity read that isn't: the
+        index is built once per process and serves every tenant, so it needs the
+        rows of all of them, each carrying the ``tenant_id`` that says whose it
+        is. ``SearchIndex`` stamps that onto the document and filters by it
+        before scoring — a per-tenant index would rebuild the whole corpus once
+        per tenant instead (audit P0-1). Callers other than the index want
+        ``_qualify_table``, which excludes the column and filters by it.
+        """
+        physical = self._physical_table(table_name)
+        return self._backend.execute(
+            # table_name is a catalog-defined identifier, never request data.
+            f"SELECT * FROM {physical} LIMIT {int(limit)}"  # nosec B608
+        )
+
+    def scan_entity_rows_by_ids(
+        self: QueryExecutionHost,
+        table_name: str,
+        *,
+        primary_key: str,
+        ids: list[str],
+    ) -> list[dict]:
+        """Targeted companion to ``scan_entity_rows`` for the incremental
+        search refresh (audit P1-6): re-read only the rows whose primary key
+        appears in the journal's changed-id set, instead of full-scanning the
+        table because one row moved.
+
+        Same deliberate shape as the bulk scan: through the active backend,
+        ``tenant_id`` included, NOT tenant-scoped — the caller is the
+        process-global index and stamps the tenant onto each document.
+        ``table_name`` and ``primary_key`` are catalog-defined identifiers;
+        the id values are event-shaped data and go through ``_quote_literal``
+        (single-quote escaping the backend's sqlglot round-trip re-escapes
+        structurally).
+        """
+        if not ids:
+            return []
+        physical = self._physical_table(table_name)
+        quoted = ", ".join(self._quote_literal(value) for value in ids)
+        return self._backend.execute(
+            # table/primary_key are catalog identifiers; every id is quoted.
+            f"SELECT * FROM {physical} WHERE {primary_key} IN ({quoted})"  # nosec B608
+        )
+
     def get_entity(
         self: QueryExecutionHost,
         entity_type: str,
@@ -139,7 +196,9 @@ class EntityQueryMixin:
         store_tz = naive_store_tz(self._backend_name)
         anchor = as_of.astimezone(store_tz).replace(tzinfo=None)
         pipeline_table = self._qualify_table("pipeline_events", tenant_id)
-        event_columns = self._table_columns(pipeline_table)
+        # Probe the *physical* journal: `_qualify_table` returns a tenant-scoped
+        # sub-select, which has no schema to describe (P0-1).
+        event_columns = self._table_columns(self._physical_table("pipeline_events"))
         use_query_params = self._backend_name == self._duckdb_backend.name
 
         if {"entity_id", "entity_data"}.issubset(event_columns):
@@ -206,7 +265,7 @@ class EntityQueryMixin:
                         return historical
 
         table_name = self._qualify_table(entity_def.table, tenant_id)
-        table_columns = self._table_columns(table_name)
+        table_columns = self._table_columns(self._physical_table(entity_def.table))
         time_column = next(
             (
                 candidate

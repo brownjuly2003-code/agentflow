@@ -190,6 +190,17 @@ class ControlPlaneStore(ABC):
     """Port for control-plane state (ADR 0010). See the module docstring for
     the claim-semantics contract adapters must uphold."""
 
+    def ping(self) -> None:
+        """Raise if the store is unreachable — cheap enough for a readiness probe.
+
+        Concrete, not abstract: the embedded adapter lives on this process's own
+        DuckDB and is up whenever the process is, so it needs no check. An
+        adapter that talks to something over a network overrides this, and
+        `/health/ready` reports a control plane it cannot reach instead of
+        letting the replica take traffic it cannot serve (audit P0-3).
+        """
+        return None
+
     # --- webhook durable delivery queue (re-drive state) ---------------------
 
     @abstractmethod

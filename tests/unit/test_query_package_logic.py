@@ -36,7 +36,6 @@ class _Host(
         self.catalog = DataCatalog()
         self._tenant_router = Mock()
         self._tenant_router.has_config.return_value = False
-        self._tenant_router.get_duckdb_schema.return_value = None
         self._backend = Mock()
         self._backend.name = backend_name
         self._backend_name = backend_name
@@ -90,9 +89,38 @@ def test_engine_health_read_connection_and_idempotent_close() -> None:
     assert engine._closed is True
 
 
-def test_engine_initializes_demo_data_on_non_duckdb_backend(
+def test_engine_never_provisions_the_external_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The constructor used to run DDL and seed demo rows on whatever external
+    # store was configured, on every boot and regardless of the demo flags: the
+    # serving identity therefore needed CREATE/ALTER/INSERT, booting replicas
+    # raced each other on the seed, and a production ClickHouse got demo orders
+    # because it happened to be empty (audit P0-2). Even with the embedded demo
+    # seed switched on, the external backend must stay untouched.
+    import src.serving.semantic_layer.query.engine as engine_module
+
+    promoted = Mock()
+    promoted.name = "clickhouse"
+    monkeypatch.setattr(engine_module, "create_backend", lambda duckdb_backend: promoted)
+
+    engine = engine_module.QueryEngine(
+        catalog=DataCatalog(), db_path=":memory:", seed_demo_data=True
+    )
+    try:
+        promoted.ensure_schema.assert_not_called()
+        promoted.seed_demo_data.assert_not_called()
+        promoted.initialize_demo_data.assert_not_called()
+        assert engine._backend_name == "clickhouse"
+    finally:
+        engine.close()
+
+
+def test_provision_external_demo_store_is_the_explicit_way_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The demo profile still needs a provisioned external store — it just has to
+    # ask for it now.
     import src.serving.semantic_layer.query.engine as engine_module
 
     promoted = Mock()
@@ -101,10 +129,8 @@ def test_engine_initializes_demo_data_on_non_duckdb_backend(
 
     engine = engine_module.QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     try:
-        # A backend other than the DuckDB one must get its own demo-data
-        # initialization call.
+        engine.provision_external_demo_store()
         promoted.initialize_demo_data.assert_called_once_with()
-        assert engine._backend_name == "clickhouse"
     finally:
         engine.close()
 
@@ -124,58 +150,41 @@ def test_quote_literal_covers_every_type_branch(host: _Host) -> None:
     assert host._quote_literal("O'Brien") == "'O''Brien'"
 
 
-def test_get_tenant_schema_rejects_non_identifier_schema(host: _Host) -> None:
-    host._tenant_router.get_duckdb_schema.return_value = "bad-schema;"
-
-    with pytest.raises(ValueError, match="Invalid DuckDB schema"):
-        host._get_tenant_schema("tenant_a")
-
-
-def test_qualify_table_returns_cached_qualified_name(host: _Host) -> None:
-    host._qualified_table_cache[("orders_v2", "tenant_a")] = '"cached"."orders_v2"'
-
-    assert host._qualify_table("orders_v2", "tenant_a") == '"cached"."orders_v2"'
-    host._tenant_router.get_duckdb_schema.assert_not_called()
+def test_tenant_predicate_rejects_a_tenant_id_that_could_break_the_literal(host: _Host) -> None:
+    # The predicate is the isolation boundary and is inlined as a literal on the
+    # ClickHouse path, so the id is validated rather than trusted (ADR-004).
+    with pytest.raises(ValueError, match="Invalid tenant id"):
+        host._tenant_predicate("bad-tenant';--")
 
 
-def test_qualify_table_requires_tenant_for_tenant_scoped_table(host: _Host) -> None:
-    host._tenant_router.has_config.return_value = True
-    host._tenant_router.get_duckdb_schema.return_value = None
-    tenant = Mock()
-    tenant.duckdb_schema = "tenant_a"
-    host._tenant_router.load.return_value = Mock(tenants=[tenant])
-    host._columns_by_table['"tenant_a"."orders_v2"'] = {"order_id"}
+def test_qualify_table_returns_cached_relation(host: _Host) -> None:
+    host._qualified_table_cache[("orders_v2", "tenant_id = 'tenant_a'")] = "CACHED"
 
-    with pytest.raises(ValueError, match="Tenant context is required"):
-        host._qualify_table("orders_v2", None)
+    assert host._qualify_table("orders_v2", "tenant_a") == "CACHED"
 
 
-def test_qualify_table_rejects_non_identifier_schema(host: _Host) -> None:
-    host._tenant_router.get_duckdb_schema.return_value = "drop table;"
+def test_qualify_table_filters_by_tenant_and_caches_the_relation(host: _Host) -> None:
+    scoped = host._qualify_table("orders_v2", "tenant_a")
 
-    with pytest.raises(ValueError, match="Invalid DuckDB schema"):
-        host._qualify_table("orders_v2", "tenant_a")
-
-
-def test_qualify_table_qualifies_and_caches_tenant_schema(host: _Host) -> None:
-    host._tenant_router.get_duckdb_schema.return_value = "tenant_a"
-
-    qualified = host._qualify_table("orders_v2", "tenant_a")
-
-    assert qualified == '"tenant_a"."orders_v2"'
-    assert host._qualified_table_cache[("orders_v2", "tenant_a")] == qualified
+    assert scoped == (
+        "(SELECT * EXCLUDE (tenant_id) FROM orders_v2 WHERE tenant_id = 'tenant_a') "
+        'AS "orders_v2"'
+    )
+    assert host._qualified_table_cache[("orders_v2", "tenant_id = 'tenant_a'")] == scoped
 
 
-def test_scope_sql_without_schema_still_validates_known_tables(host: _Host) -> None:
-    # The schema-None branch must still call _qualify_table for each known
-    # unqualified table (tenant-context enforcement), then return sql as-is.
-    # Without tenant config the resolved tenant falls back to "demo".
-    # unknown_table is not in the catalog, so the loop must skip it.
+def test_scope_sql_scopes_known_tables_and_leaves_unknown_ones_alone(host: _Host) -> None:
+    # Every known table is rewritten into its tenant-scoped relation; a table that
+    # is not in the catalog is not a serving table and is left as it is. Without a
+    # tenants config the resolved tenant falls back to DEFAULT_TENANT.
     sql = "SELECT * FROM orders_v2, unknown_table"
 
-    assert host._scope_sql(sql, None) == sql
-    assert ("orders_v2", "demo") in host._qualified_table_cache
-    assert ("unknown_table", "demo") not in host._qualified_table_cache
+    scoped = host._scope_sql(sql, None)
+
+    assert "EXCLUDE (tenant_id) FROM orders_v2 WHERE tenant_id = 'default'" in scoped
+    assert "unknown_table" in scoped
+    assert ("orders_v2", "tenant_id = 'default'") in host._qualified_table_cache
+    assert ("unknown_table", "tenant_id = 'default'") not in host._qualified_table_cache
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +282,84 @@ def test_get_entity_parses_string_timestamp_and_skips_bad_candidates(host: _Host
 
     assert result is not None
     assert result["_last_updated"] == AWARE_TS.isoformat()
+
+
+# ---------------------------------------------------------------------------
+# entity_queries — index scans (audit P0-3 / P1-6)
+# ---------------------------------------------------------------------------
+
+
+def test_scan_entity_rows_reads_the_active_backend_unscoped(host: _Host) -> None:
+    # The search index's bulk read: through the active backend, bounded, and
+    # deliberately NOT tenant-scoped — the process-global index needs every
+    # tenant's rows, each carrying its tenant_id.
+    host._backend.execute.return_value = [{"order_id": "ORD-1", "tenant_id": "default"}]
+
+    rows = host.scan_entity_rows("orders_v2", limit=500)
+
+    assert rows == [{"order_id": "ORD-1", "tenant_id": "default"}]
+    sql = host._backend.execute.call_args.args[0]
+    assert sql == "SELECT * FROM orders_v2 LIMIT 500"
+
+
+def test_scan_entity_rows_by_ids_short_circuits_on_empty_ids(host: _Host) -> None:
+    assert host.scan_entity_rows_by_ids("orders_v2", primary_key="order_id", ids=[]) == []
+    host._backend.execute.assert_not_called()
+
+
+def test_scan_entity_rows_by_ids_quotes_every_id(host: _Host) -> None:
+    # The changed-id set is event-shaped data: every value must go through
+    # literal quoting, so an id carrying a quote cannot break out of the IN.
+    host._backend.execute.return_value = []
+
+    host.scan_entity_rows_by_ids("orders_v2", primary_key="order_id", ids=["ORD-1", "ORD'2"])
+
+    sql = host._backend.execute.call_args.args[0]
+    assert "WHERE order_id IN ('ORD-1', 'ORD''2')" in sql
+
+
+# ---------------------------------------------------------------------------
+# entity_queries — fetch_orders_by_status
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_orders_by_status_empty_ladder_returns_empty(host: _Host) -> None:
+    assert host.fetch_orders_by_status([]) == []
+    host._backend.execute.assert_not_called()
+
+
+def test_fetch_orders_by_status_param_backend_binds_statuses(host: _Host) -> None:
+    host._backend.execute.return_value = [{"order_id": "ORD-1", "status": "pending"}]
+
+    rows = host.fetch_orders_by_status(["pending", "confirmed"])
+
+    assert rows == [{"order_id": "ORD-1", "status": "pending"}]
+    sql, params = host._backend.execute.call_args.args
+    assert "WHERE status IN (?, ?)" in sql
+    assert params == ["pending", "confirmed"]
+
+
+def test_fetch_orders_by_status_literal_backend_quotes_statuses(literal_host: _Host) -> None:
+    literal_host._backend.execute.return_value = []
+
+    assert literal_host.fetch_orders_by_status(["pend'ing"]) == []
+    sql = literal_host._backend.execute.call_args.args[0]
+    assert "WHERE status IN ('pend''ing')" in sql
+    assert len(literal_host._backend.execute.call_args.args) == 1
+
+
+def test_fetch_orders_by_status_missing_table_maps_to_value_error(host: _Host) -> None:
+    host._backend.execute.side_effect = BackendMissingTableError("no table")
+
+    with pytest.raises(ValueError, match="not materialized yet"):
+        host.fetch_orders_by_status(["pending"])
+
+
+def test_fetch_orders_by_status_execution_error_maps_to_value_error(host: _Host) -> None:
+    host._backend.execute.side_effect = BackendExecutionError("boom")
+
+    with pytest.raises(ValueError, match="Open-orders lookup failed"):
+        host.fetch_orders_by_status(["pending"])
 
 
 # ---------------------------------------------------------------------------

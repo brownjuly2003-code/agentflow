@@ -103,7 +103,7 @@ Typical paginated response:
 | `DELETE` | `/v1/alerts/{alert_id}` | Deactivate an alert | Path param only |
 | `POST` | `/v1/alerts/{alert_id}/test` | Send a synthetic alert notification | Path param only |
 | `GET` | `/v1/alerts/{alert_id}/history` | Alert evaluation and delivery history | Path param only |
-| `GET` | `/v1/slo` | Current SLO compliance and error budget | None |
+| `GET` | `/v1/slo` | SLIs (share of good units per window), error budget, multi-window burn rates; `unknown` when the window holds no data | None |
 | `GET` | `/metrics` | Prometheus scrape endpoint | No auth required |
 
 ## Admin API

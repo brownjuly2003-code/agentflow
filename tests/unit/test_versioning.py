@@ -3,11 +3,11 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
 from src.serving.api.versioning import ApiVersionRegistry, ResponseTransformer
+from src.serving.backends.duckdb_backend import DuckDBBackend
 from src.serving.cache import QueryCache
 
 
@@ -73,30 +73,22 @@ def _write_api_versions(path: Path, content: str | None = None) -> None:
 
 
 def _seed_tenant_data(db_path: Path) -> None:
-    conn = duckdb.connect(str(db_path))
+    # The tenant lives in a column, not a schema (ADR-004): one `orders_v2`,
+    # rows tagged with the tenant that owns them.
+    backend = DuckDBBackend(db_path=str(db_path))
     try:
-        conn.execute("CREATE SCHEMA IF NOT EXISTS acme")
+        backend.ensure_schema()
+        conn = backend.connection
+        conn.execute("DELETE FROM orders_v2")
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS acme.orders_v2 (
-                order_id VARCHAR PRIMARY KEY,
-                user_id VARCHAR,
-                status VARCHAR,
-                total_amount DECIMAL(10,2),
-                currency VARCHAR,
-                created_at TIMESTAMP
-            )
-            """
-        )
-        conn.execute("DELETE FROM acme.orders_v2")
-        conn.execute(
-            """
-            INSERT INTO acme.orders_v2 VALUES
-            ('ORD-ACME', 'USR-ACME', 'delivered', 80.00, 'USD', NOW())
+            INSERT INTO orders_v2
+                (tenant_id, order_id, user_id, status, total_amount, currency, created_at)
+            VALUES ('acme', 'ORD-ACME', 'USR-ACME', 'delivered', 80.00, 'USD', NOW())
             """
         )
     finally:
-        conn.close()
+        backend.connection.close()
 
 
 def _build_client(

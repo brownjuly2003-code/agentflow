@@ -61,3 +61,36 @@ groups:
           severity: warning
         annotations:
           summary: "Pipeline component {{ $labels.component }} is degraded"
+
+  - name: agentflow_control_plane
+    interval: 30s
+    rules:
+      # ── PostgreSQL control-plane pool (audit P1-1) ───────────
+      # Sustained waiters mean the connection budget is the bottleneck:
+      # either a slow query is hogging checkouts or the budget
+      # (AGENTFLOW_CONTROLPLANE_PG_POOL_MAX) is undersized for the load.
+      - alert: ControlPlanePoolSaturated
+        expr: agentflow_pg_pool_requests_waiting > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Control-plane PG pool has waiters for 5m"
+          description: >
+            {{ $value }} caller(s) are blocked waiting for a pooled
+            control-plane connection. Check for slow queries, then consider
+            raising AGENTFLOW_CONTROLPLANE_PG_POOL_MAX.
+
+      # Usage accounting is a side-channel that sheds load instead of
+      # failing requests — which means a non-zero drop rate is the ONLY
+      # sign that per-tenant request counters are under-reporting.
+      - alert: UsageRowsDropped
+        expr: increase(agentflow_usage_rows_dropped_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "api_usage rows are being shed"
+          description: >
+            The off-path usage writer dropped rows in the last 15m; tenant
+            request accounting is under-reporting. The writer cannot keep up
+            with the request rate — check pool waiters and PG latency.

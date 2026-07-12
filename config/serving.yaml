@@ -11,4 +11,8 @@ clickhouse:
   password: ""
   database: agentflow
   secure: false
+  # PEM CA bundle for a private-CA HTTPS endpoint; only read with
+  # secure: true, and then it REPLACES the system trust store for this
+  # connection (audit P2-3). Env override: CLICKHOUSE_CA_CERT.
+  ca_cert: ""
   timeout_seconds: 10

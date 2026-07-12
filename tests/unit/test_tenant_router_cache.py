@@ -20,7 +20,6 @@ def test_tenant_router_reuses_loaded_config(
             "  - id: demo\n"
             '    display_name: "Demo Tenant"\n'
             '    kafka_topic_prefix: "demo"\n'
-            '    duckdb_schema: "demo"\n'
             "    max_events_per_day: 10000\n"
             "    max_api_keys: 2\n"
         ),
@@ -39,8 +38,10 @@ def test_tenant_router_reuses_loaded_config(
     monkeypatch.setattr(Path, "read_text", counted_read_text)
     router = TenantRouter(tenants_path)
 
-    assert router.get_duckdb_schema("demo") == "demo"
-    assert router.get_duckdb_schema("demo") == "demo"
+    tenant = router.get_tenant("demo")
+    assert tenant is not None
+    assert tenant.display_name == "Demo Tenant"
+    assert router.get_tenant("demo") is not None
     assert read_count == 1
 
 
@@ -53,16 +54,7 @@ class _TenantRouterStub:
 
     def load(self):
         self.load_calls += 1
-        return SimpleNamespace(
-            tenants=[
-                SimpleNamespace(duckdb_schema="acme"),
-                SimpleNamespace(duckdb_schema="demo"),
-            ]
-        )
-
-    def get_duckdb_schema(self, tenant_id: str | None) -> str | None:
-        assert tenant_id is None
-        return None
+        return SimpleNamespace(tenants=[SimpleNamespace(id="acme"), SimpleNamespace(id="demo")])
 
 
 class _QualificationHost(SQLBuilderMixin):
@@ -78,11 +70,17 @@ class _QualificationHost(SQLBuilderMixin):
         return set()
 
 
-def test_table_qualification_reuses_no_tenant_resolution() -> None:
+def test_table_qualification_needs_no_tenant_scan() -> None:
+    # Scoping a table is now a predicate, not a schema lookup, so building the
+    # relation touches neither the tenants config nor the store: no `load()` to
+    # find out which schema owns the table, no `_table_columns` probe per tenant
+    # to detect an ambiguous read. With no tenant resolved the relation carries
+    # no predicate — an unscoped read, reachable only with auth disabled (ADR-004).
     host = _QualificationHost()
+    unscoped = '(SELECT * EXCLUDE (tenant_id) FROM orders_v2) AS "orders_v2"'
 
-    assert host._qualify_table("orders_v2", tenant_id=None) == "orders_v2"
-    assert host._qualify_table("orders_v2", tenant_id=None) == "orders_v2"
+    assert host._qualify_table("orders_v2", tenant_id=None) == unscoped
+    assert host._qualify_table("orders_v2", tenant_id=None) == unscoped
 
-    assert host.tenant_router_stub.load_calls == 1
-    assert host.table_column_calls == ['"acme"."orders_v2"', '"demo"."orders_v2"']
+    assert host.tenant_router_stub.load_calls == 0
+    assert host.table_column_calls == []

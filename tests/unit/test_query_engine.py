@@ -19,7 +19,6 @@ def engine(tmp_path: Path) -> QueryEngine:
             "  - id: tenant_a\n"
             "    display_name: Tenant A\n"
             "    kafka_topic_prefix: tenant-a\n"
-            "    duckdb_schema: tenant_a\n"
             "    max_events_per_day: 1000\n"
             "    max_api_keys: 10\n"
             "    allowed_entity_types: null\n"
@@ -39,19 +38,31 @@ def _tables(sql: str) -> list[tuple[str, str]]:
     return [(table.name, table.db) for table in parsed.find_all(exp.Table)]
 
 
-def test_scope_sql_does_not_qualify_cte_aliases(engine: QueryEngine) -> None:
+def _scoped(sql: str, table: str, tenant: str) -> bool:
+    """Is ``table`` read through its tenant-scoped relation (ADR-004)?
+
+    Tenant isolation is a predicate on a `tenant_id` column, not a schema
+    qualification, so what a scoped read looks like is
+    ``(SELECT * EXCLUDE (tenant_id) FROM <table> WHERE tenant_id = '<tenant>')``.
+    """
+    return f"EXCLUDE (tenant_id) FROM {table} WHERE tenant_id = '{tenant}'" in sql
+
+
+def test_scope_sql_does_not_scope_cte_aliases(engine: QueryEngine) -> None:
     scoped = engine._scope_sql(
         "WITH orders_v2 AS (SELECT * FROM users_enriched) SELECT * FROM orders_v2",
         tenant_id="tenant_a",
     )
 
-    assert ("users_enriched", "tenant_a") in _tables(scoped)
-    assert ("orders_v2", "") in _tables(scoped)
+    # The physical table inside the CTE body is scoped...
+    assert _scoped(scoped, "users_enriched", "tenant_a")
+    # ...while the CTE reference itself — a local alias, not a table — is not.
+    assert not _scoped(scoped, "orders_v2", "tenant_a")
 
 
-def test_scope_sql_qualifies_physical_table_shadowed_by_cte_name(engine: QueryEngine) -> None:
+def test_scope_sql_scopes_physical_table_shadowed_by_cte_name(engine: QueryEngine) -> None:
     # A CTE whose name collides with a real table must not hide the *physical*
-    # inner reference from tenant rescoping. Pre-fix the inner `orders_v2` was
+    # inner reference from tenant scoping. Pre-fix the inner `orders_v2` was
     # skipped (its name matched the CTE) and stayed bound to the shared `main`
     # schema, leaking every tenant's rows. (audit_30_06_26.md D1)
     scoped = engine._scope_sql(
@@ -59,13 +70,12 @@ def test_scope_sql_qualifies_physical_table_shadowed_by_cte_name(engine: QueryEn
         tenant_id="tenant_a",
     )
 
-    tables = _tables(scoped)
-    # The physical inner reference is now pinned to the caller's tenant schema.
-    assert ("orders_v2", "tenant_a") in tables
-    # The only unqualified `orders_v2` left is the outer CTE reference (1, not 2).
-    assert tables.count(("orders_v2", "")) == 1
-    # And nothing fell back to the shared `main` schema.
-    assert all(db != "main" for _, db in tables)
+    # Exactly one of the two `orders_v2` references is physical, and it is scoped;
+    # the other is the CTE reference and is left alone.
+    assert scoped.count("tenant_id = 'tenant_a'") == 1
+    assert _scoped(scoped, "orders_v2", "tenant_a")
+    # And nothing fell back to a shared schema.
+    assert all(db != "main" for _, db in _tables(scoped))
 
 
 def test_scope_sql_rejects_recursive_cte_shadowing_physical_table(engine: QueryEngine) -> None:
@@ -86,14 +96,14 @@ def test_scope_sql_rejects_recursive_cte_shadowing_physical_table(engine: QueryE
         )
 
 
-def test_scope_sql_qualifies_tables_after_subquery(engine: QueryEngine) -> None:
+def test_scope_sql_scopes_tables_after_subquery(engine: QueryEngine) -> None:
     scoped = engine._scope_sql(
         "SELECT * FROM (SELECT * FROM orders_v2) AS recent, users_enriched",
         tenant_id="tenant_a",
     )
 
-    assert ("orders_v2", "tenant_a") in _tables(scoped)
-    assert ("users_enriched", "tenant_a") in _tables(scoped)
+    assert _scoped(scoped, "orders_v2", "tenant_a")
+    assert _scoped(scoped, "users_enriched", "tenant_a")
 
 
 def test_scope_sql_leaves_comments_untouched(engine: QueryEngine) -> None:
@@ -103,17 +113,18 @@ def test_scope_sql_leaves_comments_untouched(engine: QueryEngine) -> None:
     )
 
     assert scoped.startswith("/* FROM orders_v2 */")
-    assert ("users_enriched", "tenant_a") in _tables(scoped)
+    assert _scoped(scoped, "users_enriched", "tenant_a")
 
 
 def test_scope_sql_rescopes_foreign_schema_qualified_table(engine: QueryEngine) -> None:
     # Defense-in-depth (audit_28_06_26.md #5): even if a schema-qualified known
-    # table reaches _scope_sql (validate_nl_sql rejects it on the NL path), it
-    # must be forced into the caller's tenant schema, never executed against the
-    # named foreign schema — otherwise tenant_a reads victim's data.
+    # table reaches _scope_sql (validate_nl_sql rejects it on the NL path), the
+    # reference is replaced wholesale by the caller's tenant-scoped relation —
+    # the foreign schema never survives into the executed SQL.
     scoped = engine._scope_sql("SELECT * FROM victim.orders_v2", tenant_id="tenant_a")
 
-    assert ("orders_v2", "tenant_a") in _tables(scoped)
+    assert _scoped(scoped, "orders_v2", "tenant_a")
+    assert "victim" not in scoped
     assert ("orders_v2", "victim") not in _tables(scoped)
 
 

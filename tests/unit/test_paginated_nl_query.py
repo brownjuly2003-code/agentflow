@@ -11,7 +11,6 @@ def test_paginated_query_rejects_unsafe_sql(monkeypatch: pytest.MonkeyPatch) -> 
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     engine._tenant_router = Mock()
     engine._tenant_router.has_config.return_value = False
-    engine._tenant_router.get_duckdb_schema.return_value = None
     backend = Mock()
     backend.name = "duckdb"
     engine._backend = backend

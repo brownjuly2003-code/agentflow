@@ -8,6 +8,11 @@ ARG SCALA_VERSION=2.12
 # cluster; flink-smoke submits the real job against it to keep that honest.
 ARG PYFLINK_KAFKA_JAR_VERSION=5.0.0-2.2
 
+# The Python manifest lives next to this Dockerfile (compose builds with
+# context ./src). The assert below keeps its apache-flink pin from drifting
+# away from the Flink binary distribution version above.
+COPY processing/flink_jobs/requirements.txt /tmp/flink-requirements.txt
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates curl openjdk-17-jre-headless \
     && curl -fsSL "https://archive.apache.org/dist/flink/flink-${FLINK_VERSION}/flink-${FLINK_VERSION}-bin-scala_${SCALA_VERSION}.tgz" -o /tmp/flink.tgz \
@@ -18,8 +23,9 @@ RUN apt-get update \
     && ln -s "/opt/flink/opt/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" "/opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" \
     && test -e "/opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" \
     && python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir "apache-flink==${FLINK_VERSION}" confluent-kafka pydantic structlog \
-    && rm -rf /var/lib/apt/lists/* /tmp/flink.tgz
+    && python -m pip install --no-cache-dir -r /tmp/flink-requirements.txt \
+    && python -c "from importlib.metadata import version; v = version('apache-flink'); assert v == '${FLINK_VERSION}', f'requirements.txt installed apache-flink {v}, ARG FLINK_VERSION is ${FLINK_VERSION}'" \
+    && rm -rf /var/lib/apt/lists/* /tmp/flink.tgz /tmp/flink-requirements.txt
 
 WORKDIR /opt/agentflow
 ENV FLINK_HOME=/opt/flink

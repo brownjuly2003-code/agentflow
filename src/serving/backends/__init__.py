@@ -47,8 +47,34 @@ class ServingBackend(ABC):
         """Explain a SQL statement."""
 
     @abstractmethod
+    def ensure_schema(self) -> None:
+        """Create the serving tables. Idempotent DDL.
+
+        Provisioning is a *writer* privilege. The API process never calls this
+        on an external store: it would force the serving identity to hold
+        CREATE/ALTER, and several booting replicas would race on it. External
+        stores are provisioned out of band — ``python -m src.serving.provision``
+        (or the bridge writer, which already holds write grants).
+        """
+
+    @abstractmethod
+    def seed_demo_data(self) -> None:
+        """Insert the canonical demo rows, and only if the store is empty.
+
+        Demo data is not production data. This runs from the provisioning CLI or
+        from an API booted with an explicit demo profile, never by default
+        (audit P0-2).
+        """
+
     def initialize_demo_data(self) -> None:
-        """Create and seed demo data if the backend is empty."""
+        """Provision and seed in one call — reference/demo convenience.
+
+        Kept for the bridge writer and the provisioning CLI, which legitimately
+        own both privileges. Prefer the two steps separately when the caller
+        holds only one of them.
+        """
+        self.ensure_schema()
+        self.seed_demo_data()
 
     @abstractmethod
     def health(self) -> dict:
@@ -84,6 +110,10 @@ def load_serving_backend_config(config_path: Path | str | None = None) -> dict:
                 str(os.getenv("CLICKHOUSE_SECURE", clickhouse.get("secure", "false"))).lower()
                 in {"1", "true", "yes", "on"}
             ),
+            # Path to a PEM CA bundle for a private-CA ClickHouse endpoint
+            # (audit P2-3). Only meaningful with secure=true; when set, it
+            # replaces the system trust store for this connection.
+            "ca_cert": os.getenv("CLICKHOUSE_CA_CERT", clickhouse.get("ca_cert", "")) or None,
             "timeout_seconds": int(
                 os.getenv("CLICKHOUSE_TIMEOUT_SECONDS", clickhouse.get("timeout_seconds", 10))
             ),
@@ -113,5 +143,6 @@ def create_backend(
             database=clickhouse["database"],
             secure=clickhouse["secure"],
             timeout_seconds=clickhouse["timeout_seconds"],
+            ca_cert=clickhouse["ca_cert"],
         )
     raise ValueError(f"Unsupported serving backend '{backend_name}'.")

@@ -20,6 +20,7 @@ import json
 import os
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
@@ -27,7 +28,12 @@ import pytest
 
 psycopg = pytest.importorskip("psycopg")
 
-from src.serving.control_plane.postgres import PostgresControlPlaneStore  # noqa: E402
+from src.serving.control_plane.postgres import (  # noqa: E402
+    _MIGRATIONS,
+    _SCHEMA_STATEMENTS,
+    PostgresControlPlaneStore,
+)
+from src.serving.control_plane.store import UsageRow  # noqa: E402
 
 PG_DSN = os.getenv("AGENTFLOW_TEST_PG_DSN", "")
 
@@ -50,13 +56,16 @@ _TABLES = (
 
 
 @pytest.fixture
-def store() -> PostgresControlPlaneStore:
+def store() -> Iterator[PostgresControlPlaneStore]:
     instance = PostgresControlPlaneStore(PG_DSN)
     instance.ensure_outbox_schema()  # creates the full schema
     with psycopg.connect(PG_DSN) as conn:
         for table in _TABLES:
             conn.execute(f"TRUNCATE {table}")  # noqa: S608 - table names are literals above
-    return instance
+    yield instance
+    # Every store owns a bounded connection pool now (audit P1-1); leaking
+    # ~35 of them across the suite would exhaust the server's slots.
+    instance.close()
 
 
 def _enqueue(store: PostgresControlPlaneStore, webhook_id: str, event_id: str) -> bool:
@@ -173,9 +182,14 @@ def test_claimed_rows_are_invisible_until_their_lease_expires(
 
 def test_expired_lease_makes_the_row_due_again(store: PostgresControlPlaneStore) -> None:
     short_lease = PostgresControlPlaneStore(PG_DSN, claim_lease_seconds=0.4)
-    _enqueue(short_lease, "wh-1", "e1")
-    assert [row.event_id for row in short_lease.claim_due_webhook_deliveries(limit=10)] == ["e1"]
-    assert short_lease.claim_due_webhook_deliveries(limit=10) == []
+    try:
+        _enqueue(short_lease, "wh-1", "e1")
+        assert [row.event_id for row in short_lease.claim_due_webhook_deliveries(limit=10)] == [
+            "e1"
+        ]
+        assert short_lease.claim_due_webhook_deliveries(limit=10) == []
+    finally:
+        short_lease.close()
 
     time.sleep(0.6)
 
@@ -216,9 +230,12 @@ def test_pending_delivery_survives_a_new_store_instance(
     del store  # simulate process exit; only the PostgreSQL rows remain
 
     reborn = PostgresControlPlaneStore(PG_DSN)
-    claimed = reborn.claim_due_webhook_deliveries(limit=10)
-    assert [row.event_id for row in claimed] == ["e1"]
-    assert claimed[0].body == json.dumps({"event_id": "e1"})  # canonical body verbatim
+    try:
+        claimed = reborn.claim_due_webhook_deliveries(limit=10)
+        assert [row.event_id for row in claimed] == ["e1"]
+        assert claimed[0].body == json.dumps({"event_id": "e1"})  # canonical body verbatim
+    finally:
+        reborn.close()
 
 
 # --- webhook outcome state machine (parity with the embedded pins) -----------------
@@ -473,7 +490,13 @@ def test_mark_outbox_sent_rolls_back_when_dead_letter_update_fails(
             status = conn.execute("SELECT status FROM outbox WHERE id = 'o1'").fetchone()[0]
         assert status == "pending"
     finally:
-        PostgresControlPlaneStore(PG_DSN).ensure_outbox_schema()  # restore the table
+        # Repair the fault injection with raw baseline DDL. A fresh store
+        # deliberately re-creates nothing here: the migration ledger already
+        # records the schema as applied, and lazily resurrecting dropped
+        # tables is exactly the hazard the adapter's docstring pins.
+        with psycopg.connect(PG_DSN) as conn:
+            for statement in _SCHEMA_STATEMENTS:
+                conn.execute(statement)  # restore the table
 
 
 def test_enqueue_outbox_replay_rolls_back_when_outbox_insert_fails(
@@ -500,7 +523,13 @@ def test_enqueue_outbox_replay_rolls_back_when_outbox_insert_fails(
             ).fetchone()[0]
         assert status == "failed"  # the dead-letter flip rolled back too
     finally:
-        PostgresControlPlaneStore(PG_DSN).ensure_outbox_schema()
+        # Repair the fault injection with raw baseline DDL. A fresh store
+        # deliberately re-creates nothing here: the migration ledger already
+        # records the schema as applied, and lazily resurrecting dropped
+        # tables is exactly the hazard the adapter's docstring pins.
+        with psycopg.connect(PG_DSN) as conn:
+            for statement in _SCHEMA_STATEMENTS:
+                conn.execute(statement)
 
 
 def test_enqueue_outbox_replay_marks_pending_and_inserts_in_one_transaction(
@@ -761,10 +790,18 @@ def test_session_analytics_windows_and_shapes(store: PostgresControlPlaneStore) 
 
 
 def test_qps_degrades_to_zero_when_the_server_is_unreachable() -> None:
+    # pool_timeout_seconds bounds the checkout wait: PoolTimeout is a
+    # psycopg.OperationalError subclass, so the degrade-to-zero guard sees
+    # the same exception family it always did — just after the pool gives
+    # up instead of after connect_timeout.
     unreachable = PostgresControlPlaneStore(
-        "postgresql://nobody@127.0.0.1:1/agentflow?connect_timeout=1"
+        "postgresql://nobody@127.0.0.1:1/agentflow?connect_timeout=1",
+        pool_timeout_seconds=1.5,
     )
-    assert unreachable.get_queries_per_second_last_minute() == 0.0
+    try:
+        assert unreachable.get_queries_per_second_last_minute() == 0.0
+    finally:
+        unreachable.close()
 
 
 # --- end to end: the app on the postgres profile ------------------------------------
@@ -837,3 +874,175 @@ def test_app_on_postgres_profile_shares_state_across_boots(
         usage_tenants = conn.execute("SELECT DISTINCT tenant FROM api_usage").fetchall()
     assert registrations == 1
     assert usage_tenants == [("acme",)]  # request accounting went to PostgreSQL too
+
+
+# --- audit P1-1 probes: bounded pool, one-transaction batch, versioned migrations ---
+
+
+def test_pool_bounds_connections_under_concurrent_writers() -> None:
+    tight = PostgresControlPlaneStore(PG_DSN, pool_min_size=1, pool_max_size=3)
+    try:
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            futures = [
+                pool.submit(
+                    tight.record_api_usage,
+                    tenant="pool-probe",
+                    key_name="k",
+                    endpoint=f"/v1/entity/{index}",
+                    key_id=None,
+                    key_slot="current",
+                )
+                for index in range(48)
+            ]
+            for future in futures:
+                future.result(timeout=60)
+        # The budget held under 16 concurrent writers: the pool never grew
+        # past its ceiling, and no write was dropped to achieve that.
+        assert tight._pool.get_stats()["pool_size"] <= 3
+        with psycopg.connect(PG_DSN) as conn:
+            written = conn.execute(
+                "SELECT COUNT(*) FROM api_usage WHERE tenant = 'pool-probe'"
+            ).fetchone()[0]
+        assert written == 48
+    finally:
+        tight.close()
+
+
+def test_usage_batch_lands_as_one_transaction(store: PostgresControlPlaneStore) -> None:
+    store.record_api_usage_batch([])  # empty batch: no connection, no error
+
+    rows = [
+        UsageRow(
+            tenant="acme",
+            key_name="k",
+            endpoint=f"/v1/metric/{index}",
+            key_id=None,
+            key_slot="current",
+        )
+        for index in range(256)
+    ]
+    store.record_api_usage_batch(rows)
+    with psycopg.connect(PG_DSN) as conn:
+        distinct_xmin, total = conn.execute(
+            "SELECT COUNT(DISTINCT xmin::text), COUNT(*) FROM api_usage"
+        ).fetchone()
+    assert total == 256
+    # Every row carries the same inserting-transaction id: the batch was ONE
+    # transaction, not 256 connect/commit cycles (audit P1-1).
+    assert distinct_xmin == 1
+
+
+def test_schema_version_ledger_is_stamped_and_stable(store: PostgresControlPlaneStore) -> None:
+    with psycopg.connect(PG_DSN) as conn:
+        versions = [
+            row[0]
+            for row in conn.execute(
+                "SELECT version FROM control_plane_schema_version ORDER BY version"
+            ).fetchall()
+        ]
+    assert versions == [version for version, _, _ in _MIGRATIONS]
+
+    # A second store on the same database reads the ledger and applies nothing.
+    second = PostgresControlPlaneStore(PG_DSN)
+    try:
+        second.ping()
+        with psycopg.connect(PG_DSN) as conn:
+            recount = conn.execute("SELECT COUNT(*) FROM control_plane_schema_version").fetchone()[
+                0
+            ]
+        assert recount == len(_MIGRATIONS)
+    finally:
+        second.close()
+
+
+def test_pre_versioning_database_upgrades_in_place_without_data_loss(
+    store: PostgresControlPlaneStore,
+) -> None:
+    # A deployment provisioned before the ledger existed: tables and data are
+    # present, control_plane_schema_version is not.
+    store.record_api_usage(
+        tenant="acme", key_name="k", endpoint="/v1/entity", key_id=None, key_slot="current"
+    )
+    with psycopg.connect(PG_DSN) as conn:
+        conn.execute("DROP TABLE control_plane_schema_version")
+
+    reborn = PostgresControlPlaneStore(PG_DSN)
+    try:
+        reborn.ping()  # first use runs the migration path
+        with psycopg.connect(PG_DSN) as conn:
+            surviving = conn.execute("SELECT COUNT(*) FROM api_usage").fetchone()[0]
+            versions = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT version FROM control_plane_schema_version ORDER BY version"
+                ).fetchall()
+            ]
+        # Baseline DDL is pure IF NOT EXISTS: the pre-upgrade row survived,
+        # and the database is now stamped like a fresh one.
+        assert surviving == 1
+        assert versions == [version for version, _, _ in _MIGRATIONS]
+    finally:
+        reborn.close()
+
+
+def test_concurrent_replicas_serialize_the_migration_run(
+    store: PostgresControlPlaneStore,
+) -> None:
+    # Without the advisory lock, N fresh replicas racing _ensure_schema would
+    # all read MAX(version)=0 and all INSERT version 1 — the losers die on the
+    # primary key. With it they queue, and the losers apply nothing.
+    with psycopg.connect(PG_DSN) as conn:
+        conn.execute("DROP TABLE control_plane_schema_version")
+
+    replicas = [PostgresControlPlaneStore(PG_DSN) for _ in range(4)]
+    barrier = threading.Barrier(len(replicas))
+
+    def boot(replica: PostgresControlPlaneStore) -> None:
+        barrier.wait()
+        replica.ping()
+
+    try:
+        with ThreadPoolExecutor(max_workers=len(replicas)) as pool:
+            list(pool.map(boot, replicas))
+        with psycopg.connect(PG_DSN) as conn:
+            versions = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT version FROM control_plane_schema_version ORDER BY version"
+                ).fetchall()
+            ]
+        assert versions == [version for version, _, _ in _MIGRATIONS]
+    finally:
+        for replica in replicas:
+            replica.close()
+
+
+def test_process_roles_split_serving_from_delivery_loops(
+    store: PostgresControlPlaneStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit P1-1 acceptance: API replicas without the worker role run no
+    background delivery loops — scaling them multiplies request capacity,
+    not PostgreSQL scanners — and the worker runs the loops without the
+    serving-side cache machinery."""
+    from fastapi.testclient import TestClient
+
+    from src.serving.api.main import app
+
+    monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_STORE", "postgres")
+    monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_PG_DSN", PG_DSN)
+
+    monkeypatch.setenv("AGENTFLOW_PROCESS_ROLE", "api")
+    with TestClient(app):
+        assert app.state.process_role == "api"
+        assert app.state.outbox_processor_task is None
+        assert app.state.webhook_dispatcher._task is None
+        assert app.state.alert_dispatcher._task is None
+        assert app.state.search_index_rebuild_task is not None  # it still serves search
+
+    monkeypatch.setenv("AGENTFLOW_PROCESS_ROLE", "worker")
+    with TestClient(app):
+        assert app.state.process_role == "worker"
+        assert app.state.outbox_processor_task is not None
+        assert app.state.webhook_dispatcher._task is not None
+        assert app.state.alert_dispatcher._task is not None
+        assert app.state.search_index_rebuild_task is None  # nobody asks it questions

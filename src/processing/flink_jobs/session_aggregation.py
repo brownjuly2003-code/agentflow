@@ -126,7 +126,9 @@ def build_session_pipeline(
         from pyflink.datastream.state import MapStateDescriptor
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "PyFlink is not installed. Install the project with the 'flink' extra."
+            "PyFlink is not installed. Install the Flink runtime manifest: "
+            "pip install -r src/processing/flink_jobs/requirements.txt "
+            "(in its own venv - it cannot co-install with the core package)."
         ) from exc
 
     class FlinkSessionAggregator(KeyedProcessFunction):
@@ -203,7 +205,9 @@ def main() -> None:
         from pyflink.datastream import StreamExecutionEnvironment
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "PyFlink is not installed. Install the project with the 'flink' extra."
+            "PyFlink is not installed. Install the Flink runtime manifest: "
+            "pip install -r src/processing/flink_jobs/requirements.txt "
+            "(in its own venv - it cannot co-install with the core package)."
         ) from exc
 
     env = StreamExecutionEnvironment.get_execution_environment()

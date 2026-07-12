@@ -3,7 +3,7 @@
   "info": {
     "title": "AgentFlow Query API",
     "description": "Real-time data access for AI agents",
-    "version": "1.0.0"
+    "version": "2.0.0"
   },
   "paths": {
     "/v1/query/explain": {
@@ -2477,10 +2477,44 @@
         }
       }
     },
+    "/health/live": {
+      "get": {
+        "summary": "Health Live",
+        "description": "Liveness: this process is up. No dependencies, by design.\n\nKubernetes restarts a container that fails liveness, so a dependency must\nnever appear here \u2014 a ClickHouse outage would otherwise roll every pod.",
+        "operationId": "health_live_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Health Ready",
+        "description": "Readiness: the dependencies this replica needs to answer a request.\n\nNon-200 when the serving store is unreachable or unprovisioned, so\nKubernetes takes the pod out of the Service instead of routing traffic to a\nreplica that can only fail. `/v1/health` cannot do this job: it always\nanswered 200 (payload-only status), and both k8s probes and the Compose\nhealthcheck pointed at it \u2014 so an API with a dead ClickHouse looked healthy\nto every orchestrator watching it (audit P0-3).",
+        "operationId": "health_ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/health": {
       "get": {
         "summary": "Health",
-        "description": "Pipeline health check - agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health.\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
+        "description": "Pipeline health check - agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health. Informational and\nalways 200: an agent asking \"is the data fresh enough to answer with?\" wants\nthe payload, not an HTTP error. Orchestrators use /health/live and\n/health/ready, which do fail.\n\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
         "operationId": "health_v1_health_get",
         "responses": {
           "200": {
@@ -4112,11 +4146,25 @@
             "title": "Target"
           },
           "current": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Current"
           },
           "error_budget_remaining": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Error Budget Remaining"
           },
           "status": {
@@ -4124,13 +4172,72 @@
             "enum": [
               "healthy",
               "at_risk",
-              "breached"
+              "breached",
+              "unknown"
             ],
             "title": "Status"
           },
           "window_days": {
             "type": "integer",
             "title": "Window Days"
+          },
+          "good": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Good"
+          },
+          "valid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "events",
+              "seconds"
+            ],
+            "title": "Unit"
+          },
+          "burn_rates": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Burn Rates"
+          },
+          "diagnostic": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Diagnostic"
           }
         },
         "type": "object",
@@ -4140,9 +4247,15 @@
           "current",
           "error_budget_remaining",
           "status",
-          "window_days"
+          "window_days",
+          "good",
+          "valid",
+          "unit",
+          "burn_rates",
+          "diagnostic"
         ],
-        "title": "SLOStatus"
+        "title": "SLOStatus",
+        "description": "One SLO, reported as a real SLI (audit P2-2): ``current`` is the share\nof good units among valid units over the SLO window \u2014 a fraction of\nevents for latency/error SLIs, a fraction of observed time for the\nfreshness SLI \u2014 never a rescaled point aggregate. ``None`` means the\nwindow holds no valid units: *unknown*, deliberately distinct from 0.0\n(an empty journal is not a breached SLO)."
       },
       "SearchResponse": {
         "properties": {

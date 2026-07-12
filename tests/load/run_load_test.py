@@ -161,74 +161,30 @@ def find_missing_thresholds(rows: dict[str, dict[str, float | int]]) -> list[str
 def seed_benchmark_data(duckdb_path: Path) -> None:
     import duckdb
 
+    from src.serving.backends.duckdb_backend import DuckDBBackend
+
     duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # The serving schema has exactly one owner (audit P0-1): a hand-rolled
+    # CREATE TABLE here would predate the tenant primary key and
+    # `assert_tenant_key` would refuse the store at API boot. Columns are
+    # listed explicitly in every INSERT below so `tenant_id` takes its
+    # DEFAULT — the same tenant the read path resolves when a request names
+    # none.
+    backend = DuckDBBackend(db_path=str(duckdb_path))
+    try:
+        backend.ensure_schema()
+    finally:
+        # Release the DuckDB file lock so the connection below can write.
+        backend.connection.close()
+
     conn = duckdb.connect(str(duckdb_path))
     try:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS orders_v2 (
-                order_id VARCHAR PRIMARY KEY,
-                user_id VARCHAR,
-                status VARCHAR,
-                total_amount DECIMAL(10,2),
-                currency VARCHAR DEFAULT 'RUB',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS products_current (
-                product_id VARCHAR PRIMARY KEY,
-                name VARCHAR,
-                category VARCHAR,
-                price DECIMAL(10,2),
-                in_stock BOOLEAN DEFAULT TRUE,
-                stock_quantity INTEGER DEFAULT 0
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sessions_aggregated (
-                session_id VARCHAR PRIMARY KEY,
-                user_id VARCHAR,
-                started_at TIMESTAMP,
-                ended_at TIMESTAMP,
-                duration_seconds FLOAT,
-                event_count INTEGER,
-                unique_pages INTEGER,
-                funnel_stage VARCHAR,
-                is_conversion BOOLEAN DEFAULT FALSE
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users_enriched (
-                user_id VARCHAR PRIMARY KEY,
-                total_orders INTEGER DEFAULT 0,
-                total_spent DECIMAL(10,2) DEFAULT 0,
-                first_order_at TIMESTAMP,
-                last_order_at TIMESTAMP,
-                preferred_category VARCHAR
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS pipeline_events (
-                event_id VARCHAR,
-                topic VARCHAR,
-                event_type VARCHAR,
-                latency_ms INTEGER,
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO products_current VALUES
+            INSERT OR REPLACE INTO products_current
+            (product_id, name, category, price, in_stock, stock_quantity)
+            VALUES
             ('PROD-001', 'Electric Kettle 1.7L 2200W', 'kettles', 2190.00, FALSE, 0),
             ('PROD-002', 'Air Fryer Grill 5.5L', 'grills', 5490.00, TRUE, 58),
             ('PROD-003', 'Immersion Blender Set 800W', 'blenders', 2490.00, TRUE, 203),
@@ -243,7 +199,9 @@ def seed_benchmark_data(duckdb_path: Path) -> None:
         )
         conn.execute(
             """
-            INSERT OR REPLACE INTO orders_v2 VALUES
+            INSERT OR REPLACE INTO orders_v2
+            (order_id, user_id, status, total_amount, currency, created_at)
+            VALUES
             ('ORD-20260404-1001', 'USR-10001', 'delivered',
              76400.00, 'RUB', NOW() - INTERVAL '2 hours'),
             ('ORD-20260404-1002', 'USR-10002', 'shipped',
@@ -264,7 +222,10 @@ def seed_benchmark_data(duckdb_path: Path) -> None:
         )
         conn.execute(
             """
-            INSERT OR REPLACE INTO users_enriched VALUES
+            INSERT OR REPLACE INTO users_enriched
+            (user_id, total_orders, total_spent, first_order_at, last_order_at,
+             preferred_category)
+            VALUES
             ('USR-10001', 34, 1200000.00, NOW() - INTERVAL '365 days',
              NOW() - INTERVAL '2 hours', 'grills'),
             ('USR-10002', 15, 460000.00, NOW() - INTERVAL '270 days',
@@ -279,7 +240,10 @@ def seed_benchmark_data(duckdb_path: Path) -> None:
         )
         conn.execute(
             """
-            INSERT OR REPLACE INTO sessions_aggregated VALUES
+            INSERT OR REPLACE INTO sessions_aggregated
+            (session_id, user_id, started_at, ended_at, duration_seconds,
+             event_count, unique_pages, funnel_stage, is_conversion)
+            VALUES
             ('SES-a1b2c3', 'USR-10001',
              NOW() - INTERVAL '2 hours',
              NOW() - INTERVAL '100 minutes',

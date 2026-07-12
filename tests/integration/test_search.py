@@ -33,7 +33,7 @@ def _set_auth(
         key: TenantKey(
             key=key,
             name="search-agent",
-            tenant="acme",
+            tenant="default",
             rate_limit_rpm=100,
             allowed_entity_types=allowed_entity_types,
             created_at=datetime.now(UTC).date(),
@@ -258,3 +258,63 @@ class TestSemanticSearch:
         results = response.json()["results"]
         assert results
         assert {item["entity_type"] for item in results} == {"user"}
+
+    def test_scoped_key_without_filter_never_returns_forbidden_entity_types(self, client):
+        # The bypass this pins (audit_gpt_11_07_26.md P0-4): SearchIndex.search()
+        # returns mappings, the router post-filtered them with getattr(), got
+        # None for every row and let all of them through. A key restricted to
+        # orders got user and session rows — ids plus snippets — as long as it
+        # sent no entity_types filter. This query matches orders, users and
+        # sessions alike, so a regression re-opens immediately.
+        _prepare_search_data(client)
+        _set_auth(client, allowed_entity_types=["order"])
+
+        response = client.get(
+            "/v1/search?q=USR-SRCH-1&limit=50",
+            headers={"X-API-Key": "search-test-key"},
+        )
+
+        assert response.status_code == 200
+        results = response.json()["results"]
+        leaked = {
+            item["entity_type"] for item in results if item["entity_type"] not in (None, "order")
+        }
+        assert leaked == set()
+        # The allowlist must scope the surface, not blank it.
+        assert any(item["entity_type"] == "order" for item in results)
+
+    def test_scoped_key_without_filter_still_sees_metrics(self, client):
+        _prepare_search_data(client)
+        _set_auth(client, allowed_entity_types=["order"])
+
+        response = client.get(
+            "/v1/search?q=revenue",
+            headers={"X-API-Key": "search-test-key"},
+        )
+
+        assert response.status_code == 200
+        assert any(item["type"] == "metric" for item in response.json()["results"])
+
+    def test_empty_allowlist_returns_no_entity_scoped_documents(self, client):
+        _prepare_search_data(client)
+        _set_auth(client, allowed_entity_types=[])
+
+        response = client.get(
+            "/v1/search?q=USR-SRCH-1&limit=50",
+            headers={"X-API-Key": "search-test-key"},
+        )
+
+        assert response.status_code == 200
+        assert all(item["entity_type"] is None for item in response.json()["results"])
+
+    def test_explicit_filter_outside_allowlist_returns_empty(self, client):
+        _prepare_search_data(client)
+        _set_auth(client, allowed_entity_types=["order"])
+
+        response = client.get(
+            "/v1/search?q=USR-SRCH-1&entity_types=user",
+            headers={"X-API-Key": "search-test-key"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["results"] == []

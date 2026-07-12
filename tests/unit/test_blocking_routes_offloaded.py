@@ -25,77 +25,73 @@ from src.serving.api.routers import alerts as alerts_module
 from src.serving.api.routers import webhooks as webhooks_module
 from src.serving.api.routers.deadletter import router as deadletter_router
 from src.serving.api.routers.lineage import router as lineage_router
+from src.serving.backends import ServingBackend
 from src.serving.semantic_layer.catalog import DataCatalog
-
-_PRAGMA_ROWS = [
-    (0, "event_id"),
-    (1, "topic"),
-    (2, "processed_at"),
-    (3, "tenant_id"),
-    (4, "event_type"),
-    (5, "entity_id"),
-    (6, "latency_ms"),
-]
+from src.serving.semantic_layer.journal import JournalReader
 
 
-class _SlowExecutor:
-    """Mimics a DuckDB connection/cursor: ``execute`` returns self and the
-    provenance SELECT sleeps. Supporting ``execute`` directly (the pre-fix path)
-    *and* ``cursor()`` (the fixed path) lets the same test serialize on the old
-    code and overlap on the new."""
+class _SlowBackend(ServingBackend):
+    """A serving backend whose journal scan sleeps.
+
+    The provenance scan moved behind the backend contract (audit P0-3) — lineage
+    used to run it on the query engine's own DuckDB connection — so the blocking
+    work now lives here. The schema probe returns immediately; only the scan
+    sleeps, which is what must not happen on the event loop.
+    """
+
+    name = "slow"
 
     def __init__(self, delay_seconds: float) -> None:
         self.delay_seconds = delay_seconds
-        self._mode = "pragma"
-        self.description: list[tuple[str]] = []
 
-    def execute(self, sql: str, params: object = None) -> _SlowExecutor:
-        if "PRAGMA" in sql:
-            self._mode = "pragma"
-        else:
-            # The provenance scan — this is what blocked the event loop inline.
-            time.sleep(self.delay_seconds)
-            self._mode = "select"
-            self.description = [
-                ("event_id",),
-                ("topic",),
-                ("processed_at",),
-                ("tenant_id",),
-                ("event_type",),
-                ("entity_id",),
-                ("latency_ms",),
-            ]
-        return self
-
-    def fetchall(self) -> list[tuple]:
-        if self._mode == "pragma":
-            return _PRAGMA_ROWS
+    def execute(self, sql: str, params: list | None = None) -> list[dict]:
+        del params
+        time.sleep(self.delay_seconds)
         return [
-            (
-                "E1",
-                "orders.raw",
-                datetime(2026, 6, 30, tzinfo=UTC),
-                "default",
-                "order.created",
-                "ORD-1",
-                5.0,
-            )
+            {
+                "event_id": "E1",
+                "topic": "orders.raw",
+                "processed_at": datetime(2026, 6, 30, tzinfo=UTC),
+                "tenant_id": "default",
+                "event_type": "order.created",
+                "entity_id": "ORD-1",
+                "latency_ms": 5.0,
+            }
         ]
 
-    def close(self) -> None:
-        pass
+    def scalar(self, sql: str, params: list | None = None) -> object:
+        return None
 
+    def table_columns(self, table_name: str) -> set[str]:
+        return {
+            "event_id",
+            "topic",
+            "processed_at",
+            "tenant_id",
+            "event_type",
+            "entity_id",
+            "latency_ms",
+        }
 
-class _SlowConn(_SlowExecutor):
-    def cursor(self) -> _SlowExecutor:
-        return _SlowExecutor(self.delay_seconds)
+    def explain(self, sql: str) -> list[tuple]:
+        return []
+
+    def ensure_schema(self) -> None:
+        return None
+
+    def seed_demo_data(self) -> None:
+        return None
+
+    def health(self) -> dict:
+        return {"backend": self.name, "status": "ok"}
 
 
 @pytest.mark.asyncio
 async def test_lineage_does_not_block_event_loop() -> None:
     app = FastAPI()
     app.state.catalog = DataCatalog()
-    app.state.query_engine = SimpleNamespace(_conn=_SlowConn(delay_seconds=0.3))
+    backend = _SlowBackend(delay_seconds=0.3)
+    app.state.query_engine = SimpleNamespace(journal=JournalReader(backend), backend=backend)
     app.include_router(lineage_router)
 
     transport = httpx.ASGITransport(app=app)

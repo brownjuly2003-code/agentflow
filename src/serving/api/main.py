@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import State
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -53,13 +54,18 @@ from src.serving.api.versioning import (
     build_versioning_middleware,
 )
 from src.serving.api.webhook_dispatcher import WebhookDispatcher
+from src.serving.backends import load_serving_backend_config
 from src.serving.cache import QueryCache
 from src.serving.cache_invalidation import (
     MetricCacheController,
     journal_scan_fetch,
     publish_metrics_invalidate,
 )
-from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
+from src.serving.control_plane import (
+    CONTROL_PLANE_PG_DSN_ENV,
+    control_plane_store_kind,
+    get_control_plane_store,
+)
 from src.serving.db_pool import DuckDBPool
 from src.serving.node import resolve_node_config
 from src.serving.node.emitter import NodeEmitter
@@ -68,6 +74,12 @@ from src.serving.node.seed import seed_node_baseline
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
+from src.serving.transport_policy import (
+    assert_secure_transport,
+    resolve_cors_origins,
+    resolve_profile,
+)
+from src.version import runtime_version
 
 if TYPE_CHECKING:
     from opentelemetry.sdk.trace.export import SpanExporter
@@ -112,6 +124,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
     app.state.demo_seed_on_boot = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+    # Deployment profile + transport gate (audit P2-3), resolved before any
+    # store or network client is built: a production boot over plaintext
+    # external transport dies here, not after it has already spoken.
+    app.state.profile = resolve_profile()
+    if app.state.profile == "production" and app.state.demo_mode:
+        raise RuntimeError(
+            "AGENTFLOW_PROFILE=production together with AGENTFLOW_DEMO_MODE=true: "
+            "the demo surface (public key, seeded store) must never boot as production."
+        )
+    assert_secure_transport(
+        profile=app.state.profile,
+        serving_config=load_serving_backend_config(),
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
+        pg_dsn=(
+            os.getenv(CONTROL_PLANE_PG_DSN_ENV, "")
+            if control_plane_store_kind() == "postgres"
+            else ""
+        ),
+    )
     # Three-node demo topology (ADR 0012): resolve role/branch/token once here
     # and fail fast on a misconfigured node. Unset role == standalone, which is
     # byte-identical to today's single-node demo (N1). The center ingest
@@ -119,6 +150,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.node_config = resolve_node_config()
     app.state.node_role = app.state.node_config.role
     app.state.node_branch = app.state.node_config.branch
+    # Process role (audit P1-1): 'all' (default) runs serving and the delivery
+    # loops in one process — the single-pod shape. On the scale profile, 'api'
+    # replicas serve requests and skip the delivery loops (webhook/alert
+    # dispatchers, outbox processor), while one 'worker' process runs the
+    # loops and skips the serving-side caches (periodic search rebuild,
+    # metric-cache invalidation) that only matter to a process taking
+    # requests. Scaling API replicas then scales request capacity, not the
+    # number of processes scanning PostgreSQL to re-deliver the same work.
+    process_role = (os.getenv("AGENTFLOW_PROCESS_ROLE") or "all").strip().lower()
+    if process_role not in {"all", "api", "worker"}:
+        raise ValueError(
+            f"AGENTFLOW_PROCESS_ROLE must be 'all', 'api' or 'worker', got {process_role!r}."
+        )
+    if process_role != "all" and control_plane_store_kind() == "embedded":
+        # Split roles need shared state: on the embedded profile the delivery
+        # loops exist nowhere else, so an 'api' process would silently
+        # deliver nothing and a 'worker' would scan a store nobody shares.
+        raise ValueError(
+            "AGENTFLOW_PROCESS_ROLE=api/worker requires the postgres control plane "
+            "(AGENTFLOW_CONTROLPLANE_STORE=postgres); the embedded profile is "
+            "single-process — leave the role unset."
+        )
+    app.state.process_role = process_role
+    runs_delivery_loops = process_role in {"all", "worker"}
+    serves_requests = process_role in {"all", "api"}
     # Reset the auth-disabled bypass flag on every lifespan startup. This is a
     # process-wide attribute and tests may toggle it; without an explicit
     # reset a later TestClient lifespan with no configured keys would silently
@@ -152,11 +208,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         catalog=app.state.catalog,
         db_path=os.getenv("DUCKDB_PATH", ":memory:"),
         db_pool=app.state.db_pool,
+        # Seeding is an opt-in, and off by default. It used to run inside the
+        # constructor on every boot — before this flag was ever read — so a
+        # production store got demo orders for no better reason than being empty
+        # (audit P0-2).
+        seed_demo_data=app.state.demo_seed_on_boot,
     )
+    if app.state.demo_seed_on_boot:
+        # The one path on which the API writes to a store it does not own, and
+        # it takes an explicit opt-in. Otherwise the external backend is
+        # read-only from here: its schema comes from
+        # `python -m src.serving.provision` (or the bridge writer), and readiness
+        # fails loudly when that never happened instead of quietly creating it.
+        app.state.query_engine.provision_external_demo_store()
     if app.state.demo_mode and app.state.demo_seed_on_boot:
-        app.state.query_engine._duckdb_backend.initialize_demo_data()
-        if app.state.query_engine._backend_name != app.state.query_engine._duckdb_backend.name:
-            app.state.query_engine._backend.initialize_demo_data()
         # Three-node topology (ADR 0012 §7): lay down the per-branch journal
         # baseline (center = all branches, edge = its own, standalone = none)
         # so a center-first visitor sees a coherent cross-branch picture.
@@ -173,10 +238,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.search_index.rebuild()
     except Exception:
         logger.warning("search_index_initial_rebuild_failed", exc_info=True)
-    app.state.search_index_rebuild_task = asyncio.create_task(
-        app.state.search_index.rebuild_periodically(interval_seconds=60)
+    app.state.search_index_rebuild_task = (
+        asyncio.create_task(app.state.search_index.rebuild_periodically(interval_seconds=60))
+        if serves_requests
+        else None
     )
-    app.state.health_collector = HealthCollector()
+    app.state.health_collector = HealthCollector(journal=app.state.query_engine.journal)
     try:
         app.state.health_cache_ttl_seconds = float(
             os.getenv("AGENTFLOW_HEALTH_CACHE_TTL_SECONDS", "5")
@@ -268,11 +335,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # rows and goes blind once the journal outgrows it (issue #183).
         fetch_pipeline_events=journal_scan_fetch(app.state.query_engine),
     )
-    app.state.metric_cache_controller.start()
-    if getattr(app.state, "webhook_dispatcher_autostart", True):
+    if serves_requests:
+        app.state.metric_cache_controller.start()
+    if runs_delivery_loops and getattr(app.state, "webhook_dispatcher_autostart", True):
         app.state.webhook_dispatcher.start()
     app.state.alert_dispatcher = AlertDispatcher(app)
-    if getattr(app.state, "alert_dispatcher_autostart", True):
+    if runs_delivery_loops and getattr(app.state, "alert_dispatcher_autostart", True):
         app.state.alert_dispatcher.start()
     if shared_control_plane_store is not None:
         app.state.outbox_processor = OutboxProcessor(store=shared_control_plane_store)
@@ -282,7 +350,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.outbox_processor = OutboxProcessor(
             duckdb_path=app.state.query_engine._db_path,
         )
-    app.state.outbox_processor_task = asyncio.create_task(app.state.outbox_processor.run_forever())
+    app.state.outbox_processor_task = (
+        asyncio.create_task(app.state.outbox_processor.run_forever())
+        if runs_delivery_loops
+        else None
+    )
 
     # Edge role (ADR 0012): start the slow generator->forward emitter. Off in
     # center/standalone; tests disable it with AGENTFLOW_NODE_EMITTER_ENABLED=false.
@@ -341,28 +413,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 # down: every read path still serves.
                 logger.warning("in_process_bridge_start_failed", exc_info=True)
 
-    auth_mode = (
-        "multi_tenant_api_keys"
-        if app.state.auth_manager.has_configured_keys()
-        else "open (set config/api_keys.yaml to enable)"
-    )
+    # Mirror the middleware's actual behaviour: without configured keys the
+    # API fail-closes with 503 unless the operator explicitly opted into open
+    # mode — logging "open" here understated the posture (audit P2-1).
+    if app.state.auth_manager.has_configured_keys():
+        auth_mode = "multi_tenant_api_keys"
+    elif os.getenv("AGENTFLOW_AUTH_DISABLED", "").strip().lower() in {"1", "true", "yes"}:
+        auth_mode = "open (AGENTFLOW_AUTH_DISABLED)"
+    else:
+        auth_mode = (
+            "fail_closed_no_keys (503; set AGENTFLOW_API_KEYS_FILE or AGENTFLOW_AUTH_DISABLED)"
+        )
     logger.info(
         "api_ready",
         entities=len(app.state.catalog.entities),
         auth=auth_mode,
         configured_keys=app.state.auth_manager.configured_key_count,
+        process_role=process_role,
     )
     yield
-    app.state.search_index_rebuild_task.cancel()
-    try:
-        await app.state.search_index_rebuild_task
-    except asyncio.CancelledError:
-        pass
-    app.state.outbox_processor_task.cancel()
-    try:
-        await app.state.outbox_processor_task
-    except asyncio.CancelledError:
-        pass
+    if app.state.search_index_rebuild_task is not None:
+        app.state.search_index_rebuild_task.cancel()
+        try:
+            await app.state.search_index_rebuild_task
+        except asyncio.CancelledError:
+            pass
+    if app.state.outbox_processor_task is not None:
+        app.state.outbox_processor_task.cancel()
+        try:
+            await app.state.outbox_processor_task
+        except asyncio.CancelledError:
+            pass
     await app.state.alert_dispatcher.stop()
     await app.state.webhook_dispatcher.stop()
     if getattr(app.state, "metric_cache_controller", None) is not None:
@@ -375,6 +456,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Drain the queued api_usage rows before the process goes away; they are
     # written off the request path and would otherwise die with the queue.
     app.state.auth_manager.close_usage_writer()
+    # After the drain: the usage writer's last batch needs the store's pool.
+    # Embedded stores expose no close(); the postgres store's releases its
+    # pooled connections and stops the pool's worker threads.
+    control_plane_close = getattr(getattr(app.state, "control_plane_store", None), "close", None)
+    if control_plane_close is not None:
+        control_plane_close()
     app.state.db_pool.close()
     logger.info("api_shutting_down")
 
@@ -382,7 +469,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="AgentFlow Query API",
     description="Real-time data access for AI agents",
-    version="1.0.0",
+    version=runtime_version(),
     lifespan=lifespan,
 )
 app.middleware("http")(build_auth_middleware())
@@ -420,11 +507,10 @@ async def demo_mode_guard(request: Request, call_next: RequestResponseEndpoint) 
 app.middleware("http")(build_metrics_middleware())
 
 
-cors_origins = [
-    origin.strip()
-    for origin in os.getenv("AGENTFLOW_CORS_ORIGINS", "http://localhost:3000").split(",")
-    if origin.strip()
-]
+# A wildcard origin is refused outside demo mode (audit P2-3): this
+# middleware runs with credentials, and Starlette answers "*" by echoing
+# the caller's Origin — any website could read authenticated responses.
+cors_origins = resolve_cors_origins()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -500,11 +586,88 @@ async def catalog(request: Request) -> dict:
     }
 
 
+@app.get("/health/live", response_model=None)
+async def health_live() -> dict:
+    """Liveness: this process is up. No dependencies, by design.
+
+    Kubernetes restarts a container that fails liveness, so a dependency must
+    never appear here — a ClickHouse outage would otherwise roll every pod.
+    """
+    return {"status": "alive"}
+
+
+def _readiness_checks(app_state: State) -> list[dict]:
+    """Can this replica serve? Serving store first, then the control plane."""
+    checks: list[dict] = []
+
+    backend = app_state.query_engine.backend
+    payload = backend.health()
+    serving_ok = payload.get("status") == "ok"
+    checks.append(
+        {
+            "name": "serving_backend",
+            "status": "ok" if serving_ok else "error",
+            "backend": backend.name,
+            "detail": None if serving_ok else str(payload.get("error", "unreachable")),
+        }
+    )
+
+    if serving_ok:
+        # An external store nobody migrated is the failure mode this exists for:
+        # the API used to create the tables itself on boot, so a missing schema
+        # was invisible (audit P0-2). Now it is a readiness error, not a silent
+        # CREATE TABLE.
+        provisioned = bool(backend.table_columns("orders_v2"))
+        checks.append(
+            {
+                "name": "serving_schema",
+                "status": "ok" if provisioned else "error",
+                "backend": backend.name,
+                "detail": None
+                if provisioned
+                else "serving tables are missing — run `python -m src.serving.provision --schema`",
+            }
+        )
+
+    store = app_state.control_plane_store
+    if store is not None:
+        try:
+            store.ping()
+            checks.append({"name": "control_plane", "status": "ok", "detail": None})
+        except Exception as exc:  # noqa: BLE001 - any failure means not ready
+            checks.append({"name": "control_plane", "status": "error", "detail": str(exc)})
+
+    return checks
+
+
+@app.get("/health/ready", response_model=None)
+async def health_ready(request: Request) -> Response:
+    """Readiness: the dependencies this replica needs to answer a request.
+
+    Non-200 when the serving store is unreachable or unprovisioned, so
+    Kubernetes takes the pod out of the Service instead of routing traffic to a
+    replica that can only fail. `/v1/health` cannot do this job: it always
+    answered 200 (payload-only status), and both k8s probes and the Compose
+    healthcheck pointed at it — so an API with a dead ClickHouse looked healthy
+    to every orchestrator watching it (audit P0-3).
+    """
+    checks = await run_in_threadpool(_readiness_checks, request.app.state)
+    ready = all(check["status"] == "ok" for check in checks)
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"status": "ready" if ready else "not_ready", "checks": checks},
+    )
+
+
 @app.get("/v1/health", response_model=None)
 async def health(request: Request) -> dict:
     """Pipeline health check - agents should call this before answering time-sensitive queries.
 
-    Returns overall pipeline status and per-component health.
+    Returns overall pipeline status and per-component health. Informational and
+    always 200: an agent asking "is the data fresh enough to answer with?" wants
+    the payload, not an HTTP error. Orchestrators use /health/live and
+    /health/ready, which do fail.
+
     If status != "healthy", agents should caveat their answers with data freshness warnings.
     """
     now = asyncio.get_running_loop().time()

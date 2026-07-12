@@ -4,6 +4,11 @@ The 2026-06-03 audit (F-2) found `scripts/` drifting outside the Ruff
 gate: 20 lint errors and 12 unformatted files in release/benchmark/security
 tooling that CI never checked. The lint job must cover `scripts/` alongside
 `src/` and `tests/` so operational tooling cannot silently rot again.
+
+The 2026-07-11 audit (P1-5) found the same class of gap for `integrations/`
+and `warehouse/`: both were outside the Ruff gate and `integrations/` had a
+real un-sorted-imports error sitting unnoticed. Both paths are now linted
+too.
 """
 
 from pathlib import Path
@@ -12,7 +17,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-LINTED_PATHS = ("src/", "tests/", "scripts/")
+LINTED_PATHS = ("src/", "tests/", "scripts/", "integrations/", "warehouse/")
 
 
 def _lint_steps() -> list[dict]:

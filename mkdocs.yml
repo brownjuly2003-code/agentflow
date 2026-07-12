@@ -16,6 +16,9 @@ theme:
 plugins:
   - search
 
+# Docs excluded from this build are NOT unchecked: version/link/removed-path
+# drift across authoritative pages is gated by
+# tests/unit/test_docs_single_source_of_truth.py (audit P2-1).
 exclude_docs: |
   *.md
   */**/*.md

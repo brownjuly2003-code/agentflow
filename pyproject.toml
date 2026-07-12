@@ -30,9 +30,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-flink = [
-    "apache-flink==2.3.0",
-]
+# There is deliberately no [flink] extra. apache-flink 2.3.0 -> apache-beam
+# <=2.61 caps pyarrow<17 while the core dependencies pin pyarrow>=17, so an
+# extra could never resolve in one environment (a fresh
+# `pip install .[flink]` fails outright). The Flink job runs in its own
+# interpreter inside the cluster image and imports nothing from agentflow;
+# its manifest is src/processing/flink_jobs/requirements.txt.
 cloud = [
     "boto3>=1.35,<2",
     "pyiceberg[pyiceberg-core]>=0.7,<1",
@@ -41,7 +44,9 @@ postgres = [
     # ADR 0010 slice 5: PostgresControlPlaneStore (scale profile). Optional
     # exactly like redis — the embedded default profile needs none of it,
     # and control_plane/postgres.py degrades to a clear boot error without it.
-    "psycopg[binary]>=3.2,<4",
+    # The pool extra ships psycopg_pool: the store's connections come from a
+    # bounded ConnectionPool (audit P1-1), not one connect() per method call.
+    "psycopg[binary,pool]>=3.2,<4",
 ]
 load = [
     "locust>=2.29,<3",
@@ -124,6 +129,18 @@ exclude = [
     "/docs/**",
     "/mutants/**",
     "/.dora/**",
+]
+
+[tool.uv]
+# Audit P1-3: `requires-python = ">=3.11"` above has no upper bound, so a
+# plain `uv lock` builds one universal resolution covering every Python
+# version that floor implies — including hypothetical future interpreters.
+# Restrict resolution to the versions README/CI actually ship and test
+# (3.11-3.13) so the lock stays scoped to what is real.
+environments = [
+    "python_version == '3.11'",
+    "python_version == '3.12'",
+    "python_version == '3.13'",
 ]
 
 [tool.ruff]

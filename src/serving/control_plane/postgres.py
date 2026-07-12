@@ -19,12 +19,24 @@ embedded adapter become real here:
 
 Design constraints inherited from the embedded adapter, kept deliberately:
 
-- **One connection per method call, no pool** — mirrors the pre-port
-  usage/session code opening a fresh file connection per request; pooling is
-  explicitly out of ADR 0010's scope and noted as a follow-up.
-- **Every method is one transaction** — the ``_connect`` context manager
-  commits on success and rolls back on any exception, which is what makes
-  the invariant-8 methods atomic without adapter-specific ceremony.
+- **Connections come from one bounded pool** (audit P1-1). Every method
+  checks a connection out of a ``psycopg_pool.ConnectionPool`` with a fixed
+  ``max_size`` and a checkout timeout, so the store's PostgreSQL footprint
+  is capped per process no matter the request rate — the previous
+  connection-per-call shape meant a usage batch of 256 rows could open 256
+  connections. Pool pressure is observable (``agentflow_pg_pool_*`` gauges).
+- **Every method is one transaction** — ``pool.connection()`` keeps the
+  ``psycopg.connect()`` context-manager semantics: commit on clean exit,
+  rollback on any exception, then the connection returns to the pool. This
+  is what makes the invariant-8 methods atomic without adapter-specific
+  ceremony.
+- **Schema changes are versioned migrations** (audit P1-1), not a pile of
+  ``IF NOT EXISTS`` that cannot express an ALTER. ``_MIGRATIONS`` is a
+  monotonic list; ``control_plane_schema_version`` records what ran and
+  when; concurrent replicas serialize on a transaction-scoped advisory
+  lock. Migration 1 is the pre-versioning baseline, so a store provisioned
+  before this table existed upgrades by running a no-op DDL pass and
+  getting stamped — no data is touched.
 - **JSON payloads are stored as TEXT** holding the caller's JSON string,
   not ``jsonb`` — the port contract says payloads come back "as stored
   (string or dict), the caller decodes", and the embedded adapter returns
@@ -36,9 +48,10 @@ Design constraints inherited from the embedded adapter, kept deliberately:
   mid-scenario to simulate a failed transaction must see the failure, not a
   silently recreated table.
 
-``psycopg`` (v3) is an optional dependency imported at module load with a
-``None`` fallback, exactly like ``redis`` in the rate limiter: importing this
-module is safe without it, constructing the store is not.
+``psycopg`` (v3) and ``psycopg_pool`` are optional dependencies imported at
+module load with a ``None`` fallback, exactly like ``redis`` in the rate
+limiter: importing this module is safe without them, constructing the store
+is not (install the ``postgres`` extra: ``pip install .[postgres]``).
 """
 
 from __future__ import annotations
@@ -48,11 +61,14 @@ import os
 import re
 import threading
 import time
-from collections.abc import Sequence
+import weakref
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from prometheus_client import REGISTRY
+from prometheus_client.core import GaugeMetricFamily
 
 from .store import (
     AUTO_RESOLVE_NOTE,
@@ -60,6 +76,7 @@ from .store import (
     ControlPlaneStore,
     OutboxEntry,
     TriageState,
+    UsageRow,
     WebhookQueueRow,
 )
 
@@ -71,7 +88,24 @@ try:
 except ImportError:  # pragma: no cover
     psycopg = None  # type: ignore[assignment]
 
+try:
+    import psycopg_pool
+except ImportError:  # pragma: no cover
+    psycopg_pool = None  # type: ignore[assignment]
+
 logger = structlog.get_logger()
+
+# Errors worth a bounded retry: a broken/unavailable server connection
+# (OperationalError) or an exhausted pool checkout (PoolTimeout). Everything
+# else — integrity, syntax, programming errors — must surface immediately.
+_TRANSIENT_ERRORS: tuple[type[Exception], ...] = tuple(
+    error
+    for error in (
+        getattr(psycopg, "OperationalError", None),
+        getattr(psycopg_pool, "PoolTimeout", None),
+    )
+    if error is not None
+)
 
 # How long a claimed webhook-queue / outbox row stays invisible to other
 # claimants before it self-expires back to due. Long enough for a full
@@ -241,6 +275,92 @@ _SCHEMA_STATEMENTS = (
     """,
 )
 
+# --- versioned migrations (audit P1-1) ---------------------------------------
+#
+# The ledger table is created outside the migration list (it must exist to
+# read the current version). Each migration is (version, description,
+# statements); versions are dense and monotonic from 1 — enforced at import,
+# because a gap or duplicate silently skips or repeats DDL. Migration 1 is
+# the pre-versioning baseline: pure IF NOT EXISTS, so a store that predates
+# the ledger upgrades by a no-op pass and gets stamped. Later migrations may
+# use ALTER and rely on running exactly once.
+
+_SCHEMA_VERSION_DDL = """
+    CREATE TABLE IF NOT EXISTS control_plane_schema_version (
+        version INTEGER PRIMARY KEY,
+        description TEXT NOT NULL,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+"""
+
+_MIGRATIONS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
+    (1, "baseline: six control-plane state classes (ADR 0010 slice 5)", _SCHEMA_STATEMENTS),
+)
+
+if tuple(version for version, _, _ in _MIGRATIONS) != tuple(range(1, len(_MIGRATIONS) + 1)):
+    raise RuntimeError(
+        "_MIGRATIONS versions must be dense and monotonic starting at 1: "
+        f"{[version for version, _, _ in _MIGRATIONS]}"
+    )
+
+# Transaction-scoped advisory lock serializing concurrent replicas' migration
+# runs. Any fixed 64-bit value works; this one spells 'AGFLOWCP'.
+_MIGRATION_LOCK_KEY = 0x41474C4F57435031 % (2**63)
+
+# Pool shape defaults. min_size 1 keeps an idle replica cheap; max_size 10 is
+# the per-process connection budget (spelled out in helm/values.yaml and the
+# compose files via AGENTFLOW_CONTROLPLANE_PG_POOL_MAX); the checkout timeout
+# bounds how long a caller blocks before _TRANSIENT_ERRORS retry/raise.
+DEFAULT_POOL_MIN_SIZE = 1
+DEFAULT_POOL_MAX_SIZE = 10
+DEFAULT_POOL_TIMEOUT_SECONDS = 10.0
+
+# Live pools for the stats collector below. Weak: a store (and its pool) must
+# be collectable when a test drops it without close(), and the collector must
+# never keep a closed pool alive just to report zeros about it.
+_LIVE_POOLS: weakref.WeakSet[Any] = weakref.WeakSet()
+
+
+class _PoolStatsCollector:
+    """Prometheus collector summing live control-plane pool stats.
+
+    Registered once at module import; reports zeros until a pool opens. In
+    production there is exactly one pool per process — summing keeps the
+    numbers honest in test processes that hold several stores.
+    """
+
+    def collect(self) -> Iterable[GaugeMetricFamily]:
+        connections = GaugeMetricFamily(
+            "agentflow_pg_pool_connections",
+            "Control-plane PostgreSQL pool connections, by state.",
+            labels=["state"],
+        )
+        waiting = GaugeMetricFamily(
+            "agentflow_pg_pool_requests_waiting",
+            "Callers blocked waiting for a pooled control-plane connection.",
+        )
+        ceiling = GaugeMetricFamily(
+            "agentflow_pg_pool_max_size",
+            "Configured control-plane pool connection budget.",
+        )
+        pool_size = available = requests_waiting = max_size = 0
+        for pool in list(_LIVE_POOLS):
+            stats = pool.get_stats()
+            pool_size += stats.get("pool_size", 0)
+            available += stats.get("pool_available", 0)
+            requests_waiting += stats.get("requests_waiting", 0)
+            max_size += stats.get("pool_max", 0)
+        connections.add_metric(["used"], pool_size - available)
+        connections.add_metric(["idle"], available)
+        waiting.add_metric([], requests_waiting)
+        ceiling.add_metric([], max_size)
+        yield connections
+        yield waiting
+        yield ceiling
+
+
+REGISTRY.register(_PoolStatsCollector())  # type: ignore[arg-type]
+
 
 def _window_to_interval(window: str) -> str:
     # Same grammar as the embedded adapter's parser; the '<n> minutes/hours/
@@ -268,30 +388,81 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         dsn: str,
         *,
         claim_lease_seconds: float = DEFAULT_CLAIM_LEASE_SECONDS,
+        pool_min_size: int = DEFAULT_POOL_MIN_SIZE,
+        pool_max_size: int = DEFAULT_POOL_MAX_SIZE,
+        pool_timeout_seconds: float = DEFAULT_POOL_TIMEOUT_SECONDS,
     ) -> None:
         if psycopg is None:  # pragma: no cover - exercised via monkeypatch
             raise RuntimeError(
                 "AGENTFLOW_CONTROLPLANE_STORE=postgres requires the optional "
-                "'psycopg' dependency (pip install psycopg[binary])."
+                "'psycopg' dependency (pip install psycopg[binary,pool])."
+            )
+        if psycopg_pool is None:  # pragma: no cover - exercised via monkeypatch
+            raise RuntimeError(
+                "AGENTFLOW_CONTROLPLANE_STORE=postgres requires the optional "
+                "'psycopg_pool' dependency (pip install psycopg[binary,pool])."
             )
         if not dsn:
             raise ValueError("PostgresControlPlaneStore requires a non-empty DSN.")
+        if not 1 <= pool_min_size <= pool_max_size:
+            raise ValueError(
+                "Pool sizes must satisfy 1 <= min <= max, got "
+                f"min={pool_min_size} max={pool_max_size}."
+            )
         self._dsn = dsn
         self._claim_lease_seconds = float(claim_lease_seconds)
         self._schema_ready = False
         self._schema_lock = threading.Lock()
+        # No I/O yet (open=False): constructing a store must not require a
+        # reachable server — connectivity failures belong to the first call,
+        # where the bounded retries and /health/ready can see them.
+        self._pool = psycopg_pool.ConnectionPool(
+            dsn,
+            min_size=pool_min_size,
+            max_size=pool_max_size,
+            timeout=float(pool_timeout_seconds),
+            open=False,
+            name="agentflow-control-plane",
+        )
+        self._pool_opened = False
 
     # --- connection / schema plumbing ----------------------------------------
 
+    def ping(self) -> None:
+        """Reach the database, so `/health/ready` fails when it cannot be reached.
+
+        Deliberately goes through `_connect()`, which lazily applies the schema:
+        a replica pointed at a PostgreSQL it can open but not migrate is not
+        ready either.
+        """
+        with self._connect() as conn:
+            conn.execute("SELECT 1")
+
     def _connect(self) -> AbstractContextManager[Any]:
-        # One connection = one transaction: psycopg's connection context
-        # manager commits on clean exit and rolls back on exception, which is
-        # exactly the invariant-8 semantics the port requires.
+        # One checkout = one transaction: pool.connection() keeps psycopg's
+        # connection context-manager semantics — commit on clean exit, roll
+        # back on exception — and then returns the connection to the pool,
+        # which is exactly the invariant-8 semantics the port requires.
         self._ensure_schema()
-        # Annotated hop: with psycopg absent (optional dependency), mypy sees
-        # the module as Any and warn_return_any would flag a bare return.
-        connection: AbstractContextManager[Any] = psycopg.connect(self._dsn)
+        # Annotated hop: with psycopg_pool absent (optional dependency), mypy
+        # sees the module as Any and warn_return_any would flag a bare return.
+        connection: AbstractContextManager[Any] = self._pool.connection()
         return connection
+
+    def _open_pool(self) -> None:
+        # Called under self._schema_lock. wait=False: the background workers
+        # fill min_size; the first checkout blocks (bounded by the pool
+        # timeout) rather than the whole boot.
+        if not self._pool_opened:
+            self._pool.open(wait=False)
+            self._pool_opened = True
+            _LIVE_POOLS.add(self._pool)
+
+    def close(self) -> None:
+        """Release the pool and its connections. Idempotent; the lifespan
+        shutdown and test fixtures call this so worker threads and server
+        slots do not outlive the store."""
+        self._pool.close()
 
     def _ensure_schema(self) -> None:
         if self._schema_ready:
@@ -299,9 +470,34 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         with self._schema_lock:
             if self._schema_ready:
                 return
-            with psycopg.connect(self._dsn) as conn:
-                for statement in _SCHEMA_STATEMENTS:
-                    conn.execute(statement)
+            self._open_pool()
+            with self._pool.connection() as conn:
+                # All pending migrations apply in ONE transaction, serialized
+                # across replicas by a transaction-scoped advisory lock: the
+                # loser blocks here, then reads the winner's version rows and
+                # applies nothing. Failure rolls back DDL and ledger together,
+                # so a half-applied migration cannot be recorded as done.
+                conn.execute("SELECT pg_advisory_xact_lock(%s)", (_MIGRATION_LOCK_KEY,))
+                conn.execute(_SCHEMA_VERSION_DDL)
+                row = conn.execute(
+                    "SELECT COALESCE(MAX(version), 0) FROM control_plane_schema_version"
+                ).fetchone()
+                current = int(row[0]) if row is not None else 0
+                for version, description, statements in _MIGRATIONS:
+                    if version <= current:
+                        continue
+                    for statement in statements:
+                        conn.execute(statement)
+                    conn.execute(
+                        "INSERT INTO control_plane_schema_version (version, description)"
+                        " VALUES (%s, %s)",
+                        (version, description),
+                    )
+                    logger.info(
+                        "control_plane_migration_applied",
+                        version=version,
+                        description=description,
+                    )
             # Once per store lifetime: the write methods below must never
             # recreate a table mid-scenario (see the module docstring).
             self._schema_ready = True
@@ -1241,7 +1437,40 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                         (tenant, key_name, endpoint, key_id, key_slot),
                     )
                 return
-            except psycopg.OperationalError as exc:
+            except _TRANSIENT_ERRORS as exc:
+                last_error = exc
+                time.sleep(0.01 * (attempt + 1))
+        assert last_error is not None
+        raise last_error
+
+    def record_api_usage_batch(self, rows: Sequence[UsageRow]) -> None:
+        # One checkout, one executemany, ONE transaction (audit P1-1): the
+        # base-class fallback of per-row record_api_usage calls would cost a
+        # checkout and a commit per row — a 256-row batch was up to 256
+        # connections on the pre-pool shape. psycopg batches the executemany
+        # into pipelined server round trips inside the single transaction the
+        # connection context manager owns, so the batch lands atomically:
+        # every row shares one xmin, and a failed batch persists nothing.
+        # Same failure contract as record_api_usage — raise after bounded
+        # retries; the caller drops the batch and counts it.
+        if not rows:
+            return
+        params = [
+            (row.tenant, row.key_name, row.endpoint, row.key_id, row.key_slot) for row in rows
+        ]
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                with self._connect() as conn, conn.cursor() as cursor:
+                    cursor.executemany(
+                        """
+                        INSERT INTO api_usage (tenant, key_name, endpoint, key_id, key_slot)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        params,
+                    )
+                return
+            except _TRANSIENT_ERRORS as exc:
                 last_error = exc
                 time.sleep(0.01 * (attempt + 1))
         assert last_error is not None
@@ -1599,4 +1828,31 @@ def resolve_postgres_store_from_env() -> PostgresControlPlaneStore:
             ) from None
     else:
         lease_seconds = DEFAULT_CLAIM_LEASE_SECONDS
-    return PostgresControlPlaneStore(dsn, claim_lease_seconds=lease_seconds)
+
+    def _int_env(name: str, default: int) -> int:
+        raw = (os.getenv(name) or "").strip()
+        if not raw:
+            return default
+        try:
+            return int(raw)
+        except ValueError:
+            raise ValueError(f"{name} must be an integer, got {raw!r}.") from None
+
+    def _float_env(name: str, default: float) -> float:
+        raw = (os.getenv(name) or "").strip()
+        if not raw:
+            return default
+        try:
+            return float(raw)
+        except ValueError:
+            raise ValueError(f"{name} must be a number of seconds, got {raw!r}.") from None
+
+    return PostgresControlPlaneStore(
+        dsn,
+        claim_lease_seconds=lease_seconds,
+        pool_min_size=_int_env("AGENTFLOW_CONTROLPLANE_PG_POOL_MIN", DEFAULT_POOL_MIN_SIZE),
+        pool_max_size=_int_env("AGENTFLOW_CONTROLPLANE_PG_POOL_MAX", DEFAULT_POOL_MAX_SIZE),
+        pool_timeout_seconds=_float_env(
+            "AGENTFLOW_CONTROLPLANE_PG_POOL_TIMEOUT_SECONDS", DEFAULT_POOL_TIMEOUT_SECONDS
+        ),
+    )

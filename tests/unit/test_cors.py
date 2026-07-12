@@ -1,8 +1,10 @@
 import importlib
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.serving.api.auth import AuthManager
+from src.serving.transport_policy import InsecureTransportError
 
 
 def test_default_origin_is_allowed_and_exposes_headers(monkeypatch):
@@ -41,8 +43,11 @@ def test_blocked_origin_does_not_receive_cors_headers(monkeypatch):
     assert "access-control-allow-origin" not in response.headers
 
 
-def test_preflight_allows_any_origin_when_configured(monkeypatch):
+def test_preflight_allows_any_origin_in_demo_mode(monkeypatch):
+    # Wildcard + credentials makes Starlette echo the caller's Origin. That
+    # surface is demo-only since audit P2-3 — hence the explicit demo flag.
     monkeypatch.setenv("AGENTFLOW_CORS_ORIGINS", "*")
+    monkeypatch.setenv("AGENTFLOW_DEMO_MODE", "true")
     main_module = importlib.import_module("src.serving.api.main")
     main_module = importlib.reload(main_module)
     main_module.app.state.auth_manager = AuthManager()
@@ -60,3 +65,19 @@ def test_preflight_allows_any_origin_when_configured(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://browser-agent.example"
+
+
+def test_wildcard_cors_refuses_to_load_outside_demo(monkeypatch):
+    # Any website reading authenticated responses is not a dev default
+    # either: outside demo mode the wildcard kills the app at import time,
+    # before a single request can be answered (audit P2-3).
+    monkeypatch.setenv("AGENTFLOW_CORS_ORIGINS", "*")
+    monkeypatch.delenv("AGENTFLOW_DEMO_MODE", raising=False)
+    main_module = importlib.import_module("src.serving.api.main")
+
+    with pytest.raises(InsecureTransportError, match="CORS"):
+        importlib.reload(main_module)
+
+    # Leave the module loadable for the rest of the session.
+    monkeypatch.delenv("AGENTFLOW_CORS_ORIGINS")
+    importlib.reload(main_module)

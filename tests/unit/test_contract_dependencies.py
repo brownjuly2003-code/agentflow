@@ -172,9 +172,21 @@ def test_docker_build_contexts_prepare_root_package_metadata():
             assert "wheel==0.47.0" in text
             assert "COPY contracts /app/contracts" in text
             assert "AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities" in text
-            # Q0.2 / S9: scale profile needs Postgres control-plane driver baked in
-            # (kind 2-pod previously required a docker-commit psycopg hack).
-            assert "[cloud,postgres]" in text
+            # Audit P1-3: third-party packages come only from the hash-pinned
+            # export of uv.lock; the project wheel installs with --no-deps and
+            # pip check proves the environment is consistent.
+            assert "--require-hashes -r /tmp/requirements-docker.lock" in text
+            assert 'pip install --no-cache-dir --no-deps "${wheel}"' in text
+            assert "pip check" in text
+            # Q0.2 / S9: scale profile needs the Postgres control-plane driver
+            # baked in (kind 2-pod previously required a docker-commit psycopg
+            # hack). The wheel installs --no-deps, so the guarantee now lives
+            # in the lock export the image installs from — pool included
+            # (audit P1-1).
+            lock_text = (PROJECT_ROOT / "requirements-docker.lock").read_text(encoding="utf-8")
+            assert "psycopg==" in lock_text
+            assert "psycopg-pool==" in lock_text
+            assert "boto3==" in lock_text  # the cloud extra is in the export too
         else:
             assert "COPY README.md /app/README.md" in text, (
                 f"{relative_path} must copy README.md before installing the root package"

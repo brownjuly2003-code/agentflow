@@ -15,3 +15,6 @@ storage_expire_after_days  = 365
 
 sns_alert_topic_arn   = "arn:aws:sns:us-east-1:123456789012:agentflow-prod-alerts"
 freshness_sla_seconds = 30
+
+github_org  = "brownjuly2003-code"
+github_repo = "agentflow"

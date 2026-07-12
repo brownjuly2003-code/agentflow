@@ -1,4 +1,8 @@
-name: Terraform Apply
+# The honest scope (audit P2-4): this provisions the streaming-infrastructure
+# REFERENCE (Kafka/Flink/object storage/monitoring), not a full runtime
+# platform — API/ClickHouse/PostgreSQL/Redis/ingress are operator-owned, and
+# the apply job stays `if: false` until an external approval reintroduces AWS.
+name: Terraform (streaming-infrastructure-reference)
 
 on:
   workflow_dispatch:
@@ -23,6 +27,7 @@ jobs:
   preflight:
     if: ${{ inputs.confirm == 'PREFLIGHT' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -74,6 +79,7 @@ jobs:
     # 5. Restore if: inputs.confirm == 'APPLY' for both jobs.
     if: false
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -106,7 +112,9 @@ jobs:
       - name: Terraform plan
         working-directory: infrastructure/terraform
         run: |
-          terraform init
+          # Per-environment state key (audit P2-4): the backend block carries
+          # no key, so a bare init fails instead of sharing state across envs.
+          terraform init -backend-config="key=env/${{ inputs.environment }}/terraform.tfstate"
           terraform plan -var-file="${{ steps.tfvars.outputs.file }}" -out=tfplan
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -119,6 +127,7 @@ jobs:
     if: false
     needs: plan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
     steps:
@@ -149,5 +158,5 @@ jobs:
       - name: Terraform apply
         working-directory: infrastructure/terraform
         run: |
-          terraform init
+          terraform init -backend-config="key=env/${{ inputs.environment }}/terraform.tfstate"
           terraform apply -auto-approve tfplan

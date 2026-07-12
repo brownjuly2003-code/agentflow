@@ -4,6 +4,269 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Observability — /v1/slo reports SLIs, not rescaled aggregates (audit P2-2)
+
+- **`current` is now a real SLI**: the share of good units among valid units
+  over the SLO window. Latency: events at or under the threshold (the p95
+  moves to `diagnostic` — a p95 of 2x the threshold says nothing about how
+  MANY requests were slow). Errors: non-5xx (or non-dead-letter) share.
+  Freshness: time-weighted — the share of observed seconds during which the
+  newest journal row was at most threshold old, reconstructed exactly from
+  event gaps (`min(gap, threshold)` per gap plus the tail). The old
+  `threshold / measured` rescale is gone.
+- **Missing data is `unknown`, not 0.0** — `current`,
+  `error_budget_remaining` go null and `status` says `"unknown"`: an empty
+  journal is missing data, not a missed target.
+- **Multi-window burn rates** (`burn_rates: {1h, 6h, 3d}`,
+  `(1 - sli) / (1 - target)`): the (1h, 6h) pair over 14.4 or the (6h, 3d)
+  pair over 6 marks the SLO `at_risk` even while the full window still looks
+  healthy — a month of clean traffic no longer hides an hour burning budget
+  at 25x. The response also carries `good`/`valid`/`unit`, so every number
+  is auditable from the payload.
+- Live-verified on ClickHouse 25.3, where the freshness SQL's
+  `LAG(...) OVER` transpiles to `lagInFrame` — which hands the FIRST row a
+  zero-date instead of NULL and, without the epoch guard now in place,
+  booked a phantom threshold-sized credit. Pinned by a live probe with
+  exact numbers.
+
+### Scale — search maintenance reads the journal, not the world (audit P1-6)
+
+- **The periodic tick is a `refresh()`, not a rebuild.** It reads
+  `pipeline_events` past a cursor: a quiet journal costs one bounded read and
+  zero table scans; a small change-set costs targeted `IN` re-reads of
+  exactly the rows the journal named (`scan_entity_rows_by_ids`, through the
+  active backend), upserted copy-on-write so a concurrent search never sees a
+  half-applied batch. Document frequencies are maintained incrementally, and
+  the result is pinned byte-equivalent to a full rebuild.
+- **The full pass survives where it is honest**: on a cold cursor, when the
+  journal window overflows (completeness would be a guess), when the
+  change-set outgrows targeted reads, and unconditionally every
+  `AGENTFLOW_SEARCH_FULL_REBUILD_TICKS` ticks — the bounded-staleness safety
+  net for journal-bypassing writers and deletions. Knobs:
+  `AGENTFLOW_SEARCH_REFRESH_WINDOW` (default 1000),
+  `AGENTFLOW_SEARCH_CHANGED_IDS_LIMIT` (512),
+  `AGENTFLOW_SEARCH_FULL_REBUILD_TICKS` (10).
+- **Measured, not asserted**: the scale probe shows a 10-row refresh over a
+  3000-row corpus allocating under a fifth of a rebuild's peak with zero
+  wholesale scans, and the live ClickHouse suite proves a post-boot row is
+  picked up incrementally and stays visible to its own tenant only.
+
+### Scale — the PostgreSQL control plane grows up (audit P1-1)
+
+- **Bounded connection pool.** `PostgresControlPlaneStore` checks connections
+  out of a `psycopg_pool.ConnectionPool` (min/max/timeout via
+  `AGENTFLOW_CONTROLPLANE_PG_POOL_*`, default 1/10/10s) instead of
+  `psycopg.connect()` per method call — the per-process PostgreSQL footprint
+  is now a budget, not a function of request rate. Transaction semantics are
+  unchanged (checkout = one transaction, commit/rollback on exit). Pool
+  pressure is scrapeable (`agentflow_pg_pool_connections{state}`,
+  `agentflow_pg_pool_requests_waiting`, `agentflow_pg_pool_max_size`) and
+  alertable (`ControlPlanePoolSaturated`, `UsageRowsDropped` in
+  `monitoring/alerting/rules.yml`). The `postgres` extra becomes
+  `psycopg[binary,pool]`; the store closes its pool on lifespan shutdown.
+- **`record_api_usage_batch` is one transaction.** The base-class fallback
+  paid a connection and a commit per row — a 256-row batch could open 256
+  connections. Now: one checkout, one `executemany`, one transaction; the
+  live probe proves every row of a 256-row batch shares one `xmin`.
+- **Versioned migrations.** Schema DDL moved from a flat
+  `CREATE TABLE IF NOT EXISTS` pile to a monotonic `_MIGRATIONS` ledger
+  recorded in `control_plane_schema_version`; concurrent replicas serialize
+  on a transaction-scoped advisory lock (live probe: four replicas race a
+  fresh database, one applies, ledger stays single). A pre-versioning
+  database upgrades in place: migration 1 is the baseline, pure
+  `IF NOT EXISTS`, and gets stamped without touching data.
+- **Process roles.** `AGENTFLOW_PROCESS_ROLE=api` serves requests and runs
+  no delivery loops (webhook/alert dispatchers, outbox processor);
+  `worker` runs the loops and skips the serving-side caches; default `all`
+  keeps the single-process shape. Split roles refuse the embedded profile
+  loudly — there the loops exist nowhere else. Scaling API replicas now
+  scales request capacity, not the number of PostgreSQL scanners.
+
+### Build — the dependency set is now a fact, not a weather report (audit P1-3)
+
+- **`uv.lock` is the single resolution** for Python 3.11–3.13 (the versions CI
+  actually tests; `[tool.uv].environments`). `requirements-docker.lock` is its
+  hash-pinned export for the production image (extras `cloud,postgres`), and
+  `Dockerfile.api` installs third-party packages only from it with
+  `--require-hashes`, then the project wheel with `--no-deps`, then proves the
+  result with `pip check` inside the build. Two builds from the same inputs now
+  install the same bytes.
+- **CI keeps the chain honest** (`ci.yml` job `lock-check`): `uv lock --check`
+  against `pyproject.toml`, re-export diffed against the committed
+  `requirements-docker.lock`, and a fresh hash-verified install that must pass
+  `pip check`. `security.yml` gains a `pip-audit` job over the locked pins
+  (`--no-deps` — nothing to resolve, which is what used to time out).
+- **The `[flink]` extra is gone because it never existed.** apache-flink 2.3.0 →
+  apache-beam ≤2.61 caps `pyarrow<17` while core pins `pyarrow>=17`: a fresh
+  `pip install .[flink]` could not resolve at all, and a lock covering it is
+  mathematically impossible. The Flink job runs in its own interpreter inside
+  the cluster image and imports nothing from agentflow; its manifest is now
+  `src/processing/flink_jobs/requirements.txt` (the image build asserts the
+  apache-flink pin matches `ARG FLINK_VERSION`), and the Safety scan reads that
+  file instead of the extra.
+
+### Security — tenant isolation was a schema that nobody created (audit P0-1)
+
+**Breaking for operators: every serving table's key changes.** `tenant_id` now
+leads the ClickHouse sorting key and the DuckDB primary key. ClickHouse cannot
+prepend to an existing sorting key and `CREATE TABLE IF NOT EXISTS` silently
+keeps the old one, so a store provisioned before this change is refused at
+startup (`assert_tenant_key()`) rather than served. Migrate with
+`python -m src.serving.provision --migrate`; a file-backed DuckDB store has no
+in-place migration and must be rebuilt (`:memory:`, the default, is created
+correctly). See [ADR-004](docs/decisions/004-tenant-id-column-over-schema-per-tenant.md).
+
+- **The boundary did not exist.** Isolation was expressed as a *schema
+  qualification* — `TenantRouter` mapped a tenant to a `duckdb_schema`, and the
+  SQL builder rewrote `orders_v2` into `"acme"."orders_v2"`. Nothing in `src/`
+  ever issued `CREATE SCHEMA`: only test fixtures did. So on DuckDB every
+  *authenticated* entity read died on a relation that was never created, and on
+  ClickHouse the same name meant a database nobody creates. The suite was green
+  because the shipped keys named `acme-corp`, a tenant absent from
+  `config/tenants.yaml` — the qualification resolved to nothing and silently did
+  not apply. A boundary no test can tell apart from its own absence is not one.
+- **Worse than a leak: data loss.** Drop the qualification and both tenants share
+  one `ReplacingMergeTree` key — two rows with the same `order_id` are two
+  *versions of one row*, and the later insert destroys the earlier. No read-side
+  filter can undo that, which is why the boundary is now in the physical schema
+  and the write key rather than only in a predicate.
+- **One model, both stores.** `tenant_id` is a column on all five serving tables.
+  Reads go through a single chokepoint: `_qualify_table` returns a tenant-filtered
+  sub-select (`SELECT * EXCLUDE (tenant_id) ... WHERE tenant_id = ...`) aliased
+  back to the table's own name, and `_scope_sql` performs the same substitution
+  inside metric templates and NL-generated SQL over the sqlglot AST. Writes stamp
+  the tenant (`event_tenant()`); aggregates group by it — a global
+  `GROUP BY user_id` had been summing two tenants' orders into one total and
+  writing it back to both. Search carries the tenant on each document and filters
+  before scoring. An unscoped read against a store holding foreign-tenant rows is
+  refused (503), not answered.
+- **`duckdb_schema` is gone** from `TenantDefinition`, `config/tenants.yaml` and
+  the chart's shipped values; `TenantRouter.get_duckdb_schema()` is deleted. The
+  Helm values schema still *accepts* the key (tenant items are
+  `additionalProperties: false`, so removing it would reject values written for
+  the old model) and its description says it is ignored.
+- **Proven, per store.** DuckDB: two tenants with identical entity ids resolve to
+  different rows, cross-tenant lookups 404, aggregates scope, unscoped reads are
+  refused — by example (`tests/integration/test_tenant_isolation.py`) and over
+  generated tenant/entity ids (`tests/property/test_tenant_isolation_properties.py`).
+  ClickHouse: `tests/integration/test_clickhouse_tenant_isolation_live.py` plants
+  both tenants in one live store with the same `order_id`, `user_id`,
+  `session_id` and `product_id`, then drives entity, timeline, metric, historical,
+  NL, pagination, batch, search, lineage and SLO under both keys, plus qualified-SQL,
+  CTE-shadowing and recursive-CTE escape attempts.
+- The tenant-id validator accepted `"acme\n"`: Python's `$` also matches *before*
+  a trailing newline, so an anchored `.match()` let a string that is a different
+  tenant than `acme` through, to become its own silent partition. It uses
+  `fullmatch` now. Found by the property suite, which is the point of having one.
+- `scripts/restore.py` asserted that a restored store had a *schema per tenant*,
+  parsed out of the `duckdb_schema` field — and the backup workflow's fixture
+  fabricated exactly those schemas, so the check passed only because the fixture
+  had made it pass. Both now use the product's own DDL: the fixture writes two
+  tenants into one `tenant_id`-keyed table, and restore asserts that the serving
+  tables come back carrying the column — and **refuses a pipeline store with no
+  serving tables at all**, which the old check accepted in silence.
+
+### Fixed — half the API answered from a store nobody was serving (audit P0-3)
+
+**Breaking for operators: the Kubernetes probes and the Compose healthcheck move
+off `/v1/health`.** Readiness is now `/health/ready` and liveness `/health/live`;
+`/v1/health` stays as the agent-facing informational payload.
+
+- **`/v1/lineage`, `/v1/slo`, `/v1/search` and the health collector read the
+  embedded DuckDB directly**, whatever `SERVING_BACKEND` said. On the ClickHouse
+  profile the API therefore split in half: entity and metric answered from
+  ClickHouse, while lineage reconstructed provenance, SLO computed an error
+  budget, and health reported freshness — all from a DuckDB that held nothing
+  but demo rows. Lineage even labelled the enrichment layer `system="duckdb"` on
+  a ClickHouse deployment. A plausible wrong answer is worse than an outage.
+- New `semantic_layer/journal.py` (`JournalReader`): every `pipeline_events`
+  read goes through `ServingBackend`. `QueryEngine.backend` / `.journal` are the
+  public front doors, and a **static ratchet test now fails on any private reach**
+  (`query_engine._conn`) from a read surface. A behavioural test injects a
+  backend holding rows that exist nowhere in DuckDB and asserts every surface
+  returns *those* rows.
+- **The health collector never checked the serving store at all** — it checked
+  Kafka, Flink and Iceberg, and opened its own read-only DuckDB at `DUCKDB_PATH`
+  for freshness and quality (an unrelated database on the ClickHouse profile, a
+  brand-new empty one on the `:memory:` default). It now has a `serving`
+  component and reads the journal through the active backend.
+- **`/v1/health` always answered 200** — its status lives in the payload — and
+  both Kubernetes probes *and* the Compose healthcheck pointed at it, so a
+  replica with a dead ClickHouse looked healthy to every orchestrator watching
+  it. `/health/ready` answers 503 when the serving store is unreachable *or
+  unprovisioned* (the readiness error that P0-2's removal of boot-time DDL makes
+  possible); `/health/live` stays dependency-free, so a ClickHouse outage cannot
+  roll every pod. `ControlPlaneStore.ping()` added (no-op on embedded,
+  `SELECT 1` on PostgreSQL).
+- The search index's entity scan is bounded (`AGENTFLOW_SEARCH_SCAN_LIMIT`,
+  default 10 000) and logs truncation. It was an unbounded `SELECT *` that grew
+  with the serving data — the next RSS-growth candidate after the webhook poller
+  (audit P1-6).
+- ClickHouse transpile gained `quantile_cont(col, q)` → `quantile(q)(col)`: the
+  SLO latency SLI was the one journal read with no valid ClickHouse translation.
+- The image's own `HEALTHCHECK` moved off `/v1/health` too. Helm and
+  `docker-compose.prod.yml` had been switched, but `Dockerfile.api` still asked
+  the endpoint that always answers 200 — so a standalone container reported
+  itself healthy while its serving backend was unreachable and every read was
+  failing. It asks `/health/ready` now, which can say no.
+
+### Changed — provisioning is a writer privilege, not a boot side effect (audit P0-2)
+
+**Breaking for operators of the ClickHouse profile: the API no longer creates
+its own tables.** Run `python -m src.serving.provision --schema` once before the
+first boot (Compose and Helm now do it for you — see below).
+
+- **`QueryEngine.__init__` ran DDL and seeded demo rows on every boot**, against
+  the embedded store *and* whatever external backend was configured — before
+  anything read `AGENTFLOW_DEMO_MODE`, which is why the flag appeared to do
+  nothing. Consequences: the serving identity needed CREATE/ALTER/INSERT on the
+  production store, several booting replicas could each see an empty table and
+  seed it, and a fresh production ClickHouse got demo orders for no better
+  reason than being empty.
+- The constructor now only lays down the *embedded* schema (that store is
+  created in-process and has no other provisioner). It sends **nothing** to an
+  external backend — pinned by a test that fails if a single statement reaches
+  ClickHouse on boot. An API image can run against a read-only ClickHouse user.
+- Seeding is opt-in via `AGENTFLOW_SEED_ON_BOOT` (default off), independent of
+  `AGENTFLOW_DEMO_MODE`, which keeps its own meaning (public demo key +
+  read-only guard).
+- **New: `python -m src.serving.provision [--schema] [--seed]`** — idempotent,
+  re-runnable, and provisions every store the API reads (on the ClickHouse
+  profile the embedded DuckDB still holds control-plane state, so both get their
+  schema). Wired into `make demo`, a `serving-init` one-shot service in
+  `docker-compose.prod.yml`, and a Helm `pre-install`/`pre-upgrade` migration
+  Job. A failed migration now fails the release instead of letting pods come up
+  against a store they would have silently created.
+- Helm gained `serving.clickhouse.migrationUser` / `migrationPasswordKey` so the
+  DDL identity can be separate from the serving one, and `provision.enabled` /
+  `provision.backoffLimit`.
+- **The bridge writer no longer seeds either.** `ClickHouseSink` still ensures
+  the schema — it holds the write grants and cannot run without the tables — but
+  it does not decide an empty store deserves demo rows.
+
+### Security — `/v1/search` enforced the entity allowlist on nothing (audit P0-4)
+
+- **A scoped API key could read every entity type through `/v1/search`.**
+  `SearchIndex.search()` returns mappings; the router post-filtered them with
+  `getattr(result, "entity_type", None)`, which is always `None` for a `dict`,
+  so the `or` short-circuited and every forbidden row passed. A key limited to
+  `order` got `user`, `product` and `session` ids **and snippets** back whenever
+  it sent no explicit `entity_types` filter. The direct entity endpoints kept
+  answering 403 — only search leaked. Reproduced against the real index (not a
+  mock) before the fix: `assert {'product', 'session', 'user'} == set()`.
+- The allowlist is now enforced **inside the index, before scoring**, so a
+  forbidden document never enters the candidate set. This also closes a second
+  defect: the old post-filter ran *after* `[:limit]`, so forbidden documents
+  consumed result slots and could crowd out every row the key was allowed to
+  see.
+- Policy is now explicit and tested: entity and `catalog_field` documents follow
+  the key allowlist; metric documents stay visible to scoped keys because
+  `/v1/metrics/*` is not entity-scoped; an empty allowlist returns no
+  entity-scoped document at all.
+- `SearchIndex.search()` returns `list[SearchHit]` (a `TypedDict`) instead of
+  `list[dict]`, so mypy now rejects the attribute access that silently disabled
+  the filter.
+
 ### Added — Flink state backend is configurable (unblocks stand throughput runs)
 
 - The Flink `state.backend.type` in `docker-compose.yml` is now
@@ -145,6 +408,68 @@ All notable changes to AgentFlow are documented in this file.
   the one-off reformat touched `async_client.py`, `cli.py`, `client.py`
   (line-collapse only). `make lint` / `make format` now cover
   `src/ tests/ scripts/ sdk/`, so local and CI agree.
+
+### Fixed — the standalone API image could bake in secret-bearing config and ran as root (audit P1-4)
+
+- `Dockerfile.api` did `COPY config /app/config` with no allowlist, while
+  `pyproject.toml` already excludes `config/api_keys.yaml`,
+  `config/webhooks.yaml` and `config/tenants.yaml` from the sdist for the
+  same reason — they carry credential material (bcrypt key hashes, webhook
+  signing secrets) or tenant routing data. `.dockerignore` didn't mirror that
+  exclusion, so a future plaintext secret in one of those files would have
+  been baked into an immutable image layer. `.dockerignore` now excludes the
+  same three paths `scripts/check_release_artifacts.py` already treats as
+  forbidden release-artifact members, so the existing `COPY config
+  /app/config` can no longer see them. Compose and Helm are unaffected:
+  Compose bind-mounts `./config:/app/config:ro` over the image, and Helm
+  never reads `/app/config` at all — it mounts the real config/secret
+  through a ConfigMap/Secret at `/etc/agentflow/config` and
+  `/etc/agentflow/secret`.
+- **The image ran as root by default.** Helm compensates
+  (`containerSecurityContext.runAsUser: 10001`), but `docker run` without
+  Helm did not. `Dockerfile.api` now creates a non-root `agentflow` user
+  (uid/gid 10001, matching the Helm value) after all install steps and
+  switches to it, pre-creating and chowning `/app/data` so a fresh Compose
+  named volume mounted there inherits the right ownership on first use.
+- New `tests/unit/test_docker_secret_policy.py` (static — Docker isn't
+  available on this host): fails if `.dockerignore` ever stops excluding the
+  three secret config paths, if `Dockerfile.api` ever `COPY`s one of them by
+  name, or if the final image stage's last `USER` is root/uid 0.
+
+### Changed — "Nightly Backup" is a regression test, not a backup, and now says so (audit P1-2)
+
+**The workflow never touched a deployed environment.** It built synthetic
+DuckDB fixtures on an ephemeral GitHub runner, tarred them, and uploaded a
+7-day Actions artifact — a real check that the backup/restore code path
+still works, but no evidence a live environment can be recovered. Calling it
+"Nightly Backup" and citing an RPO/RTO in `docs/disaster-recovery.md` on the
+strength of it was a false claim.
+
+- The workflow is renamed **`Backup/Restore Regression Test`**
+  (`.github/workflows/backup.yml`) and says up front, in a comment, what it
+  actually is. Its GitHub Actions artifact is renamed from
+  `agentflow-nightly-backup` to
+  `agentflow-backup-restore-regression-fixture`. The job id (`backup`) is
+  unchanged — `pyproject.toml`'s
+  `[[tool.agentflow.dependency-profiles.targets]]` registry references it by
+  `path` + `job`.
+- `docs/disaster-recovery.md` no longer states a flat RPO/RTO. It says
+  plainly what exists today — a DuckDB file/config backup+restore code path,
+  exercised nightly against synthetic fixtures — and what does not:
+  no ClickHouse backup, no PostgreSQL control-plane backup, and no restore
+  ever measured against a real staging environment.
+- `scripts/backup.py` swept all of `config/` into the archive, including
+  `config/api_keys.yaml` — bcrypt key hashes, credential material — with no
+  exclusion. It now reuses
+  `scripts/check_release_artifacts.FORBIDDEN_MEMBER_PATTERNS` (the same list
+  the Python release-artifact check already enforces) to skip
+  `config/api_keys.yaml`, `config/webhooks.yaml` and `config/tenants.yaml`,
+  plus anything else matching the same "secret" / `secrets/` patterns.
+  `tests/unit/test_backup.py` builds an archive from a fixture tree
+  containing all three, asserts none are archive members, cross-checks the
+  result with `find_forbidden_members()`, and round-trips it through
+  `scripts/verify_backup.py` and `scripts/restore.py` to confirm the rest of
+  the pipeline still works without them.
 
 ## [2.0.0] - 2026-07-06
 

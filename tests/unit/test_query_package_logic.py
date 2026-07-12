@@ -285,6 +285,84 @@ def test_get_entity_parses_string_timestamp_and_skips_bad_candidates(host: _Host
 
 
 # ---------------------------------------------------------------------------
+# entity_queries — index scans (audit P0-3 / P1-6)
+# ---------------------------------------------------------------------------
+
+
+def test_scan_entity_rows_reads_the_active_backend_unscoped(host: _Host) -> None:
+    # The search index's bulk read: through the active backend, bounded, and
+    # deliberately NOT tenant-scoped — the process-global index needs every
+    # tenant's rows, each carrying its tenant_id.
+    host._backend.execute.return_value = [{"order_id": "ORD-1", "tenant_id": "default"}]
+
+    rows = host.scan_entity_rows("orders_v2", limit=500)
+
+    assert rows == [{"order_id": "ORD-1", "tenant_id": "default"}]
+    sql = host._backend.execute.call_args.args[0]
+    assert sql == "SELECT * FROM orders_v2 LIMIT 500"
+
+
+def test_scan_entity_rows_by_ids_short_circuits_on_empty_ids(host: _Host) -> None:
+    assert host.scan_entity_rows_by_ids("orders_v2", primary_key="order_id", ids=[]) == []
+    host._backend.execute.assert_not_called()
+
+
+def test_scan_entity_rows_by_ids_quotes_every_id(host: _Host) -> None:
+    # The changed-id set is event-shaped data: every value must go through
+    # literal quoting, so an id carrying a quote cannot break out of the IN.
+    host._backend.execute.return_value = []
+
+    host.scan_entity_rows_by_ids("orders_v2", primary_key="order_id", ids=["ORD-1", "ORD'2"])
+
+    sql = host._backend.execute.call_args.args[0]
+    assert "WHERE order_id IN ('ORD-1', 'ORD''2')" in sql
+
+
+# ---------------------------------------------------------------------------
+# entity_queries — fetch_orders_by_status
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_orders_by_status_empty_ladder_returns_empty(host: _Host) -> None:
+    assert host.fetch_orders_by_status([]) == []
+    host._backend.execute.assert_not_called()
+
+
+def test_fetch_orders_by_status_param_backend_binds_statuses(host: _Host) -> None:
+    host._backend.execute.return_value = [{"order_id": "ORD-1", "status": "pending"}]
+
+    rows = host.fetch_orders_by_status(["pending", "confirmed"])
+
+    assert rows == [{"order_id": "ORD-1", "status": "pending"}]
+    sql, params = host._backend.execute.call_args.args
+    assert "WHERE status IN (?, ?)" in sql
+    assert params == ["pending", "confirmed"]
+
+
+def test_fetch_orders_by_status_literal_backend_quotes_statuses(literal_host: _Host) -> None:
+    literal_host._backend.execute.return_value = []
+
+    assert literal_host.fetch_orders_by_status(["pend'ing"]) == []
+    sql = literal_host._backend.execute.call_args.args[0]
+    assert "WHERE status IN ('pend''ing')" in sql
+    assert len(literal_host._backend.execute.call_args.args) == 1
+
+
+def test_fetch_orders_by_status_missing_table_maps_to_value_error(host: _Host) -> None:
+    host._backend.execute.side_effect = BackendMissingTableError("no table")
+
+    with pytest.raises(ValueError, match="not materialized yet"):
+        host.fetch_orders_by_status(["pending"])
+
+
+def test_fetch_orders_by_status_execution_error_maps_to_value_error(host: _Host) -> None:
+    host._backend.execute.side_effect = BackendExecutionError("boom")
+
+    with pytest.raises(ValueError, match="Open-orders lookup failed"):
+        host.fetch_orders_by_status(["pending"])
+
+
+# ---------------------------------------------------------------------------
 # entity_queries — get_entity_at
 # ---------------------------------------------------------------------------
 

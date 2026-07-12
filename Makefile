@@ -123,11 +123,18 @@ format:
 build:
 	docker compose build
 
+# Per-environment state keys (audit P2-4): the backend block carries no key,
+# so init MUST name the environment's own state object — a bare
+# `terraform init` fails instead of silently sharing one state across envs.
 deploy-dev:
-	cd infrastructure/terraform && terraform init && terraform plan -var-file=dev.tfvars
+	cd infrastructure/terraform && terraform init -backend-config="key=env/dev/terraform.tfstate" && terraform plan -var-file=dev.tfvars
 
 deploy-prod:
-	cd infrastructure/terraform && terraform init && terraform plan -var-file=prod.tfvars
+	@test -f infrastructure/terraform/environments/prod.tfvars || { \
+		echo "infrastructure/terraform/environments/prod.tfvars is operator-provided"; \
+		echo "(copy prod.tfvars.example and fill real values; never commit it)."; \
+		exit 1; }
+	cd infrastructure/terraform && terraform init -backend-config="key=env/production/terraform.tfstate" && terraform plan -var-file=environments/prod.tfvars
 	@echo "Review the plan above. Run 'terraform apply' manually to proceed."
 
 # ── Cleanup ───────────────────────────────────────────────────────

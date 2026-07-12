@@ -656,6 +656,59 @@ def test_slo_is_computed_per_tenant(client: TestClient, tenant: str) -> None:
     _assert_no_foreign_markers(response.text, tenant)
 
 
+def test_sli_arithmetic_survives_the_clickhouse_transpile(
+    client: TestClient, live_clickhouse: ClickHouseBackend
+) -> None:
+    """Audit P2-2, the live half: the SLI queries produce exact numbers
+    through the real sqlglot round trip. The freshness SLI leans on
+    LAG(...) OVER — where ClickHouse's lagInFrame hands the FIRST row a
+    zero-date instead of NULL; without the epoch guard that row books a
+    phantom threshold-sized credit (found live on 25.3, pinned here)."""
+    from datetime import datetime as _datetime
+
+    from src.serving.semantic_layer.journal import JournalReader, coerce_journal_datetime
+
+    store_now = coerce_journal_datetime(live_clickhouse.execute("SELECT NOW() AS n")[0]["n"])
+    assert isinstance(store_now, _datetime)
+    live_clickhouse.insert_rows(
+        "pipeline_events",
+        [
+            {
+                "event_id": f"EVT-SLI-{index}",
+                "topic": "orders.raw",
+                "tenant_id": "sli-probe",
+                "entity_id": f"ORD-SLI-{index}",
+                "event_type": "order.created",
+                "latency_ms": latency,
+                "processed_at": (store_now - timedelta(seconds=age)).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            for index, (age, latency) in enumerate([(90, 50), (60, 150), (30, 80)])
+        ],
+    )
+    try:
+        journal = JournalReader(live_clickhouse)
+
+        latency = journal.latency_within(threshold_ms=100, window="30 days", tenant_id="sli-probe")
+        assert latency is not None
+        assert (latency.total, latency.errors) == (3, 1)  # only the 150ms event is slow
+
+        fresh = journal.freshness_within(
+            threshold_seconds=20.0, window="30 days", tenant_id="sli-probe"
+        )
+        assert fresh is not None
+        fresh_seconds, observed_seconds = fresh
+        # Two 30s gaps capped at 20 each, plus a tail capped at 20 = 60.
+        # A phantom first-row credit would make this 80.
+        assert fresh_seconds == pytest.approx(60.0, abs=4.0)
+        assert observed_seconds == pytest.approx(90.0, abs=10.0)
+    finally:
+        _ddl(
+            live_clickhouse,
+            "ALTER TABLE pipeline_events DELETE WHERE tenant_id = 'sli-probe' "
+            "SETTINGS mutations_sync = 1",
+        )
+
+
 # --- adversarial SQL ---------------------------------------------------------
 
 

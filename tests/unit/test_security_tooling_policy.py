@@ -78,7 +78,12 @@ _ALLOWED_B608_SITES = {
     # binds them as `?` on DuckDB and _quote_literal-escapes them on ClickHouse,
     # whose execute(params=...) is a documented no-op. So `entity_id` from the
     # URL path still binds exactly as it did before the move.
-    "src/serving/semantic_layer/journal.py": 5,
+    # audit P2-2 (reviewed 2026-07-12): +2 sites — latency_within and
+    # freshness_within, the SLI numerator/denominator reads. Same shape as
+    # the neighbours: identifiers from the schema probe's allowlist,
+    # thresholds are floats from config/slo.yaml formatted with :g, tenant
+    # values go through _value().
+    "src/serving/semantic_layer/journal.py": 7,
     # ADR 0010 slice 5 (reviewed 2026-07-03): _replace_record_set interpolates
     # only its `table` argument, a module literal at exactly two call sites
     # (save_webhook_registrations / save_alert_rules); every value binds via

@@ -138,10 +138,17 @@ def test_slo_returns_statuses_and_error_budget(client: TestClient):
     assert response.status_code == 200
     data = {item["name"]: item for item in response.json()["slos"]}
     assert set(data) == {"api_latency_p95", "data_freshness", "error_rate"}
-    assert data["api_latency_p95"]["status"] == "at_risk"
-    assert 0 < data["api_latency_p95"]["error_budget_remaining"] < 0.2
+    # Every one of the ten events exceeded the 100ms threshold. The old
+    # p95-rescale called this "at_risk" (100/101 = 0.9901 "compliance"); the
+    # SLI says what happened: 0 of 10 good events, breached (audit P2-2).
+    assert data["api_latency_p95"]["status"] == "breached"
+    assert data["api_latency_p95"]["current"] == 0.0
+    assert data["api_latency_p95"]["good"] == 0.0
+    assert data["api_latency_p95"]["valid"] == 10.0
+    assert data["api_latency_p95"]["error_budget_remaining"] == 0.0
     assert data["data_freshness"]["status"] == "healthy"
-    assert data["data_freshness"]["current"] == 1.0
+    # Sub-millisecond truncation in the gap arithmetic can shave a ten-thousandth.
+    assert data["data_freshness"]["current"] == pytest.approx(1.0, abs=0.001)
     assert data["error_rate"]["status"] == "breached"
     assert data["error_rate"]["current"] == 0.8
 
@@ -179,6 +186,13 @@ def test_slo_uses_yaml_as_single_source_of_truth(client: TestClient):
                 "error_budget_remaining": 1.0,
                 "status": "healthy",
                 "window_days": 14,
+                # Both events (200ms, 220ms) sit under the 250ms threshold.
+                "good": 2.0,
+                "valid": 2.0,
+                "unit": "events",
+                "burn_rates": {"1h": 0.0, "6h": 0.0, "3d": 0.0},
+                # quantile_cont over [200, 220] at 0.95
+                "diagnostic": {"p95_latency_ms": 219.0},
             }
         ]
     }
@@ -225,6 +239,12 @@ def test_slo_uses_deadletter_ratio_when_status_codes_are_absent(client: TestClie
             "error_budget_remaining": 0.0,
             "status": "breached",
             "window_days": 30,
+            "good": 8.0,
+            "valid": 10.0,
+            "unit": "events",
+            # (1 - 0.8) / (1 - 0.999): every window holds the same ten events
+            "burn_rates": {"1h": 200.0, "6h": 200.0, "3d": 200.0},
+            "diagnostic": {"error_rate_percent": 20.0},
         }
     ]
 

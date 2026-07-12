@@ -285,6 +285,119 @@ class JournalReader:
         value = rows[0].get("value") if rows else None
         return float(value) if value is not None else None
 
+    def latency_within(
+        self,
+        *,
+        threshold_ms: float,
+        window: str,
+        tenant_id: str | None = None,
+    ) -> EventCounts | None:
+        """The latency SLI's numerator and denominator (audit P2-2): of the
+        journal rows that carry a latency at all (*valid* events), how many
+        came in at or under the threshold (*good* events). ``total`` is valid,
+        ``errors`` is valid - good, so the share is ``1 - errors/total`` —
+        the same shape ``event_counts`` returns for the error SLI.
+        """
+        columns = self.columns()
+        time_column = self.time_column()
+        if "latency_ms" not in columns or time_column is None:
+            return None
+
+        params: list[object] = []
+        clause = _where(
+            self._window_predicate(time_column, window),
+            self._tenant_predicate(tenant_id, params),
+            "latency_ms IS NOT NULL",
+        )
+        sql = (
+            # threshold is a float from config/slo.yaml, formatted here;
+            # FILTER is rewritten to countIf on ClickHouse.
+            "SELECT COUNT(*) AS total, "  # nosec B608  # noqa: S608
+            f"COUNT(*) FILTER (WHERE latency_ms > {threshold_ms:g}) AS errors "
+            f"FROM {JOURNAL_TABLE}{clause}"
+        )
+        counts = self._counts(self._rows(sql, params))
+        if counts is None or counts.total == 0:
+            return None
+        return counts
+
+    def freshness_within(
+        self,
+        *,
+        threshold_seconds: float,
+        window: str,
+        tenant_id: str | None = None,
+    ) -> tuple[float, float] | None:
+        """The freshness SLI, time-weighted (audit P2-2): of the observed
+        window, how many seconds was the newest journal row at most
+        ``threshold_seconds`` old? Returns ``(fresh_seconds,
+        observed_seconds)`` or ``None`` when the window holds no events.
+
+        Staleness over time is fully reconstructible from the event
+        timestamps: after an event at ``t`` the store is fresh until
+        ``t + threshold``, so each gap between consecutive events contributes
+        ``min(gap, threshold)`` fresh seconds, plus the tail from the last
+        event to the store's NOW(). The observation starts at the FIRST event
+        inside the window (events before it are not read, and a deployment
+        younger than the window should not be billed for time it did not
+        exist); that head choice is conservative — it can only under-report
+        freshness, never inflate it.
+        """
+        time_column = self.time_column()
+        if time_column is None:
+            return None
+
+        params: list[object] = []
+        clause = _where(
+            self._window_predicate(time_column, window),
+            self._tenant_predicate(tenant_id, params),
+        )
+        sql = (
+            # threshold is a float from config/slo.yaml; identifiers come from
+            # the schema probe's fixed allowlist. LAG/LEAST/DATE_DIFF all
+            # carry to ClickHouse through the backend transpile.
+            "WITH ordered AS ("  # nosec B608  # noqa: S608
+            f"    SELECT {time_column} AS ts, "
+            f"           LAG({time_column}) OVER (ORDER BY {time_column}) AS prev "
+            f"    FROM {JOURNAL_TABLE}{clause}"
+            ") "
+            "SELECT "
+            # The first row's prev is NULL on DuckDB but a ZERO-DATE on
+            # ClickHouse (lagInFrame substitutes a default value, not NULL) —
+            # without the epoch guard the first row books a phantom
+            # threshold-sized credit. Verified live on 25.3.
+            "    SUM(CASE WHEN prev IS NULL OR prev < CAST('2000-01-01' AS TIMESTAMP) THEN 0 "
+            # Milliseconds, not seconds: DATE_DIFF truncates, and flooring
+            # every sub-second gap to zero systematically under-reports
+            # freshness on a busy journal (hundreds of near-simultaneous
+            # events lose up to a second of fresh credit each).
+            f"        ELSE LEAST(DATE_DIFF('millisecond', prev, ts) / 1000.0, "
+            f"{threshold_seconds:g}) "
+            "        END) AS fresh_between_events, "
+            "    MIN(ts) AS first_ts, "
+            "    MAX(ts) AS last_ts, "
+            "    NOW() AS store_now "
+            "FROM ordered"
+        )
+        rows = self._rows(sql, params)
+        if not rows:
+            return None
+        row = rows[0]
+        first_ts = coerce_journal_datetime(row.get("first_ts"))
+        last_ts = coerce_journal_datetime(row.get("last_ts"))
+        store_now = coerce_journal_datetime(row.get("store_now"))
+        if first_ts is None or last_ts is None or store_now is None:
+            return None
+        raw_between = row.get("fresh_between_events")
+        fresh_between = float(raw_between) if raw_between is not None else 0.0
+        tail = max((store_now - last_ts).total_seconds(), 0.0)
+        fresh = fresh_between + min(tail, threshold_seconds)
+        observed = max((store_now - first_ts).total_seconds(), 0.0)
+        if observed <= 0.0:
+            # A single just-landed event: nothing observed yet, nothing stale.
+            return (0.0, 0.0)
+        return (min(fresh, observed), observed)
+
     def event_counts(self, *, window: str, tenant_id: str | None = None) -> EventCounts | None:
         """Events in the window and how many failed.
 

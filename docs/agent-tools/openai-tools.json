@@ -1365,8 +1365,30 @@
   {
     "type": "function",
     "function": {
+      "name": "health_live_health_live_get",
+      "description": "Health Live\n\nLiveness: this process is up. No dependencies, by design.\n\nKubernetes restarts a container that fails liveness, so a dependency must\nnever appear here \u2014 a ClickHouse outage would otherwise roll every pod.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "health_ready_health_ready_get",
+      "description": "Health Ready\n\nReadiness: the dependencies this replica needs to answer a request.\n\nNon-200 when the serving store is unreachable or unprovisioned, so\nKubernetes takes the pod out of the Service instead of routing traffic to a\nreplica that can only fail. `/v1/health` cannot do this job: it always\nanswered 200 (payload-only status), and both k8s probes and the Compose\nhealthcheck pointed at it \u2014 so an API with a dead ClickHouse looked healthy\nto every orchestrator watching it (audit P0-3).",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "health_v1_health_get",
-      "description": "Health\n\nPipeline health check - agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health.\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
+      "description": "Health\n\nPipeline health check - agents should call this before answering time-sensitive queries.\n\nReturns overall pipeline status and per-component health. Informational and\nalways 200: an agent asking \"is the data fresh enough to answer with?\" wants\nthe payload, not an HTTP error. Orchestrators use /health/live and\n/health/ready, which do fail.\n\nIf status != \"healthy\", agents should caveat their answers with data freshness warnings.",
       "parameters": {
         "type": "object",
         "properties": {}

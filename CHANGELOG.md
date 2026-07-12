@@ -4,6 +4,31 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Observability — /v1/slo reports SLIs, not rescaled aggregates (audit P2-2)
+
+- **`current` is now a real SLI**: the share of good units among valid units
+  over the SLO window. Latency: events at or under the threshold (the p95
+  moves to `diagnostic` — a p95 of 2x the threshold says nothing about how
+  MANY requests were slow). Errors: non-5xx (or non-dead-letter) share.
+  Freshness: time-weighted — the share of observed seconds during which the
+  newest journal row was at most threshold old, reconstructed exactly from
+  event gaps (`min(gap, threshold)` per gap plus the tail). The old
+  `threshold / measured` rescale is gone.
+- **Missing data is `unknown`, not 0.0** — `current`,
+  `error_budget_remaining` go null and `status` says `"unknown"`: an empty
+  journal is missing data, not a missed target.
+- **Multi-window burn rates** (`burn_rates: {1h, 6h, 3d}`,
+  `(1 - sli) / (1 - target)`): the (1h, 6h) pair over 14.4 or the (6h, 3d)
+  pair over 6 marks the SLO `at_risk` even while the full window still looks
+  healthy — a month of clean traffic no longer hides an hour burning budget
+  at 25x. The response also carries `good`/`valid`/`unit`, so every number
+  is auditable from the payload.
+- Live-verified on ClickHouse 25.3, where the freshness SQL's
+  `LAG(...) OVER` transpiles to `lagInFrame` — which hands the FIRST row a
+  zero-date instead of NULL and, without the epoch guard now in place,
+  booked a phantom threshold-sized credit. Pinned by a live probe with
+  exact numbers.
+
 ### Scale — search maintenance reads the journal, not the world (audit P1-6)
 
 - **The periodic tick is a `refresh()`, not a rebuild.** It reads

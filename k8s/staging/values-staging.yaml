@@ -45,6 +45,13 @@ config:
 extraEnv:
   - name: AGENTFLOW_WEBHOOKS_FILE
     value: /data/e2e-webhooks.yaml
+  # Staging is an ephemeral kind cluster serving from the per-pod embedded
+  # DuckDB, and the smoke tests query the documented demo entities
+  # (ORD-20260404-1001 …). Boot seeding is the explicit opt-in that audit
+  # P0-2 left for exactly this profile — off by default everywhere else, so
+  # no real store ever receives demo rows for merely being empty.
+  - name: AGENTFLOW_SEED_ON_BOOT
+    value: "true"
 
 # Staging is an ephemeral kind cluster torn down after each CI run. The
 # hashes below correspond to the same plaintext fixtures committed in

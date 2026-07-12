@@ -86,6 +86,32 @@ services:
           cpus: "0.50"
           memory: 512M
 
+  serving-init:
+    # The API stopped provisioning and seeding the serving store on boot
+    # (audit P0-2), so the stack lays the schema and the documented demo
+    # entities down itself before the API starts — the same one-shot job
+    # docker-compose.prod.yml runs, against the in-stack ClickHouse the E2E
+    # smoke suite queries.
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      AGENTFLOW_SERVING_CONFIG: /app/config/serving.yaml
+      DUCKDB_PATH: /app/data/agentflow.duckdb
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: agentflow
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+    command: ["python", "-m", "src.serving.provision", "--schema", "--seed"]
+    restart: "no"
+    volumes:
+      - agentflow-api-data:/app/data
+      - ./config:/app/config:ro
+
   agentflow-api:
     build:
       context: .
@@ -99,6 +125,8 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+      serving-init:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     environment:

@@ -3,11 +3,12 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
+**Last updated:** 2026-07-12 (PII-masking references aligned with the 2026-07-01 removal)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
 
-AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integrations. The current repository shows a security posture centered on typed request validation, tenant-scoped access control, API-key authentication, rate limiting, PII masking on responses, SQL safety guards for NL-to-SQL, and CI-based dependency and image scanning.
+AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integrations. The current repository shows a security posture centered on typed request validation, tenant-scoped access control, API-key authentication, rate limiting, SQL safety guards for NL-to-SQL, and CI-based dependency and image scanning. Response-side PII masking is no longer on this list: it was removed 2026-07-01 because the demo serving warehouse holds no PII, and real PII is governed engine-side in the DV2 vault (see section 7).
 
 The codebase is strongest at application-layer controls that can be validated directly in source: auth, authorization, request filtering, security headers, contract evolution, replay safety, and auditability of API usage. The weakest areas are the controls that typically require external infrastructure or third-party attestation. In this repository snapshot there is no evidence of an external penetration test or demonstrated generalized secrets manager integration. Local DuckDB files can be opened through an optional encrypted attach path when an operator supplies encryption key material, but the default remains backward-compatible and unencrypted.
 
@@ -133,7 +134,7 @@ Evidence: `src/serving/api/rate_limiter.py`, `src/serving/api/auth/middleware.py
 > and is governed engine-side there (ClickHouse row/column policies — ADR 0006
 > Phase 2). The paragraph below is retained as the point-in-time record.
 
-Response-side PII masking is implemented in `PiiMasker` and applied on entity responses and NL-query results. Masking behavior is configured through `config/pii_fields.yaml`, supports multiple strategies (`partial`, `full`, `hash`), and allows explicit tenant exemptions for internal tenants. When masking is applied, the API sets `X-PII-Masked: true`.
+Response-side PII masking was implemented in a `PiiMasker` module and applied on entity responses and NL-query results. Masking behavior was configured through a `pii_fields` config file, supported multiple strategies (`partial`, `full`, `hash`), and allowed explicit tenant exemptions for internal tenants. When masking was applied, the API set `X-PII-Masked: true`. The module, its config, and its tests are gone from the tree; the removal is recorded in the CHANGELOG (2026-07-01) and the engine-side replacement in ADR 0006 Phase 2.
 
 Security headers are applied centrally and include:
 - `Strict-Transport-Security`
@@ -144,7 +145,7 @@ Security headers are applied centrally and include:
 
 These controls improve baseline browser-facing hardening for docs/admin surfaces. TLS termination is intentionally delegated to an upstream edge or ingress layer; the FastAPI application applies HTTP-layer security controls behind that boundary.
 
-Evidence: `src/serving/masking.py`, `src/serving/api/routers/agent_query.py`, `src/serving/api/security.py`, `tests/unit/test_masking.py`
+Evidence: `src/serving/api/security.py` (security headers, still current); the removed masker's history lives in the CHANGELOG (2026-07-01) and `docs/decisions/0006-fix-demo-serving-engine-on-clickhouse.md` Phase 2.
 
 ## 8. Supply Chain and CI Controls
 
@@ -194,7 +195,7 @@ The current implementation has several material limitations:
 
 ### GDPR
 
-Partial readiness. The repo supports response-time PII masking, tenant scoping, and usage auditing. That helps with least-privilege data exposure and auditability. However, GDPR readiness is incomplete without documented data retention policies, deletion workflows, subject access procedures, and infrastructure evidence for storage/backup handling.
+Partial readiness. The repo supports tenant scoping, usage auditing, and engine-side PII governance in the DV2 vault (fail-closed column grants, row policies — ADR 0006 Phase 2). That helps with least-privilege data exposure and auditability. However, GDPR readiness is incomplete without documented data retention policies, deletion workflows, subject access procedures, and infrastructure evidence for storage/backup handling.
 
 ### SOC 2
 
@@ -211,7 +212,7 @@ For an engineering-led v1 product, AgentFlow shows an above-average application 
 - practical tenant isolation
 - real SQL safety controls
 - concrete key rotation mechanics
-- response-time privacy masking
+- engine-side PII governance in the DV2 vault (the serving tier holds no PII)
 - usable audit trail and CI scanning
 
 The main gap is not the app layer. It is the absence of externally verifiable infrastructure and governance controls. These gaps do not block continued development, package publication, or demos, but they do block enterprise-facing security claims:

@@ -3,7 +3,7 @@
   "info": {
     "title": "AgentFlow Query API",
     "description": "Real-time data access for AI agents",
-    "version": "1.0.0"
+    "version": "2.0.0"
   },
   "paths": {
     "/v1/query/explain": {

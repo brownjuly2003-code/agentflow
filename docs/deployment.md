@@ -11,15 +11,19 @@ Use this when developing the API, SDK examples, or documentation.
 make demo
 ```
 
-What it starts:
+What it starts (see the `demo` target in the `Makefile`):
 
-- synthetic event seeding through the local pipeline
-- DuckDB demo database
-- Redis through Docker Compose
+- Redis and ClickHouse through Docker Compose (ClickHouse is the default
+  serving store — ADR 0006)
+- an explicit provisioning step, `python -m src.serving.provision --schema
+  --seed` — the API itself never creates or seeds a store on boot (audit P0-2)
+- synthetic event seeding through the local pipeline (500 events); the embedded
+  DuckDB file keeps carrying the control-plane state
 - FastAPI on `http://localhost:8000`
 
 This path is intentionally small. It is the fastest way to test entity lookup,
-metrics, natural-language query, and SDK calls.
+metrics, natural-language query, and SDK calls. To run without Docker at all,
+set `SERVING_BACKEND=duckdb` and skip the compose services.
 
 ## Development compose
 

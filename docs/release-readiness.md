@@ -1,11 +1,13 @@
 # AgentFlow Release Readiness
 
-**Release line**: `v1.4.0`
+**Release line**: `v2.0.0`
 
 **Status**: published to PyPI (`agentflow-runtime`, `agentflow-client`) and npm
 (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA
-provenance attestations. `main` is protected by 12 required status checks and is
-green.
+provenance attestations — see
+[dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
+registry links and upload evidence. `main` is protected by 13 required status
+checks and is green.
 
 ## Summary
 
@@ -51,11 +53,11 @@ and documented in
 
 ## CI gates
 
-`main` is protected with 12 required status checks — `lint`, `test-unit`,
+`main` is protected with 13 required status checks — `lint`, `test-unit`,
 `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`,
-`terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`.
-Branch protection requires every one of them; force-pushes and deletions are
-disabled.
+`terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`,
+`build-smoke`. Branch protection requires every one of them; force-pushes and
+deletions are disabled.
 
 ## Scope
 

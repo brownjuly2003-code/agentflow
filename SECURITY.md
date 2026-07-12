@@ -2,9 +2,9 @@
 
 ## Supported versions
 
-Security fixes are released against the **current `v1.x` line**. The current
+Security fixes are released against the **current `v2.x` line**. The current
 release on PyPI / npm is the supported version; previous minor versions on
-the same `v1.x` line receive backports at maintainer discretion when the
+the same `v2.x` line receive backports at maintainer discretion when the
 fix is mechanical.
 
 See [docs/dv2-multi-branch/RELEASE_STATUS.md](docs/dv2-multi-branch/RELEASE_STATUS.md)
@@ -12,8 +12,8 @@ for the live published version.
 
 | Version line | Supported |
 |--------------|-----------|
-| `1.x` (current) | ✅ Yes |
-| `< 1.0` | ❌ No |
+| `2.x` (current) | ✅ Yes |
+| `< 2.0` | ❌ No |
 
 ## Reporting a vulnerability
 

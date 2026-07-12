@@ -259,7 +259,10 @@ config:
           - type: additive
             description: "Added meta.is_historical to entity responses"
           - type: additive
-            description: "Added X-PII-Masked response header"
+            description: >-
+              Added X-PII-Masked response header (retired 2026-07-01 — the
+              serving tier holds no PII, so the current build never emits it;
+              the name stays reserved)
 
 secrets:
   create: true

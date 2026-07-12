@@ -69,6 +69,7 @@ from src.serving.node.seed import seed_node_baseline
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
+from src.version import runtime_version
 
 if TYPE_CHECKING:
     from opentelemetry.sdk.trace.export import SpanExporter
@@ -383,11 +384,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 # down: every read path still serves.
                 logger.warning("in_process_bridge_start_failed", exc_info=True)
 
-    auth_mode = (
-        "multi_tenant_api_keys"
-        if app.state.auth_manager.has_configured_keys()
-        else "open (set config/api_keys.yaml to enable)"
-    )
+    # Mirror the middleware's actual behaviour: without configured keys the
+    # API fail-closes with 503 unless the operator explicitly opted into open
+    # mode — logging "open" here understated the posture (audit P2-1).
+    if app.state.auth_manager.has_configured_keys():
+        auth_mode = "multi_tenant_api_keys"
+    elif os.getenv("AGENTFLOW_AUTH_DISABLED", "").strip().lower() in {"1", "true", "yes"}:
+        auth_mode = "open (AGENTFLOW_AUTH_DISABLED)"
+    else:
+        auth_mode = (
+            "fail_closed_no_keys (503; set AGENTFLOW_API_KEYS_FILE or AGENTFLOW_AUTH_DISABLED)"
+        )
     logger.info(
         "api_ready",
         entities=len(app.state.catalog.entities),
@@ -433,7 +440,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="AgentFlow Query API",
     description="Real-time data access for AI agents",
-    version="1.0.0",
+    version=runtime_version(),
     lifespan=lifespan,
 )
 app.middleware("http")(build_auth_middleware())

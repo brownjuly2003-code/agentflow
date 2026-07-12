@@ -54,13 +54,18 @@ from src.serving.api.versioning import (
     build_versioning_middleware,
 )
 from src.serving.api.webhook_dispatcher import WebhookDispatcher
+from src.serving.backends import load_serving_backend_config
 from src.serving.cache import QueryCache
 from src.serving.cache_invalidation import (
     MetricCacheController,
     journal_scan_fetch,
     publish_metrics_invalidate,
 )
-from src.serving.control_plane import control_plane_store_kind, get_control_plane_store
+from src.serving.control_plane import (
+    CONTROL_PLANE_PG_DSN_ENV,
+    control_plane_store_kind,
+    get_control_plane_store,
+)
 from src.serving.db_pool import DuckDBPool
 from src.serving.node import resolve_node_config
 from src.serving.node.emitter import NodeEmitter
@@ -69,6 +74,11 @@ from src.serving.node.seed import seed_node_baseline
 from src.serving.semantic_layer.catalog import DataCatalog
 from src.serving.semantic_layer.query_engine import QueryEngine
 from src.serving.semantic_layer.search_index import SearchIndex
+from src.serving.transport_policy import (
+    assert_secure_transport,
+    resolve_cors_origins,
+    resolve_profile,
+)
 from src.version import runtime_version
 
 if TYPE_CHECKING:
@@ -114,6 +124,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
     app.state.demo_seed_on_boot = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+    # Deployment profile + transport gate (audit P2-3), resolved before any
+    # store or network client is built: a production boot over plaintext
+    # external transport dies here, not after it has already spoken.
+    app.state.profile = resolve_profile()
+    if app.state.profile == "production" and app.state.demo_mode:
+        raise RuntimeError(
+            "AGENTFLOW_PROFILE=production together with AGENTFLOW_DEMO_MODE=true: "
+            "the demo surface (public key, seeded store) must never boot as production."
+        )
+    assert_secure_transport(
+        profile=app.state.profile,
+        serving_config=load_serving_backend_config(),
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
+        pg_dsn=(
+            os.getenv(CONTROL_PLANE_PG_DSN_ENV, "")
+            if control_plane_store_kind() == "postgres"
+            else ""
+        ),
+    )
     # Three-node demo topology (ADR 0012): resolve role/branch/token once here
     # and fail fast on a misconfigured node. Unset role == standalone, which is
     # byte-identical to today's single-node demo (N1). The center ingest
@@ -478,11 +507,10 @@ async def demo_mode_guard(request: Request, call_next: RequestResponseEndpoint) 
 app.middleware("http")(build_metrics_middleware())
 
 
-cors_origins = [
-    origin.strip()
-    for origin in os.getenv("AGENTFLOW_CORS_ORIGINS", "http://localhost:3000").split(",")
-    if origin.strip()
-]
+# A wildcard origin is refused outside demo mode (audit P2-3): this
+# middleware runs with credentials, and Starlette answers "*" by echoing
+# the caller's Origin — any website could read authenticated responses.
+cors_origins = resolve_cors_origins()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,

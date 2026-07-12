@@ -133,6 +133,18 @@ serving:
     user: default
     existingSecret: ""
     passwordKey: clickhouse-password
+    # TLS to the external ClickHouse (audit P2-3). secure=true switches the
+    # client to HTTPS with certificate AND hostname verification — the server
+    # cert must match `host`. For a private CA, point tls.caSecret at a Secret
+    # holding the PEM bundle; it is mounted read-only and CLICKHOUSE_CA_CERT
+    # then REPLACES the system trust store for this connection. Note the app
+    # side: AGENTFLOW_PROFILE=production refuses to boot when an external
+    # ClickHouse is plaintext (escape hatch: AGENTFLOW_INSECURE_TRANSPORT_OK
+    # via extraEnv for deliberate in-cluster plaintext).
+    secure: false
+    tls:
+      caSecret: ""
+      caKey: ca.crt
     # Provisioning is a separate identity from serving (audit P0-2). The API
     # only reads: give `user` SELECT and nothing else, and let the pre-install
     # migration Job connect as an account that holds CREATE/ALTER. Both fall
@@ -185,6 +197,11 @@ controlPlane:
     dsnKey: controlplane-pg-dsn
 
 config:
+  # Deployment profile handed to the app as AGENTFLOW_PROFILE (audit P2-3).
+  # "" keeps the app default (dev; demo when AGENTFLOW_DEMO_MODE=true).
+  # "production" makes the boot refuse insecure transport to external
+  # ClickHouse/Redis/PostgreSQL and refuse the demo surface outright.
+  profile: ""
   duckdbPath: /data/agentflow.duckdb
   usageDbPath: /data/agentflow_api.duckdb
   apiKeysPath: /etc/agentflow/secret/api_keys.yaml

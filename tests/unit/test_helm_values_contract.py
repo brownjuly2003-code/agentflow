@@ -380,3 +380,42 @@ def test_postgres_store_still_gated_without_clickhouse_backend():
     output = _combined_output(result)
     assert result.returncode != 0, output
     assert "Multi-replica requires BOTH" in output
+
+
+def test_serving_clickhouse_tls_render_is_first_class():
+    """audit P2-3: TLS to an external ClickHouse must not require extraEnv.
+    secure=true flows to CLICKHOUSE_SECURE in BOTH consumers of the wire (API
+    deployment and provision job); a private CA secret is mounted read-only
+    and CLICKHOUSE_CA_CERT points inside the mount. The profile knob rides
+    along so the app-side production gate can be armed from values."""
+    rendered = _run_helm_template(
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.secure=true",
+        "--set",
+        "serving.clickhouse.tls.caSecret=agentflow-clickhouse-ca",
+        "--set",
+        "config.profile=production",
+    )
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+    assert output.count('name: CLICKHOUSE_SECURE\n              value: "true"') == 2
+    assert output.count("value: /etc/agentflow/tls/clickhouse/ca.crt") == 2
+    assert output.count('secretName: "agentflow-clickhouse-ca"') == 2
+    assert output.count('value: "production"') == 2
+
+    # The default render stays plaintext-off-by-default and mounts nothing.
+    default = _run_helm_template()
+    default_output = _combined_output(default)
+    assert default.returncode == 0, default_output
+    assert "CLICKHOUSE_CA_CERT" not in default_output
+    assert "clickhouse-ca" not in default_output
+    assert "AGENTFLOW_PROFILE" not in default_output
+
+    # Schema stays strict: the tls block accepts nothing undeclared.
+    bogus = _run_helm_template("--set", "serving.clickhouse.tls.bogus=1")
+    assert bogus.returncode != 0
+    assert "Additional property bogus is not allowed" in _combined_output(bogus)

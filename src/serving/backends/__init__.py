@@ -110,6 +110,10 @@ def load_serving_backend_config(config_path: Path | str | None = None) -> dict:
                 str(os.getenv("CLICKHOUSE_SECURE", clickhouse.get("secure", "false"))).lower()
                 in {"1", "true", "yes", "on"}
             ),
+            # Path to a PEM CA bundle for a private-CA ClickHouse endpoint
+            # (audit P2-3). Only meaningful with secure=true; when set, it
+            # replaces the system trust store for this connection.
+            "ca_cert": os.getenv("CLICKHOUSE_CA_CERT", clickhouse.get("ca_cert", "")) or None,
             "timeout_seconds": int(
                 os.getenv("CLICKHOUSE_TIMEOUT_SECONDS", clickhouse.get("timeout_seconds", 10))
             ),
@@ -139,5 +143,6 @@ def create_backend(
             database=clickhouse["database"],
             secure=clickhouse["secure"],
             timeout_seconds=clickhouse["timeout_seconds"],
+            ca_cert=clickhouse["ca_cert"],
         )
     raise ValueError(f"Unsupported serving backend '{backend_name}'.")

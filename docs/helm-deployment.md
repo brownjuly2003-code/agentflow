@@ -141,6 +141,31 @@ consumes an external ClickHouse: the operator provides both and the referenced
 secrets. The DSN carries a password, so — like the ClickHouse password — it is
 never inlined into values, only referenced via `existingSecret`.
 
+### TLS to external stores (audit P2-3)
+
+The scale profile crosses real network boundaries, so transport security is
+first-class in values, not an `extraEnv` afterthought:
+
+- **ClickHouse** — `serving.clickhouse.secure=true` switches the client to
+  HTTPS with certificate *and* hostname verification (the server certificate
+  must match `serving.clickhouse.host`). For a private CA, create a Secret
+  holding the PEM bundle and set `serving.clickhouse.tls.caSecret` (key name in
+  `tls.caKey`, default `ca.crt`); it is mounted read-only into both the API
+  pods and the provision Job, and `CLICKHOUSE_CA_CERT` then **replaces** the
+  system trust store for that connection. Client certificates are not
+  supported by the chart; terminate mTLS at your ingress/mesh if required.
+- **PostgreSQL** — put `sslmode=require` (or `verify-ca`/`verify-full`) in the
+  DSN stored in `controlPlane.postgres.existingSecret`.
+- **Redis** — use a `rediss://` URL in `config.redisUrl`.
+
+`config.profile=production` arms the app-side gate: the boot **fails** when an
+external ClickHouse/Redis/PostgreSQL hop is plaintext (loopback is exempt), and
+the demo surface refuses to come up at all. A deliberate plaintext hop — e.g.
+in-cluster traffic already constrained by the chart's NetworkPolicy — must be
+named explicitly via `extraEnv`:
+`AGENTFLOW_INSECURE_TRANSPORT_OK="clickhouse,redis"`. A wildcard
+`config.corsOrigins` is likewise refused outside demo mode.
+
 `k8s/staging/values-staging-scale.yaml.example` is a ready overlay:
 
 ```bash

@@ -10,6 +10,10 @@ build/
 .env.local
 *.pem
 *.key
+# The one deliberate exception to the *.pem guard: a checked-in test CA
+# CERTIFICATE (public half only, no key anywhere) for the TLS-context unit
+# tests. Certificates are public by construction; the guard exists for keys.
+!tests/fixtures/tls/test-ca.pem
 
 # Local secrets — copy from .example and fill with real values
 docker/kafka-connect/secrets/postgres.properties

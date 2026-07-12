@@ -28,8 +28,9 @@ from collections.abc import Sequence
 
 import structlog
 
-from src.serving.backends import ServingBackend, create_backend
+from src.serving.backends import ServingBackend, create_backend, load_serving_backend_config
 from src.serving.backends.duckdb_backend import DuckDBBackend
+from src.serving.transport_policy import assert_secure_transport, resolve_profile
 
 logger = structlog.get_logger()
 
@@ -41,6 +42,12 @@ def provision(
     migrate: bool = False,
     config_path: str | None = None,
 ) -> int:
+    # audit P2-3: the provisioning identity speaks to the same store over the
+    # same transport — a production profile refuses plaintext here too.
+    assert_secure_transport(
+        profile=resolve_profile(),
+        serving_config=load_serving_backend_config(config_path),
+    )
     db_path = os.getenv("DUCKDB_PATH", ":memory:") or ":memory:"
     embedded = DuckDBBackend(db_path=db_path)
     try:

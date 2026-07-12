@@ -84,6 +84,12 @@ spec:
                   name: {{ .Values.serving.clickhouse.existingSecret | quote }}
                   key: {{ .Values.serving.clickhouse.passwordKey | quote }}
             {{- end }}
+            - name: CLICKHOUSE_SECURE
+              value: {{ .Values.serving.clickhouse.secure | quote }}
+            {{- if .Values.serving.clickhouse.tls.caSecret }}
+            - name: CLICKHOUSE_CA_CERT
+              value: /etc/agentflow/tls/clickhouse/{{ .Values.serving.clickhouse.tls.caKey }}
+            {{- end }}
             {{- end }}
             # Control-plane store (ADR 0010). Set explicitly (mirrors
             # SERVING_BACKEND) so the rendered manifest is self-documenting; the
@@ -119,6 +125,10 @@ spec:
               value: {{ .Values.config.rateLimitRpm | quote }}
             - name: CACHE_TTL_SECONDS
               value: {{ .Values.config.cacheTtlSeconds | quote }}
+            {{- if .Values.config.profile }}
+            - name: AGENTFLOW_PROFILE
+              value: {{ .Values.config.profile | quote }}
+            {{- end }}
             - name: AGENTFLOW_CORS_ORIGINS
               value: {{ .Values.config.corsOrigins | quote }}
             - name: AGENTFLOW_ADMIN_KEY
@@ -172,6 +182,11 @@ spec:
             - name: secrets
               mountPath: /etc/agentflow/secret
               readOnly: true
+            {{- if and (eq .Values.serving.backend "clickhouse") .Values.serving.clickhouse.tls.caSecret }}
+            - name: clickhouse-ca
+              mountPath: /etc/agentflow/tls/clickhouse
+              readOnly: true
+            {{- end }}
             {{- if .Values.tmpVolume.enabled }}
             - name: tmp
               mountPath: /tmp
@@ -183,6 +198,11 @@ spec:
         - name: secrets
           secret:
             secretName: {{ $secretName }}
+        {{- if and (eq .Values.serving.backend "clickhouse") .Values.serving.clickhouse.tls.caSecret }}
+        - name: clickhouse-ca
+          secret:
+            secretName: {{ .Values.serving.clickhouse.tls.caSecret | quote }}
+        {{- end }}
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:

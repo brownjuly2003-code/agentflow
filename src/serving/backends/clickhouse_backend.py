@@ -231,6 +231,7 @@ class ClickHouseBackend(ServingBackend):
         database: str,
         secure: bool = False,
         timeout_seconds: int = 10,
+        ca_cert: str | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -242,10 +243,16 @@ class ClickHouseBackend(ServingBackend):
         scheme = "https" if secure else "http"
         self._base_url = f"{scheme}://{host}:{port}"
         # H-C2: when running against HTTPS, validate the server cert
-        # against the system trust store explicitly instead of relying on
-        # urllib's default (which on some Python builds disables hostname
-        # verification when no context is passed).
-        self._ssl_context = ssl.create_default_context() if secure else None
+        # against an explicit trust store instead of relying on urllib's
+        # default (which on some Python builds disables hostname
+        # verification when no context is passed). With `ca_cert` set
+        # (audit P2-3) ONLY that bundle is trusted — a private-CA server
+        # cert must chain to it, and the system store is out of the
+        # picture. Hostname verification stays on either way: the cert
+        # must match `host`.
+        self._ssl_context: ssl.SSLContext | None = (
+            ssl.create_default_context(cafile=ca_cert or None) if secure else None
+        )
 
     def _request(
         self,

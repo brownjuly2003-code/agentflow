@@ -436,6 +436,23 @@
               "type": "string",
               "minLength": 1
             },
+            "secure": {
+              "type": "boolean"
+            },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["caSecret", "caKey"],
+              "properties": {
+                "caSecret": {
+                  "type": "string"
+                },
+                "caKey": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
             "migrationUser": {
               "type": "string"
             },
@@ -496,6 +513,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "profile",
         "duckdbPath",
         "usageDbPath",
         "apiKeysPath",
@@ -516,6 +534,10 @@
         "apiVersions"
       ],
       "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["", "demo", "dev", "production"]
+        },
         "duckdbPath": {
           "type": "string",
           "minLength": 1

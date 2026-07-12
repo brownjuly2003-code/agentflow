@@ -66,7 +66,28 @@ def test_lite_compose_contains_only_required_services():
 
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
 
-    assert set(compose["services"]) == {"agentflow-api", "redis", "kafka", "postgres", "clickhouse"}
+    # serving-init is the one-shot provision/seed job the API depends on:
+    # boot provisioning left the API in audit P0-2, so the stack lays the
+    # schema and demo rows down itself before the API starts.
+    assert set(compose["services"]) == {
+        "agentflow-api",
+        "redis",
+        "kafka",
+        "postgres",
+        "clickhouse",
+        "serving-init",
+    }
+
+
+def test_lite_compose_provisions_before_the_api_starts():
+    compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.e2e.yml").read_text(encoding="utf-8"))
+
+    init = compose["services"]["serving-init"]
+    assert init["command"] == ["python", "-m", "src.serving.provision", "--schema", "--seed"]
+    assert init["depends_on"]["clickhouse"] == {"condition": "service_healthy"}
+
+    api = compose["services"]["agentflow-api"]
+    assert api["depends_on"]["serving-init"] == {"condition": "service_completed_successfully"}
 
 
 def test_lite_compose_mounts_contracts_for_api_startup():

@@ -415,7 +415,14 @@ def test_serving_clickhouse_tls_render_is_first_class():
     assert "clickhouse-ca" not in default_output
     assert "AGENTFLOW_PROFILE" not in default_output
 
-    # Schema stays strict: the tls block accepts nothing undeclared.
+    # Schema stays strict: the tls block accepts nothing undeclared. The exact
+    # message wording belongs to helm's schema validator and changed across
+    # helm releases ("Additional property bogus is not allowed" vs
+    # "additional properties 'bogus' not allowed"), so assert the meaning,
+    # not the phrasing.
     bogus = _run_helm_template("--set", "serving.clickhouse.tls.bogus=1")
     assert bogus.returncode != 0
-    assert "Additional property bogus is not allowed" in _combined_output(bogus)
+    bogus_output = _combined_output(bogus)
+    assert "bogus" in bogus_output, bogus_output
+    assert "additional propert" in bogus_output.lower(), bogus_output
+    assert "not allowed" in bogus_output, bogus_output

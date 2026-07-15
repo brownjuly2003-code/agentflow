@@ -426,3 +426,49 @@ def test_serving_clickhouse_tls_render_is_first_class():
     assert "bogus" in bogus_output, bogus_output
     assert "additional propert" in bogus_output.lower(), bogus_output
     assert "not allowed" in bogus_output, bogus_output
+
+
+def test_worker_defaults_off_and_omits_process_role():
+    """Single-pod shape: no worker Deployment, no AGENTFLOW_PROCESS_ROLE."""
+    values = _load_yaml(CHART_PATH / "values.yaml")
+    assert values["worker"]["enabled"] is False
+    assert values["worker"]["replicaCount"] == 1
+
+    result = _run_helm_template()
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert "AGENTFLOW_PROCESS_ROLE" not in output
+    assert "agentflow-worker" not in output
+    assert "app.kubernetes.io/component: worker" not in output
+
+
+def test_worker_enabled_requires_postgres_control_plane():
+    result = _run_helm_template("--set", "worker.enabled=true")
+    output = _combined_output(result)
+    assert result.returncode != 0, output
+    assert "worker.enabled requires controlPlane.store=postgres" in output
+
+
+def test_worker_enabled_splits_api_and_worker_roles():
+    """Scale profile + worker: API role=api, worker Deployment role=worker,
+    Service selects component=api only (worker not in Service endpoints)."""
+    result = _run_helm_template(
+        *_scale_profile_args(
+            "--set",
+            "worker.enabled=true",
+            "--set",
+            "worker.replicaCount=1",
+            "--set",
+            "replicaCount=2",
+        )
+    )
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert "name: agentflow-worker" in output or "name: release-name-agentflow-worker" in output or "-worker\n" in output
+    assert 'name: AGENTFLOW_PROCESS_ROLE\n              value: "api"' in output
+    assert 'name: AGENTFLOW_PROCESS_ROLE\n              value: "worker"' in output
+    # Service selector narrows to API when worker is on.
+    assert "app.kubernetes.io/component: api" in output
+    assert "app.kubernetes.io/component: worker" in output
+    # Worker must not share the API PVC (RWO multi-attach).
+    assert output.count("persistentVolumeClaim:") <= 1

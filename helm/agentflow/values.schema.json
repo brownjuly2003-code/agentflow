@@ -30,7 +30,8 @@
     "networkPolicy",
     "serving",
     "provision",
-    "controlPlane"
+    "controlPlane",
+    "worker"
   ],
   "allOf": [
     {
@@ -506,6 +507,25 @@
               "description": "Key inside existingSecret whose value is the full PostgreSQL DSN (e.g. postgresql://user:pass@host:5432/agentflow). Wired to AGENTFLOW_CONTROLPLANE_PG_DSN."
             }
           }
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "replicaCount"],
+      "description": "Optional dedicated Deployment for delivery loops (AGENTFLOW_PROCESS_ROLE=worker). When enabled the API Deployment is role=api and the Service selects only component=api. Requires controlPlane.store=postgres.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "resources": {
+          "type": "object",
+          "description": "Optional resource overrides for the worker container; empty object falls back to top-level resources."
         }
       }
     },

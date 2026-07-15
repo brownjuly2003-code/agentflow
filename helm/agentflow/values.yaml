@@ -180,21 +180,28 @@ provision:
 # PostgreSQL service (mirroring ClickHouse) — the operator provides the DSN in
 # a Secret referenced by postgres.existingSecret / postgres.dsnKey.
 #
-# Pool shape and process role (audit P1-1) tune via extraEnv:
+# Pool shape (audit P1-1) tune via extraEnv:
 #   AGENTFLOW_CONTROLPLANE_PG_POOL_MIN / _MAX (default 1/10) — the per-pod
 #     connection budget; _MAX * replicas must stay under the server's
 #     max_connections.
 #   AGENTFLOW_CONTROLPLANE_PG_POOL_TIMEOUT_SECONDS (default 10) — checkout wait.
-#   AGENTFLOW_PROCESS_ROLE — 'api' pods serve requests and run NO delivery
-#     loops; ONE 'worker' pod runs webhook/alert dispatch + outbox. Default
-#     'all' is the single-pod shape. A dedicated worker Deployment template
-#     is a follow-up; until then run a second release (replicaCount: 1,
-#     extraEnv role=worker) against the same DSN.
+#
+# Process role split (audit P1-1): leave worker.enabled=false for the single-pod
+# shape (AGENTFLOW_PROCESS_ROLE defaults to 'all'). With worker.enabled=true the
+# API Deployment is role=api, a dedicated worker Deployment is role=worker, and
+# the Service selects only component=api. Requires controlPlane.store=postgres.
 controlPlane:
   store: embedded
   postgres:
     existingSecret: ""
     dsnKey: controlplane-pg-dsn
+
+# Dedicated delivery-loop Deployment (webhook/alert/outbox). Off by default.
+worker:
+  enabled: false
+  replicaCount: 1
+  # Empty object falls back to top-level resources.
+  resources: {}
 
 config:
   # Deployment profile handed to the app as AGENTFLOW_PROFILE (audit P2-3).

@@ -6,7 +6,7 @@
 (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA
 provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
-registry links and upload evidence. `main` is protected by 13 required status
+registry links and upload evidence. `main` is protected by 15 required status
 checks and is green.
 
 ## Summary
@@ -53,11 +53,13 @@ and documented in
 
 ## CI gates
 
-`main` is protected with 13 required status checks — `lint`, `test-unit`,
+`main` is protected with 15 required status checks — `lint`, `test-unit`,
 `test-integration`, `perf-check`, `helm-schema-live`, `schema-check`,
 `terraform-validate`, `bandit`, `safety`, `npm-audit`, `trivy`, `contract`,
-`build-smoke`. Branch protection requires every one of them; force-pushes and
-deletions are disabled.
+`build-smoke`, `sdk-ts`, `lock-check`. Branch protection requires every one of
+them; force-pushes and deletions are disabled. Dependabot security updates
+(vulnerability alerts + automated security fixes) are enabled alongside the
+weekly version-update schedule in `.github/dependabot.yml`.
 
 ## Scope
 

@@ -4,6 +4,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Supply chain — Gate 2: Dependabot security updates + required-check gap closed
+
+- **Dependabot security updates enabled** on the repo (vulnerability alerts +
+  automated security fixes). Advisories open a PR immediately; weekly
+  version updates in `.github/dependabot.yml` stay for ordinary bumps.
+- **Branch protection required checks: 13 → 15** — added `sdk-ts` and
+  `lock-check` so the TypeScript SDK CI job and the `uv.lock` /
+  `requirements-docker.lock` gate cannot be skipped on `main`.
+- Living docs (`README`, `docs/release-readiness.md`) and the dependabot
+  header comment updated to match the API-verified state.
+
 ### Observability — /v1/slo reports SLIs, not rescaled aggregates (audit P2-2)
 
 - **`current` is now a real SLI**: the share of good units among valid units

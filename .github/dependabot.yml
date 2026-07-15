@@ -8,15 +8,17 @@ version: 2
 #
 # Dependabot version updates (the schedule below) are a different feature
 # from Dependabot SECURITY updates. Security updates are a separate
-# repo-level toggle, and audit P1-3 (2026-07-11) confirmed via the GitHub
-# API that it is currently DISABLED on this repo — an advisory on any
-# ecosystem below waits for the next scheduled run like any other bump; it
-# does not open a PR "immediately" as an earlier version of this comment
-# claimed. Enabling it is a repo-settings change gated on the repo owner:
+# repo-level toggle. Gate 2 (2026-07-16) enabled both vulnerability alerts
+# and automated security fixes on this repo:
 #
+#   gh api --method PUT repos/brownjuly2003-code/agentflow/vulnerability-alerts
 #   gh api --method PUT repos/brownjuly2003-code/agentflow/automated-security-fixes
 #
-# This file cannot flip that toggle by itself.
+# Advisories now open a security-update PR immediately; the weekly schedule
+# below still covers ordinary version bumps. This file cannot flip the
+# toggle by itself — verify with:
+#
+#   gh api repos/brownjuly2003-code/agentflow --jq .security_and_analysis
 
 updates:
   # ── Python: root runtime (agentflow-runtime) ───────────────────────

@@ -17,3 +17,7 @@ spec:
       name: http
   selector:
     {{- include "agentflow.selectorLabels" . | nindent 4 }}
+    {{- if .Values.worker.enabled }}
+    # Exclude worker pods (delivery loops only; same selectorLabels family).
+    app.kubernetes.io/component: api
+    {{- end }}

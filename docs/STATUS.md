@@ -1,9 +1,9 @@
 # Engineering Status
 
-> Updated: **2026-07-11** (post S13 + #183 live re-verify) · release line **`v2.0.0`** ·
-> `main` green across all 13 required checks. Numbers below come only from
-> measured, in-repo evidence — see the linked reports for methodology and
-> reproduction commands.
+> Updated: **2026-07-16** (post audit P0–P2-4 merge; CH multi-tenant live) ·
+> release line **`v2.0.0`** · `main` green across required checks. Numbers
+> below come only from measured, in-repo evidence — see the linked reports
+> for methodology and reproduction commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → Flink → serving bridge → ClickHouse → API with Redis push
@@ -22,6 +22,7 @@ passed ones (endurance, scale, delivery topology).
 | 4 h endurance soak (real path + API reads) | bounded lag (peak 2 915 → 0), bridge RSS/FD flat, one faulted batch replayed exactly-once by the journal guard, **zero cache drift** | [perf/soak-s11-2026-07-10.md](perf/soak-s11-2026-07-10.md) |
 | At-scale on own data (S13) | **51.2 M rows / 2.87 M orders / 4 years of legend history**, analyst queries 20–730 ms, all 17 §12 invariants pass incl. full-scan GTIN validation | [perf/scale-own-data-2026-07-11.md](perf/scale-own-data-2026-07-11.md) |
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
+| Multi-tenant ClickHouse write key | adversarial two-tenant suite green on live CH 25.3 (CI `test-integration` + audit stand) | [security-audit.md](security-audit.md), `tests/integration/test_clickhouse_tenant_isolation_live.py` |
 
 ## Bridge write-path throughput — burst target met
 
@@ -44,25 +45,15 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
 
 ## Known issues
 
-- **Multi-tenant ClickHouse — implemented, not yet proven live.** Tenant
-  isolation used to be a schema qualification that nothing provisioned: no
-  `CREATE SCHEMA` existed anywhere in `src/`, so on DuckDB every *authenticated*
-  entity read failed on a relation that was never created, and on ClickHouse the
-  same name meant a database nobody creates. With the qualification dropped, two
-  tenants sharing an `order_id` were two versions of one `ReplacingMergeTree`
-  row and the later insert destroyed the earlier — data loss no read filter can
-  undo. The boundary is now the `tenant_id` **column**, leading each serving
-  table's write key on both stores
-  ([ADR-004](decisions/004-tenant-id-column-over-schema-per-tenant.md)).
-  **DuckDB is proven**: two tenants with identical entity ids resolve to
-  different rows, cross-tenant lookups 404, aggregates sum only the caller's
-  rows, and an unscoped read against a shared store is refused — asserted both
-  by example (`tests/integration/test_tenant_isolation.py`) and over generated
-  tenant/entity ids (`tests/property/test_tenant_isolation_properties.py`).
-  **ClickHouse is not**: its adversarial two-tenant suite
-  (`tests/integration/test_clickhouse_tenant_isolation_live.py`) needs a live
-  server and has not been run yet. Until it is green, multi-tenant ClickHouse is
-  not a supported claim; the single-tenant profile is unaffected.
+- **Multi-tenant ClickHouse — proven live (audit P0-1).** The boundary is the
+  `tenant_id` **column**, leading each serving table's write key on both stores
+  ([ADR-004](decisions/004-tenant-id-column-over-schema-per-tenant.md)). DuckDB
+  remains covered by example and property suites; ClickHouse is covered by
+  `tests/integration/test_clickhouse_tenant_isolation_live.py` on live server
+  25.3 (CI `test-integration` service + audit Mac stand). Cross-tenant lookups
+  404, aggregates stay tenant-scoped, and `assert_tenant_key()` refuses an old
+  single-column sorting key. Broader isolation across every external dependency
+  is still out of scope — see [security-audit.md](security-audit.md).
 
 - **API RSS growth under steady load — fixed and verified live** (was 175 MB
   → 1.67 GB over the 4 h soak; the bridge stayed flat). The webhook

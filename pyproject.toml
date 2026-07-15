@@ -21,7 +21,7 @@ dependencies = [
     "opentelemetry-sdk>=1.41,<2",
     "pandera>=0.20,<1",
     "prometheus-client>=0.21,<1",
-    "pyarrow>=17,<25",
+    "pyarrow>=17,<26",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.5,<3",
     "pyyaml>=6,<7",
@@ -73,7 +73,7 @@ integrations = [
     "llama-index-core>=0.12,<1",
 ]
 contract = [
-    "schemathesis==4.22.3",
+    "schemathesis==4.22.4",
 ]
 dev = [
     "bandit>=1.9,<2",

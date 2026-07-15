@@ -55,7 +55,7 @@ Reads pass through one chokepoint. `SQLBuilderMixin._qualify_table` returns a te
 What the evidence supports today:
 
 - **DuckDB** — proven. Two tenants with identical `order_id` resolve to different rows; cross-tenant lookups return `404`; aggregates sum only the caller's rows; an unscoped read fails closed. Property tests assert the invariant over generated tenant and entity ids, not just the two-tenant example.
-- **ClickHouse** — the same model is implemented and provisioned (`assert_tenant_key()` refuses to serve a store still on the old sorting key; `provision --migrate` rebuilds one). The adversarial two-tenant suite for it is `tests/integration/test_clickhouse_tenant_isolation_live.py`, which requires a live server and runs on the CI integration job. **Until that suite is green on a real server, treat multi-tenant ClickHouse as unproven and do not claim it.**
+- **ClickHouse** — the same model is implemented, provisioned, and proven live. `assert_tenant_key()` refuses to serve a store still on the old sorting key; `provision --migrate` rebuilds one. The adversarial two-tenant suite (`tests/integration/test_clickhouse_tenant_isolation_live.py`) runs against ClickHouse 25.3 on the CI `test-integration` job and was green on the audit stand (full live suite including tenant isolation). Multi-tenant ClickHouse is a supported claim for the write-key + read-chokepoint model described above.
 
 It does not support broader claims such as end-to-end isolation across every external dependency.
 

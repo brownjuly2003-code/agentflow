@@ -464,7 +464,11 @@ def test_worker_enabled_splits_api_and_worker_roles():
     )
     output = _combined_output(result)
     assert result.returncode == 0, output
-    assert "name: agentflow-worker" in output or "name: release-name-agentflow-worker" in output or "-worker\n" in output
+    assert (
+        "name: agentflow-worker" in output
+        or "name: release-name-agentflow-worker" in output
+        or "-worker\n" in output
+    )
     assert 'name: AGENTFLOW_PROCESS_ROLE\n              value: "api"' in output
     assert 'name: AGENTFLOW_PROCESS_ROLE\n              value: "worker"' in output
     # Service selector narrows to API when worker is on.

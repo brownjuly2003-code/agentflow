@@ -428,6 +428,21 @@ def test_serving_clickhouse_tls_render_is_first_class():
     assert "not allowed" in bogus_output, bogus_output
 
 
+def test_staging_values_render_with_extra_env_after_redis():
+    """Staging overlays set redisUrl + extraEnv; the shared env template must
+    not glue the last fixed entry onto the first extraEnv list item (YAML
+    'block sequence entries are not allowed in this context')."""
+    staging = PROJECT_ROOT / "k8s" / "staging" / "values-staging.yaml"
+    result = _run_helm_template("-f", str(staging))
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    assert "AGENTFLOW_WEBHOOKS_FILE" in output
+    assert "AGENTFLOW_SEED_ON_BOOT" in output
+    # Must be a separate sequence entry, not glued to the REDIS_URL value.
+    assert 'value: "redis://' in output
+    assert '/0"- name:' not in output
+
+
 def test_worker_defaults_off_and_omits_process_role():
     """Single-pod shape: no worker Deployment, no AGENTFLOW_PROCESS_ROLE."""
     values = _load_yaml(CHART_PATH / "values.yaml")

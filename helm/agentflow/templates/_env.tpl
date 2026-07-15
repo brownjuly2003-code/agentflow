@@ -87,6 +87,7 @@ processRole may be "" (omit AGENTFLOW_PROCESS_ROLE — app default 'all').
   value: {{ $root.Values.config.otlpServiceName | quote }}
 {{- end }}
 {{- with $root.Values.extraEnv }}
-{{- toYaml . }}
+{{/* Leading newline required: {{- toYaml }} would glue onto the previous value. */}}
+{{ toYaml . }}
 {{- end }}
 {{- end -}}

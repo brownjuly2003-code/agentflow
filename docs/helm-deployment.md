@@ -78,6 +78,14 @@ Install the release:
 helm install agentflow ./helm/agentflow -f values-prod.yaml
 ```
 
+When `serving.backend=clickhouse` and `provision.enabled=true`, the chart runs a
+`pre-install`/`pre-upgrade` Job that applies the serving schema before API pods
+start. The chart `ServiceAccount` is itself an earlier Helm hook (weight `-10`,
+Job is `-5`) so the first install does not hang waiting for an SA that would
+otherwise be applied only after hooks. You do **not** need
+`kubectl create sa agentflow` out-of-band. If `serviceAccount.create=false`,
+point `serviceAccount.name` at an existing SA that the Job and pods may use.
+
 Quick dev install with only the admin key overridden, intentionally leaving API
 keys empty until you mount or render `api_keys.yaml`:
 

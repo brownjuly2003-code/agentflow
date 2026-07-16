@@ -382,6 +382,54 @@ def test_postgres_store_still_gated_without_clickhouse_backend():
     assert "Multi-replica requires BOTH" in output
 
 
+def test_serviceaccount_is_pre_hook_before_provision_job():
+    """Live E4 stand (2026-07-16): first helm install hung in pending-install
+    because the provision Job (hook weight -5) referenced SA `agentflow` while
+    the SA was a normal release resource applied only after hooks. The SA must
+    be an earlier pre-install/pre-upgrade hook so install is self-contained.
+    """
+    rendered = _run_helm_template(
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+        "--set",
+        "provision.enabled=true",
+    )
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+
+    # Multi-doc YAML: find SA and provision Job hook metadata.
+    docs = list(yaml.safe_load_all(rendered.stdout))
+    sa_docs = [
+        d
+        for d in docs
+        if d and d.get("kind") == "ServiceAccount"
+    ]
+    job_docs = [
+        d
+        for d in docs
+        if d
+        and d.get("kind") == "Job"
+        and str(d.get("metadata", {}).get("name", "")).endswith("-provision")
+    ]
+    assert len(sa_docs) == 1, "expected exactly one ServiceAccount"
+    assert len(job_docs) == 1, "expected provision Job when clickhouse backend"
+
+    sa_ann = sa_docs[0]["metadata"]["annotations"]
+    job_ann = job_docs[0]["metadata"]["annotations"]
+    assert sa_ann["helm.sh/hook"] == "pre-install,pre-upgrade"
+    assert job_ann["helm.sh/hook"] == "pre-install,pre-upgrade"
+    assert int(sa_ann["helm.sh/hook-weight"]) < int(job_ann["helm.sh/hook-weight"])
+    assert sa_ann["helm.sh/hook-delete-policy"] == "before-hook-creation"
+    # Job must still bind the chart SA (not default).
+    assert job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"] == sa_docs[0][
+        "metadata"
+    ]["name"]
+
+
 def test_serving_clickhouse_tls_render_is_first_class():
     """audit P2-3: TLS to an external ClickHouse must not require extraEnv.
     secure=true flows to CLICKHOUSE_SECURE in BOTH consumers of the wire (API

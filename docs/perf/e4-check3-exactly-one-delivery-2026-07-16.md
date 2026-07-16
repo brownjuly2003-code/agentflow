@@ -47,10 +47,12 @@ Alert single-page (cutover Phase 3 item 3) remains a live recipe; store-level
 1. **Colima was stopped** — `colima start` (existing 4 CPU / 6 GiB / vz profile).
    Co-tenant containers were already Exited; left stopped for RAM headroom.
 2. **Provision Job vs ServiceAccount** — pre-install hook `agentflow-provision`
-   references SA `agentflow`, but the SA is not a helm hook resource, so the first
-   install sat in `pending-install` until the SA was created manually. After that
-   the job completed (`provision_schema_applied backend=clickhouse`). Chart follow-up:
-   annotate the SA as a hook (weight &lt; provision) or use `default` for the job.
+   references SA `agentflow`, but on this run the SA was not yet a helm hook
+   resource, so the first install sat in `pending-install` until the SA was
+   created manually. After that the job completed
+   (`provision_schema_applied backend=clickhouse`). **Fixed in chart:** SA is now
+   a `pre-install,pre-upgrade` hook with weight `-10` (Job stays `-5`); no
+   out-of-band `kubectl create sa` needed on next staging bring-up.
 3. **Image must include `pyiceberg`** — without it pods CrashLoop with
    `ModuleNotFoundError: No module named 'pyiceberg'` at import of
    `metrics_collector`. Staging Dockerfile / `k8s_staging_up` build context should
@@ -69,7 +71,7 @@ Alert single-page (cutover Phase 3 item 3) remains a live recipe; store-level
 export PATH=$HOME/bin:/usr/local/bin:$PATH
 # colima start; kind cluster + PG/CH/Redis + scale helm as above
 # image: pip install -e ".[postgres]" && pip install pyiceberg
-kubectl create sa agentflow -n agentflow   # until chart SA is a pre-hook
+# SA is a chart pre-hook (weight -10); no manual create needed on current main
 BASE_URL=http://127.0.0.1:8080 \
   CLICKHOUSE_USER=agentflow \
   bash scripts/k8s_replica_correctness_verify.sh

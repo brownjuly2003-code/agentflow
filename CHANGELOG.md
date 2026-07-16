@@ -4,6 +4,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Helm — ServiceAccount is a pre-hook before the provision Job
+
+- **First `helm install` with ClickHouse provisioning no longer hangs** waiting
+  for SA `agentflow`. The chart `ServiceAccount` is a `pre-install,pre-upgrade`
+  hook (weight `-10`) so it exists before the provision Job (weight `-5`).
+  Root-caused on the E4 kind stand (`docs/perf/e4-check3-exactly-one-delivery-2026-07-16.md`).
+
 ### Supply chain — Gate 2: Dependabot security updates + required-check gap closed
 
 - **Dependabot security updates enabled** on the repo (vulnerability alerts +

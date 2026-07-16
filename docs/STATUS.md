@@ -24,10 +24,10 @@ passed ones (endurance, scale, delivery topology).
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
 | Multi-tenant ClickHouse write key | adversarial two-tenant suite green on live CH 25.3 (CI `test-integration` + audit stand) | [security-audit.md](security-audit.md), `tests/integration/test_clickhouse_tenant_isolation_live.py` |
 
-## Bridge write-path throughput — burst target met
+## Bridge write-path throughput — drain ceiling measured
 
 The bridge apply rate is the honest product ceiling; it has been raised in
-measured steps on the same stand:
+measured steps on the same Mac compose stand (Kafka → Flink → bridge → CH):
 
 | Step | Bridge apply | State |
 |------|-------------:|-------|

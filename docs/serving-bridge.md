@@ -78,7 +78,7 @@ instead mark it done forever.
 
 | Serving backend | Bridge form | Why |
 |---|---|---|
-| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live: ~11.4 eps post-Q1.2, ~22.9 post-Q1.3, **~87.4 eps post-Q1.4** — see [`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md). |
+| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live drain: ~11.4 → 22.9 → **87.4 eps** (400-burst, Q1.4) → **107.3 eps** (2000-event drain) — see [`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md), [`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md). Multi-hour *sustained* ≥100 eps is **not** claimed. |
 | `duckdb` (local demo / unit tests only) | in-process thread, `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | **Not production.** Demo and unit tests. Never the S8/S10 real-path store the API reads. |
 
 The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-three-node-demo-topology.md)); its edges push events to the center over HTTPS. The bridge is absent there by design.
@@ -137,14 +137,14 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
   multi-row, Q1.4 batched the session fold and the user recompute — so a batch
   now costs a constant number of ClickHouse round-trips. Delivery semantics
   never depended on the write mechanism, which is what made those swaps safe.
-  **Last measured (S10 re-run, Mac/Colima, 2026-07-10, post-Q1.4): ~87.4
-  events/s** bridge apply after a 400-event burst, peak lag 0 — the burst now
-  drains inside one catch-up window, so at this burst size the bridge no
-  longer trails the Flink hop. History: ~8 eps baseline
-  ([`perf/throughput-realpath.md`](perf/throughput-realpath.md)) → 11.4
-  (Q1.2) → 22.9 ([`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md)) → 87.4
-  ([`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md)).
-  Endurance: a 4 h soak at ~47 eps delivered held bounded lag with flat
+  **Drain ceiling (Mac/Colima, realpath):** post-Q1.4 **~87.4 eps** on a
+  400-event burst (peak lag 0); later **107.3 eps** on a 2000-event drain
+  (Flink hop = apply, 0 failures) — numeric ≥100 on a *single catch-up window*
+  is observed, not a multi-hour produce rate held above 100.
+  History: ~8 → 11.4 (Q1.2) → 22.9 ([`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md))
+  → 87.4 ([`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md))
+  → 107.3 ([`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md)).
+  Endurance: a 4 h soak at ~47 eps *delivered* held bounded lag with flat
   RSS/FDs, survived a live broker/Redis fault with an exactly-once batch
   replay, and ended with zero cache drift —
   [`perf/soak-s11-2026-07-10.md`](perf/soak-s11-2026-07-10.md).

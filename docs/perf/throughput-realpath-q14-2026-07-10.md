@@ -19,8 +19,10 @@
 | Peak lag | 329 | 213 | 218 | **0** |
 
 **×3.8** vs Q1.3, **×11** vs the original S10 baseline. The quality-plan
-target of **≥ 80 eps** is met on this burst profile (the "substantially
-better" bar of ≥ 100 eps and the *sustained* claim remain for the soak run).
+target of **≥ 80 eps** is met on this burst profile. A later 2000-event drain
+on the same Mac class cleared at **107.3 eps** (numeric ≥100 on a drain
+window — [throughput-realpath-100eps-try-2026-07-17.md](throughput-realpath-100eps-try-2026-07-17.md));
+the multi-hour *sustained* ≥100 claim remains open.
 
 Peak lag 0 and Flink-hop == apply-rate mean the 400-burst drained end-to-end
 inside one catch-up window: at this burst size the bridge no longer trails

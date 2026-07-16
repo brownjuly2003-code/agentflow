@@ -65,7 +65,14 @@ docker compose -f docker-compose.yml -f docker-compose.flink.yml \
   --bridge-metrics http://127.0.0.1:9108/metrics --latency-samples 0 --no-md
 ```
 
-## Status
+## Honest claim (what to put in SSOT)
 
-**Stretch numeric bar (≥100 eps on a realpath drain):** observed **107.3 eps**
-on the 2000-burst arm. **Sustained multi-hour claim:** still open.
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| Bridge can clear a realpath backlog at **≥ 80 eps** (400-burst) | **Met** (Q1.4) | this series / q14 |
+| Bridge can clear a larger realpath drain at **≥ 100 eps** | **Met** on 2000-event arm (**107.3 eps**, flink = apply, 0 fail) | this doc |
+| Bridge holds **≥ 100 eps sustained** for multi-hour / paced produce | **Not claimed** | still open; 4 h soak was ~47 eps *delivered* |
+
+Do **not** collapse these three into “we do 100 eps in production.” The 107.3
+figure is a **drain-window apply rate** after a finite produce, not a steady
+ingress rate held for hours.

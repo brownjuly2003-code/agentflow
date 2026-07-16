@@ -185,10 +185,14 @@ their secrets), install the chart with the scale overlay, then:
    exactly one distinct `delivery_id` for that `event_id` (idempotent enqueue
    insert-win — only the winner POSTs). Live evidence:
    [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md).
-3. **One alert page per incident** — still a live recipe (not in the script):
-   configure an alert rule, drive one triggering evaluation window; assert a
-   single page and one `alert_history` transition, not one per pod (per-rule
-   `claim_alert_tick` single-flight).
+3. **One alert page per incident** — automated as **Check 4** in the same
+   script: creates an `error_rate` rule that fires on the shared journal
+   (condition `below` / threshold `1.0` after the Check 3 insert), waits for
+   both pods' alert dispatchers to race `claim_alert_tick`, then asserts
+   `GET /v1/alerts/{id}/history` has exactly one successful `alert.triggered`
+   delivery (not one per pod). Default wait is `ALERT_WAIT_SECONDS=150` (the
+   dispatcher polls every 60s). Live topology re-run still required on the
+   scale stand to file evidence next to Check 3.
 
 The **store-level guarantee** behind Checks 2–3 (idempotent enqueue,
 single-flight tick, outbox↔dead-letter atomicity) is already live-verified by

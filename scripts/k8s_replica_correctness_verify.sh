@@ -26,17 +26,18 @@
 #             both pods' scanners to race the durable enqueue, then assert
 #             GET /v1/webhooks/{id}/logs shows exactly one delivery_id for
 #             that event_id (insert-win: only the enqueue winner POSTs).
+#   [Check 4] one alert page per incident — create a rule that fires on the
+#             shared metric store; both pods' alert dispatchers race
+#             claim_alert_tick; assert GET /v1/alerts/{id}/history has exactly
+#             one successful alert.triggered delivery (not one per pod).
 #
-# What it does NOT automate (documented recipe — see
-# docs/clickhouse-cutover-plan.md Phase 3):
-#   - one alert page per incident (needs a triggering evaluation window +
-#     capture of alert_history). The store-level single-flight claim is already
-#     live-verified by the slice-5 PG probe suite
-#     (docs/perf/control-plane-pg-verify-2026-07-03.md).
+# Store-level single-flight claim is also live-verified by the slice-5 PG probe
+# suite (docs/perf/control-plane-pg-verify-2026-07-03.md). This script adds the
+# two-real-pods emission layer on top.
 #
 # Live topology proof (Checks 1-2): docs/perf/e4-replica-topology-2026-07-11.md
-# (kind on deproject-mac). Check 3 is automated here; re-run on the same stand
-# to close the remaining delivery-topology STATUS item.
+# (kind on deproject-mac). Check 3 live: docs/perf/e4-check3-exactly-one-delivery-2026-07-16.md.
+# Check 4 is automated here; re-run on the scale stand to close Phase 3 item 3.
 set -Eeuo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
@@ -63,14 +64,30 @@ DELIVERY_POLL_SECONDS="${DELIVERY_POLL_SECONDS:-2}"
 # Tenant of the inserted event — must match the API key's tenant (staging: default).
 EVENT_TENANT="${EVENT_TENANT:-default}"
 
+# Check 4 — alert dispatcher default poll is 60s; wait >1 full tick so both
+# pods have had a chance to race claim_alert_tick for the same rule.
+ALERT_WAIT_SECONDS="${ALERT_WAIT_SECONDS:-150}"
+ALERT_POLL_SECONDS="${ALERT_POLL_SECONDS:-5}"
+# error_rate over 1h is 0 when the only journal rows are non-deadletter
+# (Check 3 insert is enough). below 1.0 therefore always fires on a healthy stand.
+ALERT_METRIC="${ALERT_METRIC:-error_rate}"
+ALERT_WINDOW="${ALERT_WINDOW:-1h}"
+ALERT_CONDITION="${ALERT_CONDITION:-below}"
+ALERT_THRESHOLD="${ALERT_THRESHOLD:-1.0}"
+
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 
 webhook_id=""
+alert_id=""
 cleanup() {
   if [[ -n "${webhook_id}" ]]; then
     curl -fsS -X DELETE -H "X-API-Key: $API_KEY" \
       "$BASE_URL/v1/webhooks/$webhook_id" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${alert_id}" ]]; then
+    curl -fsS -X DELETE -H "X-API-Key: $API_KEY" \
+      "$BASE_URL/v1/alerts/$alert_id" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -196,4 +213,64 @@ done
 (( unique_ids == 1 )) || fail "expected exactly 1 delivery_id for event_id=$event_id, got ${unique_ids} (split delivery across pods)"
 pass "exactly one delivery_id for event_id=$event_id (${log_count} log row(s))"
 
-echo "==> replica-correctness verify OK (Checks 1-3 automated; alert single-page remains a cutover-plan recipe)"
+# --- Check 4: one alert page per incident (claim_alert_tick single-flight) ----
+echo "==> [Check 4] exactly one alert.triggered page for one firing rule across pods"
+
+# Check 3 left a non-deadletter pipeline_events row, so error_rate is 0 (or at
+# least < 1.0). A rule with condition=below / threshold=1.0 must fire once the
+# dispatcher ticks. Without postgres claim_alert_tick both pods would each
+# page → two successful alert.triggered history rows.
+alert_body=$(ALERT_METRIC="$ALERT_METRIC" ALERT_WINDOW="$ALERT_WINDOW" \
+  ALERT_CONDITION="$ALERT_CONDITION" ALERT_THRESHOLD="$ALERT_THRESHOLD" \
+  WEBHOOK_URL="$WEBHOOK_URL" python3 -c '
+import json, os
+print(json.dumps({
+    "name": "replica-e4-single-page",
+    "metric": os.environ["ALERT_METRIC"],
+    "window": os.environ["ALERT_WINDOW"],
+    "condition": os.environ["ALERT_CONDITION"],
+    "threshold": float(os.environ["ALERT_THRESHOLD"]),
+    "webhook_url": os.environ["WEBHOOK_URL"],
+    "cooldown_minutes": 60,
+}))
+')
+alert_reg=$(curl -fsS -X POST \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d "$alert_body" \
+  "$BASE_URL/v1/alerts")
+alert_id=$(printf '%s' "$alert_reg" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+[[ -n "$alert_id" ]] || fail "alert create returned no id: $alert_reg"
+echo "    registered alert_id=$alert_id metric=$ALERT_METRIC $ALERT_CONDITION $ALERT_THRESHOLD window=$ALERT_WINDOW"
+
+deadline=$(( $(date +%s) + ALERT_WAIT_SECONDS ))
+triggered_ok=0
+history_count=0
+while (( $(date +%s) < deadline )); do
+  hist_json=$(curl -fsS -H "X-API-Key: $API_KEY" \
+    "$BASE_URL/v1/alerts/$alert_id/history")
+  counts=$(printf '%s' "$hist_json" | python3 -c '
+import json, sys
+hist = json.load(sys.stdin).get("history") or []
+# One incident page = one successful initial fire. Failed delivery attempts
+# retry and would inflate the count — those are not multi-pod split pages.
+ok = [
+    h for h in hist
+    if str(h.get("event_type") or "") == "alert.triggered" and h.get("success") is True
+]
+print(len(ok), len(hist))
+')
+  # shellcheck disable=SC2086
+  set -- $counts
+  triggered_ok=${1:-0}
+  history_count=${2:-0}
+  if (( triggered_ok >= 1 )); then
+    break
+  fi
+  sleep "$ALERT_POLL_SECONDS"
+done
+
+(( triggered_ok >= 1 )) || fail "no successful alert.triggered within ${ALERT_WAIT_SECONDS}s (dispatcher idle, metric not firing, or delivery failing)"
+(( triggered_ok == 1 )) || fail "expected exactly 1 successful alert.triggered page, got ${triggered_ok} (split page across pods?)"
+pass "exactly one alert.triggered page for alert_id=$alert_id (${history_count} history row(s))"
+
+echo "==> replica-correctness verify OK (Checks 1-4)"

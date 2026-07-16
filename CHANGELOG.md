@@ -11,6 +11,14 @@ All notable changes to AgentFlow are documented in this file.
   hook (weight `-10`) so it exists before the provision Job (weight `-5`).
   Root-caused on the E4 kind stand (`docs/perf/e4-check3-exactly-one-delivery-2026-07-16.md`).
 
+### K8s — replica-correctness Check 4 (alert single-page) automated
+
+- **`scripts/k8s_replica_correctness_verify.sh` Check 4** creates a firing alert
+  rule and asserts exactly one successful `alert.triggered` history row across
+  two pods (`claim_alert_tick` single-flight). Closes the remaining Phase 3
+  recipe item at the automation layer; live evidence still needs a scale-stand
+  re-run.
+
 ### Supply chain — Gate 2: Dependabot security updates + required-check gap closed
 
 - **Dependabot security updates enabled** on the repo (vulnerability alerts +

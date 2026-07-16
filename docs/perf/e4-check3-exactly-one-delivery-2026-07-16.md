@@ -24,9 +24,11 @@ PASS: exactly one delivery_id for event_id=replica-e4-858cce874ac04494 (1 log ro
   durable enqueue; `GET /v1/webhooks/{id}/logs` showed **exactly one** distinct
   `delivery_id` (insert-win — only the enqueue winner POSTs).
 
-Alert single-page (cutover Phase 3 item 3) remains a live recipe; store-level
+Alert single-page (cutover Phase 3 item 3) is now **Check 4** in
+`scripts/k8s_replica_correctness_verify.sh` (post this run). Store-level
 `claim_alert_tick` is already proven 31/31 in
-[control-plane-pg-verify-2026-07-03.md](control-plane-pg-verify-2026-07-03.md).
+[control-plane-pg-verify-2026-07-03.md](control-plane-pg-verify-2026-07-03.md);
+two-pod emission evidence still needs a scale-stand re-run with Checks 1–4.
 
 ## Topology
 
@@ -85,4 +87,5 @@ Do **not** `docker system prune` — co-tenant named volumes must stay.
 ## Status
 
 **E4 automated topology proof: PASS (Checks 1–3).** Delivery exactly-once across
-two real pods is closed at the topology layer; alert single-page remains open.
+two real pods is closed at the topology layer. Alert single-page automation
+landed later as Check 4; re-run the full script on the scale stand for evidence.

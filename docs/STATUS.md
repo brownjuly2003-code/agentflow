@@ -72,7 +72,9 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
 1. **Delivery topology** — Checks 1–3 live on kind
    ([perf/e4-replica-topology-2026-07-11.md](perf/e4-replica-topology-2026-07-11.md),
    [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md)).
-   Alert single-page (cutover Phase 3 item 3) remains a recipe-only remainder.
+   Check 4 (alert single-page) is automated in
+   `scripts/k8s_replica_correctness_verify.sh`; live evidence re-run on the
+   scale stand is still open.
 2. **≥ 100 eps stretch bar** — sustained (not burst) bridge apply above 100
    eps; requires a stand window with a healthy Flink hop.
 

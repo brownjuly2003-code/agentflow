@@ -4,6 +4,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Perf — S10 stretch try: 107.3 eps bridge apply on 2000-event drain
+
+- Live Mac compose (1 Flink TM): 2000-event realpath drain cleared at
+  **107.3 eps** bridge apply (= Flink hop, 0 failures). Numeric ≥ 100 bar on
+  a drain window observed; multi-hour sustained claim still open. Evidence:
+  `docs/perf/throughput-realpath-100eps-try-2026-07-17.md`.
+
 ### Control plane — enqueue stamps claim lease (no double-delivery mid-inline)
 
 - **`PostgresControlPlaneStore.enqueue_webhook_delivery`** sets `lease_expires_at`

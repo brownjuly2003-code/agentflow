@@ -35,13 +35,16 @@ measured steps on the same stand:
 | Q1.2 — ClickHouse-only sink, no scratch lake | 11.4 eps | measured |
 | Q1.3 — multi-row batch apply | 22.9 eps | measured — [perf/throughput-realpath-q13-2026-07-09.md](perf/throughput-realpath-q13-2026-07-09.md) |
 | Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | **87.4 eps** | measured — [perf/throughput-realpath-q14-2026-07-10.md](perf/throughput-realpath-q14-2026-07-10.md) |
+| Stretch try — 2000-event drain on same Mac class | **107.3 eps** | measured — [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md) |
 
 The series target of **≥ 80 eps** is met on the 400-burst profile (peak lag 0 —
-the burst drains inside one catch-up window). The 4 h soak then held the
-delivered produce rate (~47 eps avg) with bounded lag and no bridge leak —
-the apply path idled between batches, so the burst ceiling was never
-stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
-(fold rules, idempotency, replay) are in [serving-bridge.md](serving-bridge.md).
+the burst drains inside one catch-up window). A larger **2000-event** drain on
+the same Mac compose stand later cleared at **107.3 eps** (Flink hop =
+apply, 0 failures) — the numeric ≥ 100 bar on a realpath drain is observed;
+a *sustained multi-hour* produce ≥ 100 eps is still open. The 4 h soak held
+~47 eps avg with bounded lag (apply idled between batches). Semantics of the
+batched path (fold rules, idempotency, replay) are in
+[serving-bridge.md](serving-bridge.md).
 
 ## Known issues
 
@@ -74,8 +77,9 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
    [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md),
    [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md)).
    Phase 3 automated topology proof is closed.
-2. **≥ 100 eps stretch bar** — sustained (not burst) bridge apply above 100
-   eps; requires a stand window with a healthy Flink hop.
+2. **≥ 100 eps sustained** — multi-hour / paced produce at ≥ 100 eps with
+   bounded lag (numeric drain bar observed at 107.3 eps on a 2000-burst —
+   [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md)).
 
 External gates remain unchanged and are listed in the README scope note:
 production CDC onboarding, a benchmark on production-grade hardware, and a

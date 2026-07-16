@@ -4,6 +4,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Perf — paced 10 min @ 100 eps produce (apply ~96.5)
+
+- Mac compose (1 Flink TM): 60 000 events at `--pace-eps 100` → produce 100.0,
+  flink 97.1, bridge apply 96.5 eps, 0 failures, lag end 0 (peak 1037).
+  Evidence: `docs/perf/throughput-realpath-paced100-2026-07-17.md`. Multi-hour
+  sustained still open.
+
 ### Docs — STATUS/Next after E4 + drain ≥100; P2-6 plan only
 
 - STATUS: E4 Checks 1–4 in Proven; Next is sustained ≥100 (with

@@ -8,8 +8,8 @@
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → Flink → serving bridge → ClickHouse → API with Redis push
 invalidation) — is implemented, measured, and documented. Current work is
-raising the write-path throughput ceiling and turning documented limits into
-passed ones (endurance, scale, delivery topology).
+raising the write-path ceiling from **drain-window** numbers to **sustained**
+ones, and packaging hygiene for the next breaking release.
 
 ## Proven
 
@@ -19,6 +19,7 @@ passed ones (endurance, scale, delivery topology).
 | In-process demo freshness | 1.06 s p50 / 1.99 s p95 | [freshness-benchmark.md](freshness-benchmark.md) |
 | Real-path throughput measured | produce ~700 eps; bridge apply is the ceiling (see below) | [perf/throughput-realpath.md](perf/throughput-realpath.md) |
 | 2-pod control plane on kind | webhook registered on pod A visible on pod B; verify script PASS | [perf/e4-2pod-topology-2026-07-09.md](perf/e4-2pod-topology-2026-07-09.md) |
+| E4 Checks 1–4 (2 pods, delivery + alert single-page) | **PASS** on kind | [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md) |
 | 4 h endurance soak (real path + API reads) | bounded lag (peak 2 915 → 0), bridge RSS/FD flat, one faulted batch replayed exactly-once by the journal guard, **zero cache drift** | [perf/soak-s11-2026-07-10.md](perf/soak-s11-2026-07-10.md) |
 | At-scale on own data (S13) | **51.2 M rows / 2.87 M orders / 4 years of legend history**, analyst queries 20–730 ms, all 17 §12 invariants pass incl. full-scan GTIN validation | [perf/scale-own-data-2026-07-11.md](perf/scale-own-data-2026-07-11.md) |
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
@@ -72,14 +73,13 @@ batched path (fold rules, idempotency, replay) are in
 
 ## Next
 
-1. **Delivery topology** — Checks 1–4 live on kind
-   ([perf/e4-replica-topology-2026-07-11.md](perf/e4-replica-topology-2026-07-11.md),
-   [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md),
-   [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md)).
-   Phase 3 automated topology proof is closed.
-2. **≥ 100 eps sustained** — multi-hour / paced produce at ≥ 100 eps with
-   bounded lag (numeric drain bar observed at 107.3 eps on a 2000-burst —
-   [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md)).
+1. **≥ 100 eps sustained** — multi-hour / paced produce at ≥ 100 eps with
+   bounded lag. Drain-window ≥100 is already measured (107.3 eps @ 2000);
+   protocol and flags: [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md)
+   (`--pace-eps 100 --count …`). Needs a healthy Flink hop for the whole window.
+2. **P2-6 packaging** (breaking) — rename wheel package `src` →
+   `agentflow_runtime` with deprecation shim; plan only until a release
+   window: [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).
 
 External gates remain unchanged and are listed in the README scope note:
 production CDC onboarding, a benchmark on production-grade hardware, and a

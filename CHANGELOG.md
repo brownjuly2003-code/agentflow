@@ -4,6 +4,12 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Docs — STATUS/Next after E4 + drain ≥100; P2-6 plan only
+
+- STATUS: E4 Checks 1–4 in Proven; Next is sustained ≥100 (with
+  `--pace-eps` protocol) and P2-6 packaging plan — not delivery topology.
+- Plan (no code): `docs/plans/p2-6-runtime-namespace-migration.md`.
+
 ### Perf — S10 stretch try: 107.3 eps bridge apply on 2000-event drain
 
 - Live Mac compose (1 Flink TM): 2000-event realpath drain cleared at

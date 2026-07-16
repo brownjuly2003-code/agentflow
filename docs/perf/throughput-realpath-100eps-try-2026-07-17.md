@@ -49,7 +49,7 @@ Mac compose stand, and the bridge is not trailing Flink on that window
   metrics `:9108`, `config/serving.yaml` (ClickHouse).
 - Co-tenant containers left stopped; no `docker system prune`.
 
-## Reproduce
+## Reproduce (drain window — this run)
 
 ```bash
 export PATH=$HOME/bin:/usr/local/bin:$PATH
@@ -64,6 +64,32 @@ docker compose -f docker-compose.yml -f docker-compose.flink.yml \
   --bootstrap 127.0.0.1:19092 --count 2000 \
   --bridge-metrics http://127.0.0.1:9108/metrics --latency-samples 0 --no-md
 ```
+
+## How to measure *sustained* ≥100 (not yet run)
+
+The driver already supports paced produce (`--pace-eps`). Closing the sustained
+claim is a **longer produce window** with lag remaining bounded while the
+*target ingress* is ≥100 eps — not another unpaced backlog drain.
+
+```bash
+# Example: 15 min @ 100 eps target ≈ 90_000 events (wall ~900 s of produce)
+# then catch-up; raise --catchup-timeout-seconds if lag is high.
+# Pass criteria (proposed, not yet signed off as product bar):
+#   - produce pace ≈ 100 eps (driver)
+#   - bridge_apply_eps and flink_eps stay near the produce rate over the window
+#   - lag_peak bounded and lag_end → 0 after catch-up
+#   - apply_failures_delta == 0
+.venv/bin/python scripts/benchmark_throughput_realpath.py \
+  --bootstrap 127.0.0.1:19092 \
+  --count 90000 --pace-eps 100 \
+  --bridge-metrics http://127.0.0.1:9108/metrics \
+  --latency-samples 0 --catchup-timeout-seconds 600 --no-md
+```
+
+**Stand constraints (Mac 6 GiB):** keep `--scale flink-taskmanager=1`; stop
+co-tenants; do not claim multi-hour until a run of that length actually
+finishes with healthy Flink. A 15 min paced arm is a first step; multi-hour
+remains a separate soak-class exercise.
 
 ## Honest claim (what to put in SSOT)
 

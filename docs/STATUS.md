@@ -75,9 +75,9 @@ at 100 eps held hop/apply near 96–97 with lag → 0 after a bounded peak
 1. **≥ 100 eps multi-hour sustained** — 10 min paced @ 100 produce is measured
    (~96–97 apply/hop); multi-hour still open. Evidence:
    [perf/throughput-realpath-paced100-2026-07-17.md](perf/throughput-realpath-paced100-2026-07-17.md).
-2. **P2-6 packaging** (breaking) — rename wheel package `src` →
-   `agentflow_runtime` with deprecation shim; plan only until a release
-   window: [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).
+2. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
+   (tree/`agentflow_runtime` + shim) waits for a release branch:
+   [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).
 
 External gates remain unchanged and are listed in the README scope note:
 production CDC onboarding, a benchmark on production-grade hardware, and a

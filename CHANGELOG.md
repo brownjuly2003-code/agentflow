@@ -4,6 +4,14 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Docs — P2-6 Phase 0 inventory (no package move)
+
+- Baseline wheel still ships top-level `src/` (~540 in-repo `from src` lines).
+- Defaults recorded: `src/agentflow_runtime/` layout, one-minor shim, warnings
+  off until Phase 2. Plan:
+  `docs/plans/p2-6-runtime-namespace-migration.md`. Unit pin:
+  `tests/unit/test_postgres_enqueue_lease_contract.py` (enqueue lease SQL).
+
 ### Perf — paced 10 min @ 100 eps produce (apply ~96.5)
 
 - Mac compose (1 Flink TM): 60 000 events at `--pace-eps 100` → produce 100.0,

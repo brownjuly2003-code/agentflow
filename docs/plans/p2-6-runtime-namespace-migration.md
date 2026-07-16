@@ -1,7 +1,8 @@
 # P2-6 — Runtime namespace: `src` → `agentflow_runtime`
 
-> Plan only. **Do not implement** until a breaking release window is
-> scheduled. Source of the finding: `audit_gpt_11_07_26.md` §P2-6.
+> Plan + **Phase 0 inventory (done 2026-07-17)**. Do **not** start Phase 1
+> (tree move / dual import) until a breaking release window is scheduled.
+> Source of the finding: `audit_gpt_11_07_26.md` §P2-6.
 
 ## Problem
 
@@ -92,10 +93,70 @@ Do not block the namespace rename on integrations publish.
 - [ ] bridge: `python -m agentflow_runtime.processing.bridge_consumer` (or shim module path)
 - [ ] CI unit + contract green; no accidental `packages = ["src"]` only
 
-## Decision needed before coding
+## Decisions (defaults for the release window)
 
-1. **Layout:** `src/agentflow_runtime/` (src-layout) vs rename tree root.
-2. **Shim lifetime:** one minor vs one major.
-3. **Warning default:** on vs off until phase 2 complete.
+Recorded 2026-07-17 so implementation is not blocked on recap — still **do not
+code Phase 1** until the release branch is opened.
 
-Until those three are answered in a release ticket, leave code as-is.
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Layout | **`src/agentflow_runtime/`** (src-layout) | Keeps `src/` as the container dir; hatch packages `agentflow_runtime`; matches modern packaging without dumping the whole monorepo root. |
+| Shim lifetime | **One minor line** (e.g. 2.1 ships dual import; 2.2 drops `src` top-level) | Enough for first-party cutover + external consumers; not forever. |
+| DeprecationWarning on `import src` | **Off until Phase 2 complete**, then on by default (env `AGENTFLOW_SRC_SHIM_SILENT=1` to mute) | Avoids CI noise during mass codemod. |
+
+## Phase 0 inventory — done 2026-07-17 (`main` @ `4a5d524`)
+
+### Wheel today
+
+```text
+python -m build --wheel
+→ agentflow_runtime-2.0.0-py3-none-any.whl  (~342 KB, 145 files)
+top-level package dir in wheel:  src/   (141 files under src/)
+```
+
+Distribution name is already `agentflow-runtime`; only the **import package**
+is the generic `src`.
+
+### Hatch
+
+```toml
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+```
+
+CI mypy: `mypy src/ --ignore-missing-imports` (`.github/workflows/ci.yml`).
+
+### Runtime entrypoints hardcoding `src.`
+
+| Kind | Hits (repo scan, excl. .venv/.git) | Examples |
+|------|-----------------------------------:|----------|
+| `python -m src.…` | 47 | bridge_consumer, local_pipeline, provision docs |
+| `uvicorn src.…` | 12 | `Dockerfile.api`, `docker-compose.prod.yml`, `k8s_staging_up.sh`, load/perf workflows |
+| `src.serving.api.main` | 100 | helm deployment + worker, benchmarks, chaos/e2e |
+| `src.serving.provision` | 27 | helm provision Job, tests, main lifespan notes |
+| `src.processing.bridge_consumer` | 11 | bridge tests, main |
+| `packages = ["src"]` | 6 | pyproject (+ mutants / plan / audit) |
+| `from src.` / `import src.` lines in `src/`+`tests/`+`scripts/` | **~540** | primary codemod surface |
+
+### Helm / image (must change in Phase 1–2 with shim)
+
+- `helm/agentflow/templates/deployment.yaml` → `uvicorn` `src.serving.api.main:app`
+- `helm/agentflow/templates/deployment-worker.yaml` → same
+- `helm/agentflow/templates/provision-job.yaml` → `src.serving.provision`
+- `Dockerfile.api` CMD → `src.serving.api.main:app`
+- `scripts/k8s_staging_up.sh` patch args → same
+
+### Blast radius (honest)
+
+- **~540** first-party import lines + **~100** `main:app` string references +
+  helm/docker/compose.
+- Shim Phase 1 is mandatory; big-bang rename without shim will break every
+  image and local `python -m` habit the same day.
+
+### Phase 0 exit criteria
+
+- [x] Entrypoint inventory
+- [x] Hatch pin confirmed
+- [x] Baseline wheel tree recorded (`src/` top-level only)
+- [x] Default decisions written (layout / shim / warnings)
+- [ ] Phase 1 on a release branch (not started)

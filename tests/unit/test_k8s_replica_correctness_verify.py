@@ -27,6 +27,9 @@ def test_replica_correctness_script_automates_checks_1_through_4() -> None:
     assert "[Check 3]" in text
     assert "pipeline_events" in text
     assert "delivery_id" in text
+    # POST target must accept POST with 2xx (example.com → 405 confuses exactly-one).
+    assert "httpbin.org/post" in text or "WEBHOOK_URL" in text
+    assert "example.com/agentflow-replica-verify" not in text.split("WEBHOOK_URL=")[1].splitlines()[0]
 
     assert "[Check 4]" in text
     assert "/v1/alerts" in text

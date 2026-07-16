@@ -191,8 +191,9 @@ their secrets), install the chart with the scale overlay, then:
    both pods' alert dispatchers to race `claim_alert_tick`, then asserts
    `GET /v1/alerts/{id}/history` has exactly one successful `alert.triggered`
    delivery (not one per pod). Default wait is `ALERT_WAIT_SECONDS=150` (the
-   dispatcher polls every 60s). Live topology re-run still required on the
-   scale stand to file evidence next to Check 3.
+   dispatcher polls every 60s). Live evidence:
+   [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md)
+   (Checks 1–4 together on the scale stand).
 
 The **store-level guarantee** behind Checks 2–3 (idempotent enqueue,
 single-flight tick, outbox↔dead-letter atomicity) is already live-verified by

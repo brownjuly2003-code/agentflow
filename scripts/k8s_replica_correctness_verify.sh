@@ -47,9 +47,11 @@ RELEASE_NAME="${RELEASE_NAME:-agentflow}"
 # values-staging.yaml fixtures).
 API_KEY="${API_KEY:-af-prod-agent-ops-def456}"
 MIN_REPLICAS="${MIN_REPLICAS:-2}"
-# Public https URL that passes the egress guard. example.com returns 2xx so the
+# Public https URL that passes the egress guard and accepts POST with 2xx so the
 # inline delivery marks the queue row delivered (no redrive noise in the logs).
-WEBHOOK_URL="${WEBHOOK_URL:-https://example.com/agentflow-replica-verify}"
+# example.com returns 405 Method Not Allowed on POST and would force redrive
+# (a second delivery_id), which confuses the exactly-one assertion.
+WEBHOOK_URL="${WEBHOOK_URL:-https://httpbin.org/post}"
 LIST_READS="${LIST_READS:-8}"
 
 # Check 3 — ClickHouse journal insert (shared serving store both pods scan).

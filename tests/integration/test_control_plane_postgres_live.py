@@ -141,6 +141,35 @@ def test_parallel_enqueues_produce_exactly_one_winner(store: PostgresControlPlan
     assert count == 1
 
 
+def test_enqueue_stamps_lease_so_redrive_cannot_steal_inline(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """Winner holds a claim lease during inline delivery (multi-pod race).
+
+    Without this, the other replica's process_delivery_queue can claim the
+    still-pending row while the winner is mid-POST and both emit a delivery.
+    """
+    assert _enqueue(store, "wh-1", "e-leased") is True
+    # Still pending, but leased → claim_due must not hand it out yet.
+    assert store.claim_due_webhook_deliveries(limit=10) == []
+    status, _, _, _, lease = _queue_row("wh-1", "e-leased")
+    assert status == "pending"
+    assert lease is not None
+    # Outcome clears the lease; a failed inline then schedules backoff redrive.
+    store.record_webhook_delivery_outcome(
+        webhook_id="wh-1",
+        event_id="e-leased",
+        success=True,
+        status_code=200,
+        error=None,
+        max_attempts=5,
+        backoff_seconds=[1.0, 5.0, 25.0],
+    )
+    status, _, _, _, lease = _queue_row("wh-1", "e-leased")
+    assert status == "delivered"
+    assert lease is None
+
+
 # --- ADR probe 2: parallel claim exclusivity ---------------------------------------
 
 

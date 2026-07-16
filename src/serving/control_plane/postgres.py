@@ -5,7 +5,10 @@ tables, and the claim semantics the port only satisfies degenerately on the
 embedded adapter become real here:
 
 - ``enqueue_webhook_delivery`` wins by ``INSERT .. ON CONFLICT DO NOTHING``
-  rowcount — exactly one replica inline-delivers a fresh enqueue.
+  rowcount — exactly one replica inline-delivers a fresh enqueue. The winner
+  also stamps ``lease_expires_at`` on insert so a concurrent redrive claim
+  cannot steal the row mid-inline (same lease window as ``claim_due_*``;
+  outcome or lease expiry releases it for redrive).
 - ``claim_due_webhook_deliveries`` / ``claim_due_outbox_entries`` take rows
   with ``FOR UPDATE SKIP LOCKED`` and stamp a lease
   (``lease_expires_at``): N replicas work-steal without leader election, and
@@ -518,15 +521,27 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                 """
                 INSERT INTO webhook_delivery_queue
                     (webhook_id, event_id, tenant, event_type, body, status, attempts,
-                     next_attempt_at, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, 'pending', 0, now(), now(), now())
+                     next_attempt_at, lease_expires_at, created_at, updated_at)
+                VALUES (
+                    %s, %s, %s, %s, %s, 'pending', 0, now(),
+                    now() + make_interval(secs => %s), now(), now()
+                )
                 ON CONFLICT (webhook_id, event_id) DO NOTHING
                 """,
-                (webhook_id, event_id, tenant, event_type, body),
+                (
+                    webhook_id,
+                    event_id,
+                    tenant,
+                    event_type,
+                    body,
+                    self._claim_lease_seconds,
+                ),
             )
             # Insert-win detection (ADR 0010 §2): rowcount is 1 only for the
             # caller whose INSERT actually landed — the enqueue winner, who
-            # alone inline-delivers.
+            # alone inline-delivers. The lease stamped above keeps the row
+            # invisible to claim_due_webhook_deliveries until outcome clears
+            # it or the lease expires (crashed winner → redrive).
             return bool(cursor.rowcount == 1)
 
     def claim_due_webhook_deliveries(self, *, limit: int) -> list[WebhookQueueRow]:

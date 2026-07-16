@@ -4,6 +4,21 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Control plane — enqueue stamps claim lease (no double-delivery mid-inline)
+
+- **`PostgresControlPlaneStore.enqueue_webhook_delivery`** sets `lease_expires_at`
+  on insert-win so a concurrent redrive claim cannot steal the row while the
+  winner is still inline-POSTing. Live E4 first attempt showed two
+  `delivery_id`s 13 ms apart on one queue row; after the fix Checks 1–4 pass
+  (`docs/perf/e4-check4-alert-single-page-2026-07-17.md`).
+
+### K8s — Check 4 live + webhook POST target
+
+- **E4 Checks 1–4 live PASS** on kind (`deproject-mac`). Evidence:
+  `docs/perf/e4-check4-alert-single-page-2026-07-17.md`.
+- **Default `WEBHOOK_URL`** for the verify script is `https://httpbin.org/post`
+  (example.com returns 405 on POST and forced redrive noise).
+
 ### Helm — ServiceAccount is a pre-hook before the provision Job
 
 - **First `helm install` with ClickHouse provisioning no longer hangs** waiting
@@ -15,9 +30,7 @@ All notable changes to AgentFlow are documented in this file.
 
 - **`scripts/k8s_replica_correctness_verify.sh` Check 4** creates a firing alert
   rule and asserts exactly one successful `alert.triggered` history row across
-  two pods (`claim_alert_tick` single-flight). Closes the remaining Phase 3
-  recipe item at the automation layer; live evidence still needs a scale-stand
-  re-run.
+  two pods (`claim_alert_tick` single-flight). Live evidence filed (see above).
 
 ### Supply chain — Gate 2: Dependabot security updates + required-check gap closed
 

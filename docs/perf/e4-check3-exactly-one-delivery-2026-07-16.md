@@ -24,11 +24,11 @@ PASS: exactly one delivery_id for event_id=replica-e4-858cce874ac04494 (1 log ro
   durable enqueue; `GET /v1/webhooks/{id}/logs` showed **exactly one** distinct
   `delivery_id` (insert-win — only the enqueue winner POSTs).
 
-Alert single-page (cutover Phase 3 item 3) is now **Check 4** in
-`scripts/k8s_replica_correctness_verify.sh` (post this run). Store-level
-`claim_alert_tick` is already proven 31/31 in
-[control-plane-pg-verify-2026-07-03.md](control-plane-pg-verify-2026-07-03.md);
-two-pod emission evidence still needs a scale-stand re-run with Checks 1–4.
+Alert single-page (cutover Phase 3 item 3) is **Check 4** in
+`scripts/k8s_replica_correctness_verify.sh`. Full Checks 1–4 live evidence:
+[e4-check4-alert-single-page-2026-07-17.md](e4-check4-alert-single-page-2026-07-17.md).
+Store-level `claim_alert_tick` remains proven 31/31 in
+[control-plane-pg-verify-2026-07-03.md](control-plane-pg-verify-2026-07-03.md).
 
 ## Topology
 

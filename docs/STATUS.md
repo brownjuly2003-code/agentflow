@@ -1,6 +1,6 @@
 # Engineering Status
 
-> Updated: **2026-07-16** (post audit P0–P2-4 merge; CH multi-tenant live) ·
+> Updated: **2026-07-17** (E4 Checks 1–4 live on kind; CH multi-tenant live) ·
 > release line **`v2.0.0`** · `main` green across required checks. Numbers
 > below come only from measured, in-repo evidence — see the linked reports
 > for methodology and reproduction commands.
@@ -69,12 +69,11 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
 
 ## Next
 
-1. **Delivery topology** — Checks 1–3 live on kind
+1. **Delivery topology** — Checks 1–4 live on kind
    ([perf/e4-replica-topology-2026-07-11.md](perf/e4-replica-topology-2026-07-11.md),
-   [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md)).
-   Check 4 (alert single-page) is automated in
-   `scripts/k8s_replica_correctness_verify.sh`; live evidence re-run on the
-   scale stand is still open.
+   [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md),
+   [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md)).
+   Phase 3 automated topology proof is closed.
 2. **≥ 100 eps stretch bar** — sustained (not burst) bridge apply above 100
    eps; requires a stand window with a healthy Flink hop.
 

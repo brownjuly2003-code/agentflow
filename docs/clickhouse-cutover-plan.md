@@ -183,8 +183,8 @@ their secrets), install the chart with the scale overlay, then:
    as **Check 3**: inserts one `pipeline_events` row into the shared ClickHouse
    journal (both pods scan it), then asserts `GET /v1/webhooks/{id}/logs` has
    exactly one distinct `delivery_id` for that `event_id` (idempotent enqueue
-   insert-win — only the winner POSTs). Re-run on the scale stand to record a
-   live evidence note next to the e4 report.
+   insert-win — only the winner POSTs). Live evidence:
+   [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md).
 3. **One alert page per incident** — still a live recipe (not in the script):
    configure an alert rule, drive one triggering evaluation window; assert a
    single page and one `alert_history` transition, not one per pod (per-rule

@@ -86,12 +86,15 @@ ready="${ready:-0}"
 (( ready >= MIN_REPLICAS )) || fail "only ${ready} ready replica(s), need >= ${MIN_REPLICAS}"
 
 # Bash 3.2 (macOS system bash) has no mapfile; build the array portably.
+# Only Running API pods: the pre-install provision Job shares the same
+# app.kubernetes.io/instance label but is Completed and has no control-plane env.
 pods=()
 while IFS= read -r line; do
   [[ -n "$line" ]] && pods+=("$line")
 done < <(kubectl get pods --namespace "$NAMESPACE" \
-  -l "app.kubernetes.io/instance=$RELEASE_NAME" -o name)
-(( ${#pods[@]} >= MIN_REPLICAS )) || fail "only ${#pods[@]} pod(s) found"
+  -l "app.kubernetes.io/instance=$RELEASE_NAME" \
+  --field-selector=status.phase=Running -o name)
+(( ${#pods[@]} >= MIN_REPLICAS )) || fail "only ${#pods[@]} Running pod(s) found"
 
 for pod in "${pods[@]}"; do
   store=$(kubectl get "$pod" --namespace "$NAMESPACE" \

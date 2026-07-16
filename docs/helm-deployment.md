@@ -175,12 +175,13 @@ helm upgrade --install agentflow ./helm/agentflow \
   --namespace agentflow
 ```
 
-Replica-correctness (exactly-one delivery per (webhook, event), one alert page
-per incident, cross-pod registration visibility) is verified by
-`scripts/k8s_replica_correctness_verify.sh` plus the recipe in
-`docs/clickhouse-cutover-plan.md` (Phase 3). With the postgres store the render
-gate relaxes automatically; with `controlPlane.store=embedded` any `replicaCount
-> 1` (or `autoscaling.maxReplicas > 1`) render is refused.
+Replica-correctness is verified by `scripts/k8s_replica_correctness_verify.sh`
+(Checks 1–3: ≥2 postgres pods, cross-pod registration visibility, exactly-one
+delivery per (webhook, event) via shared ClickHouse journal insert) plus the
+alert single-page recipe in `docs/clickhouse-cutover-plan.md` (Phase 3). With
+the postgres store the render gate relaxes automatically; with
+`controlPlane.store=embedded` any `replicaCount > 1` (or
+`autoscaling.maxReplicas > 1`) render is refused.
 
 ## Contract Maintenance
 

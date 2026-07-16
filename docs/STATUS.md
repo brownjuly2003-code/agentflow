@@ -69,9 +69,11 @@ stressed; the ≥ 100 eps stretch bar stays open. Semantics of the batched path
 
 ## Next
 
-1. **Delivery topology** — exactly-one webhook delivery across replicas
-   (store-level behavior is already unit-proven; the topology-level proof is
-   scripted next).
+1. **Delivery topology (remainder)** — Checks 1–2 live on kind
+   ([perf/e4-replica-topology-2026-07-11.md](perf/e4-replica-topology-2026-07-11.md));
+   Check 3 (exactly-one delivery per webhook/event) is automated in
+   `scripts/k8s_replica_correctness_verify.sh` and needs one Mac/kind re-run
+   for a live evidence note. Alert single-page is still a cutover-plan recipe.
 2. **≥ 100 eps stretch bar** — sustained (not burst) bridge apply above 100
    eps; requires a stand window with a healthy Flink hop.
 

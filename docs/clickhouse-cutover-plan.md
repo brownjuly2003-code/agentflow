@@ -173,25 +173,28 @@ Bring up the scale stand (kind + in-cluster PostgreSQL + ClickHouse + Redis and
 their secrets), install the chart with the scale overlay, then:
 
 1. **>=2 pods on the postgres store + cross-pod registration visibility** —
-   automated by `scripts/k8s_replica_correctness_verify.sh`: asserts the
+   automated by `scripts/k8s_replica_correctness_verify.sh` Checks 1–2: asserts the
    deployment runs ≥2 ready pods all carrying `AGENTFLOW_CONTROLPLANE_STORE=postgres`,
    registers one webhook through the Service, and confirms it is visible on
    every round-robin read (on the embedded YAML store a read served by the pod
    that did not register would miss it — the sharpest split-brain, class 5).
-2. **Exactly-one delivery per (webhook, event)** — emit one pipeline event
-   matching a registered webhook's filter; read `GET /v1/webhooks/{id}/logs`;
-   assert exactly one delivery record for that `event_id` despite both pods
-   scanning the event (idempotent enqueue insert-win).
-3. **One alert page per incident** — configure an alert rule, drive one
-   triggering evaluation window; assert a single page and one `alert_history`
-   transition, not one per pod (per-rule `claim_alert_tick` single-flight).
+   Live evidence: [perf/e4-replica-topology-2026-07-11.md](perf/e4-replica-topology-2026-07-11.md).
+2. **Exactly-one delivery per (webhook, event)** — automated by the same script
+   as **Check 3**: inserts one `pipeline_events` row into the shared ClickHouse
+   journal (both pods scan it), then asserts `GET /v1/webhooks/{id}/logs` has
+   exactly one distinct `delivery_id` for that `event_id` (idempotent enqueue
+   insert-win — only the winner POSTs). Re-run on the scale stand to record a
+   live evidence note next to the e4 report.
+3. **One alert page per incident** — still a live recipe (not in the script):
+   configure an alert rule, drive one triggering evaluation window; assert a
+   single page and one `alert_history` transition, not one per pod (per-rule
+   `claim_alert_tick` single-flight).
 
-Checks 2–3 need event/alert emission plus a capture sink, so they are part of
-the live run; the **store-level guarantee** behind them (idempotent enqueue,
+The **store-level guarantee** behind Checks 2–3 (idempotent enqueue,
 single-flight tick, outbox↔dead-letter atomicity) is already live-verified by
 the slice-5 standalone-PostgreSQL probe suite (31/31,
-`docs/perf/control-plane-pg-verify-2026-07-03.md`) — Phase 3 adds only the
-two-real-pods topology proof.
+`docs/perf/control-plane-pg-verify-2026-07-03.md`) — Phase 3 adds the
+two-real-pods topology layer on top.
 
 ## Phase 4 — NL→SQL (routes through GraceKelly)
 

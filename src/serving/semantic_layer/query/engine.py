@@ -180,6 +180,7 @@ class QueryEngine(
         newest_first: bool = False,
         min_processed_at: datetime | str | None = None,
         min_event_id: str | None = None,
+        settle_seconds: int | None = None,
     ) -> list[dict]:
         """Read the ``pipeline_events`` journal through the serving backend.
 
@@ -230,6 +231,26 @@ class QueryEngine(
           ClickHouse, while the decomposition round-trips through sqlglot on
           both backends. ``min_event_id`` alone (no ``min_processed_at``) is
           ignored — a keyset needs both halves.
+
+        ``settle_seconds`` is the scan's settle watermark (audit 2026-07-17
+        #1 follow-up): when set, only rows with ``processed_at`` at least that
+        many seconds in the past are visible — ``processed_at <=
+        CAST(now() AS TIMESTAMP) - INTERVAL 'N' SECOND``, evaluated on the
+        *database* clock. A strict keyset cursor is only lossless over
+        seconds that no writer will stamp again: on ClickHouse
+        ``processed_at`` is second-granular and ``event_id`` is a UUID (not
+        monotonic), so a cursor that advances into the still-open wall-clock
+        second permanently excludes any same-second row that becomes visible
+        later with a lower ``event_id``. The watermark keeps the frontier out
+        of open seconds entirely. Both timestamp frames are self-consistent
+        per backend: DuckDB stores tz-aware stamps in session-local wall time
+        and ``CAST(now() AS TIMESTAMP)`` yields the same frame; ClickHouse
+        stores and compares in server time (UTC in every shipped deployment).
+        Invariant the caller owns: ``settle_seconds`` must exceed the
+        writers' stamp-to-visibility lag plus writer↔DB clock skew, or a
+        late-visible row can still land behind the frontier. ``None`` (the
+        default) adds no bound — re-fetching callers (search refresh, SSE,
+        metric cache) need none.
 
         ``tenant_id=None`` is an explicit invariant, not incidental behaviour
         (n4, G2 audit): it means "no tenant filter" — an unscoped, cross-
@@ -364,6 +385,15 @@ class QueryEngine(
                 cursor = _coerce_journal_timestamp(min_processed_at)
                 rendered = render(cursor.strftime("%Y-%m-%d %H:%M:%S"))
                 where_clauses.append(f"{time_column} >= CAST({rendered} AS TIMESTAMP)")
+        if settle_seconds is not None and time_column is not None:
+            # DB-clock watermark (see docstring): the keyset frontier must not
+            # enter a second writers can still stamp. int() keeps the literal
+            # allowlisted; both dialects execute this expression as written
+            # (verified live on DuckDB and ClickHouse 25.3).
+            where_clauses.append(
+                f"{time_column} <= CAST(now() AS TIMESTAMP) "
+                f"- INTERVAL '{int(settle_seconds)}' SECOND"
+            )
 
         # column names come from the schema allowlist above
         sql = f"SELECT {', '.join(select_columns)} FROM pipeline_events"  # nosec B608

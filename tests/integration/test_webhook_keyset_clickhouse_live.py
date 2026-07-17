@@ -204,3 +204,47 @@ async def test_dispatcher_drains_a_saturated_second_on_live_clickhouse(
     assert set(delivered) == expected
     assert len(delivered) == len(expected), "idempotent enqueue + strict keyset: no duplicates"
     assert dispatcher._scan_cursor == ("2026-07-10 10:00:02", "Z-AFTER-2")
+
+
+def test_settle_watermark_excludes_open_second_on_live_clickhouse(
+    clickhouse_engine: QueryEngine, live_clickhouse: ClickHouseBackend
+) -> None:
+    """The DB-clock settle watermark on the real server (review follow-up to
+    audit #1): a freshly stamped row is invisible to a settled fetch and
+    visible to an unbounded one — the transpiled ``CAST(now() AS TIMESTAMP) -
+    INTERVAL`` expression executes and compares in ClickHouse's own clock
+    frame. Runs last in this module and deletes its row so the earlier tests'
+    exact-set assertions stay valid on any re-run ordering.
+    """
+    from datetime import UTC, datetime
+
+    fresh_id = "W-FRESH-NOW"
+    live_clickhouse.insert_rows(
+        "pipeline_events",
+        [
+            {
+                "event_id": fresh_id,
+                "topic": "orders.raw",
+                "tenant_id": "acme",
+                "entity_id": "ORD-W-FRESH",
+                "event_type": "order.created",
+                "latency_ms": 100,
+                # UTC wall time — the same frame the ClickHouse server (UTC in
+                # CI and every shipped deployment) stamps and compares in.
+                "processed_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        ],
+    )
+    try:
+        settled = clickhouse_engine.fetch_pipeline_events(settle_seconds=30, limit=100)
+        unbounded = clickhouse_engine.fetch_pipeline_events(limit=100)
+
+        assert fresh_id not in {row["event_id"] for row in settled}
+        assert fresh_id in {row["event_id"] for row in unbounded}
+    finally:
+        live_clickhouse._request(  # noqa: SLF001
+            f"ALTER TABLE pipeline_events DELETE WHERE event_id = '{fresh_id}' "
+            "SETTINGS mutations_sync = 1",
+            expect_json=False,
+            translate=False,
+        )

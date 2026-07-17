@@ -206,6 +206,43 @@ def test_min_event_id_without_min_processed_at_is_ignored() -> None:
     assert "CAST" not in sql
 
 
+# --- settle watermark (audit 2026-07-17 #1 follow-up) --------------------------
+
+
+def test_settle_seconds_renders_db_clock_watermark() -> None:
+    # The watermark is evaluated on the DATABASE clock — no app-clock literal
+    # may appear (the whole point: writer stamps and the bound live in the
+    # same clock frame per backend).
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(settle_seconds=3, limit=100)
+
+    ((sql, _),) = backend.calls
+    assert "processed_at <= CAST(now() AS TIMESTAMP) - INTERVAL '3' SECOND" in sql
+    assert sql.endswith("LIMIT 100")
+
+
+def test_settle_seconds_absent_by_default() -> None:
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(limit=10)
+
+    ((sql, _),) = backend.calls
+    assert "INTERVAL" not in sql, "re-fetching callers must keep the unbounded scan"
+
+
+def test_settle_seconds_ignored_without_time_column() -> None:
+    backend = FakeExternalBackend(columns={"event_id", "topic"})
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(settle_seconds=3, limit=10)
+
+    ((sql, _),) = backend.calls
+    assert "INTERVAL" not in sql
+
+
 def test_keyset_predicate_transpiles_to_clickhouse() -> None:
     # Two-backend portability guard (audit 2026-07-17 #1): the keyset predicate
     # the external path emits must survive the exact ClickHouseBackend transpile
@@ -219,7 +256,9 @@ def test_keyset_predicate_transpiles_to_clickhouse() -> None:
 
     backend = FakeExternalBackend()
     engine = _engine(backend)
-    engine.fetch_pipeline_events(min_processed_at="2026-07-10 10:00:00", min_event_id="e0004")
+    engine.fetch_pipeline_events(
+        min_processed_at="2026-07-10 10:00:00", min_event_id="e0004", settle_seconds=3
+    )
     ((sql, _),) = backend.calls
 
     statements = [s for s in sqlglot.parse(sql, read="duckdb") if s is not None]
@@ -237,3 +276,6 @@ def test_keyset_predicate_transpiles_to_clickhouse() -> None:
     # the keyset survived as an OR of two typed comparisons over event_id
     assert "event_id" in translated
     assert " OR " in translated.upper()
+    # ...and the DB-clock settle watermark survived alongside it
+    assert "now()" in translated.lower()
+    assert "interval" in translated.lower()

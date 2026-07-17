@@ -320,7 +320,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # postgres adapter creates its whole schema (sessions included) once
         # per process, so a stray local DuckDB file would be dead weight.
         ensure_analytics_table(app.state.auth_manager.db_path)
-    app.state.webhook_dispatcher = WebhookDispatcher(app)
+    # Settle watermark: the journal scan only crosses seconds settled on the
+    # DB clock (see WebhookDispatcher). Must exceed writer stamp-to-visibility
+    # lag + clock skew; 0 opts out (tests only).
+    app.state.webhook_dispatcher = WebhookDispatcher(
+        app, settle_seconds=int(os.getenv("AGENTFLOW_WEBHOOK_SETTLE_SECONDS", "3"))
+    )
     # S7: metric-cache invalidation is a first-class controller (push from the
     # bridge + independent journal scan). It always starts — even when the
     # webhook dispatcher is held back for tests — so event-driven freshness is

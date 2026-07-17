@@ -131,6 +131,7 @@ class WebhookDispatcher:
         poll_interval_seconds: float = 2.0,
         scan_batch_size: int = 1000,
         seen_cache_size: int = 50_000,
+        settle_seconds: int = 3,
     ) -> None:
         self.app = app
         self.poll_interval_seconds = poll_interval_seconds
@@ -159,6 +160,20 @@ class WebhookDispatcher:
         # secondary safety net (the keyset is the primary dedup): eviction is
         # safe because enqueue is idempotent on its primary key and inline
         # delivery fires only for freshly inserted rows.
+        #
+        # `settle_seconds` guards the keyset's blind spot: a STRICT cursor is
+        # only lossless over seconds no writer will stamp again. ClickHouse
+        # `processed_at` is second-granular and event ids are UUIDs (not
+        # monotonic), so a cursor advanced into the still-open wall-clock
+        # second would permanently exclude any same-second row that becomes
+        # visible later with a lower event_id — a silent drop at ORDINARY
+        # load, worse than the wedge the keyset fixed. Every journal fetch is
+        # therefore bounded to rows settled at least `settle_seconds` on the
+        # DB clock; the frontier crosses only closed seconds. The value must
+        # exceed writer stamp-to-visibility lag + writer↔DB clock skew
+        # (AGENTFLOW_WEBHOOK_SETTLE_SECONDS; 0 opts out, accepting the drop
+        # risk — tests only). Worst-case added delivery latency = settle.
+        self.settle_seconds = settle_seconds
         self.scan_batch_size = scan_batch_size
         self.seen_event_ids: BoundedSeenSet = BoundedSeenSet(maxlen=seen_cache_size)
         self._scan_cursor: tuple[str, str] | None = None
@@ -209,11 +224,15 @@ class WebhookDispatcher:
     def mark_existing_events_seen(self) -> None:
         """Initialize the scan frontier at the journal tail.
 
-        Startup semantics are unchanged — events already in the journal are
-        not delivered — but the initialization is O(scan_batch_size), not
-        O(journal): the newest batch seeds the seen-set and the cursor, and
-        everything older is excluded by the cursor's keyset bound instead of
-        by enumerating it (issue #183).
+        Startup semantics: settled events already in the journal are not
+        delivered, and the initialization is O(scan_batch_size), not
+        O(journal): the newest settled batch seeds the seen-set and the
+        cursor, and everything older is excluded by the cursor's keyset bound
+        instead of by enumerating it (issue #183). Rows younger than the
+        settle watermark are deliberately NOT seeded — they are delivered
+        once settled, so events that raced a restart are not lost; a row the
+        pre-restart process already delivered is suppressed by the durable
+        enqueue's idempotent primary key, not re-POSTed.
         """
         try:
             events = self._fetch_pipeline_events(newest_first=True, limit=self.scan_batch_size)
@@ -483,12 +502,16 @@ class WebhookDispatcher:
         # connection: when serving is ClickHouse (ADR 0006) the events that
         # matter arrive from an out-of-process writer, and this scan is what
         # drives both webhook delivery and metric-cache invalidation.
+        # Single chokepoint for the settle watermark: both the poll scan and
+        # the startup seeding go through here, so neither can advance the
+        # frontier into a second writers may still stamp.
         events: list[dict] = self.app.state.query_engine.fetch_pipeline_events(
             tenant_id=tenant,
             limit=limit,
             newest_first=newest_first,
             min_processed_at=min_processed_at,
             min_event_id=min_event_id,
+            settle_seconds=self.settle_seconds,
         )
         return events
 

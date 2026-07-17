@@ -17,7 +17,14 @@ Full report: `audit_2026-07-17_post11.md`.
   second-granular cursor and silently drop every later webhook. Portable
   OR-decomposition predicate (row-value tuples don't transpile to ClickHouse); a
   regression test seeds a larger-than-one-batch second and is red on the old
-  code, green on the fix.
+  code, green on the fix. Follow-up (adversarial review): a strict keyset alone
+  would silently drop same-second rows that become visible after the frontier
+  passed their second (UUID event ids are not monotonic; ClickHouse
+  `processed_at` is second-granular), so every dispatcher fetch is bounded by a
+  DB-clock **settle watermark** — `processed_at <= now() - INTERVAL
+  AGENTFLOW_WEBHOOK_SETTLE_SECONDS` (default 3 s) — and the frontier crosses
+  only closed seconds. The settle value must exceed writer stamp-to-visibility
+  lag plus writer↔DB clock skew.
 - **NetworkPolicy — PostgreSQL egress (P1, was a hardened-prod outage).** A
   `:5432` egress rule now renders when `controlPlane.store=postgres`; without it,
   `networkPolicy.enabled=true` on the postgres profile denied every pod's PG

@@ -237,7 +237,10 @@ def test_fetch_pipeline_events_no_rows_returns_empty() -> None:
 def test_mark_existing_events_seen_populates_seen_ids(
     pipeline_conn: duckdb.DuckDBPyConnection,
 ) -> None:
-    dispatcher = WebhookDispatcher(_stub_app(pipeline_conn))
+    # settle_seconds=0: this probe is about seeding mechanics, and its fixture
+    # stamps e3 with NOW() — under the default settle watermark an open-second
+    # row is deliberately not seeded (pinned separately below).
+    dispatcher = WebhookDispatcher(_stub_app(pipeline_conn), settle_seconds=0)
 
     dispatcher.mark_existing_events_seen()
 
@@ -427,6 +430,98 @@ async def test_dispatch_drains_a_second_holding_more_than_a_batch(
         assert len(delivered) == len(expected)
         # The cursor climbed PAST the saturated second to the true journal tail.
         assert dispatcher._scan_cursor == ("2026-07-10 10:00:02", "z-after-2")
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_settle_watermark_holds_back_open_second_rows_then_delivers(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Audit 2026-07-17 #1 follow-up (review finding): a STRICT keyset cursor
+    # advanced into the still-open second permanently drops any same-second row
+    # that becomes visible later with a lower event_id (ClickHouse processed_at
+    # is second-granular, event ids are UUIDs — not monotonic). The settle
+    # watermark keeps every fetch out of unsettled seconds, so the frontier
+    # only crosses seconds no writer will stamp again.
+    now = datetime.now().replace(microsecond=123456)  # naive local — DuckDB's stamp frame
+    open_ts = now.strftime("%Y-%m-%d %H:%M:%S.%f")
+    settled_ts = (now - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S.%f")
+    conn = _journal_conn(
+        [
+            ("e-settled", "acme", "order.created", settled_ts),
+            ("zz-open-high", "acme", "order.created", open_ts),
+        ]
+    )
+    try:
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        create_webhook(app, url="https://a.test/h", tenant="acme", filters=WebhookFilters())
+        dispatcher = WebhookDispatcher(app, settle_seconds=5)
+
+        delivered: list[str] = []
+
+        async def _deliver(webhook: object, event: dict) -> dict:
+            delivered.append(str(event["event_id"]))
+            return {"success": True, "status_code": 200, "event_id": event["event_id"]}
+
+        monkeypatch.setattr(dispatcher, "deliver", _deliver)
+
+        await dispatcher.dispatch_new_events()
+        # Only the settled row is visible; the cursor must NOT enter the open
+        # second.
+        assert delivered == ["e-settled"]
+        assert dispatcher._scan_cursor == (settled_ts, "e-settled")
+
+        # The drop scenario the watermark exists for: a same-second row with a
+        # LOWER event_id becomes visible after the high one already did. Behind
+        # a strict frontier it would be excluded forever; behind the watermark
+        # it is simply not visible yet.
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES (?, 'orders.raw', ?, ?, ?)",
+            ["aa-open-low", "acme", "order.created", open_ts],
+        )
+        await dispatcher.dispatch_new_events()
+        assert delivered == ["e-settled"]  # still held back — and not lost
+
+        # Time passes (simulated by dropping the watermark): BOTH open-second
+        # rows deliver, including the late lower-id one, exactly once each.
+        dispatcher.settle_seconds = 0
+        await dispatcher.dispatch_new_events()
+        assert sorted(delivered) == ["aa-open-low", "e-settled", "zz-open-high"]
+        assert dispatcher._scan_cursor == (open_ts, "zz-open-high")
+    finally:
+        conn.close()
+
+
+def test_mark_existing_does_not_seed_unsettled_rows(config_path: Path) -> None:
+    # Startup: rows younger than the settle watermark are NOT marked seen —
+    # they deliver once settled (an event that raced a restart is not lost);
+    # a row the pre-restart process already delivered is suppressed by the
+    # durable enqueue's idempotent key, not re-POSTed.
+    now = datetime.now().replace(microsecond=123456)
+    conn = _journal_conn(
+        [
+            (
+                "e-old",
+                "acme",
+                "order.created",
+                (now - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S.%f"),
+            ),
+            ("e-fresh", "acme", "order.created", now.strftime("%Y-%m-%d %H:%M:%S.%f")),
+        ]
+    )
+    try:
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        dispatcher = WebhookDispatcher(app, settle_seconds=5)
+
+        dispatcher.mark_existing_events_seen()
+
+        assert "acme:e-old" in dispatcher.seen_event_ids
+        assert "acme:e-fresh" not in dispatcher.seen_event_ids
+        assert dispatcher._scan_cursor is not None
+        assert dispatcher._scan_cursor[1] == "e-old"
     finally:
         conn.close()
 
@@ -655,7 +750,9 @@ async def test_dispatch_isolates_webhook_failure_and_enqueues_all(
         app.state.webhook_config_path = config_path
         wh1 = create_webhook(app, url="https://a.test/h1", tenant="acme", filters=WebhookFilters())
         wh2 = create_webhook(app, url="https://b.test/h2", tenant="acme", filters=WebhookFilters())
-        dispatcher = WebhookDispatcher(app)
+        # settle_seconds=0: the probe is failure isolation, and its single row
+        # is stamped NOW() — held back by the default settle watermark.
+        dispatcher = WebhookDispatcher(app, settle_seconds=0)
 
         async def _deliver(webhook: object, event: dict) -> dict:
             if getattr(webhook, "id", None) == wh1.id:

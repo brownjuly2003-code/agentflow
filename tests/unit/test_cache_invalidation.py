@@ -219,7 +219,9 @@ async def test_webhook_listener_hook_fires_on_new_events():
     engine._backend_name = backend.name
     engine._conn = conn
     app = SimpleNamespace(state=SimpleNamespace(query_engine=engine))
-    dispatcher = WebhookDispatcher(app)
+    # settle_seconds=0: the probe is the listener hook, and its single row is
+    # stamped NOW() — held back by the default settle watermark.
+    dispatcher = WebhookDispatcher(app, settle_seconds=0)
     hits: list[int] = []
 
     async def listener() -> None:

@@ -141,7 +141,7 @@ def _prepare_pipeline_events(client: TestClient) -> None:
             (
                 "evt-order-1",
                 "events.validated",
-                "3 seconds",
+                "33 seconds",
                 "order.created",
                 "ORD-1",
                 15,
@@ -151,7 +151,7 @@ def _prepare_pipeline_events(client: TestClient) -> None:
             (
                 "evt-payment-1",
                 "events.validated",
-                "2 seconds",
+                "32 seconds",
                 "payment.initiated",
                 "ORD-1",
                 20,
@@ -161,7 +161,7 @@ def _prepare_pipeline_events(client: TestClient) -> None:
             (
                 "evt-order-2",
                 "events.validated",
-                "1 seconds",
+                "31 seconds",
                 "order.created",
                 "ORD-2",
                 12,
@@ -199,7 +199,7 @@ def _prepare_tenant_pipeline_events(client: TestClient) -> None:
             (
                 "evt-acme-order",
                 "events.validated",
-                "2 seconds",
+                "32 seconds",
                 "order.created",
                 "ORD-ACME",
                 12,
@@ -209,7 +209,7 @@ def _prepare_tenant_pipeline_events(client: TestClient) -> None:
             (
                 "evt-beta-order",
                 "events.validated",
-                "1 seconds",
+                "31 seconds",
                 "order.created",
                 "ORD-BETA",
                 15,

@@ -7,9 +7,7 @@ This pin keeps the INSERT shape from regressing on hosts without PostgreSQL.
 
 from pathlib import Path
 
-POSTGRES = (
-    Path(__file__).resolve().parents[2] / "src" / "serving" / "control_plane" / "postgres.py"
-)
+POSTGRES = Path(__file__).resolve().parents[2] / "src" / "serving" / "control_plane" / "postgres.py"
 
 
 def test_enqueue_webhook_delivery_stamps_lease_on_insert() -> None:

@@ -10,4 +10,13 @@ spec:
   selector:
     matchLabels:
       {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      # Scope to the API role only. selectorLabels alone (name+instance) also
+      # match the worker pods, so with worker.enabled a single minAvailable:1
+      # budget spanning {api ∪ worker} lets a drain evict BOTH API pods while the
+      # lone worker satisfies it → serving surface hits zero. component=api keeps
+      # this budget a guarantee about request-serving pods. The worker is a
+      # background singleton (delivery loops claim rows in PG and resume after a
+      # reschedule); a minAvailable:1 PDB on a single-replica worker would instead
+      # make its node undrainable, so workers deliberately get no PDB.
+      app.kubernetes.io/component: api
 {{- end }}

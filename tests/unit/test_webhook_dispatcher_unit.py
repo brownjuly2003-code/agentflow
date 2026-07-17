@@ -237,7 +237,10 @@ def test_fetch_pipeline_events_no_rows_returns_empty() -> None:
 def test_mark_existing_events_seen_populates_seen_ids(
     pipeline_conn: duckdb.DuckDBPyConnection,
 ) -> None:
-    dispatcher = WebhookDispatcher(_stub_app(pipeline_conn))
+    # settle_seconds=0: this probe is about seeding mechanics, and its fixture
+    # stamps e3 with NOW() — under the default settle watermark an open-second
+    # row is deliberately not seeded (pinned separately below).
+    dispatcher = WebhookDispatcher(_stub_app(pipeline_conn), settle_seconds=0)
 
     dispatcher.mark_existing_events_seen()
 
@@ -247,8 +250,11 @@ def test_mark_existing_events_seen_populates_seen_ids(
 # --- bounded incremental journal scan (issue #183) ----------------------------
 
 
-def _journal_conn(rows: list[tuple[str, str, str, str]]) -> duckdb.DuckDBPyConnection:
-    """pipeline_events with explicit timestamps: (event_id, tenant, event_type, ts)."""
+def _journal_conn(rows: list[tuple[str, str, str, str | datetime]]) -> duckdb.DuckDBPyConnection:
+    """pipeline_events with explicit timestamps: (event_id, tenant, event_type, ts).
+
+    ``ts`` may be a string literal (fixed-date regressions) or an aware
+    datetime (binds exactly like production journal writes)."""
     conn = duckdb.connect(":memory:")
     conn.execute(
         """
@@ -281,8 +287,9 @@ def test_mark_existing_events_seen_is_bounded_and_sets_cursor() -> None:
 
         # O(batch), not O(journal): only the newest batch seeds the set...
         assert dispatcher.seen_event_ids == {"acme:mid", "acme:new"}
-        # ...and the cursor sits at the journal tail, excluding older rows.
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:10"
+        # ...and the cursor sits at the journal tail (composite keyset), excluding
+        # older rows.
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:10", "new")
     finally:
         conn.close()
 
@@ -315,7 +322,9 @@ async def test_dispatch_scans_a_bounded_window_after_the_cursor(
 
         (kwargs,) = captured
         assert kwargs["limit"] == dispatcher.scan_batch_size
+        # Composite keyset: both halves of the frontier are handed to the scan.
         assert kwargs["min_processed_at"] == "2026-07-10 10:00:10"
+        assert kwargs["min_event_id"] == "e-new"
     finally:
         conn.close()
 
@@ -327,7 +336,7 @@ async def test_dispatch_advances_cursor_over_newly_seen_events() -> None:
         dispatcher = WebhookDispatcher(_stub_app(conn))
 
         await dispatcher.dispatch_new_events()
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:00"
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:00", "e1")
 
         conn.execute(
             "INSERT INTO pipeline_events VALUES "
@@ -335,7 +344,7 @@ async def test_dispatch_advances_cursor_over_newly_seen_events() -> None:
         )
         await dispatcher.dispatch_new_events()
 
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:07"
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:07", "e2")
         assert "acme:e2" in dispatcher.seen_event_ids
     finally:
         conn.close()
@@ -345,6 +354,8 @@ async def test_dispatch_advances_cursor_over_newly_seen_events() -> None:
 async def test_dispatch_advances_cursor_over_an_all_seen_full_batch() -> None:
     # Livelock guard: a full batch of already-seen rows must still move the
     # cursor, otherwise a seen frontier wider than one batch pins the window.
+    # With the composite keyset the frontier is strict (the boundary row is not
+    # re-fetched), so two passes clear e1..e4 rather than overlapping on e2/e3.
     conn = _journal_conn(
         [
             (f"e{i}", "acme", "order.created", f"2026-07-10 10:00:0{i}")
@@ -356,11 +367,167 @@ async def test_dispatch_advances_cursor_over_an_all_seen_full_batch() -> None:
         for i in range(1, 5):
             dispatcher.seen_event_ids.add(f"acme:e{i}")
 
-        await dispatcher.dispatch_new_events()  # window [start, e2] — all seen
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:02"
+        await dispatcher.dispatch_new_events()  # window (start, e2] — all seen
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:02", "e2")
 
-        await dispatcher.dispatch_new_events()  # window [e2, e3] — all seen
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:03"
+        await dispatcher.dispatch_new_events()  # window (e2, e4] — all seen
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:04", "e4")
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_drains_a_second_holding_more_than_a_batch(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression for audit_2026-07-17 #1 (cohort-wedge). A SINGLE second that
+    # holds MORE than scan_batch_size journal rows must not pin the scan. With a
+    # second-granular cursor the bounded batch fills with that second's
+    # lowest-event_id rows, `advance` is set to that SAME second, the next fetch
+    # (`WHERE processed_at >= cursor`) returns the identical rows, and every
+    # webhook for every event at/after that second is silently, permanently
+    # undelivered. The composite (processed_at, event_id) keyset advances WITHIN
+    # the saturated second, so the scan drains it and moves past.
+    #
+    # PROVING PROPERTY: on the pre-fix second-granular cursor this test FAILS
+    # (only the first `batch` events ever deliver; the tail and everything after
+    # the second are lost) and TERMINATES rather than hanging — confirmed by
+    # temporarily reverting the fix.
+    batch = 5
+    cohort = 12  # > batch: the wedge trigger
+    saturated = "2026-07-10 10:00:00"
+    rows = [(f"e{i:03d}", "acme", "order.created", saturated) for i in range(cohort)]
+    # ...plus rows strictly AFTER the saturated second — exactly what the wedge
+    # hides forever behind the pinned cursor.
+    rows.append(("z-after-1", "acme", "order.created", "2026-07-10 10:00:01"))
+    rows.append(("z-after-2", "acme", "order.created", "2026-07-10 10:00:02"))
+    conn = _journal_conn(rows)
+    try:
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        create_webhook(app, url="https://a.test/h", tenant="acme", filters=WebhookFilters())
+        dispatcher = WebhookDispatcher(app, scan_batch_size=batch)
+
+        delivered: list[str] = []
+
+        async def _deliver(webhook: object, event: dict) -> dict:
+            delivered.append(str(event["event_id"]))
+            return {"success": True, "status_code": 200, "event_id": event["event_id"]}
+
+        monkeypatch.setattr(dispatcher, "deliver", _deliver)
+
+        # Drive the poll loop by hand. Each pass advances the keyset strictly, so
+        # a bounded number of passes drains the journal; bound the loop so a
+        # regression that RE-wedges surfaces as a failed assertion, never a spin.
+        for _ in range(50):
+            before = dispatcher._scan_cursor
+            await dispatcher.dispatch_new_events()
+            if dispatcher._scan_cursor == before:
+                break  # no forward progress -> drained (or, pre-fix, wedged)
+
+        expected = {f"e{i:03d}" for i in range(cohort)} | {"z-after-1", "z-after-2"}
+        # Every event — the high-event_id tail of the saturated second AND
+        # everything after it — is delivered exactly once (idempotent enqueue +
+        # strict keyset: no duplicate POSTs).
+        assert set(delivered) == expected
+        assert len(delivered) == len(expected)
+        # The cursor climbed PAST the saturated second to the true journal tail.
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:02", "z-after-2")
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_settle_watermark_holds_back_open_second_rows_then_delivers(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Audit 2026-07-17 #1 follow-up (review finding): a STRICT keyset cursor
+    # advanced into the still-open second permanently drops any same-second row
+    # that becomes visible later with a lower event_id (ClickHouse processed_at
+    # is second-granular, event ids are UUIDs — not monotonic). The settle
+    # watermark keeps every fetch out of unsettled seconds, so the frontier
+    # only crosses seconds no writer will stamp again.
+    #
+    # Rows are stamped exactly the way production DuckDB journal writes are —
+    # binding an AWARE datetime.now(UTC) (local_pipeline binds the same) — so
+    # this test also pins the frame equivalence the watermark relies on: the
+    # aware param and CAST(now() AS TIMESTAMP) both land in the session-local
+    # frame, whatever the host zone.
+    now_utc = datetime.now(UTC).replace(microsecond=123456)
+    stored = now_utc.astimezone().replace(tzinfo=None)  # DuckDB's stored (session-local) frame
+    open_ts = stored.strftime("%Y-%m-%d %H:%M:%S.%f")
+    conn = _journal_conn(
+        [
+            ("e-settled", "acme", "order.created", now_utc - timedelta(seconds=30)),
+            ("zz-open-high", "acme", "order.created", now_utc),
+        ]
+    )
+    try:
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        create_webhook(app, url="https://a.test/h", tenant="acme", filters=WebhookFilters())
+        dispatcher = WebhookDispatcher(app, settle_seconds=5)
+
+        delivered: list[str] = []
+
+        async def _deliver(webhook: object, event: dict) -> dict:
+            delivered.append(str(event["event_id"]))
+            return {"success": True, "status_code": 200, "event_id": event["event_id"]}
+
+        monkeypatch.setattr(dispatcher, "deliver", _deliver)
+
+        await dispatcher.dispatch_new_events()
+        # Only the settled row is visible; the cursor must NOT enter the open
+        # second.
+        assert delivered == ["e-settled"]
+        settled_ts = (stored - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S.%f")
+        assert dispatcher._scan_cursor == (settled_ts, "e-settled")
+
+        # The drop scenario the watermark exists for: a same-second row with a
+        # LOWER event_id becomes visible after the high one already did. Behind
+        # a strict frontier it would be excluded forever; behind the watermark
+        # it is simply not visible yet.
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES (?, 'orders.raw', ?, ?, ?)",
+            ["aa-open-low", "acme", "order.created", now_utc],
+        )
+        await dispatcher.dispatch_new_events()
+        assert delivered == ["e-settled"]  # still held back — and not lost
+
+        # Time passes (simulated by dropping the watermark): BOTH open-second
+        # rows deliver, including the late lower-id one, exactly once each.
+        dispatcher.settle_seconds = 0
+        await dispatcher.dispatch_new_events()
+        assert sorted(delivered) == ["aa-open-low", "e-settled", "zz-open-high"]
+        assert dispatcher._scan_cursor == (open_ts, "zz-open-high")
+    finally:
+        conn.close()
+
+
+def test_mark_existing_does_not_seed_unsettled_rows(config_path: Path) -> None:
+    # Startup: rows younger than the settle watermark are NOT marked seen —
+    # they deliver once settled (an event that raced a restart is not lost);
+    # a row the pre-restart process already delivered is suppressed by the
+    # durable enqueue's idempotent key, not re-POSTed. Stamps bind aware
+    # datetime.now(UTC), exactly like production journal writes.
+    now_utc = datetime.now(UTC).replace(microsecond=123456)
+    conn = _journal_conn(
+        [
+            ("e-old", "acme", "order.created", now_utc - timedelta(seconds=30)),
+            ("e-fresh", "acme", "order.created", now_utc),
+        ]
+    )
+    try:
+        app = _stub_app(conn)
+        app.state.webhook_config_path = config_path
+        dispatcher = WebhookDispatcher(app, settle_seconds=5)
+
+        dispatcher.mark_existing_events_seen()
+
+        assert "acme:e-old" in dispatcher.seen_event_ids
+        assert "acme:e-fresh" not in dispatcher.seen_event_ids
+        assert dispatcher._scan_cursor is not None
+        assert dispatcher._scan_cursor[1] == "e-old"
     finally:
         conn.close()
 
@@ -415,7 +582,7 @@ async def test_dispatch_cursor_freezes_on_enqueue_failure_then_retries(
         await dispatcher.dispatch_new_events()
 
         assert "acme:e-fail" in dispatcher.seen_event_ids
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:02"
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:02", "e-ok")
         # e-ok's durable row already existed (idempotent enqueue), so the
         # retry pass delivered exactly the failed event — no duplicate POST.
         assert delivered == ["e-ok", "e-fail"]
@@ -440,7 +607,7 @@ async def test_seen_set_stays_bounded_across_scans() -> None:
         # The cursor, not the seen-set, is what keeps old rows out of the
         # window — it reached the journal tail even though early ids were
         # evicted.
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:07"
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:07", "e7")
     finally:
         conn.close()
 
@@ -466,7 +633,7 @@ def test_mark_existing_seeds_cursor_past_a_malformed_newest_timestamp() -> None:
     dispatcher.mark_existing_events_seen()
 
     # newest row's ts is malformed -> cursor falls back to the next parseable row
-    assert dispatcher._scan_cursor == "2026-07-10 10:00:05"
+    assert dispatcher._scan_cursor == ("2026-07-10 10:00:05", "mid")
     # every row is marked seen regardless of ts validity (id-keyed, not ts-keyed)
     assert dispatcher.seen_event_ids == {"acme:new", "acme:mid", "acme:old"}
 
@@ -485,7 +652,7 @@ async def test_dispatch_does_not_dedup_same_event_id_across_tenants() -> None:
 
         # 'other:e1' is processed (marked seen) despite 'acme:e1' being seen
         assert "other:e1" in dispatcher.seen_event_ids
-        assert dispatcher._scan_cursor == "2026-07-10 10:00:00"
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:00", "e1")
     finally:
         conn.close()
 
@@ -589,7 +756,9 @@ async def test_dispatch_isolates_webhook_failure_and_enqueues_all(
         app.state.webhook_config_path = config_path
         wh1 = create_webhook(app, url="https://a.test/h1", tenant="acme", filters=WebhookFilters())
         wh2 = create_webhook(app, url="https://b.test/h2", tenant="acme", filters=WebhookFilters())
-        dispatcher = WebhookDispatcher(app)
+        # settle_seconds=0: the probe is failure isolation, and its single row
+        # is stamped NOW() — held back by the default settle watermark.
+        dispatcher = WebhookDispatcher(app, settle_seconds=0)
 
         async def _deliver(webhook: object, event: dict) -> dict:
             if getattr(webhook, "id", None) == wh1.id:

@@ -594,54 +594,69 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         max_attempts: int,
         backoff_seconds: Sequence[float],
     ) -> None:
-        with self._connect() as conn:
-            if success:
-                conn.execute(
-                    """
-                    UPDATE webhook_delivery_queue
-                    SET status = 'delivered', last_status_code = %s, last_error = NULL,
-                        lease_expires_at = NULL, updated_at = now()
-                    WHERE webhook_id = %s AND event_id = %s
-                    """,
-                    (status_code, webhook_id, event_id),
-                )
-                return
-            row = conn.execute(
-                "SELECT attempts FROM webhook_delivery_queue "
-                "WHERE webhook_id = %s AND event_id = %s FOR UPDATE",
-                (webhook_id, event_id),
-            ).fetchone()
-            attempts = (row[0] if row else 0) + 1
-            if attempts >= max_attempts:
-                conn.execute(
-                    """
-                    UPDATE webhook_delivery_queue
-                    SET status = 'dead', attempts = %s, last_status_code = %s,
-                        last_error = %s, next_attempt_at = NULL,
-                        lease_expires_at = NULL, updated_at = now()
-                    WHERE webhook_id = %s AND event_id = %s
-                    """,
-                    (attempts, status_code, error, webhook_id, event_id),
-                )
-                return
-            delay = backoff_seconds[min(attempts - 1, len(backoff_seconds) - 1)]
-            conn.execute(
-                """
-                UPDATE webhook_delivery_queue
-                SET status = 'pending', attempts = %s, last_status_code = %s,
-                    last_error = %s, next_attempt_at = %s,
-                    lease_expires_at = NULL, updated_at = now()
-                WHERE webhook_id = %s AND event_id = %s
-                """,
-                (
-                    attempts,
-                    status_code,
-                    error,
-                    datetime.now(UTC) + timedelta(seconds=delay),
-                    webhook_id,
-                    event_id,
-                ),
-            )
+        # Bounded retry on transient connection errors, same shape as
+        # record_api_usage: without it, a POST that succeeded but then hit a
+        # momentary DB blip on this outcome write never clears the enqueue
+        # lease, stranding the row pending+leased for the full claim lease
+        # window instead of a fast redrive (audit finding #4).
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                with self._connect() as conn:
+                    if success:
+                        conn.execute(
+                            """
+                            UPDATE webhook_delivery_queue
+                            SET status = 'delivered', last_status_code = %s,
+                                last_error = NULL, lease_expires_at = NULL, updated_at = now()
+                            WHERE webhook_id = %s AND event_id = %s
+                            """,
+                            (status_code, webhook_id, event_id),
+                        )
+                        return
+                    row = conn.execute(
+                        "SELECT attempts FROM webhook_delivery_queue "
+                        "WHERE webhook_id = %s AND event_id = %s FOR UPDATE",
+                        (webhook_id, event_id),
+                    ).fetchone()
+                    attempts = (row[0] if row else 0) + 1
+                    if attempts >= max_attempts:
+                        conn.execute(
+                            """
+                            UPDATE webhook_delivery_queue
+                            SET status = 'dead', attempts = %s, last_status_code = %s,
+                                last_error = %s, next_attempt_at = NULL,
+                                lease_expires_at = NULL, updated_at = now()
+                            WHERE webhook_id = %s AND event_id = %s
+                            """,
+                            (attempts, status_code, error, webhook_id, event_id),
+                        )
+                        return
+                    delay = backoff_seconds[min(attempts - 1, len(backoff_seconds) - 1)]
+                    conn.execute(
+                        """
+                        UPDATE webhook_delivery_queue
+                        SET status = 'pending', attempts = %s, last_status_code = %s,
+                            last_error = %s,
+                            next_attempt_at = now() + make_interval(secs => %s),
+                            lease_expires_at = NULL, updated_at = now()
+                        WHERE webhook_id = %s AND event_id = %s
+                        """,
+                        (
+                            attempts,
+                            status_code,
+                            error,
+                            delay,
+                            webhook_id,
+                            event_id,
+                        ),
+                    )
+                    return
+            except _TRANSIENT_ERRORS as exc:
+                last_error = exc
+                time.sleep(0.01 * (attempt + 1))
+        assert last_error is not None
+        raise last_error
 
     def park_webhook_delivery(self, *, webhook_id: str, event_id: str, error: str) -> None:
         with self._connect() as conn:
@@ -974,21 +989,20 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         )
         if is_kafka_error:
             retry_delay_seconds = max(retry_delay_seconds, 30)
-        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(
-            seconds=retry_delay_seconds
-        )
-        if retry_count >= max_retries:
+        is_failed = retry_count >= max_retries
+        if is_failed:
             status = "failed"
-            next_attempt_at = None
         with self._connect() as conn:
             conn.execute(
                 """
                 UPDATE outbox
-                SET status = %s, retry_count = %s, next_attempt_at = %s,
+                SET status = %s, retry_count = %s,
+                    next_attempt_at = CASE WHEN %s THEN NULL
+                                            ELSE now() + make_interval(secs => %s) END,
                     last_error = %s, lease_expires_at = NULL
                 WHERE id = %s
                 """,
-                (status, retry_count, next_attempt_at, error_message, outbox_id),
+                (status, retry_count, is_failed, retry_delay_seconds, error_message, outbox_id),
             )
             if status == "failed":
                 conn.execute(

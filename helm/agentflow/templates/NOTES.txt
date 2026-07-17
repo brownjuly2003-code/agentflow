@@ -1,0 +1,45 @@
+AgentFlow {{ .Chart.AppVersion }} has been deployed as release "{{ .Release.Name }}".
+
+Service (in-cluster):
+  {{ include "agentflow.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+Control-plane store: {{ .Values.controlPlane.store }}
+{{- if .Values.worker.enabled }}
+Process-role split: ENABLED (API Deployment role=api, worker Deployment role=worker).
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+NetworkPolicy: ENABLED (default-deny + explicit egress{{ if eq .Values.controlPlane.store "postgres" }}, including PostgreSQL:{{ .Values.networkPolicy.egressPorts.postgres }}{{ end }}).
+{{- end }}
+
+{{- if .Release.IsUpgrade }}
+
+>>> UPGRADE NOTE — one-time API Deployment recreate may be required <<<
+
+This release makes the API Deployment's spec.selector carry
+`app.kubernetes.io/component: api` UNCONDITIONALLY. spec.selector is IMMUTABLE.
+If the release you just upgraded FROM was installed with an earlier chart where
+`worker.enabled=false` (selector was name+instance only), the API server will
+reject this upgrade with:
+
+    Deployment.apps "{{ include "agentflow.fullname" . }}" is invalid:
+    spec.selector: Invalid value: ... field is immutable
+
+If that happened, the upgrade did NOT apply. Recreate the API Deployment once —
+pick ONE:
+
+  # A) zero-downtime: orphan the old pods, let the new Deployment take over,
+  #    then reap the orphans after the new pods are Ready.
+  kubectl delete deployment {{ include "agentflow.fullname" . }} \
+    -n {{ .Release.Namespace }} --cascade=orphan
+  helm upgrade {{ .Release.Name }} <chart> [same flags]
+  # ...verify new pods Ready, then delete leftover old pods by hand.
+
+  # B) simplest (brief serving gap on a single-replica install):
+  kubectl delete deployment {{ include "agentflow.fullname" . }} \
+    -n {{ .Release.Namespace }}
+  helm upgrade {{ .Release.Name }} <chart> [same flags]
+
+Releases already running the split (worker.enabled=true) are unaffected — their
+selector already carried component=api. Fresh installs are unaffected.
+See docs/migration/helm-component-selector.md for detail.
+{{- end }}

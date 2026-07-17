@@ -101,8 +101,10 @@ podDisruptionBudget:
 
 # NetworkPolicy enforces a default-deny baseline plus explicit ingress on the
 # HTTP port and egress to dependencies (DNS, Kubernetes API, Redis, Kafka,
-# ClickHouse, OTLP collector). Disabled by default so existing clusters
-# without a NetworkPolicy controller are not broken; turn on per environment.
+# ClickHouse, OTLP collector, and — on the postgres control-plane profile —
+# PostgreSQL). Disabled by default so existing clusters without a NetworkPolicy
+# controller are not broken; turn on per environment. The postgres:5432 egress
+# rule is rendered only when controlPlane.store=postgres (harmless otherwise).
 networkPolicy:
   enabled: false
   ingressFromNamespaces:
@@ -112,6 +114,7 @@ networkPolicy:
     kafka: 9092
     clickhouse: 8123
     otlp: 4317
+    postgres: 5432
 
 # Serving engine (ADR 0006 / 0007 / 0009). The shipped demo runs ClickHouse;
 # the chart's default stays the safe single-node DuckDB profile because the

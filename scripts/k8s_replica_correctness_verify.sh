@@ -63,6 +63,9 @@ CLICKHOUSE_PASSWORD_KEY="${CLICKHOUSE_PASSWORD_KEY:-clickhouse-password}"
 CLICKHOUSE_POD="${CLICKHOUSE_POD:-}"
 DELIVERY_WAIT_SECONDS="${DELIVERY_WAIT_SECONDS:-45}"
 DELIVERY_POLL_SECONDS="${DELIVERY_POLL_SECONDS:-2}"
+# Once the first delivery is seen, keep polling this long and assert no second
+# delivery_id appears — a split delivery can land a poll cycle or two later.
+DELIVERY_SETTLE_SECONDS="${DELIVERY_SETTLE_SECONDS:-12}"
 # Tenant of the inserted event — must match the API key's tenant (staging: default).
 EVENT_TENANT="${EVENT_TENANT:-default}"
 
@@ -70,6 +73,9 @@ EVENT_TENANT="${EVENT_TENANT:-default}"
 # pods have had a chance to race claim_alert_tick for the same rule.
 ALERT_WAIT_SECONDS="${ALERT_WAIT_SECONDS:-150}"
 ALERT_POLL_SECONDS="${ALERT_POLL_SECONDS:-5}"
+# After the first page, dwell > one full alert tick (60s) and assert no second
+# page appears — the other pod's dispatcher could page up to one poll later.
+ALERT_SETTLE_SECONDS="${ALERT_SETTLE_SECONDS:-75}"
 # error_rate over 1h is 0 when the only journal rows are non-deadletter
 # (Check 3 insert is enough). below 1.0 therefore always fires on a healthy stand.
 ALERT_METRIC="${ALERT_METRIC:-error_rate}"
@@ -184,10 +190,20 @@ echo "    inserted pipeline_events row"
 
 # Both pods poll ~2s; enqueue is insert-win on (webhook_id, event_id). Only the
 # winner calls deliver() and writes webhook_deliveries rows for this event.
-deadline=$(( $(date +%s) + DELIVERY_WAIT_SECONDS ))
+end=$(( $(date +%s) + DELIVERY_WAIT_SECONDS ))
+settle_end=0
 unique_ids=0
 log_count=0
-while (( $(date +%s) < deadline )); do
+# Wait for the first delivery, then DWELL a settle window and assert the count
+# never rises to 2. Asserting on the first sighting cannot tell "exactly one"
+# from "one so far" (audit 2026-07-17 #3, vacuous break-then-assert).
+while :; do
+  now=$(date +%s)
+  if (( settle_end == 0 )); then
+    (( now < end )) || break
+  else
+    (( now < settle_end )) || break
+  fi
   logs_json=$(curl -fsS -H "X-API-Key: $API_KEY" \
     "$BASE_URL/v1/webhooks/$webhook_id/logs")
   # Count distinct delivery_id for this event_id. Multiple attempt rows may share
@@ -205,15 +221,17 @@ print(len(ids), len(matched))
   set -- $counts
   unique_ids=${1:-0}
   log_count=${2:-0}
-  if (( unique_ids >= 1 )); then
-    break
+  # Fail the moment a second delivery_id appears — that IS the split we guard against.
+  (( unique_ids <= 1 )) || fail "expected exactly 1 delivery_id for event_id=$event_id, got ${unique_ids} (split delivery across pods)"
+  if (( unique_ids == 1 && settle_end == 0 )); then
+    settle_end=$(( now + DELIVERY_SETTLE_SECONDS ))
   fi
   sleep "$DELIVERY_POLL_SECONDS"
 done
 
 (( unique_ids >= 1 )) || fail "no delivery log for event_id=$event_id within ${DELIVERY_WAIT_SECONDS}s (scanners idle or CH not shared)"
 (( unique_ids == 1 )) || fail "expected exactly 1 delivery_id for event_id=$event_id, got ${unique_ids} (split delivery across pods)"
-pass "exactly one delivery_id for event_id=$event_id (${log_count} log row(s))"
+pass "exactly one delivery_id for event_id=$event_id, stable over ${DELIVERY_SETTLE_SECONDS}s (${log_count} log row(s))"
 
 # --- Check 4: one alert page per incident (claim_alert_tick single-flight) ----
 echo "==> [Check 4] exactly one alert.triggered page for one firing rule across pods"
@@ -244,10 +262,21 @@ alert_id=$(printf '%s' "$alert_reg" | python3 -c 'import json,sys; print(json.lo
 [[ -n "$alert_id" ]] || fail "alert create returned no id: $alert_reg"
 echo "    registered alert_id=$alert_id metric=$ALERT_METRIC $ALERT_CONDITION $ALERT_THRESHOLD window=$ALERT_WINDOW"
 
-deadline=$(( $(date +%s) + ALERT_WAIT_SECONDS ))
+end=$(( $(date +%s) + ALERT_WAIT_SECONDS ))
+settle_end=0
 triggered_ok=0
 history_count=0
-while (( $(date +%s) < deadline )); do
+# Wait for the first page, then DWELL > one full alert tick (60s) and assert the
+# count never rises to 2 — the other pod's dispatcher could page up to one poll
+# later. Asserting on the first sighting cannot tell "one" from "one so far"
+# (audit 2026-07-17 #3, vacuous break-then-assert).
+while :; do
+  now=$(date +%s)
+  if (( settle_end == 0 )); then
+    (( now < end )) || break
+  else
+    (( now < settle_end )) || break
+  fi
   hist_json=$(curl -fsS -H "X-API-Key: $API_KEY" \
     "$BASE_URL/v1/alerts/$alert_id/history")
   counts=$(printf '%s' "$hist_json" | python3 -c '
@@ -265,14 +294,16 @@ print(len(ok), len(hist))
   set -- $counts
   triggered_ok=${1:-0}
   history_count=${2:-0}
-  if (( triggered_ok >= 1 )); then
-    break
+  # Fail the moment a second page appears — that IS the split we guard against.
+  (( triggered_ok <= 1 )) || fail "expected exactly 1 successful alert.triggered page, got ${triggered_ok} (split page across pods)"
+  if (( triggered_ok == 1 && settle_end == 0 )); then
+    settle_end=$(( now + ALERT_SETTLE_SECONDS ))
   fi
   sleep "$ALERT_POLL_SECONDS"
 done
 
 (( triggered_ok >= 1 )) || fail "no successful alert.triggered within ${ALERT_WAIT_SECONDS}s (dispatcher idle, metric not firing, or delivery failing)"
 (( triggered_ok == 1 )) || fail "expected exactly 1 successful alert.triggered page, got ${triggered_ok} (split page across pods?)"
-pass "exactly one alert.triggered page for alert_id=$alert_id (${history_count} history row(s))"
+pass "exactly one alert.triggered page for alert_id=$alert_id, stable over ${ALERT_SETTLE_SECONDS}s (${history_count} history row(s))"
 
 echo "==> replica-correctness verify OK (Checks 1-4)"

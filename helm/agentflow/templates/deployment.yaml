@@ -15,9 +15,12 @@ metadata:
   name: {{ include "agentflow.fullname" . }}
   labels:
     {{- include "agentflow.labels" . | nindent 4 }}
-    {{- if .Values.worker.enabled }}
+    # component=api is UNCONDITIONAL (not gated on worker.enabled): it keeps this
+    # Deployment's immutable spec.selector stable across a worker.enabled toggle
+    # (helm upgrade would otherwise fail "spec.selector is immutable"), keeps API
+    # vs worker pods disjoint so the two Deployments never adopt each other's
+    # pods, and lets the api-scoped PodDisruptionBudget always match these pods.
     app.kubernetes.io/component: api
-    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
@@ -28,16 +31,12 @@ spec:
   selector:
     matchLabels:
       {{- include "agentflow.selectorLabels" . | nindent 6 }}
-      {{- if .Values.worker.enabled }}
       app.kubernetes.io/component: api
-      {{- end }}
   template:
     metadata:
       labels:
         {{- include "agentflow.selectorLabels" . | nindent 8 }}
-        {{- if .Values.worker.enabled }}
         app.kubernetes.io/component: api
-        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

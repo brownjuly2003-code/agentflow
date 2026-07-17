@@ -46,6 +46,16 @@ updates:
       # have explicit floors in pyproject.toml driven by CVE fixes
       # (see commit e8b1237 and the A06 dependency-profiles block).
       # Allow minor + patch within the >= floor, never major.
+      #
+      # NOTE (audit 2026-07-17 #8): a Dependabot `ignore` applies to BOTH
+      # version updates AND security updates — there is no per-ignore
+      # `applies-to` (that key exists only on `groups`). So a CVE fixed ONLY in
+      # a major bump of these deps gets no automatic security-update PR. This is
+      # an ACCEPTED tradeoff: the `safety` + `pip-audit` jobs in security.yml
+      # scan these deps and FAIL on such a CVE, surfacing it for a deliberate
+      # manual major bump (the whole reason their majors are gated). Do NOT
+      # "fix" by dropping the ignore — that re-introduces the unwanted
+      # major-version PR churn these floors exist to prevent.
       - dependency-name: "langchain-core"
         update-types: ["version-update:semver-major"]
       - dependency-name: "langchain-text-splitters"

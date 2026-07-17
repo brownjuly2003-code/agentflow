@@ -194,9 +194,14 @@ now bounded:
   same-second row that becomes visible later with a lower id. Every dispatcher
   fetch is therefore bounded by a DB-clock **settle watermark**
   (`processed_at <= now() - INTERVAL N SECOND`,
-  `AGENTFLOW_WEBHOOK_SETTLE_SECONDS`, default 3 s; must exceed writer
-  stamp-to-visibility lag + writer↔DB clock skew; worst-case added delivery
-  latency = settle). Startup (`mark_existing_events_seen`) seeds the cursor
+  `AGENTFLOW_WEBHOOK_SETTLE_SECONDS`, default 3 s; `0` disables the bound
+  entirely — tests only; must exceed writer stamp-to-visibility lag +
+  writer↔DB clock skew, and a violation is silent (a late-visible row behind
+  the frontier is simply never delivered), so treat the invariant as an
+  operating requirement, not a tunable. On a non-UTC DuckDB host the
+  session-local frame is non-monotonic across the autumn DST fold: delivery
+  of rows stamped inside the fold window is delayed (never dropped) by up to
+  the fold width. Worst-case added delivery latency = settle. Startup (`mark_existing_events_seen`) seeds the cursor
   from the newest **settled** batch instead of enumerating the journal —
   unsettled rows deliver once settled (a restart race is not lost; the durable
   enqueue's idempotent key suppresses re-POSTs); the seen-set is now a

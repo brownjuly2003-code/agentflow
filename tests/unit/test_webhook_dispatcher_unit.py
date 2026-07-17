@@ -250,8 +250,11 @@ def test_mark_existing_events_seen_populates_seen_ids(
 # --- bounded incremental journal scan (issue #183) ----------------------------
 
 
-def _journal_conn(rows: list[tuple[str, str, str, str]]) -> duckdb.DuckDBPyConnection:
-    """pipeline_events with explicit timestamps: (event_id, tenant, event_type, ts)."""
+def _journal_conn(rows: list[tuple[str, str, str, str | datetime]]) -> duckdb.DuckDBPyConnection:
+    """pipeline_events with explicit timestamps: (event_id, tenant, event_type, ts).
+
+    ``ts`` may be a string literal (fixed-date regressions) or an aware
+    datetime (binds exactly like production journal writes)."""
     conn = duckdb.connect(":memory:")
     conn.execute(
         """
@@ -444,13 +447,19 @@ async def test_settle_watermark_holds_back_open_second_rows_then_delivers(
     # is second-granular, event ids are UUIDs — not monotonic). The settle
     # watermark keeps every fetch out of unsettled seconds, so the frontier
     # only crosses seconds no writer will stamp again.
-    now = datetime.now().replace(microsecond=123456)  # naive local — DuckDB's stamp frame
-    open_ts = now.strftime("%Y-%m-%d %H:%M:%S.%f")
-    settled_ts = (now - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S.%f")
+    #
+    # Rows are stamped exactly the way production DuckDB journal writes are —
+    # binding an AWARE datetime.now(UTC) (local_pipeline binds the same) — so
+    # this test also pins the frame equivalence the watermark relies on: the
+    # aware param and CAST(now() AS TIMESTAMP) both land in the session-local
+    # frame, whatever the host zone.
+    now_utc = datetime.now(UTC).replace(microsecond=123456)
+    stored = now_utc.astimezone().replace(tzinfo=None)  # DuckDB's stored (session-local) frame
+    open_ts = stored.strftime("%Y-%m-%d %H:%M:%S.%f")
     conn = _journal_conn(
         [
-            ("e-settled", "acme", "order.created", settled_ts),
-            ("zz-open-high", "acme", "order.created", open_ts),
+            ("e-settled", "acme", "order.created", now_utc - timedelta(seconds=30)),
+            ("zz-open-high", "acme", "order.created", now_utc),
         ]
     )
     try:
@@ -471,6 +480,7 @@ async def test_settle_watermark_holds_back_open_second_rows_then_delivers(
         # Only the settled row is visible; the cursor must NOT enter the open
         # second.
         assert delivered == ["e-settled"]
+        settled_ts = (stored - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S.%f")
         assert dispatcher._scan_cursor == (settled_ts, "e-settled")
 
         # The drop scenario the watermark exists for: a same-second row with a
@@ -479,7 +489,7 @@ async def test_settle_watermark_holds_back_open_second_rows_then_delivers(
         # it is simply not visible yet.
         conn.execute(
             "INSERT INTO pipeline_events VALUES (?, 'orders.raw', ?, ?, ?)",
-            ["aa-open-low", "acme", "order.created", open_ts],
+            ["aa-open-low", "acme", "order.created", now_utc],
         )
         await dispatcher.dispatch_new_events()
         assert delivered == ["e-settled"]  # still held back — and not lost
@@ -498,17 +508,13 @@ def test_mark_existing_does_not_seed_unsettled_rows(config_path: Path) -> None:
     # Startup: rows younger than the settle watermark are NOT marked seen —
     # they deliver once settled (an event that raced a restart is not lost);
     # a row the pre-restart process already delivered is suppressed by the
-    # durable enqueue's idempotent key, not re-POSTed.
-    now = datetime.now().replace(microsecond=123456)
+    # durable enqueue's idempotent key, not re-POSTed. Stamps bind aware
+    # datetime.now(UTC), exactly like production journal writes.
+    now_utc = datetime.now(UTC).replace(microsecond=123456)
     conn = _journal_conn(
         [
-            (
-                "e-old",
-                "acme",
-                "order.created",
-                (now - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S.%f"),
-            ),
-            ("e-fresh", "acme", "order.created", now.strftime("%Y-%m-%d %H:%M:%S.%f")),
+            ("e-old", "acme", "order.created", now_utc - timedelta(seconds=30)),
+            ("e-fresh", "acme", "order.created", now_utc),
         ]
     )
     try:

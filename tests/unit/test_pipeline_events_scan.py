@@ -233,6 +233,19 @@ def test_settle_seconds_absent_by_default() -> None:
     assert "INTERVAL" not in sql, "re-fetching callers must keep the unbounded scan"
 
 
+def test_settle_seconds_zero_is_a_true_opt_out() -> None:
+    # 0 must emit NO bound at all — `<= now()` would still withhold rows from
+    # a forward-skewed writer, which is not what "opt out" means.
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(settle_seconds=0, limit=10)
+
+    ((sql, _),) = backend.calls
+    assert "INTERVAL" not in sql
+    assert "now()" not in sql
+
+
 def test_settle_seconds_ignored_without_time_column() -> None:
     backend = FakeExternalBackend(columns={"event_id", "topic"})
     engine = _engine(backend)

@@ -385,11 +385,13 @@ class QueryEngine(
                 cursor = _coerce_journal_timestamp(min_processed_at)
                 rendered = render(cursor.strftime("%Y-%m-%d %H:%M:%S"))
                 where_clauses.append(f"{time_column} >= CAST({rendered} AS TIMESTAMP)")
-        if settle_seconds is not None and time_column is not None:
+        if settle_seconds is not None and int(settle_seconds) > 0 and time_column is not None:
             # DB-clock watermark (see docstring): the keyset frontier must not
-            # enter a second writers can still stamp. int() keeps the literal
-            # allowlisted; both dialects execute this expression as written
-            # (verified live on DuckDB and ClickHouse 25.3).
+            # enter a second writers can still stamp. 0 is a true opt-out (no
+            # clause at all — review follow-up: `<= now()` would still withhold
+            # future-stamped rows under forward writer skew). int() keeps the
+            # literal allowlisted; both dialects execute this expression as
+            # written (verified live on DuckDB and ClickHouse 25.3).
             where_clauses.append(
                 f"{time_column} <= CAST(now() AS TIMESTAMP) "
                 f"- INTERVAL '{int(settle_seconds)}' SECOND"

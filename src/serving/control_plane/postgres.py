@@ -629,7 +629,7 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                 """
                 UPDATE webhook_delivery_queue
                 SET status = 'pending', attempts = %s, last_status_code = %s,
-                    last_error = %s, next_attempt_at = %s,
+                    last_error = %s, next_attempt_at = now() + make_interval(secs => %s),
                     lease_expires_at = NULL, updated_at = now()
                 WHERE webhook_id = %s AND event_id = %s
                 """,
@@ -637,7 +637,7 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                     attempts,
                     status_code,
                     error,
-                    datetime.now(UTC) + timedelta(seconds=delay),
+                    delay,
                     webhook_id,
                     event_id,
                 ),
@@ -974,21 +974,20 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         )
         if is_kafka_error:
             retry_delay_seconds = max(retry_delay_seconds, 30)
-        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(
-            seconds=retry_delay_seconds
-        )
-        if retry_count >= max_retries:
+        is_failed = retry_count >= max_retries
+        if is_failed:
             status = "failed"
-            next_attempt_at = None
         with self._connect() as conn:
             conn.execute(
                 """
                 UPDATE outbox
-                SET status = %s, retry_count = %s, next_attempt_at = %s,
+                SET status = %s, retry_count = %s,
+                    next_attempt_at = CASE WHEN %s THEN NULL
+                                            ELSE now() + make_interval(secs => %s) END,
                     last_error = %s, lease_expires_at = NULL
                 WHERE id = %s
                 """,
-                (status, retry_count, next_attempt_at, error_message, outbox_id),
+                (status, retry_count, is_failed, retry_delay_seconds, error_message, outbox_id),
             )
             if status == "failed":
                 conn.execute(

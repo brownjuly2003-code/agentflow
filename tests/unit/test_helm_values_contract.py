@@ -403,11 +403,7 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
 
     # Multi-doc YAML: find SA and provision Job hook metadata.
     docs = list(yaml.safe_load_all(rendered.stdout))
-    sa_docs = [
-        d
-        for d in docs
-        if d and d.get("kind") == "ServiceAccount"
-    ]
+    sa_docs = [d for d in docs if d and d.get("kind") == "ServiceAccount"]
     job_docs = [
         d
         for d in docs
@@ -425,9 +421,10 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
     assert int(sa_ann["helm.sh/hook-weight"]) < int(job_ann["helm.sh/hook-weight"])
     assert sa_ann["helm.sh/hook-delete-policy"] == "before-hook-creation"
     # Job must still bind the chart SA (not default).
-    assert job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"] == sa_docs[0][
-        "metadata"
-    ]["name"]
+    assert (
+        job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"]
+        == sa_docs[0]["metadata"]["name"]
+    )
 
 
 def test_serving_clickhouse_tls_render_is_first_class():

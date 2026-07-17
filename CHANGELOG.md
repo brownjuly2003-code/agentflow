@@ -4,6 +4,47 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixes — post-11.07 adversarial audit (2 latent P1, 4 P2, 1 low)
+
+Four-surface adversarial review of everything merged since the 11.07 audit
+(control-plane, serving/webhook, helm/k8s, CI). All findings fixed and locally
+verified (ruff/lint/targeted unit tests + helm render); no live-cluster run.
+Full report: `audit_2026-07-17_post11.md`.
+
+- **Webhook journal scan — composite keyset cursor (P1, was a silent wedge).**
+  The scan cursor is now `(processed_at, event_id)` and fetches strictly after
+  it, so a single second holding ≥ `scan_batch_size` rows can no longer re-pin a
+  second-granular cursor and silently drop every later webhook. Portable
+  OR-decomposition predicate (row-value tuples don't transpile to ClickHouse); a
+  regression test seeds a larger-than-one-batch second and is red on the old
+  code, green on the fix.
+- **NetworkPolicy — PostgreSQL egress (P1, was a hardened-prod outage).** A
+  `:5432` egress rule now renders when `controlPlane.store=postgres`; without it,
+  `networkPolicy.enabled=true` on the postgres profile denied every pod's PG
+  connect and the control-plane pool never opened.
+- **Control-plane retry backoff — DB clock (P2).** `next_attempt_at` is computed
+  in SQL (`now() + make_interval`) instead of the app pod's clock, mirroring the
+  lease columns, so NTP skew no longer collapses or over-delays the
+  webhook/outbox backoff.
+- **Replica-correctness verify — settle window (P2).** E4 Checks 3/4 dwell a
+  settle window and assert the count never exceeds one, instead of asserting on
+  the first sighting — which passed a delayed split delivery/page undetected.
+- **PodDisruptionBudget — api-scoped (P2).** The PDB selects `component: api`, so
+  a drain cannot evict both API pods while a lone worker satisfies the budget.
+- **API Deployment selector — stable component label (P2).**
+  `app.kubernetes.io/component: api` is now unconditional, so the immutable
+  `spec.selector` no longer changes when `worker.enabled` is toggled. One-time
+  recreate for pre-split installs is documented in
+  `docs/migration/helm-component-selector.md` (no pre-upgrade hook — it would
+  fire on every upgrade).
+- **Webhook outcome write — transient retry (P2).**
+  `record_webhook_delivery_outcome` retries transient DB errors like
+  `record_api_usage`, so a blip after a successful POST no longer strands the
+  row+lease for the full claim window.
+- **Dependabot `ignore` — documented security-update scope (low).** Commented
+  that an `ignore` also suppresses security-update PRs (there is no per-ignore
+  `applies-to`); an accepted tradeoff, still caught by the safety/pip-audit jobs.
+
 ### Perf — paced 1 h @ 100 eps produce (apply 99.5)
 
 - Mac compose (1 Flink TM), fresh volumes: 360 000 events at `--pace-eps 100`

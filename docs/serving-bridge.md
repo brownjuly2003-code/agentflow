@@ -177,16 +177,20 @@ scans and pushes kept one entry per event forever. All journal consumers are
 now bounded:
 
 - **Webhook dispatcher** — incremental cursor scan: each pass fetches at most
-  `scan_batch_size` (1000) rows at/after the `processed_at` high-water mark
-  (`min_processed_at`, inclusive — the journal is second-granular on
-  ClickHouse, and the seen-set dedups the re-fetched cursor second). The
-  cursor advances over the contiguous prefix of rows that end the pass seen
-  and **freezes at the first row whose durable enqueue failed**, so that row
-  is re-fetched and retried next pass — the retry-forever semantics the full
-  scan provided. An all-seen full batch still advances the cursor, so a seen
-  frontier wider than one batch cannot pin the window. Startup
-  (`mark_existing_events_seen`) seeds the cursor from the newest batch instead
-  of enumerating the journal.
+  `scan_batch_size` (1000) rows **strictly after** a composite
+  `(processed_at, event_id)` keyset cursor, in `processed_at, event_id ASC`
+  order. The cursor advances over the contiguous prefix of rows that end the
+  pass seen and **freezes at the first row whose durable enqueue failed**, so
+  that row is re-fetched and retried next pass — the retry-forever semantics the
+  full scan provided. The keyset (not a bare second-granular high-water mark) is
+  what lets the frontier advance **within** a single second: an inclusive
+  `processed_at >=` cursor floored to the second was re-pinned forever by any
+  second holding ≥ `scan_batch_size` rows, silently dropping every later webhook
+  for every tenant (audit 2026-07-17 #1). The predicate is the portable
+  OR-decomposition `t > ts OR (t = ts AND event_id > id)` — a row-value tuple
+  does not transpile to ClickHouse. Startup (`mark_existing_events_seen`) seeds
+  the cursor from the newest batch instead of enumerating the journal; the
+  seen-set is now a secondary safety net, with the keyset as the primary dedup.
 - **Seen-sets** — `BoundedSeenSet` (`src/serving/seen_events.py`): capped,
   FIFO-with-refresh eviction. Eviction is safe because webhook enqueue is
   idempotent on its primary key (inline delivery fires only for freshly

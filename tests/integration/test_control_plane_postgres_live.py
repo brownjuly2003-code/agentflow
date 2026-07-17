@@ -87,6 +87,23 @@ def _queue_row(webhook_id: str, event_id: str) -> tuple | None:
         ).fetchone()
 
 
+def _release_enqueue_lease(*event_ids: str) -> None:
+    """Hand freshly enqueued rows over to the claim path.
+
+    The enqueue winner stamps a claim lease on insert (it inline-delivers;
+    see ``test_enqueue_stamps_lease_so_redrive_cannot_steal_inline``), so a
+    fresh row is invisible to ``claim_due_webhook_deliveries`` until an
+    outcome clears the lease or it expires. The claim-semantics probes below
+    are about the *claim* path, not the inline race — release the lease the
+    way expiry would, without disturbing status/attempts/next_attempt_at.
+    """
+    with psycopg.connect(PG_DSN) as conn:
+        conn.execute(
+            "UPDATE webhook_delivery_queue SET lease_expires_at = NULL WHERE event_id = ANY(%s)",
+            (list(event_ids),),
+        )
+
+
 def _stagger_created_at(table: str, key_column: str, key: str, offset_seconds: int) -> None:
     with psycopg.connect(PG_DSN) as conn:
         conn.execute(
@@ -178,6 +195,7 @@ def test_parallel_claims_never_hand_the_same_row_to_two_workers(
 ) -> None:
     for index in range(10):
         _enqueue(store, "wh-1", f"e{index}")
+    _release_enqueue_lease(*(f"e{index}" for index in range(10)))
     workers = 4
     barrier = threading.Barrier(workers)
 
@@ -197,6 +215,7 @@ def test_claimed_rows_are_invisible_until_their_lease_expires(
     store: PostgresControlPlaneStore,
 ) -> None:
     _enqueue(store, "wh-1", "e1")
+    _release_enqueue_lease("e1")
     assert [row.event_id for row in store.claim_due_webhook_deliveries(limit=10)] == ["e1"]
     # Still pending (the claim is a lease, not a state flip), but leased —
     # a second worker sees nothing.
@@ -213,6 +232,7 @@ def test_expired_lease_makes_the_row_due_again(store: PostgresControlPlaneStore)
     short_lease = PostgresControlPlaneStore(PG_DSN, claim_lease_seconds=0.4)
     try:
         _enqueue(short_lease, "wh-1", "e1")
+        _release_enqueue_lease("e1")
         assert [row.event_id for row in short_lease.claim_due_webhook_deliveries(limit=10)] == [
             "e1"
         ]
@@ -256,6 +276,7 @@ def test_pending_delivery_survives_a_new_store_instance(
     store: PostgresControlPlaneStore,
 ) -> None:
     _enqueue(store, "wh-1", "e1")
+    _release_enqueue_lease("e1")  # the winner's inline attempt died with the process
     del store  # simulate process exit; only the PostgreSQL rows remain
 
     reborn = PostgresControlPlaneStore(PG_DSN)
@@ -329,6 +350,7 @@ def test_claims_come_back_oldest_first_within_the_limit(
     for index in range(3):
         _enqueue(store, "wh-1", f"e{index}")
         _stagger_created_at("webhook_delivery_queue", "event_id", f"e{index}", index)
+    _release_enqueue_lease("e0", "e1", "e2")
 
     claimed = store.claim_due_webhook_deliveries(limit=2)
 

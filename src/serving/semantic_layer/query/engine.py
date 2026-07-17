@@ -23,16 +23,24 @@ from .nl_queries import NLQueryMixin
 from .sql_builder import SQLBuilderMixin
 
 
-def _coerce_journal_timestamp(value: datetime | str) -> datetime:
-    """Parse a journal-scan cursor into a naive, second-precision datetime.
+def _coerce_journal_timestamp(value: datetime | str, *, floor_seconds: bool = True) -> datetime:
+    """Parse a journal-scan cursor into a naive datetime.
 
     Accepts what the journal itself hands back: ``datetime`` objects (DuckDB
     rows) or ``YYYY-MM-DD HH:MM:SS[.ffffff]`` strings, ``T``-separated or not
     (ClickHouse JSON transport). Anything else raises ``ValueError`` — the
     cursor is interpolated into SQL, so it must never pass through as free
-    text. Sub-second precision is floored: journal timestamps are
-    second-granular on ClickHouse, and an inclusive ``>=`` re-fetch of the
-    cursor second is what the callers' seen-sets are for.
+    text.
+
+    ``floor_seconds`` (default) truncates to whole seconds: the inclusive
+    ``>=`` re-fetch of the cursor second is what that path's seen-set is for,
+    and ClickHouse journal timestamps are second-granular anyway. The
+    **composite keyset** path passes ``floor_seconds=False`` and keeps
+    sub-second precision on purpose: with a second floored away, every row of a
+    saturated second collapses to one comparison key and the ``(processed_at,
+    event_id)`` keyset can no longer advance *within* that second — which is the
+    exact cohort-wedge this cursor exists to prevent (audit 2026-07-17 #1). The
+    value is still strict-parsed, so it can never reach SQL as free text.
 
     Timezone-aware input is rejected rather than converted: journal
     timestamps are stored naive (N2 — UTC on ClickHouse, local on DuckDB),
@@ -42,10 +50,15 @@ def _coerce_journal_timestamp(value: datetime | str) -> datetime:
     if isinstance(value, datetime):
         if value.tzinfo is not None:
             raise ValueError("journal-scan cursor must be naive (store-local) time")
-        return value.replace(microsecond=0)
+        return value.replace(microsecond=0) if floor_seconds else value
     text = str(value).strip().replace("T", " ")
-    base = text.split(".", 1)[0]
-    return datetime.strptime(base, "%Y-%m-%d %H:%M:%S")
+    if floor_seconds:
+        base = text.split(".", 1)[0]
+        return datetime.strptime(base, "%Y-%m-%d %H:%M:%S")
+    try:
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
 
 
 class QueryEngine(
@@ -166,6 +179,7 @@ class QueryEngine(
         validated_only: bool = False,
         newest_first: bool = False,
         min_processed_at: datetime | str | None = None,
+        min_event_id: str | None = None,
     ) -> list[dict]:
         """Read the ``pipeline_events`` journal through the serving backend.
 
@@ -194,13 +208,28 @@ class QueryEngine(
         ``event_type``/``validated_only``, usable without an ``entity_id``
         for a bulk scan across many entities in one query.
 
-        ``min_processed_at`` is the incremental-scan cursor (issue #183): an
-        inclusive lower bound on the journal time column, accepting the
-        ``datetime``/string forms the journal itself returns (strictly parsed
-        — see ``_coerce_journal_timestamp``). Pair it with ``limit`` so a
-        poller re-reads only the frontier of a large journal instead of
-        materializing all of it on every pass. Ignored when the journal has
-        no time column (the scan then stays bounded by ``limit`` alone).
+        ``min_processed_at`` is the incremental-scan cursor (issue #183),
+        accepting the ``datetime``/string forms the journal itself returns
+        (strictly parsed — see ``_coerce_journal_timestamp``). Pair it with
+        ``limit`` so a poller re-reads only the frontier of a large journal
+        instead of materializing all of it on every pass. Ignored when the
+        journal has no time column (the scan then stays bounded by ``limit``
+        alone). It has two modes:
+
+        * alone, it is an **inclusive** lower bound (``processed_at >= cursor``,
+          second-floored) — the caller's seen-set dedups the re-fetched second.
+        * paired with ``min_event_id``, it becomes a **composite keyset**:
+          ``processed_at > ts OR (processed_at = ts AND event_id > id)`` —
+          strictly after the ``(processed_at, event_id)`` of the last row the
+          caller consumed, keeping the same ``ORDER BY processed_at, event_id``.
+          This is what lets the scan advance *within* a single second that holds
+          more than ``limit`` rows; the inclusive bound alone pins there forever
+          and silently drops every later event (audit 2026-07-17 #1). The
+          predicate is written as the OR-decomposition rather than a row-value
+          tuple ``(a, b) > (x, y)`` because the tuple form does not transpile to
+          ClickHouse, while the decomposition round-trips through sqlglot on
+          both backends. ``min_event_id`` alone (no ``min_processed_at``) is
+          ignored — a keyset needs both halves.
 
         ``tenant_id=None`` is an explicit invariant, not incidental behaviour
         (n4, G2 audit): it means "no tenant filter" — an unscoped, cross-
@@ -305,12 +334,36 @@ class QueryEngine(
                 return []
             where_clauses.append(f"entity_id = {render(entity_id)}")
         if min_processed_at is not None and time_column is not None:
-            cursor = _coerce_journal_timestamp(min_processed_at)
-            rendered = render(cursor.strftime("%Y-%m-%d %H:%M:%S"))
             # CAST keeps the comparison typed on both engines (DuckDB binds a
             # VARCHAR param; the ClickHouse transpile maps TIMESTAMP to
             # DateTime).
-            where_clauses.append(f"{time_column} >= CAST({rendered} AS TIMESTAMP)")
+            if min_event_id is not None:
+                # Composite keyset (audit 2026-07-17 #1): strictly past
+                # (processed_at, event_id) so a second holding >= `limit` rows
+                # cannot pin the window. Sub-second precision is preserved
+                # (floor_seconds=False) so a saturated DuckDB second stays
+                # discriminable; on ClickHouse processed_at is second-granular
+                # so the literal is a whole second either way. The row-value
+                # tuple form does not transpile — this OR-decomposition does
+                # (verified duckdb + clickhouse). `render` is called once per
+                # placeholder so the DuckDB param list matches the SQL.
+                cursor = _coerce_journal_timestamp(min_processed_at, floor_seconds=False)
+                if cursor.microsecond:
+                    cursor_text = cursor.strftime("%Y-%m-%d %H:%M:%S.%f")
+                else:
+                    cursor_text = cursor.strftime("%Y-%m-%d %H:%M:%S")
+                gt_ts = render(cursor_text)
+                eq_ts = render(cursor_text)
+                cursor_id = render(str(min_event_id))
+                where_clauses.append(
+                    f"({time_column} > CAST({gt_ts} AS TIMESTAMP) "
+                    f"OR ({time_column} = CAST({eq_ts} AS TIMESTAMP) "
+                    f"AND event_id > {cursor_id}))"
+                )
+            else:
+                cursor = _coerce_journal_timestamp(min_processed_at)
+                rendered = render(cursor.strftime("%Y-%m-%d %H:%M:%S"))
+                where_clauses.append(f"{time_column} >= CAST({rendered} AS TIMESTAMP)")
 
         # column names come from the schema allowlist above
         sql = f"SELECT {', '.join(select_columns)} FROM pipeline_events"  # nosec B608

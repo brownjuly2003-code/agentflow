@@ -152,3 +152,88 @@ def test_min_processed_at_ignored_when_journal_has_no_time_column() -> None:
     ((sql, _),) = backend.calls
     assert "CAST" not in sql, "no time column to bound on — the scan stays limit-bounded"
     assert sql.endswith("LIMIT 50")
+
+
+# --- composite keyset cursor (audit 2026-07-17 #1) -----------------------------
+
+
+def test_min_event_id_renders_composite_keyset_not_inclusive_bound() -> None:
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(
+        min_processed_at="2026-07-10 10:00:00", min_event_id="e0004", limit=1000
+    )
+
+    ((sql, params),) = backend.calls
+    # Strict keyset PAST (processed_at, event_id), written as the portable
+    # OR-decomposition (row-value tuples do not transpile to ClickHouse). This is
+    # what lets the scan advance WITHIN a second holding more than one batch of
+    # rows; the inclusive `>=` bound alone pins there forever (the cohort-wedge).
+    assert params is None
+    assert (
+        "(processed_at > CAST('2026-07-10 10:00:00' AS TIMESTAMP) "
+        "OR (processed_at = CAST('2026-07-10 10:00:00' AS TIMESTAMP) "
+        "AND event_id > 'e0004'))"
+    ) in sql
+    assert ">=" not in sql, "keyset must not fall back to the wedge-prone inclusive bound"
+    assert sql.endswith("ORDER BY processed_at ASC, event_id ASC LIMIT 1000")
+
+
+def test_min_event_id_preserves_sub_second_precision_in_the_keyset() -> None:
+    # A DuckDB journal timestamp can carry microseconds; the keyset must compare
+    # at full precision, otherwise a saturated second's sub-second rows collapse
+    # to one key and re-wedge. (On ClickHouse processed_at is second-granular, so
+    # this branch simply never produces a fractional literal there.)
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(min_processed_at="2026-07-10T10:00:00.123456", min_event_id="e1")
+
+    ((sql, _),) = backend.calls
+    assert "CAST('2026-07-10 10:00:00.123456' AS TIMESTAMP)" in sql
+
+
+def test_min_event_id_without_min_processed_at_is_ignored() -> None:
+    # A keyset needs both halves; an event id alone is not a cursor.
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+
+    engine.fetch_pipeline_events(min_event_id="e1", limit=10)
+
+    ((sql, _),) = backend.calls
+    assert "event_id >" not in sql
+    assert "CAST" not in sql
+
+
+def test_keyset_predicate_transpiles_to_clickhouse() -> None:
+    # Two-backend portability guard (audit 2026-07-17 #1): the keyset predicate
+    # the external path emits must survive the exact ClickHouseBackend transpile
+    # (parse duckdb -> generate clickhouse -> re-parse clickhouse) with table
+    # references preserved — the backend's own fail-closed invariant
+    # (`_assert_scope_preserved`). A row-value tuple `(a, b) > (x, y)` would not
+    # round-trip; this OR-decomposition does. Pins the property in CI so a
+    # sqlglot regression can never silently reintroduce the ClickHouse-only wedge.
+    import sqlglot
+    from sqlglot import exp
+
+    backend = FakeExternalBackend()
+    engine = _engine(backend)
+    engine.fetch_pipeline_events(min_processed_at="2026-07-10 10:00:00", min_event_id="e0004")
+    ((sql, _),) = backend.calls
+
+    statements = [s for s in sqlglot.parse(sql, read="duckdb") if s is not None]
+    assert len(statements) == 1
+    translated = statements[0].sql(dialect="clickhouse")
+    reparsed = sqlglot.parse_one(translated, read="clickhouse")  # must not raise
+
+    def _refs(node: exp.Expr) -> list[tuple[str, str, str]]:
+        return sorted(
+            ((t.catalog or "").lower(), (t.db or "").lower(), (t.name or "").lower())
+            for t in node.find_all(exp.Table)
+        )
+
+    assert _refs(statements[0]) == _refs(reparsed), "transpile changed table references"
+    # the keyset survived as an OR of two typed comparisons over event_id
+    assert "event_id" in translated
+    assert " OR " in translated.upper()

@@ -141,19 +141,27 @@ class WebhookDispatcher:
         self.max_delivery_attempts = 5
         self.redrive_batch_size = 100
         # Journal scan is incremental and bounded (issue #183): each pass reads
-        # at most `scan_batch_size` rows at/after `_scan_cursor` instead of the
-        # whole journal — the unbounded scan is what grew the API process to
-        # 1.67 GB over the 4 h S11 soak. `scan_batch_size` must exceed the
-        # largest same-second event cohort the pipeline produces (journal
-        # timestamps are second-granular on ClickHouse; at the measured
-        # 87 eps a cohort is ~100 rows, so 1000 leaves ×10 headroom) — an
-        # all-seen full batch advances the cursor, so a cohort smaller than
-        # one batch can never pin the window. The seen-set is capped too:
-        # eviction is safe because enqueue is idempotent on its primary key
-        # and inline delivery fires only for freshly inserted rows.
+        # at most `scan_batch_size` rows strictly after `_scan_cursor` instead of
+        # the whole journal — the unbounded scan is what grew the API process to
+        # 1.67 GB over the 4 h S11 soak.
+        #
+        # `_scan_cursor` is a COMPOSITE keyset — the (processed_at, event_id) of
+        # the last contiguously-handled row — not a bare timestamp (audit
+        # 2026-07-17 #1). A bare second-granular cursor advanced only to the
+        # whole second and re-fetched `WHERE processed_at >= cursor`; a single
+        # second holding >= `scan_batch_size` rows then filled every batch with
+        # that second's lowest-event_id rows, re-pinned the cursor to the SAME
+        # second, and silently dropped every webhook for every event at/after it
+        # — permanently, with a healthy-looking cursor. The keyset advances
+        # WITHIN a saturated second (`(processed_at, event_id) > cursor`), so the
+        # batch size no longer has to exceed the largest same-second cohort for
+        # the scan to make progress. The seen-set is capped and is now a
+        # secondary safety net (the keyset is the primary dedup): eviction is
+        # safe because enqueue is idempotent on its primary key and inline
+        # delivery fires only for freshly inserted rows.
         self.scan_batch_size = scan_batch_size
         self.seen_event_ids: BoundedSeenSet = BoundedSeenSet(maxlen=seen_cache_size)
-        self._scan_cursor: str | None = None
+        self._scan_cursor: tuple[str, str] | None = None
         self._task: asyncio.Task | None = None
         # S7: first-class subscribers notified when the journal scan marks new
         # events seen. Replaces the historical monkey-patch over
@@ -204,7 +212,7 @@ class WebhookDispatcher:
         Startup semantics are unchanged — events already in the journal are
         not delivered — but the initialization is O(scan_batch_size), not
         O(journal): the newest batch seeds the seen-set and the cursor, and
-        everything older is excluded by the cursor's ``>=`` bound instead of
+        everything older is excluded by the cursor's keyset bound instead of
         by enumerating it (issue #183).
         """
         try:
@@ -218,15 +226,15 @@ class WebhookDispatcher:
                 self.seen_event_ids.add(_seen_event_key(event))
         if events:
             # newest_first — seed the cursor from the newest row whose
-            # processed_at parses. If the very newest row's timestamp is
-            # malformed, fall back to the next parseable row rather than
-            # leaving the cursor None: a None cursor makes the next scan fetch
-            # with min_processed_at=None (from the oldest journal row), which
+            # processed_at parses AND that carries an event_id (both halves of
+            # the keyset). If the very newest row is unusable, fall back to the
+            # next usable row rather than leaving the cursor None: a None cursor
+            # makes the next scan fetch from the oldest journal row, which
             # re-delivers the whole batch we just seeded (audit #185, defensive
             # seed-edge). All rows in this batch are already in the seen-set, so
-            # advancing to any of their timestamps drops nothing.
+            # advancing to any of their keys drops nothing.
             for event in events:
-                seeded = _cursor_timestamp(event)
+                seeded = _cursor_key(event)
                 if seeded is not None:
                     self._scan_cursor = seeded
                     break
@@ -243,17 +251,23 @@ class WebhookDispatcher:
         # Delivery stays tenant-scoped below. Metric-cache invalidation is
         # owned by MetricCacheController (S7) and does not require this loop.
         #
-        # The scan is incremental (issue #183): a bounded batch at/after the
-        # cursor, ASC. The cursor advances over the contiguous prefix of rows
-        # that end this pass seen (previously or newly), and freezes at the
-        # first row left unseen (an enqueue failure) so that row is re-fetched
-        # and retried next pass — the retry-forever semantics the full scan
-        # provided, without materializing the whole journal every 2 s.
+        # The scan is incremental (issue #183): a bounded batch strictly after
+        # the (processed_at, event_id) keyset cursor, ASC. The cursor advances
+        # over the contiguous prefix of rows that end this pass seen (previously
+        # or newly), and freezes at the first row left unseen (an enqueue
+        # failure) so that row is re-fetched and retried next pass — the
+        # retry-forever semantics the full scan provided, without materializing
+        # the whole journal every 2 s. Because the cursor carries event_id, the
+        # frontier moves even inside a single second that holds more than one
+        # batch of rows (audit 2026-07-17 #1).
         newly_seen = 0
-        advance: str | None = None
+        advance: tuple[str, str] | None = None
         frozen = False
+        cursor = self._scan_cursor
         for event in self._fetch_pipeline_events(
-            limit=self.scan_batch_size, min_processed_at=self._scan_cursor
+            limit=self.scan_batch_size,
+            min_processed_at=cursor[0] if cursor is not None else None,
+            min_event_id=cursor[1] if cursor is not None else None,
         ):
             event_id = str(event.get("event_id") or "")
             seen_key = _seen_event_key(event)
@@ -268,7 +282,7 @@ class WebhookDispatcher:
                 # the cursor move over it so a frontier of already-seen rows
                 # cannot pin the scan window.
                 if not frozen:
-                    advance = _cursor_timestamp(event) or advance
+                    advance = _cursor_key(event) or advance
                 continue
 
             tenant = str(event.get("tenant_id") or "default")
@@ -320,7 +334,7 @@ class WebhookDispatcher:
                 self.seen_event_ids.add(seen_key)
                 newly_seen += 1
                 if not frozen:
-                    advance = _cursor_timestamp(event) or advance
+                    advance = _cursor_key(event) or advance
             else:
                 frozen = True
 
@@ -463,6 +477,7 @@ class WebhookDispatcher:
         limit: int | None = None,
         newest_first: bool = False,
         min_processed_at: str | None = None,
+        min_event_id: str | None = None,
     ) -> list[dict]:
         # Scan the journal through the serving backend, not the embedded DuckDB
         # connection: when serving is ClickHouse (ADR 0006) the events that
@@ -473,6 +488,7 @@ class WebhookDispatcher:
             limit=limit,
             newest_first=newest_first,
             min_processed_at=min_processed_at,
+            min_event_id=min_event_id,
         )
         return events
 
@@ -579,22 +595,52 @@ def _seen_event_key(event: dict) -> str:
 def _cursor_timestamp(event: dict) -> str | None:
     """Normalize a journal row's ``processed_at`` into a scan-cursor string.
 
-    Returns ``YYYY-MM-DD HH:MM:SS`` (second precision — the journal's own
-    granularity on ClickHouse) or ``None`` when the value is missing or does
-    not round-trip through strict parsing, so a malformed row can degrade one
-    cursor advance but never poison the next scan's SQL.
+    Returns ``YYYY-MM-DD HH:MM:SS[.ffffff]`` or ``None`` when the value is
+    missing or does not round-trip through strict parsing, so a malformed row
+    can degrade one cursor advance but never poison the next scan's SQL.
+
+    Sub-second precision is *preserved* when present: the composite keyset the
+    cursor feeds compares ``processed_at`` exactly, and flooring a DuckDB
+    microsecond timestamp to its whole second would collapse a saturated
+    second's rows into one key and let the scan re-wedge there (audit
+    2026-07-17 #1). On ClickHouse ``processed_at`` is second-granular, so the
+    string is a whole second either way — the same literal shape as before.
     """
     value = event.get("processed_at")
     if value is None:
         return None
     if isinstance(value, datetime):
+        if value.microsecond:
+            return value.strftime("%Y-%m-%d %H:%M:%S.%f")
         return value.strftime("%Y-%m-%d %H:%M:%S")
-    text = str(value).strip().replace("T", " ").split(".", 1)[0]
-    try:
-        datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
+    text = str(value).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if parsed.microsecond:
+            return parsed.strftime("%Y-%m-%d %H:%M:%S.%f")
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    return None
+
+
+def _cursor_key(event: dict) -> tuple[str, str] | None:
+    """Composite keyset cursor ``(processed_at, event_id)`` for a journal row.
+
+    Returns ``None`` when the row cannot anchor a cursor — a missing/malformed
+    ``processed_at`` or a missing ``event_id`` — so the caller keeps its prior
+    cursor rather than advancing onto an unusable key. Both halves are required:
+    the keyset only defeats the same-second cohort wedge when it can order rows
+    that share a ``processed_at`` by ``event_id``.
+    """
+    ts = _cursor_timestamp(event)
+    if ts is None:
         return None
-    return text
+    event_id = str(event.get("event_id") or "")
+    if not event_id:
+        return None
+    return (ts, event_id)
 
 
 def _event_type_matches(event_type: str, requested: str) -> bool:

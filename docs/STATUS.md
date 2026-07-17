@@ -38,13 +38,14 @@ measured steps on the same Mac compose stand (Kafka → Flink → bridge → CH)
 | Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | **87.4 eps** | measured — [perf/throughput-realpath-q14-2026-07-10.md](perf/throughput-realpath-q14-2026-07-10.md) |
 | Stretch try — 2000-event drain on same Mac class | **107.3 eps** | measured — [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md) |
 | Paced 10 min @ 100 eps produce | **96.5 apply / 97.1 flink / 100 produce** | measured — [perf/throughput-realpath-paced100-2026-07-17.md](perf/throughput-realpath-paced100-2026-07-17.md) |
+| Paced **1 h** @ 100 eps produce | **99.5 apply / 99.5 flink / 100 produce** | measured — [perf/throughput-realpath-paced100-1h-2026-07-17.md](perf/throughput-realpath-paced100-1h-2026-07-17.md) |
 
 The series target of **≥ 80 eps** is met on the 400-burst profile. A
-**2000-event** drain cleared at **107.3 eps**. A **~10 minute paced** produce
-at 100 eps held hop/apply near 96–97 with lag → 0 after a bounded peak
-(peak lag 1037). Multi-hour sustained ≥ 100 is still open. The 4 h soak held
-~47 eps avg delivered with bounded lag. Semantics of the batched path are in
-[serving-bridge.md](serving-bridge.md).
+**2000-event** drain cleared at **107.3 eps**. Paced ingress at 100 eps held
+for **10 min** (~96.5 apply) and for **1 h** (**99.5 apply/hop**, 0 failures,
+0 duplicates, lag → 0). Multi-hour (4 h+) sustained ≥ 100 is still open. The
+4 h soak held ~47 eps avg *delivered* with bounded lag. Semantics of the
+batched path are in [serving-bridge.md](serving-bridge.md).
 
 ## Known issues
 
@@ -72,9 +73,9 @@ at 100 eps held hop/apply near 96–97 with lag → 0 after a bounded peak
 
 ## Next
 
-1. **≥ 100 eps multi-hour sustained** — 10 min paced @ 100 produce is measured
-   (~96–97 apply/hop); multi-hour still open. Evidence:
-   [perf/throughput-realpath-paced100-2026-07-17.md](perf/throughput-realpath-paced100-2026-07-17.md).
+1. **≥ 100 eps multi-hour sustained** — 1 h paced @ 100 is measured
+   (99.5 apply/hop); **4 h+** still open. Evidence:
+   [perf/throughput-realpath-paced100-1h-2026-07-17.md](perf/throughput-realpath-paced100-1h-2026-07-17.md).
 2. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
    (tree/`agentflow_runtime` + shim) waits for a release branch:
    [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).

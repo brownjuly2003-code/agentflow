@@ -4,6 +4,15 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Perf — paced 1 h @ 100 eps produce (apply 99.5)
+
+- Mac compose (1 Flink TM), fresh volumes: 360 000 events at `--pace-eps 100`
+  → produce 100.0, flink 99.5, bridge apply 99.5, **0 failures / 0 duplicates**,
+  lag end 0 (peak 1679). Evidence:
+  `docs/perf/throughput-realpath-paced100-1h-2026-07-17.md`. Multi-hour still
+  open. Ops note: must `compose down -v` this project first or journal-guard
+  duplicates dominate the window.
+
 ### Docs — P2-6 Phase 0 inventory (no package move)
 
 - Baseline wheel still ships top-level `src/` (~540 in-repo `from src` lines).

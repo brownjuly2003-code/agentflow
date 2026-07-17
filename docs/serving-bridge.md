@@ -145,8 +145,11 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
   → 87.4 ([`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md))
   → 107.3 drain ([`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md))
   → paced 10 min @ 100 produce ≈ **96.5 apply / 97.1 flink**
-  ([`perf/throughput-realpath-paced100-2026-07-17.md`](perf/throughput-realpath-paced100-2026-07-17.md)).
-  Endurance: a 4 h soak at ~47 eps *delivered* held bounded lag with flat
+  ([`perf/throughput-realpath-paced100-2026-07-17.md`](perf/throughput-realpath-paced100-2026-07-17.md))
+  → paced **1 h** @ 100 produce ≈ **99.5 apply / 99.5 flink** (0 dups)
+  ([`perf/throughput-realpath-paced100-1h-2026-07-17.md`](perf/throughput-realpath-paced100-1h-2026-07-17.md)).
+  Multi-hour (4 h+) at ≥100 still open. Endurance: a 4 h soak at ~47 eps
+  *delivered* held bounded lag with flat
   RSS/FDs, survived a live broker/Redis fault with an exactly-once batch
   replay, and ended with zero cache drift —
   [`perf/soak-s11-2026-07-10.md`](perf/soak-s11-2026-07-10.md).

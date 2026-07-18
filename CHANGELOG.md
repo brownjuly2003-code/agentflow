@@ -4,6 +4,38 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixes — P3 follow-ups from the post-11.07 review (webhook)
+
+Two of the three P3 limitations the post-11.07 review left documented are now
+closed; the third (DuckDB autumn DST-fold delivery *delay* — never a drop) stays
+documented as an accepted narrow limit. Locally verified (ruff check + ruff
+format + targeted webhook/control-plane unit suites); the PostgreSQL adapter's
+symmetric change is verified by inspection against the shared contract (no
+live-cluster run on this host).
+
+- **Settle-invariant violation is no longer silent (P3a).** The webhook scan's
+  settle watermark rests on an operator invariant
+  (`AGENTFLOW_WEBHOOK_SETTLE_SECONDS` must exceed writer stamp-to-visibility lag +
+  writer↔DB clock skew); a violation used to drop the late-visible row behind the
+  keyset frontier with no signal at all. A cheap **sampled runtime detector** now
+  probes the bounded band immediately behind the frontier (a `newest_first`
+  window under a new `max_processed_at` bound, once per interval — no per-pass
+  cost, no journal-wide scan) for rows the scan never marked seen, and raises
+  `agentflow_webhook_settle_violations_total` with a
+  `webhook_settle_invariant_violation` warning. It reads only
+  `fetch_pipeline_events` + the in-memory seen-set, so it runs on both the DuckDB
+  and ClickHouse serving stores; silent under the `0` opt-out.
+- **Idempotent webhook outcome recording (P3b).**
+  `record_webhook_delivery_outcome` now carries the delivery round's
+  `delivery_id` and records it on the queue row (`last_outcome_id`), so a repeat
+  of the outcome write no-ops instead of bumping `attempts` a second time. This
+  closes attempts+2 → premature dead-letter, where the PostgreSQL adapter's
+  transient-error retry re-applied a failure whose UPDATE had committed but whose
+  commit-ack was lost. Embedded (DuckDB) and PostgreSQL adapters both stamp and
+  guard on the id; PostgreSQL migration 2 adds the column. A store-level
+  regression test is red on the pre-fix (non-idempotent) path and green on the
+  fix.
+
 ### Fixes — post-11.07 adversarial audit (2 latent P1, 4 P2, 1 low)
 
 Four-surface adversarial review of everything merged since the 11.07 audit

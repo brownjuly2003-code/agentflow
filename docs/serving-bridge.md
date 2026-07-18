@@ -196,16 +196,33 @@ now bounded:
   (`processed_at <= now() - INTERVAL N SECOND`,
   `AGENTFLOW_WEBHOOK_SETTLE_SECONDS`, default 3 s; `0` disables the bound
   entirely — tests only; must exceed writer stamp-to-visibility lag +
-  writer↔DB clock skew, and a violation is silent (a late-visible row behind
-  the frontier is simply never delivered), so treat the invariant as an
-  operating requirement, not a tunable. On a non-UTC DuckDB host the
+  writer↔DB clock skew — treat the invariant as an operating requirement, not
+  a tunable, because a violation still drops the late-visible row behind the
+  frontier (it is simply never delivered). That drop is no longer *silent*: a
+  cheap sampled runtime detector probes the band immediately behind the frontier
+  (`max_processed_at = frontier`, bounded `newest_first` window, once per
+  interval — no per-pass cost, no journal-wide scan) for rows the scan never
+  marked seen, and raises `agentflow_webhook_settle_violations_total` with a
+  `webhook_settle_invariant_violation` warning naming the frontier and a sample
+  row. It reads only `fetch_pipeline_events` and the in-memory seen-set, so it
+  runs on both the DuckDB and ClickHouse serving stores; it is silent under the
+  `0` opt-out. (Residual, documented: membership is tested against the bounded
+  seen-set, so an id evicted under an extreme burst within the lookback band, or
+  an arrival stamped older than that band, can be missed — the probe is
+  read-only and never changes what is delivered.) On a non-UTC DuckDB host the
   session-local frame is non-monotonic across the autumn DST fold: delivery
   of rows stamped inside the fold window is delayed (never dropped) by up to
   the fold width. Worst-case added delivery latency = settle. Startup (`mark_existing_events_seen`) seeds the cursor
   from the newest **settled** batch instead of enumerating the journal —
   unsettled rows deliver once settled (a restart race is not lost; the durable
   enqueue's idempotent key suppresses re-POSTs); the seen-set is now a
-  secondary safety net, with the keyset as the primary dedup.
+  secondary safety net, with the keyset as the primary dedup. Delivery
+  *outcomes* are idempotent per round too: `record_webhook_delivery_outcome`
+  carries that round's `delivery_id` and records it on the queue row
+  (`last_outcome_id`), so a repeat of the outcome write no-ops instead of
+  bumping `attempts` a second time. This closes attempts+2 → premature
+  dead-letter, where the PostgreSQL adapter's transient-error retry re-applied a
+  failure whose UPDATE had committed but whose commit-ack was lost.
 - **Seen-sets** — `BoundedSeenSet` (`src/serving/seen_events.py`): capped,
   FIFO-with-refresh eviction. Eviction is safe because webhook enqueue is
   idempotent on its primary key (inline delivery fires only for freshly

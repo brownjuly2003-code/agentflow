@@ -6,9 +6,10 @@ import hmac
 import json
 import os
 import secrets
+import time
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
+from src.serving.api.metrics import WEBHOOK_SETTLE_VIOLATIONS
 from src.serving.backends import BackendExecutionError
 from src.serving.control_plane import get_control_plane_store
 from src.serving.seen_events import BoundedSeenSet
@@ -178,6 +180,25 @@ class WebhookDispatcher:
         self.seen_event_ids: BoundedSeenSet = BoundedSeenSet(maxlen=seen_cache_size)
         self._scan_cursor: tuple[str, str] | None = None
         self._task: asyncio.Task | None = None
+        # Settle-invariant detector (P3 runtime check): the settle watermark
+        # only works while `settle_seconds` exceeds writer stamp-to-visibility
+        # lag + clock skew; a violation is otherwise silent (a late-visible row
+        # behind the frontier is never delivered). Once per interval the
+        # dispatcher probes a bounded band immediately BEHIND the keyset frontier
+        # for rows it never marked seen and warns + counts them — no per-pass
+        # cost, no journal-wide scan, and zero effect on delivery semantics. The
+        # probe stays out of open seconds by construction (its upper bound is the
+        # frontier, which is already settled), so it runs identically on DuckDB
+        # and ClickHouse. Silent when settle is opted out (`settle_seconds == 0`).
+        self._settle_check_interval_seconds = 30.0
+        self._settle_probe_lookback_seconds = max(60.0, float(settle_seconds) * 20.0)
+        self._settle_probe_limit = 200
+        # Seeded at construction (not None) so the probe first runs one interval
+        # into the dispatcher's life, never on the very first pass — startup
+        # warmup does not need a behind-frontier scan, and a single hand-driven
+        # dispatch in a test stays a single journal fetch unless it opts in by
+        # lowering the interval.
+        self._last_settle_check_at: float = time.monotonic()
         # S7: first-class subscribers notified when the journal scan marks new
         # events seen. Replaces the historical monkey-patch over
         # ``dispatch_new_events`` in main.py. Cache invalidation is owned by
@@ -360,12 +381,114 @@ class WebhookDispatcher:
         if advance is not None:
             self._scan_cursor = advance
 
+        # Cheap, sampled runtime check that the settle invariant still holds.
+        # Isolated so a probe failure can never disturb delivery.
+        try:
+            self._check_settle_invariant()
+        except Exception as exc:  # pragma: no cover - defensive; probe is read-only
+            logger.warning("webhook_settle_probe_error", error=str(exc))
+
         if newly_seen:
             for listener in self._on_new_events:
                 try:
                     await listener()
                 except Exception as exc:
                     logger.warning("webhook_new_events_listener_failed", error=str(exc))
+
+    def _check_settle_invariant(self) -> None:
+        """Detect a violated settle invariant cheaply, at runtime.
+
+        The operator invariant behind the settle watermark is ``settle_seconds >
+        writer stamp-to-visibility lag + writer<->DB clock skew``. When it holds,
+        the strict keyset frontier only crosses seconds no writer will stamp
+        again. When it is violated, a row becomes visible with a
+        ``(processed_at, event_id)`` already behind the frontier; every future
+        forward scan excludes it and it is **never delivered** — a silent drop.
+
+        The forward scan cannot see such a row (that is the whole problem), so
+        this probe looks the other way: a single bounded ``newest_first`` window
+        in the band immediately behind the current frontier
+        (``max_processed_at = frontier``), for rows the dispatcher never marked
+        seen. Each such row is a concrete never-handed-out delivery and bumps
+        ``agentflow_webhook_settle_violations_total`` with a warning.
+
+        Cost control: it runs at most once per ``_settle_check_interval_seconds``
+        (not every pass), fetches at most ``_settle_probe_limit`` rows within a
+        bounded lookback band, and never materializes the journal — so it adds no
+        per-pass cost and cannot regrow the RSS issue #183 fixed. It only reads
+        ``fetch_pipeline_events`` (the ClickHouse-safe chokepoint) and the
+        in-memory seen-set, so it works on both the DuckDB and ClickHouse serving
+        stores. Silent under the ``settle_seconds == 0`` opt-out.
+
+        Residual limits (documented, not silent): membership is tested against
+        the bounded seen-set, so a genuine drop whose id was already evicted
+        (only under an extreme burst wider than the seen-set within the lookback
+        band) could be missed or, if delivered-then-evicted, over-counted; the
+        probe is read-only either way and never changes what is delivered. A
+        pathologically late arrival stamped older than the lookback band is also
+        outside the window — the band is sized for realistic lag near the settle
+        boundary.
+        """
+        if self.settle_seconds <= 0:
+            return
+        cursor = self._scan_cursor
+        if cursor is None:
+            return
+        now = time.monotonic()
+        if (now - self._last_settle_check_at) < self._settle_check_interval_seconds:
+            return
+        self._last_settle_check_at = now
+
+        frontier_ts, frontier_id = cursor
+        frontier_dt = _parse_cursor_timestamp(frontier_ts)
+        if frontier_dt is None:
+            return
+        band_lower = frontier_dt - timedelta(seconds=self._settle_probe_lookback_seconds)
+        try:
+            behind = self._fetch_pipeline_events(
+                limit=self._settle_probe_limit,
+                newest_first=True,
+                min_processed_at=band_lower,
+                max_processed_at=frontier_ts,
+                # The band's upper bound is the already-settled frontier, so the
+                # watermark is redundant here; disable it so the probe cannot be
+                # confused with the forward scan's settle bound.
+                settle_seconds=0,
+            )
+        except Exception as exc:
+            logger.warning("webhook_settle_probe_failed", error=str(exc))
+            return
+
+        undelivered: list[dict] = []
+        for event in behind:
+            key = _cursor_key(event)
+            if key is None:
+                continue
+            ev_ts, ev_id = key
+            ev_dt = _parse_cursor_timestamp(ev_ts)
+            if ev_dt is None:
+                continue
+            # Keep only rows STRICTLY behind the keyset frontier — the exact set
+            # the forward scan `(t > ts OR (t = ts AND id > id))` will never
+            # return. Rows at or ahead of the frontier are still deliverable.
+            if ev_dt > frontier_dt or (ev_dt == frontier_dt and ev_id >= frontier_id):
+                continue
+            if _seen_event_key(event) in self.seen_event_ids:
+                continue
+            undelivered.append(event)
+
+        if undelivered:
+            WEBHOOK_SETTLE_VIOLATIONS.inc(len(undelivered))
+            sample = undelivered[0]
+            logger.warning(
+                "webhook_settle_invariant_violation",
+                settle_seconds=self.settle_seconds,
+                frontier_processed_at=frontier_ts,
+                frontier_event_id=frontier_id,
+                undelivered_behind_frontier=len(undelivered),
+                sample_event_id=str(sample.get("event_id") or ""),
+                sample_processed_at=str(sample.get("processed_at") or ""),
+            )
 
     async def deliver(self, webhook: WebhookRegistration, event: dict) -> dict:
         """Deliver one event now (the ``/test`` endpoint and the inline dispatch
@@ -495,8 +618,10 @@ class WebhookDispatcher:
         *,
         limit: int | None = None,
         newest_first: bool = False,
-        min_processed_at: str | None = None,
+        min_processed_at: str | datetime | None = None,
         min_event_id: str | None = None,
+        max_processed_at: str | datetime | None = None,
+        settle_seconds: int | None = None,
     ) -> list[dict]:
         # Scan the journal through the serving backend, not the embedded DuckDB
         # connection: when serving is ClickHouse (ADR 0006) the events that
@@ -511,7 +636,8 @@ class WebhookDispatcher:
             newest_first=newest_first,
             min_processed_at=min_processed_at,
             min_event_id=min_event_id,
-            settle_seconds=self.settle_seconds,
+            max_processed_at=max_processed_at,
+            settle_seconds=self.settle_seconds if settle_seconds is None else settle_seconds,
         )
         return events
 
@@ -538,7 +664,12 @@ class WebhookDispatcher:
         ``delivered``; failure → bump attempts and re-schedule (back to
         ``pending`` with a backoff ``next_attempt_at``), or park as ``dead`` once
         ``max_delivery_attempts`` is reached. The transition itself lives in the
-        control-plane store; the retry policy stays dispatcher configuration."""
+        control-plane store; the retry policy stays dispatcher configuration.
+
+        ``delivery_id`` (the per-round id ``deliver``/``_deliver_body`` mints and
+        returns in ``result``) is the idempotency token the store uses so a
+        retry of this write after a lost commit-ack does not count the same
+        outcome twice — the attempts+2 → premature dead-letter bug (P3)."""
         if not event_id:
             return
         get_control_plane_store(self.app).record_webhook_delivery_outcome(
@@ -549,6 +680,7 @@ class WebhookDispatcher:
             error=result.get("error"),
             max_attempts=self.max_delivery_attempts,
             backoff_seconds=self.backoff_seconds,
+            delivery_id=result.get("delivery_id"),
         )
 
     async def process_delivery_queue(self) -> None:
@@ -645,6 +777,24 @@ def _cursor_timestamp(event: dict) -> str | None:
         if parsed.microsecond:
             return parsed.strftime("%Y-%m-%d %H:%M:%S.%f")
         return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    return None
+
+
+def _parse_cursor_timestamp(text: str) -> datetime | None:
+    """Parse a normalized cursor string back into a naive datetime.
+
+    Inverse of :func:`_cursor_timestamp` for the settle-invariant detector's
+    in-Python keyset comparison — comparing datetimes (not raw strings) avoids
+    any lexicographic edge between whole-second and sub-second stamps of the
+    same second. Returns ``None`` on anything that does not round-trip, so a
+    malformed row is skipped rather than crashing the probe.
+    """
+    candidate = text.strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(candidate, fmt)
+        except ValueError:
+            continue
     return None
 
 

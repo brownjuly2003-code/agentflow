@@ -22,6 +22,7 @@ from types import SimpleNamespace
 import duckdb
 import httpx
 import pytest
+from prometheus_client import REGISTRY
 
 from src.serving.api.webhook_dispatcher import (
     WebhookDispatcher,
@@ -528,6 +529,101 @@ def test_mark_existing_does_not_seed_unsettled_rows(config_path: Path) -> None:
         assert "acme:e-fresh" not in dispatcher.seen_event_ids
         assert dispatcher._scan_cursor is not None
         assert dispatcher._scan_cursor[1] == "e-old"
+    finally:
+        conn.close()
+
+
+# --- P3(a): runtime settle-invariant detector --------------------------------
+
+_SETTLE_METRIC = "agentflow_webhook_settle_violations_total"
+
+
+def _settle_violations() -> float:
+    return REGISTRY.get_sample_value(_SETTLE_METRIC) or 0.0
+
+
+@pytest.mark.asyncio
+async def test_settle_detector_flags_undelivered_row_behind_frontier() -> None:
+    # The silent failure the detector exists to surface: the settle invariant is
+    # violated, so a row becomes visible with a processed_at already behind the
+    # settled keyset frontier. The forward scan's strict keyset excludes it
+    # forever — it is never delivered. The behind-frontier probe catches it and
+    # bumps agentflow_webhook_settle_violations_total.
+    conn = _journal_conn([("e-front", "acme", "order.created", "2026-07-10 10:00:10")])
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn), settle_seconds=3)
+        dispatcher._settle_check_interval_seconds = 0.0  # probe every pass in the test
+
+        # Pass 1: e-front is long settled, so the frontier advances onto it and
+        # it is marked seen. Nothing is behind the frontier yet.
+        await dispatcher.dispatch_new_events()
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:10", "e-front")
+        base = _settle_violations()
+
+        # A late-visible row lands BEHIND the settled frontier (lower second).
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES "
+            "('e-late', 'orders.raw', 'acme', 'order.created', '2026-07-10 10:00:05')"
+        )
+        await dispatcher.dispatch_new_events()
+
+        # The forward scan never handed it out, and the probe flagged exactly it.
+        assert "acme:e-late" not in dispatcher.seen_event_ids
+        assert _settle_violations() - base == 1.0
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_settle_detector_silent_when_settle_opted_out() -> None:
+    # settle_seconds == 0 is a deliberate opt-out (tests, or an operator who
+    # accepts the drop risk); the detector must stay completely silent even when
+    # a row is demonstrably behind the frontier.
+    conn = _journal_conn([("e-front", "acme", "order.created", "2026-07-10 10:00:10")])
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn), settle_seconds=0)
+        dispatcher._settle_check_interval_seconds = 0.0
+
+        await dispatcher.dispatch_new_events()
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:10", "e-front")
+        base = _settle_violations()
+
+        conn.execute(
+            "INSERT INTO pipeline_events VALUES "
+            "('e-late', 'orders.raw', 'acme', 'order.created', '2026-07-10 10:00:05')"
+        )
+        await dispatcher.dispatch_new_events()
+
+        assert _settle_violations() == base  # no warning, no counter movement
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_settle_detector_does_not_flag_already_delivered_rows() -> None:
+    # No false positives: a row behind the frontier that the scan DID hand out
+    # (it is in the seen-set) must not be counted. This is the common case —
+    # every settled row sits behind the frontier once the cursor moves past it.
+    conn = _journal_conn(
+        [
+            ("e-early", "acme", "order.created", "2026-07-10 10:00:05"),
+            ("e-front", "acme", "order.created", "2026-07-10 10:00:10"),
+        ]
+    )
+    try:
+        dispatcher = WebhookDispatcher(_stub_app(conn), settle_seconds=3)
+        dispatcher._settle_check_interval_seconds = 0.0
+        base = _settle_violations()
+
+        # Both settle and are handed out; the frontier ends at e-front with
+        # e-early sitting (delivered) behind it.
+        await dispatcher.dispatch_new_events()
+        assert dispatcher._scan_cursor == ("2026-07-10 10:00:10", "e-front")
+        assert "acme:e-early" in dispatcher.seen_event_ids
+
+        # A second pass re-runs the probe over the same behind-frontier band.
+        await dispatcher.dispatch_new_events()
+        assert _settle_violations() == base  # delivered-behind-frontier is not a violation
     finally:
         conn.close()
 

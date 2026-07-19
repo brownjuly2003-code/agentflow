@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -541,7 +542,21 @@ class AuthManager:
         return items
 
     def _rate_limit_key(self, tenant_key: TenantKey) -> str:
-        return tenant_key.key or tenant_key.key_hash or tenant_key.name
+        # This string becomes a Redis sorted-set key NAME (``rate_limiter`` calls
+        # ``zadd(key, ...)``), so it must never be the plaintext API key: a Redis
+        # read (SCAN / MONITOR / a backup / a shared cache) would otherwise
+        # recover live keys straight from the bucket names. Key the bucket by the
+        # stable non-secret ``key_id``; then the stored hash; then a hash of the
+        # plaintext (never the plaintext itself); finally the non-secret name.
+        # Each distinct key still maps to its own bucket, so per-key rate-limit
+        # isolation is unchanged. (audit S-6)
+        if tenant_key.key_id:
+            return f"kid:{tenant_key.key_id}"
+        if tenant_key.key_hash:
+            return f"kh:{tenant_key.key_hash}"
+        if tenant_key.key:
+            return f"kh:{hashlib.sha256(tenant_key.key.encode()).hexdigest()}"
+        return f"name:{tenant_key.name}"
 
     def _matches_key_material(self, item: TenantKey, value: str) -> bool:
         if item.key is not None and secrets.compare_digest(item.key, value):

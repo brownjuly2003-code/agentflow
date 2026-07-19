@@ -126,6 +126,10 @@ agentflow_demo_api.duckdb*
 
 # Internal working notes / autonomous-session artifacts — kept locally, not published.
 # These are process/handoff/scratch docs, not product or engineering documentation.
+# Claude Code config/session state and any *_local/ scratch dir are kitchen, never
+# product — untracked-but-unignored is one `git add -A` from a public repo. (N-6/P5.2)
+/.claude/
+/*_local/
 /AGENT_STATE.md
 /AUTOPILOT.md
 /BACKLOG.md
@@ -134,7 +138,15 @@ agentflow_demo_api.duckdb*
 /all-open-questions-closure-plan.md
 /close-gaps-plan.md
 /road-to-9.8.md
-/desc_for_julia.md
+/desc_for_julia*.md
+/G2_AUDIT_REPORT.md
+/new_plen_*.md
+/pii-deny-gate.md
+/s6-bridge-design.md
+/slice5-pg-control-plane.md
+# Root-level scratch presentation decks (internal drafts, not product; no tracked
+# code references them). Product docs live under docs/ and examples/.
+/presentation*.html
 /fable_*.md
 /next-session-*.md
 /second-opinion-*.md

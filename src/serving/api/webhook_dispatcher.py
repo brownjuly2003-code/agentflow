@@ -19,7 +19,11 @@ import structlog
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
+from src.serving.api.egress_guard import (
+    UnsafeEgressURLError,
+    pinned_transport,
+    resolve_public_ip,
+)
 from src.serving.api.metrics import WEBHOOK_SETTLE_VIOLATIONS
 from src.serving.backends import BackendExecutionError
 from src.serving.control_plane import get_control_plane_store
@@ -529,12 +533,14 @@ class WebhookDispatcher:
         status_code: int | None = None
         error: str | None = None
 
-        # Re-validate at delivery time too (not only at registration): a hostname
-        # that resolved to a public IP when the webhook was created could now
-        # point at an internal address (DNS rebinding). Fail the delivery instead
-        # of fetching an internal target. (audit_28_06_26.md #2)
+        # Resolve + validate at delivery time (not only at registration): a
+        # hostname that resolved to a public IP when the webhook was created
+        # could now point at an internal address (DNS rebinding). Resolve once
+        # here and pin the connection to that IP so httpx does not re-resolve
+        # between the check and the connect (rebinding TOCTOU, audit S-1). Fail
+        # the delivery instead of fetching an internal target. (audit_28_06_26.md #2)
         try:
-            await asyncio.to_thread(validate_public_url, webhook.url)
+            pinned_ip = await asyncio.to_thread(resolve_public_ip, webhook.url)
         except UnsafeEgressURLError as exc:
             error = f"unsafe egress URL: {exc}"
             store.log_webhook_delivery(
@@ -558,7 +564,9 @@ class WebhookDispatcher:
                 "attempts": 0,
             }
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(
+            timeout=5.0, transport=pinned_transport(webhook.url, pinned_ip)
+        ) as client:
             for attempt in range(1, 4):
                 attempts = attempt
                 error = None

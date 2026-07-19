@@ -44,14 +44,21 @@ def test_backend_wrapped_valueerror_is_genericised() -> None:
     assert "orders_v2" not in http.detail
 
 
-def test_missing_table_subclass_is_also_genericised() -> None:
-    # BackendMissingTableError is a BackendExecutionError subclass — same class
-    # of raw engine text, must not leak.
-    cause = BackendMissingTableError("orders_v2 not materialized on clickhouse-0")
+def test_missing_table_gets_clean_actionable_detail_without_sql() -> None:
+    # BackendMissingTableError is an operator provisioning signal; keep the
+    # actionable "not materialized" phrasing but drop the scoped-SQL reference
+    # the upstream message embeds.
+    cause = BackendMissingTableError(
+        "Table '(SELECT * EXCLUDE (tenant_id) FROM users_enriched) AS \"users_enriched\"' "
+        "for entity 'user' is not materialized yet"
+    )
     err = ValueError(f"Entity lookup failed: {cause}")
     err.__cause__ = cause
     http = _client_safe_error(err, _req(), status_code=503)
-    assert http.detail == "backend query failed (ref corr-123)"
+    assert http.status_code == 503
+    assert "is not materialized yet" in http.detail
+    assert "SELECT" not in http.detail
+    assert "users_enriched" not in http.detail
 
 
 def test_plain_validation_valueerror_is_verbatim() -> None:
@@ -81,6 +88,14 @@ def test_batch_direct_backend_error_is_genericised() -> None:
 def test_batch_wrapped_backend_error_is_genericised() -> None:
     msg = _safe_item_error(_reraise_from(BackendExecutionError(_RAW)), _req())
     assert msg == "backend query failed (ref corr-123)"
+
+
+def test_batch_missing_table_gets_clean_actionable_detail() -> None:
+    msg = _safe_item_error(
+        BackendMissingTableError("... FROM orders_v2 ... not materialized"), _req()
+    )
+    assert "is not materialized yet" in msg
+    assert "orders_v2" not in msg
 
 
 def test_batch_plain_validation_error_is_verbatim() -> None:

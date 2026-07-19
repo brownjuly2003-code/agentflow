@@ -12,7 +12,7 @@ from src.serving.api.routers.agent_query import (
     _call_in_threadpool_with_kwarg_fallback,
     _ensure_metric_allowed,
 )
-from src.serving.backends import BackendExecutionError
+from src.serving.backends import BackendExecutionError, BackendMissingTableError
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["agent"])
@@ -27,6 +27,12 @@ def _safe_item_error(exc: Exception, req: Request) -> str:
     Genericise those (log the real text server-side under the correlation id) and
     keep plain validation messages verbatim (pre-pen-test audit, S-2).
     """
+    if isinstance(exc, BackendMissingTableError) or isinstance(
+        exc.__cause__, BackendMissingTableError
+    ):
+        # Actionable provisioning signal, kept clean of the scoped-SQL reference
+        # (mirrors _client_safe_error).
+        return "serving table is not materialized yet — run provisioning"
     if isinstance(exc, BackendExecutionError) or isinstance(exc.__cause__, BackendExecutionError):
         correlation_id = getattr(req.state, "correlation_id", None)
         logger.error("batch_backend_error", detail=str(exc), correlation_id=correlation_id)

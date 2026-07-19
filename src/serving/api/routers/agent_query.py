@@ -23,7 +23,7 @@ from src.serving.api.versioning import (
     get_version_registry,
     resolve_request_version,
 )
-from src.serving.backends import BackendExecutionError
+from src.serving.backends import BackendExecutionError, BackendMissingTableError
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
 from src.serving.control_plane import get_control_plane_store
 from src.serving.semantic_layer.stage_clock import coerce_dt, resolve_breach, stage_budget
@@ -47,7 +47,18 @@ def _client_safe_error(exc: ValueError, req: Request, status_code: int) -> HTTPE
     validation (safe and useful to the caller) and is returned verbatim. The
     caller's ``status_code`` is preserved in both branches.
     """
-    if isinstance(exc.__cause__, BackendExecutionError):
+    cause = exc.__cause__
+    if isinstance(cause, BackendMissingTableError):
+        # A missing serving table is an actionable operator signal (run
+        # provisioning), not engine internals — but the upstream message embeds
+        # the scoped-SQL table reference, so return a clean fixed detail that
+        # keeps the "not materialized" signal without the SQL. `/health/ready`
+        # carries the full provisioning hint for operators.
+        return HTTPException(
+            status_code=status_code,
+            detail="serving table is not materialized yet — run provisioning",
+        )
+    if isinstance(cause, BackendExecutionError):
         correlation_id = getattr(req.state, "correlation_id", None)
         logger.error("backend_execution_error", detail=str(exc), correlation_id=correlation_id)
         ref = f" (ref {correlation_id})" if correlation_id else ""

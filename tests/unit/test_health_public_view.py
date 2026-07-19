@@ -9,6 +9,8 @@ contract) and nothing else.
 
 from __future__ import annotations
 
+from agentflow.models import HealthStatus
+
 from src.serving.api.main import _public_health_view
 
 _RAW_PAYLOAD = {
@@ -40,10 +42,23 @@ _RAW_PAYLOAD = {
 }
 
 
-def test_view_keeps_only_name_status_source_per_component() -> None:
+def test_view_component_fields_match_sdk_contract() -> None:
     view = _public_health_view(_RAW_PAYLOAD)
     for component in view["components"]:
-        assert set(component) == {"name", "status", "source", "metrics"}
+        assert set(component) == {"name", "status", "message", "source", "metrics"}
+
+
+def test_view_still_validates_against_sdk_health_model() -> None:
+    # The SDK's HealthComponent requires string `message`/`source` and the
+    # top-level HealthStatus requires `checked_at`. The push-only E2E lane
+    # validates the /v1/health payload through this model — dropping `message`
+    # broke it. Pin the contract here so it fails in unit tests, not only e2e.
+    HealthStatus.model_validate(_public_health_view(_RAW_PAYLOAD))
+
+
+def test_view_blanks_message_but_keeps_it_a_string() -> None:
+    for component in _public_health_view(_RAW_PAYLOAD)["components"]:
+        assert component["message"] == ""
 
 
 def test_view_drops_error_strings_counts_and_backend_identity() -> None:
@@ -95,5 +110,5 @@ def test_view_tolerates_missing_optional_keys() -> None:
     view = _public_health_view({"status": "healthy", "components": [{"name": "x", "status": "ok"}]})
     assert view == {
         "status": "healthy",
-        "components": [{"name": "x", "status": "ok", "source": None, "metrics": {}}],
+        "components": [{"name": "x", "status": "ok", "message": "", "source": None, "metrics": {}}],
     }

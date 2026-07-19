@@ -184,6 +184,80 @@ def test_outcome_failure_backs_off_then_parks_dead_at_max(
     assert next_at is None  # parked for good
 
 
+# --- P3(b): idempotent outcome recording (no attempts+2 on a lost-ack retry) ---
+
+
+def test_outcome_is_idempotent_per_delivery_id_no_double_count(
+    store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    """A retry of the SAME delivery round's outcome must not count twice.
+
+    Models the P3 failure: the outcome write commits on the DB but the
+    commit-ack is lost, so the caller (the postgres adapter's transient-error
+    retry) re-applies the identical outcome — same ``delivery_id``. Without the
+    idempotency guard the second application re-reads the already-bumped
+    ``attempts`` and bumps it again (attempts+2), prematurely parking the row
+    ``dead`` one real failure early. With the guard the repeat is a no-op.
+
+    Proving property: on the pre-fix store (guard removed) the second call bumps
+    ``attempts`` to 2 and, at ``max_attempts=2``, flips ``status`` to ``dead`` —
+    this test then fails on both asserts.
+    """
+    _enqueue(store, "wh-1", "e1")
+
+    outcome = {
+        "webhook_id": "wh-1",
+        "event_id": "e1",
+        "success": False,
+        "status_code": 500,
+        "error": "boom",
+        "max_attempts": 2,  # a double count here would immediately dead-letter
+        "backoff_seconds": [10.0],
+        "delivery_id": "round-1",
+    }
+    store.record_webhook_delivery_outcome(**outcome)
+    status, attempts, next_at, _ = _row(conn, "wh-1", "e1")
+    assert (status, attempts) == ("pending", 1)  # one real failure counted once
+    assert next_at is not None  # still scheduled for redrive, NOT dead
+
+    # The lost-ack retry: identical outcome, identical delivery_id.
+    store.record_webhook_delivery_outcome(**outcome)
+    status, attempts, next_at, _ = _row(conn, "wh-1", "e1")
+    assert (status, attempts) == ("pending", 1)  # idempotent — still 1, not 2
+    assert next_at is not None  # not prematurely dead-lettered
+
+
+def test_outcome_distinct_delivery_ids_still_count_each_round(
+    store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    """Two genuinely different delivery rounds (distinct ids) still each count —
+    the guard suppresses only a repeat of the same round, never a real redrive."""
+    _enqueue(store, "wh-1", "e1")
+
+    store.record_webhook_delivery_outcome(
+        webhook_id="wh-1",
+        event_id="e1",
+        success=False,
+        status_code=500,
+        error="boom",
+        max_attempts=5,
+        backoff_seconds=[10.0],
+        delivery_id="round-1",
+    )
+    store.record_webhook_delivery_outcome(
+        webhook_id="wh-1",
+        event_id="e1",
+        success=False,
+        status_code=500,
+        error="boom",
+        max_attempts=5,
+        backoff_seconds=[10.0],
+        delivery_id="round-2",
+    )
+    status, attempts, _next_at, _ = _row(conn, "wh-1", "e1")
+    assert (status, attempts) == ("pending", 2)  # two distinct rounds, two counts
+
+
 def test_park_marks_dead_with_reason(
     store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
 ) -> None:

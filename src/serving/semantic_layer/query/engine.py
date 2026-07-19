@@ -180,6 +180,7 @@ class QueryEngine(
         newest_first: bool = False,
         min_processed_at: datetime | str | None = None,
         min_event_id: str | None = None,
+        max_processed_at: datetime | str | None = None,
         settle_seconds: int | None = None,
     ) -> list[dict]:
         """Read the ``pipeline_events`` journal through the serving backend.
@@ -231,6 +232,15 @@ class QueryEngine(
           ClickHouse, while the decomposition round-trips through sqlglot on
           both backends. ``min_event_id`` alone (no ``min_processed_at``) is
           ignored — a keyset needs both halves.
+
+        ``max_processed_at`` is the symmetric **inclusive upper bound**
+        (``processed_at <= cursor``, sub-second precision preserved). It is the
+        seam the webhook dispatcher's settle-invariant detector reads through: a
+        bounded ``newest_first`` window under this bound scans only the band
+        immediately *behind* the keyset frontier, never the whole journal, so
+        the detector's probe stays O(window). Orthogonal to ``min_processed_at``
+        (pair them for a bounded band); ignored when the journal has no time
+        column. Same strict-parse contract as the other cursors.
 
         ``settle_seconds`` is the scan's settle watermark (audit 2026-07-17
         #1 follow-up): when set, only rows with ``processed_at`` at least that
@@ -385,6 +395,21 @@ class QueryEngine(
                 cursor = _coerce_journal_timestamp(min_processed_at)
                 rendered = render(cursor.strftime("%Y-%m-%d %H:%M:%S"))
                 where_clauses.append(f"{time_column} >= CAST({rendered} AS TIMESTAMP)")
+        if max_processed_at is not None and time_column is not None:
+            # Inclusive upper bound, mirror of the min_processed_at cursor.
+            # Sub-second precision is preserved (floor_seconds=False) so the
+            # detector's band ends exactly at the keyset frontier rather than
+            # one second past it; on ClickHouse processed_at is second-granular
+            # so the literal is a whole second either way. Same CAST/render
+            # discipline as every other bound (allowlisted, transpiles to both
+            # dialects).
+            upper = _coerce_journal_timestamp(max_processed_at, floor_seconds=False)
+            if upper.microsecond:
+                upper_text = upper.strftime("%Y-%m-%d %H:%M:%S.%f")
+            else:
+                upper_text = upper.strftime("%Y-%m-%d %H:%M:%S")
+            rendered_max = render(upper_text)
+            where_clauses.append(f"{time_column} <= CAST({rendered_max} AS TIMESTAMP)")
         if settle_seconds is not None and int(settle_seconds) > 0 and time_column is not None:
             # DB-clock watermark (see docstring): the keyset frontier must not
             # enter a second writers can still stamp. 0 is a true opt-out (no

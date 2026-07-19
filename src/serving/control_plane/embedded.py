@@ -153,11 +153,20 @@ def ensure_webhook_delivery_queue_table(conn: duckdb.DuckDBPyConnection) -> None
                 next_attempt_at TIMESTAMP,
                 last_status_code INTEGER,
                 last_error VARCHAR,
+                last_outcome_id VARCHAR,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (webhook_id, event_id)
             )
             """
+        )
+        # Idempotency token for the outcome write (P3): the delivery_id of the
+        # last outcome applied to this row, so a retry after a lost commit-ack
+        # is a no-op instead of a second attempts bump. ADD COLUMN IF NOT EXISTS
+        # upgrades a queue table created before this column existed (same
+        # pattern as ensure_dead_letter_table's tenant_id backfill).
+        conn.execute(
+            "ALTER TABLE webhook_delivery_queue ADD COLUMN IF NOT EXISTS last_outcome_id VARCHAR"
         )
 
 
@@ -471,39 +480,50 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
         error: str | None,
         max_attempts: int,
         backoff_seconds: Sequence[float],
+        delivery_id: str | None = None,
     ) -> None:
         conn = self._conn
         now = datetime.now(UTC)
+        # Read the current attempts AND the last outcome id in one shot so the
+        # idempotency guard and the failure-branch increment share one snapshot.
+        row = conn.execute(
+            "SELECT attempts, last_outcome_id FROM webhook_delivery_queue "
+            "WHERE webhook_id = ? AND event_id = ?",
+            [webhook_id, event_id],
+        ).fetchone()
+        # Idempotency (P3): this exact delivery round's outcome already landed —
+        # a retry after a lost commit-ack. No-op so attempts is not bumped twice.
+        if delivery_id is not None and row is not None and row[1] == delivery_id:
+            return
         if success:
             conn.execute(
                 "UPDATE webhook_delivery_queue SET status = 'delivered', "
-                "last_status_code = ?, last_error = NULL, updated_at = ? "
+                "last_status_code = ?, last_error = NULL, last_outcome_id = ?, updated_at = ? "
                 "WHERE webhook_id = ? AND event_id = ?",
-                [status_code, now, webhook_id, event_id],
+                [status_code, delivery_id, now, webhook_id, event_id],
             )
             return
-        row = conn.execute(
-            "SELECT attempts FROM webhook_delivery_queue WHERE webhook_id = ? AND event_id = ?",
-            [webhook_id, event_id],
-        ).fetchone()
         attempts = (row[0] if row else 0) + 1
         if attempts >= max_attempts:
             conn.execute(
                 "UPDATE webhook_delivery_queue SET status = 'dead', attempts = ?, "
-                "last_status_code = ?, last_error = ?, next_attempt_at = NULL, updated_at = ? "
+                "last_status_code = ?, last_error = ?, last_outcome_id = ?, "
+                "next_attempt_at = NULL, updated_at = ? "
                 "WHERE webhook_id = ? AND event_id = ?",
-                [attempts, status_code, error, now, webhook_id, event_id],
+                [attempts, status_code, error, delivery_id, now, webhook_id, event_id],
             )
             return
         delay = backoff_seconds[min(attempts - 1, len(backoff_seconds) - 1)]
         conn.execute(
             "UPDATE webhook_delivery_queue SET status = 'pending', attempts = ?, "
-            "last_status_code = ?, last_error = ?, next_attempt_at = ?, updated_at = ? "
+            "last_status_code = ?, last_error = ?, last_outcome_id = ?, "
+            "next_attempt_at = ?, updated_at = ? "
             "WHERE webhook_id = ? AND event_id = ?",
             [
                 attempts,
                 status_code,
                 error,
+                delivery_id,
                 now + timedelta(seconds=delay),
                 now,
                 webhook_id,

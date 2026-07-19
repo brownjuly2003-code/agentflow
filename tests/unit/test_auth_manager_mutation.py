@@ -532,6 +532,35 @@ class TestInMemoryRateLimiting:
         # would block at exactly the window edge.
         assert m.is_rate_limited(tenant_key) is False
 
+    def test_bucket_key_never_contains_plaintext_api_key(self) -> None:
+        # The bucket key becomes a Redis sorted-set key name, so it must not leak
+        # the plaintext API key to anyone who can read Redis. (audit S-6)
+        m = _build_manager()
+        plaintext_key = "af-prod-acme-agent-super-secret-abc123xyz"  # noqa: S105
+        bucket = m._rate_limit_key(_key(key=plaintext_key, key_id=None, key_hash=None))
+        assert plaintext_key not in bucket
+        assert bucket.startswith("kh:")
+
+    def test_bucket_key_prefers_key_id_over_secret_material(self) -> None:
+        m = _build_manager()
+        bucket = m._rate_limit_key(_key(key="plaintext", key_id="kid-42", key_hash="stored"))
+        assert bucket == "kid:kid-42"
+
+    def test_bucket_key_uses_stored_hash_when_no_key_id(self) -> None:
+        m = _build_manager()
+        bucket = m._rate_limit_key(_key(key="plaintext", key_id=None, key_hash="stored-hash"))
+        assert bucket == "kh:stored-hash"
+
+    def test_bucket_key_is_deterministic_and_per_key_distinct(self) -> None:
+        # Same material -> same bucket (rate limiting still accumulates); different
+        # material -> different bucket (per-key isolation preserved).
+        m = _build_manager()
+        a1 = m._rate_limit_key(_key(key="alpha", key_id=None, key_hash=None))
+        a2 = m._rate_limit_key(_key(key="alpha", key_id=None, key_hash=None))
+        b = m._rate_limit_key(_key(key="beta", key_id=None, key_hash=None))
+        assert a1 == a2
+        assert a1 != b
+
     @pytest.mark.asyncio
     async def test_check_rate_limit_applies_local_window_when_redis_reports_full(self) -> None:
         m = _build_manager(
@@ -570,13 +599,15 @@ class TestInMemoryRateLimiting:
 
 
 class TestKeyingAndAuthorization:
-    def test_rate_limit_key_prefers_plaintext_key(self) -> None:
+    def test_rate_limit_key_prefers_hash_over_plaintext(self) -> None:
+        # (audit S-6) the bucket key becomes a Redis key name, so keying by the
+        # stored hash in preference to the plaintext keeps live keys out of Redis.
         m = _build_manager()
-        assert m._rate_limit_key(_key(key="k", key_hash="h")) == "k"
+        assert m._rate_limit_key(_key(key="k", key_hash="h")) == "kh:h"
 
-    def test_rate_limit_key_falls_back_to_hash_when_no_plaintext(self) -> None:
+    def test_rate_limit_key_uses_hash_when_no_plaintext(self) -> None:
         m = _build_manager()
-        assert m._rate_limit_key(_key(key=None, key_hash="h")) == "h"
+        assert m._rate_limit_key(_key(key=None, key_hash="h")) == "kh:h"
 
     def test_is_entity_allowed_true_when_unrestricted(self) -> None:
         m = _build_manager()

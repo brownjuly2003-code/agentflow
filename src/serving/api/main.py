@@ -740,12 +740,14 @@ def _public_health_view(payload: dict) -> dict:
 
     `/v1/health` is auth-exempt, yet each component's `message`/`metrics` carry
     recon: `f"Kafka unavailable: {exc}"` (internal hostnames/URLs), broker/topic
-    counts, cluster sizes, and the serving backend's identity. Keep the overall
-    status, each component's name/status/source (the documented contract), and
-    only the allowlisted operational gauges (pool utilization, data freshness);
-    drop `message` and every non-allowlisted metric. Agents still get the
-    per-component status they use to caveat freshness, and pool-utilization
-    observability (its only exposure — not on /metrics) is preserved.
+    counts, cluster sizes, and the serving backend's identity. Neutralise the
+    `message` text (it is where every `{exc}` and count lives) and keep only the
+    allowlisted operational gauges (pool utilization, data freshness); keep the
+    overall status and each component's name/status/source. The field *shape* is
+    unchanged — `message` stays a string and `metrics` a dict — because the SDK's
+    `HealthComponent` model requires them; only the sensitive *content* is
+    dropped. Agents still get per-component status to caveat freshness, and
+    pool-utilization observability (its only exposure — not on /metrics) is kept.
     """
     components = []
     for c in payload.get("components", []):
@@ -754,6 +756,9 @@ def _public_health_view(payload: dict) -> dict:
             {
                 "name": c.get("name"),
                 "status": c.get("status"),
+                # Blanked, not dropped: the SDK HealthComponent requires a string
+                # `message`, but its content (error text, counts) is the leak.
+                "message": "",
                 "source": c.get("source"),
                 "metrics": metrics,
             }

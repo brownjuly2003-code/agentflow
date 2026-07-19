@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 import httpx
 import structlog
 
-from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_url
+from src.serving.api.egress_guard import (
+    UnsafeEgressURLError,
+    pinned_transport,
+    resolve_public_ip,
+)
 from src.serving.api.webhook_dispatcher import _event_body, _signature
 from src.serving.control_plane import get_control_plane_store
 
@@ -263,10 +267,12 @@ async def deliver(
     error: str | None = None
 
     target_url = webhook_url or alert.webhook_url
-    # Re-validate at delivery time (DNS rebinding): a name public at registration
-    # could now resolve to an internal address. (audit_28_06_26.md #2)
+    # Resolve + validate at delivery time (DNS rebinding): a name public at
+    # registration could now resolve to an internal address. Resolve once and pin
+    # the connection to that IP so httpx does not re-resolve between the check and
+    # the connect (rebinding TOCTOU, audit S-1). (audit_28_06_26.md #2)
     try:
-        await asyncio.to_thread(validate_public_url, target_url)
+        pinned_ip = await asyncio.to_thread(resolve_public_ip, target_url)
     except UnsafeEgressURLError as exc:
         error = f"unsafe egress URL: {exc}"
         store.log_alert_delivery(
@@ -297,7 +303,9 @@ async def deliver(
             "attempts": 0,
         }
 
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(
+        timeout=5.0, transport=pinned_transport(target_url, pinned_ip)
+    ) as client:
         for attempt in range(1, 4):
             attempts = attempt
             error = None

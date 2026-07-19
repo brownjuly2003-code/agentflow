@@ -658,9 +658,15 @@ async def health_ready(request: Request) -> Response:
     """
     checks = await run_in_threadpool(_readiness_checks, request.app.state)
     ready = all(check["status"] == "ok" for check in checks)
+    # This probe is auth-exempt (k8s/Compose carry no API key). The internal
+    # check dicts carry `backend` (engine identity) and `detail` (str(exc), which
+    # can embed internal hostnames/DSNs); expose only name+status so an
+    # unauthenticated caller cannot fingerprint the topology (pre-pen-test audit,
+    # S-3). The failing detail is still logged server-side by the check itself.
+    public_checks = [{"name": c["name"], "status": c["status"]} for c in checks]
     return JSONResponse(
         status_code=200 if ready else 503,
-        content={"status": "ready" if ready else "not_ready", "checks": checks},
+        content={"status": "ready" if ready else "not_ready", "checks": public_checks},
     )
 
 
@@ -709,4 +715,50 @@ async def health(request: Request) -> dict:
                 request.app.state.health_cache_expires_at = (
                     now + request.app.state.health_cache_ttl_seconds
                 )
-    return cast(dict, health_payload)
+    return _public_health_view(cast(dict, health_payload))
+
+
+# Metric keys safe to expose on the auth-exempt /v1/health. Fail-closed
+# allowlist: only this process's own resource gauges and data-freshness, never
+# topology recon (backend identity, broker/topic counts, Flink job counts). A
+# metric added to a component in the future does NOT leak until listed here
+# (pre-pen-test audit, S-3).
+_PUBLIC_HEALTH_METRICS = frozenset(
+    {
+        "pool_size",
+        "read_in_use",
+        "read_available",
+        "read_utilization",
+        "write_in_use",
+        "last_event_age_seconds",
+    }
+)
+
+
+def _public_health_view(payload: dict) -> dict:
+    """Strip a component-health payload to what is safe to serve unauthenticated.
+
+    `/v1/health` is auth-exempt, yet each component's `message`/`metrics` carry
+    recon: `f"Kafka unavailable: {exc}"` (internal hostnames/URLs), broker/topic
+    counts, cluster sizes, and the serving backend's identity. Keep the overall
+    status, each component's name/status/source (the documented contract), and
+    only the allowlisted operational gauges (pool utilization, data freshness);
+    drop `message` and every non-allowlisted metric. Agents still get the
+    per-component status they use to caveat freshness, and pool-utilization
+    observability (its only exposure — not on /metrics) is preserved.
+    """
+    components = []
+    for c in payload.get("components", []):
+        metrics = {k: v for k, v in (c.get("metrics") or {}).items() if k in _PUBLIC_HEALTH_METRICS}
+        components.append(
+            {
+                "name": c.get("name"),
+                "status": c.get("status"),
+                "source": c.get("source"),
+                "metrics": metrics,
+            }
+        )
+    view = {"status": payload.get("status"), "components": components}
+    if "checked_at" in payload:
+        view["checked_at"] = payload["checked_at"]
+    return view

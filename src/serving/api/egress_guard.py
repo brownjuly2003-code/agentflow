@@ -45,6 +45,18 @@ class UnsafeEgressURLError(ValueError):
 
 def _ip_is_public(ip: str) -> bool:
     addr = ipaddress.ip_address(ip)
+    # An IPv4-mapped IPv6 address (``::ffff:169.254.169.254``) embeds an IPv4
+    # target the connect will actually reach. CPython's ``is_private`` /
+    # ``is_link_local`` do reflect the embedded v4 on 3.11 for the ranges that
+    # matter here, but that is version-dependent (tightened in 3.13); unwrap to
+    # the embedded IPv4 and judge THAT, so the guard does not hinge on the stdlib
+    # version of the prod image. Same for 6to4 (``2002::/16``) which carries a v4
+    # in the next 32 bits. (pre-pen-test audit, S-1 feeder)
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped is not None:
+            return _ip_is_public(str(addr.ipv4_mapped))
+        if addr.sixtofour is not None:
+            return _ip_is_public(str(addr.sixtofour))
     return not (
         addr.is_private
         or addr.is_loopback

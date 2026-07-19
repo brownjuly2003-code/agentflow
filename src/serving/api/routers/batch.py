@@ -4,7 +4,7 @@ from copy import copy
 from typing import Any, Literal
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.serving.api.routers.agent_query import (
@@ -186,6 +186,26 @@ async def _execute_query_item(item: BatchItem, req: Request) -> dict[str, Any]:
 
 @router.post("/batch", response_model=BatchResponse)
 async def batch_query(request: BatchRequest, req: Request) -> BatchResponse:
+    # A batch runs one engine op per item but the auth middleware only metered the
+    # single HTTP request, so a tenant could drive up to 20x its per-minute budget
+    # (concentrated on the expensive NL path) for one token. Charge the remaining
+    # items against the same rate-limit bucket and reject the whole batch if the
+    # budget cannot absorb them. Skipped when auth is disabled (no tenant_key).
+    # (audit S-4)
+    tenant_key = getattr(req.state, "tenant_key", None)
+    auth_manager = getattr(req.app.state, "auth_manager", None)
+    extra_units = len(request.requests) - 1
+    if tenant_key is not None and auth_manager is not None and extra_units > 0:
+        within_budget = await auth_manager.charge_rate_limit(tenant_key, extra_units)
+        if not within_budget:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Rate limit exceeded: a {len(request.requests)}-item batch costs "
+                    f"{len(request.requests)} of {tenant_key.rate_limit_rpm} requests/minute."
+                ),
+            )
+
     started_at = time.monotonic()
     outcomes = await asyncio.gather(
         *[_execute_item(item, req) for item in request.requests],

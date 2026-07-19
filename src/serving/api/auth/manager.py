@@ -421,6 +421,24 @@ class AuthManager:
             return True, max(0, tenant_key.rate_limit_rpm - len(window)), reset_at
         return is_allowed, remaining, reset_at
 
+    async def charge_rate_limit(self, tenant_key: TenantKey, units: int) -> bool:
+        """Debit ``units`` *additional* rate-limit tokens for one request that does
+        more than one unit of metered work — a ``/v1/batch`` of N items runs N
+        engine ops but the middleware only charged the single HTTP request.
+
+        Each unit maps to one ``check_rate_limit`` call against the same bucket,
+        so a batch cannot bypass the per-minute budget by bundling many (notably
+        the expensive NL→SQL) engine ops under one token. Every unit is debited
+        (the request costs its full N even when over budget); returns ``False`` if
+        the bucket could not absorb all of them, so the caller can reject before
+        doing the work. (audit S-4)
+        """
+        allowed = True
+        for _ in range(max(0, units)):
+            ok, _remaining, _reset_at = await self.check_rate_limit(tenant_key)
+            allowed = allowed and ok
+        return allowed
+
     def is_failed_auth_limited(self, client_ip: str) -> bool:
         now = self.time_source()
         cutoff = now - FAILED_AUTH_WINDOW_SECONDS

@@ -251,7 +251,11 @@ class DeduplicateByEventId(MapFunction):
 def build_pipeline() -> StreamExecutionEnvironment:
     env = StreamExecutionEnvironment.get_execution_environment()
 
-    # Checkpointing for exactly-once
+    # Checkpointing gives at-least-once source replay on recovery. It is NOT
+    # Kafka-transactional exactly-once (the events.validated sink is built with no
+    # DeliveryGuarantee); the effective exactly-once seen at the serving layer is
+    # completed downstream by the bridge's idempotent, event_id-keyed apply — see
+    # src/processing/bridge_consumer.py.
     env.enable_checkpointing(30_000)  # 30s
     env.get_checkpoint_config().set_min_pause_between_checkpoints(10_000)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))

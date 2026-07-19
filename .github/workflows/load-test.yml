@@ -69,4 +69,12 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: load-test-results
-          path: .artifacts/load/
+          # Exclude the live DuckDB files: their .wal sidecar is checkpointed away
+          # asynchronously, so it can vanish between upload-artifact's file scan and
+          # the zip step, failing the job with ENOENT on `*.duckdb.wal`. The DBs are
+          # runtime state, not useful debug output (results.json / stats / api.log
+          # are). This makes the step deterministic instead of racing the checkpoint.
+          path: |
+            .artifacts/load/
+            !.artifacts/load/*.duckdb
+            !.artifacts/load/*.duckdb.*

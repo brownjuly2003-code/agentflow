@@ -235,10 +235,21 @@ class ControlPlaneStore(ABC):
         error: str | None,
         max_attempts: int,
         backoff_seconds: Sequence[float],
+        delivery_id: str | None = None,
     ) -> None:
         """Advance a queue row from one delivery round's outcome: success →
         ``delivered``; failure → bump attempts and re-schedule with backoff, or
-        park as ``dead`` once ``max_attempts`` is reached."""
+        park as ``dead`` once ``max_attempts`` is reached.
+
+        ``delivery_id`` makes the write **idempotent per delivery round**. The
+        failure branch is a read-modify-write of ``attempts``; a store that
+        retries this call after the DB committed but the commit-ack was lost
+        (the PostgreSQL adapter's transient-error retry) would otherwise re-read
+        the already-bumped ``attempts`` and bump it again — attempts+2, a
+        premature dead-letter (P3). Adapters persist the last applied
+        ``delivery_id`` on the queue row and no-op when it repeats, so the same
+        round's outcome lands exactly once. ``None`` (a caller with no round id)
+        keeps the pre-idempotency behaviour — every call applies."""
 
     @abstractmethod
     def park_webhook_delivery(self, *, webhook_id: str, event_id: str, error: str) -> None:

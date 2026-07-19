@@ -41,3 +41,18 @@ USAGE_ROWS_DROPPED = Counter(
     "agentflow_usage_rows_dropped_total",
     "api_usage rows dropped because the off-path writer queue was full.",
 )
+
+# The webhook dispatcher's settle watermark rests on an operator invariant:
+# AGENTFLOW_WEBHOOK_SETTLE_SECONDS must exceed writer stamp-to-visibility lag +
+# writer<->DB clock skew. A violation is otherwise SILENT — a row that becomes
+# visible with a (processed_at, event_id) already behind the strict keyset
+# frontier is excluded by every future forward scan and never delivered. This
+# counter is incremented by the dispatcher's sampled behind-frontier probe for
+# each such never-handed-out row it observes; sustained non-zero means settle is
+# set below the writers' true visibility lag and webhook deliveries are being
+# dropped (raise AGENTFLOW_WEBHOOK_SETTLE_SECONDS). Flat at 0 is healthy.
+WEBHOOK_SETTLE_VIOLATIONS = Counter(
+    "agentflow_webhook_settle_violations_total",
+    "Journal rows observed strictly behind the webhook scan frontier yet never "
+    "handed out — a violated settle invariant (settle < write-visibility lag).",
+)

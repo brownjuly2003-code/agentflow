@@ -298,6 +298,11 @@ _SCHEMA_VERSION_DDL = """
 
 _MIGRATIONS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
     (1, "baseline: six control-plane state classes (ADR 0010 slice 5)", _SCHEMA_STATEMENTS),
+    (
+        2,
+        "webhook_delivery_queue.last_outcome_id — idempotent outcome write (P3)",
+        ("ALTER TABLE webhook_delivery_queue ADD COLUMN IF NOT EXISTS last_outcome_id TEXT",),
+    ),
 )
 
 if tuple(version for version, _, _ in _MIGRATIONS) != tuple(range(1, len(_MIGRATIONS) + 1)):
@@ -593,43 +598,59 @@ class PostgresControlPlaneStore(ControlPlaneStore):
         error: str | None,
         max_attempts: int,
         backoff_seconds: Sequence[float],
+        delivery_id: str | None = None,
     ) -> None:
         # Bounded retry on transient connection errors, same shape as
         # record_api_usage: without it, a POST that succeeded but then hit a
         # momentary DB blip on this outcome write never clears the enqueue
         # lease, stranding the row pending+leased for the full claim lease
         # window instead of a fast redrive (audit finding #4).
+        #
+        # That retry is exactly what could count one failure twice (P3): attempt
+        # 0's UPDATE commits on the server but the commit-ack is lost, so the
+        # except-branch retries and attempt 1 re-reads the already-bumped
+        # attempts and bumps it again — attempts+2, a premature dead-letter.
+        # delivery_id makes the round idempotent: the row records the last
+        # applied outcome id under FOR UPDATE, and a repeat is a no-op. Because
+        # the guard and the increment read the same locked row inside one
+        # transaction, the retry sees attempt 0's committed stamp (skip) or its
+        # rollback (apply once) — never a double bump.
         last_error: Exception | None = None
         for attempt in range(3):
             try:
                 with self._connect() as conn:
+                    row = conn.execute(
+                        "SELECT attempts, last_outcome_id FROM webhook_delivery_queue "
+                        "WHERE webhook_id = %s AND event_id = %s FOR UPDATE",
+                        (webhook_id, event_id),
+                    ).fetchone()
+                    if delivery_id is not None and row is not None and row[1] == delivery_id:
+                        # This delivery round's outcome already landed (a retry
+                        # after a lost commit-ack). No-op.
+                        return
                     if success:
                         conn.execute(
                             """
                             UPDATE webhook_delivery_queue
                             SET status = 'delivered', last_status_code = %s,
-                                last_error = NULL, lease_expires_at = NULL, updated_at = now()
+                                last_error = NULL, last_outcome_id = %s,
+                                lease_expires_at = NULL, updated_at = now()
                             WHERE webhook_id = %s AND event_id = %s
                             """,
-                            (status_code, webhook_id, event_id),
+                            (status_code, delivery_id, webhook_id, event_id),
                         )
                         return
-                    row = conn.execute(
-                        "SELECT attempts FROM webhook_delivery_queue "
-                        "WHERE webhook_id = %s AND event_id = %s FOR UPDATE",
-                        (webhook_id, event_id),
-                    ).fetchone()
                     attempts = (row[0] if row else 0) + 1
                     if attempts >= max_attempts:
                         conn.execute(
                             """
                             UPDATE webhook_delivery_queue
                             SET status = 'dead', attempts = %s, last_status_code = %s,
-                                last_error = %s, next_attempt_at = NULL,
+                                last_error = %s, last_outcome_id = %s, next_attempt_at = NULL,
                                 lease_expires_at = NULL, updated_at = now()
                             WHERE webhook_id = %s AND event_id = %s
                             """,
-                            (attempts, status_code, error, webhook_id, event_id),
+                            (attempts, status_code, error, delivery_id, webhook_id, event_id),
                         )
                         return
                     delay = backoff_seconds[min(attempts - 1, len(backoff_seconds) - 1)]
@@ -637,7 +658,7 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                         """
                         UPDATE webhook_delivery_queue
                         SET status = 'pending', attempts = %s, last_status_code = %s,
-                            last_error = %s,
+                            last_error = %s, last_outcome_id = %s,
                             next_attempt_at = now() + make_interval(secs => %s),
                             lease_expires_at = NULL, updated_at = now()
                         WHERE webhook_id = %s AND event_id = %s
@@ -646,6 +667,7 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                             attempts,
                             status_code,
                             error,
+                            delivery_id,
                             delay,
                             webhook_id,
                             event_id,

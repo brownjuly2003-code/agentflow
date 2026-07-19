@@ -562,6 +562,26 @@ class TestInMemoryRateLimiting:
         assert a1 != b
 
     @pytest.mark.asyncio
+    async def test_charge_rate_limit_within_budget_returns_true(self) -> None:
+        # A batch of 4 items (3 extra units) fits under a 5/min budget. (audit S-4)
+        m = _build_manager()
+        assert await m.charge_rate_limit(_key(rate_limit_rpm=5), 3) is True
+
+    @pytest.mark.asyncio
+    async def test_charge_rate_limit_over_budget_returns_false(self) -> None:
+        # 5 extra units cannot fit a 2/min budget -> the batch is rejected.
+        m = _build_manager()
+        assert await m.charge_rate_limit(_key(rate_limit_rpm=2), 5) is False
+
+    @pytest.mark.asyncio
+    async def test_charge_rate_limit_zero_units_is_noop(self) -> None:
+        # A single-item batch (0 extra units) debits nothing beyond the request.
+        m = _build_manager()
+        tenant_key = _key(rate_limit_rpm=1)
+        assert await m.charge_rate_limit(tenant_key, 0) is True
+        assert await m.charge_rate_limit(tenant_key, 1) is True  # budget untouched
+
+    @pytest.mark.asyncio
     async def test_check_rate_limit_applies_local_window_when_redis_reports_full(self) -> None:
         m = _build_manager(
             time_source=FrozenClock(1_000.0),

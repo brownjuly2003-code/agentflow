@@ -167,6 +167,40 @@ def test_batch_rejects_more_than_twenty_requests(client):
     assert response.status_code == 422
 
 
+def test_batch_meters_each_item_against_rate_limit(client):
+    # (audit S-4) a batch of N items runs N engine ops, so it must cost N
+    # rate-limit tokens, not one. A batch that exceeds the tenant's per-minute
+    # budget is rejected (429) instead of bypassing it ~20x on the expensive path.
+    manager = client.app.state.auth_manager
+    key = "batch-rpm-key"
+    manager.keys_by_value = {
+        key: TenantKey(
+            key=key,
+            name="batch-agent",
+            tenant="default",
+            rate_limit_rpm=3,
+            allowed_entity_types=None,
+            created_at=datetime.now(UTC).date(),
+        )
+    }
+    manager._rate_windows.clear()
+    manager.rate_limiter._windows.clear()
+
+    response = client.post(
+        "/v1/batch",
+        headers={"X-API-Key": key},
+        json={
+            "requests": [
+                {"id": f"m{index}", "type": "metric", "params": {"name": "x", "window": "1h"}}
+                for index in range(5)  # 1 (request) + 4 extra = 5 > rpm 3
+            ]
+        },
+    )
+
+    assert response.status_code == 429
+    assert "Rate limit exceeded" in response.json()["detail"]
+
+
 def test_batch_requires_api_key_when_auth_is_configured(client):
     _set_auth(client)
 

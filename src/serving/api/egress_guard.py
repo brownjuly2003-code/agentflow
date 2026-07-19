@@ -170,8 +170,8 @@ class _PinnedIPTransport(httpx.AsyncHTTPTransport):
     the hostname is carried into the TLS handshake as ``sni_hostname`` so SNI and
     certificate verification still key on the hostname rather than the IP."""
 
-    def __init__(self, hostname: str, pinned_ip: str, **kwargs: object) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, hostname: str, pinned_ip: str) -> None:
+        super().__init__()
         self._hostname = hostname
         self._pinned_ip = pinned_ip
 

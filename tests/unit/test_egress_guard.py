@@ -26,11 +26,30 @@ from src.serving.api.egress_guard import UnsafeEgressURLError, validate_public_u
         "http://0.0.0.0/",  # unspecified
         "https://[fd00::1]/",  # IPv6 unique-local
         "http://[fe80::1]/",  # IPv6 link-local
+        # IPv4-mapped IPv6 embedding an internal v4 target — the connect reaches
+        # the embedded IPv4, so the guard must judge that, not the wrapper
+        # (pre-pen-test audit, S-1 feeder; robust across CPython versions).
+        "http://[::ffff:169.254.169.254]/latest/meta-data/",  # mapped metadata
+        "http://[::ffff:127.0.0.1]/",  # mapped loopback
+        "http://[::ffff:10.0.0.1]/",  # mapped private
+        "http://[2002:a9fe:a9fe::1]/",  # 6to4 embedding 169.254.169.254
     ],
 )
 def test_validate_rejects_non_public_addresses(url: str) -> None:
     with pytest.raises(UnsafeEgressURLError):
         validate_public_url(url)
+
+
+def test_mapped_public_ipv4_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The unwrap must not over-reject: a mapped *public* IPv4 stays public.
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::ffff:93.184.216.34", 80, 0, 0))
+        ],
+    )
+    validate_public_url("http://mapped-public.example.com/hook")  # must not raise
 
 
 @pytest.mark.parametrize(

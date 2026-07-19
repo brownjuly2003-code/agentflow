@@ -23,6 +23,7 @@ from src.serving.api.versioning import (
     get_version_registry,
     resolve_request_version,
 )
+from src.serving.backends import BackendExecutionError, BackendMissingTableError
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
 from src.serving.control_plane import get_control_plane_store
 from src.serving.semantic_layer.stage_clock import coerce_dt, resolve_breach, stage_budget
@@ -30,6 +31,39 @@ from src.serving.semantic_layer.stage_clock import coerce_dt, resolve_breach, st
 logger = structlog.get_logger()
 tracer = trace.get_tracer("agentflow.api")
 router = APIRouter(tags=["agent"])
+
+
+def _client_safe_error(exc: ValueError, req: Request, status_code: int) -> HTTPException:
+    """Map a query-layer ``ValueError`` to an ``HTTPException`` that never leaks
+    engine internals.
+
+    The query helpers catch a ``BackendExecutionError`` (raw ClickHouse/DuckDB
+    text — engine type, SQL fragments, table/column names) and re-raise it as
+    ``ValueError(f"... failed: {backend_error}")`` with ``from e``. Returning that
+    detail verbatim fingerprints the backend to any authenticated caller
+    (pre-pen-test audit, S-2). When the cause is a ``BackendExecutionError``, log
+    the real text server-side under the correlation id and return a generic
+    detail carrying only that id; a plain ``ValueError`` is request-level
+    validation (safe and useful to the caller) and is returned verbatim. The
+    caller's ``status_code`` is preserved in both branches.
+    """
+    cause = exc.__cause__
+    if isinstance(cause, BackendMissingTableError):
+        # A missing serving table is an actionable operator signal (run
+        # provisioning), not engine internals — but the upstream message embeds
+        # the scoped-SQL table reference, so return a clean fixed detail that
+        # keeps the "not materialized" signal without the SQL. `/health/ready`
+        # carries the full provisioning hint for operators.
+        return HTTPException(
+            status_code=status_code,
+            detail="serving table is not materialized yet — run provisioning",
+        )
+    if isinstance(cause, BackendExecutionError):
+        correlation_id = getattr(req.state, "correlation_id", None)
+        logger.error("backend_execution_error", detail=str(exc), correlation_id=correlation_id)
+        ref = f" (ref {correlation_id})" if correlation_id else ""
+        return HTTPException(status_code=status_code, detail=f"backend query failed{ref}")
+    return HTTPException(status_code=status_code, detail=str(exc))
 
 
 # Engine call-signature compatibility (F-4): older engine implementations and
@@ -516,7 +550,7 @@ async def natural_language_query(request: NLQueryRequest, req: Request) -> Query
         except HTTPException:
             raise
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from None
+            raise _client_safe_error(e, req, status_code=400) from None
         if result.get("sql") is not None:
             span.set_attribute("query.sql", result["sql"])
         span.set_attribute("query.rows", int(result.get("row_count", 0)))
@@ -618,7 +652,7 @@ async def get_entity(
                 optional_kwargs={"tenant_id": tenant_id},
             )
     except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from None
+        raise _client_safe_error(e, req, status_code=503) from None
 
     if result is None:
         raise HTTPException(status_code=404, detail=f"{entity_type}/{entity_id} not found")
@@ -673,7 +707,7 @@ async def get_order_timeline(order_id: str, req: Request) -> OrderTimelineRespon
     try:
         payload = await run_in_threadpool(_build_order_timeline, req, order_id)
     except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from None
+        raise _client_safe_error(e, req, status_code=503) from None
 
     if payload is None:
         raise HTTPException(status_code=404, detail=f"order/{order_id} not found")
@@ -766,7 +800,7 @@ async def get_metric(
             as_of=as_of,
         )
     except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from None
+        raise _client_safe_error(e, req, status_code=503) from None
 
     metric_payload = {
         "metric_name": metric_name,

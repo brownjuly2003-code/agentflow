@@ -3,6 +3,7 @@ import time
 from copy import copy
 from typing import Any, Literal
 
+import structlog
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
@@ -11,8 +12,33 @@ from src.serving.api.routers.agent_query import (
     _call_in_threadpool_with_kwarg_fallback,
     _ensure_metric_allowed,
 )
+from src.serving.backends import BackendExecutionError, BackendMissingTableError
 
+logger = structlog.get_logger()
 router = APIRouter(tags=["agent"])
+
+
+def _safe_item_error(exc: Exception, req: Request) -> str:
+    """Return a client-safe per-item error string.
+
+    A batch item runs the same entity/metric/NL path as the single-item routes,
+    so its failures carry the same raw engine text — directly as a
+    ``BackendExecutionError`` or wrapped as ``ValueError(f"... failed: {e}")``.
+    Genericise those (log the real text server-side under the correlation id) and
+    keep plain validation messages verbatim (pre-pen-test audit, S-2).
+    """
+    if isinstance(exc, BackendMissingTableError) or isinstance(
+        exc.__cause__, BackendMissingTableError
+    ):
+        # Actionable provisioning signal, kept clean of the scoped-SQL reference
+        # (mirrors _client_safe_error).
+        return "serving table is not materialized yet — run provisioning"
+    if isinstance(exc, BackendExecutionError) or isinstance(exc.__cause__, BackendExecutionError):
+        correlation_id = getattr(req.state, "correlation_id", None)
+        logger.error("batch_backend_error", detail=str(exc), correlation_id=correlation_id)
+        ref = f" (ref {correlation_id})" if correlation_id else ""
+        return f"backend query failed{ref}"
+    return str(exc)
 
 
 class BatchItem(BaseModel):
@@ -57,7 +83,7 @@ async def _execute_item(item: BatchItem, req: Request) -> BatchResult:
             data = await _execute_query_item(item, req)
         return BatchResult(id=item.id, status="ok", data=data)
     except Exception as exc:
-        return BatchResult(id=item.id, status="error", error=str(exc))
+        return BatchResult(id=item.id, status="error", error=_safe_item_error(exc, req))
 
 
 async def _execute_entity_item(item: BatchItem, req: Request) -> dict[str, Any]:

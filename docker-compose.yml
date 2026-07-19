@@ -18,6 +18,11 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_LOG_RETENTION_HOURS: 24
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Single-node KRaft heartbeats broker->controller over TCP inside one JVM;
+      # when the host stalls longer than the default 9s session the broker fences
+      # ITSELF and every partition goes leaderless. 45s absorbs the stalls a
+      # loaded dev host actually produces.
+      KAFKA_BROKER_SESSION_TIMEOUT_MS: "45000"
       CLUSTER_ID: "AgentFlowKafkaCluster01"
       KAFKA_JMX_PORT: 9101
     volumes:

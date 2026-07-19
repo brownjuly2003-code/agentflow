@@ -418,6 +418,19 @@ def main() -> int:
     lag_peak = baseline["lag"]
     pending_latency: dict[str, tuple[float, str]] = {}  # event_id -> (t0, order_id)
 
+    # Delivery errors surface ONLY via callback: without one librdkafka expires
+    # undeliverable messages silently (message.timeout.ms) and `produced` counts
+    # events that never reached the broker — the gate math is then meaningless.
+    delivery_failures = 0
+    first_delivery_error: str | None = None
+
+    def _on_delivery(err: object, _msg: object) -> None:
+        nonlocal delivery_failures, first_delivery_error
+        if err is not None:
+            delivery_failures += 1
+            if first_delivery_error is None:
+                first_delivery_error = str(err)
+
     t_produce0 = time.perf_counter()
     next_pace = t_produce0
     for i in range(args.count):
@@ -428,10 +441,18 @@ def main() -> int:
         if want_lat:
             pending_latency[event["event_id"]] = (time.perf_counter(), event["order_id"])
 
-        producer.produce(args.source_topic, value=payload)
+        producer.produce(args.source_topic, value=payload, on_delivery=_on_delivery)
         produced += 1
         if produced % 50 == 0:
             producer.poll(0)
+            if delivery_failures:
+                print(
+                    f"FATAL: {delivery_failures} events failed delivery after retries "
+                    f"(first: {first_delivery_error}); aborting — a run with lost "
+                    "produce cannot judge the gate",
+                    file=sys.stderr,
+                )
+                return 3
 
         if args.pace_eps > 0:
             next_pace += 1.0 / args.pace_eps
@@ -458,7 +479,14 @@ def main() -> int:
             except Exception as exc:  # noqa: BLE001
                 print(f"  produced={produced} (metrics warn: {exc})", flush=True)
 
-    producer.flush(30)
+    unflushed = producer.flush(120)
+    if unflushed or delivery_failures:
+        print(
+            f"FATAL: produce lane lost events (delivery_failures={delivery_failures}, "
+            f"still_in_queue={unflushed}, first: {first_delivery_error}); aborting",
+            file=sys.stderr,
+        )
+        return 3
     t_produce1 = time.perf_counter()
     produce_wall = t_produce1 - t_produce0
 

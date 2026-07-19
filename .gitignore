@@ -85,6 +85,11 @@ mutants/
 /more_help.md
 /About_DE_project.md
 /audit_*.md
+# Guard the common typo/variant so a misnamed audit can't dodge the rule above
+# (e.g. autdit_*.md). Same class as security_preaudit_* slipping past /audit_*.
+/autdit_*.md
+# Root-level planning notes are session scratch, not product docs.
+/plan_*.md
 # Session handoff for the next agent: working notes, not product docs. Untracked
 # but unignored is one `git add -A` away from a public repo, so name it.
 /_NEXT_SESSION.md

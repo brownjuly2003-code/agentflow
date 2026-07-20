@@ -197,15 +197,26 @@ jobs:
           fi
       - name: Run Safety
         run: |
-          # SFTY-20260217-93940 (CVE-2026-25087): pyarrow use-after-free when
-          # decoding malformed IPC files, fixed in 23.0.1. Only the Flink
-          # runtime bucket is affected: apache-flink's beam chain caps
-          # pyarrow<17, so the fixed version cannot install there (the API
-          # image and every extra run pyarrow>=23.0.1 via uv.lock, gated by
-          # pip-audit). The Flink jobs only exchange Arrow IPC that beam
-          # itself produces inside the pipeline, never operator-supplied IPC
-          # files. Blocked upstream, not by our pin: apache-flink 2.3.0 is
-          # the newest PyPI release (checked 2026-07-20) and itself caps
+          # SFTY-20260217-93940 (CVE-2026-25087): use-after-free in Arrow
+          # C++ 15.0.0-23.0.0, fixed in 23.0.1. Only the flink-runtime
+          # bucket resolves an affected pyarrow (apache-flink's beam chain
+          # caps pyarrow<17; the API image and every extra run >=23.0.1 via
+          # uv.lock, gated by pip-audit). Why the risk is negligible here
+          # (GHSA-rgxp-2hwp-jwgg, verified 2026-07-20):
+          #   1. The vulnerable API is the C++ IPC *file* reader with
+          #      pre-buffering enabled (RecordBatchFileReader::
+          #      PreBufferMetadata, off by default). Per the advisory, "the
+          #      functionality is not exposed in language bindings (Python,
+          #      Ruby, C GLib), so these bindings are not vulnerable" — the
+          #      pyarrow wheel this bucket installs cannot reach the bug.
+          #   2. Our jobs are DataStream STRING/pickle only; PyFlink 2.3.0
+          #      imports pyarrow lazily and solely for Table/pandas Arrow
+          #      coders (fn_execution/coders.py), whose decode path is
+          #      pa.ipc.open_stream — the IPC *stream* reader, which the
+          #      advisory explicitly excludes. pyarrow is installed but
+          #      never imported on our code path.
+          # Blocked upstream, not by our pin: apache-flink 2.3.0 is the
+          # newest PyPI release (checked 2026-07-20) and itself caps
           # pyarrow<21; beam accepts pyarrow<24 only from 2.75.0, which no
           # released apache-flink allows. Dependabot watches the Flink
           # manifest (src/processing/flink_jobs), so the next apache-flink

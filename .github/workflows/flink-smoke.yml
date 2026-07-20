@@ -37,9 +37,17 @@ jobs:
         run: |
           set -euo pipefail
           marker="Job has been submitted with JobID"
+          # The PyFlink image build has stalled silently on registry/PyPI pulls
+          # before (30-min job timeouts on doc-only PRs #213/#218, zero build
+          # output after the ca-certificates layer) — bound the build and retry
+          # once so a transient network stall costs ~10 min, not the whole job.
+          if ! timeout 600 docker compose $COMPOSE_FILES build flink-job-runner; then
+            echo "flink image build stalled or failed — one retry"
+            timeout 600 docker compose $COMPOSE_FILES build flink-job-runner
+          fi
           # Brings up the dependency graph (kafka, kafka-init, minio, minio-init,
-          # flink-jobmanager, flink-taskmanager) and builds the PyFlink image.
-          docker compose $COMPOSE_FILES up -d --build flink-job-runner
+          # flink-jobmanager, flink-taskmanager) with the image built above.
+          docker compose $COMPOSE_FILES up -d flink-job-runner
 
           echo "Waiting up to 10 min for '$marker' in flink-job-runner logs..."
           deadline=$((SECONDS + 600))

@@ -58,7 +58,12 @@ def test_smoke_uses_the_flink_compose_overlay() -> None:
     # PyFlink job image; without it the regression is not exercised.
     assert job["env"]["COMPOSE_FILES"] == "-f docker-compose.yml -f docker-compose.flink.yml"
     run = _submit_step(job)["run"]
-    assert "up -d --build flink-job-runner" in run
+    # The build is bounded + retried separately (silent registry stalls ate the
+    # whole 30-min job on #213/#218), and `up` must then run the locally built
+    # image rather than pulling upstream.
+    assert "timeout 600 docker compose $COMPOSE_FILES build flink-job-runner" in run
+    assert "up -d flink-job-runner" in run
+    assert "up -d --build" not in run
 
 
 def test_smoke_criterion_is_job_submission() -> None:

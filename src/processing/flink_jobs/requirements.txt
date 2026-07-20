@@ -14,6 +14,6 @@
 # libraries carry the same bounds as core pyproject.toml so both runtimes
 # accept the same model/config payloads.
 apache-flink==2.3.0
-confluent-kafka>=2.5,<3
+confluent-kafka>=2.15.0,<3
 pydantic>=2.13.4,<3
 structlog>=26.1.0,<27

@@ -17,6 +17,7 @@ from typing import Any
 
 import duckdb
 import pytest
+from fastapi import HTTPException
 
 from src.serving.api.routers import stream as stream_module
 from src.serving.api.routers.stream import fetch_recent_events, stream_events
@@ -164,11 +165,17 @@ async def test_fetch_synthesizes_topic_when_column_absent() -> None:
 
 class _StreamReq:
     """Request whose ``is_disconnected`` flips to True after N checks, so the
-    SSE loop runs a bounded number of iterations."""
+    SSE loop runs a bounded number of iterations. Pass the same ``app`` to
+    several requests to model connections sharing one process (the S-5
+    concurrent-stream counter lives on ``app.state``)."""
 
-    def __init__(self, *, disconnect_after: int) -> None:
-        self.app = SimpleNamespace(state=SimpleNamespace(query_engine=SimpleNamespace(_conn=None)))
-        self.state = SimpleNamespace(tenant_id=None)
+    def __init__(
+        self, *, disconnect_after: int, tenant_id: str | None = None, app: Any = None
+    ) -> None:
+        self.app = app or SimpleNamespace(
+            state=SimpleNamespace(query_engine=SimpleNamespace(_conn=None))
+        )
+        self.state = SimpleNamespace(tenant_id=tenant_id)
         self._checks = 0
         self._disconnect_after = disconnect_after
 
@@ -308,6 +315,112 @@ async def test_stream_seen_set_is_bounded(monkeypatch: pytest.MonkeyPatch) -> No
     await _drain(await stream_events(_StreamReq(disconnect_after=1)))
 
     assert created == [stream_module.SEEN_CACHE_SIZE]
+
+
+# ── concurrent-stream cap (security pre-audit S-5) ───────────────
+
+
+def _capped_app() -> SimpleNamespace:
+    return SimpleNamespace(state=SimpleNamespace(query_engine=SimpleNamespace(_conn=None)))
+
+
+@pytest.fixture
+def _empty_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_fetch(**_kwargs: Any) -> list[dict[str, object]]:
+        return []
+
+    monkeypatch.setattr(stream_module, "fetch_recent_events", fake_fetch)
+
+
+@pytest.mark.usefixtures("_empty_fetch")
+async def test_stream_cap_rejects_excess_connection_with_429(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTFLOW_SSE_MAX_STREAMS_PER_TENANT", "2")
+    app = _capped_app()
+
+    r1 = await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+    r2 = await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+    # Slots are claimed at accept time, before the generator ever runs.
+    assert app.state.sse_active_streams == {"acme": 2}
+
+    with pytest.raises(HTTPException) as excinfo:
+        await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+    assert excinfo.value.status_code == 429
+    assert excinfo.value.headers == {"Retry-After": "1"}
+    # The rejected request must not consume a slot.
+    assert app.state.sse_active_streams == {"acme": 2}
+
+    # Closing both streams frees the slots and the next connection is accepted.
+    await _drain(r1)
+    await _drain(r2)
+    assert app.state.sse_active_streams == {}
+    r4 = await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+    assert r4.media_type == "text/event-stream"
+    await _drain(r4)
+
+
+@pytest.mark.usefixtures("_empty_fetch")
+async def test_stream_cap_is_per_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTFLOW_SSE_MAX_STREAMS_PER_TENANT", "1")
+    app = _capped_app()
+
+    r_acme = await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+    # acme is at its cap; globex still gets its own budget.
+    r_globex = await stream_events(_StreamReq(disconnect_after=1, tenant_id="globex", app=app))
+    assert app.state.sse_active_streams == {"acme": 1, "globex": 1}
+
+    with pytest.raises(HTTPException):
+        await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+
+    await _drain(r_acme)
+    await _drain(r_globex)
+    assert app.state.sse_active_streams == {}
+
+
+@pytest.mark.usefixtures("_empty_fetch")
+async def test_stream_cap_skipped_when_auth_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    # tenant_id=None means auth is off (dev/demo) — no cap, matching the
+    # /v1/batch S-4 convention.
+    monkeypatch.setenv("AGENTFLOW_SSE_MAX_STREAMS_PER_TENANT", "1")
+    app = _capped_app()
+
+    responses = [
+        await stream_events(_StreamReq(disconnect_after=1, tenant_id=None, app=app))
+        for _ in range(3)
+    ]
+    assert getattr(app.state, "sse_active_streams", None) is None
+    for response in responses:
+        await _drain(response)
+
+
+async def test_stream_cap_default_and_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AGENTFLOW_SSE_MAX_STREAMS_PER_TENANT", raising=False)
+    assert stream_module.max_streams_per_tenant() == stream_module.DEFAULT_MAX_STREAMS_PER_TENANT
+    monkeypatch.setenv("AGENTFLOW_SSE_MAX_STREAMS_PER_TENANT", "7")
+    assert stream_module.max_streams_per_tenant() == 7
+
+
+@pytest.mark.usefixtures("_empty_fetch")
+async def test_stream_slot_released_by_background_task_when_never_iterated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # If the server never iterates the generator (response setup fails before
+    # streaming), its `finally` never runs — the response's background task is
+    # the release path, and release stays idempotent if both paths do run.
+    monkeypatch.setenv("AGENTFLOW_SSE_MAX_STREAMS_PER_TENANT", "1")
+    app = _capped_app()
+
+    response = await stream_events(_StreamReq(disconnect_after=1, tenant_id="acme", app=app))
+    assert app.state.sse_active_streams == {"acme": 1}
+    assert response.background is not None
+
+    await response.background()
+    assert app.state.sse_active_streams == {}
+
+    # Draining after the background release must not push the count negative.
+    await _drain(response)
+    assert app.state.sse_active_streams == {}
 
 
 async def test_stream_dedup_survives_eviction_of_older_ids(

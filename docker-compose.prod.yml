@@ -1,5 +1,14 @@
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   kafka-1:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka-1
     ports:
@@ -32,6 +41,7 @@ services:
       retries: 10
 
   kafka-2:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka-2
     ports:
@@ -64,6 +74,7 @@ services:
       retries: 10
 
   kafka-3:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka-3
     ports:
@@ -96,6 +107,7 @@ services:
       retries: 10
 
   schema-registry:
+    logging: *default-logging
     image: confluentinc/cp-schema-registry:7.7.0
     depends_on:
       kafka-1:
@@ -117,6 +129,7 @@ services:
       retries: 10
 
   kafka-ui:
+    logging: *default-logging
     image: provectuslabs/kafka-ui:v0.7.2
     depends_on:
       schema-registry:
@@ -130,6 +143,7 @@ services:
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
 
   redis:
+    logging: *default-logging
     image: redis:7.4-alpine
     ports:
       - "127.0.0.1:6379:6379"
@@ -143,6 +157,7 @@ services:
       retries: 10
 
   jaeger:
+    logging: *default-logging
     image: jaegertracing/all-in-one:1.55
     ports:
       - "127.0.0.1:16686:16686"
@@ -151,6 +166,7 @@ services:
       COLLECTOR_OTLP_ENABLED: "true"
 
   clickhouse:
+    logging: *default-logging
     # Part of the default bring-up since ADR 0006 fixed the serving engine on
     # ClickHouse (no longer profile-gated).
     image: clickhouse/clickhouse-server:24.8
@@ -171,6 +187,7 @@ services:
       retries: 10
 
   serving-init:
+    logging: *default-logging
     # Provisioning ran on API boot until audit P0-2: the serving identity then
     # needed CREATE/ALTER/INSERT, several booting replicas could race on the
     # same seed, and an empty production store got demo rows just for being
@@ -201,6 +218,7 @@ services:
       - ./config:/app/config:ro
 
   agentflow-api:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -245,6 +263,7 @@ services:
       retries: 10
 
   prometheus:
+    logging: *default-logging
     image: prom/prometheus:v2.54.0
     depends_on:
       agentflow-api:
@@ -271,6 +290,7 @@ services:
       - prometheus-data:/prometheus
 
   grafana:
+    logging: *default-logging
     image: grafana/grafana:11.2.0
     depends_on:
       prometheus:

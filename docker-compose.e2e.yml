@@ -1,5 +1,14 @@
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   redis:
+    logging: *default-logging
     image: redis:7.4-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
@@ -14,6 +23,7 @@ services:
           memory: 256M
 
   kafka:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka
     ports:
@@ -51,6 +61,7 @@ services:
           memory: 1G
 
   clickhouse:
+    logging: *default-logging
     image: clickhouse/clickhouse-server:24.8
     environment:
       CLICKHOUSE_DB: agentflow
@@ -70,6 +81,7 @@ services:
           memory: 1G
 
   postgres:
+    logging: *default-logging
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: agentflow
@@ -87,6 +99,7 @@ services:
           memory: 512M
 
   serving-init:
+    logging: *default-logging
     # The API stopped provisioning and seeding the serving store on boot
     # (audit P0-2), so the stack lays the schema and the documented demo
     # entities down itself before the API starts — the same one-shot job
@@ -113,6 +126,7 @@ services:
       - ./config:/app/config:ro
 
   agentflow-api:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile.api

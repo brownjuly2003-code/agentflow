@@ -5,6 +5,15 @@ variable "instance_type" { type = string }
 variable "broker_count" { type = number }
 variable "ebs_volume_size_gb" { type = number }
 
+# Broker ingress is limited to the CIDRs of the subnets the cluster (and its
+# clients — Flink runs in the same private subnets) actually lives in, not the
+# whole 10.0.0.0/8. Broker-to-broker traffic stays allowed because the brokers'
+# own subnets are in this same list.
+data "aws_subnet" "client" {
+  for_each = toset(var.subnet_ids)
+  id       = each.value
+}
+
 resource "aws_security_group" "kafka" {
   name_prefix = "agentflow-kafka-${var.environment}-"
   vpc_id      = var.vpc_id
@@ -13,17 +22,33 @@ resource "aws_security_group" "kafka" {
     from_port   = 9092
     to_port     = 9098
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"]
-    description = "Kafka broker ports"
+    cidr_blocks = [for s in data.aws_subnet.client : s.cidr_block]
+    description = "Kafka broker ports (cluster + client subnets only)"
   }
 
+  # Brokers only talk to each other (replication, KRaft) inside these subnets;
+  # MSK control-plane and log/metric delivery go over service-managed ENIs, not
+  # this security group.
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow all outbound"
+    cidr_blocks = [for s in data.aws_subnet.client : s.cidr_block]
+    description = "Inter-broker traffic within cluster subnets"
   }
+}
+
+# Customer-managed key for broker EBS at-rest encryption (instead of the
+# implicit aws/kafka key): rotation, usage audit and revocation stay in
+# project control.
+resource "aws_kms_key" "kafka" {
+  description         = "agentflow ${var.environment} MSK at-rest encryption"
+  enable_key_rotation = true
+}
+
+resource "aws_kms_alias" "kafka" {
+  name          = "alias/agentflow-${var.environment}-kafka"
+  target_key_id = aws_kms_key.kafka.key_id
 }
 
 resource "aws_msk_configuration" "main" {
@@ -68,9 +93,20 @@ resource "aws_msk_cluster" "main" {
     revision = aws_msk_configuration.main.latest_revision
   }
 
+  # TLS-only client traffic + IAM client authentication: an in-VPC foothold
+  # alone is no longer enough to read or write the event stream — a client
+  # must present SigV4 credentials authorized for kafka-cluster:* actions.
+  client_authentication {
+    sasl {
+      iam = true
+    }
+  }
+
   encryption_info {
+    encryption_at_rest_kms_key_arn = aws_kms_key.kafka.arn
+
     encryption_in_transit {
-      client_broker = "TLS_PLAINTEXT"
+      client_broker = "TLS"
       in_cluster    = true
     }
   }
@@ -96,8 +132,10 @@ resource "aws_msk_cluster" "main" {
   }
 }
 
-output "bootstrap_brokers" {
-  value = aws_msk_cluster.main.bootstrap_brokers
+# SASL/IAM endpoints (port 9098). The plaintext bootstrap_brokers attribute is
+# empty once client_broker = "TLS", so it is deliberately not exported.
+output "bootstrap_brokers_sasl_iam" {
+  value = aws_msk_cluster.main.bootstrap_brokers_sasl_iam
 }
 
 output "cluster_arn" {

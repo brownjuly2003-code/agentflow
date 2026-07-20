@@ -3,6 +3,18 @@ variable "lake_bucket_name" { type = string }
 variable "lifecycle_glacier_days" { type = number }
 variable "lifecycle_expire_days" { type = number }
 
+# Customer-managed key so key rotation, usage audit and revocation stay in
+# project control instead of the AWS-managed aws/s3 key.
+resource "aws_kms_key" "lake" {
+  description         = "agentflow ${var.environment} lake bucket at-rest encryption"
+  enable_key_rotation = true
+}
+
+resource "aws_kms_alias" "lake" {
+  name          = "alias/agentflow-${var.environment}-lake"
+  target_key_id = aws_kms_key.lake.key_id
+}
+
 resource "aws_s3_bucket" "lake" {
   bucket = var.lake_bucket_name
 }
@@ -19,7 +31,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "lake" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "aws:kms"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.lake.arn
     }
     bucket_key_enabled = true
   }
@@ -91,4 +104,8 @@ output "lake_bucket_name" {
 
 output "lake_bucket_arn" {
   value = aws_s3_bucket.lake.arn
+}
+
+output "lake_kms_key_arn" {
+  value = aws_kms_key.lake.arn
 }

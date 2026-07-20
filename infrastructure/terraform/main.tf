@@ -54,13 +54,16 @@ module "kafka" {
 module "flink" {
   source = "./modules/flink"
 
-  environment         = var.environment
-  vpc_id              = var.vpc_id
-  subnet_ids          = var.private_subnet_ids
-  kafka_bootstrap     = module.kafka.bootstrap_brokers
-  s3_bucket_arn       = module.storage.lake_bucket_arn
-  parallelism         = var.flink_parallelism
-  parallelism_per_kpu = var.flink_parallelism_per_kpu
+  environment              = var.environment
+  vpc_id                   = var.vpc_id
+  subnet_ids               = var.private_subnet_ids
+  kafka_bootstrap          = module.kafka.bootstrap_brokers_sasl_iam
+  kafka_cluster_arn        = module.kafka.cluster_arn
+  s3_bucket_arn            = module.storage.lake_bucket_arn
+  lake_kms_key_arn         = module.storage.lake_kms_key_arn
+  parallelism              = var.flink_parallelism
+  parallelism_per_kpu      = var.flink_parallelism_per_kpu
+  permissions_boundary_arn = module.github_oidc.permissions_boundary_arn
 }
 
 module "storage" {
@@ -75,9 +78,10 @@ module "storage" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  environment           = var.environment
-  kafka_cluster_arn     = module.kafka.cluster_arn
-  flink_application_arn = module.flink.application_arn
-  sns_alert_topic_arn   = var.sns_alert_topic_arn
-  freshness_sla_seconds = var.freshness_sla_seconds
+  environment              = var.environment
+  kafka_cluster_arn        = module.kafka.cluster_arn
+  flink_application_arn    = module.flink.application_arn
+  sns_alert_topic_arn      = var.sns_alert_topic_arn
+  freshness_sla_seconds    = var.freshness_sla_seconds
+  permissions_boundary_arn = module.github_oidc.permissions_boundary_arn
 }

@@ -197,11 +197,6 @@ jobs:
           fi
       - name: Run Safety
         run: |
-          # 88512: Cross-ecosystem false positive — PyUp advisory text
-          # references @langchain/google-cloud-sql-pg (npm) but is matched
-          # against Python langchain<1.2.24, which does not exist (latest is
-          # 1.2.15). Remove this ignore when PyUp corrects the entry.
-          #
           # SFTY-20260217-93940 (CVE-2026-25087): pyarrow use-after-free when
           # decoding malformed IPC files, fixed in 23.0.1. Only the Flink
           # runtime bucket is affected: apache-flink's beam chain caps
@@ -209,10 +204,19 @@ jobs:
           # image and every extra run pyarrow>=23.0.1 via uv.lock, gated by
           # pip-audit). The Flink jobs only exchange Arrow IPC that beam
           # itself produces inside the pipeline, never operator-supplied IPC
-          # files. Remove when apache-flink/beam raise their pyarrow floor
-          # past 23.0.1.
+          # files. Blocked upstream, not by our pin: apache-flink 2.3.0 is
+          # the newest PyPI release (checked 2026-07-20) and itself caps
+          # pyarrow<21; beam accepts pyarrow<24 only from 2.75.0, which no
+          # released apache-flink allows. Dependabot watches the Flink
+          # manifest (src/processing/flink_jobs), so the next apache-flink
+          # release opens a PR — re-check this ignore there. Remove when the
+          # resolved flink-runtime bucket installs pyarrow>=23.0.1.
+          #
+          # 88512 (langchain cross-ecosystem false positive) was ignored here
+          # until 2026-07-20; PyUp corrected the entry (verified: safety
+          # 2.3.5 reports 0 findings on the pinned langchain stack), so the
+          # ignore is gone. If it ever resurfaces, it fails this job loudly.
           safety check \
-            --ignore 88512 \
             --ignore SFTY-20260217-93940 \
             -r .tmp-security/requirements-main.txt \
             -r .tmp-security/requirements-sdk.txt \

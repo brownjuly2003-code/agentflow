@@ -90,6 +90,8 @@ mutants/
 /autdit_*.md
 # Root-level planning notes are session scratch, not product docs.
 /plan_*.md
+# Task specs handed to external review models (Grok etc.) — session kitchen.
+/grok_task_*.md
 # Session handoff for the next agent: working notes, not product docs. Untracked
 # but unignored is one `git add -A` away from a public repo, so name it.
 /_NEXT_SESSION.md

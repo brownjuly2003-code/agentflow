@@ -69,6 +69,10 @@ Before using them for a real environment, operators still need to provide:
 - resource requests and limits
 - monitoring ownership
 - rollback process
+- network isolation: set `networkPolicy.enabled=true` before any
+  multi-replica production rollout (the chart default is `false` so
+  kind/dev clusters without a NetworkPolicy controller keep working) and
+  confirm the target cluster actually enforces NetworkPolicy
 
 ## Terraform overview
 

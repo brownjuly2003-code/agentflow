@@ -1,15 +1,16 @@
 # Engineering Status
 
-> Updated: **2026-07-17** (E4 Checks 1–4 live on kind; CH multi-tenant live) ·
-> release line **`v2.0.0`** · `main` green across required checks. Numbers
-> below come only from measured, in-repo evidence — see the linked reports
-> for methodology and reproduction commands.
+> Updated: **2026-07-20** (4 h @ 100 eps soak **r4 PASS**; July security
+> hardening wave merged) · release line **`v2.0.0`** · `main` green across
+> required checks. Numbers below come only from measured, in-repo evidence —
+> see the linked reports for methodology and reproduction commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → Flink → serving bridge → ClickHouse → API with Redis push
-invalidation) — is implemented, measured, and documented. Current work is
-raising the write-path ceiling from **drain-window** numbers to **sustained**
-ones, and packaging hygiene for the next breaking release.
+invalidation) — is implemented, measured, and documented. The write-path
+ceiling is proven **sustained** (4 h @ 100 eps, exactly-once); remaining work
+is packaging hygiene for the next breaking release plus the external gates
+listed below.
 
 ## Proven
 
@@ -39,13 +40,17 @@ measured steps on the same Mac compose stand (Kafka → Flink → bridge → CH)
 | Stretch try — 2000-event drain on same Mac class | **107.3 eps** | measured — [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md) |
 | Paced 10 min @ 100 eps produce | **96.5 apply / 97.1 flink / 100 produce** | measured — [perf/throughput-realpath-paced100-2026-07-17.md](perf/throughput-realpath-paced100-2026-07-17.md) |
 | Paced **1 h** @ 100 eps produce | **99.5 apply / 99.5 flink / 100 produce** | measured — [perf/throughput-realpath-paced100-1h-2026-07-17.md](perf/throughput-realpath-paced100-1h-2026-07-17.md) |
+| Paced **4 h** @ 100 eps produce (r4) | **99.9 apply / 99.9 flink / 100.0 produce** — 1 440 000 events, dup = 0, failures = 0, lag 0 → 0, 0 Flink restarts | measured — [perf/throughput-realpath-paced100-4h-r4-2026-07-19.md](perf/throughput-realpath-paced100-4h-r4-2026-07-19.md) |
 
 The series target of **≥ 80 eps** is met on the 400-burst profile. A
 **2000-event** drain cleared at **107.3 eps**. Paced ingress at 100 eps held
-for **10 min** (~96.5 apply) and for **1 h** (**99.5 apply/hop**, 0 failures,
-0 duplicates, lag → 0). Multi-hour (4 h+) sustained ≥ 100 is still open. The
-4 h soak held ~47 eps avg *delivered* with bounded lag. Semantics of the
-batched path are in [serving-bridge.md](serving-bridge.md).
+for 10 min, 1 h, and — closing the multi-hour gate — **4 h** (r4:
+`produced = validated = applied = 1 440 000` exactly, 0 duplicates,
+0 failures, lag ends at 0, zero Flink restarts). The two failed 4 h attempts
+before r4 are written up honestly in the r4 report (stand disk exhaustion;
+bench producer losing a broker self-fence) — neither was an apply-path
+defect. Semantics of the batched path are in
+[serving-bridge.md](serving-bridge.md).
 
 ## Known issues
 
@@ -73,12 +78,13 @@ batched path are in [serving-bridge.md](serving-bridge.md).
 
 ## Next
 
-1. **≥ 100 eps multi-hour sustained** — 1 h paced @ 100 is measured
-   (99.5 apply/hop); **4 h+** still open. Evidence:
-   [perf/throughput-realpath-paced100-1h-2026-07-17.md](perf/throughput-realpath-paced100-1h-2026-07-17.md).
-2. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
+1. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
    (tree/`agentflow_runtime` + shim) waits for a release branch:
    [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).
+2. **Flink-runtime dependency bump** — the pinned `apache-flink==2.3.0` job
+   environment holds a `safety` ignore for a non-fixable transitive `pyarrow`
+   advisory (isolated to the Flink image, core pins `pyarrow>=17`); retire the
+   ignore when the upstream flink/beam chain allows it.
 
 External gates remain unchanged and are listed in the README scope note:
 production CDC onboarding, a benchmark on production-grade hardware, and a

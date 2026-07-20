@@ -92,7 +92,7 @@ class _FakeExecutionEnvironment:
         self.checkpointing = None
         self.parallelism = None
         self.from_source_args = None
-        self.restart_strategy = None
+        self.configured = None
         self.stream = _FakeStream()
 
     def enable_checkpointing(self, interval):
@@ -101,8 +101,10 @@ class _FakeExecutionEnvironment:
     def set_parallelism(self, value):
         self.parallelism = value
 
-    def set_restart_strategy(self, value):
-        self.restart_strategy = value
+    # Deliberately no set_restart_strategy: Flink 2.x removed it (FLIP-381),
+    # so a regression back to it must fail here, not only on the live cluster.
+    def configure(self, configuration):
+        self.configured = configuration
 
     def from_source(self, source, watermark_strategy, name):
         self.from_source_args = (source, watermark_strategy, name)
@@ -147,8 +149,16 @@ def session_aggregator(monkeypatch):
             self.timestamp_assigner = assigner
             return self
 
+    class _Configuration:
+        def __init__(self):
+            self.values = {}
+
+        def set_string(self, key, value):
+            self.values[key] = value
+
     common.Types = _Types
     common.WatermarkStrategy = _WatermarkStrategy
+    common.Configuration = _Configuration
 
     serialization = types.ModuleType("pyflink.common.serialization")
 
@@ -175,15 +185,6 @@ def session_aggregator(monkeypatch):
             return cls(seconds * 1000)
 
     time_module.Duration = _Duration
-
-    restart_strategy = types.ModuleType("pyflink.common.restart_strategy")
-
-    class _RestartStrategies:
-        @staticmethod
-        def failure_rate_restart(max_failure_rate, failure_rate_interval, delay_interval):
-            return ("failure_rate", max_failure_rate, failure_rate_interval, delay_interval)
-
-    restart_strategy.RestartStrategies = _RestartStrategies
 
     datastream = types.ModuleType("pyflink.datastream")
     datastream.__path__ = []
@@ -280,7 +281,6 @@ def session_aggregator(monkeypatch):
     common.serialization = serialization
     common.time = time_module
     common.watermark_strategy = watermark_strategy
-    common.restart_strategy = restart_strategy
     datastream.connectors = connectors
     connectors.kafka = kafka
     datastream.functions = functions
@@ -293,7 +293,6 @@ def session_aggregator(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyflink.common.serialization", serialization)
     monkeypatch.setitem(sys.modules, "pyflink.common.time", time_module)
     monkeypatch.setitem(sys.modules, "pyflink.common.watermark_strategy", watermark_strategy)
-    monkeypatch.setitem(sys.modules, "pyflink.common.restart_strategy", restart_strategy)
     monkeypatch.setitem(sys.modules, "pyflink.datastream", datastream)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors", connectors)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors.kafka", kafka)
@@ -623,7 +622,13 @@ def test_build_pipeline_sets_bounded_restart_strategy(session_aggregator, monkey
 
     session_aggregator.build_pipeline()
 
-    assert env.restart_strategy == ("failure_rate", 3, 300_000, 10_000)
+    assert env.configured is not None
+    assert env.configured.values == {
+        "restart-strategy.type": "failure-rate",
+        "restart-strategy.failure-rate.max-failures-per-interval": "3",
+        "restart-strategy.failure-rate.failure-rate-interval": "300000 ms",
+        "restart-strategy.failure-rate.delay": "10000 ms",
+    }
 
 
 def test_build_pipeline_respects_environment_overrides(session_aggregator, monkeypatch):

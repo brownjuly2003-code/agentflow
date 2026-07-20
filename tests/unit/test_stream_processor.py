@@ -116,7 +116,7 @@ class _FakeExecutionEnvironment:
         self.parallelism = None
         self.checkpoint_config = _FakeCheckpointConfig()
         self.from_source_args = None
-        self.restart_strategy = None
+        self.configured = None
         self.source_stream = _FakeSourceStream(self)
         self.validated_stream = None
         self.dead_letter_stream = None
@@ -133,8 +133,10 @@ class _FakeExecutionEnvironment:
     def set_parallelism(self, value):
         self.parallelism = value
 
-    def set_restart_strategy(self, value):
-        self.restart_strategy = value
+    # Deliberately no set_restart_strategy: Flink 2.x removed it (FLIP-381),
+    # so a regression back to it must fail here, not only on the live cluster.
+    def configure(self, configuration):
+        self.configured = configuration
 
     def from_source(self, source, watermark_strategy, name):
         self.from_source_args = (source, watermark_strategy, name)
@@ -266,8 +268,16 @@ def stream_processor(monkeypatch):
             self.timestamp_assigner = assigner
             return self
 
+    class _Configuration:
+        def __init__(self):
+            self.values = {}
+
+        def set_string(self, key, value):
+            self.values[key] = value
+
     common.Types = _Types
     common.WatermarkStrategy = _WatermarkStrategy
+    common.Configuration = _Configuration
 
     serialization = types.ModuleType("pyflink.common.serialization")
 
@@ -303,15 +313,6 @@ def stream_processor(monkeypatch):
 
     time_module.Duration = _Duration
     time_module.Time = _Time
-
-    restart_strategy = types.ModuleType("pyflink.common.restart_strategy")
-
-    class _RestartStrategies:
-        @staticmethod
-        def failure_rate_restart(max_failure_rate, failure_rate_interval, delay_interval):
-            return ("failure_rate", max_failure_rate, failure_rate_interval, delay_interval)
-
-    restart_strategy.RestartStrategies = _RestartStrategies
 
     datastream = types.ModuleType("pyflink.datastream")
     datastream.__path__ = []
@@ -441,7 +442,6 @@ def stream_processor(monkeypatch):
     common.serialization = serialization
     common.time = time_module
     common.watermark_strategy = watermark_strategy
-    common.restart_strategy = restart_strategy
     datastream.connectors = connectors
     connectors.kafka = kafka
     datastream.functions = functions
@@ -455,7 +455,6 @@ def stream_processor(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyflink.common.serialization", serialization)
     monkeypatch.setitem(sys.modules, "pyflink.common.time", time_module)
     monkeypatch.setitem(sys.modules, "pyflink.common.watermark_strategy", watermark_strategy)
-    monkeypatch.setitem(sys.modules, "pyflink.common.restart_strategy", restart_strategy)
     monkeypatch.setitem(sys.modules, "pyflink.datastream", datastream)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors", connectors)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors.kafka", kafka)
@@ -879,7 +878,13 @@ def test_build_pipeline_sets_bounded_restart_strategy(stream_processor, monkeypa
 
     stream_processor.build_pipeline()
 
-    assert env.restart_strategy == ("failure_rate", 3, 300_000, 10_000)
+    assert env.configured is not None
+    assert env.configured.values == {
+        "restart-strategy.type": "failure-rate",
+        "restart-strategy.failure-rate.max-failures-per-interval": "3",
+        "restart-strategy.failure-rate.failure-rate-interval": "300000 ms",
+        "restart-strategy.failure-rate.delay": "10000 ms",
+    }
 
 
 def test_build_pipeline_restart_strategy_env_overrides(stream_processor, monkeypatch):
@@ -891,7 +896,13 @@ def test_build_pipeline_restart_strategy_env_overrides(stream_processor, monkeyp
 
     stream_processor.build_pipeline()
 
-    assert env.restart_strategy == ("failure_rate", 5, 600_000, 20_000)
+    assert env.configured is not None
+    assert env.configured.values == {
+        "restart-strategy.type": "failure-rate",
+        "restart-strategy.failure-rate.max-failures-per-interval": "5",
+        "restart-strategy.failure-rate.failure-rate-interval": "600000 ms",
+        "restart-strategy.failure-rate.delay": "20000 ms",
+    }
 
 
 def test_build_pipeline_respects_environment_overrides(stream_processor, monkeypatch):

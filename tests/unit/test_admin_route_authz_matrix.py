@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 from fastapi.params import Depends
 
-from src.serving.api.auth.middleware import _is_exempt_path, require_admin_key
+from src.serving.api.auth.middleware import _is_admin_path, _is_exempt_path, require_admin_key
 from src.serving.api.routers.admin import router as admin_router
 from src.serving.api.routers.admin_ui import router as admin_ui_router
 from src.serving.node import ingest as ingest_module
@@ -55,3 +55,60 @@ def test_node_events_is_auth_middleware_exempt_not_open() -> None:
     source = inspect.getsource(ingest_module.ingest_node_events)
     assert "compare_digest" in source
     assert "_extract_bearer" in source
+
+
+# ── G-4: walk the ASSEMBLED app, not just the two known router objects ──────
+#
+# The router pins above can't see a THIRD admin router registered without the
+# dependency — that route would ship fully open (middleware skips admin paths
+# by design). The walk below closes that gap; the probe test below it proves
+# the checker is able to fail (a detector that can't fail proves nothing).
+
+
+def _admin_routes_missing_admin_key(app: object) -> list[str]:
+    from fastapi.routing import APIRoute
+
+    missing: list[str] = []
+    for route in app.routes:  # type: ignore[attr-defined]
+        path = getattr(route, "path", "")
+        if not _is_admin_path(path):
+            continue
+        if not isinstance(route, APIRoute):
+            # A mount / raw Starlette route under an admin prefix has no
+            # FastAPI dependency chain at all — flag it.
+            missing.append(path)
+            continue
+        if require_admin_key not in _dependency_calls(list(route.dependant.dependencies)):
+            missing.append(path)
+    return missing
+
+
+def test_every_assembled_admin_route_requires_admin_key() -> None:
+    from src.serving.api.main import app
+
+    admin_paths = [r.path for r in app.routes if _is_admin_path(getattr(r, "path", ""))]
+    assert len(admin_paths) >= 2, "expected admin routes on the assembled app"
+    assert _admin_routes_missing_admin_key(app) == []
+
+
+def test_admin_key_checker_flags_an_unprotected_route() -> None:
+    from fastapi import APIRouter, FastAPI
+    from fastapi import Depends as FastDepends
+
+    probe = FastAPI()
+    open_router = APIRouter(prefix="/v1/admin")
+
+    @open_router.get("/leak")
+    def _leak() -> dict:  # pragma: no cover — never called
+        return {}
+
+    guarded_router = APIRouter(prefix="/admin", dependencies=[FastDepends(require_admin_key)])
+
+    @guarded_router.get("/ok")
+    def _ok() -> dict:  # pragma: no cover — never called
+        return {}
+
+    probe.include_router(open_router)
+    probe.include_router(guarded_router)
+
+    assert _admin_routes_missing_admin_key(probe) == ["/v1/admin/leak"]

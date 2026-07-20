@@ -450,3 +450,34 @@ async def test_batch_query_reports_mixed_results_and_duration() -> None:
     assert [r.id for r in response.results] == ["ok-entity", "bad-metric", "ok-query"]
     assert [r.status for r in response.results] == ["ok", "error", "ok"]
     assert response.duration_ms >= 0
+
+
+async def test_batch_query_gather_fallback_never_echoes_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-BatchResult gather outcome escaped `_execute_item`'s own Exception
+    handling, so its text never went through `_safe_item_error` — the client
+    must see a generic message, not raw engine detail (S-2 class, audit G-5)."""
+    engine = _ModernEngine(entity={"order_id": "ORD-1"})
+    req = _make_req(engine)
+
+    async def _escape(item: BatchItem, _req: Any) -> BatchResult:
+        raise RuntimeError("secret-dsn clickhouse://internal-host:8123/prod")
+
+    monkeypatch.setattr(batch_module, "_execute_item", _escape)
+    request = BatchRequest(
+        requests=[
+            BatchItem(
+                id="i-1", type="entity", params={"entity_type": "order", "entity_id": "ORD-1"}
+            )
+        ]
+    )
+
+    response = await batch_query(request, req)
+
+    (result,) = response.results
+    assert result.status == "error"
+    assert result.error is not None
+    assert "secret-dsn" not in result.error
+    assert "internal-host" not in result.error
+    assert result.error.startswith("batch item failed")

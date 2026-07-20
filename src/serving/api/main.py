@@ -506,6 +506,22 @@ async def demo_mode_guard(request: Request, call_next: RequestResponseEndpoint) 
     return await call_next(request)
 
 
+# Interactive docs and the schema are auth-exempt (`_is_exempt_path`), which
+# on a production deployment hands any caller the full route map without a
+# key (audit G-2). Same policy as the CORS wildcard: demo/dev convenience,
+# refused on the production profile.
+_DOCS_PATH_PREFIXES = ("/docs", "/redoc", "/openapi")
+
+
+@app.middleware("http")
+async def production_docs_guard(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    if request.url.path.startswith(_DOCS_PATH_PREFIXES) and (
+        getattr(request.app.state, "profile", "dev") == "production"
+    ):
+        return JSONResponse(status_code=404, content={"detail": "Not found."})
+    return await call_next(request)
+
+
 # Registered last so it wraps every other HTTP middleware and observes the
 # final response status code; route template is populated by the router after
 # call_next() returns. Backs agentflow-api-health.json + api-5xx-spike.md.

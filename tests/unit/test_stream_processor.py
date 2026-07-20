@@ -116,6 +116,7 @@ class _FakeExecutionEnvironment:
         self.parallelism = None
         self.checkpoint_config = _FakeCheckpointConfig()
         self.from_source_args = None
+        self.restart_strategy = None
         self.source_stream = _FakeSourceStream(self)
         self.validated_stream = None
         self.dead_letter_stream = None
@@ -131,6 +132,9 @@ class _FakeExecutionEnvironment:
 
     def set_parallelism(self, value):
         self.parallelism = value
+
+    def set_restart_strategy(self, value):
+        self.restart_strategy = value
 
     def from_source(self, source, watermark_strategy, name):
         self.from_source_args = (source, watermark_strategy, name)
@@ -300,6 +304,15 @@ def stream_processor(monkeypatch):
     time_module.Duration = _Duration
     time_module.Time = _Time
 
+    restart_strategy = types.ModuleType("pyflink.common.restart_strategy")
+
+    class _RestartStrategies:
+        @staticmethod
+        def failure_rate_restart(max_failure_rate, failure_rate_interval, delay_interval):
+            return ("failure_rate", max_failure_rate, failure_rate_interval, delay_interval)
+
+    restart_strategy.RestartStrategies = _RestartStrategies
+
     datastream = types.ModuleType("pyflink.datastream")
     datastream.__path__ = []
     datastream.StreamExecutionEnvironment = _FakeExecutionEnvironment
@@ -428,6 +441,7 @@ def stream_processor(monkeypatch):
     common.serialization = serialization
     common.time = time_module
     common.watermark_strategy = watermark_strategy
+    common.restart_strategy = restart_strategy
     datastream.connectors = connectors
     connectors.kafka = kafka
     datastream.functions = functions
@@ -441,6 +455,7 @@ def stream_processor(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyflink.common.serialization", serialization)
     monkeypatch.setitem(sys.modules, "pyflink.common.time", time_module)
     monkeypatch.setitem(sys.modules, "pyflink.common.watermark_strategy", watermark_strategy)
+    monkeypatch.setitem(sys.modules, "pyflink.common.restart_strategy", restart_strategy)
     monkeypatch.setitem(sys.modules, "pyflink.datastream", datastream)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors", connectors)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.connectors.kafka", kafka)
@@ -850,6 +865,33 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
     assert env.dead_letter_stream.sink["record_serializer"]["topic"] == "events.deadletter"
     assert env.filtered_stream.sink["bootstrap_servers"] == "localhost:9092"
     assert env.filtered_stream.sink["record_serializer"]["topic"] == "events.validated"
+
+
+def test_build_pipeline_sets_bounded_restart_strategy(stream_processor, monkeypatch):
+    env = _FakeExecutionEnvironment()
+    stream_processor.StreamExecutionEnvironment.current_env = env
+    for name in (
+        "FLINK_RESTART_MAX_FAILURES_PER_INTERVAL",
+        "FLINK_RESTART_FAILURE_RATE_INTERVAL_MS",
+        "FLINK_RESTART_DELAY_MS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    stream_processor.build_pipeline()
+
+    assert env.restart_strategy == ("failure_rate", 3, 300_000, 10_000)
+
+
+def test_build_pipeline_restart_strategy_env_overrides(stream_processor, monkeypatch):
+    env = _FakeExecutionEnvironment()
+    stream_processor.StreamExecutionEnvironment.current_env = env
+    monkeypatch.setenv("FLINK_RESTART_MAX_FAILURES_PER_INTERVAL", "5")
+    monkeypatch.setenv("FLINK_RESTART_FAILURE_RATE_INTERVAL_MS", "600000")
+    monkeypatch.setenv("FLINK_RESTART_DELAY_MS", "20000")
+
+    stream_processor.build_pipeline()
+
+    assert env.restart_strategy == ("failure_rate", 5, 600_000, 20_000)
 
 
 def test_build_pipeline_respects_environment_overrides(stream_processor, monkeypatch):

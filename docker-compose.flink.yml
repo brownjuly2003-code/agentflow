@@ -1,5 +1,14 @@
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   kafka:
+    logging: *default-logging
     environment:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,HOST://0.0.0.0:19092,CONTROLLER://0.0.0.0:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:19092
@@ -11,6 +20,13 @@ services:
       - "9101:9101"
 
   flink-jobmanager:
+    logging: *default-logging
+    # The 2026-07-18 soak lost its TaskManager to a one-off container death and
+    # the job then hung in NoResourceAvailable for the rest of the run; the
+    # cluster processes must come back on their own. The one-shot job
+    # containers (kafka-init, minio-init, flink-job-runner) keep the default
+    # "no" — restarting a completed provision job would resubmit the Flink job.
+    restart: unless-stopped
     build:
       context: ./src
       dockerfile: processing/flink_jobs/Dockerfile
@@ -26,6 +42,8 @@ services:
       PYTHONPATH: /opt/agentflow
 
   flink-taskmanager:
+    logging: *default-logging
+    restart: unless-stopped
     build:
       context: ./src
       dockerfile: processing/flink_jobs/Dockerfile
@@ -41,6 +59,7 @@ services:
       PYTHONPATH: /opt/agentflow
 
   flink-job-runner:
+    logging: *default-logging
     build:
       context: ./src
       dockerfile: processing/flink_jobs/Dockerfile

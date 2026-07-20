@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
+from pyflink.common.restart_strategy import RestartStrategies
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.time import Duration, Time
 from pyflink.common.watermark_strategy import TimestampAssigner
@@ -259,6 +260,19 @@ def build_pipeline() -> StreamExecutionEnvironment:
     env.enable_checkpointing(30_000)  # 30s
     env.get_checkpoint_config().set_min_pause_between_checkpoints(10_000)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
+
+    # Bounded restart budget: with the default infinite fixed-delay strategy a
+    # job whose environment is persistently broken (e.g. checkpoint storage
+    # full) restarts forever, re-emitting from the last checkpoint on every
+    # attempt and flooding downstream with duplicates. Exceeding the failure
+    # rate parks the job in FAILED, where alerting and the operator take over.
+    env.set_restart_strategy(
+        RestartStrategies.failure_rate_restart(
+            int(os.getenv("FLINK_RESTART_MAX_FAILURES_PER_INTERVAL", "3")),
+            int(os.getenv("FLINK_RESTART_FAILURE_RATE_INTERVAL_MS", "300000")),  # 5 min
+            int(os.getenv("FLINK_RESTART_DELAY_MS", "10000")),  # 10s
+        )
+    )
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 

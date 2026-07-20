@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pyflink.common import Types, WatermarkStrategy
+from pyflink.common.restart_strategy import RestartStrategies
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.time import Duration
 from pyflink.common.watermark_strategy import TimestampAssigner
@@ -157,6 +158,16 @@ def build_pipeline() -> StreamExecutionEnvironment:
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(CHECKPOINT_INTERVAL_MS)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
+
+    # Bounded restart budget — same rationale as stream_processor.build_pipeline:
+    # a persistently failing job must park in FAILED, not restart forever.
+    env.set_restart_strategy(
+        RestartStrategies.failure_rate_restart(
+            int(os.getenv("FLINK_RESTART_MAX_FAILURES_PER_INTERVAL", "3")),
+            int(os.getenv("FLINK_RESTART_FAILURE_RATE_INTERVAL_MS", "300000")),  # 5 min
+            int(os.getenv("FLINK_RESTART_DELAY_MS", "10000")),  # 10s
+        )
+    )
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 

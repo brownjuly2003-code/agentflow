@@ -1,6 +1,6 @@
 output "kafka_bootstrap_brokers" {
-  description = "Kafka bootstrap broker connection string"
-  value       = module.kafka.bootstrap_brokers
+  description = "Kafka bootstrap broker connection string (SASL/IAM listeners)"
+  value       = module.kafka.bootstrap_brokers_sasl_iam
 }
 
 output "flink_application_arn" {

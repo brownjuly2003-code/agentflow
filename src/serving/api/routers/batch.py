@@ -41,6 +41,21 @@ def _safe_item_error(exc: Exception, req: Request) -> str:
     return str(exc)
 
 
+def _unexpected_outcome_error(outcome: object, req: Request) -> str:
+    """Client-safe text for a gather outcome that is not a ``BatchResult``.
+
+    ``_execute_item`` converts every ``Exception`` into a ``BatchResult``
+    itself, so anything landing here escaped that controlled path (an
+    unexpected ``BaseException`` or a bug). Its text has not been through
+    ``_safe_item_error`` and may carry raw engine detail — never echo it to
+    the client (S-2 class, audit G-5); log it under the correlation id.
+    """
+    correlation_id = getattr(req.state, "correlation_id", None)
+    logger.error("batch_unexpected_outcome", detail=repr(outcome), correlation_id=correlation_id)
+    ref = f" (ref {correlation_id})" if correlation_id else ""
+    return f"batch item failed{ref}"
+
+
 class BatchItem(BaseModel):
     id: str
     type: Literal["entity", "metric", "query"]
@@ -214,7 +229,7 @@ async def batch_query(request: BatchRequest, req: Request) -> BatchResponse:
     results = [
         outcome
         if isinstance(outcome, BatchResult)
-        else BatchResult(id=item.id, status="error", error=str(outcome))
+        else BatchResult(id=item.id, status="error", error=_unexpected_outcome_error(outcome, req))
         for item, outcome in zip(request.requests, outcomes, strict=False)
     ]
     return BatchResponse(

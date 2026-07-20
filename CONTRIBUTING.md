@@ -73,6 +73,23 @@ python scripts/check_performance.py --baseline docs/benchmark-baseline.json --cu
 python scripts/generate_contracts.py --check
 ```
 
+## Dependabot pip PRs and `uv.lock`
+
+Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**
+regenerating `uv.lock`, so the `lock-check` gate (`uv lock --check`) fails on
+every such PR. Bring the lockfile along by hand:
+
+```bash
+gh pr checkout <pr-number>
+uv lock
+git add uv.lock && git commit -m "chore(deps): regenerate uv.lock for the group bump"
+git push
+gh pr update-branch <pr-number>   # branch protection requires up-to-date branches
+```
+
+Then let CI finish and merge as usual. GitHub Actions and npm bumps do not
+need this — only the pip ecosystem is locked with uv.
+
 ## Architecture decisions
 
 Significant design changes should include an ADR in `docs/decisions/`.

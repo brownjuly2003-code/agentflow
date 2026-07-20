@@ -132,6 +132,8 @@ class EntityQueryMixin:
         self: QueryExecutionHost,
         statuses: list[str],
         tenant_id: str | None = None,
+        *,
+        limit: int,
     ) -> list[dict]:
         """Bulk read for the stuck-orders worklist (ops-surfaces-spec.md §3.2).
 
@@ -141,6 +143,12 @@ class EntityQueryMixin:
         order's latest ``orders.status`` row) happens in the caller via
         ``fetch_pipeline_events(topic="orders.status")``, the same port
         method the Order 360 timeline already uses.
+
+        ``limit`` is required (security pre-audit S-8): without it this read
+        materialises a large tenant's entire open-orders set on a worker
+        thread. Truncation is deterministic (ORDER BY primary key), and the
+        callers probe with ``cap + 1`` to *detect* it rather than cut
+        silently.
         """
         entity_def = self.catalog.entities.get("order")
         if entity_def is None or not statuses:
@@ -162,7 +170,8 @@ class EntityQueryMixin:
             # caller-supplied catalog ladder, never a literal here
             f"SELECT * FROM {table_name} "  # nosec B608
             f"WHERE status IN ({status_placeholders}) "
-            f"ORDER BY {self._quote_identifier(entity_def.primary_key)}"
+            f"ORDER BY {self._quote_identifier(entity_def.primary_key)} "
+            f"LIMIT {int(limit)}"
         )
         try:
             rows = (

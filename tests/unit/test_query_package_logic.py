@@ -324,14 +324,14 @@ def test_scan_entity_rows_by_ids_quotes_every_id(host: _Host) -> None:
 
 
 def test_fetch_orders_by_status_empty_ladder_returns_empty(host: _Host) -> None:
-    assert host.fetch_orders_by_status([]) == []
+    assert host.fetch_orders_by_status([], limit=50) == []
     host._backend.execute.assert_not_called()
 
 
 def test_fetch_orders_by_status_param_backend_binds_statuses(host: _Host) -> None:
     host._backend.execute.return_value = [{"order_id": "ORD-1", "status": "pending"}]
 
-    rows = host.fetch_orders_by_status(["pending", "confirmed"])
+    rows = host.fetch_orders_by_status(["pending", "confirmed"], limit=50)
 
     assert rows == [{"order_id": "ORD-1", "status": "pending"}]
     sql, params = host._backend.execute.call_args.args
@@ -339,10 +339,21 @@ def test_fetch_orders_by_status_param_backend_binds_statuses(host: _Host) -> Non
     assert params == ["pending", "confirmed"]
 
 
+def test_fetch_orders_by_status_is_bounded_and_deterministic(host: _Host) -> None:
+    # S-8: the read must carry the caller's row cap, and truncation must be
+    # deterministic — ORDER BY primary key, then LIMIT.
+    host._backend.execute.return_value = []
+
+    host.fetch_orders_by_status(["pending"], limit=101)
+
+    sql = host._backend.execute.call_args.args[0]
+    assert sql.endswith('ORDER BY "order_id" LIMIT 101')
+
+
 def test_fetch_orders_by_status_literal_backend_quotes_statuses(literal_host: _Host) -> None:
     literal_host._backend.execute.return_value = []
 
-    assert literal_host.fetch_orders_by_status(["pend'ing"]) == []
+    assert literal_host.fetch_orders_by_status(["pend'ing"], limit=50) == []
     sql = literal_host._backend.execute.call_args.args[0]
     assert "WHERE status IN ('pend''ing')" in sql
     assert len(literal_host._backend.execute.call_args.args) == 1
@@ -352,14 +363,14 @@ def test_fetch_orders_by_status_missing_table_maps_to_value_error(host: _Host) -
     host._backend.execute.side_effect = BackendMissingTableError("no table")
 
     with pytest.raises(ValueError, match="not materialized yet"):
-        host.fetch_orders_by_status(["pending"])
+        host.fetch_orders_by_status(["pending"], limit=50)
 
 
 def test_fetch_orders_by_status_execution_error_maps_to_value_error(host: _Host) -> None:
     host._backend.execute.side_effect = BackendExecutionError("boom")
 
     with pytest.raises(ValueError, match="Open-orders lookup failed"):
-        host.fetch_orders_by_status(["pending"])
+        host.fetch_orders_by_status(["pending"], limit=50)
 
 
 # ---------------------------------------------------------------------------

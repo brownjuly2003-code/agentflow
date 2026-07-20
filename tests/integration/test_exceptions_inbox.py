@@ -310,6 +310,76 @@ def test_acknowledge_then_resolve_lifecycle(authed_client: TestClient, auth_head
     assert stats["manual_resolutions"] == 1
 
 
+def test_scan_cap_reports_truncation_in_list_and_stats(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    # S-8: the demo seed has two dead-letter rows; a cap of 1 truncates the
+    # inbox's native source, which both surfaces report — never a silent cut.
+    data = client.get("/v1/ops/exceptions").json()
+    assert data["scan_truncated"] is False
+    assert client.get("/v1/ops/exceptions/stats").json()["scan_truncated"] is False
+
+    monkeypatch.setenv("AGENTFLOW_OPS_INBOX_SCAN_LIMIT", "1")
+
+    data = client.get("/v1/ops/exceptions").json()
+    assert data["scan_truncated"] is True
+    assert len(data["items"]) == 1
+    assert client.get("/v1/ops/exceptions/stats").json()["scan_truncated"] is True
+
+
+def test_truncated_webhook_scan_never_auto_resolves_out_of_window_items(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    # S-8 guard: a truncated scan cannot prove absence. Without the guard,
+    # the capped gather would pass an incomplete seen-set to auto-resolve and
+    # mark the still-dead out-of-window delivery resolved — and since its
+    # `updated_at` never advances, the later upsert could not reopen it.
+    from datetime import UTC, datetime, timedelta
+
+    from src.serving.control_plane import get_control_plane_store
+    from src.serving.control_plane.embedded import ensure_webhook_delivery_queue_table
+
+    store = get_control_plane_store(client.app)
+    conn = store._conn
+    ensure_webhook_delivery_queue_table(conn)
+    now = datetime.now(UTC)
+    for webhook_id, event_id, updated_at in (
+        ("wh-old", "evt-old", now - timedelta(minutes=10)),
+        ("wh-new", "evt-new", now),
+    ):
+        conn.execute(
+            """
+            INSERT INTO webhook_delivery_queue
+                (webhook_id, event_id, tenant, event_type, body, status, attempts,
+                 last_error, created_at, updated_at)
+            VALUES (?, ?, 'default', 'order.created', '{}', 'dead', 5,
+                    'connection refused', ?, ?)
+            """,
+            [webhook_id, event_id, updated_at, updated_at],
+        )
+
+    # Both enter the overlay while the scan is unbounded.
+    data = client.get("/v1/ops/exceptions", params={"source": "webhook_delivery"}).json()
+    assert {item["item_id"] for item in data["items"]} == {
+        "wh:wh-old:evt-old",
+        "wh:wh-new:evt-new",
+    }
+
+    # Capped to the newest row: truncated, and wh-old is out of the window.
+    monkeypatch.setenv("AGENTFLOW_OPS_INBOX_SCAN_LIMIT", "1")
+    data = client.get("/v1/ops/exceptions", params={"source": "webhook_delivery"}).json()
+    assert data["scan_truncated"] is True
+    assert [item["item_id"] for item in data["items"]] == ["wh:wh-new:evt-new"]
+
+    # Uncapped again: wh-old is still open — the truncated scan resolved
+    # nothing behind the operator's back.
+    monkeypatch.delenv("AGENTFLOW_OPS_INBOX_SCAN_LIMIT")
+    data = client.get("/v1/ops/exceptions", params={"source": "webhook_delivery"}).json()
+    status_by_id = {item["item_id"]: item["status"] for item in data["items"]}
+    assert status_by_id["wh:wh-old:evt-old"] == "open"
+    assert status_by_id["wh:wh-new:evt-new"] == "open"
+
+
 def test_auto_resolve_when_the_finding_no_longer_reproduces(
     authed_client: TestClient, auth_headers
 ):

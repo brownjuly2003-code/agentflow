@@ -1,9 +1,19 @@
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   kafka:
+    logging: *default-logging
     environment:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
 
   cdc-kafka-init:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     depends_on:
       kafka:
@@ -26,6 +36,7 @@ services:
         kafka-configs --bootstrap-server kafka:9092 --alter --entity-type topics --entity-name schemahistory.cdc.mysql.agentflow_demo --add-config cleanup.policy=delete,retention.ms=-1
 
   postgres-source:
+    logging: *default-logging
     image: postgres:16
     command:
       - "postgres"
@@ -51,6 +62,7 @@ services:
       retries: 5
 
   mysql-source:
+    logging: *default-logging
     image: mysql:8.4
     command:
       - "--server-id=223344"
@@ -75,6 +87,7 @@ services:
       retries: 10
 
   kafka-connect:
+    logging: *default-logging
     image: agentflow-kafka-connect:local
     build:
       context: .
@@ -117,6 +130,7 @@ services:
       retries: 12
 
   cdc-register-connectors:
+    logging: *default-logging
     image: agentflow-kafka-connect:local
     depends_on:
       kafka-connect:

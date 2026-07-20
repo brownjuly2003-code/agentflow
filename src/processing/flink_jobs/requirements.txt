@@ -15,5 +15,5 @@
 # accept the same model/config payloads.
 apache-flink==2.3.0
 confluent-kafka>=2.5,<3
-pydantic>=2.9,<3
+pydantic>=2.13.4,<3
 structlog>=26.1.0,<27

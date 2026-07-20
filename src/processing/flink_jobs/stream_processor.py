@@ -12,7 +12,7 @@ import os
 from collections.abc import Iterator
 from typing import Any
 
-from pyflink.common import Types, WatermarkStrategy
+from pyflink.common import Configuration, Types, WatermarkStrategy
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.time import Duration, Time
 from pyflink.common.watermark_strategy import TimestampAssigner
@@ -259,6 +259,29 @@ def build_pipeline() -> StreamExecutionEnvironment:
     env.enable_checkpointing(30_000)  # 30s
     env.get_checkpoint_config().set_min_pause_between_checkpoints(10_000)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
+
+    # Bounded restart budget: with the default infinite fixed-delay strategy a
+    # job whose environment is persistently broken (e.g. checkpoint storage
+    # full) restarts forever, re-emitting from the last checkpoint on every
+    # attempt and flooding downstream with duplicates. Exceeding the failure
+    # rate parks the job in FAILED, where alerting and the operator take over.
+    # Flink 2.x removed env.set_restart_strategy (FLIP-381); the strategy must
+    # go through Configuration + env.configure.
+    restart_config = Configuration()
+    restart_config.set_string("restart-strategy.type", "failure-rate")
+    restart_config.set_string(
+        "restart-strategy.failure-rate.max-failures-per-interval",
+        str(int(os.getenv("FLINK_RESTART_MAX_FAILURES_PER_INTERVAL", "3"))),
+    )
+    restart_config.set_string(
+        "restart-strategy.failure-rate.failure-rate-interval",
+        f"{int(os.getenv('FLINK_RESTART_FAILURE_RATE_INTERVAL_MS', '300000'))} ms",  # 5 min
+    )
+    restart_config.set_string(
+        "restart-strategy.failure-rate.delay",
+        f"{int(os.getenv('FLINK_RESTART_DELAY_MS', '10000'))} ms",  # 10s
+    )
+    env.configure(restart_config)
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 

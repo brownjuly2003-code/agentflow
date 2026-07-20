@@ -113,6 +113,32 @@ def test_pagination_shape(client: TestClient):
     assert data["pagination"] == {"page": 1, "page_size": 2, "total": 5, "pages": 3}
 
 
+def test_scan_cap_reports_truncation_instead_of_cutting_silently(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    # S-8: the open-orders read is bounded, and hitting the bound is visible
+    # (`scan_truncated`), never a silent cut of the worklist. The window is
+    # deterministic — the engine read orders by primary key, so with a cap of
+    # 2 the first two open orders by id are the whole scanned picture.
+    monkeypatch.setenv("AGENTFLOW_OPS_ORDERS_SCAN_LIMIT", "2")
+
+    response = client.get("/v1/ops/stuck-orders", params={"include_within_sla": "true"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["scan_truncated"] is True
+    assert {item["order_id"] for item in data["items"]} == {
+        "ORD-20260404-1002",
+        "ORD-20260404-1003",
+    }
+    assert data["pagination"]["total"] == 2
+
+    # Uncapped, the flag reports an untruncated scan.
+    monkeypatch.delenv("AGENTFLOW_OPS_ORDERS_SCAN_LIMIT")
+    data = client.get("/v1/ops/stuck-orders").json()
+    assert data["scan_truncated"] is False
+
+
 def test_order_without_stage_rows_reports_fallback_clock(client: TestClient):
     # I12: an order written outside the stage-row writer degrades honestly
     # to the created_at fallback instead of pretending to have a journal

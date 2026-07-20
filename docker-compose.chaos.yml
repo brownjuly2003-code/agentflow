@@ -1,5 +1,14 @@
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   kafka:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka
     environment:
@@ -24,6 +33,7 @@ services:
       start_period: 20s
 
   redis:
+    logging: *default-logging
     image: redis:7.4-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
@@ -34,6 +44,7 @@ services:
       start_period: 5s
 
   toxiproxy:
+    logging: *default-logging
     image: ghcr.io/shopify/toxiproxy:2.9.0
     depends_on:
       kafka:

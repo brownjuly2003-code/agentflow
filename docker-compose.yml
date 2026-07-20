@@ -1,6 +1,15 @@
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   # ── Kafka (KRaft mode, no Zookeeper) ──────────────────────────
   kafka:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     ports:
       - "9092:9092"
@@ -34,6 +43,7 @@ services:
       retries: 5
 
   kafka-init:
+    logging: *default-logging
     image: confluentinc/cp-kafka:7.7.0
     depends_on:
       kafka:
@@ -63,6 +73,7 @@ services:
 
   # ── Flink ─────────────────────────────────────────────────────
   flink-jobmanager:
+    logging: *default-logging
     image: flink:2.3.0-java17
     ports:
       - "8081:8081"
@@ -89,6 +100,7 @@ services:
       retries: 5
 
   flink-taskmanager:
+    logging: *default-logging
     image: flink:2.3.0-java17
     depends_on:
       flink-jobmanager:
@@ -109,6 +121,7 @@ services:
 
   # ── MinIO (S3-compatible object store) ────────────────────────
   minio:
+    logging: *default-logging
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     ports:
       - "9000:9000"
@@ -126,6 +139,7 @@ services:
       retries: 3
 
   minio-init:
+    logging: *default-logging
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
@@ -154,6 +168,7 @@ services:
         echo "MinIO buckets created."
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -165,6 +180,7 @@ services:
 
   # ── ClickHouse (serving store, ADR 0006) ──────────────────────
   clickhouse:
+    logging: *default-logging
     image: clickhouse/clickhouse-server:24.8
     ports:
       - "127.0.0.1:8123:8123"
@@ -192,6 +208,7 @@ services:
 
   # ── Prometheus ────────────────────────────────────────────────
   prometheus:
+    logging: *default-logging
     image: prom/prometheus:v2.54.0
     ports:
       - "9090:9090"
@@ -202,6 +219,7 @@ services:
 
   # ── Grafana ───────────────────────────────────────────────────
   grafana:
+    logging: *default-logging
     image: grafana/grafana:11.2.0
     ports:
       - "3000:3000"

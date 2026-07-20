@@ -1224,18 +1224,20 @@ class PostgresControlPlaneStore(ControlPlaneStore):
             ],
         }
 
-    def list_dead_letter_events_for_inbox(self, tenant_id: str) -> list[dict]:
+    def list_dead_letter_events_for_inbox(
+        self, tenant_id: str, *, limit: int | None = None
+    ) -> list[dict]:
+        select = (
+            "SELECT event_id, event_type, failure_reason, failure_detail, "
+            "received_at, retry_count, last_retried_at, status "
+            "FROM dead_letter_events "
+            "WHERE COALESCE(tenant_id, 'default') = %s "
+            "ORDER BY received_at DESC"
+        )
+        # suffix is empty or "LIMIT <int>" — never caller-shaped text
+        suffix = f" LIMIT {int(limit)}" if limit is not None else ""
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT event_id, event_type, failure_reason, failure_detail,
-                       received_at, retry_count, last_retried_at, status
-                FROM dead_letter_events
-                WHERE COALESCE(tenant_id, 'default') = %s
-                ORDER BY received_at DESC
-                """,
-                (tenant_id,),
-            ).fetchall()
+            rows = conn.execute(select + suffix, (tenant_id,)).fetchall()
         return [
             {
                 "event_id": row[0],
@@ -1430,19 +1432,22 @@ class PostgresControlPlaneStore(ControlPlaneStore):
 
     # --- webhook dead deliveries for the exception inbox ----------------------
 
-    def list_dead_webhook_deliveries(self, tenant_id: str | None = None) -> list[dict]:
+    def list_dead_webhook_deliveries(
+        self, tenant_id: str | None = None, *, limit: int | None = None
+    ) -> list[dict]:
         select = (
             "SELECT webhook_id, event_id, tenant, event_type, body, attempts, "
             "last_status_code, last_error, created_at, updated_at "
             "FROM webhook_delivery_queue WHERE status = 'dead'"
         )
+        suffix = f" LIMIT {int(limit)}" if limit is not None else ""
         with self._connect() as conn:
             if tenant_id is not None:
                 rows = conn.execute(
-                    select + " AND tenant = %s ORDER BY updated_at DESC", (tenant_id,)
+                    select + " AND tenant = %s ORDER BY updated_at DESC" + suffix, (tenant_id,)
                 ).fetchall()
             else:
-                rows = conn.execute(select + " ORDER BY updated_at DESC").fetchall()
+                rows = conn.execute(select + " ORDER BY updated_at DESC" + suffix).fetchall()
         return [
             {
                 "webhook_id": row[0],

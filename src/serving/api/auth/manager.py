@@ -440,6 +440,13 @@ class AuthManager:
         return allowed
 
     def is_failed_auth_limited(self, client_ip: str) -> bool:
+        # Per-process on purpose (unlike the Redis-shared request rate limiter):
+        # on N replicas an attacker spreading guesses gets N x the failed-auth
+        # budget, which is an accepted risk while API keys are 256-bit random
+        # values — brute force is infeasible at any realistic multiple, and the
+        # throttle only has to blunt log-flooding/scanning. Revisit (move to
+        # Redis alongside `check_rate_limit`) if key entropy ever drops or
+        # failed-auth alerting starts keying off this counter. (audit S-7)
         now = self.time_source()
         cutoff = now - FAILED_AUTH_WINDOW_SECONDS
         window = [stamp for stamp in self._failed_auth_windows[client_ip] if stamp > cutoff]

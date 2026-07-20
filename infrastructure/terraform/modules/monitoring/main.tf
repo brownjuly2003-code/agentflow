@@ -3,6 +3,7 @@ variable "kafka_cluster_arn" { type = string }
 variable "flink_application_arn" { type = string }
 variable "sns_alert_topic_arn" { type = string }
 variable "freshness_sla_seconds" { type = number }
+variable "permissions_boundary_arn" { type = string }
 
 # ── CloudWatch Alarms ───────────────────────────────────────────
 
@@ -87,7 +88,8 @@ resource "aws_grafana_workspace" "main" {
 }
 
 resource "aws_iam_role" "grafana" {
-  name = "agentflow-grafana-${var.environment}"
+  name                 = "agentflow-grafana-${var.environment}"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

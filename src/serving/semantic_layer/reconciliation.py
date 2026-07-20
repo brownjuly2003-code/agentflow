@@ -23,6 +23,26 @@ if TYPE_CHECKING:
 _STATUS_EVENT_PREFIX = "order.status."
 
 _DEFAULT_JOURNAL_SCAN_LIMIT = 20_000
+_DEFAULT_ORDERS_SCAN_LIMIT = 20_000
+
+
+def orders_scan_limit() -> int:
+    """Row cap for the ops-surfaces open-orders read (security pre-audit S-8):
+    ``fetch_orders_by_status`` with no bound materialises a large tenant's
+    entire open-orders set on a worker thread. Same "size safety net" contract
+    as ``journal_scan_limit`` — at demo scale the read never gets near the
+    cap, and the stuck-orders route probes with ``cap + 1`` so hitting it is
+    *reported* (``scan_truncated``), never a silent cut. Env-tunable via
+    ``AGENTFLOW_OPS_ORDERS_SCAN_LIMIT``.
+    """
+    raw = (os.getenv("AGENTFLOW_OPS_ORDERS_SCAN_LIMIT") or "").strip()
+    if not raw:
+        return _DEFAULT_ORDERS_SCAN_LIMIT
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_ORDERS_SCAN_LIMIT
+    return value if value > 0 else _DEFAULT_ORDERS_SCAN_LIMIT
 
 
 def journal_scan_limit() -> int:
@@ -110,7 +130,14 @@ def check_journal_vs_store(
     if not latest_by_entity:
         return []
 
-    order_rows = engine.fetch_orders_by_status([*ladder, *terminal_names], tenant_id=tenant_id)
+    # Bounded like the journal scan above (S-8). Truncation here can only
+    # *miss* findings, never invent them: an order absent from the bounded
+    # window falls into the "missing from the store — tolerated, not flagged"
+    # branch below, the same false-negative-only failure mode the bounded
+    # journal scan already accepts.
+    order_rows = engine.fetch_orders_by_status(
+        [*ladder, *terminal_names], tenant_id=tenant_id, limit=orders_scan_limit()
+    )
     store_status_by_id = {str(row.get("order_id")): row.get("status") for row in order_rows}
 
     findings: list[ReconciliationFinding] = []

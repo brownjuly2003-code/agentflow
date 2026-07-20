@@ -1140,27 +1140,22 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
             ],
         }
 
-    def list_dead_letter_events_for_inbox(self, tenant_id: str) -> list[dict]:
+    def list_dead_letter_events_for_inbox(
+        self, tenant_id: str, *, limit: int | None = None
+    ) -> list[dict]:
         cursor = self._conn.cursor()
         try:
             ensure_dead_letter_table(cursor)
-            rows = cursor.execute(
-                """
-                SELECT
-                    event_id,
-                    event_type,
-                    failure_reason,
-                    failure_detail,
-                    received_at,
-                    retry_count,
-                    last_retried_at,
-                    status
-                FROM dead_letter_events
-                WHERE COALESCE(tenant_id, 'default') = ?
-                ORDER BY received_at DESC
-                """,
-                [tenant_id],
-            ).fetchall()
+            select = (
+                "SELECT event_id, event_type, failure_reason, failure_detail, "
+                "received_at, retry_count, last_retried_at, status "
+                "FROM dead_letter_events "
+                "WHERE COALESCE(tenant_id, 'default') = ? "
+                "ORDER BY received_at DESC"
+            )
+            # suffix is empty or "LIMIT <int>" — never caller-shaped text
+            suffix = f" LIMIT {int(limit)}" if limit is not None else ""
+            rows = cursor.execute(select + suffix, [tenant_id]).fetchall()
         finally:
             cursor.close()
         return [
@@ -1381,7 +1376,9 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
 
     # --- webhook dead deliveries for the exception inbox ----------------------
 
-    def list_dead_webhook_deliveries(self, tenant_id: str | None = None) -> list[dict]:
+    def list_dead_webhook_deliveries(
+        self, tenant_id: str | None = None, *, limit: int | None = None
+    ) -> list[dict]:
         conn = self._conn
         ensure_webhook_delivery_queue_table(conn)
         select = (
@@ -1389,12 +1386,13 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
             "last_status_code, last_error, created_at, updated_at "
             "FROM webhook_delivery_queue WHERE status = 'dead'"
         )
+        suffix = f" LIMIT {int(limit)}" if limit is not None else ""
         if tenant_id is not None:
             rows = conn.execute(
-                select + " AND tenant = ? ORDER BY updated_at DESC", [tenant_id]
+                select + " AND tenant = ? ORDER BY updated_at DESC" + suffix, [tenant_id]
             ).fetchall()
         else:
-            rows = conn.execute(select + " ORDER BY updated_at DESC").fetchall()
+            rows = conn.execute(select + " ORDER BY updated_at DESC" + suffix).fetchall()
         return [
             {
                 "webhook_id": row[0],

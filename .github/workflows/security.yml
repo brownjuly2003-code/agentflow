@@ -313,6 +313,33 @@ jobs:
           limit-severities-for-sarif: true
       - name: Upload Trivy scan results
         if: always()
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
         with:
           sarif_file: trivy-results.sarif
+
+  iac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Run Trivy IaC misconfiguration scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infrastructure/terraform
+          format: sarif
+          output: trivy-iac.sarif
+          severity: MEDIUM,HIGH,CRITICAL
+          exit-code: "1"
+          limit-severities-for-sarif: true
+      - name: Upload Trivy IaC scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          sarif_file: trivy-iac.sarif
+          # Distinct category so these alerts do not collide with the image
+          # scan's SARIF upload in the trivy job.
+          category: trivy-iac

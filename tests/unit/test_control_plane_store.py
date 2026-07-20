@@ -552,6 +552,7 @@ def _seed_dead_letter(
     event_id: str,
     tenant_id: str = "acme",
     status: str = "failed",
+    received_at: datetime | None = None,
 ) -> None:
     conn.execute(
         """
@@ -560,7 +561,7 @@ def _seed_dead_letter(
             failure_detail, received_at, retry_count, last_retried_at, status
         ) VALUES (?, ?, 'order.created', '{"a": 1}', 'semantic', 'x', ?, 0, NULL, ?)
         """,
-        [event_id, tenant_id, datetime.now(UTC), status],
+        [event_id, tenant_id, received_at or datetime.now(UTC), status],
     )
 
 
@@ -981,6 +982,41 @@ def test_list_dead_letter_events_for_inbox_returns_every_status(
     rows = outbox_store.list_dead_letter_events_for_inbox("acme")
 
     assert {row["event_id"] for row in rows} == {"evt-failed", "evt-dismissed"}
+
+
+def test_list_dead_webhook_deliveries_limit_keeps_the_newest_rows(
+    store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    # S-8: the bound must be the newest N (ORDER BY updated_at DESC), so the
+    # inbox's cap+1 probe sees fresh items first and truncation is honest.
+    base = datetime.now(UTC)
+    for index in range(3):
+        _seed_webhook_dead(
+            conn,
+            webhook_id=f"wh-{index}",
+            event_id=f"evt-{index}",
+            updated_at=base - timedelta(minutes=3 - index),
+        )
+
+    rows = store.list_dead_webhook_deliveries("acme", limit=2)
+
+    assert [row["webhook_id"] for row in rows] == ["wh-2", "wh-1"]
+
+
+def test_list_dead_letter_events_for_inbox_limit_keeps_the_newest_rows(
+    outbox_store: EmbeddedControlPlaneStore, conn: duckdb.DuckDBPyConnection
+) -> None:
+    base = datetime.now(UTC)
+    for index in range(3):
+        _seed_dead_letter(
+            conn,
+            event_id=f"evt-{index}",
+            received_at=base - timedelta(minutes=3 - index),
+        )
+
+    rows = outbox_store.list_dead_letter_events_for_inbox("acme", limit=2)
+
+    assert [row["event_id"] for row in rows] == ["evt-2", "evt-1"]
 
 
 def test_list_stuck_replay_dead_letter_events_filters_by_age_and_status(

@@ -13,6 +13,7 @@ webhook dead-delivery reads). No raw engine connection reach, no vault DSN
 from __future__ import annotations
 
 import math
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -30,6 +31,7 @@ from src.serving.semantic_layer.reconciliation import (
     check_journal_vs_store,
     check_stuck_replay,
     journal_scan_limit,
+    orders_scan_limit,
 )
 from src.serving.semantic_layer.stage_clock import (
     coerce_dt,
@@ -47,6 +49,27 @@ _DEADLETTER_STATUS_MAP = {
     "dismissed": "resolved",
 }
 _SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
+
+_DEFAULT_INBOX_SCAN_LIMIT = 20_000
+
+
+def inbox_scan_limit() -> int:
+    """Per-source row cap for the exception-inbox store reads (security
+    pre-audit S-8): the inbox materialises every dead-letter row and dead
+    webhook delivery for the tenant in memory on a worker thread. Same "size
+    safety net" contract as ``journal_scan_limit``/``orders_scan_limit`` —
+    the gather probes with ``cap + 1``, so hitting the cap is reported
+    (``scan_truncated``), never a silent cut. Env-tunable via
+    ``AGENTFLOW_OPS_INBOX_SCAN_LIMIT``.
+    """
+    raw = (os.getenv("AGENTFLOW_OPS_INBOX_SCAN_LIMIT") or "").strip()
+    if not raw:
+        return _DEFAULT_INBOX_SCAN_LIMIT
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_INBOX_SCAN_LIMIT
+    return value if value > 0 else _DEFAULT_INBOX_SCAN_LIMIT
 
 
 class StuckOrderItem(BaseModel):
@@ -71,6 +94,9 @@ class StuckOrdersResponse(BaseModel):
     items: list[StuckOrderItem]
     summary: StuckOrdersSummary
     pagination: dict[str, int]
+    # True when the open-orders read hit its scan cap (S-8): the worklist,
+    # summary counts, and total then cover the scanned window only.
+    scan_truncated: bool = False
 
 
 def _resolve_tenant_id(request: Request) -> str | None:
@@ -144,7 +170,14 @@ def _build_stuck_orders_payload(
     stage_budgets = (getattr(order_def, "stages", None) or []) if order_def else []
     ladder = ladder_stage_names(stage_budgets)
 
-    order_rows = engine.fetch_orders_by_status(ladder, tenant_id=tenant_id)
+    # cap+1 probe: hitting the cap is reported as `scan_truncated`, never a
+    # silent cut of the worklist (S-8). Truncation is deterministic — the
+    # engine read orders by primary key.
+    scan_cap = orders_scan_limit()
+    order_rows = engine.fetch_orders_by_status(ladder, tenant_id=tenant_id, limit=scan_cap + 1)
+    scan_truncated = len(order_rows) > scan_cap
+    if scan_truncated:
+        order_rows = order_rows[:scan_cap]
     stage_rows = engine.fetch_pipeline_events(
         tenant_id=tenant_id,
         topic="orders.status",
@@ -217,6 +250,7 @@ def _build_stuck_orders_payload(
             "total": total,
             "pages": math.ceil(total / page_size) if total else 0,
         },
+        "scan_truncated": scan_truncated,
     }
 
 
@@ -265,12 +299,16 @@ class ExceptionItem(BaseModel):
 class ExceptionsListResponse(BaseModel):
     items: list[ExceptionItem]
     pagination: dict[str, int]
+    # True when a source read hit its scan cap (S-8): the inbox and its
+    # counts then cover the scanned window only.
+    scan_truncated: bool = False
 
 
 class ExceptionsStatsResponse(BaseModel):
     by_source: dict[str, dict[str, int]] = Field(default_factory=dict)
     last_24h: int
     manual_resolutions: int
+    scan_truncated: bool = False
 
 
 class TriageActionRequest(BaseModel):
@@ -382,11 +420,12 @@ def _reconciliation_finding_to_item(
     }
 
 
-def _gather_exception_items(request: Request) -> tuple[list[dict[str, Any]], str]:
+def _gather_exception_items(request: Request) -> tuple[list[dict[str, Any]], str, bool]:
     """Run R1/R2, upsert/auto-resolve the overlay, and assemble every current
     item across all three sources (§4.1), unfiltered — the list and stats
     endpoints both start from this same picture, so counts never drift
-    between them within one request."""
+    between them within one request. The third element reports whether any
+    source read hit its scan cap (S-8)."""
     store = get_control_plane_store(request.app)
     engine = request.app.state.query_engine
     tenant_id = _tenant_id(request)
@@ -394,21 +433,28 @@ def _gather_exception_items(request: Request) -> tuple[list[dict[str, Any]], str
     order_def = catalog.entities.get("order")
     stage_budgets = (getattr(order_def, "stages", None) or []) if order_def else []
     now = datetime.now(UTC)
+    scan_cap = inbox_scan_limit()
 
     # Source 2: webhook dead deliveries — overlay-backed (§4.1 #2).
-    dead_deliveries = store.list_dead_webhook_deliveries(tenant_id)
+    dead_deliveries = store.list_dead_webhook_deliveries(tenant_id, limit=scan_cap + 1)
+    webhook_truncated = len(dead_deliveries) > scan_cap
+    if webhook_truncated:
+        dead_deliveries = dead_deliveries[:scan_cap]
     webhook_seen_ids = [f"wh:{row['webhook_id']}:{row['event_id']}" for row in dead_deliveries]
     for row, item_id in zip(dead_deliveries, webhook_seen_ids, strict=True):
         seen_at = coerce_dt(row.get("updated_at")) or now
         store.upsert_triage_finding(
             item_id=item_id, tenant_id=tenant_id, source="webhook_delivery", seen_at=seen_at
         )
-    store.auto_resolve_missing_triage_findings(
-        tenant_id=tenant_id,
-        source="webhook_delivery",
-        seen_item_ids=webhook_seen_ids,
-        resolved_at=now,
-    )
+    if not webhook_truncated:
+        # A truncated scan cannot prove absence: auto-resolving against an
+        # incomplete seen-set would mark still-dead deliveries resolved.
+        store.auto_resolve_missing_triage_findings(
+            tenant_id=tenant_id,
+            source="webhook_delivery",
+            seen_item_ids=webhook_seen_ids,
+            resolved_at=now,
+        )
 
     # Source 3: reconciliation findings — overlay-backed (§4.1 #3).
     findings = [
@@ -434,9 +480,12 @@ def _gather_exception_items(request: Request) -> tuple[list[dict[str, Any]], str
         state.item_id: state for state in store.list_triage_states(tenant_id=tenant_id)
     }
 
-    items: list[dict[str, Any]] = [
-        _deadletter_row_to_item(row) for row in store.list_dead_letter_events_for_inbox(tenant_id)
-    ]
+    deadletter_rows = store.list_dead_letter_events_for_inbox(tenant_id, limit=scan_cap + 1)
+    deadletter_truncated = len(deadletter_rows) > scan_cap
+    if deadletter_truncated:
+        deadletter_rows = deadletter_rows[:scan_cap]
+
+    items: list[dict[str, Any]] = [_deadletter_row_to_item(row) for row in deadletter_rows]
     items.extend(
         _webhook_delivery_row_to_item(row, overlay_states.get(item_id), now)
         for row, item_id in zip(dead_deliveries, webhook_seen_ids, strict=True)
@@ -445,7 +494,7 @@ def _gather_exception_items(request: Request) -> tuple[list[dict[str, Any]], str
         _reconciliation_finding_to_item(finding, overlay_states.get(item_id))
         for finding, item_id in zip(findings, reconciliation_seen_ids, strict=True)
     )
-    return items, tenant_id
+    return items, tenant_id, webhook_truncated or deadletter_truncated
 
 
 def _build_exceptions_list_payload(
@@ -455,7 +504,7 @@ def _build_exceptions_list_payload(
     page: int,
     page_size: int,
 ) -> dict[str, Any]:
-    items, _tenant = _gather_exception_items(request)
+    items, _tenant, scan_truncated = _gather_exception_items(request)
 
     if source is not None:
         items = [item for item in items if item["source"] == source]
@@ -484,11 +533,12 @@ def _build_exceptions_list_payload(
             "total": total,
             "pages": math.ceil(total / page_size) if total else 0,
         },
+        "scan_truncated": scan_truncated,
     }
 
 
 def _build_exceptions_stats_payload(request: Request) -> dict[str, Any]:
-    items, tenant_id = _gather_exception_items(request)
+    items, tenant_id, scan_truncated = _gather_exception_items(request)
     store = get_control_plane_store(request.app)
     now = datetime.now(UTC)
 
@@ -506,6 +556,7 @@ def _build_exceptions_stats_payload(request: Request) -> dict[str, Any]:
         "by_source": by_source,
         "last_24h": last_24h,
         "manual_resolutions": manual_resolutions,
+        "scan_truncated": scan_truncated,
     }
 
 

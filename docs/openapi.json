@@ -3233,6 +3233,11 @@
             },
             "type": "object",
             "title": "Pagination"
+          },
+          "scan_truncated": {
+            "type": "boolean",
+            "title": "Scan Truncated",
+            "default": false
           }
         },
         "type": "object",
@@ -3261,6 +3266,11 @@
           "manual_resolutions": {
             "type": "integer",
             "title": "Manual Resolutions"
+          },
+          "scan_truncated": {
+            "type": "boolean",
+            "title": "Scan Truncated",
+            "default": false
           }
         },
         "type": "object",
@@ -4451,6 +4461,11 @@
             },
             "type": "object",
             "title": "Pagination"
+          },
+          "scan_truncated": {
+            "type": "boolean",
+            "title": "Scan Truncated",
+            "default": false
           }
         },
         "type": "object",

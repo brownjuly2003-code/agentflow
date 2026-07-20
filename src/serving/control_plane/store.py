@@ -455,12 +455,16 @@ class ControlPlaneStore(ABC):
         for one tenant's active (``failed``) dead-letter events."""
 
     @abstractmethod
-    def list_dead_letter_events_for_inbox(self, tenant_id: str) -> list[dict]:
+    def list_dead_letter_events_for_inbox(
+        self, tenant_id: str, *, limit: int | None = None
+    ) -> list[dict]:
         """Every dead-letter row for one tenant, any status, newest first —
         the exception inbox's native source (§4.1 #1). Unlike
         ``list_dead_letter_events`` (the public ``/v1/deadletter`` route:
         ``status='failed'`` only, paginated), the inbox aggregates and
-        paginates across three heterogeneous sources itself."""
+        paginates across three heterogeneous sources itself. ``limit`` bounds
+        the read to the newest N rows (S-8) — the inbox probes with
+        ``cap + 1`` to detect truncation instead of cutting silently."""
 
     @abstractmethod
     def list_stuck_replay_dead_letter_events(
@@ -535,10 +539,13 @@ class ControlPlaneStore(ABC):
     # --- webhook dead deliveries for the exception inbox ----------------------
 
     @abstractmethod
-    def list_dead_webhook_deliveries(self, tenant_id: str | None = None) -> list[dict]:
+    def list_dead_webhook_deliveries(
+        self, tenant_id: str | None = None, *, limit: int | None = None
+    ) -> list[dict]:
         """Every ``webhook_delivery_queue`` row parked ``dead``, optionally
         scoped to one tenant — the exception inbox's overlay source #2
-        (§4.1)."""
+        (§4.1). ``limit`` bounds the read to the newest N rows (S-8), same
+        ``cap + 1`` probe contract as the dead-letter inbox read."""
 
     # --- API usage accounting (per-tenant/per-key request counters) ----------
 

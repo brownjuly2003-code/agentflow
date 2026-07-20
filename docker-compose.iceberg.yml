@@ -3,8 +3,17 @@
 # docker-compose.yml (same image tags, bucket, credentials) so the PyIceberg
 # sink writes table data/metadata to the real object store the rest of the
 # stack already uses. Consumed by tests/integration/test_iceberg_sink.py.
+# Bounded container logs: the 2026-07-18 soak filled the stand's disk with
+# unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   minio:
+    logging: *default-logging
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     ports:
       - "9000:9000"
@@ -23,6 +32,7 @@ services:
   # MinIO healthcheck so the stack comes up regardless of whether the server
   # image ships curl.
   minio-init:
+    logging: *default-logging
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       - minio
@@ -36,6 +46,7 @@ services:
         echo "MinIO bucket ready."
 
   iceberg-rest:
+    logging: *default-logging
     image: tabulario/iceberg-rest:0.6.0
     depends_on:
       minio-init:

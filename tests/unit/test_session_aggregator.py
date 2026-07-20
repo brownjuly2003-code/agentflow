@@ -92,6 +92,7 @@ class _FakeExecutionEnvironment:
         self.checkpointing = None
         self.parallelism = None
         self.from_source_args = None
+        self.configured = None
         self.stream = _FakeStream()
 
     def enable_checkpointing(self, interval):
@@ -99,6 +100,11 @@ class _FakeExecutionEnvironment:
 
     def set_parallelism(self, value):
         self.parallelism = value
+
+    # Deliberately no set_restart_strategy: Flink 2.x removed it (FLIP-381),
+    # so a regression back to it must fail here, not only on the live cluster.
+    def configure(self, configuration):
+        self.configured = configuration
 
     def from_source(self, source, watermark_strategy, name):
         self.from_source_args = (source, watermark_strategy, name)
@@ -143,8 +149,16 @@ def session_aggregator(monkeypatch):
             self.timestamp_assigner = assigner
             return self
 
+    class _Configuration:
+        def __init__(self):
+            self.values = {}
+
+        def set_string(self, key, value):
+            self.values[key] = value
+
     common.Types = _Types
     common.WatermarkStrategy = _WatermarkStrategy
+    common.Configuration = _Configuration
 
     serialization = types.ModuleType("pyflink.common.serialization")
 
@@ -594,6 +608,27 @@ def test_build_pipeline_uses_defaults_and_wires_stream(session_aggregator, monke
     assert env.stream.key_by_fn(json.dumps({})) == "unknown"
     assert env.stream.sink["bootstrap_servers"] == "localhost:9092"
     assert env.stream.sink["record_serializer"]["topic"] == "sessions.aggregated"
+
+
+def test_build_pipeline_sets_bounded_restart_strategy(session_aggregator, monkeypatch):
+    env = _FakeExecutionEnvironment()
+    session_aggregator.StreamExecutionEnvironment.current_env = env
+    for name in (
+        "FLINK_RESTART_MAX_FAILURES_PER_INTERVAL",
+        "FLINK_RESTART_FAILURE_RATE_INTERVAL_MS",
+        "FLINK_RESTART_DELAY_MS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    session_aggregator.build_pipeline()
+
+    assert env.configured is not None
+    assert env.configured.values == {
+        "restart-strategy.type": "failure-rate",
+        "restart-strategy.failure-rate.max-failures-per-interval": "3",
+        "restart-strategy.failure-rate.failure-rate-interval": "300000 ms",
+        "restart-strategy.failure-rate.delay": "10000 ms",
+    }
 
 
 def test_build_pipeline_respects_environment_overrides(session_aggregator, monkeypatch):

@@ -65,6 +65,30 @@ updates:
       - dependency-name: "dagster"
         update-types: ["version-update:semver-major"]
 
+  # ── Python: Flink runtime image manifest ───────────────────────────
+  # Not an extra of the root project (its beam chain can never co-install
+  # with core pyarrow>=17 — see the manifest header), so it needs its own
+  # pip entry or new apache-flink releases go unnoticed. This is the
+  # watchdog for the pyarrow safety-ignore (SFTY-20260217-93940 in
+  # security.yml): the ignore is blocked on the next apache-flink release
+  # raising the beam/pyarrow chain, and that release must open a PR here.
+  # apache-flink majors/minors stay individual PRs by default (no group),
+  # matching the deliberate-bump policy for the Flink line.
+  - package-ecosystem: pip
+    directory: "/src/processing/flink_jobs"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,flink)"
+    labels:
+      - dependencies
+      - python
+      - flink
+
   # ── Python: SDK (agentflow-client) ─────────────────────────────────
   - package-ecosystem: pip
     directory: "/sdk"

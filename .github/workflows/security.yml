@@ -222,6 +222,13 @@ jobs:
           # manifest (src/processing/flink_jobs), so the next apache-flink
           # release opens a PR — re-check this ignore there. Remove when the
           # resolved flink-runtime bucket installs pyarrow>=23.0.1.
+          # Do NOT retry "uninstall unused pyarrow from the image" — probed
+          # in the real image 2026-07-21 and rejected: without pyarrow,
+          # `import apache_beam` itself crashes (beam 2.61 io/__init__ does
+          # `from apache_beam.io.parquetio import *`, and parquetio's class
+          # bodies evaluate `pa.Table` annotations with pa=None ->
+          # AttributeError). The dependency is load-bearing at import time
+          # even though our jobs never use it.
           #
           # 88512 (langchain cross-ecosystem false positive) was ignored here
           # until 2026-07-20; PyUp corrected the entry (verified: safety

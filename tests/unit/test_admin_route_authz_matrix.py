@@ -10,7 +10,7 @@ coverage / import order on CI).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 from fastapi.params import Depends
 
@@ -65,12 +65,39 @@ def test_node_events_is_auth_middleware_exempt_not_open() -> None:
 # the checker is able to fail (a detector that can't fail proves nothing).
 
 
+def _iter_leaf_routes(
+    routes: list, prefix: str, inherited: tuple
+) -> Iterator[tuple[str, object, tuple]]:
+    """Yield ``(full_path, route, inherited_dependency_calls)`` leaves.
+
+    FastAPI ≥0.139 no longer flattens ``include_router`` into ``app.routes``:
+    the app holds lazy ``_IncludedRouter`` nodes (no ``path`` attribute) whose
+    children live in ``.original_router.routes`` with the router's own prefix
+    already applied; the include-time prefix/dependencies sit on
+    ``.include_context``. Older FastAPI keeps flattened ``APIRoute`` lists —
+    this walk handles both.
+    """
+    for route in routes:
+        context = getattr(route, "include_context", None)
+        original = getattr(route, "original_router", None)
+        if context is not None and original is not None:
+            include_deps = tuple(
+                _dependency_calls(list(getattr(context, "dependencies", []) or []))
+            )
+            yield from _iter_leaf_routes(
+                original.routes,
+                prefix + (getattr(context, "prefix", "") or ""),
+                inherited + include_deps,
+            )
+            continue
+        yield prefix + getattr(route, "path", ""), route, inherited
+
+
 def _admin_routes_missing_admin_key(app: object) -> list[str]:
     from fastapi.routing import APIRoute
 
     missing: list[str] = []
-    for route in app.routes:  # type: ignore[attr-defined]
-        path = getattr(route, "path", "")
+    for path, route, inherited in _iter_leaf_routes(app.routes, "", ()):  # type: ignore[attr-defined]
         if not _is_admin_path(path):
             continue
         if not isinstance(route, APIRoute):
@@ -78,7 +105,8 @@ def _admin_routes_missing_admin_key(app: object) -> list[str]:
             # FastAPI dependency chain at all — flag it.
             missing.append(path)
             continue
-        if require_admin_key not in _dependency_calls(list(route.dependant.dependencies)):
+        calls = _dependency_calls(list(route.dependant.dependencies)) | set(inherited)
+        if require_admin_key not in calls:
             missing.append(path)
     return missing
 
@@ -86,7 +114,11 @@ def _admin_routes_missing_admin_key(app: object) -> list[str]:
 def test_every_assembled_admin_route_requires_admin_key() -> None:
     from src.serving.api.main import app
 
-    admin_paths = [r.path for r in app.routes if _is_admin_path(getattr(r, "path", ""))]
+    admin_paths = [
+        path
+        for path, _route, _inherited in _iter_leaf_routes(app.routes, "", ())
+        if _is_admin_path(path)
+    ]
     assert len(admin_paths) >= 2, "expected admin routes on the assembled app"
     assert _admin_routes_missing_admin_key(app) == []
 

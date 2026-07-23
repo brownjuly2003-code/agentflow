@@ -1097,3 +1097,4 @@ def test_process_roles_split_serving_from_delivery_loops(
         assert app.state.webhook_dispatcher._task is not None
         assert app.state.alert_dispatcher._task is not None
         assert app.state.search_index_rebuild_task is None  # nobody asks it questions
+        assert app.state.search_index is None

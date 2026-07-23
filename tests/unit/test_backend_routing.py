@@ -152,9 +152,11 @@ class _EngineStub:
         self.catalog = DataCatalog()
         self.scanned: list[str] = []
 
-    def scan_entity_rows(self, table_name: str, *, limit: int) -> list[dict]:
+    def scan_entity_rows(self, table_name: str, *, primary_key: str, limit: int) -> list[dict]:
         self.scanned.append(table_name)
-        return self.backend.execute(f"SELECT * FROM {table_name} LIMIT {limit}")
+        return self.backend.execute(
+            f'SELECT * FROM {table_name} ORDER BY "tenant_id", "{primary_key}" LIMIT {limit}'
+        )
 
     def get_metric(self, name: str, window: str = "24h") -> dict:
         return {"value": 42.0, "unit": "RUB"}

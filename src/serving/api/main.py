@@ -12,7 +12,7 @@ Security: API key authentication + per-key rate limiting.
 import asyncio
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import date
 from typing import TYPE_CHECKING, cast
 
@@ -117,9 +117,18 @@ def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+async def _cancel_background_task(task: asyncio.Task[None]) -> None:
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
     """Initialize shared resources on startup."""
+    resources = cast(AsyncExitStack, app.state.resource_stack)
     logger.info("api_starting")
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
@@ -204,6 +213,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pool_size=app.state.duckdb_pool_size,
     )
     app.state.db_pool.initialize()
+    resources.callback(app.state.db_pool.close)
     app.state.query_engine = QueryEngine(
         catalog=app.state.catalog,
         db_path=os.getenv("DUCKDB_PATH", ":memory:"),
@@ -226,23 +236,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # baseline (center = all branches, edge = its own, standalone = none)
         # so a center-first visitor sees a coherent cross-branch picture.
         seed_node_baseline(app.state.query_engine._conn, app.state.node_config)
-    app.state.search_index = SearchIndex(
-        catalog=app.state.catalog,
-        query_engine=app.state.query_engine,
-    )
-    # Search rebuild must not block API startup: catalogue/query backend
-    # transient failures should leave the rest of the surface online with
-    # degraded search rather than crash the lifespan (M-C1 /
-    # audit-2026-05).
-    try:
-        app.state.search_index.rebuild()
-    except Exception:
-        logger.warning("search_index_initial_rebuild_failed", exc_info=True)
-    app.state.search_index_rebuild_task = (
-        asyncio.create_task(app.state.search_index.rebuild_periodically(interval_seconds=60))
-        if serves_requests
-        else None
-    )
+    app.state.search_index = None
+    app.state.search_index_rebuild_task = None
+    if serves_requests:
+        app.state.search_index = SearchIndex(
+            catalog=app.state.catalog,
+            query_engine=app.state.query_engine,
+        )
+        # Search rebuild must not block API startup: catalogue/query backend
+        # transient failures should leave the rest of the surface online with
+        # degraded search rather than crash the lifespan (M-C1 /
+        # audit-2026-05).
+        try:
+            app.state.search_index.rebuild()
+        except Exception:
+            logger.warning("search_index_initial_rebuild_failed", exc_info=True)
+        app.state.search_index_rebuild_task = asyncio.create_task(
+            app.state.search_index.rebuild_periodically(interval_seconds=60)
+        )
+        resources.push_async_callback(
+            _cancel_background_task,
+            app.state.search_index_rebuild_task,
+        )
     app.state.health_collector = HealthCollector(journal=app.state.query_engine.journal)
     try:
         app.state.health_cache_ttl_seconds = float(
@@ -259,6 +274,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.health_cache_expires_at = 0.0
     app.state.health_cache_refresh_lock = asyncio.Lock()
     app.state.query_cache = QueryCache(redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"))
+    resources.push_async_callback(app.state.query_cache.close)
     try:
         app.state.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", "30"))
     except ValueError:
@@ -274,6 +290,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # app — the query engine above is fresh, the store must bind to it.
     app.state.control_plane_store = None
     control_plane_store = get_control_plane_store(app)
+    control_plane_close = getattr(control_plane_store, "close", None)
+    if control_plane_close is not None:
+        resources.callback(control_plane_close)
     # On the external (postgres) profile every control-plane consumer shares
     # the one store (slice 5); the embedded profile injects nothing, so the
     # consumers keep building their historical private stores (usage on its
@@ -287,6 +306,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         admin_key=os.getenv("AGENTFLOW_ADMIN_KEY"),
         store=shared_control_plane_store,
     )
+    resources.callback(app.state.auth_manager.close_usage_writer)
     app.state.auth_manager.load()
     if app.state.demo_mode:
         demo_api_key = os.getenv("DEMO_API_KEY", "demo-key")
@@ -326,6 +346,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.webhook_dispatcher = WebhookDispatcher(
         app, settle_seconds=int(os.getenv("AGENTFLOW_WEBHOOK_SETTLE_SECONDS", "3"))
     )
+    resources.push_async_callback(app.state.webhook_dispatcher.stop)
     # S7: metric-cache invalidation is a first-class controller (push from the
     # bridge + independent journal scan). It always starts — even when the
     # webhook dispatcher is held back for tests — so event-driven freshness is
@@ -340,11 +361,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # rows and goes blind once the journal outgrows it (issue #183).
         fetch_pipeline_events=journal_scan_fetch(app.state.query_engine),
     )
+    resources.push_async_callback(app.state.metric_cache_controller.stop)
     if serves_requests:
         app.state.metric_cache_controller.start()
     if runs_delivery_loops and getattr(app.state, "webhook_dispatcher_autostart", True):
         app.state.webhook_dispatcher.start()
     app.state.alert_dispatcher = AlertDispatcher(app)
+    resources.push_async_callback(app.state.alert_dispatcher.stop)
     if runs_delivery_loops and getattr(app.state, "alert_dispatcher_autostart", True):
         app.state.alert_dispatcher.start()
     if shared_control_plane_store is not None:
@@ -360,6 +383,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if runs_delivery_loops
         else None
     )
+    if app.state.outbox_processor_task is not None:
+        resources.push_async_callback(
+            _cancel_background_task,
+            app.state.outbox_processor_task,
+        )
 
     # Edge role (ADR 0012): start the slow generator->forward emitter. Off in
     # center/standalone; tests disable it with AGENTFLOW_NODE_EMITTER_ENABLED=false.
@@ -373,6 +401,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             interval_seconds=_env_float("AGENTFLOW_NODE_EMIT_INTERVAL_SECONDS", 3.0),
             batch_size=_env_int("AGENTFLOW_NODE_EMIT_BATCH_SIZE", 5),
         )
+        resources.push_async_callback(app.state.node_emitter.stop)
         app.state.node_emitter.start()
         app.state.node_emitter_task = app.state.node_emitter.task
 
@@ -413,6 +442,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
                 app.state.serving_bridge = bridge
                 app.state.serving_bridge_stop = stop_event
+                resources.callback(stop_event.set)
             except Exception:
                 # A missing broker degrades freshness, it does not take the API
                 # down: every read path still serves.
@@ -437,38 +467,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         process_role=process_role,
     )
     yield
-    if app.state.search_index_rebuild_task is not None:
-        app.state.search_index_rebuild_task.cancel()
-        try:
-            await app.state.search_index_rebuild_task
-        except asyncio.CancelledError:
-            pass
-    if app.state.outbox_processor_task is not None:
-        app.state.outbox_processor_task.cancel()
-        try:
-            await app.state.outbox_processor_task
-        except asyncio.CancelledError:
-            pass
-    await app.state.alert_dispatcher.stop()
-    await app.state.webhook_dispatcher.stop()
-    if getattr(app.state, "metric_cache_controller", None) is not None:
-        await app.state.metric_cache_controller.stop()
-    if getattr(app.state, "node_emitter", None) is not None:
-        await app.state.node_emitter.stop()
-    if getattr(app.state, "serving_bridge_stop", None) is not None:
-        app.state.serving_bridge_stop.set()
-    await app.state.query_cache.close()
-    # Drain the queued api_usage rows before the process goes away; they are
-    # written off the request path and would otherwise die with the queue.
-    app.state.auth_manager.close_usage_writer()
-    # After the drain: the usage writer's last batch needs the store's pool.
-    # Embedded stores expose no close(); the postgres store's releases its
-    # pooled connections and stops the pool's worker threads.
-    control_plane_close = getattr(getattr(app.state, "control_plane_store", None), "close", None)
-    if control_plane_close is not None:
-        control_plane_close()
-    app.state.db_pool.close()
     logger.info("api_shutting_down")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Rollback initialized resources on startup failure and always clean up."""
+    async with AsyncExitStack() as resource_stack:
+        app.state.resource_stack = resource_stack
+        async with _lifespan_body(app):
+            yield
 
 
 app = FastAPI(

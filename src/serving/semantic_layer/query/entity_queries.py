@@ -14,6 +14,7 @@ class EntityQueryMixin:
         self: QueryExecutionHost,
         table_name: str,
         *,
+        primary_key: str,
         limit: int,
     ) -> list[dict]:
         """Bulk-read an entity table through the active backend, ``tenant_id`` included.
@@ -34,8 +35,11 @@ class EntityQueryMixin:
         """
         physical = self._physical_table(table_name)
         return self._backend.execute(
-            # table_name is a catalog-defined identifier, never request data.
-            f"SELECT * FROM {physical} LIMIT {int(limit)}"  # nosec B608
+            # Table/primary_key are catalog-defined identifiers, never request
+            # data. Tenant first makes duplicate per-tenant ids deterministic.
+            f"SELECT * FROM {physical} "  # nosec B608
+            f"ORDER BY {self._quote_identifier('tenant_id')}, "
+            f"{self._quote_identifier(primary_key)} LIMIT {int(limit)}"
         )
 
     def scan_entity_rows_by_ids(

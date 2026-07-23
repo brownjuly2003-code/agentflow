@@ -295,11 +295,11 @@ def test_scan_entity_rows_reads_the_active_backend_unscoped(host: _Host) -> None
     # tenant's rows, each carrying its tenant_id.
     host._backend.execute.return_value = [{"order_id": "ORD-1", "tenant_id": "default"}]
 
-    rows = host.scan_entity_rows("orders_v2", limit=500)
+    rows = host.scan_entity_rows("orders_v2", primary_key="order_id", limit=501)
 
     assert rows == [{"order_id": "ORD-1", "tenant_id": "default"}]
     sql = host._backend.execute.call_args.args[0]
-    assert sql == "SELECT * FROM orders_v2 LIMIT 500"
+    assert sql == 'SELECT * FROM orders_v2 ORDER BY "tenant_id", "order_id" LIMIT 501'
 
 
 def test_scan_entity_rows_by_ids_short_circuits_on_empty_ids(host: _Host) -> None:

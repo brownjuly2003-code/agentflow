@@ -5,7 +5,11 @@ from pathlib import Path
 
 import yaml
 
-from src.processing.iceberg_sink import IcebergSink, _expand_env
+from src.processing.iceberg_sink import (
+    VALIDATED_EVENTS_SCHEMA,
+    IcebergSink,
+    _expand_env,
+)
 
 
 def test_rest_catalog_uses_warehouse_identifier_without_local_mkdir(
@@ -196,3 +200,44 @@ def test_s3_rest_catalog_expands_env_credentials_without_local_mkdir(
     }
     # An s3:// warehouse must never create a local directory.
     assert mkdir_calls == []
+
+
+def test_validated_events_schema_keeps_tenant_and_kafka_identity() -> None:
+    fields = {field.name: field.required for field in VALIDATED_EVENTS_SCHEMA.fields}
+
+    assert fields["event_id"] is True
+    assert fields["tenant_id"] is True
+    assert fields["event_type"] is True
+    assert fields["kafka_topic"] is False
+    assert fields["kafka_partition"] is False
+    assert fields["kafka_offset"] is False
+
+
+def test_normalize_validated_event_preserves_end_to_end_identity() -> None:
+    sink = IcebergSink.__new__(IcebergSink)
+    event = {
+        "event_id": "evt-1",
+        "tenant": "acme",
+        "event_type": "order.created",
+        "source": "postgres_cdc",
+        "entity_type": "order",
+        "entity_id": "ORD-1",
+        "operation": "insert",
+        "timestamp": "2026-07-23T12:00:00+00:00",
+        "source_metadata": {
+            "kafka": {
+                "topic": "acme.cdc.postgres.public.orders_v2",
+                "partition": 2,
+                "offset": 47,
+            }
+        },
+    }
+
+    normalized = sink._normalize_record("validated_events", event)
+
+    assert normalized["event_id"] == "evt-1"
+    assert normalized["tenant_id"] == "acme"
+    assert normalized["entity_id"] == "ORD-1"
+    assert normalized["kafka_topic"] == "acme.cdc.postgres.public.orders_v2"
+    assert normalized["kafka_partition"] == 2
+    assert normalized["kafka_offset"] == 47

@@ -14,6 +14,8 @@ iceberg:
     s3.secret-access-key: ${AGENTFLOW_S3_SECRET_KEY:-minio123}
     s3.region: ${AGENTFLOW_S3_REGION:-us-east-1}
   tables:
+    - name: validated_events
+      partition_by: [days(occurred_at)]
     - name: orders
       partition_by: [days(created_at)]
     - name: payments

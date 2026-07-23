@@ -7,10 +7,11 @@ nothing carried that topic into the store the API serves from. Freshness on the
 real path was therefore measurable only as far as the Kafka hop
 (``docs/perf/freshness-realpath-2026-06-30.md``).
 
-**Guarantee.** At-least-once delivery plus an idempotent, ``event_id``-keyed
-apply. Offsets are committed *after* the batch is applied, so a crash replays
-the batch and the journal guard collapses what already landed. We do not claim
-Kafka-transactional exactly-once, and could not: Flink builds the
+**Guarantee.** At-least-once delivery plus an idempotent,
+``(tenant_id, event_id)``-keyed apply. Offsets are committed *after* the batch
+is applied, so a crash replays the batch and the journal guard collapses what
+already landed. We do not claim Kafka-transactional exactly-once, and could
+not: Flink builds the
 ``events.validated`` sink without a ``DeliveryGuarantee`` and its dedup state
 expires after ten minutes, so duplicates reach us by design.
 
@@ -60,6 +61,7 @@ from src.processing.bridge_metrics import (
     start_metrics_server,
 )
 from src.processing.clickhouse_sink import ClickHouseSink
+from src.processing.kafka_security import confluent_kafka_consumer_config
 from src.processing.local_pipeline import (
     _ensure_tables,
     _process_event,
@@ -135,22 +137,28 @@ class ServingBridge:
 
     # -- idempotency guard ------------------------------------------------
 
-    def _existing_serving_event_ids(self, event_ids: list[str]) -> set[str]:
-        """Ids already carried by the journal of the store the API serves from."""
-        if not event_ids:
+    def _existing_serving_event_identities(
+        self,
+        identities: list[tuple[str, str]],
+    ) -> set[tuple[str, str]]:
+        """Tenant-scoped ids already carried by the serving-store journal."""
+        if not identities:
             return set()
         if self._sink is not None:
-            return self._sink.existing_event_ids(event_ids)
+            return self._sink.existing_event_identities(identities)
         # Static SQL: the batch's ids arrive as one bound LIST parameter rather
         # than a generated run of placeholders, so nothing is interpolated and
         # this query stays out of the reviewed interpolated-SQL surface (A-4).
         rows = self._lake_conn.execute(
-            "SELECT DISTINCT event_id FROM pipeline_events "
+            "SELECT DISTINCT tenant_id, event_id FROM pipeline_events "
             "WHERE event_id IN (SELECT unnest(?)) "
             "AND topic IN ('events.validated', 'events.deadletter')",
-            [list(event_ids)],
+            [[event_id for _, event_id in identities]],
         ).fetchall()
-        return {str(row[0]) for row in rows}
+        requested = set(identities)
+        return {(str(tenant_id), str(event_id)) for tenant_id, event_id in rows}.intersection(
+            requested
+        )
 
     # -- apply ------------------------------------------------------------
 
@@ -171,6 +179,10 @@ class ServingBridge:
                 EVENTS_DEADLETTER.labels(reason="missing_event_id").inc()
                 dead_lettered += 1
                 continue
+            if not event.get("tenant"):
+                EVENTS_DEADLETTER.labels(reason="missing_tenant").inc()
+                dead_lettered += 1
+                continue
             if not is_canonical_event_type(str(event.get("event_type", ""))):
                 # Reject rather than half-apply: see _CANONICAL_PREFIXES.
                 EVENTS_DEADLETTER.labels(reason="non_canonical_event_type").inc()
@@ -188,12 +200,13 @@ class ServingBridge:
         applied_event_ids: list[str] = []
 
         if events:
-            batch_ids = [str(event["event_id"]) for event in events]
-            seen = self._existing_serving_event_ids(batch_ids)
+            batch_identities = [(str(event["tenant"]), str(event["event_id"])) for event in events]
+            seen = self._existing_serving_event_identities(batch_identities)
             to_apply: list[dict] = []
             for event in events:
                 event_id = str(event["event_id"])
-                if event_id in seen:
+                identity = (str(event["tenant"]), event_id)
+                if identity in seen:
                     # Replay of an already-applied event, or a Flink duplicate
                     # that outlived its 10-minute dedup TTL. Count, do not
                     # re-apply; re-applying would also rewrite the derived
@@ -202,6 +215,7 @@ class ServingBridge:
                     duplicates += 1
                     continue
                 to_apply.append(event)
+                seen.add(identity)
 
             if to_apply:
                 # Production path: ClickHouse-only batch apply (Q1.3).
@@ -217,7 +231,6 @@ class ServingBridge:
                         EVENTS_APPLIED.inc()
                         applied += 1
                         applied_event_ids.append(event_id)
-                        seen.add(event_id)
                     else:
                         # Flink already validated this; a failure here means the
                         # bridge's schema has drifted from Flink's.
@@ -399,12 +412,11 @@ def start_in_process_bridge(
     from src.serving.write_lock import SERVING_WRITE_LOCK
 
     consumer = Consumer(
-        {
-            "bootstrap.servers": bootstrap_servers,
-            "group.id": group_id,
-            "enable.auto.commit": False,
-            "auto.offset.reset": offset_reset,
-        }
+        confluent_kafka_consumer_config(
+            bootstrap_servers=bootstrap_servers,
+            group_id=group_id,
+            offset_reset=offset_reset,
+        )
     )
     consumer.subscribe(list(topics))
     bridge = ServingBridge(
@@ -470,12 +482,11 @@ def main() -> int:
     _ensure_tables(lake_conn)
 
     consumer = Consumer(
-        {
-            "bootstrap.servers": os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-            "group.id": os.getenv("AGENTFLOW_BRIDGE_GROUP_ID", DEFAULT_GROUP_ID),
-            "enable.auto.commit": False,
-            "auto.offset.reset": os.getenv("AGENTFLOW_BRIDGE_OFFSET_RESET", "earliest"),
-        }
+        confluent_kafka_consumer_config(
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+            group_id=os.getenv("AGENTFLOW_BRIDGE_GROUP_ID", DEFAULT_GROUP_ID),
+            offset_reset=os.getenv("AGENTFLOW_BRIDGE_OFFSET_RESET", "earliest"),
+        )
     )
     consumer.subscribe([VALIDATED_TOPIC])
 

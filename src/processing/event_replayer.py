@@ -16,7 +16,7 @@ from src.processing.outbox import OutboxProcessor
 from src.processing.tracing import inject_trace_to_kafka_headers, telemetry_disabled
 from src.quality.validators.schema_validator import validate_event
 from src.quality.validators.semantic_validator import validate_semantics
-from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
+from src.serving.control_plane import EmbeddedControlPlaneStore, OutboxReplayRepository
 
 DEFAULT_KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 DEFAULT_REPLAY_TOPIC = "events.raw"
@@ -47,7 +47,7 @@ class EventReplayer:
         producer: Callable[[str, dict], None] | None = None,
         bootstrap_servers: str | None = None,
         *,
-        store: ControlPlaneStore | None = None,
+        store: OutboxReplayRepository | None = None,
     ) -> None:
         if conn is None and store is None:
             raise ValueError("conn or store is required")
@@ -58,7 +58,7 @@ class EventReplayer:
         # the app's shared store and passes it via ``store=`` so it never
         # reaches the query engine's connection directly.
         if store is not None:
-            self._store: ControlPlaneStore = store
+            self._store: OutboxReplayRepository = store
         else:
             assert conn is not None  # guaranteed by the check above
             resolved_conn = conn

@@ -10,6 +10,7 @@ from typing import Any
 import pyarrow as pa
 import yaml
 from pyiceberg.catalog import load_catalog
+from pyiceberg.expressions import In, Reference, literal
 from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.schema import Schema
 from pyiceberg.transforms import DayTransform, HourTransform
@@ -17,6 +18,7 @@ from pyiceberg.types import (
     BooleanType,
     DoubleType,
     IntegerType,
+    LongType,
     NestedField,
     StringType,
     TimestampType,
@@ -52,6 +54,7 @@ ORDERS_SCHEMA = Schema(
     NestedField(field_id=10, name="order_size_bucket", field_type=StringType(), required=True),
     NestedField(field_id=11, name="created_at", field_type=TimestampType(), required=True),
     NestedField(field_id=12, name="payload_json", field_type=StringType(), required=True),
+    NestedField(field_id=13, name="tenant_id", field_type=StringType(), required=True),
 )
 
 PAYMENTS_SCHEMA = Schema(
@@ -68,6 +71,7 @@ PAYMENTS_SCHEMA = Schema(
     NestedField(field_id=11, name="risk_level", field_type=StringType(), required=False),
     NestedField(field_id=12, name="created_at", field_type=TimestampType(), required=True),
     NestedField(field_id=13, name="payload_json", field_type=StringType(), required=True),
+    NestedField(field_id=14, name="tenant_id", field_type=StringType(), required=True),
 )
 
 CLICKSTREAM_SCHEMA = Schema(
@@ -85,6 +89,7 @@ CLICKSTREAM_SCHEMA = Schema(
     NestedField(field_id=12, name="is_product_page", field_type=BooleanType(), required=False),
     NestedField(field_id=13, name="created_at", field_type=TimestampType(), required=True),
     NestedField(field_id=14, name="payload_json", field_type=StringType(), required=True),
+    NestedField(field_id=15, name="tenant_id", field_type=StringType(), required=True),
 )
 
 INVENTORY_SCHEMA = Schema(
@@ -99,6 +104,7 @@ INVENTORY_SCHEMA = Schema(
     NestedField(field_id=9, name="stock_quantity", field_type=IntegerType(), required=True),
     NestedField(field_id=10, name="created_at", field_type=TimestampType(), required=True),
     NestedField(field_id=11, name="payload_json", field_type=StringType(), required=True),
+    NestedField(field_id=12, name="tenant_id", field_type=StringType(), required=True),
 )
 
 DEAD_LETTER_SCHEMA = Schema(
@@ -108,6 +114,22 @@ DEAD_LETTER_SCHEMA = Schema(
     NestedField(field_id=4, name="source_topic", field_type=StringType(), required=True),
     NestedField(field_id=5, name="received_at", field_type=TimestampType(), required=True),
     NestedField(field_id=6, name="payload_json", field_type=StringType(), required=True),
+    NestedField(field_id=7, name="tenant_id", field_type=StringType(), required=True),
+)
+
+VALIDATED_EVENTS_SCHEMA = Schema(
+    NestedField(field_id=1, name="event_id", field_type=StringType(), required=True),
+    NestedField(field_id=2, name="tenant_id", field_type=StringType(), required=True),
+    NestedField(field_id=3, name="event_type", field_type=StringType(), required=True),
+    NestedField(field_id=4, name="source", field_type=StringType(), required=True),
+    NestedField(field_id=5, name="entity_type", field_type=StringType(), required=False),
+    NestedField(field_id=6, name="entity_id", field_type=StringType(), required=False),
+    NestedField(field_id=7, name="operation", field_type=StringType(), required=False),
+    NestedField(field_id=8, name="occurred_at", field_type=TimestampType(), required=True),
+    NestedField(field_id=9, name="kafka_topic", field_type=StringType(), required=False),
+    NestedField(field_id=10, name="kafka_partition", field_type=IntegerType(), required=False),
+    NestedField(field_id=11, name="kafka_offset", field_type=LongType(), required=False),
+    NestedField(field_id=12, name="payload_json", field_type=StringType(), required=True),
 )
 
 
@@ -161,6 +183,35 @@ class IcebergSink:
         table.append(arrow_table)
         return len(normalized_records)
 
+    def existing_event_identities(
+        self,
+        table_name: str,
+        identities: list[tuple[str, str]],
+    ) -> set[tuple[str, str]]:
+        if not identities:
+            return set()
+        self.create_tables_if_not_exist()
+        table = self.catalog.load_table(self._identifier(table_name))
+        requested = set(identities)
+        rows = table.scan(
+            row_filter=In(
+                term=Reference("event_id"),
+                values={literal(event_id) for _, event_id in identities},
+            ),
+            selected_fields=("tenant_id", "event_id"),
+        ).to_arrow()
+        if rows.num_rows == 0:
+            return set()
+        existing = {
+            (str(tenant_id), str(event_id))
+            for tenant_id, event_id in zip(
+                rows.column("tenant_id").to_pylist(),
+                rows.column("event_id").to_pylist(),
+                strict=True,
+            )
+        }
+        return existing.intersection(requested)
+
     def row_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
         for table_name in self.table_configs:
@@ -206,6 +257,7 @@ class IcebergSink:
             "clickstream": CLICKSTREAM_SCHEMA,
             "inventory": INVENTORY_SCHEMA,
             "dead_letter": DEAD_LETTER_SCHEMA,
+            "validated_events": VALIDATED_EVENTS_SCHEMA,
         }
         return schemas[table_name]
 
@@ -251,6 +303,8 @@ class IcebergSink:
             return self._normalize_inventory(record)
         if table_name == "dead_letter":
             return self._normalize_dead_letter(record)
+        if table_name == "validated_events":
+            return self._normalize_validated_event(record)
         msg = f"Unsupported table: {table_name}"
         raise ValueError(msg)
 
@@ -280,6 +334,7 @@ class IcebergSink:
             "order_size_bucket": str(derived.get("order_size_bucket", "unknown")),
             "created_at": self._coerce_timestamp(record.get("timestamp")),
             "payload_json": self._dump_payload(record),
+            "tenant_id": str(record.get("tenant", "default")),
         }
 
     def _normalize_payment(self, record: dict[str, Any]) -> dict[str, Any]:
@@ -298,6 +353,7 @@ class IcebergSink:
             "risk_level": (str(derived["risk_level"]) if "risk_level" in derived else None),
             "created_at": self._coerce_timestamp(record.get("timestamp")),
             "payload_json": self._dump_payload(record),
+            "tenant_id": str(record.get("tenant", "default")),
         }
 
     def _normalize_clickstream(self, record: dict[str, Any]) -> dict[str, Any]:
@@ -321,6 +377,7 @@ class IcebergSink:
             "is_product_page": derived.get("is_product_page"),
             "created_at": self._coerce_timestamp(record.get("timestamp")),
             "payload_json": self._dump_payload(record),
+            "tenant_id": str(record.get("tenant", "default")),
         }
 
     def _normalize_inventory(self, record: dict[str, Any]) -> dict[str, Any]:
@@ -336,6 +393,7 @@ class IcebergSink:
             "stock_quantity": int(record["stock_quantity"]),
             "created_at": self._coerce_timestamp(record.get("timestamp")),
             "payload_json": self._dump_payload(record),
+            "tenant_id": str(record.get("tenant", "default")),
         }
 
     def _normalize_dead_letter(self, record: dict[str, Any]) -> dict[str, Any]:
@@ -352,6 +410,40 @@ class IcebergSink:
                 if "payload_json" in record
                 else self._dump_payload(record.get("payload", record))
             ),
+            "tenant_id": str(record.get("tenant", "default")),
+        }
+
+    def _normalize_validated_event(self, record: dict[str, Any]) -> dict[str, Any]:
+        source_metadata = record.get("source_metadata")
+        kafka_metadata = source_metadata.get("kafka") if isinstance(source_metadata, dict) else None
+        kafka_metadata = kafka_metadata if isinstance(kafka_metadata, dict) else {}
+        return {
+            "event_id": str(record["event_id"]),
+            "tenant_id": str(record["tenant"]),
+            "event_type": str(record["event_type"]),
+            "source": str(record.get("source", "unknown")),
+            "entity_type": (
+                str(record["entity_type"]) if record.get("entity_type") is not None else None
+            ),
+            "entity_id": (
+                str(record["entity_id"]) if record.get("entity_id") is not None else None
+            ),
+            "operation": (
+                str(record["operation"]) if record.get("operation") is not None else None
+            ),
+            "occurred_at": self._coerce_timestamp(record.get("timestamp")),
+            "kafka_topic": (
+                str(kafka_metadata["topic"]) if kafka_metadata.get("topic") is not None else None
+            ),
+            "kafka_partition": (
+                int(kafka_metadata["partition"])
+                if kafka_metadata.get("partition") is not None
+                else None
+            ),
+            "kafka_offset": (
+                int(kafka_metadata["offset"]) if kafka_metadata.get("offset") is not None else None
+            ),
+            "payload_json": self._dump_payload(record),
         }
 
     def _coerce_timestamp(self, value: Any) -> datetime:

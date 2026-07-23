@@ -12,7 +12,11 @@ from confluent_kafka import KafkaException
 from opentelemetry import trace
 
 from src.processing.tracing import inject_trace_to_kafka_headers, telemetry_disabled
-from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore, OutboxEntry
+from src.serving.control_plane import (
+    EmbeddedControlPlaneStore,
+    OutboxEntry,
+    OutboxReplayRepository,
+)
 from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
@@ -30,7 +34,7 @@ class OutboxProcessor:
         bootstrap_servers: str | None = None,
         max_retries: int = 5,
         *,
-        store: ControlPlaneStore | None = None,
+        store: OutboxReplayRepository | None = None,
     ) -> None:
         if conn is None and duckdb_path is None and store is None:
             raise ValueError("duckdb_path or conn is required")
@@ -49,7 +53,7 @@ class OutboxProcessor:
         # embedded store bound to whichever connection this instance owns —
         # not necessarily the app's shared query_engine connection (see
         # main.py's file-vs-:memory: branch this preserves verbatim).
-        self._store: ControlPlaneStore = store or EmbeddedControlPlaneStore(
+        self._store: OutboxReplayRepository = store or EmbeddedControlPlaneStore(
             conn_provider=lambda: self._connection
         )
         self._store.ensure_outbox_schema()

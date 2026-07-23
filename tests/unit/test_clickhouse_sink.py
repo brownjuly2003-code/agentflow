@@ -99,6 +99,22 @@ def test_record_pipeline_event_appends_journal_row() -> None:
     ]
 
 
+def test_existing_event_identities_are_tenant_scoped() -> None:
+    sink, backend = _sink(
+        execute_results=[
+            [
+                {"tenant_id": "acme", "event_id": "evt-shared"},
+                {"tenant_id": "demo", "event_id": "evt-other"},
+            ]
+        ]
+    )
+
+    existing = sink.existing_event_identities([("acme", "evt-shared"), ("demo", "evt-shared")])
+
+    assert existing == {("acme", "evt-shared")}
+    assert "SELECT DISTINCT tenant_id, event_id" in backend.executed[0]
+
+
 def test_upsert_order_appends_version_and_recomputes_user_aggregate() -> None:
     sink, backend = _sink(
         execute_results=[

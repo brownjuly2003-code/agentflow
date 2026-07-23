@@ -81,7 +81,12 @@ class _FakeConsumer:
 class _RecordingSink:
     """Stands in for ClickHouseSink: records the serving writes it is asked for."""
 
-    def __init__(self, *, journal: set[str] | None = None, raise_on_order: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        journal: set[tuple[str, str]] | None = None,
+        raise_on_order: bool = False,
+    ) -> None:
         self.journal = set(journal or ())
         self.orders: list[dict] = []
         self.pipeline_events: list[dict] = []
@@ -91,8 +96,11 @@ class _RecordingSink:
         self.user_refresh_ids: set[str] = set()
         self._raise_on_order = raise_on_order
 
-    def existing_event_ids(self, event_ids: list[str]) -> set[str]:
-        return {event_id for event_id in event_ids if event_id in self.journal}
+    def existing_event_identities(
+        self,
+        identities: list[tuple[str, str]],
+    ) -> set[tuple[str, str]]:
+        return self.journal.intersection(identities)
 
     def upsert_order(self, event: dict, *, refresh_user: bool = True) -> None:
         if self._raise_on_order:
@@ -126,13 +134,13 @@ class _RecordingSink:
 
     def record_pipeline_event(self, **kwargs) -> None:
         self.pipeline_events.append(kwargs)
-        self.journal.add(str(kwargs["event_id"]))
+        self.journal.add((str(kwargs["tenant_id"]), str(kwargs["event_id"])))
 
     def record_pipeline_events(self, rows: list[dict]) -> None:
         self.journal_batch_calls += 1
         for row in rows:
             self.pipeline_events.append(row)
-            self.journal.add(str(row["event_id"]))
+            self.journal.add((str(row["tenant_id"]), str(row["event_id"])))
 
 
 def _flink_shaped_order(event_id: str | None = None, order_id: str | None = None) -> dict:
@@ -184,6 +192,7 @@ def _flink_shaped_page_view(session_id: str, page_url: str) -> dict:
     }
     event = enrich_clickstream(event)
     event["_partition_key"] = session_id
+    event["tenant"] = "default"
     return event
 
 
@@ -227,6 +236,17 @@ def test_revalidation_passes_on_flink_enriched_event(lake):
     assert topic == (VALIDATED_TOPIC,)
 
 
+def test_validated_event_without_tenant_fails_closed(lake):
+    event = _flink_shaped_order()
+    event.pop("tenant")
+    consumer = _FakeConsumer([[_Message(event)]])
+
+    result = _bridge(consumer, lake_conn=lake).run_once()
+
+    assert (result.applied, result.dead_lettered) == (0, 1)
+    assert lake.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0] == 0
+
+
 def test_reenrichment_is_stable():
     event = _flink_shaped_order()
     once = enrich_order(copy.deepcopy(event))["_derived"]
@@ -261,13 +281,38 @@ def test_idempotent_on_duplicate_event_id(lake):
     assert order_rows == 1
 
 
+def test_same_event_id_from_two_tenants_is_not_treated_as_replay(lake):
+    shared_event_id = "11111111-1111-4111-8111-111111111111"
+    acme = _flink_shaped_order(
+        event_id=shared_event_id,
+        order_id="ORD-20260723-9101",
+    )
+    acme["tenant"] = "acme"
+    demo = _flink_shaped_order(
+        event_id=shared_event_id,
+        order_id="ORD-20260723-9102",
+    )
+    demo["tenant"] = "demo"
+    consumer = _FakeConsumer([[_Message(acme, offset=0)], [_Message(demo, offset=1)]])
+    bridge = _bridge(consumer, lake_conn=lake)
+
+    first = bridge.run_once()
+    second = bridge.run_once()
+
+    assert (first.applied, first.duplicates) == (1, 0)
+    assert (second.applied, second.duplicates) == (1, 0)
+    assert set(
+        lake.execute("SELECT tenant_id, order_id FROM orders_v2 ORDER BY tenant_id").fetchall()
+    ) == {("acme", "ORD-20260723-9101"), ("demo", "ORD-20260723-9102")}
+
+
 def test_guard_reads_the_serving_journal_not_the_scratch_lake(lake):
     """On the ClickHouse path the guard must ask ClickHouse. If it asked the
     bridge's scratch lake, a crash between the local commit and the mirror
     would strand the event: the lake would claim it was applied and the
     serving store would never receive it."""
     event = _flink_shaped_order()
-    sink = _RecordingSink(journal={event["event_id"]})
+    sink = _RecordingSink(journal={(str(event["tenant"]), str(event["event_id"]))})
     consumer = _FakeConsumer([[_Message(event)]])
 
     result = _bridge(consumer, sink=sink, lake_conn=lake).run_once()
@@ -290,8 +335,11 @@ def test_clickhouse_path_skips_scratch_duckdb_on_apply(lake):
     assert len(sink.orders) == 1
     assert sink.orders[0]["order_id"] == event["order_id"]
     # Journal + status rows land on the sink, never DuckDB.
-    assert event["event_id"] in sink.journal
-    assert f"{event['event_id']}-status" in sink.journal
+    assert (str(event["tenant"]), str(event["event_id"])) in sink.journal
+    assert (
+        str(event["tenant"]),
+        f"{event['event_id']}-status",
+    ) in sink.journal
     assert lake.execute("SELECT COUNT(*) FROM pipeline_events").fetchone()[0] == 0
     assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
 
@@ -451,6 +499,82 @@ def test_non_canonical_event_type_dead_letters(lake):
     assert lake.execute("SELECT COUNT(*) FROM orders_v2").fetchone()[0] == 0
     # The batch is still committed: replaying it would only re-reject it.
     assert consumer.commits == 1
+
+
+def test_two_cdc_sources_keep_same_order_id_isolated_by_tenant(lake, tmp_path):
+    from src.ingestion.cdc.normalizer import normalize_debezium_event
+
+    registry = tmp_path / "cdc_sources.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "sources": [
+                    {
+                        "id": "acme-postgres",
+                        "connector": "postgresql",
+                        "topic_pattern": "acme.cdc.postgres.*",
+                        "tenant_id": "acme",
+                    },
+                    {
+                        "id": "demo-postgres",
+                        "connector": "postgresql",
+                        "topic_pattern": "demo.cdc.postgres.*",
+                        "tenant_id": "demo",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    raw = {
+        "before": None,
+        "after": {
+            "order_id": "ORD-SHARED",
+            "user_id": "USR-SHARED",
+            "status": "confirmed",
+            "total_amount": "20.00",
+            "currency": "USD",
+        },
+        "source": {
+            "connector": "postgresql",
+            "db": "agentflow_demo",
+            "schema": "public",
+            "table": "orders_v2",
+            "lsn": 26721944,
+            "txId": 753,
+            "ts_ms": 1777245326123,
+        },
+        "op": "c",
+    }
+
+    events = [
+        normalize_debezium_event(
+            raw,
+            kafka_metadata={
+                "topic": f"{tenant}.cdc.postgres.public.orders_v2",
+                "partition": 0,
+                "offset": offset,
+                "timestamp": "2026-07-23T12:00:00+00:00",
+            },
+            profile="production",
+            registry_path=registry,
+        )
+        for tenant, offset in (("acme", 1), ("demo", 2))
+    ]
+    sink = _RecordingSink()
+    consumer = _FakeConsumer(
+        [[_Message(event, offset=offset) for offset, event in enumerate(events)]]
+    )
+
+    result = _bridge(consumer, sink=sink, lake_conn=lake).run_once()
+
+    assert result is not None
+    assert (result.applied, result.dead_lettered) == (2, 0)
+    assert {(event["tenant"], event["order_id"]) for event in sink.orders} == {
+        ("acme", "ORD-SHARED"),
+        ("demo", "ORD-SHARED"),
+    }
 
 
 @pytest.mark.parametrize(

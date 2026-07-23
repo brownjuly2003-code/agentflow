@@ -10,18 +10,33 @@ import type {
   BatchItem,
   BatchResponse,
   CatalogResponse,
+  Changelog,
   ClientOptions,
+  ContractDiff,
   ContractResponse,
+  ContractSummary,
+  ContractValidation,
+  EntityReadOptions,
   EntityEnvelope,
   EventFilters,
+  ExplainQueryOptions,
   FetchLike,
   HealthStatus,
+  IdempotentRequestOptions,
+  Lineage,
+  MetricReadOptions,
   MetricName,
   MetricResult,
   OrderEntity,
+  PaginationOptions,
   PipelineEvent,
   ProductEntity,
+  QueryExplanation,
+  QueryOptions,
   QueryResult,
+  RequestOptions,
+  SearchOptions,
+  SearchResults,
   SessionEntity,
   TimeWindow,
   UserEntity,
@@ -80,30 +95,46 @@ export class AgentFlowClient {
     return this;
   }
 
-  async getOrder(orderId: string): Promise<OrderEntity> {
-    return this.getEntity<OrderEntity>("order", orderId);
+  async getOrder(
+    orderId: string,
+    options: EntityReadOptions = {},
+  ): Promise<OrderEntity> {
+    return this.getEntityData<OrderEntity>("order", orderId, options);
   }
 
-  async getUser(userId: string): Promise<UserEntity> {
-    return this.getEntity<UserEntity>("user", userId);
+  async getUser(
+    userId: string,
+    options: EntityReadOptions = {},
+  ): Promise<UserEntity> {
+    return this.getEntityData<UserEntity>("user", userId, options);
   }
 
-  async getProduct(productId: string): Promise<ProductEntity> {
-    return this.getEntity<ProductEntity>("product", productId);
+  async getProduct(
+    productId: string,
+    options: EntityReadOptions = {},
+  ): Promise<ProductEntity> {
+    return this.getEntityData<ProductEntity>("product", productId, options);
   }
 
-  async getSession(sessionId: string): Promise<SessionEntity> {
-    return this.getEntity<SessionEntity>("session", sessionId);
+  async getSession(
+    sessionId: string,
+    options: EntityReadOptions = {},
+  ): Promise<SessionEntity> {
+    return this.getEntityData<SessionEntity>("session", sessionId, options);
   }
 
   async getMetric(
     name: MetricName | string,
     window = "1h" as TimeWindow | string,
+    options: MetricReadOptions = {},
   ): Promise<MetricResult> {
     const payload = await this.requestJson<MetricResult>(
       "GET",
       `/v1/metrics/${encodeURIComponent(name)}`,
-      { params: { window } },
+      {
+        params: { window, as_of: this.normalizeAsOf(options.asOf) },
+        signal: options.signal,
+      },
     );
     return {
       ...payload,
@@ -112,14 +143,165 @@ export class AgentFlowClient {
     };
   }
 
-  async query(question: string): Promise<QueryResult> {
-    const payload = await this.requestJson<QueryResult>("POST", "/v1/query", {
-      json: { question },
-    });
+  async query(
+    question: string,
+    options: QueryOptions = {},
+  ): Promise<QueryResult> {
+    const request: Record<string, unknown> = { question };
+    if (options.limit != null) {
+      request.limit = options.limit;
+    }
+    if (options.cursor != null) {
+      request.cursor = options.cursor;
+    }
+    const payload = await this.requestJson<Record<string, unknown>>(
+      "POST",
+      "/v1/query",
+      {
+        json: request,
+        headers: options.idempotencyKey
+          ? { "Idempotency-Key": options.idempotencyKey }
+          : undefined,
+        signal: options.signal,
+      },
+    );
+    const metadata = this.normalizeQueryMetadata(
+      this.recordValue(payload.metadata),
+    );
+    for (const key of ["total_count", "next_cursor", "has_more", "page_size"]) {
+      if (key in payload) {
+        metadata[key] = payload[key];
+      }
+    }
     return {
-      ...payload,
-      metadata: this.normalizeQueryMetadata(payload.metadata ?? {}),
+      answer: (payload.answer ?? payload.rows ?? []) as QueryResult["answer"],
+      sql: typeof payload.sql === "string" ? payload.sql : null,
+      metadata,
     };
+  }
+
+  async explainQuery(
+    question: string,
+    options: ExplainQueryOptions = {},
+  ): Promise<QueryExplanation> {
+    const payload: Record<string, unknown> = { question };
+    if (options.contractVersion != null) {
+      payload.contract_version = options.contractVersion;
+    }
+    return this.requestJson<QueryExplanation>("POST", "/v1/query/explain", {
+      json: payload,
+      signal: options.signal,
+    });
+  }
+
+  async search(
+    query: string,
+    options: SearchOptions = {},
+  ): Promise<SearchResults> {
+    return this.requestJson<SearchResults>("GET", "/v1/search", {
+      params: {
+        q: query,
+        limit: options.limit ?? 10,
+        entity_types: options.entityTypes?.join(","),
+      },
+      signal: options.signal,
+    });
+  }
+
+  async listContracts(options: RequestOptions = {}): Promise<ContractSummary[]> {
+    const payload = await this.requestJson<{ contracts: ContractSummary[] }>(
+      "GET",
+      "/v1/contracts",
+      { signal: options.signal },
+    );
+    return payload.contracts ?? [];
+  }
+
+  async getContract(
+    entity: string,
+    version?: string,
+    options: RequestOptions = {},
+  ): Promise<ContractResponse> {
+    const suffix = version == null ? "" : `/${encodeURIComponent(version)}`;
+    return this.requestJson<ContractResponse>(
+      "GET",
+      `/v1/contracts/${encodeURIComponent(entity)}${suffix}`,
+      { signal: options.signal },
+    );
+  }
+
+  async diffContracts(
+    entity: string,
+    fromVersion: string,
+    toVersion: string,
+    options: RequestOptions = {},
+  ): Promise<ContractDiff> {
+    return this.requestJson<ContractDiff>(
+      "GET",
+      `/v1/contracts/${encodeURIComponent(entity)}/diff/${encodeURIComponent(fromVersion)}/${encodeURIComponent(toVersion)}`,
+      { signal: options.signal },
+    );
+  }
+
+  async validateContract(
+    entity: string,
+    payload: Record<string, unknown>,
+    options: IdempotentRequestOptions = {},
+  ): Promise<ContractValidation> {
+    return this.requestJson<ContractValidation>(
+      "POST",
+      `/v1/contracts/${encodeURIComponent(entity)}/validate`,
+      {
+        json: payload,
+        headers: options.idempotencyKey
+          ? { "Idempotency-Key": options.idempotencyKey }
+          : undefined,
+        signal: options.signal,
+      },
+    );
+  }
+
+  async getLineage(
+    entityType: string,
+    entityId: string,
+    options: RequestOptions = {},
+  ): Promise<Lineage> {
+    return this.requestJson<Lineage>(
+      "GET",
+      `/v1/lineage/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`,
+      { signal: options.signal },
+    );
+  }
+
+  async getChangelog(options: RequestOptions = {}): Promise<Changelog> {
+    return this.requestJson<Changelog>("GET", "/v1/changelog", {
+      signal: options.signal,
+    });
+  }
+
+  async *paginate(
+    question: string,
+    options: PaginationOptions = {},
+  ): AsyncGenerator<Array<Record<string, unknown>>> {
+    let cursor: string | undefined;
+    do {
+      const result = await this.query(question, {
+        limit: options.pageSize ?? 100,
+        cursor,
+        signal: options.signal,
+      });
+      const rows = Array.isArray(result.answer)
+        ? result.answer
+        : [result.answer];
+      yield rows;
+      if (result.metadata.has_more !== true) {
+        return;
+      }
+      cursor =
+        typeof result.metadata.next_cursor === "string"
+          ? result.metadata.next_cursor
+          : undefined;
+    } while (cursor != null);
   }
 
   async health(): Promise<HealthStatus> {
@@ -165,9 +347,16 @@ export class AgentFlowClient {
     })();
   }
 
-  async batch(requests: BatchItem[]): Promise<BatchResponse> {
+  async batch(
+    requests: BatchItem[],
+    options: IdempotentRequestOptions = {},
+  ): Promise<BatchResponse> {
     return this.requestJson<BatchResponse>("POST", "/v1/batch", {
       json: { requests },
+      headers: options.idempotencyKey
+        ? { "Idempotency-Key": options.idempotencyKey }
+        : undefined,
+      signal: options.signal,
     });
   }
 
@@ -236,16 +425,33 @@ export class AgentFlowClient {
     };
   }
 
-  private async getEntity<T extends object>(
+  async getEntity<T extends object = Record<string, unknown>>(
     entityType: string,
     entityId: string,
-  ): Promise<T> {
+    options: EntityReadOptions = {},
+  ): Promise<EntityEnvelope<T>> {
     const envelope = await this.requestJson<EntityEnvelope<Record<string, unknown>>>(
       "GET",
       `/v1/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`,
+      {
+        params: { as_of: this.normalizeAsOf(options.asOf) },
+        signal: options.signal,
+      },
     );
     const versioned = await this.applyContractVersion(entityType, envelope.data);
-    return this.normalizeEntity(entityType, versioned) as T;
+    return {
+      ...envelope,
+      data: this.normalizeEntity(entityType, versioned) as T,
+    };
+  }
+
+  private async getEntityData<T extends object>(
+    entityType: string,
+    entityId: string,
+    options: EntityReadOptions,
+  ): Promise<T> {
+    const envelope = await this.getEntity<T>(entityType, entityId, options);
+    return envelope.data;
   }
 
   private async applyContractVersion<T extends Record<string, unknown>>(
@@ -257,7 +463,7 @@ export class AgentFlowClient {
       return payload;
     }
 
-    const contract = await this.getContract(entityType, version);
+    const contract = await this.getContractVersionCached(entityType, version);
     const requiredFields = contract.fields
       .filter((field) => field.required)
       .map((field) => field.name);
@@ -277,7 +483,7 @@ export class AgentFlowClient {
     return Object.fromEntries(filteredEntries) as T;
   }
 
-  private async getContract(
+  private async getContractVersionCached(
     entityType: string,
     version: string,
   ): Promise<ContractResponse> {
@@ -302,6 +508,7 @@ export class AgentFlowClient {
       params?: Record<string, string | number | boolean | undefined>;
       json?: Record<string, unknown>;
       signal?: AbortSignal;
+      headers?: HeadersInit;
     } = {},
   ): Promise<T> {
     const response = await this.fetchResponse(method, path, options);
@@ -317,6 +524,7 @@ export class AgentFlowClient {
       json?: Record<string, unknown>;
       signal?: AbortSignal;
       accept?: string;
+      headers?: HeadersInit;
     } = {},
   ): Promise<Response> {
     const url = new URL(`${this.baseUrl}${path}`);
@@ -330,6 +538,7 @@ export class AgentFlowClient {
       "X-API-Key": this.apiKey,
       ...(options.json ? { "Content-Type": "application/json" } : {}),
       ...this.objectHeaders(this.headers),
+      ...this.objectHeaders(options.headers),
     };
     const canRetry = isRetryableMethod(method, headers);
     let attempt = 0;
@@ -339,7 +548,11 @@ export class AgentFlowClient {
     while (true) {
       const controller = new AbortController();
       const onAbort = () => controller.abort();
-      options.signal?.addEventListener("abort", onAbort, { once: true });
+      if (options.signal?.aborted) {
+        controller.abort();
+      } else {
+        options.signal?.addEventListener("abort", onAbort, { once: true });
+      }
       const timeoutId =
         this.timeoutMs > 0
           ? setTimeout(() => controller.abort(), this.timeoutMs)
@@ -524,6 +737,19 @@ export class AgentFlowClient {
       }
     }
     return normalized;
+  }
+
+  private normalizeAsOf(value?: Date | string): string | undefined {
+    if (value == null) {
+      return undefined;
+    }
+    return value instanceof Date ? value.toISOString() : value;
+  }
+
+  private recordValue(value: unknown): Record<string, unknown> {
+    return value != null && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
   }
 
   private toNumber(value: unknown): number {

@@ -15,6 +15,39 @@ export interface ClientOptions {
   circuitBreaker?: CircuitBreaker;
 }
 
+export interface RequestOptions {
+  signal?: AbortSignal;
+}
+
+export interface EntityReadOptions extends RequestOptions {
+  asOf?: Date | string;
+}
+
+export interface MetricReadOptions extends EntityReadOptions {}
+
+export interface QueryOptions extends RequestOptions {
+  limit?: number;
+  cursor?: string;
+  idempotencyKey?: string;
+}
+
+export interface PaginationOptions extends RequestOptions {
+  pageSize?: number;
+}
+
+export interface ExplainQueryOptions extends RequestOptions {
+  contractVersion?: string;
+}
+
+export interface SearchOptions extends RequestOptions {
+  limit?: number;
+  entityTypes?: string[];
+}
+
+export interface IdempotentRequestOptions extends RequestOptions {
+  idempotencyKey?: string;
+}
+
 export type MetricName =
   | "revenue"
   | "order_count"
@@ -25,7 +58,7 @@ export type MetricName =
 
 export type TimeWindow = "5m" | "15m" | "1h" | "6h" | "24h" | "7d" | "now";
 
-export interface EntityEnvelope<TData extends Record<string, unknown>> {
+export interface EntityEnvelope<TData extends object> {
   entity_type: string;
   entity_id: string;
   data: TData;
@@ -182,11 +215,94 @@ export interface PipelineEvent {
 
 export interface ContractField {
   name: string;
-  required?: boolean;
+  type?: string;
+  required: boolean;
+  description?: string | null;
+  values?: string[] | null;
+  unit?: string | null;
 }
 
 export interface ContractResponse {
   entity: string;
   version: string;
+  released?: string;
+  status?: string;
   fields: ContractField[];
+  breaking_changes?: Array<Record<string, unknown>>;
+}
+
+export interface QueryExplanation {
+  question: string;
+  sql: string;
+  tables_accessed: string[];
+  estimated_rows?: number | null;
+  engine: string;
+  warning?: string | null;
+}
+
+export interface SearchResult {
+  type: "entity" | "metric" | "catalog_field";
+  id: string;
+  entity_type: string | null;
+  score: number;
+  snippet: string;
+  endpoint: string;
+}
+
+export interface SearchResults {
+  query: string;
+  results: SearchResult[];
+}
+
+export interface ContractSummary {
+  entity: string;
+  version: string;
+  released: string;
+  status: string;
+}
+
+export interface ContractDiff {
+  entity: string;
+  from_version: string;
+  to_version: string;
+  breaking_changes: Array<Record<string, unknown>>;
+  additive_changes: Array<Record<string, unknown>>;
+}
+
+export interface ContractValidation {
+  entity: string;
+  base_version: string;
+  candidate_version: string;
+  breaking_changes?: Array<Record<string, unknown>>;
+  safe_changes?: Array<Record<string, unknown>>;
+  is_breaking: boolean;
+  requires_version_bump: boolean;
+}
+
+export interface LineageNode {
+  layer: string;
+  system: string;
+  table_or_topic: string;
+  processed_at?: string | null;
+  quality_score?: number | null;
+}
+
+export interface Lineage {
+  entity_type: string;
+  entity_id: string;
+  lineage: LineageNode[];
+  freshness_seconds: number;
+  validated: boolean;
+  enriched: boolean;
+}
+
+export interface ChangelogVersion {
+  date: string;
+  status: string;
+  changes: string[];
+}
+
+export interface Changelog {
+  latest_version: string;
+  versions: ChangelogVersion[];
 }

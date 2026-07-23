@@ -508,3 +508,187 @@ describe("AgentFlowClient resilience", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("AgentFlowClient cross-SDK capability contract", () => {
+  it("supports historical entity and metric reads with AbortSignal", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      const url = String(input);
+      if (url.includes("/v1/entity/")) {
+        expect(url).toContain("as_of=2026-07-23T12%3A00%3A00.000Z");
+        return jsonResponse(200, {
+          entity_type: "order",
+          entity_id: "ORD-1",
+          data: {
+            order_id: "ORD-1",
+            user_id: "USR-1",
+            status: "paid",
+            total_amount: 10,
+            currency: "USD",
+            created_at: "2026-07-23T10:00:00Z",
+          },
+          meta: { is_historical: true },
+        });
+      }
+      expect(url).toContain("window=24h");
+      expect(url).toContain("as_of=2026-07-23T12%3A00%3A00Z");
+      return jsonResponse(200, {
+        metric_name: "revenue",
+        value: 10,
+        unit: "USD",
+        window: "24h",
+        computed_at: "2026-07-23T12:00:00Z",
+      });
+    });
+    const client = new AgentFlowClient("https://api.example.test", "test-key", {
+      fetch: fetchMock,
+    });
+
+    await client.getOrder("ORD-1", {
+      asOf: new Date("2026-07-23T12:00:00Z"),
+      signal: controller.signal,
+    });
+    await client.getMetric("revenue", "24h", {
+      asOf: "2026-07-23T12:00:00Z",
+      signal: controller.signal,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("supports query cursor and idempotency headers", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.body).toBe(
+        JSON.stringify({ question: "top products", limit: 25, cursor: "cursor-1" }),
+      );
+      expect(new Headers(init?.headers).get("Idempotency-Key")).toBe("query-123");
+      return jsonResponse(200, {
+        rows: [{ product_id: "PROD-1" }],
+        sql: "SELECT 1",
+        total_count: 2,
+        next_cursor: "cursor-2",
+        has_more: true,
+        page_size: 25,
+      });
+    });
+    const client = new AgentFlowClient("https://api.example.test", "test-key", {
+      fetch: fetchMock,
+    });
+
+    const result = await client.query("top products", {
+      limit: 25,
+      cursor: "cursor-1",
+      idempotencyKey: "query-123",
+    });
+
+    expect(result.answer).toEqual([{ product_id: "PROD-1" }]);
+    expect(result.metadata.next_cursor).toBe("cursor-2");
+  });
+
+  it("supports explain, search, contracts, lineage, and changelog APIs", async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      calls.push(`${url.pathname}${url.search}`);
+      if (url.pathname === "/v1/query/explain") {
+        return jsonResponse(200, {
+          question: "top products",
+          sql: "SELECT 1",
+          tables_accessed: ["products"],
+          engine: "rule_based",
+        });
+      }
+      if (url.pathname === "/v1/search") {
+        return jsonResponse(200, { query: "revenue", results: [] });
+      }
+      if (url.pathname === "/v1/contracts") {
+        return jsonResponse(200, { contracts: [] });
+      }
+      if (url.pathname.includes("/diff/")) {
+        return jsonResponse(200, {
+          entity: "order",
+          from_version: "1",
+          to_version: "2",
+          breaking_changes: [],
+          additive_changes: [],
+        });
+      }
+      if (url.pathname.endsWith("/validate")) {
+        return jsonResponse(200, {
+          entity: "order",
+          base_version: "1",
+          candidate_version: "2",
+          is_breaking: false,
+          requires_version_bump: false,
+        });
+      }
+      if (url.pathname.startsWith("/v1/contracts/order")) {
+        return jsonResponse(200, {
+          entity: "order",
+          version: "2",
+          released: "2026-07-23",
+          status: "stable",
+          fields: [],
+        });
+      }
+      if (url.pathname.startsWith("/v1/lineage/")) {
+        return jsonResponse(200, {
+          entity_type: "order",
+          entity_id: "ORD-1",
+          lineage: [],
+          freshness_seconds: 1,
+          validated: true,
+          enriched: true,
+        });
+      }
+      return jsonResponse(200, { latest_version: "2", versions: [] });
+    });
+    const client = new AgentFlowClient("https://api.example.test", "test-key", {
+      fetch: fetchMock,
+    });
+
+    await client.explainQuery("top products", { contractVersion: "2" });
+    await client.search("revenue", { limit: 3, entityTypes: ["order", "product"] });
+    await client.listContracts();
+    await client.getContract("order", "2");
+    await client.diffContracts("order", "1", "2");
+    await client.validateContract("order", { version: "2", fields: [] }, {
+      idempotencyKey: "contract-1",
+    });
+    await client.getLineage("order", "ORD-1");
+    await client.getChangelog();
+
+    expect(calls).toContain("/v1/search?q=revenue&limit=3&entity_types=order%2Cproduct");
+    expect(calls).toContain("/v1/contracts/order/diff/1/2");
+    expect(calls).toContain("/v1/lineage/order/ORD-1");
+    expect(calls).toContain("/v1/changelog");
+  });
+
+  it("paginates query rows until has_more is false", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { cursor?: string };
+      return body.cursor == null
+        ? jsonResponse(200, {
+            rows: [{ id: 1 }],
+            has_more: true,
+            next_cursor: "next",
+          })
+        : jsonResponse(200, {
+            rows: [{ id: 2 }],
+            has_more: false,
+            next_cursor: null,
+          });
+    });
+    const client = new AgentFlowClient("https://api.example.test", "test-key", {
+      fetch: fetchMock,
+    });
+
+    const pages: Array<Array<Record<string, unknown>>> = [];
+    for await (const page of client.paginate("all products", { pageSize: 1 })) {
+      pages.push(page);
+    }
+
+    expect(pages).toEqual([[{ id: 1 }], [{ id: 2 }]]);
+  });
+});

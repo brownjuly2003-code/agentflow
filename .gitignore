@@ -150,6 +150,7 @@ agentflow_demo_api.duckdb*
 # Root-level scratch presentation decks (internal drafts, not product; no tracked
 # code references them). Product docs live under docs/ and examples/.
 /presentation*.html
+/pres.html
 /fable_*.md
 /next-session-*.md
 /second-opinion-*.md

@@ -28,8 +28,8 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
   - **In-process demo shortcut** (`local_pipeline` → DuckDB, no Kafka/Flink): **1.06 s p50 / 1.99 s p95**, tunable to **238 ms p50**; TTL-only ~15 s — [demo benchmark](docs/freshness-benchmark.md), `python scripts/benchmark_freshness.py`
   Do not present the 1.06 s figure as the production streaming path.
 - **Measured write-path throughput** — bridge apply **87.4 events/s** on a 400-event burst (catch-up 4.6 s, peak lag 0) after three measured optimization steps (8 → 11.4 → 22.9 → 87.4), and a **4 h endurance soak** at the delivered ~47 eps with bounded lag, flat bridge RSS/FDs, one live fault replayed exactly-once, and zero cache drift — [q14 report](docs/perf/throughput-realpath-q14-2026-07-10.md), [S11 soak](docs/perf/soak-s11-2026-07-10.md)
-- **At scale on its own data** — 4 years of the synthetic legend's history (**51.2 M rows, 2.87 M orders, 10.66 M Chestny Znak marking codes**) generated deterministically into the real raw-vault DDL; analyst queries answer in 20–730 ms and all 17 generator-spec invariants hold, including a full-scan GS1 check-digit validation — [S13 report](docs/perf/scale-own-data-2026-07-11.md), `python scripts/benchmark_scale_own_data.py`
-- **Lineage as a contract** — all six metrics declare their source events, serving table, and a 2.5 s p95 staleness budget in versioned contracts, exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
+- **At scale on its own data** — 4 years of the synthetic legend's history (**51.2 M rows, 2.87 M orders, 10.66 M Chestny Znak marking codes**) generated deterministically into the real raw-vault DDL; analyst queries answer in 20–730 ms and all 17 at-scale correctness checks pass — 10 row reconciliations, the 5 SQL-checkable generator-spec §12 invariants (channel and revenue mix, AOV bimodality, msk revenue share, GTIN validity), and 2 distribution checks, including a full-scan GS1 check-digit validation; the §12 spec's 12 invariants are pinned in full by 15 unit tests — [S13 report](docs/perf/scale-own-data-2026-07-11.md), `python scripts/benchmark_scale_own_data.py`
+- **Lineage as a contract** — all six metrics declare their source events, serving table, and an **8 s p95** staleness budget in versioned contracts (the budget is the measured real-path p95 of 5.70 s plus headroom, and each contract carries that basis in writing), exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
 - **Published release line through `v2.0.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
 - **Tested and gated** — 1,500+ unit tests plus a broad Windows no-Docker suite; CI enforces 15 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract, build-smoke, sdk-ts, lock-check) through branch protection
 - **Verified SDK parity** across Python and TypeScript — entity/metric historical
@@ -179,8 +179,8 @@ audit-closure sprint:
   surface, SQL guard centralized on `sqlglot`, entity allowlist
   enforcement, fail-closed auth, secret rotation, Helm hardening,
   OpenAPI drift gate, and the required status checks.
-- **`v1.2.0`** — DV2 multi-branch warehouse: 38 Data Vault 2.0 tables
-  (8 hubs / 8 links / 22+ satellites), an Argo Workflows `dv2-refresh`
+- **`v1.2.0`** — DV2 multi-branch warehouse: 55 Data Vault 2.0 tables
+  (8 hubs / 8 links / 39 satellites; 64 tables / 48 satellites today), an Argo Workflows `dv2-refresh`
   template, a dbt project (3 mart models + 12 tests), and per-branch CDC
   fan-out via ClickHouse `MaterializedPostgreSQL`.
 - **`v1.3.0`** — `helm/kafka-connect` hardening matched to `helm/agentflow`

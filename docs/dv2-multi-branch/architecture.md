@@ -45,7 +45,7 @@ flowchart LR
 
     subgraph WARM["Warm tier — ClickHouse DV2.0 (1 year)"]
         direction TB
-        W1["raw_vault<br/>8 hubs · 8 links · 22 sats"]
+        W1["raw_vault<br/>8 hubs · 8 links · 48 sats"]
         W2["business_vault<br/>MDM + canonical orders"]
         W3["mart<br/>BI / analytics"]
     end

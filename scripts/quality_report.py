@@ -9,7 +9,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,6 +28,7 @@ OUTPUT_PATH = PROJECT_ROOT / "docs" / "quality.md"
 NODEIDS_CACHE_PATH = PROJECT_ROOT / ".pytest_cache" / "v" / "cache" / "nodeids"
 SECURITY_TIMEOUT_SECONDS = 300
 COLLECTION_TIMEOUT_SECONDS = 120
+COVERAGE_MAX_AGE = timedelta(days=7)
 
 TEST_SUITES = {
     "Unit": ("tests/unit",),
@@ -187,11 +188,28 @@ def collect_suite_metric(name: str, paths: tuple[str, ...]) -> SuiteMetric:
     )
 
 
-def load_coverage_detail() -> str:
-    coverage_path = PROJECT_ROOT / "coverage.xml"
+def load_coverage_detail(
+    coverage_path: Path | None = None,
+    now: datetime | None = None,
+) -> str:
+    coverage_path = coverage_path or PROJECT_ROOT / "coverage.xml"
     if not coverage_path.exists():
         return "coverage.xml not found"
     root = ET.parse(coverage_path).getroot()  # noqa: S314
+    generated_timestamp = root.attrib.get("timestamp")
+    if generated_timestamp is None:
+        return "Coverage artifact has no generation timestamp; percentage not published"
+    try:
+        generated_at = datetime.fromtimestamp(int(generated_timestamp) / 1000, tz=UTC)
+    except (OverflowError, TypeError, ValueError):
+        return "Coverage artifact has an invalid generation timestamp; percentage not published"
+    current_time = now or datetime.now(UTC)
+    if current_time - generated_at > COVERAGE_MAX_AGE:
+        return (
+            "Stale coverage artifact "
+            f"(generated {generated_at.date().isoformat()}, maximum age "
+            f"{COVERAGE_MAX_AGE.days} days); percentage not published"
+        )
     line_rate = root.attrib.get("line-rate")
     lines_valid = root.attrib.get("lines-valid")
     lines_covered = root.attrib.get("lines-covered")
@@ -609,6 +627,12 @@ def render_markdown(
         "",
         f"- Generated: `{generated_at}`",
         f"- Generator: `{generator_command}`",
+        "",
+        "## Enforced Gates",
+        "- Project coverage floor: 60%",
+        "- Patch coverage floor: 80%",
+        "- Critical-module coverage floor: 90%",
+        "- MkDocs strict build: required",
         "",
         "## Test Suites",
     ]

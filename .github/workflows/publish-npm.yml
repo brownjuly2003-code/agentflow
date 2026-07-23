@@ -20,6 +20,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: npm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -41,10 +42,12 @@ jobs:
           const fs = require("node:fs");
 
           const tag = process.env.GITHUB_REF_NAME;
+          if (process.env.GITHUB_REF_TYPE !== "tag") {
+            throw new Error("npm publication must run from a release tag");
+          }
+
           let expectedVersion;
-          if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") {
-            expectedVersion = process.env.MANUAL_RELEASE_VERSION;
-          } else if (tag?.startsWith("sdk-v")) {
+          if (tag?.startsWith("sdk-v")) {
             expectedVersion = tag.slice("sdk-v".length);
           } else if (tag?.startsWith("v")) {
             expectedVersion = tag.slice("v".length);
@@ -53,6 +56,14 @@ jobs:
           }
           if (!expectedVersion) {
             throw new Error("Missing release version");
+          }
+          if (
+            process.env.GITHUB_EVENT_NAME === "workflow_dispatch"
+            && process.env.MANUAL_RELEASE_VERSION !== expectedVersion
+          ) {
+            throw new Error(
+              `Manual release version ${process.env.MANUAL_RELEASE_VERSION} does not match tag ${expectedVersion}`,
+            );
           }
 
           const expectedPythonVersion = expectedVersion.replace("-rc", "rc");

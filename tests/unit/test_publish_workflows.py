@@ -27,8 +27,12 @@ def test_npm_publish_workflow_uses_trusted_publishing_oidc():
     ]
 
     assert workflow["permissions"]["id-token"] == "write"
+    assert publish_job["environment"] == "npm"
     assert publish_steps
     assert "npm install -g npm@^11.5.1" in step_commands
+    assert "GITHUB_REF_TYPE" in step_commands
+    assert "MANUAL_RELEASE_VERSION" in step_commands
+    assert "does not match tag" in step_commands
     assert publish_steps[0]["run"] == "npm publish --access public"
     assert "NODE_AUTH_TOKEN" not in publish_steps[0].get("env", {})
     assert "NPM_TOKEN" not in yaml.safe_dump(publish_steps[0])

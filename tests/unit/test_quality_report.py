@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,23 @@ def test_build_generator_command_includes_skip_flags() -> None:
         )
         == "python scripts/quality_report.py --skip-docker --skip-dependency-scans"
     )
+
+
+def test_load_coverage_detail_rejects_stale_artifact(tmp_path: Path) -> None:
+    coverage_path = tmp_path / "coverage.xml"
+    coverage_path.write_text(
+        '<coverage timestamp="1767225600000" line-rate="0.6709" '
+        'lines-valid="7785" lines-covered="5223"/>',
+        encoding="utf-8",
+    )
+
+    detail = quality_report.load_coverage_detail(
+        coverage_path=coverage_path,
+        now=datetime(2026, 7, 23, tzinfo=UTC),
+    )
+
+    assert detail.startswith("Stale coverage artifact")
+    assert "67.09%" not in detail
 
 
 def test_build_requirement_files_reuses_resolved_security_inputs(

@@ -52,7 +52,7 @@ export VIRTUAL_ENV="${repo_root}/.venv"
 export PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,cloud]"
 python -m pip install -e ./sdk
 
 if [ ! -f .env ]; then

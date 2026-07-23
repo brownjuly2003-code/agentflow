@@ -28,8 +28,9 @@ stack-prod:
 
 wait-healthy:
 	@echo "Waiting for services..."
-	python -c "import time, urllib.request; [time.sleep(2) for _ in range(30) if not (lambda: (urllib.request.urlopen('http://localhost:8081/overview'), True)[-1])()]" 2>/dev/null || echo "Flink not ready yet"
-	@echo "Check service health at: http://localhost:8081 (Flink), http://localhost:9001 (MinIO)"
+	python scripts/wait_for_http.py --url http://localhost:8081/overview --timeout 60 --interval 2 --label Flink
+	python scripts/wait_for_http.py --url http://localhost:9000/minio/health/live --timeout 60 --interval 2 --label MinIO
+	@echo "Service UIs: http://localhost:8081 (Flink), http://localhost:9001 (MinIO console)"
 
 produce:
 	python -m src.ingestion.producers.event_producer

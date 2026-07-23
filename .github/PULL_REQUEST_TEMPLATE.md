@@ -42,7 +42,7 @@ test plan — say "n/a" with a reason if there is no real test surface.
 - [ ] Public API surface changes have a matching update in `docs/api-reference.md`
 - [ ] Operational behavior changes have a matching update in `docs/runbook.md` (local-dev) or `docs/runbooks/` (production on-call)
 - [ ] Significant design choices have an ADR in `docs/decisions/`
-- [ ] No new dependencies pinned beyond what the existing `[tool.agentflow.dependency-profiles]` block in `pyproject.toml` allows (workflow YAML is generated from this; do not hand-edit `.github/workflows/*.yml` for deps)
+- [ ] Dependency changes update `pyproject.toml`, `uv.lock`, and the relevant install profile; workflow YAML is reviewed when CI behavior changes
 
 ## Related
 

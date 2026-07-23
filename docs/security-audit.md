@@ -3,7 +3,7 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
-**Last updated:** 2026-07-12 (PII-masking references aligned with the 2026-07-01 removal)
+**Last updated:** 2026-07-23 (authentication defaults and quality gates revalidated)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
@@ -32,7 +32,7 @@ Threat model assumed by the current implementation:
 
 ## 2. Authentication and Authorization
 
-The API uses tenant-bound API keys plus a separate admin secret for `/v1/admin/*`. API key material can be stored either as plaintext runtime values or as bcrypt hashes. The default security policy sets bcrypt rounds to `12`, which is aligned with a modern password-hashing baseline for application secrets.
+The API uses tenant-bound API keys plus a separate admin secret for `/v1/admin/*`. New hashed API-key material uses Argon2id by default and is paired with a deterministic, peppered HMAC lookup digest so authentication performs one slow verification instead of scanning every key. Existing bcrypt hashes remain supported as a legacy migration path; `bcrypt_rounds: 12` applies only when bcrypt is selected explicitly.
 
 Rotation support is implemented in the auth layer. Keys have `key_id`, `previous_key_hash`, `previous_key_active_until`, and explicit grace-period behavior. Admin rotation endpoints expose create, rotate, rotation-status, and revoke-old flows. The auth middleware also records endpoint usage per tenant/key, which gives the system a concrete audit trail for key activity and key-slot transitions.
 
@@ -42,7 +42,7 @@ Authorization is layered on top of authentication:
 - request context binds `tenant_id` to the authenticated tenant
 - serving paths use that tenant context when querying tenant-scoped data
 
-Evidence: `src/serving/api/auth/manager.py`, `src/serving/api/auth/middleware.py`, `src/serving/api/auth/key_rotation.py`, `tests/integration/test_rotation.py`
+Evidence: `config/security.yaml`, `src/serving/api/security.py`, `src/serving/api/auth/manager.py`, `src/serving/api/auth/middleware.py`, `src/serving/api/auth/key_rotation.py`, `tests/unit/test_auth_argon2_lookup.py`, `tests/integration/test_rotation.py`
 
 ## 3. Tenant Isolation
 

@@ -6,10 +6,13 @@ fully-down API."""
 from __future__ import annotations
 
 import logging
+from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from src.serving.api import main as main_module
 from src.serving.api.main import app
 from src.serving.semantic_layer import search_index as search_index_module
 
@@ -34,3 +37,21 @@ def test_lifespan_survives_search_rebuild_failure(
     assert any(
         "search_index_initial_rebuild_failed" in record.getMessage() for record in caplog.records
     ), "expected a warning log entry naming the initial-rebuild failure"
+
+
+def test_startup_failure_closes_initialized_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    pool = Mock()
+    pool.initialize.return_value = None
+    monkeypatch.setattr(main_module, "DuckDBPool", Mock(return_value=pool))
+    monkeypatch.setattr(
+        main_module,
+        "QueryEngine",
+        Mock(side_effect=RuntimeError("simulated query-engine startup failure")),
+    )
+    isolated_app = FastAPI(lifespan=main_module.lifespan)
+
+    with pytest.raises(RuntimeError, match="simulated query-engine startup failure"):
+        with TestClient(isolated_app):
+            pass
+
+    pool.close.assert_called_once_with()

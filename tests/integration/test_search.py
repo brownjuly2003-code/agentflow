@@ -168,6 +168,10 @@ class TestSemanticSearch:
         assert results[0]["id"] == "ORD-SRCH-1"
         assert results[0]["endpoint"] == "/v1/entity/order/ORD-SRCH-1"
         assert results[0]["score"] >= results[-1]["score"]
+        assert response.json()["partial"] is False
+        assert response.json()["degraded"] is False
+        assert response.json()["partial_entity_types"] == []
+        assert response.json()["failed_entity_types"] == []
 
     def test_search_revenue_returns_metric_result(self, client):
         _disable_auth(client)

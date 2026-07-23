@@ -95,6 +95,15 @@ class SearchHit(TypedDict):
     endpoint: str
 
 
+class SearchIndexStatus(TypedDict):
+    partial: bool
+    degraded: bool
+    indexed_documents: int
+    entity_scan_limit: int
+    partial_entity_types: list[str]
+    failed_entity_types: list[str]
+
+
 class SearchIndex:
     def __init__(
         self,
@@ -115,6 +124,8 @@ class SearchIndex:
         self._documents: dict[tuple[str, str | None, str | None, str], SearchDocument] = {}
         self._document_frequency: Counter[str] = Counter()
         self._rebuilt_at: datetime | None = None
+        self._partial_entity_types: set[str] = set()
+        self._failed_entity_types: set[str] = set()
         # Incremental state: the journal watermark the last pass is known to
         # have covered, and how many ticks ago the last FULL pass ran.
         self._journal_cursor: datetime | None = None
@@ -134,8 +145,15 @@ class SearchIndex:
         cursor_candidate = self._journal_frontier()
 
         documents: dict[tuple[str, str | None, str | None, str], SearchDocument] = {}
+        partial_entity_types: set[str] = set()
+        failed_entity_types: set[str] = set()
         for entity in self.catalog.entities.values():
-            for document in self._entity_documents(entity):
+            entity_documents, partial, failed = self._entity_documents(entity)
+            if partial:
+                partial_entity_types.add(entity.name)
+            if failed:
+                failed_entity_types.add(entity.name)
+            for document in entity_documents:
                 documents[self._document_key(document)] = document
             for document in self._catalog_field_documents(entity):
                 documents[self._document_key(document)] = document
@@ -151,9 +169,24 @@ class SearchIndex:
         self._documents = documents
         self._document_frequency = document_frequency
         self._rebuilt_at = datetime.now()
+        self._partial_entity_types = partial_entity_types
+        self._failed_entity_types = failed_entity_types
         self._journal_cursor = cursor_candidate
         self._ticks_since_full_rebuild = 0
         logger.info("search_index_rebuilt", documents=len(documents))
+
+    def status(self) -> SearchIndexStatus:
+        """Machine-readable corpus completeness for the search API."""
+        partial_entity_types = sorted(self._partial_entity_types)
+        failed_entity_types = sorted(self._failed_entity_types)
+        return {
+            "partial": bool(partial_entity_types or failed_entity_types),
+            "degraded": bool(failed_entity_types),
+            "indexed_documents": len(self._documents),
+            "entity_scan_limit": self._entity_scan_limit,
+            "partial_entity_types": partial_entity_types,
+            "failed_entity_types": failed_entity_types,
+        }
 
     def refresh(self) -> str:
         """One periodic maintenance tick (audit P1-6). Returns what it did:
@@ -381,6 +414,7 @@ class SearchIndex:
         documents = dict(self._documents)
         frequency = self._document_frequency.copy()
         ids = sorted(changed_ids)
+        failed_entity_types = set(self._failed_entity_types)
         for entity in self.catalog.entities.values():
             try:
                 rows = self.query_engine.scan_entity_rows_by_ids(
@@ -390,7 +424,9 @@ class SearchIndex:
                 )
             except BackendExecutionError:
                 logger.exception("search_index_incremental_scan_failed", entity_type=entity.name)
+                failed_entity_types.add(entity.name)
                 continue
+            failed_entity_types.discard(entity.name)
             returned: set[tuple[str | None, str]] = set()
             for row in rows:
                 document = self._entity_document_from_row(entity, row)
@@ -418,21 +454,28 @@ class SearchIndex:
         # batch so the frequency table shrinks with the corpus.
         self._documents = documents
         self._document_frequency = +frequency
+        self._failed_entity_types = failed_entity_types
 
-    def _entity_documents(self, entity: EntityDefinition) -> list[SearchDocument]:
+    def _entity_documents(
+        self, entity: EntityDefinition
+    ) -> tuple[list[SearchDocument], bool, bool]:
         try:
             # Through the active backend. This scan ran on the raw DuckDB
             # connection, so on the ClickHouse profile /v1/search indexed — and
             # answered from — a store nobody was serving (audit P0-3).
             rows = self.query_engine.scan_entity_rows(
                 entity.table,
-                limit=self._entity_scan_limit,
+                primary_key=entity.primary_key,
+                # Probe one row past the cap so equality is not mistaken for
+                # truncation and the API can state completeness truthfully.
+                limit=self._entity_scan_limit + 1,
             )
         except BackendExecutionError:
             logger.exception("search_index_entity_scan_failed", entity_type=entity.name)
-            return []
+            return [], False, True
 
-        if len(rows) >= self._entity_scan_limit:
+        partial = len(rows) > self._entity_scan_limit
+        if partial:
             logger.warning(
                 "search_index_entity_scan_truncated",
                 entity_type=entity.name,
@@ -440,11 +483,11 @@ class SearchIndex:
             )
 
         documents = []
-        for row in rows:
+        for row in rows[: self._entity_scan_limit]:
             document = self._entity_document_from_row(entity, row)
             if document is not None:
                 documents.append(document)
-        return documents
+        return documents, partial, False
 
     def _entity_document_from_row(
         self, entity: EntityDefinition, row: dict

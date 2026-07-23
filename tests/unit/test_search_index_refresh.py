@@ -15,6 +15,7 @@ from __future__ import annotations
 import tracemalloc
 from datetime import datetime, timedelta
 
+from src.serving.backends import BackendExecutionError
 from src.serving.semantic_layer.catalog import EntityDefinition
 from src.serving.semantic_layer.search_index import SearchDocument, SearchIndex
 
@@ -35,6 +36,7 @@ class FakeEngine:
         self.journal: list[dict] = []
         self.full_scans = 0
         self.targeted_scans: list[tuple[str, tuple[str, ...]]] = []
+        self.failing_targeted_tables: set[str] = set()
 
     def add_row(self, table: str, row: dict, *, primary_key: str) -> None:
         self.tables.setdefault(table, {})[(row["tenant_id"], str(row[primary_key]))] = row
@@ -42,14 +44,20 @@ class FakeEngine:
     def journal_event(self, processed_at: datetime, **columns: object) -> None:
         self.journal.append({"processed_at": processed_at, **columns})
 
-    def scan_entity_rows(self, table_name: str, *, limit: int) -> list[dict]:
+    def scan_entity_rows(self, table_name: str, *, primary_key: str, limit: int) -> list[dict]:
         self.full_scans += 1
-        return list(self.tables.get(table_name, {}).values())[:limit]
+        rows = sorted(
+            self.tables.get(table_name, {}).values(),
+            key=lambda row: (str(row["tenant_id"]), str(row[primary_key])),
+        )
+        return rows[:limit]
 
     def scan_entity_rows_by_ids(
         self, table_name: str, *, primary_key: str, ids: list[str]
     ) -> list[dict]:
         self.targeted_scans.append((table_name, tuple(ids)))
+        if table_name in self.failing_targeted_tables:
+            raise BackendExecutionError(f"{table_name} unavailable")
         wanted = set(ids)
         return [
             row
@@ -160,6 +168,17 @@ def test_incremental_refresh_equals_a_full_rebuild() -> None:
     assert [hit["id"] for hit in hits] == ["o1"]
 
 
+def test_incremental_scan_failure_is_visible_in_index_status() -> None:
+    index, engine = _build()
+    engine.failing_targeted_tables.add("orders_v2")
+    engine.journal_event(T0 + timedelta(seconds=5), entity_id="o1", event_type="order.updated")
+
+    assert index.refresh() == "incremental"
+
+    assert index.status()["degraded"] is True
+    assert index.status()["failed_entity_types"] == ["order"]
+
+
 def test_refresh_updates_one_tenant_without_touching_the_other() -> None:
     index, engine = _build()
     # Same order_id under a second tenant — a legitimate collision (P0-1).
@@ -200,6 +219,36 @@ def test_window_overflow_falls_back_to_a_full_rebuild() -> None:
         )
 
     assert index.refresh() == "full:overflow"
+
+
+def test_large_rebuild_is_deterministic_and_reports_partial_corpus() -> None:
+    engine = FakeEngine()
+    for number in reversed(range(10_001)):
+        engine.add_row(
+            "orders_v2",
+            _order_row(f"o{number:05d}"),
+            primary_key="order_id",
+        )
+    catalog = FakeCatalog({"order": _order_entity()})
+    index = SearchIndex(
+        catalog=catalog,  # type: ignore[arg-type]
+        query_engine=engine,  # type: ignore[arg-type]
+        entity_scan_limit=10_000,
+    )
+
+    index.rebuild()
+
+    status = index.status()
+    entity_ids = sorted(
+        document.doc_id for document in index._documents.values() if document.doc_type == "entity"
+    )
+    assert len(entity_ids) == 10_000
+    assert entity_ids[0] == "o00000"
+    assert entity_ids[-1] == "o09999"
+    assert status["partial"] is True
+    assert status["degraded"] is False
+    assert status["partial_entity_types"] == ["order"]
+    assert status["failed_entity_types"] == []
 
 
 def test_oversized_change_set_falls_back_to_a_full_rebuild() -> None:

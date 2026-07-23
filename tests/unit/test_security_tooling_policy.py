@@ -3,6 +3,8 @@ import tomllib
 from configparser import ConfigParser
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -32,6 +34,32 @@ def test_sql_injection_checks_are_not_globally_suppressed() -> None:
 
     assert "S608" not in ruff_ignores
     assert "B608" not in bandit_skips
+
+
+def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
+    security_workflow = (ROOT / ".github" / "workflows" / "security.yml").read_text(
+        encoding="utf-8"
+    )
+    dependabot = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+
+    assert "requirements-flink-runtime.txt" in security_workflow
+    assert security_workflow.count("--ignore SFTY-20260217-93940") == 1
+    assert "resolved flink-runtime bucket installs pyarrow>=23.0.1" in security_workflow
+    assert 'Do NOT retry "uninstall unused pyarrow from the image"' in security_workflow
+
+    flink_updates = [
+        entry
+        for entry in dependabot["updates"]
+        if entry.get("package-ecosystem") == "pip"
+        and entry.get("directory") == "/src/processing/flink_jobs"
+    ]
+
+    assert len(flink_updates) == 1
+    flink_update = flink_updates[0]
+    assert flink_update["commit-message"]["prefix"] == "chore(deps,flink)"
+    assert "flink" in flink_update["labels"]
+    assert "ignore" not in flink_update
+    assert "groups" not in flink_update
 
 
 # A-4: the dynamic-SQL surface is safe *today* — identifiers are regex-bound,

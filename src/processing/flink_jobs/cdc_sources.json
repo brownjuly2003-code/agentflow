@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "demo-postgres",
+      "connector": "postgresql",
+      "topic_pattern": "cdc.postgres.*",
+      "tenant_id": "demo"
+    },
+    {
+      "id": "demo-mysql",
+      "connector": "mysql",
+      "topic_pattern": "cdc.mysql.*",
+      "tenant_id": "demo"
+    }
+  ]
+}

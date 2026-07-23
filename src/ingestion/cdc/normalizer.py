@@ -1,11 +1,12 @@
 """Normalize raw Debezium records into the AgentFlow CDC contract."""
 
+import fnmatch
 import json
+import os
 import uuid
 from datetime import UTC, datetime
-from typing import Any
-
-from src.tenancy import TenantRouter
+from pathlib import Path
+from typing import Any, cast
 
 _SOURCE_BY_CONNECTOR: dict[str, str] = {
     "postgresql": "postgres_cdc",
@@ -62,12 +63,27 @@ _TABLE_MAPPINGS: dict[str, dict[str, Any]] = {
     },
 }
 
+_DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / "processing" / "flink_jobs" / "cdc_sources.json"
+)
+
+
+class TenantResolutionError(ValueError):
+    """Raised when a non-demo CDC record has no unambiguous tenant mapping."""
+
 
 def is_debezium_event(event: dict[str, Any]) -> bool:
     return all(key in event for key in ("before", "after", "source", "op"))
 
 
-def normalize_debezium_event(event: dict[str, Any], topic: str | None = None) -> dict[str, Any]:
+def normalize_debezium_event(
+    event: dict[str, Any],
+    topic: str | None = None,
+    *,
+    kafka_metadata: dict[str, Any] | None = None,
+    profile: str | None = None,
+    registry_path: Path | str | None = None,
+) -> dict[str, Any]:
     source = event.get("source") or {}
     if not isinstance(source, dict):
         raise ValueError("Debezium record source is not an object")
@@ -95,36 +111,45 @@ def normalize_debezium_event(event: dict[str, Any], topic: str | None = None) ->
     if entity_id is None:
         raise ValueError(f"CDC row image missing key column: {key_column}")
 
-    metadata = _source_metadata(source)
-    # Resolution order: explicit `topic` arg, then `event["topic"]` if a Kafka
-    # wrapper populated it, then `source.database`/`source.schema` (Postgres
-    # WAL exposes the database name; useful when topic is not propagated),
-    # then `source.name` (connector name — last resort, often non-tenant).
-    # See review P1: Debezium value-only deserializer drops topic, so
-    # without an explicit topic argument all events fall to `default`.
-    tenant_hint = topic or event.get("topic") or _topic_from_source(source) or source.get("name")
-    tenant = _tenant_from_topic(tenant_hint)
+    effective_kafka_metadata = _normalize_kafka_metadata(kafka_metadata, topic, event)
+    effective_profile = profile or os.getenv("AGENTFLOW_PROFILE") or "demo"
+    tenant = _resolve_tenant(
+        connector=connector,
+        kafka_metadata=effective_kafka_metadata,
+        profile=effective_profile,
+        registry_path=registry_path,
+    )
+    metadata = _source_metadata(source, effective_kafka_metadata)
     stable_key = {
         "entity_id": str(entity_id),
         "operation": operation,
         "position": metadata["position"],
         "source": source_name,
         "table": table,
+        "tenant": tenant,
     }
 
-    return {
-        "event_id": str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(stable_key, sort_keys=True))),
-        "event_type": table_mapping["event_types"][operation],
-        "operation": operation,
-        "timestamp": _event_timestamp(event, source),
-        "source": source_name,
-        "tenant": tenant,
-        "entity_type": table_mapping["entity_type"],
-        "entity_id": str(entity_id),
-        "before": event.get("before"),
-        "after": event.get("after"),
-        "source_metadata": metadata,
-    }
+    # Keep the row image available both as CDC evidence (`before`/`after`) and
+    # as canonical top-level fields. The serving materializer consumes fields
+    # such as order_id/user_id directly; without this projection a normalized
+    # order passed CDC validation but failed later with a missing serving key.
+    normalized = dict(row)
+    normalized.update(
+        {
+            "event_id": str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(stable_key, sort_keys=True))),
+            "event_type": table_mapping["event_types"][operation],
+            "operation": operation,
+            "timestamp": _event_timestamp(event, source),
+            "source": source_name,
+            "tenant": tenant,
+            "entity_type": table_mapping["entity_type"],
+            "entity_id": str(entity_id),
+            "before": event.get("before"),
+            "after": event.get("after"),
+            "source_metadata": metadata,
+        }
+    )
+    return normalized
 
 
 def _event_timestamp(event: dict[str, Any], source: dict[str, Any]) -> str:
@@ -134,10 +159,13 @@ def _event_timestamp(event: dict[str, Any], source: dict[str, Any]) -> str:
     return datetime.fromtimestamp(int(ts_ms) / 1000, UTC).isoformat()
 
 
-def _source_metadata(source: dict[str, Any]) -> dict[str, Any]:
+def _source_metadata(
+    source: dict[str, Any],
+    kafka_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     connector = source.get("connector")
     position = _source_position(source)
-    return {
+    metadata = {
         "connector": connector,
         "database": source.get("db"),
         "schema": source.get("schema"),
@@ -145,6 +173,9 @@ def _source_metadata(source: dict[str, Any]) -> dict[str, Any]:
         "snapshot": source.get("snapshot"),
         "position": position,
     }
+    if kafka_metadata is not None:
+        metadata["kafka"] = kafka_metadata
+    return metadata
 
 
 def _source_position(source: dict[str, Any]) -> dict[str, Any]:
@@ -162,25 +193,87 @@ def _source_position(source: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _tenant_from_topic(topic: object) -> str:
-    if not isinstance(topic, str) or not topic:
+def _normalize_kafka_metadata(
+    kafka_metadata: dict[str, Any] | None,
+    topic: str | None,
+    event: dict[str, Any],
+) -> dict[str, Any] | None:
+    if kafka_metadata is not None:
+        normalized = {
+            "topic": kafka_metadata.get("topic"),
+            "partition": kafka_metadata.get("partition"),
+            "offset": kafka_metadata.get("offset"),
+            "timestamp": kafka_metadata.get("timestamp"),
+        }
+        return normalized
+    topic_hint = topic or event.get("topic")
+    if isinstance(topic_hint, str) and topic_hint:
+        return {
+            "topic": topic_hint,
+            "partition": None,
+            "offset": None,
+            "timestamp": None,
+        }
+    return None
+
+
+def _load_registry(registry_path: Path | str | None) -> dict[str, Any]:
+    configured = registry_path or os.getenv("AGENTFLOW_CDC_SOURCES_FILE")
+    path = Path(configured) if configured is not None else _DEFAULT_REGISTRY_PATH
+    try:
+        registry: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise TenantResolutionError(
+            f"tenant_resolution_failed: cannot load CDC source registry {path}: {exc}"
+        ) from exc
+    if (
+        not isinstance(registry, dict)
+        or registry.get("version") != 1
+        or not isinstance(registry.get("sources"), list)
+    ):
+        raise TenantResolutionError(
+            f"tenant_resolution_failed: unsupported CDC source registry {path}"
+        )
+    return cast(dict[str, Any], registry)
+
+
+def _resolve_tenant(
+    *,
+    connector: object,
+    kafka_metadata: dict[str, Any] | None,
+    profile: str,
+    registry_path: Path | str | None,
+) -> str:
+    topic = kafka_metadata.get("topic") if kafka_metadata is not None else None
+    matches: set[str] = set()
+    if isinstance(connector, str) and isinstance(topic, str) and topic:
+        for source in _load_registry(registry_path)["sources"]:
+            if source.get("connector") != connector:
+                continue
+            pattern = source.get("topic_pattern")
+            tenant_id = source.get("tenant_id")
+            if (
+                isinstance(pattern, str)
+                and isinstance(tenant_id, str)
+                and tenant_id
+                and fnmatch.fnmatchcase(topic, pattern)
+            ):
+                matches.add(tenant_id)
+
+    if len(matches) == 1:
+        tenant = next(iter(matches))
+        if profile != "demo" and tenant == "default":
+            raise TenantResolutionError(
+                "tenant_resolution_failed: production mapping cannot target tenant 'default'"
+            )
+        return tenant
+    if len(matches) > 1:
+        raise TenantResolutionError(
+            f"tenant_resolution_failed: ambiguous mapping for connector={connector!r}, "
+            f"topic={topic!r}"
+        )
+    if profile == "demo":
         return "default"
-    router = TenantRouter()
-    for tenant in router.load().tenants:
-        prefix = tenant.kafka_topic_prefix
-        if topic == prefix or topic.startswith(f"{prefix}."):
-            return tenant.id
-    return "default"
-
-
-def _topic_from_source(source: dict[str, Any]) -> str | None:
-    """Reconstruct a Kafka topic prefix from Debezium source metadata.
-
-    Postgres exposes `db` + `schema` + `table`; MySQL exposes `db` + `table`.
-    Many connectors set `topic.prefix` to `cdc.<db>` so even without the live
-    Kafka topic we can match TenantRouter prefixes when tenants split per db.
-    """
-    db = source.get("db")
-    if not isinstance(db, str) or not db:
-        return None
-    return f"cdc.{db}"
+    raise TenantResolutionError(
+        f"tenant_resolution_failed: no mapping for connector={connector!r}, topic={topic!r}"
+    )

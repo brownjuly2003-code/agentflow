@@ -171,10 +171,21 @@ def validate_semantics(event: dict) -> SemanticResult:
     event_type = event.get("event_type", "unknown")
     all_issues: list[SemanticIssue] = []
 
-    for prefix, rules in _RULES.items():
-        if event_type.startswith(prefix):
-            for rule_fn in rules:
-                all_issues.extend(rule_fn(event))
+    # A normalized CDC row is a materialized table image, not the original
+    # domain event. For example orders_v2 has a total but no line-item array,
+    # so applying order_total_consistency would reject every valid CDC row.
+    # CdcEvent schema validation owns this boundary until table-specific CDC
+    # semantic rules are introduced.
+    is_cdc_event = (
+        event.get("source") in {"postgres_cdc", "mysql_cdc"}
+        and "operation" in event
+        and "source_metadata" in event
+    )
+    if not is_cdc_event:
+        for prefix, rules in _RULES.items():
+            if event_type.startswith(prefix):
+                for rule_fn in rules:
+                    all_issues.extend(rule_fn(event))
 
     has_errors = any(i.severity == "error" for i in all_issues)
 

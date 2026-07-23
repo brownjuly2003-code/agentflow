@@ -47,6 +47,11 @@ class _FakeSourceStream:
         self.env = env
         self.process_function = None
         self.output_type = None
+        self.watermark_strategy = None
+
+    def assign_timestamps_and_watermarks(self, strategy):
+        self.watermark_strategy = strategy
+        return self
 
     def process(self, function, output_type=None):
         self.process_function = function
@@ -350,6 +355,10 @@ def stream_processor(monkeypatch):
             self.values["record_serializer"] = value
             return self
 
+        def set_property(self, key, value):
+            self.values.setdefault("properties", {})[key] = value
+            return self
+
         def set_topic(self, value):
             self.values["topic"] = value
             return self
@@ -462,7 +471,19 @@ def stream_processor(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyflink.datastream.output_tag", output_tag)
     monkeypatch.setitem(sys.modules, "pyflink.datastream.state", state)
 
-    return importlib.import_module(target)
+    module = importlib.import_module(target)
+
+    def _fake_ingress(env, *, bootstrap_servers, topics, group_id, security_properties=None):
+        env.ingress_args = {
+            "bootstrap_servers": bootstrap_servers,
+            "topics": tuple(topics),
+            "group_id": group_id,
+            "security_properties": dict(security_properties or {}),
+        }
+        return env.source_stream
+
+    monkeypatch.setattr(module, "build_kafka_ingress_stream", _fake_ingress)
+    return module
 
 
 def test_extract_timestamp_uses_event_timestamp(stream_processor):
@@ -609,6 +630,100 @@ def test_process_element_normalizes_debezium_before_validation(stream_processor,
     assert emitted[0]["_partition_key"] == "ORD-CDC-1"
     assert "enriched_by" not in emitted[0]
     assert pairs[0][0] == emitted[0]["event_id"]
+
+
+def test_process_element_uses_kafka_envelope_for_tenant_mapping(stream_processor, monkeypatch):
+    validated_events = []
+
+    def _validate_event(event):
+        validated_events.append(event)
+        return _ValidationResult()
+
+    _install_processor_dependencies(monkeypatch, validate_event=_validate_event)
+    monkeypatch.setenv("AGENTFLOW_PROFILE", "production")
+    processor = stream_processor.ValidateAndEnrich()
+    debezium = {
+        "before": None,
+        "after": {"order_id": "ORD-CDC-ENVELOPE", "status": "confirmed"},
+        "source": {
+            "connector": "postgresql",
+            "db": "agentflow_demo",
+            "schema": "public",
+            "table": "orders_v2",
+            "lsn": 26721945,
+            "txId": 754,
+            "ts_ms": 1777245326123,
+        },
+        "op": "c",
+    }
+    value = json.dumps(
+        {
+            "_agentflow_kafka": {
+                "version": 1,
+                "topic": "cdc.postgres.public.orders_v2",
+                "partition": 2,
+                "offset": 47,
+                "timestamp": "2026-07-23T12:00:00+00:00",
+            },
+            "value": json.dumps(debezium),
+        }
+    )
+
+    pairs = list(processor.process_element(value, _FakeProcessContext()))
+
+    assert len(pairs) == 1
+    assert pairs[0][0] is not stream_processor.DEAD_LETTER_TAG
+    assert validated_events[0]["tenant"] == "demo"
+    assert validated_events[0]["source_metadata"]["kafka"] == {
+        "topic": "cdc.postgres.public.orders_v2",
+        "partition": 2,
+        "offset": 47,
+        "timestamp": "2026-07-23T12:00:00+00:00",
+    }
+
+
+def test_process_element_routes_unknown_production_source_to_dlq(
+    stream_processor, monkeypatch, tmp_path
+):
+    registry = tmp_path / "cdc_sources.json"
+    registry.write_text('{"version":1,"sources":[]}', encoding="utf-8")
+    _install_processor_dependencies(monkeypatch)
+    monkeypatch.setenv("AGENTFLOW_PROFILE", "production")
+    monkeypatch.setenv("AGENTFLOW_CDC_SOURCES_FILE", str(registry))
+    processor = stream_processor.ValidateAndEnrich()
+    debezium = {
+        "before": None,
+        "after": {"order_id": "ORD-UNKNOWN", "status": "confirmed"},
+        "source": {
+            "connector": "postgresql",
+            "db": "agentflow_demo",
+            "schema": "public",
+            "table": "orders_v2",
+            "lsn": 26721946,
+            "txId": 755,
+            "ts_ms": 1777245326123,
+        },
+        "op": "c",
+    }
+    value = json.dumps(
+        {
+            "_agentflow_kafka": {
+                "version": 1,
+                "topic": "unknown.cdc.postgres.public.orders_v2",
+                "partition": 0,
+                "offset": 1,
+                "timestamp": "2026-07-23T12:00:00+00:00",
+            },
+            "value": json.dumps(debezium),
+        }
+    )
+
+    emitted = list(processor.process_element(value, _FakeProcessContext()))
+
+    assert len(emitted) == 1
+    tag, payload = emitted[0]
+    assert tag is stream_processor.DEAD_LETTER_TAG
+    assert json.loads(payload)["reason"] == "tenant_resolution_failed"
 
 
 def test_process_element_routes_semantic_errors_to_dlq(stream_processor, monkeypatch):
@@ -824,14 +939,13 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
     monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
 
     result = stream_processor.build_pipeline()
-    source, watermark_strategy, name = env.from_source_args
 
     assert result is env
     assert env.checkpointing == 30_000
     assert env.checkpoint_config.min_pause_between_checkpoints == 10_000
     assert env.parallelism == 2
-    assert source["bootstrap_servers"] == "localhost:9092"
-    assert source["topics"] == (
+    assert env.ingress_args["bootstrap_servers"] == "localhost:9092"
+    assert env.ingress_args["topics"] == (
         "orders.raw",
         "payments.raw",
         "clicks.raw",
@@ -841,9 +955,8 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
         "cdc.mysql.agentflow_demo.products_current",
         "cdc.mysql.agentflow_demo.sessions_aggregated",
     )
-    assert source["group_id"] == "agentflow-stream-processor"
-    assert source["starting_offsets"] == "earliest"
-    assert name == "kafka-source"
+    assert env.ingress_args["group_id"] == "agentflow-stream-processor"
+    watermark_strategy = env.source_stream.watermark_strategy
     assert watermark_strategy.out_of_orderness.millis == 5000
     assert isinstance(
         watermark_strategy.timestamp_assigner,
@@ -912,9 +1025,28 @@ def test_build_pipeline_respects_environment_overrides(stream_processor, monkeyp
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
     stream_processor.build_pipeline()
-    source, _, _ = env.from_source_args
 
     assert env.parallelism == 5
-    assert source["bootstrap_servers"] == "kafka:29092"
+    assert env.ingress_args["bootstrap_servers"] == "kafka:29092"
     assert env.dead_letter_stream.sink["bootstrap_servers"] == "kafka:29092"
     assert env.filtered_stream.sink["bootstrap_servers"] == "kafka:29092"
+
+
+def test_build_pipeline_wires_kafka_auth_to_source_and_sinks(
+    stream_processor,
+    monkeypatch,
+):
+    env = _FakeExecutionEnvironment()
+    stream_processor.StreamExecutionEnvironment.current_env = env
+    monkeypatch.setenv("AGENTFLOW_PROFILE", "production")
+    monkeypatch.setenv("AGENTFLOW_KAFKA_AUTH_ENABLED", "true")
+    monkeypatch.setenv("AGENTFLOW_KAFKA_USERNAME", "agentflow")
+    monkeypatch.setenv("AGENTFLOW_KAFKA_PASSWORD", "secret")
+
+    stream_processor.build_pipeline()
+
+    properties = env.ingress_args["security_properties"]
+    assert properties["security.protocol"] == "SASL_SSL"
+    assert properties["sasl.mechanism"] == "SCRAM-SHA-512"
+    assert env.dead_letter_stream.sink["properties"] == properties
+    assert env.filtered_stream.sink["properties"] == properties

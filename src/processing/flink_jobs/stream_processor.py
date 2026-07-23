@@ -1,6 +1,6 @@
 """Core Flink streaming job: validates, enriches, and routes events.
 
-Pipeline: Kafka source → Schema validation → Enrichment → Deduplication → Iceberg sink
+Pipeline: Kafka source → Schema validation → Enrichment → Deduplication → Kafka sinks
 Invalid events are routed to a dead letter topic with error metadata.
 
 This is the main entry point for the Flink cluster. Submit with:
@@ -18,13 +18,17 @@ from pyflink.common.time import Duration, Time
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import (
-    KafkaOffsetsInitializer,
     KafkaRecordSerializationSchema,
     KafkaSink,
-    KafkaSource,
 )
 from pyflink.datastream.functions import MapFunction, ProcessFunction
 from pyflink.datastream.output_tag import OutputTag
+
+from src.processing.flink_jobs.kafka_ingress import (
+    build_kafka_ingress_stream,
+    configured_input_topics,
+)
+from src.processing.kafka_security import flink_kafka_security_properties
 
 # Side output for invalid events
 DEAD_LETTER_TAG = OutputTag("dead-letter", Types.STRING())
@@ -37,22 +41,36 @@ def _event_tenant(event: dict) -> str:
     return str(tenant) if tenant else "default"
 
 
+def _decode_ingress_value(value: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    decoded = json.loads(value)
+    if not isinstance(decoded, dict):
+        raise ValueError("Kafka ingress payload is not a JSON object")
+    metadata = decoded.get("_agentflow_kafka")
+    if metadata is None:
+        return decoded, None
+    if not isinstance(metadata, dict) or metadata.get("version") != 1:
+        raise ValueError("Kafka ingress envelope has an unsupported metadata version")
+    payload = decoded.get("value")
+    if not isinstance(payload, str):
+        raise ValueError("Kafka ingress envelope value is not a string")
+    event = json.loads(payload)
+    if not isinstance(event, dict):
+        raise ValueError("Kafka ingress envelope value is not a JSON object")
+    return event, metadata
+
+
 class EventTimestampAssigner(TimestampAssigner):
     """Extracts event_time from the JSON payload for watermark generation."""
 
     def extract_timestamp(self, value: str, record_timestamp: int) -> int:
         try:
-            event = json.loads(value)
+            event, kafka_metadata = _decode_ingress_value(value)
             from datetime import UTC, datetime
 
             from src.ingestion.cdc.normalizer import is_debezium_event, normalize_debezium_event
 
             if is_debezium_event(event):
-                # Best-effort topic for tenant resolution: Debezium value-only
-                # deserializer drops the Kafka topic name (review P1).
-                # Wrappers should populate `event["topic"]` before this point;
-                # without it we still fall back to source.name → 'default'.
-                event = normalize_debezium_event(event, topic=event.get("topic"))
+                event = normalize_debezium_event(event, kafka_metadata=kafka_metadata)
             ts = datetime.fromisoformat(event["timestamp"])
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=UTC)
@@ -96,10 +114,10 @@ class ValidateAndEnrich(ProcessFunction):
         from src.quality.validators.schema_validator import validate_event
         from src.quality.validators.semantic_validator import validate_semantics
 
-        # 1. Parse JSON
+        # 1. Parse the Kafka metadata envelope and its JSON value.
         try:
-            event = json.loads(value)
-        except json.JSONDecodeError as e:
+            event, kafka_metadata = _decode_ingress_value(value)
+        except (json.JSONDecodeError, ValueError) as e:
             yield (
                 DEAD_LETTER_TAG,
                 json.dumps(
@@ -112,14 +130,28 @@ class ValidateAndEnrich(ProcessFunction):
             )
             return
 
-        from src.ingestion.cdc.normalizer import is_debezium_event, normalize_debezium_event
+        from src.ingestion.cdc.normalizer import (
+            TenantResolutionError,
+            is_debezium_event,
+            normalize_debezium_event,
+        )
 
         try:
             if is_debezium_event(event):
-                # See note above on topic propagation; Flink wrappers should
-                # inject `event["topic"]` from KafkaSourceMetadata when
-                # available so tenant resolution sees the prefixed topic.
-                event = normalize_debezium_event(event, topic=event.get("topic"))
+                event = normalize_debezium_event(event, kafka_metadata=kafka_metadata)
+        except TenantResolutionError as e:
+            yield (
+                DEAD_LETTER_TAG,
+                json.dumps(
+                    {
+                        "raw": value[:1000],
+                        "error": str(e),
+                        "reason": "tenant_resolution_failed",
+                        "stage": "cdc_normalization",
+                    }
+                ),
+            )
+            return
         except ValueError as e:
             yield (
                 DEAD_LETTER_TAG,
@@ -284,33 +316,22 @@ def build_pipeline() -> StreamExecutionEnvironment:
     env.configure(restart_config)
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-
-    # Multi-topic Kafka source
-    source = (
-        KafkaSource.builder()
-        .set_bootstrap_servers(bootstrap_servers)
-        .set_topics(
-            "orders.raw",
-            "payments.raw",
-            "clicks.raw",
-            "products.cdc",
-            "cdc.postgres.public.orders_v2",
-            "cdc.postgres.public.users_enriched",
-            "cdc.mysql.agentflow_demo.products_current",
-            "cdc.mysql.agentflow_demo.sessions_aggregated",
-        )
-        .set_group_id("agentflow-stream-processor")
-        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
-        .set_value_only_deserializer(SimpleStringSchema())
-        .build()
-    )
+    input_topics = configured_input_topics()
+    kafka_security = flink_kafka_security_properties()
 
     watermark_strategy = WatermarkStrategy.for_bounded_out_of_orderness(
         Duration.of_seconds(5)
     ).with_timestamp_assigner(EventTimestampAssigner())
 
-    # Main pipeline
-    stream = env.from_source(source, watermark_strategy, "kafka-source")
+    # The Table connector exposes topic/partition/offset/timestamp metadata;
+    # the DataStream KafkaSource Python wrapper exposes only value bytes.
+    stream = build_kafka_ingress_stream(
+        env,
+        bootstrap_servers=bootstrap_servers,
+        topics=input_topics,
+        group_id=os.getenv("AGENTFLOW_FLINK_GROUP_ID", "agentflow-stream-processor"),
+        security_properties=kafka_security,
+    ).assign_timestamps_and_watermarks(watermark_strategy)
 
     # Validate + enrich (with dead letter side output); emits
     # (event_id, payload) pairs so the dedup key is read from the tuple
@@ -321,17 +342,15 @@ def build_pipeline() -> StreamExecutionEnvironment:
     )
 
     # Dead letter sink
-    dead_letter_sink = (
-        KafkaSink.builder()
-        .set_bootstrap_servers(bootstrap_servers)
-        .set_record_serializer(
-            KafkaRecordSerializationSchema.builder()
-            .set_topic("events.deadletter")
-            .set_value_serialization_schema(SimpleStringSchema())
-            .build()
-        )
+    dead_letter_builder = KafkaSink.builder().set_bootstrap_servers(bootstrap_servers)
+    for key, value in kafka_security.items():
+        dead_letter_builder.set_property(key, value)
+    dead_letter_sink = dead_letter_builder.set_record_serializer(
+        KafkaRecordSerializationSchema.builder()
+        .set_topic("events.deadletter")
+        .set_value_serialization_schema(SimpleStringSchema())
         .build()
-    )
+    ).build()
 
     validated.get_side_output(DEAD_LETTER_TAG).sink_to(dead_letter_sink)
 
@@ -343,17 +362,15 @@ def build_pipeline() -> StreamExecutionEnvironment:
     )
 
     # Validated events sink (for downstream consumers)
-    validated_sink = (
-        KafkaSink.builder()
-        .set_bootstrap_servers(bootstrap_servers)
-        .set_record_serializer(
-            KafkaRecordSerializationSchema.builder()
-            .set_topic("events.validated")
-            .set_value_serialization_schema(SimpleStringSchema())
-            .build()
-        )
+    validated_builder = KafkaSink.builder().set_bootstrap_servers(bootstrap_servers)
+    for key, value in kafka_security.items():
+        validated_builder.set_property(key, value)
+    validated_sink = validated_builder.set_record_serializer(
+        KafkaRecordSerializationSchema.builder()
+        .set_topic("events.validated")
+        .set_value_serialization_schema(SimpleStringSchema())
         .build()
-    )
+    ).build()
 
     deduped.sink_to(validated_sink)
 

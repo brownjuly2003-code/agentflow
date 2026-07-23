@@ -151,6 +151,7 @@ agentflow_demo_api.duckdb*
 # code references them). Product docs live under docs/ and examples/.
 /presentation*.html
 /pres.html
+/agentFlow.html
 /fable_*.md
 /next-session-*.md
 /second-opinion-*.md

@@ -53,7 +53,7 @@ from src.serving.api.metrics import USAGE_RECORD_FAILURES, USAGE_ROWS_DROPPED
 from src.serving.control_plane.store import UsageRow
 
 if TYPE_CHECKING:
-    from src.serving.control_plane.store import ControlPlaneStore
+    from src.serving.control_plane import UsageAuditRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -75,7 +75,7 @@ class UsageWriter:
 
     def __init__(
         self,
-        store: ControlPlaneStore,
+        store: UsageAuditRepository,
         audit_publisher: AuditPublisher | None = None,
         *,
         max_queue: int = DEFAULT_MAX_QUEUE,

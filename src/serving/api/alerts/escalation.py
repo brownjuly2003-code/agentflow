@@ -14,7 +14,7 @@ from src.serving.api.egress_guard import (
     resolve_public_ip,
 )
 from src.serving.api.webhook_dispatcher import _event_body, _signature
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import get_alert_repository
 
 from .evaluator import evaluate_rule
 
@@ -252,7 +252,7 @@ async def deliver(
     change_pct: float | None = None,
     webhook_url: str | None = None,
 ) -> dict:
-    store = get_control_plane_store(dispatcher.app)
+    store = get_alert_repository(dispatcher.app)
     delivery_id = str(uuid.uuid4())
     body = _event_body(payload)
     headers = {

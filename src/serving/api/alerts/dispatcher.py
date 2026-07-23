@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Literal
 import structlog
 from pydantic import BaseModel, Field, model_validator
 
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import get_alert_repository
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -89,12 +89,12 @@ def get_alert_config_path(app: FastAPI) -> Path:
 
 
 def load_alerts(app: FastAPI) -> list[AlertRule]:
-    store = get_control_plane_store(app)
+    store = get_alert_repository(app)
     return [AlertRule.model_validate(record) for record in store.load_alert_rules()]
 
 
 def save_alerts(app: FastAPI, alerts: list[AlertRule]) -> None:
-    store = get_control_plane_store(app)
+    store = get_alert_repository(app)
     store.save_alert_rules([alert.model_dump(mode="json") for alert in alerts])
 
 
@@ -257,7 +257,7 @@ class AlertDispatcher:
     async def dispatch_alerts(self) -> int:
         from .escalation import dispatch_alert
 
-        store = get_control_plane_store(self.app)
+        store = get_alert_repository(self.app)
         alerts = load_alerts(self.app)
         now = datetime.now(UTC)
         triggered = 0

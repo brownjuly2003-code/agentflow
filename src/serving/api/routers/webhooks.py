@@ -15,7 +15,7 @@ from src.serving.api.webhook_dispatcher import (
     get_webhook,
     list_webhooks,
 )
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import get_webhook_repository
 
 router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
 
@@ -109,4 +109,4 @@ def _read_delivery_logs(request: Request, webhook_id: str) -> list[dict]:
     # isolates the read (a dedicated cursor per call in the embedded adapter)
     # so concurrent reads on different threads don't collide on the shared
     # connection. (audit_30_06_26.md A2)
-    return get_control_plane_store(request.app).get_webhook_delivery_logs(webhook_id)
+    return get_webhook_repository(request.app).get_webhook_delivery_logs(webhook_id)

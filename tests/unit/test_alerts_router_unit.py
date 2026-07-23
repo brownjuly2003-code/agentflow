@@ -263,7 +263,7 @@ async def test_test_alert_not_found_raises_404(monkeypatch: pytest.MonkeyPatch) 
 
 
 class _FakeStore:
-    """Stands in for ``get_control_plane_store(app)`` — the history read goes
+    """Stands in for ``get_alert_repository(app)`` — the history read goes
     through the store port, not a raw ``query_engine._conn`` cursor."""
 
     def __init__(self, history: list[dict]) -> None:
@@ -277,7 +277,7 @@ async def test_alert_history_returns_records(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(alerts_module, "get_alert", lambda app, alert_id, tenant: _rule())
     monkeypatch.setattr(
         alerts_module,
-        "get_control_plane_store",
+        "get_alert_repository",
         lambda app: _FakeStore([{"fired_at": "2026-06-13"}]),
     )
     result = await alert_history("al-1", _req())

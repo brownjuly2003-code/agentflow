@@ -13,7 +13,7 @@ from src.processing.event_replayer import (
     EventReplayer,
     ReplayValidationError,
 )
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import get_outbox_replay_repository
 
 router = APIRouter(prefix="/v1/deadletter", tags=["deadletter"])
 
@@ -79,7 +79,7 @@ def _decode_payload(payload: object) -> dict:
 def _replayer(request: Request) -> EventReplayer:
     producer = getattr(request.app.state, "deadletter_producer", None)
     return EventReplayer(
-        store=get_control_plane_store(request.app),
+        store=get_outbox_replay_repository(request.app),
         producer=producer if callable(producer) else None,
     )
 
@@ -93,7 +93,7 @@ def _require_deadletter_write_access(request: Request, event_id: str) -> None:
             status_code=403,
             detail="This API key has read-only access to dead-letter operations.",
         )
-    exists = get_control_plane_store(request.app).dead_letter_event_exists(
+    exists = get_outbox_replay_repository(request.app).dead_letter_event_exists(
         event_id, _tenant_id(request)
     )
     if not exists:
@@ -106,7 +106,7 @@ async def deadletter_stats(request: Request) -> DeadLetterStatsResponse:
 
 
 def _deadletter_stats(request: Request) -> DeadLetterStatsResponse:
-    stats = get_control_plane_store(request.app).get_dead_letter_stats(_tenant_id(request))
+    stats = get_outbox_replay_repository(request.app).get_dead_letter_stats(_tenant_id(request))
     return DeadLetterStatsResponse(**stats)
 
 
@@ -123,7 +123,7 @@ async def list_deadletter_events(
 def _list_deadletter_events(
     request: Request, page: int, page_size: int, reason: str | None
 ) -> DeadLetterListResponse:
-    items, total = get_control_plane_store(request.app).list_dead_letter_events(
+    items, total = get_outbox_replay_repository(request.app).list_dead_letter_events(
         tenant_id=_tenant_id(request), reason=reason, page=page, page_size=page_size
     )
     return DeadLetterListResponse(
@@ -143,7 +143,9 @@ async def get_deadletter_event(event_id: str, request: Request) -> DeadLetterDet
 
 
 def _get_deadletter_event(request: Request, event_id: str) -> DeadLetterDetail:
-    row = get_control_plane_store(request.app).get_dead_letter_event(event_id, _tenant_id(request))
+    row = get_outbox_replay_repository(request.app).get_dead_letter_event(
+        event_id, _tenant_id(request)
+    )
     if row is None:
         raise HTTPException(status_code=404, detail=f"Dead-letter event '{event_id}' not found.")
     return DeadLetterDetail(**{**row, "payload": _decode_payload(row["payload"])})

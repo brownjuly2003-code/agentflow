@@ -11,7 +11,7 @@ from starlette.responses import Response
 
 from src.serving.api.auth import require_admin_key
 from src.serving.cache import ENTITY_TTL_SECONDS
-from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
+from src.serving.control_plane import EmbeddedControlPlaneStore, UsageAuditRepository
 
 router = APIRouter(
     prefix="/admin",
@@ -75,12 +75,12 @@ def _cache_stats(state: State) -> dict[str, object]:
     }
 
 
-def _qps_last_minute(source: ControlPlaneStore | Path | str) -> float:
-    # ADR 0010 slice 4: routed through the ControlPlaneStore port — was a
+def _qps_last_minute(source: UsageAuditRepository | Path | str) -> float:
+    # ADR 0010 slice 4: routed through the UsageAuditRepository port — was a
     # direct connect_duckdb(db_path) query. Slice 5: the admin dashboard
     # hands in the manager's store (shared PostgreSQL store on the scale
     # profile); a bare path still builds the embedded per-call wrapper.
-    if isinstance(source, ControlPlaneStore):
+    if isinstance(source, UsageAuditRepository):
         return source.get_queries_per_second_last_minute()
     store = EmbeddedControlPlaneStore(usage_db_path_provider=lambda: source)
     return store.get_queries_per_second_last_minute()

@@ -26,6 +26,12 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: list[SearchResult]
+    partial: bool
+    degraded: bool
+    indexed_documents: int
+    entity_scan_limit: int
+    partial_entity_types: list[str]
+    failed_entity_types: list[str]
 
 
 def _normalize_entity_types(entity_types: list[str] | None) -> list[str] | None:
@@ -72,12 +78,13 @@ async def search(
     # `entity_types` would drop every metric document for a scoped key, because
     # an entity_types filter means "entities only".
     authorized_entity_types = _allowed_entity_types(req)
+    index_status = search_index.status()
     if authorized_entity_types is not None and normalized_entity_types is not None:
         narrowed = [t for t in normalized_entity_types if t in set(authorized_entity_types)]
         if not narrowed:
             # Asking only for types this key cannot read is an empty result set,
             # not a 403: /v1/entity already answers 403 for the direct lookup.
-            return SearchResponse(query=q, results=[])
+            return SearchResponse(query=q, results=[], **index_status)
         search_entity_types: list[str] | None = narrowed
     else:
         search_entity_types = normalized_entity_types
@@ -109,4 +116,8 @@ async def search(
         results=len(hits),
         entity_types=normalized_entity_types,
     )
-    return SearchResponse(query=q, results=[SearchResult(**hit) for hit in hits])
+    return SearchResponse(
+        query=q,
+        results=[SearchResult(**hit) for hit in hits],
+        **index_status,
+    )

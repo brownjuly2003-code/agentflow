@@ -26,7 +26,7 @@ from src.serving.api.egress_guard import (
 )
 from src.serving.api.metrics import WEBHOOK_SETTLE_VIOLATIONS
 from src.serving.backends import BackendExecutionError
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import get_webhook_repository
 from src.serving.seen_events import BoundedSeenSet
 
 try:
@@ -74,13 +74,13 @@ def get_webhook_config_path(app: FastAPI) -> Path:
 
 
 def load_webhooks(app: FastAPI) -> list[WebhookRegistration]:
-    records = get_control_plane_store(app).load_webhook_registrations()
+    records = get_webhook_repository(app).load_webhook_registrations()
     return WebhookConfig.model_validate({"webhooks": records}).webhooks
 
 
 def save_webhooks(app: FastAPI, webhooks: list[WebhookRegistration]) -> None:
     payload = WebhookConfig(webhooks=webhooks).model_dump(mode="json")
-    get_control_plane_store(app).save_webhook_registrations(payload["webhooks"])
+    get_webhook_repository(app).save_webhook_registrations(payload["webhooks"])
 
 
 def create_webhook(
@@ -516,7 +516,7 @@ class WebhookDispatcher:
         per-attempt logging. Shared by :meth:`deliver` and the durable re-drive
         (:meth:`process_delivery_queue`), which replays the stored body verbatim.
         """
-        store = get_control_plane_store(self.app)
+        store = get_webhook_repository(self.app)
 
         delivery_id = str(uuid.uuid4())
         if not event_id:
@@ -659,7 +659,7 @@ class WebhookDispatcher:
         event_id = str(event.get("event_id") or "")
         if not event_id:
             return False
-        return get_control_plane_store(self.app).enqueue_webhook_delivery(
+        return get_webhook_repository(self.app).enqueue_webhook_delivery(
             webhook_id=webhook.id,
             event_id=event_id,
             tenant=str(event.get("tenant_id") or "default"),
@@ -680,7 +680,7 @@ class WebhookDispatcher:
         outcome twice — the attempts+2 → premature dead-letter bug (P3)."""
         if not event_id:
             return
-        get_control_plane_store(self.app).record_webhook_delivery_outcome(
+        get_webhook_repository(self.app).record_webhook_delivery_outcome(
             webhook_id=webhook_id,
             event_id=event_id,
             success=bool(result.get("success")),
@@ -696,7 +696,7 @@ class WebhookDispatcher:
         removed/deactivated parks its row as ``dead`` rather than retrying
         forever. Bounded by ``redrive_batch_size`` so one pass can't stall the
         loop on a large backlog."""
-        store = get_control_plane_store(self.app)
+        store = get_webhook_repository(self.app)
         for row in store.claim_due_webhook_deliveries(limit=self.redrive_batch_size):
             webhook = get_webhook(self.app, row.webhook_id, str(row.tenant or "default"))
             if webhook is None:

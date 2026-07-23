@@ -2,7 +2,7 @@
 (ops-surfaces-spec.md §4.3), the exception inbox's third source (D4).
 
 Pure, read-only cross-store consistency probes: both functions read via the
-QueryEngine/ControlPlaneStore ports only and never write serving state (I10)
+QueryEngine/OutboxReplayRepository ports only and never write serving state (I10)
 — the caller (``routers/ops.py``) turns findings into overlay upserts and
 owns the dedupe-key -> ``item_id`` mapping (``rc:<dedupe_key>``, §4.4).
 """
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 from src.serving.semantic_layer.stage_clock import coerce_dt, ladder_stage_names
 
 if TYPE_CHECKING:
-    from src.serving.control_plane import ControlPlaneStore
+    from src.serving.control_plane import OutboxReplayRepository
     from src.serving.semantic_layer.query.engine import QueryEngine
 
 _STATUS_EVENT_PREFIX = "order.status."
@@ -169,7 +169,7 @@ def check_journal_vs_store(
 
 
 def check_stuck_replay(
-    store: ControlPlaneStore, tenant_id: str, *, older_than_seconds: float
+    store: OutboxReplayRepository, tenant_id: str, *, older_than_seconds: float
 ) -> list[ReconciliationFinding]:
     """R2: dead-letter rows sitting in ``replay_pending`` longer than
     ``older_than_seconds`` — a replay was requested but its outbox entry

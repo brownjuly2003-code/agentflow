@@ -9,6 +9,16 @@ imports lazily (psycopg is an optional dependency, the ``redis`` pattern),
 so reach it via ``src.serving.control_plane.postgres`` only when configured.
 """
 
+from .capabilities import (
+    AlertRepository,
+    OutboxReplayRepository,
+    UsageAuditRepository,
+    WebhookRepository,
+    get_alert_repository,
+    get_outbox_replay_repository,
+    get_usage_audit_repository,
+    get_webhook_repository,
+)
 from .embedded import (
     EmbeddedControlPlaneStore,
     ensure_alert_history_table,
@@ -35,10 +45,14 @@ from .store import (
 __all__ = [
     "CONTROL_PLANE_PG_DSN_ENV",
     "CONTROL_PLANE_STORE_ENV",
+    "AlertRepository",
     "ControlPlaneStore",
     "EmbeddedControlPlaneStore",
     "OutboxEntry",
+    "OutboxReplayRepository",
     "TriageState",
+    "UsageAuditRepository",
+    "WebhookRepository",
     "WebhookQueueRow",
     "control_plane_store_kind",
     "ensure_alert_history_table",
@@ -50,5 +64,9 @@ __all__ = [
     "ensure_webhook_deliveries_table",
     "ensure_webhook_delivery_queue_table",
     "get_control_plane_store",
+    "get_alert_repository",
+    "get_outbox_replay_repository",
+    "get_usage_audit_repository",
+    "get_webhook_repository",
     "stuck_replay_threshold_seconds",
 ]

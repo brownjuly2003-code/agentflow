@@ -37,7 +37,7 @@ from src.serving.api.security import (
     verify_api_key,
 )
 from src.serving.audit_publisher import AuditPublisher, build_audit_publisher_from_env
-from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
+from src.serving.control_plane import EmbeddedControlPlaneStore, UsageAuditRepository
 
 if TYPE_CHECKING:
     from .key_rotation import KeyRotator
@@ -120,7 +120,7 @@ class AuthManager:
         redis_url: str | None = None,
         audit_publisher: AuditPublisher | None = None,
         *,
-        store: ControlPlaneStore | None = None,
+        store: UsageAuditRepository | None = None,
     ) -> None:
         self.api_keys_path = Path(api_keys_path) if api_keys_path else None
         resolved_db_path = Path(db_path)
@@ -141,7 +141,7 @@ class AuthManager:
         # usage/session state has always lived in its own file (see the
         # port module's docstring on why this is not the outbox's
         # :memory:-vs-file duality).
-        self.store: ControlPlaneStore = store or EmbeddedControlPlaneStore(
+        self.store: UsageAuditRepository = store or EmbeddedControlPlaneStore(
             usage_db_path_provider=lambda: self.db_path
         )
         self.admin_key = admin_key if admin_key is not None else os.getenv("AGENTFLOW_ADMIN_KEY")

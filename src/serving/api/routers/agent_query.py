@@ -25,7 +25,7 @@ from src.serving.api.versioning import (
 )
 from src.serving.backends import BackendExecutionError, BackendMissingTableError
 from src.serving.cache import ENTITY_TTL_SECONDS, QueryCache, cache_entity_key
-from src.serving.control_plane import get_control_plane_store
+from src.serving.control_plane import get_outbox_replay_repository
 from src.serving.semantic_layer.stage_clock import coerce_dt, resolve_breach, stage_budget
 
 logger = structlog.get_logger()
@@ -375,7 +375,7 @@ def _build_order_timeline(request: Request, order_id: str) -> dict[str, Any] | N
     Runs on a worker thread (the route offloads it, matching lineage.py /
     deadletter.py). Composes exactly the two ops-layer ports per ADR 0011:
     QueryEngine for the order row, the journal, and the customer projection;
-    ControlPlaneStore for dead-letter exception detail. No raw connection, no
+    OutboxReplayRepository for dead-letter exception detail. No raw connection, no
     vault DSN (invariant I1).
     """
     engine = request.app.state.query_engine
@@ -435,7 +435,7 @@ def _build_order_timeline(request: Request, order_id: str) -> dict[str, Any] | N
         if user_row is not None:
             customer = {field: user_row.get(field) for field in _ORDER_TIMELINE_CUSTOMER_FIELDS}
 
-    store = get_control_plane_store(request.app)
+    store = get_outbox_replay_repository(request.app)
     exceptions = []
     for row in trail_rows:
         if row.get("topic") != "events.deadletter":

@@ -13,20 +13,20 @@ from starlette.background import BackgroundTasks
 from starlette.responses import Response
 from starlette.types import Message
 
-from src.serving.control_plane import ControlPlaneStore, EmbeddedControlPlaneStore
+from src.serving.control_plane import EmbeddedControlPlaneStore, UsageAuditRepository
 from src.serving.duckdb_connection import connect_duckdb
 
 logger = structlog.get_logger()
 
 
-def _usage_store(source: ControlPlaneStore | Path | str) -> ControlPlaneStore:
+def _usage_store(source: UsageAuditRepository | Path | str) -> UsageAuditRepository:
     # ADR 0010 slice 4: the SQL for the functions below lives behind the
-    # ControlPlaneStore port (control_plane/embedded.py). Slice 5 makes the
+    # UsageAuditRepository port (control_plane/embedded.py). Slice 5 makes the
     # entry points polymorphic: callers on the scale profile hand in the
     # shared store (AuthManager.store, a PostgresControlPlaneStore there);
     # a path keeps the pre-port behavior — a fresh, cheap embedded wrapper
     # per call, nothing connected until a method on it runs.
-    if isinstance(source, ControlPlaneStore):
+    if isinstance(source, UsageAuditRepository):
         return source
     return EmbeddedControlPlaneStore(usage_db_path_provider=lambda: source)
 
@@ -174,7 +174,7 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
 
 
 def get_usage_analytics(
-    source: ControlPlaneStore | Path | str,
+    source: UsageAuditRepository | Path | str,
     *,
     window: str = "24h",
     tenant: str | None = None,
@@ -183,7 +183,7 @@ def get_usage_analytics(
 
 
 def get_top_queries(
-    source: ControlPlaneStore | Path | str,
+    source: UsageAuditRepository | Path | str,
     *,
     limit: int = 10,
     window: str = "24h",
@@ -192,7 +192,7 @@ def get_top_queries(
 
 
 def get_top_entities(
-    source: ControlPlaneStore | Path | str,
+    source: UsageAuditRepository | Path | str,
     *,
     limit: int = 10,
     window: str = "24h",
@@ -201,19 +201,19 @@ def get_top_entities(
 
 
 def get_latency_analytics(
-    source: ControlPlaneStore | Path | str,
+    source: UsageAuditRepository | Path | str,
     *,
     window: str = "24h",
 ) -> dict:
     return _usage_store(source).get_latency_analytics(window=window)
 
 
-def get_anomalies(source: ControlPlaneStore | Path | str, *, window: str = "24h") -> dict:
+def get_anomalies(source: UsageAuditRepository | Path | str, *, window: str = "24h") -> dict:
     return _usage_store(source).get_anomalies(window=window)
 
 
 def _schedule_session_write(
-    source: ControlPlaneStore | Path | str, request_id: str, record: dict
+    source: UsageAuditRepository | Path | str, request_id: str, record: dict
 ) -> None:
     threading.Thread(
         target=_insert_session,
@@ -222,7 +222,9 @@ def _schedule_session_write(
     ).start()
 
 
-def _insert_session(source: ControlPlaneStore | Path | str, request_id: str, record: dict) -> None:
+def _insert_session(
+    source: UsageAuditRepository | Path | str, request_id: str, record: dict
+) -> None:
     # Deliberately does NOT call ensure_analytics_table: the table is
     # guaranteed to exist by main.py's boot-time call (embedded profile; the
     # postgres adapter creates its schema once per process), and re-checking

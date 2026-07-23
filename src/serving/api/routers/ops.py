@@ -5,7 +5,7 @@ inbox (ops-surfaces-spec.md §4, D4).
 Composes exactly the QueryEngine port (the open-orders read
 ``fetch_orders_by_status`` and the stage-clock journal read
 ``fetch_pipeline_events``, the same two reads the Order 360 timeline uses)
-and the ControlPlaneStore port (dead-letter reads, the triage overlay,
+and the OutboxReplayRepository port (dead-letter reads, the triage overlay,
 webhook dead-delivery reads). No raw engine connection reach, no vault DSN
 (invariant I1).
 """
@@ -23,7 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from src.serving.control_plane import (
     TriageState,
-    get_control_plane_store,
+    get_outbox_replay_repository,
     stuck_replay_threshold_seconds,
 )
 from src.serving.semantic_layer.reconciliation import (
@@ -426,7 +426,7 @@ def _gather_exception_items(request: Request) -> tuple[list[dict[str, Any]], str
     endpoints both start from this same picture, so counts never drift
     between them within one request. The third element reports whether any
     source read hit its scan cap (S-8)."""
-    store = get_control_plane_store(request.app)
+    store = get_outbox_replay_repository(request.app)
     engine = request.app.state.query_engine
     tenant_id = _tenant_id(request)
     catalog = request.app.state.catalog
@@ -539,7 +539,7 @@ def _build_exceptions_list_payload(
 
 def _build_exceptions_stats_payload(request: Request) -> dict[str, Any]:
     items, tenant_id, scan_truncated = _gather_exception_items(request)
-    store = get_control_plane_store(request.app)
+    store = get_outbox_replay_repository(request.app)
     now = datetime.now(UTC)
 
     by_source: dict[str, dict[str, int]] = {}
@@ -583,7 +583,7 @@ def _set_exception_state(
                 "or /dismiss instead of the exception-inbox overlay."
             ),
         )
-    store = get_control_plane_store(request.app)
+    store = get_outbox_replay_repository(request.app)
     tenant_id = _tenant_id(request)
     note = payload.note if payload is not None else None
     updated = store.set_triage_state(item_id=item_id, tenant_id=tenant_id, status=status, note=note)

@@ -840,7 +840,11 @@ class EmbeddedControlPlaneStore(ControlPlaneStore):
         )
         if is_kafka_error:
             retry_delay_seconds = max(retry_delay_seconds, 30)
-        next_attempt_at: datetime | None = datetime.now(UTC) + timedelta(
+        # DuckDB TIMESTAMP is timezone-naive. Binding an aware datetime makes
+        # DuckDB convert it to the host timezone before dropping tzinfo, which
+        # shifts retry scheduling on non-UTC hosts. Store a UTC-naive value,
+        # matching every read/comparison of this column.
+        next_attempt_at: datetime | None = datetime.now(UTC).replace(tzinfo=None) + timedelta(
             seconds=retry_delay_seconds
         )
         conn.execute("BEGIN TRANSACTION")

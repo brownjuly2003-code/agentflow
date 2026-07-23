@@ -536,3 +536,164 @@ def test_worker_enabled_splits_api_and_worker_roles():
     assert "app.kubernetes.io/component: worker" in output
     # Worker must not share the API PVC (RWO multi-attach).
     assert output.count("persistentVolumeClaim:") <= 1
+
+
+def test_lake_materializer_renders_as_separate_kafka_consumer():
+    result = _run_helm_template(
+        "--set",
+        "lakeMaterializer.enabled=true",
+        "--set",
+        "lakeMaterializer.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "lakeMaterializer.catalogUri=http://iceberg-rest.data.svc:8181",
+        "--set",
+        "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    assert "app.kubernetes.io/component: lake-materializer" in output
+    assert "src.processing.lake_consumer" in output
+    assert 'value: "kafka.data.svc:9092"' in output
+    assert 'value: "http://iceberg-rest.data.svc:8181"' in output
+    assert 'value: "s3://agentflow-lake/warehouse"' in output
+
+
+def test_lake_materializer_network_policy_allows_catalog_and_object_store():
+    result = _run_helm_template(
+        "--set",
+        "networkPolicy.enabled=true",
+        "--set",
+        "lakeMaterializer.enabled=true",
+        "--set",
+        "lakeMaterializer.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "lakeMaterializer.catalogUri=http://iceberg-rest.data.svc:8181",
+        "--set",
+        "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    assert "port: 8181" in output
+    assert "port: 9000" in output
+
+
+def test_serving_bridge_renders_as_separate_clickhouse_consumer():
+    result = _run_helm_template(
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+        "--set",
+        "servingBridge.enabled=true",
+        "--set",
+        "servingBridge.kafkaBootstrapServers=kafka.data.svc:9092",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    assert "app.kubernetes.io/component: serving-bridge" in output
+    assert "src.processing.bridge_consumer" in output
+    assert 'value: "kafka.data.svc:9092"' in output
+    assert 'name: "agentflow-clickhouse"' in output
+
+
+def test_serving_bridge_rejects_duckdb_backend():
+    result = _run_helm_template(
+        "--set",
+        "servingBridge.enabled=true",
+        "--set",
+        "servingBridge.kafkaBootstrapServers=kafka.data.svc:9092",
+    )
+
+    output = _combined_output(result)
+    assert result.returncode != 0, output
+    assert "servingBridge.enabled requires serving.backend=clickhouse" in output
+
+
+def test_production_materializer_requires_kafka_auth():
+    result = _run_helm_template(
+        "--set",
+        "config.profile=production",
+        "--set",
+        "lakeMaterializer.enabled=true",
+        "--set",
+        "lakeMaterializer.kafkaBootstrapServers=kafka.data.svc:9093",
+        "--set",
+        "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
+        "--set",
+        "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode != 0, output
+    assert "production Kafka workloads require kafkaAuth.enabled=true" in output
+
+
+def test_kafka_auth_credentials_are_secret_references():
+    result = _run_helm_template(
+        "--set",
+        "config.profile=production",
+        "--set",
+        "kafkaAuth.enabled=true",
+        "--set",
+        "kafkaAuth.existingSecret=agentflow-kafka",
+        "--set",
+        "kafkaAuth.caSecret=agentflow-kafka-ca",
+        "--set",
+        "lakeMaterializer.enabled=true",
+        "--set",
+        "lakeMaterializer.kafkaBootstrapServers=kafka.data.svc:9093",
+        "--set",
+        "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
+        "--set",
+        "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    assert "AGENTFLOW_KAFKA_USERNAME" in output
+    assert 'name: "agentflow-kafka"' in output
+    assert 'secretName: "agentflow-kafka-ca"' in output
+    assert "kafka-password" in output
+
+
+def test_flink_operator_workload_renders_golden_runtime():
+    result = _run_helm_template(
+        "--set",
+        "config.profile=production",
+        "--set",
+        "kafkaAuth.enabled=true",
+        "--set",
+        "kafkaAuth.existingSecret=agentflow-kafka",
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka.data.svc:9093",
+        "--set",
+        "flinkJob.checkpointStorage=s3://agentflow-state/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=s3://agentflow-state/savepoints",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    assert "apiVersion: flink.apache.org/v1beta1" in output
+    assert "kind: FlinkDeployment" in output
+    assert "flinkVersion: v2_3" in output
+    assert "flink-python-2.3.0.jar" in output
+    assert output.count("/opt/pyflink-venv/bin/python") == 2
+    assert "/opt/agentflow/src/processing/flink_jobs/stream_processor.py" in output
+    assert "/opt/agentflow/src/processing/flink_jobs/session_aggregator.py" in output
+    assert "/opt/agentflow/src/processing/flink_jobs/session_aggregation.py" not in output
+    assert output.count("kind: FlinkDeployment") == 2
+    assert 'value: "events.validated"' in output
+    assert 'value: "sessions.aggregated"' in output
+    assert "s3://agentflow-state/checkpoints" in output
+    assert "AGENTFLOW_KAFKA_INPUT_TOPICS" in output
+    assert "kind: Role" in output
+    assert "kind: RoleBinding" in output
+    assert "configmaps" in output

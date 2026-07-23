@@ -1,0 +1,101 @@
+{{- if and .Values.flinkJob.enabled .Values.flinkJob.sessions.enabled }}
+{{- $bootstrapServers := required "flinkJob.kafkaBootstrapServers is required when flinkJob.enabled=true" .Values.flinkJob.kafkaBootstrapServers }}
+{{- $checkpointStorage := required "flinkJob.checkpointStorage is required when flinkJob.enabled=true" .Values.flinkJob.checkpointStorage }}
+{{- $savepointStorage := required "flinkJob.savepointStorage is required when flinkJob.enabled=true" .Values.flinkJob.savepointStorage }}
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: {{ include "agentflow.fullname" . }}-session-aggregator
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: session-aggregator
+spec:
+  image: "{{ .Values.flinkJob.image.repository }}:{{ .Values.flinkJob.image.tag }}"
+  imagePullPolicy: {{ .Values.flinkJob.image.pullPolicy }}
+  flinkVersion: {{ .Values.flinkJob.flinkVersion }}
+  serviceAccount: {{ .Values.flinkJob.serviceAccount | default (include "agentflow.serviceAccountName" .) }}
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: {{ .Values.flinkJob.taskSlots | quote }}
+    execution.checkpointing.interval: {{ printf "%d ms" (int .Values.flinkJob.checkpointIntervalMs) | quote }}
+    execution.checkpointing.mode: EXACTLY_ONCE
+    execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+    state.checkpoints.dir: {{ $checkpointStorage | quote }}
+    state.savepoints.dir: {{ $savepointStorage | quote }}
+    high-availability.type: kubernetes
+    high-availability.storageDir: {{ printf "%s/ha-session" (trimSuffix "/" $checkpointStorage) | quote }}
+    {{- if .Values.flinkJob.stateBackend.endpoint }}
+    s3.endpoint: {{ .Values.flinkJob.stateBackend.endpoint | quote }}
+    s3.path.style.access: {{ .Values.flinkJob.stateBackend.pathStyleAccess | quote }}
+    {{- end }}
+  podTemplate:
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: flink-main-container
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ $bootstrapServers | quote }}
+            - name: FLINK_SESSION_SOURCE_TOPIC
+              value: {{ .Values.flinkJob.sessions.sourceTopic | quote }}
+            - name: FLINK_SESSION_SINK_TOPIC
+              value: {{ .Values.flinkJob.sessions.sinkTopic | quote }}
+            - name: FLINK_SESSION_GROUP_ID
+              value: {{ .Values.flinkJob.sessions.groupId | quote }}
+            - name: FLINK_SESSION_MAX_UNIQUE_PAGES
+              value: {{ .Values.flinkJob.sessions.maxUniquePages | quote }}
+            - name: FLINK_SESSION_MAX_UNIQUE_PRODUCTS
+              value: {{ .Values.flinkJob.sessions.maxUniqueProducts | quote }}
+            - name: AGENTFLOW_PROFILE
+              value: {{ .Values.config.profile | default "dev" | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.flinkJob.stateBackend.region | quote }}
+            {{- include "agentflow.kafkaAuthEnv" . | nindent 12 }}
+            {{- if .Values.flinkJob.stateBackend.existingSecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.flinkJob.stateBackend.existingSecret | quote }}
+                  key: {{ .Values.flinkJob.stateBackend.accessKeyKey | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.flinkJob.stateBackend.existingSecret | quote }}
+                  key: {{ .Values.flinkJob.stateBackend.secretKeyKey | quote }}
+            {{- end }}
+          {{- if .Values.kafkaAuth.caSecret }}
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/agentflow/kafka
+              readOnly: true
+          {{- end }}
+      {{- if .Values.kafkaAuth.caSecret }}
+      volumes:
+        - name: kafka-ca
+          secret:
+            secretName: {{ .Values.kafkaAuth.caSecret | quote }}
+      {{- end }}
+  jobManager:
+    resources:
+      requests:
+        cpu: {{ .Values.flinkJob.jobManager.cpu | quote }}
+        memory: {{ .Values.flinkJob.jobManager.memory | quote }}
+  taskManager:
+    resources:
+      requests:
+        cpu: {{ .Values.flinkJob.taskManager.cpu | quote }}
+        memory: {{ .Values.flinkJob.taskManager.memory | quote }}
+  job:
+    jarURI: local:///opt/flink/opt/flink-python-2.3.0.jar
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - -pyclientexec
+      - /opt/pyflink-venv/bin/python
+      - -py
+      - /opt/agentflow/src/processing/flink_jobs/session_aggregator.py
+    parallelism: {{ .Values.flinkJob.sessions.parallelism }}
+    upgradeMode: {{ .Values.flinkJob.upgradeMode }}
+    state: running
+{{- end }}

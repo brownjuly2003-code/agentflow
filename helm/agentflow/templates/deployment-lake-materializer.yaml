@@ -1,0 +1,129 @@
+{{- if .Values.lakeMaterializer.enabled }}
+{{- $bootstrapServers := required "lakeMaterializer.kafkaBootstrapServers is required when lakeMaterializer.enabled=true" .Values.lakeMaterializer.kafkaBootstrapServers }}
+{{- $catalogUri := required "lakeMaterializer.catalogUri is required when lakeMaterializer.enabled=true" .Values.lakeMaterializer.catalogUri }}
+{{- $warehouse := required "lakeMaterializer.warehouse is required when lakeMaterializer.enabled=true" .Values.lakeMaterializer.warehouse }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentflow.fullname" . }}-lake-materializer
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lake-materializer
+spec:
+  replicas: {{ .Values.lakeMaterializer.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: lake-materializer
+  template:
+    metadata:
+      labels:
+        {{- include "agentflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: lake-materializer
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "agentflow.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: lake-materializer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - python
+            - -m
+            - src.processing.lake_consumer
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ $bootstrapServers | quote }}
+            - name: AGENTFLOW_LAKE_GROUP_ID
+              value: {{ .Values.lakeMaterializer.groupId | quote }}
+            - name: AGENTFLOW_LAKE_OFFSET_RESET
+              value: {{ .Values.lakeMaterializer.offsetReset | quote }}
+            - name: AGENTFLOW_ICEBERG_CONFIG
+              value: {{ .Values.lakeMaterializer.configPath | quote }}
+            - name: AGENTFLOW_ICEBERG_URI
+              value: {{ $catalogUri | quote }}
+            - name: AGENTFLOW_ICEBERG_WAREHOUSE
+              value: {{ $warehouse | quote }}
+            - name: AGENTFLOW_S3_REGION
+              value: {{ .Values.lakeMaterializer.s3Region | quote }}
+            {{- include "agentflow.kafkaAuthEnv" . | nindent 12 }}
+            {{- if .Values.lakeMaterializer.s3Endpoint }}
+            - name: AGENTFLOW_S3_ENDPOINT
+              value: {{ .Values.lakeMaterializer.s3Endpoint | quote }}
+            {{- end }}
+            {{- if .Values.lakeMaterializer.existingSecret }}
+            - name: AGENTFLOW_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.lakeMaterializer.existingSecret | quote }}
+                  key: {{ .Values.lakeMaterializer.accessKeyKey | quote }}
+            - name: AGENTFLOW_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.lakeMaterializer.existingSecret | quote }}
+                  key: {{ .Values.lakeMaterializer.secretKeyKey | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml (.Values.lakeMaterializer.resources | default .Values.resources) | nindent 12 }}
+          {{- if or .Values.tmpVolume.enabled .Values.kafkaAuth.caSecret }}
+          volumeMounts:
+            {{- if .Values.kafkaAuth.caSecret }}
+            - name: kafka-ca
+              mountPath: /etc/agentflow/kafka
+              readOnly: true
+            {{- end }}
+            {{- if .Values.tmpVolume.enabled }}
+            - name: tmp
+              mountPath: /tmp
+            {{- end }}
+          {{- end }}
+      {{- if or .Values.tmpVolume.enabled .Values.kafkaAuth.caSecret }}
+      volumes:
+        {{- if .Values.kafkaAuth.caSecret }}
+        - name: kafka-ca
+          secret:
+            secretName: {{ .Values.kafkaAuth.caSecret | quote }}
+        {{- end }}
+        {{- if .Values.tmpVolume.enabled }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.tmpVolume.sizeLimit | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

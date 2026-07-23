@@ -1,0 +1,37 @@
+{{- if and .Values.flinkJob.enabled .Values.flinkJob.createRbac }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agentflow.fullname" . }}-flink
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - pods
+      - pods/log
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agentflow.fullname" . }}-flink
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "agentflow.fullname" . }}-flink
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.flinkJob.serviceAccount | default (include "agentflow.serviceAccountName" .) }}
+{{- end }}

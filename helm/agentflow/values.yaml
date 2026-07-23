@@ -115,6 +115,20 @@ networkPolicy:
     clickhouse: 8123
     otlp: 4317
     postgres: 5432
+    icebergCatalog: 8181
+    objectStore: 9000
+
+# Kafka clients use the same fail-closed SASL/TLS contract. Credentials are
+# always read from an operator-managed Secret.
+kafkaAuth:
+  enabled: false
+  securityProtocol: SASL_SSL
+  saslMechanism: SCRAM-SHA-512
+  existingSecret: ""
+  usernameKey: kafka-username
+  passwordKey: kafka-password
+  caSecret: ""
+  caKey: ca.crt
 
 # Serving engine (ADR 0006 / 0007 / 0009). The shipped demo runs ClickHouse;
 # the chart's default stays the safe single-node DuckDB profile because the
@@ -205,6 +219,90 @@ worker:
   replicaCount: 1
   # Empty object falls back to top-level resources.
   resources: {}
+
+# Durable Kafka -> Iceberg materializer. It is a separate consumer so Kafka
+# offsets are committed only after the Iceberg append succeeds.
+lakeMaterializer:
+  enabled: false
+  replicaCount: 1
+  kafkaBootstrapServers: ""
+  groupId: agentflow-iceberg-materializer
+  offsetReset: earliest
+  configPath: /app/config/iceberg.yaml
+  catalogUri: ""
+  warehouse: ""
+  s3Endpoint: ""
+  s3Region: us-east-1
+  existingSecret: ""
+  accessKeyKey: s3-access-key
+  secretKeyKey: s3-secret-key
+  # Empty object falls back to top-level resources.
+  resources: {}
+
+# Durable Kafka -> ClickHouse serving materializer. Standalone mode is valid
+# only with the external ClickHouse backend.
+servingBridge:
+  enabled: false
+  replicaCount: 1
+  kafkaBootstrapServers: ""
+  groupId: agentflow-serving-bridge
+  offsetReset: earliest
+  batchMax: 256
+  metricsPort: 9108
+  # Empty object falls back to top-level resources.
+  resources: {}
+
+# Apache Flink Kubernetes Operator application-mode workload. The operator CRDs
+# and controller are cluster prerequisites; this chart owns the application CR.
+flinkJob:
+  enabled: false
+  image:
+    repository: agentflow/flink
+    tag: "2.3.0"
+    pullPolicy: IfNotPresent
+  flinkVersion: v2_3
+  serviceAccount: ""
+  createRbac: true
+  kafkaBootstrapServers: ""
+  inputTopics:
+    - orders.raw
+    - payments.raw
+    - clicks.raw
+    - products.cdc
+    - cdc.postgres.public.orders_v2
+    - cdc.postgres.public.users_enriched
+    - cdc.mysql.agentflow_demo.products_current
+    - cdc.mysql.agentflow_demo.sessions_aggregated
+  groupId: agentflow-stream-processor
+  parallelism: 2
+  taskSlots: 2
+  checkpointIntervalMs: 30000
+  checkpointStorage: ""
+  savepointStorage: ""
+  upgradeMode: savepoint
+  # The only deployed session implementation. It consumes the validated
+  # stream and closes idle sessions via event-time timers.
+  sessions:
+    enabled: true
+    sourceTopic: events.validated
+    sinkTopic: sessions.aggregated
+    groupId: agentflow-session-aggregator
+    parallelism: 2
+    maxUniquePages: 1000
+    maxUniqueProducts: 1000
+  jobManager:
+    cpu: "1"
+    memory: 2048m
+  taskManager:
+    cpu: "1"
+    memory: 2048m
+  stateBackend:
+    endpoint: ""
+    region: us-east-1
+    pathStyleAccess: false
+    existingSecret: ""
+    accessKeyKey: s3-access-key
+    secretKeyKey: s3-secret-key
 
 config:
   # Deployment profile handed to the app as AGENTFLOW_PROFILE (audit P2-3).

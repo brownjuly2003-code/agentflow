@@ -1,0 +1,147 @@
+{{- if .Values.servingBridge.enabled }}
+{{- if ne .Values.serving.backend "clickhouse" }}
+{{- fail "servingBridge.enabled requires serving.backend=clickhouse" }}
+{{- end }}
+{{- $bootstrapServers := required "servingBridge.kafkaBootstrapServers is required when servingBridge.enabled=true" .Values.servingBridge.kafkaBootstrapServers }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentflow.fullname" . }}-serving-bridge
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serving-bridge
+spec:
+  replicas: {{ .Values.servingBridge.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: serving-bridge
+  template:
+    metadata:
+      labels:
+        {{- include "agentflow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: serving-bridge
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "agentflow.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: serving-bridge
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - python
+            - -m
+            - src.processing.bridge_consumer
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.servingBridge.metricsPort }}
+              protocol: TCP
+          env:
+            - name: SERVING_BACKEND
+              value: clickhouse
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ $bootstrapServers | quote }}
+            - name: AGENTFLOW_BRIDGE_GROUP_ID
+              value: {{ .Values.servingBridge.groupId | quote }}
+            - name: AGENTFLOW_BRIDGE_OFFSET_RESET
+              value: {{ .Values.servingBridge.offsetReset | quote }}
+            - name: AGENTFLOW_BRIDGE_BATCH_MAX
+              value: {{ .Values.servingBridge.batchMax | quote }}
+            - name: AGENTFLOW_BRIDGE_METRICS_PORT
+              value: {{ .Values.servingBridge.metricsPort | quote }}
+            {{- include "agentflow.kafkaAuthEnv" . | nindent 12 }}
+            - name: CLICKHOUSE_HOST
+              value: {{ required "serving.clickhouse.host is required when serving.backend=clickhouse" .Values.serving.clickhouse.host | quote }}
+            - name: CLICKHOUSE_PORT
+              value: {{ .Values.serving.clickhouse.port | quote }}
+            - name: CLICKHOUSE_DATABASE
+              value: {{ .Values.serving.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.serving.clickhouse.user | quote }}
+            {{- if .Values.serving.clickhouse.existingSecret }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.serving.clickhouse.existingSecret | quote }}
+                  key: {{ .Values.serving.clickhouse.passwordKey | quote }}
+            {{- end }}
+            - name: CLICKHOUSE_SECURE
+              value: {{ .Values.serving.clickhouse.secure | quote }}
+            {{- if .Values.serving.clickhouse.tls.caSecret }}
+            - name: CLICKHOUSE_CA_CERT
+              value: /etc/agentflow/tls/clickhouse/{{ .Values.serving.clickhouse.tls.caKey }}
+            {{- end }}
+          resources:
+            {{- toYaml (.Values.servingBridge.resources | default .Values.resources) | nindent 12 }}
+          {{- if or .Values.tmpVolume.enabled .Values.serving.clickhouse.tls.caSecret .Values.kafkaAuth.caSecret }}
+          volumeMounts:
+            {{- if .Values.kafkaAuth.caSecret }}
+            - name: kafka-ca
+              mountPath: /etc/agentflow/kafka
+              readOnly: true
+            {{- end }}
+            {{- if .Values.serving.clickhouse.tls.caSecret }}
+            - name: clickhouse-ca
+              mountPath: /etc/agentflow/tls/clickhouse
+              readOnly: true
+            {{- end }}
+            {{- if .Values.tmpVolume.enabled }}
+            - name: tmp
+              mountPath: /tmp
+            {{- end }}
+          {{- end }}
+      {{- if or .Values.tmpVolume.enabled .Values.serving.clickhouse.tls.caSecret .Values.kafkaAuth.caSecret }}
+      volumes:
+        {{- if .Values.kafkaAuth.caSecret }}
+        - name: kafka-ca
+          secret:
+            secretName: {{ .Values.kafkaAuth.caSecret | quote }}
+        {{- end }}
+        {{- if .Values.serving.clickhouse.tls.caSecret }}
+        - name: clickhouse-ca
+          secret:
+            secretName: {{ .Values.serving.clickhouse.tls.caSecret | quote }}
+        {{- end }}
+        {{- if .Values.tmpVolume.enabled }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.tmpVolume.sizeLimit | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -120,7 +120,7 @@ knowledge confirmation, license SPDX id, and the public project URL field.
   unclaimed.** These $0 artifacts are posture, not attestation. The audit doc
   and release-readiness wording stay authoritative.
 - **No third-party claim is made.** If a real pen-test report ever arrives,
-  route it through `docs/operations/external-pen-test-attestation-handoff.md`.
+  route it through `docs/operations/third-party-pen-test-intake.md`.
 
 ## 4. First Scorecard cycle — findings triaged (2026-06-06)
 

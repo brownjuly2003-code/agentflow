@@ -62,6 +62,30 @@ def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
     assert "groups" not in flink_update
 
 
+def test_external_pen_test_handoff_exists_without_claiming_attestation() -> None:
+    handoff_path = (
+        ROOT / "docs" / "operations" / "third-party-pen-test-intake.md"
+    )
+    handoff = handoff_path.read_text(encoding="utf-8")
+    security_audit = (ROOT / "docs" / "security-audit.md").read_text(
+        encoding="utf-8"
+    )
+    posture = (ROOT / "docs" / "operations" / "openssf-security-posture.md").read_text(
+        encoding="utf-8"
+    )
+    s12_report = (ROOT / "docs" / "security-s12-2026-07-09.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert handoff_path.name in security_audit
+    assert handoff_path.name in posture
+    assert handoff_path.name in s12_report
+    assert "Current status: not present / unclaimed" in handoff
+    assert "Do not claim" in handoff
+    assert "Required third-party evidence" in handoff
+    assert "remediation/retest" in handoff
+
+
 # A-4: the dynamic-SQL surface is safe *today* — identifiers are regex-bound,
 # NL->SQL passes sqlglot validation in `sql_guard`, and table allowlists apply —
 # but only because every call site validated its input. The report flags it as

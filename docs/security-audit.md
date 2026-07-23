@@ -13,8 +13,8 @@ AgentFlow exposes a public FastAPI surface for AI agents and tenant-owned integr
 The codebase is strongest at application-layer controls that can be validated directly in source: auth, authorization, request filtering, security headers, contract evolution, replay safety, and auditability of API usage. The weakest areas are the controls that typically require external infrastructure or third-party attestation. In this repository snapshot there is no evidence of an external penetration test or demonstrated generalized secrets manager integration. Local DuckDB files can be opened through an optional encrypted attach path when an operator supplies encryption key material, but the default remains backward-compatible and unencrypted.
 
 External pen-test attestation status as of 2026-05-06: not present. Use
-`docs/operations/external-pen-test-attestation-handoff.md` for the checklist
-required before any third-party pen-test claim.
+`docs/operations/third-party-pen-test-intake.md` for the checklist required
+before any third-party pen-test claim.
 
 Automated posture channel (2026-06-05): the repository now publishes an
 OpenSSF Scorecard result (`.github/workflows/scorecard.yml`) and carries a

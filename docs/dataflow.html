@@ -162,12 +162,12 @@
     <div>
       <h1><b>AgentFlow</b> — движение данных</h1>
       <p class="sub">Real-time платформа, отдающая AI-агентам живой бизнес-контекст:
-        источники → Kafka → Flink → Iceberg / DuckDB → семантический слой → FastAPI → SDK.
-        Все технологии и версии — из <span class="mono">pyproject.toml</span> и
-        <span class="mono">docker-compose*.yml</span>.</p>
+        источники → Kafka → PyFlink → <span class="mono">events.validated</span> →
+        Iceberg + ClickHouse → FastAPI → SDK. Golden topology имеет статус
+        production candidate до прохождения live acceptance.</p>
       <div class="meta">
-        <span>agentflow-runtime v1.4.0</span><span>Python ≥ 3.11</span>
-        <span>commit 7e289c0</span><span>2026-06-06</span>
+        <span>agentflow-runtime v2.0.0</span><span>Python 3.11–3.13</span>
+        <span>audit claims</span><span>2026-07-23</span>
       </div>
     </div>
     <div class="legend" id="legend"></div>
@@ -229,14 +229,14 @@ const NODES=[
   "<b>Kafka UI</b> <span class='chip'>0.7.2</span> — наблюдение за топиками"],
  paths:"docker-compose{,.prod,.cdc}.yml"},
 
-{id:"flink",x:748,y:178,w:320,cls:"hot",title:"Apache Flink",chip:"1.19 · PyFlink",
+{id:"flink",x:748,y:178,w:320,cls:"hot",title:"Apache Flink",chip:"PyFlink 2.3",
  sub:"потоковая обработка",
  items:[
   "<code>stream_processor.py</code> — валидация → обогащение → дедуп → маршрутизация",
-  "сессионные окна — <code>session_aggregation.py</code>",
+  "сессионные окна — canonical <code>session_aggregator.py</code> с event-time timer и bounded state",
   "<b>exactly-once</b> чекпоинты — <code>checkpointing.py</code>",
-  "образ <code>flink:1.19-java11</code> + свой Dockerfile"],
- kpi:"p50 пайплайна Kafka → Iceberg ≈ <b>220 ms</b>",
+  "operator-compatible образ <code>flink:2.3.0-scala_2.12-java17</code>"],
+ kpi:"verified Kafka → PyFlink → bridge: <b>3.02 s p50 / 5.70 s p95</b>",
  paths:"src/processing/flink_jobs/ · docker-compose.flink.yml"},
 
 {id:"quality",x:748,y:452,w:320,cls:"hot",title:"Контроль качества",
@@ -257,7 +257,7 @@ const NODES=[
  paths:"src/processing/{outbox,event_replayer}.py"},
 
 {id:"iceberg",x:1132,y:178,w:300,cls:"hot",title:"Apache Iceberg",chip:"pyiceberg 0.7",
- sub:"lakehouse — производственные таблицы",
+ sub:"lakehouse materializer — live acceptance pending",
  items:[
   "sink валидированных событий — <code>iceberg_sink.py</code>",
   "каталог: <b>REST</b> <span class='chip'>tabulario 0.6.0</span> dev · <b>AWS Glue</b> prod",
@@ -265,16 +265,16 @@ const NODES=[
   "снапшоты · time-travel · компакция"],
  paths:"src/processing/iceberg_sink.py · docker-compose.iceberg.yml"},
 
-{id:"duckdb",x:1132,y:452,w:300,cls:"hot",title:"DuckDB",chip:"≥ 1.1",
- sub:"serving-БД по умолчанию",
+{id:"duckdb",x:1132,y:452,w:300,cls:"loc",title:"DuckDB",chip:"≥ 1.1",
+ sub:"local-dev / test compatibility store",
  items:[
   "<b>DuckDBPool</b> — общие read-курсоры, сериализованные записи",
   "таблицы <code>orders_v2</code>, <code>users_enriched</code>, outbox",
   "backend-абстракция — <code>duckdb_backend.py</code>"],
  paths:"src/serving/{db_pool,duckdb_connection}.py · backends/"},
 
-{id:"ch",x:1132,y:676,w:300,cls:"",title:"ClickHouse",chip:"24.8",
- sub:"опциональный read-backend",
+{id:"ch",x:1132,y:676,w:300,cls:"hot",title:"ClickHouse",chip:"25.3",
+ sub:"production/demo serving store",
  items:[
   "высокая конкурентность чтения <span class='mut'>(prod-compose)</span>",
   "транспиляция диалекта — <b>sqlglot</b> <span class='chip'>30</span>"],
@@ -299,7 +299,7 @@ const NODES=[
 {id:"api",x:1496,y:560,w:360,cls:"hot",title:"FastAPI + Uvicorn",chip:"0.111 / 0.30",
  sub:"одна serving-граница для агентов",
  items:[
-  "middleware: <b>auth</b> (bcrypt, fail-closed) · rate-limiter · версионирование · тенант-изоляция на каждом чтении",
+  "middleware: <b>auth</b> (Argon2id default, bcrypt legacy verify) · rate-limiter · версионирование · тенант-изоляция на каждом чтении",
   "core: <code>/v1/entity·metrics·query·catalog·health</code>",
   "discovery: <code>/v1/search·contracts·lineage·changelog</code>",
   "ops: <code>/v1/batch·stream(SSE)·deadletter·webhooks·alerts·slo</code> + admin/UI",
@@ -394,8 +394,10 @@ const EDGES=[
  {f:"kafka",ff:"B",foff:-40,t:"outbox",tf:"T",toff:30,type:"dlq",label:"DLQ → replay",at:.5,
   wp:[[610,742]]},
  {f:"iceberg",ff:"R",t:"sem",tf:"L",toff:-78,type:"ctl",label:"lakehouse-чтения · health",at:.5},
- {f:"duckdb",ff:"R",foff:-25,t:"sem",tf:"L",toff:30,type:"hot",label:"serving по умолчанию",at:.5},
- {f:"ch",ff:"R",t:"sem",tf:"L",toff:108,type:"hot",dash:1,label:"опционально",at:.5},
+ {f:"kafka",ff:"B",foff:55,t:"ch",tf:"L",toff:-30,type:"hot",label:"bridge: events.validated",at:.6,
+  wp:[[716,690],[1098,690]]},
+ {f:"duckdb",ff:"R",foff:-25,t:"sem",tf:"L",toff:30,type:"loc",label:"local-dev / test",at:.5},
+ {f:"ch",ff:"R",t:"sem",tf:"L",toff:108,type:"hot",label:"serving",at:.5},
  {f:"redis",ff:"R",t:"api",tf:"L",toff:60,type:"ctl",both:1,label:"кэш метрик · инвалидация",at:.5},
  {f:"sem",ff:"B",t:"api",tf:"T",type:"hot"},
  {f:"api",ff:"R",foff:-120,t:"pysdk",tf:"L",type:"hot"},

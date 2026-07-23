@@ -24,6 +24,16 @@ Common response headers:
 
 The Python SDK stores the latest version headers on `last_server_version`, `last_latest_version`, `last_deprecated`, and `last_deprecation_warning` after each request.
 
+## SDK Capability Contract
+
+The Python and TypeScript SDKs share typed entity/metric historical reads,
+cursor pagination, per-call idempotency, query explain, search, contracts,
+lineage, changelog, health, catalog, batch, retry, and circuit-breaker APIs.
+TypeScript additionally exposes event streaming and explicit `AbortSignal`
+cancellation. The [machine-readable capability matrix](../config/project_claims.toml)
+is checked against the actual public methods and renders the
+[SDK capability contract](sdk-capabilities.md).
+
 Auth exemptions:
 - `GET /v1/health`
 - `GET /docs`

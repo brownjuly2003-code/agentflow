@@ -18,7 +18,7 @@ Consumers are anything that needs the current number at the moment of decision: 
 ┌─────────────────────────────────────────────────────────┐
 │                    AgentFlow Platform                    │
 │                                                         │
-│  Kafka → Flink → Iceberg → Semantic Layer → Agent API   │
+│ Kafka → PyFlink → validated → Iceberg + ClickHouse → API│
 └─────────────────────────────┬───────────────────────────┘
                               │
                     ┌─────────▼──────────┐
@@ -38,14 +38,23 @@ Consumers are anything that needs the current number at the moment of decision: 
 
 ## Data Flow
 
-### Production: Kafka → Flink → Iceberg (p50 latency: ~220ms)
+The [golden production topology ADR](decisions/0013-golden-production-topology.md)
+selects one artifact and runtime: containerized PyFlink 2.3 on Kubernetes. Its
+version and acceptance state are recorded in the
+[machine-readable project claims](../config/project_claims.toml). The verified
+streaming path today is Kafka → PyFlink 2.3 → `events.validated` → bridge →
+ClickHouse → API, measured at 3.02 s p50 / 5.70 s p95. The accepted topology
+adds an independently replayable Iceberg materializer from `events.validated`;
+it is not a production claim until the clean-checkout acceptance gate passes.
 
-1. **Ingestion**: Events arrive via Kafka producers (orders, payments, clicks) or Debezium CDC connectors running on Kafka Connect
-2. **Processing**: Flink validates (schema + semantic), enriches, deduplicates, and routes events
-3. **Storage**: Valid events land in Iceberg tables; production uses AWS Glue as the catalog over object storage
-4. **Quality**: Pre-storage gates check schema + semantic rules. Failures → dead letter topic
-5. **Bridge**: A consumer of `events.validated` applies each event to the serving store, idempotently by `event_id` — this is what makes the serving store move when a real Kafka event happens. After a successful apply the bridge also **pushes** metric-cache invalidation (Redis channel + in-process callback); a journal-scan fallback covers writers that do not push. See [Serving Bridge](serving-bridge.md#cache-invalidation-s7).
-6. **Serving**: Agent API reads from the configured serving backend; since ADR 0006 Phase 1 the demo/production default is ClickHouse (`config/serving.yaml`), with DuckDB as the local-dev/test and compatibility store, while Iceberg remains the lakehouse storage layer
+### Golden container path
+
+1. **Ingestion**: Events arrive via Kafka producers (orders, payments, clicks) or Debezium CDC connectors running on Kafka Connect.
+2. **Processing**: containerized PyFlink 2.3 validates, enriches, deduplicates, and routes events to `events.validated` or `events.deadletter`.
+3. **Lake materialization**: a dedicated consumer writes validated events to Iceberg. Production acceptance requires this consumer and its replay proof; the current verified benchmark did not include this hop.
+4. **Quality**: pre-storage gates check schema and semantic rules. Failures go to the dead-letter topic.
+5. **Serving materialization**: the bridge applies `events.validated` to ClickHouse idempotently by `(tenant_id, event_id)`. After a successful apply it also **pushes** metric-cache invalidation (Redis channel + in-process callback); a journal-scan fallback covers writers that do not push. See [Serving Bridge](serving-bridge.md#cache-invalidation-s7).
+6. **Serving**: Agent API reads ClickHouse in the demo/production profile (`config/serving.yaml`), with DuckDB as the local-dev/test compatibility store.
 
 For CDC sources, Debezium/Kafka Connect handles source capture while a shared normalizer converts Postgres/MySQL envelopes into one canonical AgentFlow CDC contract before validation. See [ADR 0005](decisions/0005-cdc-ingestion-strategy.md).
 
@@ -146,7 +155,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | Lite E2E Docker | `docker-compose.e2e.yml` with the narrowed CI service set | Faster E2E and smoke coverage without the full observability stack |
 | Chaos harness | `docker-compose.chaos.yml` + Toxiproxy + pytest chaos suite | Validate graceful degradation under Kafka/Redis failures |
 | kind staging | `helm/agentflow`, `k8s/`, `scripts/k8s_staging_up.sh` | Production-shaped staging on a local Kubernetes cluster |
-| Production | Managed Kafka/Flink/Iceberg/object storage + Helm/Terraform | Durable, autoscaled multi-service deployment |
+| Production candidate | Kubernetes + containerized PyFlink 2.3 + Kafka + Iceberg materializer + ClickHouse + API | Accepted golden topology; not production-ready until the ADR acceptance gate passes |
 
 > **Serving engine decision — fixed on ClickHouse ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md),
 > [ADR 0007](decisions/0007-deployment-topology-kubernetes.md)).** The serving engine is

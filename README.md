@@ -16,7 +16,8 @@ AgentFlow's axis is **event → live metric**: every metric declares which event
 - streaming ingestion for operational events (validated, enriched, journaled)
 - a semantic layer that exposes entities, metrics, lineage, and query endpoints
 - typed, versioned contracts — each metric ships with its source events and a staleness budget
-- Python and TypeScript clients that speak the same API surface
+- Python and TypeScript clients whose checked capabilities are published in the
+  [machine-readable project claims](config/project_claims.toml)
 
 Consumers are whoever needs the number now: humans, dashboards, downstream services, and AI agents — agents are one consumer, not the product.
 
@@ -31,7 +32,13 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 - **Lineage as a contract** — all six metrics declare their source events, serving table, and a 2.5 s p95 staleness budget in versioned contracts, exposed through `/v1/catalog` and `/v1/contracts` and pinned by tests against the actual write path
 - **Published release line through `v2.0.0`** on PyPI (`agentflow-runtime`, `agentflow-client`) and npm (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA provenance on every artifact
 - **Tested and gated** — 1,500+ unit tests plus a broad Windows no-Docker suite; CI enforces 15 required status checks (lint, schema, unit, integration, helm, perf, terraform, bandit, safety, npm-audit, trivy, contract, build-smoke, sdk-ts, lock-check) through branch protection
-- **Dual SDK parity** across Python and TypeScript — retries, circuit breakers, batching, pagination, contract pinning, idempotency keys, `as_of` historical reads — over sub-second entity lookups (p50 `38–55 ms`, p99 `167 ms` on local hardware)
+- **Verified SDK parity** across Python and TypeScript — entity/metric historical
+  reads, cursor/idempotent query, explain/search, contracts, lineage, changelog,
+  health, catalog, batching, retries, and circuit breakers. TypeScript
+  additionally provides event streaming and explicit `AbortSignal` cancellation.
+  The generated [capability contract](docs/sdk-capabilities.md) is checked
+  against both public client classes. Entity lookups remain sub-second (p50
+  `38–55 ms`, p99 `167 ms` on local hardware).
 - **Security in the hot path** — a tenant boundary that lives in each serving table's write key and is applied at a single read chokepoint ([ADR-004](docs/decisions/004-tenant-id-column-over-schema-per-tenant.md); proven against DuckDB and live ClickHouse 25.3 — see [STATUS](docs/STATUS.md#proven)), parameterized queries, `sqlglot` AST validation for NL-to-SQL, fail-closed auth, secret scrubbing, and a Bandit gate for new findings
 - **Production-shaped extras** — two CDC paths (hardened Debezium/Kafka Connect + a ClickHouse per-branch fan-out), on-call [runbooks](docs/runbooks/README.md), and a [narrated demo](docs/dv2-multi-branch/) of the DV2 multi-branch warehouse
 
@@ -80,11 +87,16 @@ Local demo runs without API-key enforcement unless you explicitly configure `AGE
 ## Architecture
 
 ```text
-Event sources -> Kafka -> Flink -> Iceberg --------\
-                                                    -> Semantic layer -> FastAPI -> Agent / SDK
-Local demo   -> local_pipeline -> ClickHouse ------/
-                       (DuckDB stays the local lake / test store)
+Event sources -> Kafka -> PyFlink -> events.validated -+-> Iceberg materializer
+                                                       +-> bridge -> ClickHouse -\
+Local demo   -> local_pipeline -------------------------------> ClickHouse ----+-> FastAPI -> Agent / SDK
+                                                (DuckDB: local-dev / test compatibility)
 ```
+
+The containerized PyFlink 2.3 topology is a production candidate, not a
+production-acceptance claim. The currently verified streaming path ends at
+Kafka → PyFlink → `events.validated` → bridge → ClickHouse → API; live Iceberg,
+clean-cluster deployment, recovery, and soak evidence remain pending.
 
 Stack:
 
@@ -215,11 +227,11 @@ The tagged line and `main` are in sync as of `v2.0.0`. See the
 
 ### Scope
 
-This is a reference data-engineering project. The streaming, warehouse, and
-deployment artifacts (Flink, Iceberg, Helm, Terraform, k8s) are exercised
-against a local pipeline and a kind cluster in CI rather than a managed
-cloud. Wiring it to a live production source needs inputs that live outside
-the repo — CDC source onboarding (runbook ready in
+This is a reference data-engineering project. Component, contract, Helm, and
+replay tests exercise the checked-in streaming, lake, serving, and deployment
+artifacts; they do not constitute a clean-cluster golden-topology acceptance.
+Wiring it to a live production source needs inputs that live outside the repo —
+CDC source onboarding (runbook ready in
 [docs/operations/cdc-production-onboarding.md](docs/operations/cdc-production-onboarding.md)),
 a public benchmark on production-grade hardware, and an external pen-test
 attestation.

@@ -2,21 +2,30 @@
 
 **Release line**: `v2.0.0`
 
-**Status**: published to PyPI (`agentflow-runtime`, `agentflow-client`) and npm
+**Package status**: published to PyPI (`agentflow-runtime`, `agentflow-client`) and npm
 (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA
 provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
-registry links and upload evidence. `main` is protected by 15 required status
-checks and is green.
+registry links and upload evidence.
+
+**Golden-topology status (2026-07-23)**: production candidate, not production
+accepted. Repository implementation and local contract gates are complete;
+live clean-cluster, recovery, soak, rollback, and external security evidence
+remain pending as listed below.
 
 ## Summary
 
 AgentFlow ships an event-native metrics layer: business metrics that move when
 events happen, served over typed contracts to people, dashboards, services, and
-AI agents. The technical blockers from the initial internal audit are closed;
-subsequent work hardened security (tenant isolation, `sqlglot` SQL validation,
-fail-closed auth), added the DV2 multi-branch Data Vault 2.0 warehouse, hardened
-the Helm/CDC path, and brought the Python and TypeScript SDKs to parity.
+AI agents. The repository-level blockers from the 2026-07-23 audit are
+implemented: fail-closed CDC attribution, one operator-compatible PyFlink
+runtime, tenant-scoped replay identity, explicit lake and serving
+materializers, role-aware lifecycle cleanup, deterministic partial search, one
+canonical session job, narrow control-plane capabilities, and a verified
+common SDK surface with explicit language-specific differences. Runtime,
+evidence, Python-version, quality-gate, and SDK capability statements are
+tracked in the
+[machine-readable project claims](../config/project_claims.toml).
 Architecture decisions are recorded as ADRs in [docs/decisions/](decisions/).
 
 ## Performance baseline
@@ -61,13 +70,33 @@ them; force-pushes and deletions are disabled. Dependabot security updates
 (vulnerability alerts + automated security fixes) are enabled alongside the
 weekly version-update schedule in `.github/dependabot.yml`.
 
+The required `lint` job now contains strict MkDocs and claims validation. The
+required `test-unit` job contains the 80% changed-code coverage gate and depends
+on the 3.11/3.12/3.13 `python-compat` matrix, so a failed compatibility lane
+cannot be bypassed merely because its job name is not a separate protected
+context.
+
 ## Scope
 
-The streaming, warehouse, and deployment artifacts (Flink, Iceberg, Helm,
-Terraform, k8s) are validated against a local pipeline and a kind cluster in CI
-rather than a paid managed cloud — a deliberate non-goal for this reference
-project. Wiring AgentFlow to a live production source needs inputs that live
+Component, contract, Helm, and replay tests validate the checked-in streaming,
+lake, serving, and deployment artifacts. They do not substitute for the
+following live production-acceptance evidence:
+
+1. clean-checkout OCI builds plus Flink Kubernetes Operator deployment;
+2. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
+   ClickHouse → API, then replayed after checkpoint restore without duplicate
+   `(tenant_id, event_id)` rows;
+3. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
+   artifact and topology (the existing 2026-07-19 soak predates the Iceberg
+   materializer);
+4. an external penetration-test report and remediation/retest evidence;
+5. GitHub Environment `npm` created with approval protection. The workflow now
+   requires `environment: npm` and a matching release tag, but the repository
+   settings API returned `404` for that environment on 2026-07-23, so approval
+   protection is not yet evidenced.
+
+Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in
 [docs/operations/cdc-production-onboarding.md](operations/cdc-production-onboarding.md)),
-a public benchmark on production-grade hardware, and an external pen-test
-attestation. None of the claims those would unlock are made here.
+a public benchmark on production-grade hardware, and operator-owned
+credentials. None of the claims those would unlock are made here.

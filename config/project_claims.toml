@@ -1,0 +1,208 @@
+schema_version = 1
+
+[production]
+status = "candidate"
+golden_topology = "containerized-pyflink-kubernetes"
+runtime = "PyFlink"
+flink_version = "2.3.0"
+artifact_type = "OCI image"
+artifact_definition = "src/processing/flink_jobs/Dockerfile"
+base_image = "flink:2.3.0-scala_2.12-java17@sha256:12a034b71a4d6d55227d14fe0ba69b0612c065a1dfaa756de4858fc56148c99c"
+deployment_definition = "helm/agentflow/templates/flinkdeployment.yaml"
+topology_decision = "docs/decisions/0013-golden-production-topology.md"
+verified_streaming_path = "Kafka -> PyFlink -> events.validated -> bridge -> ClickHouse -> API"
+pending_acceptance = [
+    "live Iceberg materialization from events.validated",
+    "clean-checkout OCI build and Kubernetes Operator deployment",
+    "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke",
+    "checkpoint restore and replay acceptance",
+    "4h soak and rollback rehearsal on the golden topology",
+]
+reference_only_infrastructure = ["infrastructure/terraform/modules/flink"]
+
+[latency.real_path]
+p50_seconds = 3.02
+p95_seconds = 5.70
+evidence = "docs/perf/freshness-e2e-realpath.md"
+
+[python]
+declared_versions = ["3.11", "3.12", "3.13"]
+ci_smoke_versions = ["3.11", "3.12", "3.13"]
+version_source = "pyproject.toml"
+
+[quality]
+project_coverage_floor_percent = 60
+patch_coverage_floor_percent = 80
+critical_module_coverage_floor_percent = 90
+strict_documentation_build = true
+
+[sdk]
+common_capabilities = [
+    "entity reads",
+    "metric reads",
+    "query",
+    "as_of historical reads",
+    "cursor pagination",
+    "per-call idempotency keys",
+    "query explain",
+    "search",
+    "contracts",
+    "lineage",
+    "changelog",
+    "health and freshness",
+    "catalog",
+    "batching",
+    "retries",
+    "circuit breaker",
+]
+python_only_capabilities = []
+typescript_only_capabilities = ["event streaming", "AbortSignal cancellation"]
+capability_contract_status = "verified-core-parity"
+
+[[sdk.capability]]
+name = "entity and historical reads"
+python_methods = ["get_entity", "get_order", "get_user", "get_product", "get_session"]
+typescript_methods = ["getEntity", "getOrder", "getUser", "getProduct", "getSession"]
+
+[[sdk.capability]]
+name = "metric and historical reads"
+python_methods = ["get_metric"]
+typescript_methods = ["getMetric"]
+
+[[sdk.capability]]
+name = "query, cursor, and pagination"
+python_methods = ["query", "paginate"]
+typescript_methods = ["query", "paginate"]
+
+[[sdk.capability]]
+name = "query explanation"
+python_methods = ["explain_query"]
+typescript_methods = ["explainQuery"]
+
+[[sdk.capability]]
+name = "semantic search"
+python_methods = ["search"]
+typescript_methods = ["search"]
+
+[[sdk.capability]]
+name = "contract lifecycle"
+python_methods = ["list_contracts", "get_contract", "diff_contracts", "validate_contract"]
+typescript_methods = ["listContracts", "getContract", "diffContracts", "validateContract"]
+
+[[sdk.capability]]
+name = "lineage and changelog"
+python_methods = ["get_lineage", "get_changelog"]
+typescript_methods = ["getLineage", "getChangelog"]
+
+[[sdk.capability]]
+name = "health, catalog, batch, and resilience"
+python_methods = ["health", "is_fresh", "catalog", "batch", "configure_resilience"]
+typescript_methods = ["health", "isFresh", "catalog", "batch", "configureResilience"]
+
+required_evidence = [
+    "docs/perf/freshness-e2e-realpath.md",
+    "docs/decisions/0013-golden-production-topology.md",
+    "src/processing/flink_jobs/Dockerfile",
+    "src/processing/flink_jobs/requirements.txt",
+    "helm/agentflow/templates/flinkdeployment.yaml",
+    "helm/agentflow/values.yaml",
+]
+
+[[documents]]
+path = "README.md"
+required = [
+    "[machine-readable project claims](config/project_claims.toml)",
+    "3.02 s p50",
+    "5.70 s p95",
+    "Verified SDK parity",
+    "[capability contract](docs/sdk-capabilities.md)",
+    "production candidate, not a production-acceptance claim",
+    "Kafka → PyFlink → `events.validated` → bridge → ClickHouse → API",
+]
+forbidden = [
+    "Dual SDK parity",
+    "clients that speak the same API surface",
+    "Python additionally provides typed pagination",
+    "Event sources -> Kafka -> Flink -> Iceberg",
+    "a kind cluster in CI",
+]
+
+[[documents]]
+path = "docs/api-reference.md"
+required = [
+    "[machine-readable capability matrix](../config/project_claims.toml)",
+    "[SDK capability contract](sdk-capabilities.md)",
+]
+forbidden = ["Python-only typed helpers"]
+
+[[documents]]
+path = "docs/architecture.md"
+required = [
+    "[golden production topology ADR](decisions/0013-golden-production-topology.md)",
+    "[machine-readable project claims](../config/project_claims.toml)",
+    "Kafka → PyFlink 2.3 → `events.validated` → bridge → ClickHouse → API",
+    "(tenant_id, event_id)",
+]
+forbidden = [
+    "Production: Kafka → Flink → Iceberg (p50 latency: ~220ms)",
+    "idempotently by `event_id`",
+]
+
+[[documents]]
+path = "docs/dataflow.html"
+required = [
+    "PyFlink 2.3",
+    "3.02 s p50 / 5.70 s p95",
+    "session_aggregator.py",
+    "Argon2id default",
+    "production/demo serving store",
+]
+forbidden = [
+    "1.19 · PyFlink",
+    "flink:1.19-java11",
+    "220 ms",
+    "serving-БД по умолчанию",
+    "опциональный read-backend",
+    "bcrypt, fail-closed",
+]
+
+[[documents]]
+path = "docs/release-readiness.md"
+required = [
+    "[machine-readable project claims](../config/project_claims.toml)",
+    "verified common SDK surface",
+]
+forbidden = [
+    "brought the Python and TypeScript SDKs to parity",
+]
+
+[[documents]]
+path = "docs/STATUS.md"
+required = [
+    "golden topology remains a production candidate",
+    "Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API",
+    "Docker-heavy acceptance could not run on 2026-07-23",
+]
+forbidden = [
+    "remaining work is packaging hygiene",
+]
+
+[[documents]]
+path = "docs/quality.md"
+required = [
+    "Project coverage floor: 60%",
+    "Patch coverage floor: 80%",
+    "Critical-module coverage floor: 90%",
+    "MkDocs strict build: required",
+]
+forbidden = [
+    "67.09% line coverage",
+]
+
+[[documents]]
+path = "docs/decisions/0013-golden-production-topology.md"
+required = [
+    "[machine-readable project claims](../../config/project_claims.toml)",
+    "containerized PyFlink 2.3",
+]
+forbidden = []

@@ -1,16 +1,19 @@
 # Engineering Status
 
-> Updated: **2026-07-20** (4 h @ 100 eps soak **r4 PASS**; July security
-> hardening wave merged) · release line **`v2.0.0`** · `main` green across
-> required checks. Numbers below come only from measured, in-repo evidence —
-> see the linked reports for methodology and reproduction commands.
+> Updated: **2026-07-23** (audit implementation independently re-verified
+> locally; golden topology remains a production candidate, not production
+> accepted) · release line **`v2.0.0`**. Numbers below come only from measured,
+> in-repo evidence — see the linked reports for methodology and reproduction
+> commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
-(Kafka → Flink → serving bridge → ClickHouse → API with Redis push
-invalidation) — is implemented, measured, and documented. The write-path
-ceiling is proven **sustained** (4 h @ 100 eps, exactly-once); remaining work
-is packaging hygiene for the next breaking release plus the external gates
-listed below.
+(Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API
+with Redis push invalidation) — is implemented, measured, and documented. The
+Iceberg materializer, operator-compatible image, and Helm workload are
+implemented and locally contract-tested, but the complete golden topology has
+not passed clean-cluster, recovery, soak, rollback, or external security
+acceptance. The earlier 4 h @ 100 eps result remains valid evidence for its
+measured pre-materializer path, not for the unaccepted topology.
 
 ## Proven
 
@@ -25,6 +28,17 @@ listed below.
 | At-scale on own data (S13) | **51.2 M rows / 2.87 M orders / 4 years of legend history**, analyst queries 20–730 ms, all 17 §12 invariants pass incl. full-scan GTIN validation | [perf/scale-own-data-2026-07-11.md](perf/scale-own-data-2026-07-11.md) |
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
 | Multi-tenant ClickHouse write key | adversarial two-tenant suite green on live CH 25.3 (CI `test-integration` + audit stand) | [security-audit.md](security-audit.md), `tests/integration/test_clickhouse_tenant_isolation_live.py` |
+
+## 2026-07-23 audit closure
+
+| Area | Locally verified state |
+|------|------------------------|
+| Claims and documentation | machine-readable topology, runtime, SDK, Python, and quality claims agree; 7 validator tests pass and strict MkDocs builds |
+| Runtime and deployment | pinned PyFlink 2.3 OCI definition and Helm `FlinkDeployment` agree; Helm lint passes and 32 Helm contract tests pass |
+| CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
+| SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
+| Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
+| Acceptance boundary | live Iceberg, clean operator deployment, restore/replay, fresh soak/rollback, external pen-test, and npm environment approval remain unverified |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -78,17 +92,22 @@ defect. Semantics of the batched path are in
 
 ## Next
 
-1. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
+1. **Golden-topology acceptance** — clean-checkout OCI build and Kubernetes
+   Operator deployment; two-tenant Kafka → PyFlink → Iceberg → ClickHouse →
+   API smoke; checkpoint restore/replay without duplicate
+   `(tenant_id, event_id)` rows; fresh 4 h soak plus backup/rollback rehearsal.
+   The configured Mac verification host currently has no `docker` command, so
+   Docker-heavy acceptance could not run on 2026-07-23.
+2. **External gates** — third-party penetration test with remediation/retest,
+   production CDC onboarding and credentials, public production-grade
+   benchmark, and GitHub Environment `npm` with approval protection.
+3. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
    (tree/`agentflow_runtime` + shim) waits for a release branch:
    [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).
-2. **Flink-runtime dependency bump** — the pinned `apache-flink==2.3.0` job
+4. **Flink-runtime dependency bump** — the pinned `apache-flink==2.3.0` job
    environment holds a `safety` ignore for a non-fixable transitive `pyarrow`
    advisory (isolated to the Flink image, core pins `pyarrow>=17`); retire the
    ignore when the upstream flink/beam chain allows it.
-
-External gates remain unchanged and are listed in the README scope note:
-production CDC onboarding, a benchmark on production-grade hardware, and a
-third-party pen-test attestation.
 
 ---
 

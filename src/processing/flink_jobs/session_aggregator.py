@@ -1,10 +1,10 @@
-"""Session aggregation Flink job: builds user sessions from clickstream events.
+"""Canonical session aggregation Flink job.
 
-Groups clickstream events into sessions using a 30-minute gap-based window.
-Outputs session summaries with: duration, page count, conversion signals, funnel stage.
+Consumes validated events, groups tenant-scoped sessions with event-time
+timers, and emits bounded session summaries after 30 minutes of inactivity.
 
 Submit with:
-    flink run -py session_aggregator.py
+    flink run -py src/processing/flink_jobs/session_aggregator.py
 """
 
 import json
@@ -27,10 +27,21 @@ from pyflink.datastream.connectors.kafka import (
 from pyflink.datastream.functions import KeyedProcessFunction
 from pyflink.datastream.state import ValueStateDescriptor
 
+from src.processing.flink_jobs.session_window import (
+    accumulate_session,
+    is_session_event,
+    new_session,
+    raw_session_key,
+    summarize_session,
+)
+from src.processing.kafka_security import flink_kafka_security_properties
+
 SESSION_GAP_MINUTES = 30
 SESSION_GAP_MS = SESSION_GAP_MINUTES * 60 * 1000
 WATERMARK_OUT_OF_ORDERNESS_SECONDS = 10
 CHECKPOINT_INTERVAL_MS = 30_000
+MAX_UNIQUE_PAGES = int(os.getenv("FLINK_SESSION_MAX_UNIQUE_PAGES", "1000"))
+MAX_UNIQUE_PRODUCTS = int(os.getenv("FLINK_SESSION_MAX_UNIQUE_PRODUCTS", "1000"))
 
 
 class ClickTimestampAssigner(TimestampAssigner):
@@ -46,68 +57,73 @@ class ClickTimestampAssigner(TimestampAssigner):
 
 
 class SessionWindowFunction(KeyedProcessFunction):
-    """Accumulates clickstream events into sessions using processing-time timers.
+    """Accumulates clickstream events using event-time gap timers.
 
-    State per session_id:
+    State per ``(tenant_id, session_id)``:
     - session_data: JSON with accumulated pages, first/last event time, event count
     - timer_ts: timestamp of the gap-expiry timer
 
-    When the timer fires (no new event for 30 min), emit session summary.
+    Events at or behind the current watermark are dropped and counted. Unique
+    page/product collections are capped so a long-lived hot key cannot grow
+    state without bound.
     """
+
+    def __init__(
+        self,
+        *,
+        max_unique_pages: int = MAX_UNIQUE_PAGES,
+        max_unique_products: int = MAX_UNIQUE_PRODUCTS,
+    ) -> None:
+        if max_unique_pages < 1 or max_unique_products < 1:
+            raise ValueError("session collection limits must be positive")
+        self.max_unique_pages = max_unique_pages
+        self.max_unique_products = max_unique_products
 
     def open(self, runtime_context: Any) -> None:
         self.session_state = runtime_context.get_state(
             ValueStateDescriptor("session_data", Types.STRING())
         )
         self.timer_state = runtime_context.get_state(ValueStateDescriptor("timer_ts", Types.LONG()))
+        self.late_events_dropped = runtime_context.get_metric_group().counter("late_events_dropped")
 
     def process_element(self, value: str, ctx: KeyedProcessFunction.Context) -> None:
         event = json.loads(value)
+        session_id = event.get("session_id")
+        if not session_id:
+            raise ValueError("session_id is required for session aggregation")
         event_ts = ctx.timestamp()
+        if event_ts is None:
+            raise ValueError("event timestamp is required for session aggregation")
+        if event_ts <= ctx.timer_service().current_watermark():
+            self.late_events_dropped.inc()
+            return
 
         current = self.session_state.value()
         if current:
             session = json.loads(current)
         else:
-            session = {
-                "session_id": event.get("session_id", ctx.get_current_key()),
-                "user_id": event.get("user_id"),
-                "first_event_ts": event_ts,
-                "last_event_ts": event_ts,
-                "event_count": 0,
-                "pages": [],
-                "has_add_to_cart": False,
-                "has_checkout": False,
-                "product_ids_viewed": [],
-            }
+            session = new_session(event, event_ts)
 
-        # Update session
-        session["last_event_ts"] = event_ts
-        session["event_count"] += 1
-
-        page = event.get("page_url", "")
-        if page and page not in session["pages"]:
-            session["pages"].append(page)
-
-        if event.get("event_type") == "add_to_cart":
-            session["has_add_to_cart"] = True
-        if "/checkout" in page:
-            session["has_checkout"] = True
-
-        pid = event.get("product_id")
-        if pid and pid not in session["product_ids_viewed"]:
-            session["product_ids_viewed"].append(pid)
+        # Out-of-order events that are still ahead of the watermark belong to
+        # the session, but must not move its end backward or shorten the timer.
+        accumulate_session(
+            session,
+            event,
+            event_ts,
+            max_unique_pages=self.max_unique_pages,
+            max_unique_products=self.max_unique_products,
+        )
 
         self.session_state.update(json.dumps(session))
 
         # Reset gap timer
         old_timer = self.timer_state.value()
-        if old_timer:
+        new_timer = session["last_event_ts"] + SESSION_GAP_MS
+        if old_timer and old_timer != new_timer:
             ctx.timer_service().delete_event_time_timer(old_timer)
-
-        new_timer = event_ts + SESSION_GAP_MS
-        ctx.timer_service().register_event_time_timer(new_timer)
-        self.timer_state.update(new_timer)
+        if old_timer != new_timer:
+            ctx.timer_service().register_event_time_timer(new_timer)
+            self.timer_state.update(new_timer)
 
     def on_timer(self, timestamp: int, ctx: KeyedProcessFunction.OnTimerContext) -> Iterator[str]:
         """Session gap expired — emit session summary."""
@@ -116,34 +132,7 @@ class SessionWindowFunction(KeyedProcessFunction):
             return
 
         session = json.loads(current)
-        duration_ms = session["last_event_ts"] - session["first_event_ts"]
-
-        # Determine funnel stage
-        if session["has_checkout"]:
-            funnel_stage = "checkout"
-        elif session["has_add_to_cart"]:
-            funnel_stage = "add_to_cart"
-        elif len(session["product_ids_viewed"]) > 0:
-            funnel_stage = "product_view"
-        elif session["event_count"] > 1:
-            funnel_stage = "browse"
-        else:
-            funnel_stage = "bounce"
-
-        summary = {
-            "session_id": session["session_id"],
-            "user_id": session["user_id"],
-            "started_at": datetime.fromtimestamp(
-                session["first_event_ts"] / 1000, tz=UTC
-            ).isoformat(),
-            "ended_at": datetime.fromtimestamp(session["last_event_ts"] / 1000, tz=UTC).isoformat(),
-            "duration_seconds": duration_ms / 1000,
-            "event_count": session["event_count"],
-            "unique_pages": len(session["pages"]),
-            "products_viewed": len(session["product_ids_viewed"]),
-            "funnel_stage": funnel_stage,
-            "is_conversion": session["has_checkout"],
-        }
+        summary = summarize_session(session)
 
         # Emit
         yield json.dumps(summary)
@@ -153,8 +142,13 @@ class SessionWindowFunction(KeyedProcessFunction):
         self.timer_state.clear()
 
 
-def build_pipeline() -> StreamExecutionEnvironment:
-    env = StreamExecutionEnvironment.get_execution_environment()
+def build_pipeline(
+    *,
+    env: StreamExecutionEnvironment | None = None,
+    source_topic: str | None = None,
+    sink_topic: str | None = None,
+) -> StreamExecutionEnvironment:
+    env = env or StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(CHECKPOINT_INTERVAL_MS)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
 
@@ -179,38 +173,45 @@ def build_pipeline() -> StreamExecutionEnvironment:
     env.configure(restart_config)
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    kafka_security = flink_kafka_security_properties()
 
-    source = (
+    source_builder = (
         KafkaSource.builder()
         .set_bootstrap_servers(bootstrap_servers)
-        .set_topics("clicks.raw")
-        .set_group_id("agentflow-session-aggregator")
+        .set_topics(source_topic or os.getenv("FLINK_SESSION_SOURCE_TOPIC", "events.validated"))
+        .set_group_id(os.getenv("FLINK_SESSION_GROUP_ID", "agentflow-session-aggregator"))
         .set_starting_offsets(KafkaOffsetsInitializer.earliest())
         .set_value_only_deserializer(SimpleStringSchema())
-        .build()
     )
+    if kafka_security:
+        source_builder.set_properties(kafka_security)
+    source = source_builder.build()
 
     watermark_strategy = WatermarkStrategy.for_bounded_out_of_orderness(
         Duration.of_seconds(WATERMARK_OUT_OF_ORDERNESS_SECONDS)
     ).with_timestamp_assigner(ClickTimestampAssigner())
 
-    stream = env.from_source(source, watermark_strategy, "clicks-source")
+    stream = env.from_source(source, watermark_strategy, "session-events-source")
 
-    sessions = stream.key_by(lambda x: json.loads(x).get("session_id", "unknown")).process(
-        SessionWindowFunction(), output_type=Types.STRING()
+    sessions = (
+        stream.filter(is_session_event)
+        .key_by(raw_session_key)
+        .process(SessionWindowFunction(), output_type=Types.STRING())
     )
 
-    sink = (
+    sink_builder = (
         KafkaSink.builder()
         .set_bootstrap_servers(bootstrap_servers)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
-            .set_topic("sessions.aggregated")
+            .set_topic(sink_topic or os.getenv("FLINK_SESSION_SINK_TOPIC", "sessions.aggregated"))
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
         )
-        .build()
     )
+    if kafka_security:
+        sink_builder.set_properties(kafka_security)
+    sink = sink_builder.build()
 
     sessions.sink_to(sink)
 

@@ -1,13 +1,17 @@
+"""Compatibility surface for the canonical ``session_aggregator`` job.
+
+The historical module contained a second Flink implementation that only
+closed a session when another event arrived. Production build and launch now
+delegate to ``session_aggregator.py``; the pure state helper remains for
+callers that use it in deterministic, non-Flink tests.
+"""
+
 from __future__ import annotations
 
-import json
-import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
-
-from src.processing.flink_jobs.checkpointing import configure_checkpointing
 
 if TYPE_CHECKING:
     from pyflink.datastream import StreamExecutionEnvironment
@@ -63,6 +67,8 @@ def _closed_session(user_id: str, state: _SessionState) -> dict[str, object]:
 
 
 class SessionAggregator:
+    """Deprecated deterministic helper; not a Flink job implementation."""
+
     def __init__(self, session_gap: timedelta = SESSION_GAP):
         self._session_gap = session_gap
         self._state: dict[str, _SessionState] = {}
@@ -112,111 +118,21 @@ def build_session_pipeline(
     source_topic: str,
     sink_topic: str,
 ) -> Any:
-    try:
-        from pyflink.common import Types
-        from pyflink.common.serialization import SimpleStringSchema
-        from pyflink.common.watermark_strategy import WatermarkStrategy
-        from pyflink.datastream.connectors.kafka import (
-            KafkaOffsetsInitializer,
-            KafkaRecordSerializationSchema,
-            KafkaSink,
-            KafkaSource,
-        )
-        from pyflink.datastream.functions import KeyedProcessFunction
-        from pyflink.datastream.state import MapStateDescriptor
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "PyFlink is not installed. Install the Flink runtime manifest: "
-            "pip install -r src/processing/flink_jobs/requirements.txt "
-            "(in its own venv - it cannot co-install with the core package)."
-        ) from exc
+    """Delegate legacy callers to the one canonical Flink implementation."""
+    from src.processing.flink_jobs.session_aggregator import build_pipeline
 
-    class FlinkSessionAggregator(KeyedProcessFunction):
-        def open(self, runtime_context: Any) -> None:
-            descriptor = MapStateDescriptor(
-                "session_state",
-                Types.STRING(),
-                Types.STRING(),
-            )
-            self.state = runtime_context.get_map_state(descriptor)
-            # One aggregator per operator instance (audit M-C2): the object is
-            # reused across events instead of being constructed per element.
-            # restore() below fully replaces its internal dict each event, so
-            # Flink keyed state stays the single source of truth (recovery
-            # safe) and no entries leak between keys sharing this instance.
-            self.aggregator = SessionAggregator()
-
-        def process_element(self, raw_event: str, ctx: Any) -> Iterator[str]:
-            event = json.loads(raw_event)
-            user_id = str(event["user_id"])
-
-            if self.state.contains(user_id):
-                self.aggregator.restore({user_id: json.loads(self.state.get(user_id))})
-            else:
-                self.aggregator.restore({})
-
-            for session in self.aggregator.process_event(event):
-                yield json.dumps(session)
-
-            self.state.put(user_id, json.dumps(self.aggregator.snapshot()[user_id]))
-
-    configure_checkpointing(env)
-
-    bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-
-    source = (
-        KafkaSource.builder()
-        .set_bootstrap_servers(bootstrap_servers)
-        .set_topics(source_topic)
-        .set_group_id("agentflow-session-aggregation")
-        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
-        .set_value_only_deserializer(SimpleStringSchema())
-        .build()
+    return build_pipeline(
+        env=env,
+        source_topic=source_topic,
+        sink_topic=sink_topic,
     )
-
-    sessions = (
-        env.from_source(
-            source,
-            WatermarkStrategy.for_monotonous_timestamps(),
-            "Session Aggregation Source",
-        )
-        .key_by(lambda raw: json.loads(raw)["user_id"])
-        .process(FlinkSessionAggregator(), output_type=Types.STRING())
-    )
-
-    sink = (
-        KafkaSink.builder()
-        .set_bootstrap_servers(bootstrap_servers)
-        .set_record_serializer(
-            KafkaRecordSerializationSchema.builder()
-            .set_topic(sink_topic)
-            .set_value_serialization_schema(SimpleStringSchema())
-            .build()
-        )
-        .build()
-    )
-
-    sessions.sink_to(sink)
-    return sessions
 
 
 def main() -> None:
-    try:
-        from pyflink.datastream import StreamExecutionEnvironment
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "PyFlink is not installed. Install the Flink runtime manifest: "
-            "pip install -r src/processing/flink_jobs/requirements.txt "
-            "(in its own venv - it cannot co-install with the core package)."
-        ) from exc
+    from src.processing.flink_jobs.session_aggregator import build_pipeline
 
-    env = StreamExecutionEnvironment.get_execution_environment()
-    build_session_pipeline(
-        env=env,
-        source_topic=os.getenv("FLINK_SOURCE_TOPIC", "events.validated"),
-        sink_topic=os.getenv("FLINK_SESSION_SINK_TOPIC", "sessions.aggregated"),
-    )
-    env.execute("agentflow-session-aggregation")
+    pipeline = build_pipeline()
+    pipeline.execute("agentflow-session-aggregator")
 
 
 if __name__ == "__main__":

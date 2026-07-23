@@ -1,125 +1,117 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from src.processing.flink_jobs.checkpointing import configure_checkpointing
-from src.processing.flink_jobs.session_aggregation import SESSION_GAP, SessionAggregator
+from src.processing.flink_jobs.session_window import (
+    accumulate_session,
+    new_session,
+    session_key,
+    summarize_session,
+)
 
 BASE_TIME = datetime(2026, 4, 12, 12, 0, tzinfo=UTC)
+BASE_TIME_MS = int(BASE_TIME.timestamp() * 1000)
 
 
-def _event(user_id: str, offset_minutes: int, value: float = 0.0) -> dict:
+def _event(
+    *,
+    tenant: str = "acme",
+    session_id: str = "session-1",
+    user_id: str = "user-1",
+    page_url: str = "/home",
+    product_id: str | None = None,
+) -> dict:
     return {
+        "tenant": tenant,
+        "session_id": session_id,
         "user_id": user_id,
-        "timestamp": (BASE_TIME + timedelta(minutes=offset_minutes)).isoformat(),
-        "value": value,
+        "event_type": "page_view",
+        "page_url": page_url,
+        "product_id": product_id,
     }
 
 
 def test_session_opens_on_first_event():
-    aggregator = SessionAggregator()
+    session = new_session(_event(), BASE_TIME_MS)
 
-    emitted = aggregator.process_event(_event("user-1", 0, value=10.0))
-
-    assert emitted == []
-    assert aggregator.snapshot() == {
-        "user-1": {
-            "start_time": BASE_TIME.isoformat(),
-            "last_time": BASE_TIME.isoformat(),
-            "event_count": 1,
-            "total_value": 10.0,
-        }
-    }
+    assert session["tenant_id"] == "acme"
+    assert session["session_id"] == "session-1"
+    assert session["event_count"] == 0
+    assert session["pages"] == []
 
 
 def test_session_updates_within_gap():
-    aggregator = SessionAggregator()
-    aggregator.process_event(_event("user-1", 0, value=10.0))
-
-    emitted = aggregator.process_event(_event("user-1", 20, value=7.5))
-
-    assert emitted == []
-    assert aggregator.snapshot()["user-1"] == {
-        "start_time": BASE_TIME.isoformat(),
-        "last_time": (BASE_TIME + timedelta(minutes=20)).isoformat(),
-        "event_count": 2,
-        "total_value": 17.5,
-    }
-
-
-def test_session_closes_when_gap_exceeds_threshold():
-    aggregator = SessionAggregator()
-    aggregator.process_event(_event("user-1", 0, value=10.0))
-    aggregator.process_event(_event("user-1", 10, value=5.0))
-
-    emitted = aggregator.process_event(_event("user-1", 45, value=2.0))
-
-    assert emitted == [
-        {
-            "user_id": "user-1",
-            "session_start": BASE_TIME.isoformat(),
-            "session_end": (BASE_TIME + timedelta(minutes=10)).isoformat(),
-            "event_count": 2,
-            "total_value": 15.0,
-            "status": "closed",
-        }
-    ]
-    assert aggregator.snapshot()["user-1"] == {
-        "start_time": (BASE_TIME + timedelta(minutes=45)).isoformat(),
-        "last_time": (BASE_TIME + timedelta(minutes=45)).isoformat(),
-        "event_count": 1,
-        "total_value": 2.0,
-    }
-
-
-def test_session_state_survives_snapshot_restore():
-    aggregator = SessionAggregator()
-    aggregator.process_event(_event("user-1", 0, value=10.0))
-    aggregator.process_event(_event("user-1", 5, value=5.0))
-    snapshot = aggregator.snapshot()
-
-    restored = SessionAggregator()
-    restored.restore(snapshot)
-
-    emitted = restored.process_event(_event("user-1", 25, value=2.5))
-
-    assert emitted == []
-    assert restored.snapshot()["user-1"] == {
-        "start_time": BASE_TIME.isoformat(),
-        "last_time": (BASE_TIME + timedelta(minutes=25)).isoformat(),
-        "event_count": 3,
-        "total_value": 17.5,
-    }
-
-
-def test_sessions_are_isolated_per_user():
-    aggregator = SessionAggregator()
-    aggregator.process_event(_event("user-1", 0, value=1.0))
-    aggregator.process_event(_event("user-2", 0, value=3.0))
-    aggregator.process_event(_event("user-2", 5, value=4.0))
-
-    emitted = aggregator.process_event(
-        {
-            "user_id": "user-1",
-            "timestamp": (BASE_TIME + SESSION_GAP + timedelta(minutes=1)).isoformat(),
-            "value": 2.0,
-        }
+    session = new_session(_event(page_url="/one"), BASE_TIME_MS)
+    accumulate_session(
+        session,
+        _event(page_url="/one"),
+        BASE_TIME_MS,
+        max_unique_pages=10,
+        max_unique_products=10,
+    )
+    accumulate_session(
+        session,
+        _event(page_url="/two"),
+        BASE_TIME_MS + 60_000,
+        max_unique_pages=10,
+        max_unique_products=10,
     )
 
-    assert emitted == [
-        {
-            "user_id": "user-1",
-            "session_start": BASE_TIME.isoformat(),
-            "session_end": BASE_TIME.isoformat(),
-            "event_count": 1,
-            "total_value": 1.0,
-            "status": "closed",
-        }
-    ]
-    assert aggregator.snapshot()["user-2"] == {
-        "start_time": BASE_TIME.isoformat(),
-        "last_time": (BASE_TIME + timedelta(minutes=5)).isoformat(),
-        "event_count": 2,
-        "total_value": 7.0,
-    }
+    assert session["event_count"] == 2
+    assert session["pages"] == ["/one", "/two"]
+
+
+def test_out_of_order_event_preserves_latest_session_end():
+    session = new_session(_event(), BASE_TIME_MS + 60_000)
+    accumulate_session(
+        session,
+        _event(page_url="/later"),
+        BASE_TIME_MS + 60_000,
+        max_unique_pages=10,
+        max_unique_products=10,
+    )
+    accumulate_session(
+        session,
+        _event(page_url="/earlier"),
+        BASE_TIME_MS,
+        max_unique_pages=10,
+        max_unique_products=10,
+    )
+
+    assert session["first_event_ts"] == BASE_TIME_MS
+    assert session["last_event_ts"] == BASE_TIME_MS + 60_000
+
+
+def test_session_collections_are_bounded_and_visible_in_summary():
+    session = new_session(_event(), BASE_TIME_MS)
+    for offset, (page, product) in enumerate(
+        [("/one", "sku-1"), ("/two", "sku-2"), ("/three", "sku-3")]
+    ):
+        accumulate_session(
+            session,
+            _event(page_url=page, product_id=product),
+            BASE_TIME_MS + offset,
+            max_unique_pages=2,
+            max_unique_products=1,
+        )
+
+    summary = summarize_session(session)
+
+    assert summary["unique_pages"] == 2
+    assert summary["products_viewed"] == 1
+    assert summary["pages_truncated"] is True
+    assert summary["products_truncated"] is True
+
+
+def test_same_session_id_is_isolated_per_tenant():
+    assert session_key(_event(tenant="acme")) == "acme\x1fsession-1"
+    assert session_key(_event(tenant="globex")) == "globex\x1fsession-1"
+
+
+def test_legacy_tenant_id_remains_compatible():
+    event = _event()
+    event["tenant_id"] = event.pop("tenant")
+
+    assert session_key(event) == "acme\x1fsession-1"
 
 
 class _FakeCheckpointConfig:

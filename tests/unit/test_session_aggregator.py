@@ -27,22 +27,41 @@ class _FakeRuntimeContext:
     def __init__(self):
         self.descriptors = []
         self.states = {}
+        self.counters = {}
 
     def get_state(self, descriptor):
         self.descriptors.append(descriptor)
         return self.states.setdefault(descriptor.name, _FakeValueState())
 
+    def get_metric_group(self):
+        return self
+
+    def counter(self, name):
+        return self.counters.setdefault(name, _FakeCounter())
+
+
+class _FakeCounter:
+    def __init__(self):
+        self.value = 0
+
+    def inc(self):
+        self.value += 1
+
 
 class _FakeTimerService:
-    def __init__(self):
+    def __init__(self, watermark=-(2**63)):
         self.registered = []
         self.deleted = []
+        self.watermark = watermark
 
     def register_event_time_timer(self, value):
         self.registered.append(value)
 
     def delete_event_time_timer(self, value):
         self.deleted.append(value)
+
+    def current_watermark(self):
+        return self.watermark
 
 
 class _FakeProcessContext:
@@ -63,6 +82,7 @@ class _FakeProcessContext:
 
 class _FakeStream:
     def __init__(self):
+        self.filter_fn = None
         self.key_by_fn = None
         self.process_function = None
         self.output_type = None
@@ -70,6 +90,10 @@ class _FakeStream:
 
     def key_by(self, func):
         self.key_by_fn = func
+        return self
+
+    def filter(self, func):
+        self.filter_fn = func
         return self
 
     def process(self, function, output_type=None):
@@ -216,6 +240,10 @@ def session_aggregator(monkeypatch):
 
         def set_value_only_deserializer(self, value):
             self.values["value_only_deserializer"] = value
+            return self
+
+        def set_properties(self, value):
+            self.values["properties"] = value
             return self
 
         def set_record_serializer(self, value):
@@ -371,6 +399,7 @@ def test_process_element_initializes_session_and_timer(opened_window):
     window.process_element(
         json.dumps(
             {
+                "tenant_id": "acme",
                 "session_id": "session-1",
                 "user_id": "user-1",
                 "event_type": "page_view",
@@ -383,6 +412,7 @@ def test_process_element_initializes_session_and_timer(opened_window):
 
     session = json.loads(window.session_state.value())
     assert session == {
+        "tenant_id": "acme",
         "session_id": "session-1",
         "user_id": "user-1",
         "first_event_ts": event_ts,
@@ -392,6 +422,8 @@ def test_process_element_initializes_session_and_timer(opened_window):
         "has_add_to_cart": False,
         "has_checkout": False,
         "product_ids_viewed": ["sku-1"],
+        "pages_truncated": False,
+        "products_truncated": False,
     }
     assert timer_service.deleted == []
     assert timer_service.registered == [event_ts + session_aggregator.SESSION_GAP_MS]
@@ -407,6 +439,7 @@ def test_process_element_updates_session_and_deduplicates_collections(opened_win
     window.process_element(
         json.dumps(
             {
+                "tenant_id": "acme",
                 "session_id": "session-1",
                 "user_id": "user-1",
                 "event_type": "page_view",
@@ -419,6 +452,7 @@ def test_process_element_updates_session_and_deduplicates_collections(opened_win
     window.process_element(
         json.dumps(
             {
+                "tenant_id": "acme",
                 "session_id": "session-1",
                 "user_id": "user-1",
                 "event_type": "add_to_cart",
@@ -441,17 +475,96 @@ def test_process_element_updates_session_and_deduplicates_collections(opened_win
     assert timer_service.registered[-1] == second_ts + session_aggregator.SESSION_GAP_MS
 
 
-def test_process_element_uses_current_key_for_missing_session_id(opened_window):
+def test_process_element_rejects_missing_session_id(opened_window):
     _, window, _ = opened_window
     event_ts = int(datetime(2026, 4, 17, 10, 0, tzinfo=UTC).timestamp() * 1000)
 
+    with pytest.raises(ValueError, match="session_id"):
+        window.process_element(
+            json.dumps({"tenant_id": "acme", "user_id": "user-1", "event_type": "page_view"}),
+            _FakeProcessContext(event_ts, key="derived-session"),
+        )
+
+
+def test_process_element_drops_event_at_or_behind_watermark(opened_window):
+    _, window, runtime_context = opened_window
+    event_ts = int(datetime(2026, 4, 17, 10, 0, tzinfo=UTC).timestamp() * 1000)
+    timer_service = _FakeTimerService(watermark=event_ts)
+
     window.process_element(
-        json.dumps({"user_id": "user-1", "event_type": "page_view"}),
-        _FakeProcessContext(event_ts, key="derived-session"),
+        json.dumps(
+            {
+                "tenant_id": "acme",
+                "session_id": "session-1",
+                "user_id": "user-1",
+                "event_type": "page_view",
+            }
+        ),
+        _FakeProcessContext(event_ts, timer_service=timer_service),
+    )
+
+    assert window.session_state.value() is None
+    assert timer_service.registered == []
+    assert runtime_context.counters["late_events_dropped"].value == 1
+
+
+def test_out_of_order_event_does_not_shorten_session_timer(opened_window):
+    _, window, _ = opened_window
+    timer_service = _FakeTimerService()
+    later_ts = int(datetime(2026, 4, 17, 10, 5, tzinfo=UTC).timestamp() * 1000)
+    earlier_ts = int(datetime(2026, 4, 17, 10, 2, tzinfo=UTC).timestamp() * 1000)
+    base = {
+        "tenant_id": "acme",
+        "session_id": "session-1",
+        "user_id": "user-1",
+        "event_type": "page_view",
+    }
+
+    window.process_element(
+        json.dumps({**base, "page_url": "/later"}),
+        _FakeProcessContext(later_ts, timer_service=timer_service),
+    )
+    window.process_element(
+        json.dumps({**base, "page_url": "/earlier"}),
+        _FakeProcessContext(earlier_ts, timer_service=timer_service),
     )
 
     session = json.loads(window.session_state.value())
-    assert session["session_id"] == "derived-session"
+    assert session["first_event_ts"] == earlier_ts
+    assert session["last_event_ts"] == later_ts
+    assert timer_service.registered == [later_ts + 30 * 60 * 1000]
+    assert timer_service.deleted == []
+
+
+def test_unique_collections_are_capped(session_aggregator) -> None:
+    runtime_context = _FakeRuntimeContext()
+    window = session_aggregator.SessionWindowFunction(max_unique_pages=2, max_unique_products=1)
+    window.open(runtime_context)
+    timer_service = _FakeTimerService()
+    base_ts = int(datetime(2026, 4, 17, 10, 0, tzinfo=UTC).timestamp() * 1000)
+
+    for offset, (page, product) in enumerate(
+        [("/one", "sku-1"), ("/two", "sku-2"), ("/three", "sku-3")]
+    ):
+        window.process_element(
+            json.dumps(
+                {
+                    "tenant_id": "acme",
+                    "session_id": "session-1",
+                    "user_id": "user-1",
+                    "event_type": "page_view",
+                    "page_url": page,
+                    "product_id": product,
+                }
+            ),
+            _FakeProcessContext(base_ts + offset, timer_service=timer_service),
+        )
+
+    session = json.loads(window.session_state.value())
+    assert session["pages"] == ["/one", "/two"]
+    assert session["product_ids_viewed"] == ["sku-1"]
+    assert session["pages_truncated"] is True
+    assert session["products_truncated"] is True
 
 
 def test_on_timer_returns_no_output_when_state_is_empty(opened_window):
@@ -467,6 +580,7 @@ def test_on_timer_emits_summary_and_clears_state(opened_window):
     window.session_state.update(
         json.dumps(
             {
+                "tenant_id": "acme",
                 "session_id": "session-1",
                 "user_id": "user-1",
                 "first_event_ts": start,
@@ -476,6 +590,8 @@ def test_on_timer_emits_summary_and_clears_state(opened_window):
                 "has_add_to_cart": False,
                 "has_checkout": False,
                 "product_ids_viewed": [],
+                "pages_truncated": False,
+                "products_truncated": False,
             }
         )
     )
@@ -485,6 +601,7 @@ def test_on_timer_emits_summary_and_clears_state(opened_window):
 
     assert emitted == [
         {
+            "tenant_id": "acme",
             "session_id": "session-1",
             "user_id": "user-1",
             "started_at": "2026-04-17T10:00:00+00:00",
@@ -495,6 +612,8 @@ def test_on_timer_emits_summary_and_clears_state(opened_window):
             "products_viewed": 0,
             "funnel_stage": "bounce",
             "is_conversion": False,
+            "pages_truncated": False,
+            "products_truncated": False,
         }
     ]
     assert window.session_state.value() is None
@@ -593,19 +712,25 @@ def test_build_pipeline_uses_defaults_and_wires_stream(session_aggregator, monke
     assert env.checkpointing == 30_000
     assert env.parallelism == 2
     assert source["bootstrap_servers"] == "localhost:9092"
-    assert source["topics"] == "clicks.raw"
+    assert source["topics"] == "events.validated"
     assert source["group_id"] == "agentflow-session-aggregator"
     assert source["starting_offsets"] == "earliest"
-    assert name == "clicks-source"
+    assert name == "session-events-source"
     assert watermark_strategy.out_of_orderness.millis == 10_000
     assert isinstance(
         watermark_strategy.timestamp_assigner,
         session_aggregator.ClickTimestampAssigner,
     )
+    assert env.stream.filter_fn(json.dumps({"session_id": "session-1"})) is True
+    assert env.stream.filter_fn(json.dumps({"event_type": "order.created"})) is False
     assert env.stream.output_type == session_aggregator.Types.STRING()
     assert isinstance(env.stream.process_function, session_aggregator.SessionWindowFunction)
-    assert env.stream.key_by_fn(json.dumps({"session_id": "session-1"})) == "session-1"
-    assert env.stream.key_by_fn(json.dumps({})) == "unknown"
+    assert (
+        env.stream.key_by_fn(json.dumps({"tenant": "acme", "session_id": "session-1"}))
+        == "acme\x1fsession-1"
+    )
+    with pytest.raises(ValueError, match="session_id"):
+        env.stream.key_by_fn(json.dumps({"tenant_id": "acme"}))
     assert env.stream.sink["bootstrap_servers"] == "localhost:9092"
     assert env.stream.sink["record_serializer"]["topic"] == "sessions.aggregated"
 
@@ -643,3 +768,18 @@ def test_build_pipeline_respects_environment_overrides(session_aggregator, monke
     assert env.parallelism == 5
     assert source["bootstrap_servers"] == "kafka:29092"
     assert env.stream.sink["bootstrap_servers"] == "kafka:29092"
+
+
+def test_build_pipeline_applies_fail_closed_kafka_security(session_aggregator, monkeypatch):
+    env = _FakeExecutionEnvironment()
+    session_aggregator.StreamExecutionEnvironment.current_env = env
+    monkeypatch.setenv("AGENTFLOW_PROFILE", "production")
+    monkeypatch.setenv("AGENTFLOW_KAFKA_AUTH_ENABLED", "true")
+    monkeypatch.setenv("AGENTFLOW_KAFKA_USERNAME", "agentflow")
+    monkeypatch.setenv("AGENTFLOW_KAFKA_PASSWORD", "secret")
+
+    session_aggregator.build_pipeline()
+    source, _, _ = env.from_source_args
+
+    assert source["properties"]["security.protocol"] == "SASL_SSL"
+    assert env.stream.sink["properties"]["security.protocol"] == "SASL_SSL"

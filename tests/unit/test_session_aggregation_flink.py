@@ -1,10 +1,7 @@
-"""Unit tests for the Flink wiring in session_aggregation.build_session_pipeline.
+"""Compatibility checks for the retired ``session_aggregation`` entry point.
 
-The pyflink surface is faked through sys.modules (the imports inside
-build_session_pipeline resolve at call time), so these run without PyFlink.
-They pin the audit M-C2 fix: one SessionAggregator instance per operator,
-created in open(), with full-replace restore() per event so no state leaks
-between keys and recovery still reads Flink state as the source of truth.
+The legacy path must delegate to ``session_aggregator`` and contain no second
+Flink operator implementation.
 """
 
 import json
@@ -258,66 +255,48 @@ def _event(user_id, offset_minutes, value=1.0):
     )
 
 
-def test_flink_session_aggregator_is_constructed_once(fake_pyflink, monkeypatch):
-    instances = []
-    real_aggregator = session_aggregation.SessionAggregator
+def test_legacy_build_delegates_to_canonical_job(monkeypatch):
+    calls = []
+    sentinel = object()
 
-    class _CountingAggregator(real_aggregator):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            instances.append(self)
+    def build_pipeline(**kwargs):
+        calls.append(kwargs)
+        return sentinel
 
-    monkeypatch.setattr(session_aggregation, "SessionAggregator", _CountingAggregator)
+    monkeypatch.setitem(
+        sys.modules,
+        "src.processing.flink_jobs.session_aggregator",
+        types.SimpleNamespace(build_pipeline=build_pipeline),
+    )
+    env = object()
 
-    function, _ = _build_process_function(monkeypatch)
+    result = session_aggregation.build_session_pipeline(env, "smoke-in", "smoke-out")
 
-    assert list(function.process_element(_event("user-1", 0), None)) == []
-    assert list(function.process_element(_event("user-2", 0), None)) == []
-
-    assert len(instances) == 1
-
-
-def test_restore_replaces_state_so_keys_do_not_leak(fake_pyflink, monkeypatch):
-    instances = []
-    real_aggregator = session_aggregation.SessionAggregator
-
-    class _CountingAggregator(real_aggregator):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            instances.append(self)
-
-    monkeypatch.setattr(session_aggregation, "SessionAggregator", _CountingAggregator)
-
-    function, runtime_context = _build_process_function(monkeypatch)
-
-    list(function.process_element(_event("user-1", 0), None))
-    list(function.process_element(_event("user-2", 0), None))
-
-    # Flink state carries both keys; the shared in-memory aggregator must
-    # only ever hold the key of the event being processed (full-replace
-    # restore), so recovery reads Flink state, never a stale local copy.
-    assert set(runtime_context.map_state.entries) == {"user-1", "user-2"}
-    assert set(instances[-1]._state) == {"user-2"}
-
-
-def test_session_closes_across_state_round_trip(fake_pyflink, monkeypatch):
-    function, runtime_context = _build_process_function(monkeypatch)
-
-    assert list(function.process_element(_event("user-1", 0, value=10.0), None)) == []
-    emitted = [
-        json.loads(item) for item in function.process_element(_event("user-1", 45, value=2.0), None)
-    ]
-
-    assert emitted == [
+    assert result is sentinel
+    assert calls == [
         {
-            "user_id": "user-1",
-            "session_start": BASE_TIME.isoformat(),
-            "session_end": BASE_TIME.isoformat(),
-            "event_count": 1,
-            "total_value": 10.0,
-            "status": "closed",
+            "env": env,
+            "source_topic": "smoke-in",
+            "sink_topic": "smoke-out",
         }
     ]
-    snapshot = json.loads(runtime_context.map_state.entries["user-1"])
-    assert snapshot["event_count"] == 1
-    assert snapshot["total_value"] == 2.0
+
+
+def test_legacy_module_contains_no_second_flink_operator():
+    assert not hasattr(session_aggregation, "FlinkSessionAggregator")
+    assert not hasattr(session_aggregation, "KafkaSource")
+    assert not hasattr(session_aggregation, "KeyedProcessFunction")
+
+
+def test_legacy_main_executes_canonical_pipeline(monkeypatch):
+    executed = []
+    pipeline = types.SimpleNamespace(execute=executed.append)
+    monkeypatch.setitem(
+        sys.modules,
+        "src.processing.flink_jobs.session_aggregator",
+        types.SimpleNamespace(build_pipeline=lambda: pipeline),
+    )
+
+    session_aggregation.main()
+
+    assert executed == ["agentflow-session-aggregator"]

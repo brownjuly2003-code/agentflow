@@ -101,6 +101,89 @@ jobs:
         run: |
           /tmp/agentflow-clean/bin/python -c "from agentflow.client import AgentFlowClient; from src.serving.api.main import app; from src.processing.local_pipeline import main; from src.processing.lake_consumer import ValidatedLakeConsumer; assert AgentFlowClient and app and main and ValidatedLakeConsumer"
 
+  local-duckdb-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SERVING_BACKEND: clickhouse
+      DUCKDB_PATH: ci-must-ignore.duckdb
+      AGENTFLOW_LOCAL_ONLY: "false"
+      AGENTFLOW_SERVING_BRIDGE_ENABLED: "true"
+      AGENTFLOW_CONTROLPLANE_PG_DSN: postgresql://ci-must-not-connect.invalid/agentflow
+      AGENTFLOW_NODE_CENTER_URL: https://ci-must-not-connect.invalid
+      AGENTFLOW_NODE_TOKEN: ci-must-ignore
+      AGENTFLOW_ICEBERG_CONFIG: s3://ci-must-not-connect.invalid/catalog
+      KAFKA_BOOTSTRAP_SERVERS: ci-must-not-connect.invalid:9092
+      FLINK_JOBMANAGER_URL: http://ci-must-not-connect.invalid:8081
+      REDIS_URL: redis://ci-must-not-connect.invalid:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: https://ci-must-not-connect.invalid:4317
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install core runtime dependencies
+        run: python -m pip install -e .
+      - name: Prepare the local-only DuckDB database
+        run: |
+          test ! -e .env
+          python scripts/demo_local.py --db-path "${RUNNER_TEMP}/local-duckdb-smoke.duckdb" --burst 20 --prepare-only
+      - name: Smoke health, entity, and NL query
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_path="${RUNNER_TEMP}/local-duckdb-smoke.log"
+          port="$(python -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
+          server_pid=""
+
+          cleanup() {
+            local status="$?"
+            trap - EXIT
+            if [[ -n "${server_pid}" ]]; then
+              kill -TERM -- "-${server_pid}" 2>/dev/null || true
+              for _ in $(seq 1 50); do
+                if ! kill -0 -- "-${server_pid}" 2>/dev/null; then
+                  break
+                fi
+                sleep 0.1
+              done
+              if kill -0 -- "-${server_pid}" 2>/dev/null; then
+                kill -KILL -- "-${server_pid}" 2>/dev/null || true
+              fi
+              wait "${server_pid}" 2>/dev/null || true
+            fi
+            if [[ "${status}" -ne 0 ]]; then
+              cat "${log_path}"
+            fi
+            exit "${status}"
+          }
+          trap cleanup EXIT
+
+          export AGENTFLOW_CI_DB_PATH="${RUNNER_TEMP}/local-duckdb-smoke.duckdb"
+          export AGENTFLOW_CI_PORT="${port}"
+          PYTHONUNBUFFERED=1 setsid python -c \
+            'import os; from pathlib import Path; from scripts.demo_local import build_environment, serve_demo; serve_demo(build_environment(Path(os.environ["AGENTFLOW_CI_DB_PATH"])), host="127.0.0.1", port=int(os.environ["AGENTFLOW_CI_PORT"]))' \
+            >"${log_path}" 2>&1 &
+          server_pid="$!"
+          base_url="http://127.0.0.1:${port}"
+          curl_options=(
+            --fail
+            --silent
+            --show-error
+            --retry 60
+            --retry-all-errors
+            --retry-connrefused
+            --retry-delay 1
+            --max-time 5
+          )
+          curl "${curl_options[@]}" "${base_url}/v1/health" > /dev/null
+          curl "${curl_options[@]}" \
+            "${base_url}/v1/entity/order/ORD-20260404-1001" > /dev/null
+          curl "${curl_options[@]}" \
+            -H "Content-Type: application/json" \
+            --data '{"question":"Show me top 3 products"}' \
+            "${base_url}/v1/query" > /dev/null
+
   schema-check:
     runs-on: ubuntu-latest
     needs: lint

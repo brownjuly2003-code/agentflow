@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts import demo_local
 
@@ -122,3 +123,53 @@ def test_prepare_only_does_not_start_api(
     assert prepared[0][0]["SERVING_BACKEND"] == "duckdb"
     assert prepared[0][1] == 10
     assert served == []
+
+
+def test_ci_smokes_fresh_checkout_local_only_duckdb() -> None:
+    workflow_path = demo_local.REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["local-duckdb-smoke"]
+
+    assert job["runs-on"] == "ubuntu-latest"
+    assert 0 < job["timeout-minutes"] <= 20
+    assert "services" not in job
+    assert job["env"] == {
+        "SERVING_BACKEND": "clickhouse",
+        "DUCKDB_PATH": "ci-must-ignore.duckdb",
+        "AGENTFLOW_LOCAL_ONLY": "false",
+        "AGENTFLOW_SERVING_BRIDGE_ENABLED": "true",
+        "AGENTFLOW_CONTROLPLANE_PG_DSN": "postgresql://ci-must-not-connect.invalid/agentflow",
+        "AGENTFLOW_NODE_CENTER_URL": "https://ci-must-not-connect.invalid",
+        "AGENTFLOW_NODE_TOKEN": "ci-must-ignore",
+        "AGENTFLOW_ICEBERG_CONFIG": "s3://ci-must-not-connect.invalid/catalog",
+        "KAFKA_BOOTSTRAP_SERVERS": "ci-must-not-connect.invalid:9092",
+        "FLINK_JOBMANAGER_URL": "http://ci-must-not-connect.invalid:8081",
+        "REDIS_URL": "redis://ci-must-not-connect.invalid:6379/0",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://ci-must-not-connect.invalid:4317",
+    }
+
+    steps = job["steps"]
+    assert any(step.get("uses", "").startswith("actions/checkout@") for step in steps)
+    assert any(
+        step.get("uses", "").startswith("actions/setup-python@")
+        and step.get("with", {}).get("python-version") == "3.11"
+        for step in steps
+    )
+
+    commands = "\n".join(step.get("run", "") for step in steps)
+    assert "python -m pip install -e ." in commands
+    assert "test ! -e .env" in commands
+    assert (
+        'python scripts/demo_local.py --db-path "${RUNNER_TEMP}/local-duckdb-smoke.duckdb" '
+        "--burst 20 --prepare-only"
+    ) in commands
+    assert "setsid python -c" in commands
+    assert "demo_local import build_environment, serve_demo" in commands
+    assert 'kill -TERM -- "-${server_pid}"' in commands
+    assert 'kill -0 -- "-${server_pid}"' in commands
+    assert 'kill -KILL -- "-${server_pid}"' in commands
+    assert "${base_url}/v1/health" in commands
+    assert "${base_url}/v1/entity/order/ORD-20260404-1001" in commands
+    assert "${base_url}/v1/query" in commands
+    assert "Show me top 3 products" in commands
+    assert "docker" not in commands.lower()

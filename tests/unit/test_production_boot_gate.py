@@ -35,6 +35,14 @@ def test_production_never_boots_the_demo_surface(monkeypatch: pytest.MonkeyPatch
         pass
 
 
+def test_production_never_boots_local_only_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTFLOW_PROFILE", "production")
+    monkeypatch.setenv("AGENTFLOW_LOCAL_ONLY", "true")
+
+    with pytest.raises(RuntimeError, match="local-only"), TestClient(app):
+        pass
+
+
 def test_production_boots_on_local_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     # conftest pins SERVING_BACKEND=duckdb and REDIS_URL defaults to
     # loopback: nothing external, nothing plaintext, the gate stays quiet.

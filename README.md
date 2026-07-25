@@ -49,8 +49,10 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 Prerequisites:
 
 - Python `3.11+`
-- `make`
-- Docker Compose (`make demo` starts Redis and the ClickHouse serving store)
+- Docker Compose (optional, only for the ClickHouse-backed demo)
+- `make` (optional, for the aliases below)
+
+### No Docker (recommended first run)
 
 PowerShell 7+:
 
@@ -58,7 +60,7 @@ PowerShell 7+:
 git clone https://github.com/brownjuly2003-code/agentflow.git
 cd agentflow
 . .\scripts\setup.ps1
-make demo
+python scripts/demo_local.py
 ```
 
 macOS / Linux:
@@ -67,10 +69,27 @@ macOS / Linux:
 git clone https://github.com/brownjuly2003-code/agentflow.git
 cd agentflow
 source ./scripts/setup.sh
+python scripts/demo_local.py
+```
+
+After package installation, this path stays local: it provisions a file-backed
+DuckDB database, processes 500 synthetic events without the optional Iceberg
+sink, disables external Kafka/Flink/Redis health probes, and serves the API on
+`http://localhost:8000`. Swagger UI is available at
+`http://localhost:8000/docs`. `make demo-local` is an alias for the same
+command.
+
+### Docker demo
+
+Use `make demo` when you specifically want Redis and the ClickHouse serving
+store:
+
+```bash
 make demo
 ```
 
-`make demo` starts Redis and ClickHouse, seeds demo data through the full pipeline (validated events land in the ClickHouse serving store), and serves the API on `http://localhost:8000`. Swagger UI is available at `http://localhost:8000/docs`.
+This path requires Docker Compose and mirrors validated pipeline events into
+ClickHouse.
 
 Try it:
 
@@ -105,13 +124,16 @@ Start the API with the keys file and **without** `AGENTFLOW_AUTH_DISABLED`.
 macOS/Linux:
 
 ```bash
-AGENTFLOW_API_KEYS_FILE=config/api_keys.yaml DUCKDB_PATH=agentflow_demo.duckdb \
+SERVING_BACKEND=duckdb AGENTFLOW_LOCAL_ONLY=true \
+  AGENTFLOW_API_KEYS_FILE=config/api_keys.yaml DUCKDB_PATH=agentflow_demo.duckdb \
   python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 PowerShell 5.1+:
 
 ```powershell
+$env:SERVING_BACKEND = "duckdb"
+$env:AGENTFLOW_LOCAL_ONLY = "true"
 $env:AGENTFLOW_API_KEYS_FILE = "config/api_keys.yaml"
 $env:DUCKDB_PATH = "agentflow_demo.duckdb"
 python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000

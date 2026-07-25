@@ -97,16 +97,28 @@ class HealthCollector:
     (audit P0-3).
     """
 
-    def __init__(self, journal: JournalReader | None = None) -> None:
+    def __init__(
+        self,
+        journal: JournalReader | None = None,
+        *,
+        include_external: bool = True,
+    ) -> None:
         self._journal = journal
-        self._checks: list = [
-            self._check_kafka,
-            self._check_flink,
+        embedded_checks = [
             self._check_serving,
             self._check_freshness,
             self._check_quality_score,
-            self._check_iceberg,
         ]
+        self._checks: list = (
+            [
+                self._check_kafka,
+                self._check_flink,
+                *embedded_checks,
+                self._check_iceberg,
+            ]
+            if include_external
+            else embedded_checks
+        )
 
     def collect(self) -> PipelineHealth:
         components = []

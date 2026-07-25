@@ -55,9 +55,9 @@ try {
     python -c "from src.serving.api.main import app; print('OK')"
 
     if ($MyInvocation.InvocationName -eq ".") {
-        Write-Host "=== Setup complete. Run: make demo ==="
+        Write-Host "=== Setup complete. Run: python scripts/demo_local.py ==="
     } else {
-        Write-Host "=== Setup complete. Run '. .\scripts\setup.ps1' before 'make demo' to keep the virtualenv active. ==="
+        Write-Host "=== Setup complete. Run '. .\scripts\setup.ps1' before 'python scripts/demo_local.py' to keep the virtualenv active. ==="
     }
 } finally {
     $ErrorActionPreference = $originalErrorActionPreference

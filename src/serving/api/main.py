@@ -133,6 +133,7 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
     setup_telemetry(app)
     app.state.demo_mode = os.getenv("AGENTFLOW_DEMO_MODE", "").lower() == "true"
     app.state.demo_seed_on_boot = os.getenv("AGENTFLOW_SEED_ON_BOOT", "").lower() == "true"
+    app.state.local_only = _truthy(os.getenv("AGENTFLOW_LOCAL_ONLY", "false"))
     # Deployment profile + transport gate (audit P2-3), resolved before any
     # store or network client is built: a production boot over plaintext
     # external transport dies here, not after it has already spoken.
@@ -141,6 +142,11 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
         raise RuntimeError(
             "AGENTFLOW_PROFILE=production together with AGENTFLOW_DEMO_MODE=true: "
             "the demo surface (public key, seeded store) must never boot as production."
+        )
+    if app.state.profile == "production" and app.state.local_only:
+        raise RuntimeError(
+            "AGENTFLOW_PROFILE=production together with AGENTFLOW_LOCAL_ONLY=true: "
+            "local-only mode disables production dependency checks and cache wiring."
         )
     assert_secure_transport(
         profile=app.state.profile,
@@ -258,7 +264,10 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
             _cancel_background_task,
             app.state.search_index_rebuild_task,
         )
-    app.state.health_collector = HealthCollector(journal=app.state.query_engine.journal)
+    app.state.health_collector = HealthCollector(
+        journal=app.state.query_engine.journal,
+        include_external=not app.state.local_only,
+    )
     try:
         app.state.health_cache_ttl_seconds = float(
             os.getenv("AGENTFLOW_HEALTH_CACHE_TTL_SECONDS", "5")
@@ -273,7 +282,10 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
     app.state.health_cache_payload = None
     app.state.health_cache_expires_at = 0.0
     app.state.health_cache_refresh_lock = asyncio.Lock()
-    app.state.query_cache = QueryCache(redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"))
+    app.state.query_cache = QueryCache(
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
+        enabled=not app.state.local_only,
+    )
     resources.push_async_callback(app.state.query_cache.close)
     try:
         app.state.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", "30"))
@@ -350,7 +362,8 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
     # S7: metric-cache invalidation is a first-class controller (push from the
     # bridge + independent journal scan). It always starts — even when the
     # webhook dispatcher is held back for tests — so event-driven freshness is
-    # not hostage to delivery-loop autostart. The historical monkey-patch over
+    # not hostage to delivery-loop autostart. Local-only explicitly skips this
+    # network/cache controller. The historical monkey-patch over
     # dispatch_new_events is gone.
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
@@ -362,7 +375,7 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
         fetch_pipeline_events=journal_scan_fetch(app.state.query_engine),
     )
     resources.push_async_callback(app.state.metric_cache_controller.stop)
-    if serves_requests:
+    if serves_requests and not app.state.local_only:
         app.state.metric_cache_controller.start()
     if runs_delivery_loops and getattr(app.state, "webhook_dispatcher_autostart", True):
         app.state.webhook_dispatcher.start()

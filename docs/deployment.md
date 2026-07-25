@@ -3,9 +3,26 @@
 AgentFlow has three useful local-to-production-shaped views. This page explains
 what each view is for and where the external evidence boundary starts.
 
-## Local demo
+## Local demo with No Docker
 
-Use this when developing the API, SDK examples, or documentation.
+Use this for the fastest local API, SDK, and documentation loop:
+
+```bash
+python scripts/demo_local.py
+```
+
+The runner selects a persistent DuckDB serving store, explicitly provisions and
+seeds it, processes 500 events through the local pipeline, skips optional
+Iceberg writes, and starts FastAPI on `http://localhost:8000`. It also disables
+external Kafka, Flink, Iceberg, and Redis health/cache connections so this path
+does not require local infrastructure after package installation.
+
+Use `python scripts/demo_local.py --prepare-only` to stop after provisioning and
+pipeline processing. `make demo-local` is a convenience alias.
+
+## Docker demo
+
+Use this when testing the ClickHouse-backed serving profile:
 
 ```bash
 make demo
@@ -21,9 +38,8 @@ What it starts (see the `demo` target in the `Makefile`):
   DuckDB file keeps carrying the control-plane state
 - FastAPI on `http://localhost:8000`
 
-This path is intentionally small. It is the fastest way to test entity lookup,
-metrics, natural-language query, and SDK calls. To run without Docker at all,
-set `SERVING_BACKEND=duckdb` and skip the compose services.
+This path exercises more service boundaries than the local-only runner and
+requires Docker Compose.
 
 ## Development compose
 

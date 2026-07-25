@@ -1,13 +1,14 @@
 # Quickstart
 
 This path runs AgentFlow locally, seeds demo data, starts the API, and verifies
-the main read/query surface. It uses only local tooling and Docker for Redis.
+the main read/query surface. The recommended first run needs No Docker services
+or provider API keys after package installation.
 
 ## Prerequisites
 
 - Python `3.11+`
-- `make`
-- Docker Compose
+- Optional: `make` for command aliases
+- Optional: Docker Compose for the ClickHouse-backed demo
 - Optional docs tooling: `mkdocs-material` for this site
 
 Install the docs tooling if it is not already available:
@@ -34,17 +35,27 @@ python -m pip install "mkdocs-material>=9.5,<10"
     source ./scripts/setup.sh
     ```
 
-## Start the demo API
+## Start the demo API with No Docker
 
-`make demo` seeds local data, starts Redis, and runs FastAPI on
-`http://localhost:8000`.
+The cross-platform runner provisions a file-backed DuckDB database, processes
+500 synthetic events without the optional Iceberg sink, and starts FastAPI on
+`http://localhost:8000`:
 
 ```bash
-make demo
+python scripts/demo_local.py
 ```
 
-The command runs the API in the foreground. Leave it open while trying the
-requests below.
+`make demo-local` is an alias. The command runs the API in the foreground;
+leave it open while trying the requests below.
+
+To prepare the database without starting a server, for example in CI:
+
+```bash
+python scripts/demo_local.py --prepare-only
+```
+
+For the Docker-backed profile with Redis and the ClickHouse serving store, use
+`make demo` instead.
 
 ## Verify health
 

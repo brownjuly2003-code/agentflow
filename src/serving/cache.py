@@ -21,12 +21,17 @@ class QueryCache:
         self,
         redis_url: str = "redis://localhost:6379",
         redis_client: Any | None = None,
+        *,
+        enabled: bool = True,
     ) -> None:
+        self._disabled = not enabled
         self._redis = redis_client
-        if self._redis is None and redis is not None:
+        if enabled and self._redis is None and redis is not None:
             self._redis = redis.from_url(redis_url)
 
     async def get(self, key: str) -> dict | None:
+        if self._disabled:
+            return None
         if self._redis is None:
             logger.warning(
                 "query_cache_unavailable",
@@ -59,6 +64,8 @@ class QueryCache:
             return None
 
     async def set(self, key: str, value: dict, ttl: int = 30) -> None:
+        if self._disabled:
+            return
         if self._redis is None:
             logger.warning(
                 "query_cache_unavailable",
@@ -80,6 +87,8 @@ class QueryCache:
             )
 
     async def delete(self, *keys: str) -> None:
+        if self._disabled:
+            return
         if not keys:
             return
         if self._redis is None:
@@ -99,6 +108,8 @@ class QueryCache:
             )
 
     async def invalidate_metrics(self) -> None:
+        if self._disabled:
+            return
         if self._redis is None:
             logger.warning(
                 "query_cache_unavailable",

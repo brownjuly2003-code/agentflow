@@ -1,4 +1,4 @@
-.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo pipeline flink-local load-test benchmark bench perf-plot
+.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -42,7 +42,10 @@ api:
 tools:
 	python scripts/export_openapi.py
 
-# ── End-to-End Demo (Docker: Redis + ClickHouse serving store) ───
+# ── End-to-End Demos ─────────────────────────────────────────────
+
+demo-local:
+	python scripts/demo_local.py
 
 demo:
 	@echo "=== AgentFlow Demo ==="

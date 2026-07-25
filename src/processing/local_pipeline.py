@@ -7,6 +7,7 @@ Usage:
     python -m src.processing.local_pipeline                # default: 10 events/sec
     python -m src.processing.local_pipeline --eps 50       # 50 events/sec
     python -m src.processing.local_pipeline --burst 500    # one-shot: 500 events
+    python -m src.processing.local_pipeline --burst 500 --no-iceberg
 """
 
 import argparse
@@ -605,7 +606,12 @@ def _format_rate(total: float, elapsed: float) -> str:
     return f"{total / max(elapsed, 0.001):.0f} evt/s"
 
 
-def run(events_per_second: int = 10, burst: int = 0) -> None:
+def run(
+    events_per_second: int = 10,
+    burst: int = 0,
+    *,
+    iceberg_enabled: bool = True,
+) -> None:
     """Run the local pipeline."""
     configure_logging()
     logger = structlog.get_logger()
@@ -617,11 +623,13 @@ def run(events_per_second: int = 10, burst: int = 0) -> None:
     # startup beats a demo that silently serves a frozen seed.
     clickhouse_sink = ClickHouseSink.from_serving_config()
     iceberg_sink = None
-    iceberg_config = os.getenv("AGENTFLOW_ICEBERG_CONFIG")
-    if not iceberg_config:
-        default_iceberg_config = Path("config/iceberg.yaml")
-        if default_iceberg_config.exists():
-            iceberg_config = str(default_iceberg_config)
+    iceberg_config = None
+    if iceberg_enabled:
+        iceberg_config = os.getenv("AGENTFLOW_ICEBERG_CONFIG")
+        if not iceberg_config:
+            default_iceberg_config = Path("config/iceberg.yaml")
+            if default_iceberg_config.exists():
+                iceberg_config = str(default_iceberg_config)
     if iceberg_config:
         try:
             iceberg_sink = IcebergSink(config_path=iceberg_config)
@@ -702,5 +710,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AgentFlow local pipeline")
     parser.add_argument("--eps", type=int, default=10, help="Events per second")
     parser.add_argument("--burst", type=int, default=0, help="One-shot: N events then stop")
+    parser.add_argument(
+        "--no-iceberg",
+        action="store_true",
+        help="Skip the optional Iceberg sink (for an offline DuckDB run).",
+    )
     args = parser.parse_args()
-    run(events_per_second=args.eps, burst=args.burst)
+    run(
+        events_per_second=args.eps,
+        burst=args.burst,
+        iceberg_enabled=not args.no_iceberg,
+    )

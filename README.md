@@ -84,6 +84,49 @@ curl -X POST http://localhost:8000/v1/query \
 
 Local demo runs without API-key enforcement unless you explicitly configure `AGENTFLOW_API_KEYS_FILE`.
 
+### Use your own local API key
+
+Open demo mode is for exploration. To exercise real API-key auth locally:
+
+```bash
+cp .env.example .env
+python scripts/rotate_keys.py --name Local --tenant default
+```
+
+PowerShell uses `Copy-Item .env.example .env`; the key-generation command is
+the same.
+
+The plaintext API key is **shown once**; the script stores only a **one-way hash**
+in `config/api_keys.yaml` (the hash scheme follows `config/security.yaml` and is
+not hard-coded by the script).
+
+Start the API with the keys file and **without** `AGENTFLOW_AUTH_DISABLED`.
+
+macOS/Linux:
+
+```bash
+AGENTFLOW_API_KEYS_FILE=config/api_keys.yaml DUCKDB_PATH=agentflow_demo.duckdb \
+  python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+```
+
+PowerShell 5.1+:
+
+```powershell
+$env:AGENTFLOW_API_KEYS_FILE = "config/api_keys.yaml"
+$env:DUCKDB_PATH = "agentflow_demo.duckdb"
+python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+```
+
+Then send the plaintext key shown by `rotate_keys.py`:
+
+```bash
+curl -H "X-API-Key: <plaintext-from-rotate_keys>" \
+  http://localhost:8000/v1/entity/order/ORD-20260404-1001
+```
+
+Warning: the Hugging Face Space `demo-key` is **public-demo-only**. Do not reuse
+it as a local or production secret.
+
 ## Architecture
 
 ```text

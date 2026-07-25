@@ -650,3 +650,6 @@ def test_rotate_keys_script_prints_plaintext_once_and_writes_hash(
     assert match is not None
     assert stored["keys"][0]["key_hash"].startswith("$2")
     assert match.group(1) not in api_keys_path.read_text(encoding="utf-8")
+    assert "Stored one-way hash in" in completed.stdout
+    assert "Stored bcrypt hash" not in completed.stdout
+    assert "Plaintext API key (shown once):" in completed.stdout

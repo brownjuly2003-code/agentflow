@@ -13,7 +13,7 @@ from src.serving.api.auth import AuthManager, KeyCreateRequest
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate an API key and store only its bcrypt hash."
+        description="Generate an API key and store only its one-way hash."
     )
     parser.add_argument("--api-keys", default="config/api_keys.yaml")
     parser.add_argument("--security-config", default="config/security.yaml")
@@ -40,7 +40,7 @@ def main() -> int:
         )
     )
     print(f"Plaintext API key (shown once): {created.key}")
-    print(f"Stored bcrypt hash in {Path(args.api_keys)}")
+    print(f"Stored one-way hash in {Path(args.api_keys)}")
     return 0
 
 

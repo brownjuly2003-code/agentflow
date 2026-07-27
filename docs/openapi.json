@@ -4279,12 +4279,48 @@
             },
             "type": "array",
             "title": "Results"
+          },
+          "partial": {
+            "type": "boolean",
+            "title": "Partial"
+          },
+          "degraded": {
+            "type": "boolean",
+            "title": "Degraded"
+          },
+          "indexed_documents": {
+            "type": "integer",
+            "title": "Indexed Documents"
+          },
+          "entity_scan_limit": {
+            "type": "integer",
+            "title": "Entity Scan Limit"
+          },
+          "partial_entity_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Partial Entity Types"
+          },
+          "failed_entity_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed Entity Types"
           }
         },
         "type": "object",
         "required": [
           "query",
-          "results"
+          "results",
+          "partial",
+          "degraded",
+          "indexed_documents",
+          "entity_scan_limit",
+          "partial_entity_types",
+          "failed_entity_types"
         ],
         "title": "SearchResponse"
       },

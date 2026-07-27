@@ -154,6 +154,14 @@ environments = [
 target-version = "py311"
 line-length = 100
 
+[tool.ruff.format]
+# These two legacy files are predominantly CRLF with small LF-only blocks.
+# Keep lint coverage while avoiding a whole-file EOL rewrite in the formatter gate.
+exclude = [
+    "src/quality/validators/semantic_validator.py",
+    "src/serving/control_plane/embedded.py",
+]
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "PT"]
 ignore = ["S101", "S311"]

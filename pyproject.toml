@@ -361,6 +361,13 @@ job = "lint"
 profile = "dev-tools"
 
 [[tool.agentflow.dependency-profiles.targets]]
+name = "ci.local-duckdb-smoke"
+kind = "workflow"
+path = ".github/workflows/ci.yml"
+job = "local-duckdb-smoke"
+profile = "runtime"
+
+[[tool.agentflow.dependency-profiles.targets]]
 name = "ci.schema-check"
 kind = "workflow"
 path = ".github/workflows/ci.yml"

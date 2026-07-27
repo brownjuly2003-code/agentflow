@@ -15,6 +15,10 @@ not passed clean-cluster, recovery, soak, rollback, or external security
 acceptance. The earlier 4 h @ 100 eps result remains valid evidence for its
 measured pre-materializer path, not for the unaccepted topology.
 
+**Project lifecycle:** closure candidate. Engineering scope is frozen; the
+production-candidate boundary, future acceptance program, and release gates are
+recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
+
 ## Proven
 
 | Claim | Result | Evidence |
@@ -90,7 +94,11 @@ defect. Semantics of the batched path are in
   journal — RSS slope **+7.5 MB/h**, plateaued (was ~+370 MB/h monotonic);
   [perf/rss-reverify-183-2026-07-11.md](perf/rss-reverify-183-2026-07-11.md).
 
-## Next
+## Post-closure operations and future work
+
+The items below are not active engineering backlog for the closing release.
+They require a separately authorized acceptance, deployment, or breaking-release
+program.
 
 1. **Golden-topology acceptance** — clean-checkout OCI build and Kubernetes
    Operator deployment; two-tenant Kafka → PyFlink → Iceberg → ClickHouse →

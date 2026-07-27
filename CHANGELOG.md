@@ -4,6 +4,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Docs — project closure contract
+
+- `docs/PROJECT_CLOSURE.md` freezes the engineering scope, maps the July
+  production-foundation plan to landed work, preserves the honest
+  production-candidate boundary, and moves clean-cluster/soak/rollback/pen-test
+  work into a separately authorized acceptance program.
+
 ### Fixes — P3 follow-ups from the post-11.07 review (webhook)
 
 Two of the three P3 limitations the post-11.07 review left documented are now

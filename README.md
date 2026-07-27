@@ -7,6 +7,11 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+**Project status:** closure candidate. The engineering scope is feature-frozen;
+the post-v2 golden topology remains a production candidate, not an accepted
+production deployment. Final scope disposition and the remaining publication
+gates are recorded in [docs/PROJECT_CLOSURE.md](docs/PROJECT_CLOSURE.md).
+
 ## Why this exists
 
 BI on a replica answers yesterday's questions. Support, ops, and merch workflows need *current* orders, metrics, and health signals at the moment of decision — not a stale warehouse snapshot, not a pile of one-off service adapters, and not a cache that quietly serves 30-second-old numbers.

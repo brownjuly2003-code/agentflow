@@ -18,6 +18,7 @@ build/
 # Local secrets — copy from .example and fill with real values
 docker/kafka-connect/secrets/postgres.properties
 docker/kafka-connect/secrets/mysql.properties
+/config/api_keys.local.yaml
 
 .venv/
 venv/

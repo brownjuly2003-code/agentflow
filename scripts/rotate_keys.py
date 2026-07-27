@@ -15,7 +15,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate an API key and store only its one-way hash."
     )
-    parser.add_argument("--api-keys", default="config/api_keys.yaml")
+    parser.add_argument("--api-keys", default="config/api_keys.local.yaml")
     parser.add_argument("--security-config", default="config/security.yaml")
     parser.add_argument("--name", default="Rotated Key")
     parser.add_argument("--tenant", default="default")

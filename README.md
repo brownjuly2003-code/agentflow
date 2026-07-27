@@ -116,8 +116,11 @@ PowerShell uses `Copy-Item .env.example .env`; the key-generation command is
 the same.
 
 The plaintext API key is **shown once**; the script stores only a **one-way hash**
-in `config/api_keys.yaml` (the hash scheme follows `config/security.yaml` and is
-not hard-coded by the script).
+in ignored `config/api_keys.local.yaml` (the hash scheme follows
+`config/security.yaml` and is not hard-coded by the script).
+
+The tracked `config/api_keys.yaml` remains a sample and is not modified by this
+local flow.
 
 Start the API with the keys file and **without** `AGENTFLOW_AUTH_DISABLED`.
 
@@ -125,7 +128,7 @@ macOS/Linux:
 
 ```bash
 SERVING_BACKEND=duckdb AGENTFLOW_LOCAL_ONLY=true \
-  AGENTFLOW_API_KEYS_FILE=config/api_keys.yaml DUCKDB_PATH=agentflow_demo.duckdb \
+  AGENTFLOW_API_KEYS_FILE=config/api_keys.local.yaml DUCKDB_PATH=agentflow_demo.duckdb \
   python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -134,7 +137,7 @@ PowerShell 5.1+:
 ```powershell
 $env:SERVING_BACKEND = "duckdb"
 $env:AGENTFLOW_LOCAL_ONLY = "true"
-$env:AGENTFLOW_API_KEYS_FILE = "config/api_keys.yaml"
+$env:AGENTFLOW_API_KEYS_FILE = "config/api_keys.local.yaml"
 $env:DUCKDB_PATH = "agentflow_demo.duckdb"
 python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
 ```

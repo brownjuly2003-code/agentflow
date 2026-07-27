@@ -653,3 +653,35 @@ def test_rotate_keys_script_prints_plaintext_once_and_writes_hash(
     assert "Stored one-way hash in" in completed.stdout
     assert "Stored bcrypt hash" not in completed.stdout
     assert "Plaintext API key (shown once):" in completed.stdout
+
+
+def test_rotate_keys_script_defaults_to_ignored_local_file(
+    tmp_path: Path,
+    security_config_path: Path,
+) -> None:
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "rotate_keys.py"
+
+    subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(script_path),
+            "--security-config",
+            str(security_config_path),
+            "--name",
+            "Local",
+            "--tenant",
+            "default",
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    local_keys_path = tmp_path / "config" / "api_keys.local.yaml"
+    stored = yaml.safe_load(local_keys_path.read_text(encoding="utf-8"))
+    gitignore = (Path(__file__).resolve().parents[2] / ".gitignore").read_text(encoding="utf-8")
+
+    assert len(stored["keys"]) == 1
+    assert stored["keys"][0]["name"] == "Local"
+    assert "/config/api_keys.local.yaml" in gitignore

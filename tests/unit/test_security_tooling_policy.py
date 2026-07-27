@@ -63,19 +63,13 @@ def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
 
 
 def test_external_pen_test_handoff_exists_without_claiming_attestation() -> None:
-    handoff_path = (
-        ROOT / "docs" / "operations" / "third-party-pen-test-intake.md"
-    )
+    handoff_path = ROOT / "docs" / "operations" / "third-party-pen-test-intake.md"
     handoff = handoff_path.read_text(encoding="utf-8")
-    security_audit = (ROOT / "docs" / "security-audit.md").read_text(
-        encoding="utf-8"
-    )
+    security_audit = (ROOT / "docs" / "security-audit.md").read_text(encoding="utf-8")
     posture = (ROOT / "docs" / "operations" / "openssf-security-posture.md").read_text(
         encoding="utf-8"
     )
-    s12_report = (ROOT / "docs" / "security-s12-2026-07-09.md").read_text(
-        encoding="utf-8"
-    )
+    s12_report = (ROOT / "docs" / "security-s12-2026-07-09.md").read_text(encoding="utf-8")
 
     assert handoff_path.name in security_audit
     assert handoff_path.name in posture

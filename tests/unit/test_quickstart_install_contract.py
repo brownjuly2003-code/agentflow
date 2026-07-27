@@ -36,7 +36,7 @@ def test_ci_smokes_clean_wheel_on_all_declared_python_versions() -> None:
         for step in job["steps"]
         if step.get("name") == "Smoke quickstart and materializer imports"
     )
-    assert smoke_step["working-directory"] == "/tmp"
+    assert smoke_step["working-directory"] == "/tmp"  # noqa: S108
 
     required_job = workflow["jobs"]["test-unit"]
     assert "python-compat" in required_job["needs"]

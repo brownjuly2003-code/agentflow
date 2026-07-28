@@ -629,7 +629,10 @@ def test_process_element_normalizes_debezium_before_validation(stream_processor,
     assert emitted[0]["entity_id"] == "ORD-CDC-1"
     assert emitted[0]["_partition_key"] == "ORD-CDC-1"
     assert "enriched_by" not in emitted[0]
-    assert pairs[0][0] == emitted[0]["event_id"]
+    assert pairs[0][0] == json.dumps(
+        ["default", emitted[0]["event_id"]],
+        separators=(",", ":"),
+    )
 
 
 def test_process_element_uses_kafka_envelope_for_tenant_mapping(stream_processor, monkeypatch):
@@ -807,7 +810,7 @@ def test_process_element_enriches_order_and_sets_metadata(stream_processor, monk
     )
 
     pairs = list(processor.process_element(value, ctx))
-    assert [event_id for event_id, _ in pairs] == ["evt-3"]
+    assert [identity for identity, _ in pairs] == ['["default","evt-3"]']
     emitted = [json.loads(payload) for _, payload in pairs]
     event = emitted[0]
     processing_time = datetime.fromisoformat(event["_enriched"]["processing_time"])
@@ -819,6 +822,30 @@ def test_process_element_enriches_order_and_sets_metadata(stream_processor, monk
     assert event["_enriched"]["pipeline_latency_ms"] == int(
         (processing_time - original_time).total_seconds() * 1000
     )
+
+
+def test_process_element_keys_dedup_by_tenant_and_event_id(stream_processor, monkeypatch):
+    _install_processor_dependencies(monkeypatch)
+    processor = stream_processor.ValidateAndEnrich()
+    base_event = {
+        "event_id": "evt-shared",
+        "event_type": "order.created",
+        "timestamp": "2026-04-17T09:30:00+00:00",
+        "user_id": "user-1",
+        "order_id": "order-1",
+    }
+
+    keys = [
+        next(
+            processor.process_element(
+                json.dumps({**base_event, "tenant": tenant}),
+                _FakeProcessContext(),
+            )
+        )[0]
+        for tenant in ("acme", "globex")
+    ]
+
+    assert keys == ['["acme","evt-shared"]', '["globex","evt-shared"]']
 
 
 def test_process_element_uses_clickstream_enrichment(stream_processor, monkeypatch):
@@ -967,8 +994,8 @@ def test_build_pipeline_uses_defaults_and_wires_sinks(stream_processor, monkeypa
     )
     assert isinstance(env.source_stream.process_function, stream_processor.ValidateAndEnrich)
     assert env.validated_stream.side_output_tag is stream_processor.DEAD_LETTER_TAG
-    assert env.validated_stream.key_by_fn(("evt-7", "payload")) == "evt-7"
-    assert env.validated_stream.key_by_fn(("", "payload")) == ""
+    assert env.validated_stream.key_by_fn(('["acme","evt-7"]', "payload")) == '["acme","evt-7"]'
+    assert env.validated_stream.key_by_fn(('["default",""]', "payload")) == '["default",""]'
     assert isinstance(env.keyed_stream.map_function, stream_processor.DeduplicateByEventId)
     assert env.keyed_stream.output_type == stream_processor.Types.STRING()
     assert env.mapped_stream.filter_fn(None) is False

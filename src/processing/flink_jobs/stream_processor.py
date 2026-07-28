@@ -246,18 +246,23 @@ class ValidateAndEnrich(ProcessFunction):
             or event["event_id"]
         )
 
-        # Emit (event_id, payload) so the dedup key_by downstream reads the
-        # key from the tuple instead of re-parsing the whole JSON payload a
-        # second time (audit M-C3).
-        yield event.get("event_id", ""), json.dumps(event)
+        # Tenant scope is part of event identity throughout the materialization
+        # path. Encode the pair unambiguously so two tenants may reuse an
+        # event_id without sharing keyed dedup state, while still avoiding a
+        # second full-payload parse downstream (audit M-C3).
+        dedup_identity = json.dumps(
+            [event["tenant"], str(event.get("event_id", ""))],
+            separators=(",", ":"),
+        )
+        yield dedup_identity, json.dumps(event)
 
 
 class DeduplicateByEventId(MapFunction):
     """Deduplicates events using a Flink keyed state with TTL.
 
-    Receives (event_id, payload) pairs keyed by event_id; pairs whose
-    event_id was already seen within the TTL window are dropped. This
-    handles at-least-once delivery from Kafka producers.
+    Receives ``(tenant/event_id identity, payload)`` pairs keyed by that
+    identity; pairs already seen within the TTL window are dropped. This
+    handles at-least-once delivery without suppressing another tenant's event.
     """
 
     def open(self, runtime_context: Any) -> None:
@@ -334,8 +339,8 @@ def build_pipeline() -> StreamExecutionEnvironment:
     ).assign_timestamps_and_watermarks(watermark_strategy)
 
     # Validate + enrich (with dead letter side output); emits
-    # (event_id, payload) pairs so the dedup key is read from the tuple
-    # instead of a second full-JSON parse (audit M-C3).
+    # (tenant/event_id identity, payload) pairs so the dedup key is read from
+    # the tuple instead of a second full-JSON parse (audit M-C3).
     validated = stream.process(
         ValidateAndEnrich(),
         output_type=Types.TUPLE([Types.STRING(), Types.STRING()]),
@@ -354,7 +359,7 @@ def build_pipeline() -> StreamExecutionEnvironment:
 
     validated.get_side_output(DEAD_LETTER_TAG).sink_to(dead_letter_sink)
 
-    # Deduplicate by event_id
+    # Deduplicate by tenant-scoped event identity.
     deduped = (
         validated.key_by(lambda pair: pair[0])
         .map(DeduplicateByEventId(), output_type=Types.STRING())

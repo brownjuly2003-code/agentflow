@@ -694,6 +694,15 @@ def test_flink_operator_workload_renders_golden_runtime():
         assert "resources" not in task_manager
         assert job_manager["resource"] == {"cpu": 1, "memory": "2048m"}
         assert task_manager["resource"] == {"cpu": 1, "memory": "2048m"}
+        main_container = next(
+            container
+            for container in deployment["spec"]["podTemplate"]["spec"]["containers"]
+            if container["name"] == "flink-main-container"
+        )
+        parallelism_env = next(
+            item["value"] for item in main_container["env"] if item["name"] == "FLINK_PARALLELISM"
+        )
+        assert parallelism_env == str(deployment["spec"]["job"]["parallelism"])
     assert "apiVersion: flink.apache.org/v1beta1" in output
     assert "kind: FlinkDeployment" in output
     assert "flinkVersion: v2_3" in output

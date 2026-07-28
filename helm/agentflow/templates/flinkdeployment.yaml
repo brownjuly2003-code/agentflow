@@ -42,6 +42,8 @@ spec:
               value: {{ join "," .Values.flinkJob.inputTopics | quote }}
             - name: AGENTFLOW_FLINK_GROUP_ID
               value: {{ .Values.flinkJob.groupId | quote }}
+            - name: FLINK_PARALLELISM
+              value: {{ .Values.flinkJob.parallelism | quote }}
             - name: AGENTFLOW_PROFILE
               value: {{ .Values.config.profile | default "dev" | quote }}
             - name: AWS_REGION

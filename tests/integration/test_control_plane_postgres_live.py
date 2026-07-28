@@ -652,8 +652,10 @@ def test_schedule_outbox_retry_floors_kafka_shaped_errors_at_30s(
     )
 
     with psycopg.connect(PG_DSN) as conn:
-        next_at = conn.execute("SELECT next_attempt_at FROM outbox WHERE id = 'o1'").fetchone()[0]
-    assert next_at >= datetime.now(UTC) + timedelta(seconds=20)
+        next_at, database_now = conn.execute(
+            "SELECT next_attempt_at, now() FROM outbox WHERE id = 'o1'"
+        ).fetchone()
+    assert next_at >= database_now + timedelta(seconds=20)
 
 
 def test_outbox_claims_are_leased_and_claim_by_id_is_exclusive(

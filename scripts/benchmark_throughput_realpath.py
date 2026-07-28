@@ -247,6 +247,22 @@ def format_duration(ms: float) -> str:
     return f"{ms:.0f} ms"
 
 
+def catchup_is_complete(
+    *,
+    processed: float,
+    produced: int,
+    lag: float,
+    baseline_lag: float,
+    pending_latency_count: int,
+    completion_ratio: float,
+) -> bool:
+    return (
+        processed >= produced * completion_ratio
+        and lag <= max(5.0, baseline_lag)
+        and pending_latency_count == 0
+    )
+
+
 def build_markdown(report: dict) -> str:
     s = report["summary"]
     gen = report["generated"]
@@ -374,10 +390,18 @@ def main() -> int:
     parser.add_argument("--latency-samples", type=int, default=10)
     parser.add_argument("--latency-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--catchup-timeout-seconds", type=float, default=300.0)
+    parser.add_argument(
+        "--catchup-completion-ratio",
+        type=float,
+        default=0.99,
+        help="processed/produced ratio required before catch-up completes",
+    )
     parser.add_argument("--report-json", default=str(DEFAULT_JSON))
     parser.add_argument("--report-md", default=str(DEFAULT_REPORT))
     parser.add_argument("--no-md", action="store_true")
     args = parser.parse_args()
+    if not 0.0 < args.catchup_completion_ratio <= 1.0:
+        parser.error("--catchup-completion-ratio must be in (0, 1]")
 
     try:
         baseline = read_bridge_snapshot(args.bridge_metrics)
@@ -522,16 +546,15 @@ def main() -> int:
             lag_peak = max(lag_peak, final["lag"])
             applied_delta = final["applied"] - baseline["applied"]
             processed = applied_delta + (final["duplicates"] - baseline["duplicates"])
-            if (
-                processed >= produced * 0.99
-                and final["lag"] <= max(5.0, baseline["lag"])
-                and not pending_latency
+            if catchup_is_complete(
+                processed=processed,
+                produced=produced,
+                lag=final["lag"],
+                baseline_lag=baseline["lag"],
+                pending_latency_count=len(pending_latency),
+                completion_ratio=args.catchup_completion_ratio,
             ):
                 break
-            if processed >= produced * 0.99 and final["lag"] <= max(5.0, baseline["lag"]):
-                # applied done; keep looping only for remaining latency probes
-                if not pending_latency:
-                    break
             print(
                 f"  catch-up applied_delta={applied_delta:.0f}/{produced} "
                 f"dup_delta={final['duplicates'] - baseline['duplicates']:.0f} "
@@ -595,6 +618,7 @@ def main() -> int:
         "bridge_metrics_url": args.bridge_metrics,
         "count": args.count,
         "pace_eps": args.pace_eps or None,
+        "catchup_completion_ratio": args.catchup_completion_ratio,
         "latency_samples": args.latency_samples,
         "system": {
             "python": platform.python_version(),

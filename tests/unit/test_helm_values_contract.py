@@ -591,6 +591,8 @@ def test_serving_bridge_renders_as_separate_clickhouse_consumer():
         "servingBridge.enabled=true",
         "--set",
         "servingBridge.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set-string",
+        "config.redisUrl=redis://redis.data.svc:6379/0",
     )
     output = _combined_output(result)
 
@@ -599,6 +601,20 @@ def test_serving_bridge_renders_as_separate_clickhouse_consumer():
     assert "src.processing.bridge_consumer" in output
     assert 'value: "kafka.data.svc:9092"' in output
     assert 'name: "agentflow-clickhouse"' in output
+    deployments = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document
+        and document.get("kind") == "Deployment"
+        and document.get("metadata", {}).get("labels", {}).get("app.kubernetes.io/component")
+        == "serving-bridge"
+    ]
+    assert len(deployments) == 1
+    env = {
+        item["name"]: item.get("value")
+        for item in deployments[0]["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["REDIS_URL"] == "redis://redis.data.svc:6379/0"
 
 
 def test_serving_bridge_rejects_duckdb_backend():

@@ -76,6 +76,15 @@ def test_dev_extra_installs_jsonschema_for_helm_schema_tests():
     assert any(dependency.startswith("jsonschema") for dependency in dev_dependencies)
 
 
+def test_runtime_and_docker_image_include_redis_client():
+    pyproject = _load_pyproject()
+    runtime_dependencies = pyproject["project"]["dependencies"]
+    docker_lock = (PROJECT_ROOT / "requirements-docker.lock").read_text(encoding="utf-8")
+
+    assert any(dependency.startswith("redis") for dependency in runtime_dependencies)
+    assert "redis==" in docker_lock
+
+
 def test_contract_workflow_uses_contract_extra():
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "contract.yml").read_text(encoding="utf-8")
 

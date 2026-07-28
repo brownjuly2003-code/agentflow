@@ -72,6 +72,10 @@ spec:
               value: {{ .Values.servingBridge.batchMax | quote }}
             - name: AGENTFLOW_BRIDGE_METRICS_PORT
               value: {{ .Values.servingBridge.metricsPort | quote }}
+            {{- if .Values.config.redisUrl }}
+            - name: REDIS_URL
+              value: {{ .Values.config.redisUrl | quote }}
+            {{- end }}
             {{- include "agentflow.kafkaAuthEnv" . | nindent 12 }}
             - name: CLICKHOUSE_HOST
               value: {{ required "serving.clickhouse.host is required when serving.backend=clickhouse" .Values.serving.clickhouse.host | quote }}

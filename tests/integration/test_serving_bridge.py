@@ -90,6 +90,7 @@ def _flink_shaped_order() -> dict:
         "processor_version": "1.0.0",
     }
     event["_partition_key"] = event["user_id"]
+    event["tenant"] = "default"
     return event
 
 
@@ -115,6 +116,7 @@ def _flink_shaped_page_view(session_id: str, page_url: str) -> dict:
         "processor_version": "1.0.0",
     }
     event["_partition_key"] = session_id
+    event["tenant"] = "default"
     return event
 
 

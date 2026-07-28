@@ -106,9 +106,7 @@ def test_expired_waiver_fails_closed() -> None:
 
 
 def test_repo_flink_policy_pins_only_the_two_proven_findings() -> None:
-    policy = json.loads(
-        (ROOT / "config" / "security-vulnerability-waivers.json").read_text(encoding="utf-8")
-    )
+    policy = json.loads((ROOT / "security" / "trivy-waivers.json").read_text(encoding="utf-8"))
     scope = policy["scopes"]["flink-runtime"]
     waivers = scope["waivers"]
 

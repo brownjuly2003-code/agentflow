@@ -64,6 +64,22 @@ standard `/docker-entrypoint.sh`. PyFlink and job dependencies live in
 `/opt/pyflink-venv`; both rendered jobs pass that interpreter through
 `-pyclientexec`.
 
+## Kubernetes Operator 1.15 compatibility
+
+Install the pinned Apache Flink Kubernetes Operator 1.15.0 chart before the
+AgentFlow chart. The 1.15.0 operator code recognizes `v2_3`, but its published
+generated `FlinkDeployment` CRD enum ends at `v2_2`. After installing that
+exact operator release, repair the CRD before enabling `flinkJob`:
+
+```bash
+python scripts/patch_flink_operator_1_15_crd.py
+```
+
+The command is idempotent and fail-closed: it adds only `v2_3`, only when the
+existing enum exactly matches the published 1.15.0 schema, and refuses unknown
+or newer CRD layouts. Do not use this version-specific patch with another
+operator release.
+
 ## Tests
 
 Run the Task 7 regression suite with:

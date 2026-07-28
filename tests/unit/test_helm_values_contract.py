@@ -111,6 +111,26 @@ def test_chart_defaults_do_not_embed_production_shaped_api_key_hashes():
     assert "$2a$" not in values_text
 
 
+def test_nodeport_service_renders_requested_node_port():
+    result = _run_helm_template(
+        "--set",
+        "service.type=NodePort",
+        "--set",
+        "service.nodePort=30081",
+    )
+
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+    services = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document and document.get("kind") == "Service"
+    ]
+    assert len(services) == 1
+    assert services[0]["spec"]["type"] == "NodePort"
+    assert services[0]["spec"]["ports"][0]["nodePort"] == 30081
+
+
 def test_helm_template_rejects_persistent_duckdb_multi_replica_render():
     result = _run_helm_template(
         "--set",

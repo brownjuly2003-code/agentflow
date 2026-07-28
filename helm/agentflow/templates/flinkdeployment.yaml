@@ -72,15 +72,13 @@ spec:
             secretName: {{ .Values.kafkaAuth.caSecret | quote }}
       {{- end }}
   jobManager:
-    resources:
-      requests:
-        cpu: {{ .Values.flinkJob.jobManager.cpu | quote }}
-        memory: {{ .Values.flinkJob.jobManager.memory | quote }}
+    resource:
+      cpu: {{ .Values.flinkJob.jobManager.cpu }}
+      memory: {{ .Values.flinkJob.jobManager.memory | quote }}
   taskManager:
-    resources:
-      requests:
-        cpu: {{ .Values.flinkJob.taskManager.cpu | quote }}
-        memory: {{ .Values.flinkJob.taskManager.memory | quote }}
+    resource:
+      cpu: {{ .Values.flinkJob.taskManager.cpu }}
+      memory: {{ .Values.flinkJob.taskManager.memory | quote }}
   job:
     jarURI: local:///opt/flink/opt/flink-python-2.3.0.jar
     entryClass: org.apache.flink.client.python.PythonDriver

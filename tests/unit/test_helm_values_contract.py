@@ -681,6 +681,19 @@ def test_flink_operator_workload_renders_golden_runtime():
     output = _combined_output(result)
 
     assert result.returncode == 0, output
+    flink_deployments = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document and document.get("kind") == "FlinkDeployment"
+    ]
+    assert len(flink_deployments) == 2
+    for deployment in flink_deployments:
+        job_manager = deployment["spec"]["jobManager"]
+        task_manager = deployment["spec"]["taskManager"]
+        assert "resources" not in job_manager
+        assert "resources" not in task_manager
+        assert job_manager["resource"] == {"cpu": 1, "memory": "2048m"}
+        assert task_manager["resource"] == {"cpu": 1, "memory": "2048m"}
     assert "apiVersion: flink.apache.org/v1beta1" in output
     assert "kind: FlinkDeployment" in output
     assert "flinkVersion: v2_3" in output

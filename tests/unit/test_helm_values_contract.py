@@ -406,7 +406,12 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
     """Live E4 stand (2026-07-16): first helm install hung in pending-install
     because the provision Job (hook weight -5) referenced SA `agentflow` while
     the SA was a normal release resource applied only after hooks. The SA must
-    be an earlier pre-install/pre-upgrade hook so install is self-contained.
+    be an earlier pre-install hook so first install is self-contained.
+
+    Live Helm upgrade rev4 (2026-07): SA as pre-install,pre-upgrade +
+    before-hook-creation deleted/recreated the SA on upgrade. Flink JM kept
+    the old projected token and got 401 on core ConfigMaps until JM restart.
+    Workload SA must NOT re-run on pre-upgrade; provision Job stays dual-hook.
     """
     rendered = _run_helm_template(
         "--set",
@@ -436,9 +441,13 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
 
     sa_ann = sa_docs[0]["metadata"]["annotations"]
     job_ann = job_docs[0]["metadata"]["annotations"]
-    assert sa_ann["helm.sh/hook"] == "pre-install,pre-upgrade"
+    # SA: pre-install only — must survive upgrade without hook replacement.
+    assert sa_ann["helm.sh/hook"] == "pre-install"
+    assert "pre-upgrade" not in sa_ann["helm.sh/hook"]
+    # Provision Job still re-runs on upgrade to reconcile schema/topics.
     assert job_ann["helm.sh/hook"] == "pre-install,pre-upgrade"
     assert int(sa_ann["helm.sh/hook-weight"]) < int(job_ann["helm.sh/hook-weight"])
+    # before-hook-creation keeps pre-install retry safe without orphaning SA.
     assert sa_ann["helm.sh/hook-delete-policy"] == "before-hook-creation"
     # Job must still bind the chart SA (not default).
     assert (

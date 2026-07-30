@@ -87,6 +87,10 @@ Push, PR mutations and release actions require explicit owner authorization.
 - Per owner allocation, Codex performed the dependency remediation,
   documentation, Mac verification, and Git closeout; Grok/Grokw remained
   paused to preserve its remaining weekly quota.
+- Repository-owned coverage gates are green and remain blocking. Codecov OIDC
+  currently returns `Repository not found`; its upload is non-blocking
+  reporting until the one-time external activation in
+  [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
 - Production status remains `candidate`; none of this closes the live Iceberg,
   restore/replay, fresh soak/rollback, external pen-test, or npm approval gates.
 

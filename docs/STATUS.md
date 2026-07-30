@@ -35,6 +35,10 @@ findings; see
 [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
 The dependency failure, resolution, and clean Mac verification are recorded in
 [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+All repository-owned coverage floors remain blocking; Codecov upload is
+non-blocking reporting until the repository is enabled in that external
+service, as recorded in
+[operations/codecov-setup.md](operations/codecov-setup.md).
 The exact post-remediation GitHub SHA must still complete all required checks
 before the external closure gate is claimed.
 

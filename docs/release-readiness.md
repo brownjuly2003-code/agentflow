@@ -81,7 +81,10 @@ The required `lint` job now contains strict MkDocs and claims validation. The
 required `test-unit` job contains the 80% changed-code coverage gate and depends
 on the 3.11/3.12/3.13 `python-compat` matrix, so a failed compatibility lane
 cannot be bypassed merely because its job name is not a separate protected
-context.
+context. The same job enforces a 60% full-suite line/branch floor and separate
+90% floors for security-critical modules. Codecov upload is non-blocking
+reporting until the repository is enabled in that external service; see
+[operations/codecov-setup.md](operations/codecov-setup.md).
 
 The 2026-07-30 closing remediation additionally covers two clean-install
 boundaries: the core-only API imports and serves health/entity/query without

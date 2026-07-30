@@ -6,12 +6,25 @@ run.
 
 ## How uploads work today
 
-- `ci.yml` calls `codecov/codecov-action@v4` with `use_oidc: true` during
-  the `test-unit` job.
+- `ci.yml` calls pinned `codecov/codecov-action` v7.0.0 with
+  `use_oidc: true` during the `test-unit` job.
 - OIDC uploads do not require a long-lived `CODECOV_TOKEN`; the action
   exchanges the GitHub OIDC token for a short-lived Codecov credential.
 - `fail_ci_if_error: false` keeps CI green even if Codecov is temporarily
-  unreachable.
+  unreachable or the repository has not yet been enabled there.
+- Coverage still fails closed inside CI: the full suite enforces a 60%
+  line/branch floor, `diff-cover` enforces 80% on changed code, and
+  security-critical modules have separate 90% gates.
+
+## Current external status
+
+On 2026-07-30, CI run
+[`30575838038`](https://github.com/brownjuly2003-code/agentflow/actions/runs/30575838038)
+completed every test and local coverage gate successfully. Codecov OIDC token
+exchange and upload queueing also succeeded, but Codecov returned
+`Repository not found` while processing the report. This is an external
+repository-activation gap, not a test or coverage failure. Complete the
+one-time setup below before treating the Codecov dashboard or badge as current.
 
 ## One-time setup
 
@@ -40,7 +53,8 @@ Expected response: `Valid!`.
 ## Verify the pipeline
 
 1. Push a commit to `main` or open a pull request.
-2. Confirm the `Upload coverage` step in `test-unit` succeeds.
+2. After the repository is enabled in Codecov, confirm the `Upload coverage`
+   step reports a successful external upload.
 3. Open the Codecov dashboard and confirm a new report appears for the
    commit SHA.
 4. Reload `README.md` on GitHub — the `codecov` badge should resolve to
@@ -57,3 +71,8 @@ Expected response: `Valid!`.
 - Coverage for `tests/`, `scripts/`, `examples/`, `sdk-ts/`, and
   `notebooks/` is ignored because those directories are not part of the
   production surface.
+
+These Codecov policies are additional reporting/status checks once the
+external repository is enabled. The blocking repository-owned coverage floors
+remain the `pytest-cov`, `diff-cover`, and module-specific commands in
+`.github/workflows/ci.yml`.

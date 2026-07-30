@@ -316,7 +316,10 @@ jobs:
         with:
           files: coverage.xml
           use_oidc: true
-          fail_ci_if_error: true
+          # Coverage floors are enforced locally above. Codecov is reporting
+          # only and must not mask a green test job when the repo is not yet
+          # enabled in the external service.
+          fail_ci_if_error: false
 
   test-integration:
     runs-on: ubuntu-latest

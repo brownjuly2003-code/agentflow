@@ -1148,6 +1148,14 @@ pyiceberg==0.11.1 ; python_full_version < '3.14' \
     --hash=sha256:e273242cdca56029af694d7ce18075d47a74d034326d663ff6dd2655a6f44825 \
     --hash=sha256:eb3a0a3e630ee89758eb96b39b456f4697732351fb0c080e9498ea578f9b71f9
     # via agentflow-runtime
+pyiceberg-core==0.7.0 ; python_full_version < '3.14' \
+    --hash=sha256:2303276b0d8b57b8ce4a3ef9e5050ffdefd9561684728cd0a9a72a9ad0a6a74d \
+    --hash=sha256:64dd3c3c7af6d39097e1d070161e98118e5dd423392992a9074e1ab813fd467b \
+    --hash=sha256:74543885cc97e8d976707f97dd01e8f03dce8a5d3a01e41ada0aaefa13c742f9 \
+    --hash=sha256:8166883ace30a388d2f659634bec87731cad7bc52341c997fcdd4e13780e4345 \
+    --hash=sha256:94fe0281f09c84cdd4e56d217865ef1d81e0cb0b708ba6eb2f4c5ae8bf86f0ba \
+    --hash=sha256:99e23463c30c4180329719fe1f120e779b20616a36bbdd42042b70063a13bd39
+    # via agentflow-runtime
 pyparsing==3.3.2 ; python_full_version < '3.14' \
     --hash=sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d \
     --hash=sha256:c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc

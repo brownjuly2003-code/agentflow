@@ -58,8 +58,8 @@ rehearsal and third-party penetration test.
 ## Обязательные внешние closure gates
 
 - closing commits `59fc19c` (Operator/Kafka reproducibility) and `72b9609`
-  (Python compatibility/core lock remediation) published to `main`; the final
-  core-only/Ruff/runtime-image hardening commit remains to be published;
+  (Python compatibility/core lock remediation), plus `f11fd59`
+  (core-only/Ruff/runtime-image hardening), are published to `main`;
 - all required GitHub checks green on the exact closing SHA;
 - two open Dependabot PRs receive a final one-by-one disposition;
 - the substantial post-v2 changes receive a final release/version decision and
@@ -74,9 +74,19 @@ Push, PR mutations and release actions require explicit owner authorization.
   core-only API import without `pyiceberg`) are fixed and locally verified.
 - The Security Scan findings were traced to packages vendored by runtime
   `pip`; the final image now removes installer tooling after `pip check`.
+- CI on `f11fd59` passed every separate workflow and every early main-CI gate,
+  then exposed two upstream-resolution boundaries: PyIceberg 0.11 writes
+  without native core and MCP 2.0 breaking the 1.x integration API. The
+  candidate now resolves `pyiceberg-core==0.7.0` across Python 3.11–3.13 and
+  constrains MCP to `<2`; `2170` local unit/property tests and all `39`
+  selected clean-Mac dependency tests pass. See
+  [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
 - Independent Mac image validation reports zero HIGH/CRITICAL findings with
   Trivy 0.70.0; see
   [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+- Per owner allocation, Codex performed the dependency remediation,
+  documentation, Mac verification, and Git closeout; Grok/Grokw remained
+  paused to preserve its remaining weekly quota.
 - Production status remains `candidate`; none of this closes the live Iceberg,
   restore/replay, fresh soak/rollback, external pen-test, or npm approval gates.
 

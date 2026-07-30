@@ -26,10 +26,15 @@ Closing CI hardening on 2026-07-30 also verified the Python 3.11/3.12/3.13
 compatibility lanes, made `pyiceberg` optional for the core-only API path,
 aligned SDK examples with Ruff 0.16 Markdown formatting, and removed
 `pip`/`setuptools`/`wheel` from the final API image after `pip check`.
+A later dependency-resolution gate now keeps the Iceberg write path complete
+with Python 3.13-compatible `pyiceberg-core==0.7.0` and holds the optional MCP
+integration on its supported 1.x API.
 A clean core-only HTTP smoke returned 200 for health, entity, and NL query.
 An independent Mac rebuild scanned with Trivy 0.70.0 at zero HIGH/CRITICAL
 findings; see
 [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+The dependency failure, resolution, and clean Mac verification are recorded in
+[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
 The exact post-remediation GitHub SHA must still complete all required checks
 before the external closure gate is claimed.
 
@@ -53,6 +58,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | Clean-checkout PyFlink OCI build + submission smoke | PASS clean-checkout OCI build + submission smoke on 2026-07-30 — image built, JobID `RUNNING`, not Operator/E2E | [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md) |
 | Flink Kubernetes Operator + Helm golden deploy | PASS clean kind Operator/Helm deploy of verified image on exact HEAD `36ed1ec` — CR/job stable, checkpoints `2→23`, leader flaps `0`, not lake E2E | [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md) |
 | Hardened API runtime image (local acceptance) | core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL after runtime installer removal | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) |
+| Python cloud/MCP dependency compatibility (local + isolated Mac) | 2170 unit/property tests PASS; MCP 1.29 + PyIceberg 0.11.1/core 0.7.0 clean environment and 39 focused tests PASS | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) |
 
 ## 2026-07-23 audit closure
 

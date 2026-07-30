@@ -87,9 +87,16 @@ The 2026-07-30 closing remediation additionally covers two clean-install
 boundaries: the core-only API imports and serves health/entity/query without
 the optional `pyiceberg` package, and the final API image removes
 `pip`/`setuptools`/`wheel` after its hash-locked install and `pip check`.
+The cloud profile separately includes `pyiceberg-core==0.7.0`, whose
+stable-ABI build supports the full Python matrix and restores PyIceberg 0.11
+write transforms; the optional MCP integration is capped below the breaking
+2.0 API. Clean Mac Python 3.13 verification passed with MCP 1.29 and all 39
+selected contract/MCP/Iceberg tests.
 Independent Mac validation with Trivy 0.70.0 reported zero HIGH/CRITICAL
 findings; details and evidence limits are in
-[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md)
+and
+[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
 All required GitHub checks must still be green on the exact final pushed SHA.
 
 ## Scope

@@ -85,11 +85,12 @@ def test_runtime_and_docker_image_include_redis_client():
     assert "redis==" in docker_lock
 
 
-def test_cloud_extra_uses_pure_python_pyiceberg_without_native_core():
-    """Cloud must ship pure-Python pyiceberg; pyiceberg-core has no cp313 wheels.
+def test_cloud_extra_uses_python_313_compatible_pyiceberg_core():
+    """Iceberg writes need native transforms without reintroducing the cp313 break.
 
-    The native extra is an optimization unused by project code. Pinning it via
-    ``pyiceberg[pyiceberg-core]`` blocks Python 3.13 lock/install on CI.
+    PyIceberg 0.11 requires ``pyiceberg-core`` for partition transforms and
+    table appends. Core 0.8 excludes Python 3.13, while 0.7 ships a compatible
+    stable-ABI wheel for every supported interpreter.
     """
     pyproject = _load_pyproject()
     cloud = pyproject["project"]["optional-dependencies"]["cloud"]
@@ -100,9 +101,18 @@ def test_cloud_extra_uses_pure_python_pyiceberg_without_native_core():
         for dependency in cloud
     ), cloud
     assert not any("[pyiceberg-core]" in dependency for dependency in cloud), cloud
-    assert not any(dependency.startswith("pyiceberg-core") for dependency in cloud), cloud
+    assert "pyiceberg-core>=0.7,<0.8" in cloud
     assert "pyiceberg==" in docker_lock
-    assert "pyiceberg-core==" not in docker_lock
+    assert "pyiceberg-core==0.7.0" in docker_lock
+
+
+def test_mcp_integration_rejects_breaking_major_versions():
+    integrations = tomllib.loads(
+        (PROJECT_ROOT / "integrations" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    mcp_dependencies = integrations["project"]["optional-dependencies"]["mcp"]
+
+    assert "mcp>=1.0,<2" in mcp_dependencies
 
 
 def test_contract_workflow_uses_contract_extra():

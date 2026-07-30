@@ -66,6 +66,26 @@ Runtime checks:
 - Trivy summary: Debian `13.5` vulnerabilities `0`; every detected Python
   package vulnerabilities `0`.
 
+## Dependency-lock revalidation
+
+Final CI dependency diagnosis added `pyiceberg-core==0.7.0` to the cloud
+profile and hash lock. Codex rebuilt the image from isolated Mac clone
+`/tmp/agentflow-ci-f11-codex-deps-01`, based on exact `f11fd59` plus the five
+candidate dependency files:
+
+```text
+agentflow-api:security-codex-f11deps-01
+manifest list sha256:95254620bf98e73ce89feae28e0b178a3cf00956c7e63eedd40f8958705645d1
+```
+
+The rebuilt Python 3.11 image installed core 0.7.0 through
+`requirements-docker.lock`, passed `pip check`, removed installer tooling,
+and preserved the API import. A fresh official Trivy `0.70.0` container scan
+with the same HIGH/CRITICAL failure policy exited `0`; every reported OS and
+Python package row was clean. Dependency root-cause and Python 3.13/MCP
+verification are in
+[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+
 ## Evidence boundary
 
 This is content-level local acceptance of the candidate runtime image. The

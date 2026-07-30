@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import tomllib
 from pathlib import Path
 
 from scripts.validate_project_claims import validate_repository
@@ -28,11 +29,56 @@ VALIDATOR_INPUTS = (
     "docs/quality.md",
     "docs/decisions/0013-golden-production-topology.md",
     "docs/perf/freshness-e2e-realpath.md",
+    "docs/perf/golden-flink-submission-2026-07-30.md",
 )
 
 
 def test_repository_claims_are_consistent() -> None:
     assert validate_repository(ROOT) == []
+
+
+def test_flink_submission_smoke_evidence_is_claimed() -> None:
+    """Submission smoke PASS is machine-readable and fixture-wired.
+
+    Scope boundary: clean-checkout OCI build + real job submission only —
+    not Operator deployment, lake-to-serving E2E, or production acceptance.
+    """
+    evidence = "docs/perf/golden-flink-submission-2026-07-30.md"
+    manifest = tomllib.loads(
+        (ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8")
+    )
+    production = manifest["production"]
+
+    assert evidence in manifest["required_evidence"]
+    assert production.get("verified_submission_smoke") == evidence
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_flink_submission_smoke_evidence_documents_live_compose_commands() -> None:
+    """Report command classes must match the live Mac PASS-run compose workflow.
+
+    Rejects the drifted direct `docker build -f .../Dockerfile` recipe that
+    never ran in the recorded PASS evidence.
+    """
+    evidence = ROOT / "docs/perf/golden-flink-submission-2026-07-30.md"
+    text = evidence.read_text(encoding="utf-8")
+    checkout = "/tmp/agentflow-acceptance-ca82be5-grokw-01"
+
+    required_fragments = (
+        "docker compose --project-name agentflow-flink-ca82be5",
+        f"--project-directory {checkout}",
+        f"-f {checkout}/docker-compose.yml",
+        f"-f {checkout}/docker-compose.flink.yml",
+        "build flink-job-runner",
+        "up -d flink-job-runner",
+        "logs flink-job-runner",
+        "down -v",
+    )
+    for fragment in required_fragments:
+        assert fragment in text, f"missing live command fragment: {fragment}"
+
+    assert "-f src/processing/flink_jobs/Dockerfile" not in text
 
 
 def test_validator_detects_document_drift(tmp_path: Path) -> None:

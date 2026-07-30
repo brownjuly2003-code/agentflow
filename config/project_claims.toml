@@ -1,5 +1,15 @@
 schema_version = 1
 
+required_evidence = [
+    "docs/perf/freshness-e2e-realpath.md",
+    "docs/decisions/0013-golden-production-topology.md",
+    "src/processing/flink_jobs/Dockerfile",
+    "src/processing/flink_jobs/requirements.txt",
+    "helm/agentflow/templates/flinkdeployment.yaml",
+    "helm/agentflow/values.yaml",
+    "docs/perf/golden-flink-submission-2026-07-30.md",
+]
+
 [production]
 status = "candidate"
 golden_topology = "containerized-pyflink-kubernetes"
@@ -11,9 +21,10 @@ base_image = "flink:2.3.0-scala_2.12-java17@sha256:12a034b71a4d6d55227d14fe0ba69
 deployment_definition = "helm/agentflow/templates/flinkdeployment.yaml"
 topology_decision = "docs/decisions/0013-golden-production-topology.md"
 verified_streaming_path = "Kafka -> PyFlink -> events.validated -> bridge -> ClickHouse -> API"
+verified_submission_smoke = "docs/perf/golden-flink-submission-2026-07-30.md"
 pending_acceptance = [
     "live Iceberg materialization from events.validated",
-    "clean-checkout OCI build and Kubernetes Operator deployment",
+    "Kubernetes Operator deployment of the verified Flink OCI image",
     "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke",
     "checkpoint restore and replay acceptance",
     "4h soak and rollback rehearsal on the golden topology",
@@ -99,15 +110,6 @@ name = "health, catalog, batch, and resilience"
 python_methods = ["health", "is_fresh", "catalog", "batch", "configure_resilience"]
 typescript_methods = ["health", "isFresh", "catalog", "batch", "configureResilience"]
 
-required_evidence = [
-    "docs/perf/freshness-e2e-realpath.md",
-    "docs/decisions/0013-golden-production-topology.md",
-    "src/processing/flink_jobs/Dockerfile",
-    "src/processing/flink_jobs/requirements.txt",
-    "helm/agentflow/templates/flinkdeployment.yaml",
-    "helm/agentflow/values.yaml",
-]
-
 [[documents]]
 path = "README.md"
 required = [
@@ -181,7 +183,7 @@ path = "docs/STATUS.md"
 required = [
     "golden topology remains a production candidate",
     "Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API",
-    "Docker-heavy acceptance could not run on 2026-07-23",
+    "PASS clean-checkout OCI build + submission smoke on 2026-07-30",
 ]
 forbidden = [
     "remaining work is packaging hygiene",

@@ -8,10 +8,12 @@ provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
 registry links and upload evidence.
 
-**Golden-topology status (2026-07-23)**: production candidate, not production
+**Golden-topology status (2026-07-30)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
-live clean-cluster, recovery, soak, rollback, and external security evidence
-remain pending as listed below.
+clean-checkout OCI build + real Flink job submission smoke is **PASS**
+([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md)).
+Operator deployment, lake-to-serving E2E, recovery, soak, rollback, and
+external security evidence remain pending as listed below.
 
 ## Summary
 
@@ -79,10 +81,19 @@ context.
 ## Scope
 
 Component, contract, Helm, and replay tests validate the checked-in streaming,
-lake, serving, and deployment artifacts. They do not substitute for the
-following live production-acceptance evidence:
+lake, serving, and deployment artifacts. They do not substitute for full live
+production-acceptance evidence.
 
-1. clean-checkout OCI builds plus Flink Kubernetes Operator deployment;
+**Completed (limited scope, 2026-07-30):** clean-checkout PyFlink OCI build and
+real job submission smoke on `deproject-mac` — see
+[perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md).
+This is **not** Operator deployment, lake-to-serving E2E, or production
+acceptance.
+
+**Still required for production acceptance:**
+
+1. Flink Kubernetes Operator + Helm golden-topology deployment of the verified
+   OCI image on a clean kind (or equivalent) cluster;
 2. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
    ClickHouse → API, then replayed after checkpoint restore without duplicate
    `(tenant_id, event_id)` rows;

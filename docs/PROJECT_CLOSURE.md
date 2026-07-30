@@ -36,13 +36,17 @@ breaking migrations требуют отдельной программы.
 | 9. Quality/docs/release controls | core done; external evidence remains below |
 | 10. Production acceptance | separate external acceptance program |
 
-Шаг 10 не объявляется выполненным. Он включает clean-cluster operator deploy,
-live Iceberg path, checkpoint restore/replay, fresh four-hour golden-topology
-soak, rollback rehearsal and third-party penetration test.
+Шаг 10 не объявляется выполненным. Clean-cluster Operator/Helm deploy of the
+verified Flink OCI image on exact HEAD `36ed1ec` is now measured
+([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)),
+but the remaining acceptance program still includes live Iceberg path,
+checkpoint restore/replay, fresh four-hour golden-topology soak, rollback
+rehearsal and third-party penetration test.
 
 ## Post-closure future/accepted limits
 
-- Golden-topology production acceptance — `future operations`; production
+- Golden-topology production acceptance — Operator/Helm deploy **PASS** on
+  2026-07-30; full production acceptance remains `future operations`; production
   status remains `candidate`.
 - Third-party pen-test and remediation/retest — required before a production
   security claim, not part of self-attested closure.

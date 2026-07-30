@@ -1,0 +1,151 @@
+# Kind acceptance single-node Kafka/KRaft scaffold.
+# Acceptance/staging only — not a production Kafka topology.
+# Proven fixes from clean kind Operator acceptance (2026-07-30):
+#   - enableServiceLinks: false (avoids injected KAFKA_PORT breaking cp-kafka)
+#   - controller voters on 127.0.0.1 (avoids kind Service hairpin deadlock)
+#   - explicit inter-broker listener + widened probe windows
+# Apply on a clean kind stand:
+#   kubectl apply -f k8s/acceptance/kafka-kraft.yaml
+# Topic Job is idempotent via --if-not-exists; re-run requires deleting the Job.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentflow
+  labels:
+    agentflow.scaffold: kind-acceptance
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: agentflow
+  labels:
+    app: kafka
+    agentflow.scaffold: kind-acceptance
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+        agentflow.scaffold: kind-acceptance
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.7.0
+          ports:
+            - name: plaintext
+              containerPort: 9092
+            - name: controller
+              containerPort: 29093
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@127.0.0.1:29093
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_MIN_INSYNC_REPLICAS
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "false"
+            - name: KAFKA_BROKER_SESSION_TIMEOUT_MS
+              value: "45000"
+            - name: CLUSTER_ID
+              value: AgentFlowKafkaCluster01
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: agentflow
+  labels:
+    app: kafka
+    agentflow.scaffold: kind-acceptance
+spec:
+  selector:
+    app: kafka
+  ports:
+    - name: plaintext
+      port: 9092
+      targetPort: 9092
+    - name: controller
+      port: 29093
+      targetPort: 29093
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topic-bootstrap
+  namespace: agentflow
+  labels:
+    app: kafka
+    agentflow.scaffold: kind-acceptance
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 12
+  template:
+    metadata:
+      labels:
+        app: kafka-topic-bootstrap
+        agentflow.scaffold: kind-acceptance
+    spec:
+      restartPolicy: OnFailure
+      enableServiceLinks: false
+      containers:
+        - name: topic-bootstrap
+          image: confluentinc/cp-kafka:7.7.0
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              bootstrap="kafka.agentflow.svc.cluster.local:9092"
+              echo "waiting for Kafka at ${bootstrap}"
+              for _ in $(seq 1 60); do
+                if kafka-topics --bootstrap-server "${bootstrap}" --list >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 5
+              done
+              kafka-topics --bootstrap-server "${bootstrap}" --list >/dev/null
+              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic orders.raw --partitions 1 --replication-factor 1
+              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic events.validated --partitions 1 --replication-factor 1
+              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic events.deadletter --partitions 1 --replication-factor 1
+              kafka-topics --bootstrap-server "${bootstrap}" --list

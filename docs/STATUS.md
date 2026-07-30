@@ -1,20 +1,25 @@
 # Engineering Status
 
-> Updated: **2026-07-30** (clean-checkout PyFlink OCI build + real job
-> submission smoke **PASS**; golden topology remains a production candidate, not
-> production accepted) · release line **`v2.0.0`**. Numbers below come only from
-> measured, in-repo evidence — see the linked reports for methodology and
-> reproduction commands.
+> Updated: **2026-07-30** (clean-checkout PyFlink OCI build + submission smoke
+> **PASS**; Flink Kubernetes Operator + Helm golden-topology deploy **PASS**;
+> golden topology remains a production candidate, not production accepted) ·
+> release line **`v2.0.0`**. Numbers below come only from measured, in-repo
+> evidence — see the linked reports for methodology and reproduction commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API
 with Redis push invalidation) — is implemented, measured, and documented. The
 Iceberg materializer, operator-compatible image, and Helm workload are
 implemented and locally contract-tested. On 2026-07-30 a clean-checkout OCI
-build and real Flink job submission smoke passed on `deproject-mac`; Operator
-deploy, lake-to-serving E2E, recovery, soak, rollback, and external security
-acceptance remain open. The earlier 4 h @ 100 eps result remains valid evidence
-for its measured pre-materializer path, not for the unaccepted topology.
+build and real Flink job submission smoke passed on `deproject-mac`, and a
+later clean kind + Operator + Helm acceptance of exact HEAD `36ed1ec` also
+passed (stable hold, growing checkpoints, zero leadership flaps; Kafka on
+that stand used live runtime fixes, later captured in the tracked kind
+acceptance scaffold `k8s/acceptance/kafka-kraft.yaml` — not production Kafka).
+Live Iceberg materialization, lake-to-serving E2E, recovery, soak, rollback,
+and external security acceptance remain open. The earlier 4 h @ 100 eps result
+remains valid evidence for its measured pre-materializer path, not for the
+still-unaccepted full golden topology.
 
 **Project lifecycle:** closure candidate. Engineering scope is frozen; the
 production-candidate boundary, future acceptance program, and release gates are
@@ -34,6 +39,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | Security pass (offline/unit remainder) | closed; third-party pen-test **not** claimed | [security-s12-2026-07-09.md](security-s12-2026-07-09.md), [security-audit.md](security-audit.md) |
 | Multi-tenant ClickHouse write key | adversarial two-tenant suite green on live CH 25.3 (CI `test-integration` + audit stand) | [security-audit.md](security-audit.md), `tests/integration/test_clickhouse_tenant_isolation_live.py` |
 | Clean-checkout PyFlink OCI build + submission smoke | PASS clean-checkout OCI build + submission smoke on 2026-07-30 — image built, JobID `RUNNING`, not Operator/E2E | [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md) |
+| Flink Kubernetes Operator + Helm golden deploy | PASS clean kind Operator/Helm deploy of verified image on exact HEAD `36ed1ec` — CR/job stable, checkpoints `2→23`, leader flaps `0`, not lake E2E | [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md) |
 
 ## 2026-07-23 audit closure
 
@@ -44,7 +50,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke now measured (2026-07-30); live Iceberg, Operator deployment of the verified image, restore/replay, fresh soak/rollback, external pen-test, and npm environment approval remain unverified |
+| Acceptance boundary | clean build/submission smoke and Operator/Helm deploy now measured (2026-07-30); live Iceberg, lake-to-serving E2E, restore/replay, fresh soak/rollback, external pen-test, and npm environment approval remain unverified |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -103,15 +109,17 @@ They require a separately authorized acceptance, deployment, or breaking-release
 program.
 
 1. **Golden-topology acceptance** — clean-checkout OCI build + submission smoke
-   is **PASS** as of 2026-07-30
-   ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
-   next work starts with clean kind + Kubernetes Operator + Helm deployment of
-   the verified image; then two-tenant Kafka → PyFlink → Iceberg → ClickHouse →
-   API smoke; checkpoint restore/replay without duplicate
+   is **PASS**
+   ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md))
+   and clean kind + Kubernetes Operator + Helm deployment of the verified image
+   on exact HEAD `36ed1ec` is also **PASS**
+   ([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)).
+   Remaining acceptance work: two-tenant Kafka → PyFlink → Iceberg →
+   ClickHouse → API smoke; checkpoint restore/replay without duplicate
    `(tenant_id, event_id)` rows; fresh 4 h soak plus backup/rollback rehearsal.
-   Historical note: on 2026-07-23 the Mac verification host had no usable
-   `docker` command for Docker-heavy acceptance; by 2026-07-30 the host was
-   prepared and the submission smoke passed.
+   Acceptance-scaffold Kafka reproducibility debt (kind runtime fixes for
+   `enableServiceLinks` / controller quorum voters) is recorded in the Operator
+   evidence and is not a production-acceptance claim.
 2. **External gates** — third-party penetration test with remediation/retest,
    production CDC onboarding and credentials, public production-grade
    benchmark, and GitHub Environment `npm` with approval protection.

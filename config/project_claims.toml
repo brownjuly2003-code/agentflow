@@ -8,6 +8,7 @@ required_evidence = [
     "helm/agentflow/templates/flinkdeployment.yaml",
     "helm/agentflow/values.yaml",
     "docs/perf/golden-flink-submission-2026-07-30.md",
+    "docs/perf/golden-operator-acceptance-2026-07-30.md",
 ]
 
 [production]
@@ -22,9 +23,9 @@ deployment_definition = "helm/agentflow/templates/flinkdeployment.yaml"
 topology_decision = "docs/decisions/0013-golden-production-topology.md"
 verified_streaming_path = "Kafka -> PyFlink -> events.validated -> bridge -> ClickHouse -> API"
 verified_submission_smoke = "docs/perf/golden-flink-submission-2026-07-30.md"
+verified_operator_acceptance = "docs/perf/golden-operator-acceptance-2026-07-30.md"
 pending_acceptance = [
     "live Iceberg materialization from events.validated",
-    "Kubernetes Operator deployment of the verified Flink OCI image",
     "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke",
     "checkpoint restore and replay acceptance",
     "4h soak and rollback rehearsal on the golden topology",

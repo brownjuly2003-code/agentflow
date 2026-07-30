@@ -11,8 +11,13 @@ registry links and upload evidence.
 **Golden-topology status (2026-07-30)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
 clean-checkout OCI build + real Flink job submission smoke is **PASS**
-([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md)).
-Operator deployment, lake-to-serving E2E, recovery, soak, rollback, and
+([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
+clean kind + Flink Kubernetes Operator + Helm deployment of the verified image
+on exact HEAD `36ed1ec` is also **PASS**
+([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)).
+That acceptance used live Kafka runtime fixes; the kind acceptance scaffold is
+now tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
+production Kafka claim). Lake-to-serving E2E, recovery, soak, rollback, and
 external security evidence remain pending as listed below.
 
 ## Summary
@@ -84,24 +89,33 @@ Component, contract, Helm, and replay tests validate the checked-in streaming,
 lake, serving, and deployment artifacts. They do not substitute for full live
 production-acceptance evidence.
 
-**Completed (limited scope, 2026-07-30):** clean-checkout PyFlink OCI build and
-real job submission smoke on `deproject-mac` — see
-[perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md).
-This is **not** Operator deployment, lake-to-serving E2E, or production
-acceptance.
+**Completed (limited scope, 2026-07-30):**
+
+1. clean-checkout PyFlink OCI build and real job submission smoke on
+   `deproject-mac` — see
+   [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md);
+2. clean kind + Flink Kubernetes Operator + Helm golden-topology deployment of
+   the verified OCI image on exact HEAD `36ed1ec` (stable hold, checkpoints
+   growing, zero leadership flaps) — see
+   [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md).
+
+These close submission smoke and Operator/Helm deploy only. They are **not**
+lake-to-serving E2E or production acceptance. Kafka on the acceptance stand
+required evidence-backed scaffold fixes (`enableServiceLinks: false` and
+controller quorum voters at `127.0.0.1:29093`); that is recorded as
+acceptance-scaffold reproducibility debt, not a product source of truth from
+untracked prompts.
 
 **Still required for production acceptance:**
 
-1. Flink Kubernetes Operator + Helm golden-topology deployment of the verified
-   OCI image on a clean kind (or equivalent) cluster;
-2. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
+1. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
    ClickHouse → API, then replayed after checkpoint restore without duplicate
    `(tenant_id, event_id)` rows;
-3. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
+2. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
    artifact and topology (the existing 2026-07-19 soak predates the Iceberg
    materializer);
-4. an external penetration-test report and remediation/retest evidence;
-5. GitHub Environment `npm` created with approval protection. The workflow now
+3. an external penetration-test report and remediation/retest evidence;
+4. GitHub Environment `npm` created with approval protection. The workflow now
    requires `environment: npm` and a matching release tag, but the repository
    settings API returned `404` for that environment on 2026-07-23, so approval
    protection is not yet evidenced.

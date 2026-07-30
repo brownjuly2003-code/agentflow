@@ -213,20 +213,14 @@ echo "==> Enabling host loopback relay for webhook callbacks..."
 # The SSRF egress guard rejects 127.0.0.1 as loopback by default; allowlist
 # exactly the relay loopback here (ephemeral staging only) so the webhook
 # delivery test passes without weakening the guard for real targets.
+# command/args that start the relay live in k8s/staging/values-staging.yaml
+# (Helm desired state) so a later helm upgrade cannot orphan live-only args.
 kubectl set env "deployment/$RELEASE_NAME" \
   --namespace "$NAMESPACE" \
   HOST_LOOPBACK_PROXY_TARGET="$HOST_LOOPBACK_PROXY_TARGET" \
   HOST_LOOPBACK_PROXY_RANGE_START="$HOST_LOOPBACK_PROXY_RANGE_START" \
   HOST_LOOPBACK_PROXY_RANGE_END="$HOST_LOOPBACK_PROXY_RANGE_END" \
   AGENTFLOW_EGRESS_ALLOWED_HOSTS="127.0.0.1"
-
-kubectl patch deployment "$RELEASE_NAME" \
-  --namespace "$NAMESPACE" \
-  --type=json \
-  -p='[
-    {"op":"replace","path":"/spec/template/spec/containers/0/command","value":["/bin/sh","-lc"]},
-    {"op":"add","path":"/spec/template/spec/containers/0/args","value":["python /app/host_loopback_proxy.py >/tmp/host-loopback-proxy.log 2>&1 & exec uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000"]}
-  ]'
 
 echo "==> Patching service to fixed NodePort..."
 kubectl patch service "$RELEASE_NAME" \

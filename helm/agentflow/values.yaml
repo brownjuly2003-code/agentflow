@@ -408,4 +408,12 @@ affinity:
 
 nodeSelector: {}
 tolerations: []
+command:
+  - uvicorn
+  - src.serving.api.main:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+args: []
 extraEnv: []

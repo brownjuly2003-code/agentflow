@@ -22,6 +22,8 @@
     "affinity",
     "nodeSelector",
     "tolerations",
+    "command",
+    "args",
     "extraEnv",
     "podSecurityContext",
     "containerSecurityContext",
@@ -1072,6 +1074,19 @@
     },
     "tolerations": {
       "type": "array"
+    },
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "extraEnv": {
       "type": "array"

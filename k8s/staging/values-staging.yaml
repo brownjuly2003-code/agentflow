@@ -42,6 +42,16 @@ config:
   corsOrigins: http://localhost:3000,http://127.0.0.1:3000
   redisUrl: redis://agentflow-redis:6379/0
 
+# Host-loopback relay for E2E webhook callbacks: listen on 127.0.0.1 inside
+# the pod and forward to the host gateway (HOST_LOOPBACK_PROXY_* set by
+# k8s_staging_up.sh). Must live in Helm desired state so helm upgrade does
+# not restore the base uvicorn command while leaving orphaned args.
+command:
+  - /bin/sh
+  - -lc
+args:
+  - python /app/host_loopback_proxy.py >/tmp/host-loopback-proxy.log 2>&1 & exec uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+
 extraEnv:
   - name: AGENTFLOW_WEBHOOKS_FILE
     value: /data/e2e-webhooks.yaml

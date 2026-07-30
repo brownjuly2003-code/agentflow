@@ -508,6 +508,56 @@ def test_staging_values_render_with_extra_env_after_redis():
     assert '/0"- name:' not in output
 
 
+def _api_container(rendered_stdout: str) -> dict:
+    deployments = [
+        document
+        for document in yaml.safe_load_all(rendered_stdout)
+        if document
+        and document.get("kind") == "Deployment"
+        and document.get("metadata", {}).get("labels", {}).get("app.kubernetes.io/component")
+        == "api"
+    ]
+    assert len(deployments) == 1, "expected exactly one API Deployment"
+    containers = deployments[0]["spec"]["template"]["spec"]["containers"]
+    assert len(containers) == 1
+    return containers[0]
+
+
+def test_staging_values_render_host_loopback_relay_command():
+    """Staging owns relay command/args in Helm desired state so helm upgrade
+    cannot restore the base uvicorn command while leaving orphaned args."""
+    staging = PROJECT_ROOT / "k8s" / "staging" / "values-staging.yaml"
+    result = _run_helm_template("-f", str(staging))
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+
+    container = _api_container(result.stdout)
+    assert container["command"] == ["/bin/sh", "-lc"]
+    assert len(container.get("args") or []) == 1
+    relay_arg = container["args"][0]
+    assert "host_loopback_proxy.py" in relay_arg
+    assert "exec uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000" in relay_arg
+
+
+def test_default_chart_render_keeps_uvicorn_command_without_staging_relay():
+    """Base/production defaults must keep direct uvicorn and omit the relay."""
+    result = _run_helm_template()
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+
+    container = _api_container(result.stdout)
+    assert container["command"] == [
+        "uvicorn",
+        "src.serving.api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+    ]
+    assert not container.get("args")
+    assert "host_loopback_proxy.py" not in result.stdout
+
+
 def test_worker_defaults_off_and_omits_process_role():
     """Single-pod shape: no worker Deployment, no AGENTFLOW_PROCESS_ROLE."""
     values = _load_yaml(CHART_PATH / "values.yaml")

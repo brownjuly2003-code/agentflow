@@ -20,6 +20,23 @@ rules:
       - patch
       - update
       - watch
+  # Flink Kubernetes Operator 1.15 JobManager reconcile (proven on kind acceptance)
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - deployments/finalizers
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups: [""]
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

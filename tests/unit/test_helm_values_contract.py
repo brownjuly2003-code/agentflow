@@ -755,3 +755,68 @@ def test_flink_operator_workload_renders_golden_runtime():
     assert "kind: Role" in output
     assert "kind: RoleBinding" in output
     assert "configmaps" in output
+
+
+def _rule_covers(
+    rules: list[dict],
+    *,
+    api_groups: set[str],
+    resources: set[str],
+    verbs: set[str],
+) -> bool:
+    """True when some Role rule grants at least the given groups/resources/verbs."""
+    for rule in rules:
+        rule_groups = set(rule.get("apiGroups") or [])
+        rule_resources = set(rule.get("resources") or [])
+        rule_verbs = set(rule.get("verbs") or [])
+        if (
+            api_groups <= rule_groups
+            and resources <= rule_resources
+            and verbs <= rule_verbs
+        ):
+            return True
+    return False
+
+
+def test_flink_role_grants_operator_deployments_and_events():
+    """Flink K8s Operator 1.15 JM needs deployments + events on the job SA Role.
+
+    Clean kind acceptance left JobManager stuck until these rules were patched
+    live onto agentflow-flink; helm upgrade without the chart change reverts
+    them and the job falls back into reconcile.
+    """
+    result = _run_helm_template(
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "flinkJob.checkpointStorage=s3://agentflow-state/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=s3://agentflow-state/savepoints",
+    )
+    output = _combined_output(result)
+    assert result.returncode == 0, output
+
+    flink_roles = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document
+        and document.get("kind") == "Role"
+        and str(document.get("metadata", {}).get("name", "")).endswith("-flink")
+    ]
+    assert len(flink_roles) == 1, "expected exactly one Flink Role"
+    rules = flink_roles[0].get("rules") or []
+
+    assert _rule_covers(
+        rules,
+        api_groups={"apps"},
+        resources={"deployments", "deployments/finalizers"},
+        verbs={"get", "list", "watch", "update", "patch"},
+    ), "Flink Role must grant apps deployments (+ finalizers) for JM reconcile"
+    assert _rule_covers(
+        rules,
+        api_groups={""},
+        resources={"events"},
+        verbs={"create", "patch"},
+    ), "Flink Role must grant core events create/patch"

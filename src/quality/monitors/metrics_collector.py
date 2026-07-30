@@ -18,7 +18,6 @@ import structlog
 import yaml
 from confluent_kafka import KafkaException
 from prometheus_client import Gauge
-from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
 
 from src.serving.backends import BackendExecutionError
 
@@ -374,6 +373,25 @@ class HealthCollector:
                 name="iceberg",
                 status=HealthStatus.DEGRADED,
                 message="Iceberg config not found",
+                last_check=datetime.now(UTC),
+                metrics={"row_counts": {}},
+                source=CheckSource.PLACEHOLDER,
+            )
+
+        # Optional cloud extra: only import pyiceberg when a config file exists.
+        # Local/core installs can construct HealthCollector(include_external=False)
+        # without requiring the cloud dependency at module import time.
+        try:
+            from pyiceberg.exceptions import (
+                NoSuchPropertyException,
+                RESTError,
+                ValidationError,
+            )
+        except ImportError as exc:
+            return ComponentHealth(
+                name="iceberg",
+                status=HealthStatus.DEGRADED,
+                message=f"Iceberg unavailable: {exc}",
                 last_check=datetime.now(UTC),
                 metrics={"row_counts": {}},
                 source=CheckSource.PLACEHOLDER,

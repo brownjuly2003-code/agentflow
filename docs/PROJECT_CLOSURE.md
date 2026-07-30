@@ -57,13 +57,28 @@ rehearsal and third-party penetration test.
 
 ## Обязательные внешние closure gates
 
-- local closing commits published to `main`;
+- closing commits `59fc19c` (Operator/Kafka reproducibility) and `72b9609`
+  (Python compatibility/core lock remediation) published to `main`; the final
+  core-only/Ruff/runtime-image hardening commit remains to be published;
 - all required GitHub checks green on the exact closing SHA;
 - two open Dependabot PRs receive a final one-by-one disposition;
 - the substantial post-v2 changes receive a final release/version decision and
   published supply-chain evidence if released.
 
 Push, PR mutations and release actions require explicit owner authorization.
+
+## Текущий closing handoff — 2026-07-30
+
+- Python compatibility 3.11/3.12/3.13 is green on pushed SHA `72b9609`.
+- The remaining main-CI failures on that SHA (Ruff 0.16 SDK Markdown and
+  core-only API import without `pyiceberg`) are fixed and locally verified.
+- The Security Scan findings were traced to packages vendored by runtime
+  `pip`; the final image now removes installer tooling after `pip check`.
+- Independent Mac image validation reports zero HIGH/CRITICAL findings with
+  Trivy 0.70.0; see
+  [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+- Production status remains `candidate`; none of this closes the live Iceberg,
+  restore/replay, fresh soak/rollback, external pen-test, or npm approval gates.
 
 ## Сохранённые локальные артефакты
 

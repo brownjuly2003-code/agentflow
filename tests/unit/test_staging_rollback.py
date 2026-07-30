@@ -36,8 +36,9 @@ def test_staging_script_preflights_required_cluster_tools() -> None:
 
 def test_staging_image_installs_postgres_extra_and_pyiceberg() -> None:
     """E4 kind stand (2026-07-16): API CrashLoop without pyiceberg because
-    HealthCollector imports it at module load. Staging inline Dockerfile must
-    keep both the postgres extra and an explicit pyiceberg install.
+    staging enables external Iceberg health checks that need it at runtime.
+    Staging inline Dockerfile must keep both the postgres extra and an
+    explicit pyiceberg install.
     """
     script = (PROJECT_ROOT / "scripts" / "k8s_staging_up.sh").read_text(encoding="utf-8")
     assert 'pip install --no-cache-dir -e ".[postgres]"' in script

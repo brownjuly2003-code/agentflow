@@ -154,11 +154,21 @@ The repository includes a dedicated security workflow in GitHub Actions:
 - Safety for dependency vulnerability scanning
 - Trivy for container image scanning and CycloneDX SBOM generation
 
+On 2026-07-30, a Trivy scan of the API image identified vulnerable packages
+vendored by runtime `pip`, not dependencies from the application lock. The
+final stage now removes `pip`, `setuptools`, and `wheel` after the hash-locked
+install and `pip check`. An independent Mac rebuild and Trivy `0.70.0` scan
+reported zero HIGH/CRITICAL findings while the API import remained healthy.
+See
+[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+
 The Bandit baseline currently records a historical `B310` finding in `src/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
 
 Helm defaults no longer embed production-shaped API-key verifier hashes. Operators can render a chart-managed Secret for local use or mount an existing Kubernetes Secret, which is friendlier to External Secrets Operator, Sealed Secrets, or equivalent workflows.
 
-Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`, `docs/helm-deployment.md`
+Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
+`docs/helm-deployment.md`,
+`docs/security-runtime-image-trivy-2026-07-30.md`
 
 ## 9. Operational Security and Auditability
 

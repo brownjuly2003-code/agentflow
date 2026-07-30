@@ -83,6 +83,15 @@ on the 3.11/3.12/3.13 `python-compat` matrix, so a failed compatibility lane
 cannot be bypassed merely because its job name is not a separate protected
 context.
 
+The 2026-07-30 closing remediation additionally covers two clean-install
+boundaries: the core-only API imports and serves health/entity/query without
+the optional `pyiceberg` package, and the final API image removes
+`pip`/`setuptools`/`wheel` after its hash-locked install and `pip check`.
+Independent Mac validation with Trivy 0.70.0 reported zero HIGH/CRITICAL
+findings; details and evidence limits are in
+[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+All required GitHub checks must still be green on the exact final pushed SHA.
+
 ## Scope
 
 Component, contract, Helm, and replay tests validate the checked-in streaming,

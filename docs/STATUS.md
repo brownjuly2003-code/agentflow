@@ -2,6 +2,7 @@
 
 > Updated: **2026-07-30** (clean-checkout PyFlink OCI build + submission smoke
 > **PASS**; Flink Kubernetes Operator + Helm golden-topology deploy **PASS**;
+> core-only API and hardened runtime-image remediation locally **PASS**;
 > golden topology remains a production candidate, not production accepted) ·
 > release line **`v2.0.0`**. Numbers below come only from measured, in-repo
 > evidence — see the linked reports for methodology and reproduction commands.
@@ -20,6 +21,17 @@ Live Iceberg materialization, lake-to-serving E2E, recovery, soak, rollback,
 and external security acceptance remain open. The earlier 4 h @ 100 eps result
 remains valid evidence for its measured pre-materializer path, not for the
 still-unaccepted full golden topology.
+
+Closing CI hardening on 2026-07-30 also verified the Python 3.11/3.12/3.13
+compatibility lanes, made `pyiceberg` optional for the core-only API path,
+aligned SDK examples with Ruff 0.16 Markdown formatting, and removed
+`pip`/`setuptools`/`wheel` from the final API image after `pip check`.
+A clean core-only HTTP smoke returned 200 for health, entity, and NL query.
+An independent Mac rebuild scanned with Trivy 0.70.0 at zero HIGH/CRITICAL
+findings; see
+[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+The exact post-remediation GitHub SHA must still complete all required checks
+before the external closure gate is claimed.
 
 **Project lifecycle:** closure candidate. Engineering scope is frozen; the
 production-candidate boundary, future acceptance program, and release gates are
@@ -40,6 +52,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | Multi-tenant ClickHouse write key | adversarial two-tenant suite green on live CH 25.3 (CI `test-integration` + audit stand) | [security-audit.md](security-audit.md), `tests/integration/test_clickhouse_tenant_isolation_live.py` |
 | Clean-checkout PyFlink OCI build + submission smoke | PASS clean-checkout OCI build + submission smoke on 2026-07-30 — image built, JobID `RUNNING`, not Operator/E2E | [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md) |
 | Flink Kubernetes Operator + Helm golden deploy | PASS clean kind Operator/Helm deploy of verified image on exact HEAD `36ed1ec` — CR/job stable, checkpoints `2→23`, leader flaps `0`, not lake E2E | [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md) |
+| Hardened API runtime image (local acceptance) | core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL after runtime installer removal | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) |
 
 ## 2026-07-23 audit closure
 

@@ -207,6 +207,15 @@ def test_docker_build_contexts_prepare_root_package_metadata():
             assert "--require-hashes -r /tmp/requirements-docker.lock" in text
             assert 'pip install --no-cache-dir --no-deps "${wheel}"' in text
             assert "pip check" in text
+            # Runtime image must not ship installer tooling: Trivy SBOM tied
+            # GHSA-6v7p-g79w-8964 (msgpack via pip vendor) and CVE-2025-47273
+            # (setuptools) to the final-layer pip/setuptools/wheel tree, not
+            # to requirements-docker.lock. Uninstall only after installs and
+            # pip check so the hash-locked environment is still verified.
+            final_stage = text.rsplit("FROM ", maxsplit=1)[-1]
+            uninstall = "python -m pip uninstall --yes pip setuptools wheel"
+            assert uninstall in final_stage
+            assert final_stage.index("pip check") < final_stage.index(uninstall)
             # Q0.2 / S9: scale profile needs the Postgres control-plane driver
             # baked in (kind 2-pod previously required a docker-commit psycopg
             # hack). The wheel installs --no-deps, so the guarantee now lives

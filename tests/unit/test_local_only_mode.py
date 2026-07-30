@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -14,6 +18,8 @@ from src.serving import provision
 from src.serving.api.main import app
 from src.serving.cache import QueryCache
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_local_health_collector_keeps_only_embedded_checks() -> None:
     collector = HealthCollector(include_external=False)
@@ -23,6 +29,66 @@ def test_local_health_collector_keeps_only_embedded_checks() -> None:
         "_check_freshness",
         "_check_quality_score",
     ]
+
+
+def test_metrics_collector_imports_without_pyiceberg() -> None:
+    """Core/local mode must import HealthCollector when pyiceberg is absent."""
+    script = """
+import os
+import sys
+
+# Force pyiceberg absent even if the host env has the cloud extra installed.
+sys.modules["pyiceberg"] = None
+sys.modules["pyiceberg.exceptions"] = None
+
+from src.quality.monitors.metrics_collector import (
+    CheckSource,
+    HealthCollector,
+    HealthStatus,
+)
+
+collector = HealthCollector(include_external=False)
+assert [check.__name__ for check in collector._checks] == [
+    "_check_serving",
+    "_check_freshness",
+    "_check_quality_score",
+]
+
+# Existing config + blocked pyiceberg must yield degraded placeholder, not
+# the missing-config path (config check runs before the lazy import).
+health = collector._check_iceberg()
+assert health.name == "iceberg"
+assert health.status == HealthStatus.DEGRADED
+assert health.source == CheckSource.PLACEHOLDER
+assert health.message.startswith("Iceberg unavailable")
+assert "Iceberg config not found" not in health.message
+print("ok")
+"""
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".yaml",
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        handle.write("catalog:\n  name: test\n")
+        config_path = handle.name
+
+    env = os.environ.copy()
+    env["AGENTFLOW_ICEBERG_CONFIG"] = config_path
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+    finally:
+        Path(config_path).unlink(missing_ok=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout
 
 
 def test_disabled_query_cache_does_not_construct_redis(

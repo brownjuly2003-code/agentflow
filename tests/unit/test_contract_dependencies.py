@@ -85,6 +85,26 @@ def test_runtime_and_docker_image_include_redis_client():
     assert "redis==" in docker_lock
 
 
+def test_cloud_extra_uses_pure_python_pyiceberg_without_native_core():
+    """Cloud must ship pure-Python pyiceberg; pyiceberg-core has no cp313 wheels.
+
+    The native extra is an optimization unused by project code. Pinning it via
+    ``pyiceberg[pyiceberg-core]`` blocks Python 3.13 lock/install on CI.
+    """
+    pyproject = _load_pyproject()
+    cloud = pyproject["project"]["optional-dependencies"]["cloud"]
+    docker_lock = (PROJECT_ROOT / "requirements-docker.lock").read_text(encoding="utf-8")
+
+    assert any(
+        dependency == "pyiceberg>=0.7,<1" or dependency.startswith("pyiceberg>=")
+        for dependency in cloud
+    ), cloud
+    assert not any("[pyiceberg-core]" in dependency for dependency in cloud), cloud
+    assert not any(dependency.startswith("pyiceberg-core") for dependency in cloud), cloud
+    assert "pyiceberg==" in docker_lock
+    assert "pyiceberg-core==" not in docker_lock
+
+
 def test_contract_workflow_uses_contract_extra():
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "contract.yml").read_text(encoding="utf-8")
 

@@ -21,9 +21,7 @@ ACCEPTANCE_NAMESPACE = "agentflow"
 
 
 def _load_documents() -> list[dict]:
-    assert MANIFEST_PATH.is_file(), (
-        f"missing kind acceptance Kafka scaffold: {MANIFEST_PATH}"
-    )
+    assert MANIFEST_PATH.is_file(), f"missing kind acceptance Kafka scaffold: {MANIFEST_PATH}"
     text = MANIFEST_PATH.read_text(encoding="utf-8")
     docs = [doc for doc in yaml.safe_load_all(text) if doc]
     assert docs, f"empty scaffold manifest: {MANIFEST_PATH}"
@@ -36,11 +34,7 @@ def _by_kind(kind: str) -> list[dict]:
 
 def _env_map(container: dict) -> dict[str, str]:
     env = container.get("env") or []
-    return {
-        item["name"]: str(item["value"])
-        for item in env
-        if "name" in item and "value" in item
-    }
+    return {item["name"]: str(item["value"]) for item in env if "name" in item and "value" in item}
 
 
 def _container_script(container: dict) -> str:

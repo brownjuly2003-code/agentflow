@@ -10,17 +10,20 @@ Usage:
     python -m src.processing.local_pipeline --burst 500 --no-iceberg
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
 import structlog
 import yaml
-from pyiceberg.exceptions import NoSuchPropertyException, RESTError, ValidationError
 
 from src.ingestion.producers.event_producer import (
     generate_click,
@@ -31,7 +34,6 @@ from src.ingestion.producers.event_producer import (
 from src.logger import configure_logging
 from src.processing.clickhouse_sink import ClickHouseSink
 from src.processing.event_tenant import event_tenant
-from src.processing.iceberg_sink import IcebergSink
 from src.processing.transformations.enrichment import (
     compute_payment_risk_score,
     enrich_clickstream,
@@ -40,6 +42,13 @@ from src.processing.transformations.enrichment import (
 from src.quality.validators.schema_validator import validate_event
 from src.quality.validators.semantic_validator import validate_semantics
 from src.serving.backends.duckdb_backend import DuckDBBackend
+
+if TYPE_CHECKING:
+    from src.processing.iceberg_sink import IcebergSink
+else:
+    # Late-bound so core-only installs can import this module without [cloud].
+    # Integration tests monkeypatch this name before ``run()`` constructs a sink.
+    IcebergSink = None
 
 DB_PATH = os.getenv("DUCKDB_PATH", "agentflow_demo.duckdb")
 
@@ -631,8 +640,20 @@ def run(
             if default_iceberg_config.exists():
                 iceberg_config = str(default_iceberg_config)
     if iceberg_config:
+        # Optional [cloud] dependency: import only when a sink is actually configured.
+        from pyiceberg.exceptions import (
+            NoSuchPropertyException,
+            RESTError,
+            ValidationError,
+        )
+
+        sink_cls = IcebergSink
+        if sink_cls is None:
+            from src.processing.iceberg_sink import IcebergSink as _IcebergSink
+
+            sink_cls = _IcebergSink
         try:
-            iceberg_sink = IcebergSink(config_path=iceberg_config)
+            iceberg_sink = sink_cls(config_path=iceberg_config)
             iceberg_sink.create_tables_if_not_exist()
         except (
             OSError,
@@ -706,7 +727,8 @@ def run(
         )
 
 
-if __name__ == "__main__":
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point (importable for installed-wheel smoke and ``python -m``)."""
     parser = argparse.ArgumentParser(description="AgentFlow local pipeline")
     parser.add_argument("--eps", type=int, default=10, help="Events per second")
     parser.add_argument("--burst", type=int, default=0, help="One-shot: N events then stop")
@@ -715,9 +737,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip the optional Iceberg sink (for an offline DuckDB run).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     run(
         events_per_second=args.eps,
         burst=args.burst,
         iceberg_enabled=not args.no_iceberg,
     )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

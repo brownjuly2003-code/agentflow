@@ -828,11 +828,7 @@ def _rule_covers(
         rule_groups = set(rule.get("apiGroups") or [])
         rule_resources = set(rule.get("resources") or [])
         rule_verbs = set(rule.get("verbs") or [])
-        if (
-            api_groups <= rule_groups
-            and resources <= rule_resources
-            and verbs <= rule_verbs
-        ):
+        if api_groups <= rule_groups and resources <= rule_resources and verbs <= rule_verbs:
             return True
     return False
 

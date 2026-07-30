@@ -57,8 +57,7 @@ def test_staging_script_does_not_live_patch_api_command_or_args() -> None:
     # kubectl patch must be its own command line after the progress echo;
     # a missing LF turns it into an echo argument (bash -n still passes).
     assert (
-        'echo "==> Patching service to fixed NodePort..."\n'
-        'kubectl patch service "$RELEASE_NAME" \\'
+        'echo "==> Patching service to fixed NodePort..."\nkubectl patch service "$RELEASE_NAME" \\'
     ) in script
     assert "/spec/template/spec/containers/0/command" not in script
     assert "/spec/template/spec/containers/0/args" not in script

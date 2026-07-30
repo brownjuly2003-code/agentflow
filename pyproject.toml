@@ -39,7 +39,7 @@ dependencies = [
 # its manifest is src/processing/flink_jobs/requirements.txt.
 cloud = [
     "boto3>=1.35,<2",
-    "pyiceberg[pyiceberg-core]>=0.7,<1",
+    "pyiceberg>=0.7,<1",
 ]
 postgres = [
     # ADR 0010 slice 5: PostgresControlPlaneStore (scale profile). Optional

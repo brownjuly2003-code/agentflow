@@ -44,9 +44,7 @@ def test_flink_submission_smoke_evidence_is_claimed() -> None:
     not Operator deployment, lake-to-serving E2E, or production acceptance.
     """
     evidence = "docs/perf/golden-flink-submission-2026-07-30.md"
-    manifest = tomllib.loads(
-        (ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8")
-    )
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
     production = manifest["production"]
 
     assert evidence in manifest["required_evidence"]
@@ -63,7 +61,8 @@ def test_flink_submission_smoke_evidence_documents_live_compose_commands() -> No
     """
     evidence = ROOT / "docs/perf/golden-flink-submission-2026-07-30.md"
     text = evidence.read_text(encoding="utf-8")
-    checkout = "/tmp/agentflow-acceptance-ca82be5-grokw-01"
+    # Evidence fragment from the live Mac PASS path; not a temp-file operation.
+    checkout = "/tmp/agentflow-acceptance-ca82be5-grokw-01"  # noqa: S108
 
     required_fragments = (
         "docker compose --project-name agentflow-flink-ca82be5",

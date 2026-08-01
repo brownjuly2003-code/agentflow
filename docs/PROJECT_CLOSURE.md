@@ -44,9 +44,12 @@ narrow boundary
 ([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)),
 and full one-event lake-to-serving smoke is measured
 ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
-The remaining acceptance program still includes checkpoint restore/replay,
-fresh four-hour golden-topology soak, rollback rehearsal, third-party
-penetration test, and GitHub Environment `npm` approval evidence.
+The remaining acceptance program still includes checkpoint restore/replay
+(capacity-blocked), fresh four-hour golden-topology soak plus rollback
+rehearsal (read-only preflight **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/
+rollback **not started** — see
+[perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)),
+third-party penetration test, and GitHub Environment `npm` approval evidence.
 
 ## Post-closure future/accepted limits
 
@@ -103,9 +106,10 @@ Push, PR mutations and release actions require explicit owner authorization.
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
 - Production status remains `candidate`; exactly four production gates remain
-  open: restore/replay, fresh soak/rollback, external pen-test, and npm
-  approval evidence. Next atomic gate is checkpoint restore/replay without
-  duplicate `(tenant_id, event_id)`.
+  open: restore/replay (capacity-blocked), fresh soak/rollback (preflight
+  **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/rollback **not started**),
+  external pen-test, and npm approval evidence. Next independent safe audit
+  item (no runtime mutation): GitHub `npm` Environment approval evidence.
 
 ## Сохранённые локальные артефакты
 

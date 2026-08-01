@@ -4,11 +4,12 @@
 > **PASS**; Flink Kubernetes Operator + Helm golden-topology deploy **PASS**;
 > live Iceberg materialization from `events.validated` **PASS** at the direct
 > topic boundary; full lake-to-serving single-event smoke **PASS** on the
-> mixed-SHA stand; core-only API and hardened runtime-image remediation locally
-> **PASS**; golden topology remains a production candidate, not production
-> accepted) · release line **`v2.0.0`**. Numbers below come only from measured,
-> in-repo evidence — see the linked reports for methodology and reproduction
-> commands.
+> mixed-SHA stand; golden 4h soak/rollback read-only preflight
+> **`BLOCKED_RESOURCE_CAPACITY`** — canary/soak/rollback **not started**;
+> core-only API and hardened runtime-image remediation locally **PASS**;
+> golden topology remains a production candidate, not production accepted) ·
+> release line **`v2.0.0`**. Numbers below come only from measured, in-repo
+> evidence — see the linked reports for methodology and reproduction commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API
@@ -29,11 +30,15 @@ also **PASS**ed
 ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)):
 `orders.raw` → PyFlink → `events.validated` → {Iceberg; bridge → ClickHouse →
 API}. That closes the single-event hop chain only; it is not full
-production acceptance. Checkpoint restore/replay, fresh soak/rollback, and
-external security acceptance remain open. The earlier 4 h @ 100 eps result
-remains valid evidence for its measured pre-materializer path, not for the
-still-unaccepted full golden topology. Tracked full-smoke evidence is recorded
-in local evidence commit `cf247ba` (local-only, unpushed).
+production acceptance. Checkpoint restore/replay remains capacity-blocked;
+fresh golden 4h soak + rollback read-only preflight returned
+**`BLOCKED_RESOURCE_CAPACITY`** (Kind/Colima volume ~94% used / ~3.6–3.7 GiB
+free; canary/soak/rollback **not started**) — see
+[perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md).
+External security acceptance remains open. The earlier 4 h @ 100 eps result
+remains valid evidence for its measured pre-materializer path only (advisory
+for the post-Iceberg golden gate). Tracked full-smoke evidence is recorded in
+local evidence commit `cf247ba` (local-only, unpushed).
 
 Closing CI hardening on 2026-07-30 also verified the Python 3.11/3.12/3.13
 compatibility lanes, made `pyiceberg` optional for the core-only API path,
@@ -88,7 +93,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, and full one-event lake-to-serving smoke now measured; restore/replay, fresh soak/rollback, external pen-test, and npm environment approval remain unverified |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, and full one-event lake-to-serving smoke now measured; restore/replay capacity-blocked; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test and npm environment approval remain unverified |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -157,14 +162,18 @@ program.
    ([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md));
    and full one-event lake-to-serving smoke is **PASS**
    ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
-   Next atomic gate: checkpoint restore/replay without duplicate
-   `(tenant_id, event_id)`. Still open after that: fresh 4 h soak plus
-   backup/rollback rehearsal. Exactly four production-acceptance gates remain
-   overall: (1) restore/replay, (2) fresh soak+rollback, (3) external
-   pen-test, (4) npm approval. Acceptance-scaffold Kafka reproducibility debt
-   (kind runtime fixes for `enableServiceLinks` / controller quorum voters)
-   is recorded in the Operator evidence and is not a production-acceptance
-   claim.
+   Restore/replay and fresh 4h soak+rollback are both open and
+   capacity-blocked on this stand: restore/replay capacity evidence in
+   [perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md](perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md);
+   soak/rollback read-only preflight **`BLOCKED_RESOURCE_CAPACITY`** in
+   [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
+   (canary/soak/rollback **not started**; old 4h evidence advisory only).
+   Exactly four production-acceptance gates remain overall: (1) restore/replay,
+   (2) fresh soak+rollback, (3) external pen-test, (4) npm approval. Next
+   independent safe audit item (no runtime mutation): GitHub `npm` Environment
+   approval evidence. Acceptance-scaffold Kafka reproducibility debt (kind
+   runtime fixes for `enableServiceLinks` / controller quorum voters) is
+   recorded in the Operator evidence and is not a production-acceptance claim.
 2. **External notes (not extra production-acceptance gates)** — production CDC
    onboarding/credentials, public production-grade benchmark work, and Codecov
    repository activation remain outside those four gates. Pen-test and npm

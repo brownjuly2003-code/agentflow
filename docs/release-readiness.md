@@ -22,8 +22,11 @@ and full one-event lake-to-serving smoke is **PASS**
 ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
 Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
 is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
-production Kafka claim). Checkpoint restore/replay, fresh soak, rollback, and
-external security evidence remain pending as listed below. Tracked full-smoke
+production Kafka claim). Checkpoint restore/replay remains capacity-blocked;
+fresh golden 4h soak + rollback read-only preflight returned
+**`BLOCKED_RESOURCE_CAPACITY`** (canary/soak/rollback **not started**; see
+[perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
+External security evidence remains pending as listed below. Tracked full-smoke
 evidence is recorded in local evidence commit `cf247ba` (local-only, unpushed).
 
 ## Summary
@@ -144,15 +147,22 @@ untracked prompts.
 **Still required for production acceptance (exactly four gates):**
 
 1. the same path replayed after checkpoint restore without duplicate
-   `(tenant_id, event_id)` rows (next atomic gate);
-2. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
-   artifact and topology (the existing 2026-07-19 soak predates the Iceberg
-   materializer);
+   `(tenant_id, event_id)` rows (capacity-blocked; not accepted);
+2. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
+   (**1_440_000** events) through the full post-Iceberg path with exact
+   lake/serving counts, plus Helm rollback rehearsal to verified rev **2**
+   (never rev 1). Read-only preflight **`BLOCKED_RESOURCE_CAPACITY`** —
+   canary/soak/rollback **not started**
+   ([perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
+   The existing 2026-07-19 soak predates the Iceberg materializer and is
+   advisory only;
 3. an external penetration-test report and remediation/retest evidence;
 4. GitHub Environment `npm` created with approval protection. The workflow now
    requires `environment: npm` and a matching release tag, but the repository
    settings API returned `404` for that environment on 2026-07-23, so approval
-   protection is not yet evidenced.
+   protection is not yet evidenced. Next independent safe audit item while
+   capacity-bound gates stay blocked: re-check that npm Environment approval
+   evidence.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

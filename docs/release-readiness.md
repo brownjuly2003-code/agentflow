@@ -26,9 +26,12 @@ production Kafka claim). Checkpoint restore/replay remains capacity-blocked;
 fresh golden 4h soak + rollback read-only preflight returned
 **`BLOCKED_RESOURCE_CAPACITY`** (canary/soak/rollback **not started**; see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
-External security evidence remains pending as listed below. Read-only GitHub
-Environment `npm` approval audit at `2026-08-01T16:51:29Z` returned
-**`BLOCKED_ENVIRONMENT_ABSENT`** — see
+External security evidence remains pending as listed below. Read-only
+external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
+**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
+[operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
+Read-only GitHub Environment `npm` approval audit at `2026-08-01T16:51:29Z`
+returned **`BLOCKED_ENVIRONMENT_ABSENT`** — see
 [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
 Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
 (local-only, unpushed).
@@ -160,7 +163,29 @@ untracked prompts.
    ([perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
    The existing 2026-07-19 soak predates the Iceberg materializer and is
    advisory only;
-3. an external penetration-test report and remediation/retest evidence;
+3. an external penetration-test report and remediation/retest evidence.
+   Read-only evidence/readiness audit at `2026-08-01T17:11:58Z` (local HEAD
+   before documentation `ebde86f`; public repo `brownjuly2003-code/agentflow`)
+   returned **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**. Canonical intake remains
+   **not present / unclaimed** with empty decision-record fields and all
+   acceptance checklist boxes open. Bounded tracked scan found only the blank
+   intake; GitHub unified `search/issues` returned `total_count = 0` for
+   `pentest`, exact phrase `penetration test`, `retest`, and `assessor`; nine
+   releases have zero assets; Actions artifacts (`total_count = 3106`) had zero
+   name matches after full pagination. All seven gate criteria fail. Internal
+   Bandit/Safety/Trivy, Scorecard, S12/offline tests, and runtime image scans
+   are not third-party pen-test evidence. This audit was **not** a penetration
+   test. Evidence:
+   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
+   Minimum owner packet: independent assessor + independence statement;
+   engagement type; exact target/artifact/commit; dates; scope/exclusions/RoE;
+   credential owner/rotation plan without secrets; data-handling confirmation;
+   remediation owner; immutable full-report location; redacted summary; finding
+   inventory; remediation/risk-acceptance map; retest confirmations;
+   residual-risk record; access revocation evidence. After receipt: redacted
+   summary under `docs/operations/`, complete intake, evidence-linked
+   security/status/readiness updates, then read-only re-audit. Do not procure,
+   simulate, or perform a pen-test from documentation work;
 4. GitHub Environment `npm` created with approval protection. The workflow
    correctly binds the publish job to `environment: npm` with tag/version
    safeguards, but workflow wiring alone is not approval-protection evidence.
@@ -176,9 +201,9 @@ untracked prompts.
    [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
    Smallest owner action: create Environment named exactly `npm`, configure a
    non-empty Required reviewers rule, then re-run a read-only GET audit (do not
-   perform from documentation work). Next independent safe audit item while
-   capacity-bound gates stay blocked: read-only consolidation of external
-   pentest intake/evidence state (do not claim a pentest was performed).
+   perform from documentation work). After documenting the external-pentest
+   evidence blocker, no independent safe production-acceptance item remains on
+   the current stand; further closure requires owner/external-state input.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

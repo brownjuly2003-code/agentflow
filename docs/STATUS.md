@@ -6,12 +6,14 @@
 > topic boundary; full lake-to-serving single-event smoke **PASS** on the
 > mixed-SHA stand; golden 4h soak/rollback read-only preflight
 > **`BLOCKED_RESOURCE_CAPACITY`** — canary/soak/rollback **not started**;
-> GitHub Environment `npm` approval audit **`BLOCKED_ENVIRONMENT_ABSENT`**
-> (Environment missing; gate open); core-only API and hardened runtime-image
-> remediation locally **PASS**; golden topology remains a production candidate,
-> not production accepted) · release line **`v2.0.0`**. Numbers below come only
-> from measured, in-repo evidence — see the linked reports for methodology and
-> reproduction commands.
+> external pentest evidence audit **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
+> (evidence/readiness only; not a pen-test; gate open); GitHub Environment
+> `npm` approval audit **`BLOCKED_ENVIRONMENT_ABSENT`** (Environment missing;
+> gate open); core-only API and hardened runtime-image remediation locally
+> **PASS**; golden topology remains a production candidate, not production
+> accepted) · release line **`v2.0.0`**. Numbers below come only from measured,
+> in-repo evidence — see the linked reports for methodology and reproduction
+> commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API
@@ -37,10 +39,15 @@ fresh golden 4h soak + rollback read-only preflight returned
 **`BLOCKED_RESOURCE_CAPACITY`** (Kind/Colima volume ~94% used / ~3.6–3.7 GiB
 free; canary/soak/rollback **not started**) — see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md).
-External security acceptance remains open. Read-only GitHub API audit of
-Environment `npm` at `2026-08-01T16:51:29Z` returned
-**`BLOCKED_ENVIRONMENT_ABSENT`** (list of four environments omits `npm`;
-detail **404**; admin principal; workflow `environment: npm` wiring is
+External security acceptance remains open. Read-only external-pentest
+evidence/readiness audit at `2026-08-01T17:11:58Z` returned
+**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** (intake not present/unclaimed; all seven
+gate criteria fail; no repository-visible or public-GitHub third-party evidence;
+**not** a penetration test) — see
+[operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
+Read-only GitHub API audit of Environment `npm` at `2026-08-01T16:51:29Z`
+returned **`BLOCKED_ENVIRONMENT_ABSENT`** (list of four environments omits
+`npm`; detail **404**; admin principal; workflow `environment: npm` wiring is
 correct but not approval-protection evidence) — see
 [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
 The earlier 4 h @ 100 eps result remains valid evidence for its measured
@@ -101,7 +108,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, and full one-event lake-to-serving smoke now measured; restore/replay capacity-blocked; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test open; npm Environment approval audit `BLOCKED_ENVIRONMENT_ABSENT` (Environment absent; gate open) |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, and full one-event lake-to-serving smoke now measured; restore/replay capacity-blocked; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open); npm Environment approval audit `BLOCKED_ENVIRONMENT_ABSENT` (Environment absent; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -176,16 +183,24 @@ program.
    soak/rollback read-only preflight **`BLOCKED_RESOURCE_CAPACITY`** in
    [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
    (canary/soak/rollback **not started**; old 4h evidence advisory only).
-   Exactly four production-acceptance gates remain overall: (1) restore/replay,
-   (2) fresh soak+rollback, (3) external pen-test, (4) npm approval. Gate 4
-   read-only audit **`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z`
-   ([operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md));
-   owner must create Environment `npm` with a non-empty Required reviewers rule
-   and re-audit (do not perform from docs work). Next independent safe audit
-   item (no runtime mutation): read-only consolidation of external pentest
-   intake/evidence state. Acceptance-scaffold Kafka reproducibility debt (kind
-   runtime fixes for `enableServiceLinks` / controller quorum voters) is
-   recorded in the Operator evidence and is not a production-acceptance claim.
+   Exactly four production-acceptance gates remain overall: (1) restore/replay
+   (capacity-blocked); (2) fresh soak+rollback (`BLOCKED_RESOURCE_CAPACITY`);
+   (3) external pen-test (**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at
+   `2026-08-01T17:11:58Z` —
+   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md);
+   evidence/readiness only, not a pen-test; intake not present/unclaimed; all
+   seven criteria fail); (4) npm approval (**`BLOCKED_ENVIRONMENT_ABSENT`** at
+   `2026-08-01T16:51:29Z` —
+   [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
+   After documenting the pentest evidence blocker, no independent safe
+   production-acceptance item remains on the current stand; further closure
+   requires owner/external-state input (capacity remediation/larger host or
+   authorized protected strategy; create/protect Environment `npm`; or
+   third-party pentest engagement/evidence). Do not procure, simulate, or
+   perform a pen-test from docs work. Acceptance-scaffold Kafka reproducibility
+   debt (kind runtime fixes for `enableServiceLinks` / controller quorum
+   voters) is recorded in the Operator evidence and is not a
+   production-acceptance claim.
 2. **External notes (not extra production-acceptance gates)** — production CDC
    onboarding/credentials, public production-grade benchmark work, and Codecov
    repository activation remain outside those four gates. Pen-test and npm

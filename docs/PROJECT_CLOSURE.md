@@ -49,9 +49,13 @@ The remaining acceptance program still includes checkpoint restore/replay
 rehearsal (read-only preflight **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/
 rollback **not started** — see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)),
-third-party penetration test, and GitHub Environment `npm` approval evidence
-(read-only audit **`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z` —
-Environment missing; see
+third-party penetration test (read-only evidence audit
+**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
+pen-test; intake not present/unclaimed; see
+[operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)),
+and GitHub Environment `npm` approval evidence (read-only audit
+**`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z` — Environment
+missing; see
 [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
 
 ## Post-closure future/accepted limits
@@ -62,7 +66,9 @@ Environment missing; see
   acceptance remains `future operations`; production status remains
   `candidate`.
 - Third-party pen-test and remediation/retest — required before a production
-  security claim, not part of self-attested closure.
+  security claim, not part of self-attested closure; evidence audit
+  **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
+  ([operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
 - P2-6 runtime namespace migration — `future breaking release`.
 - Production CDC onboarding/credentials — `future deployment`.
 - Transitive PyArrow advisory in the isolated Flink 2.3 image remains the
@@ -111,15 +117,21 @@ Push, PR mutations and release actions require explicit owner authorization.
 - Production status remains `candidate`; exactly four production gates remain
   open: restore/replay (capacity-blocked), fresh soak/rollback (preflight
   **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/rollback **not started**),
-  external pen-test, and npm approval evidence (read-only audit
-  **`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z` — Environment
-  `npm` absent from list of four; detail **404**; workflow `environment: npm`
-  wiring correct but not approval-protection evidence; see
+  external pen-test (read-only evidence audit
+  **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
+  pen-test; intake not present/unclaimed; all seven criteria fail; see
+  [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)),
+  and npm approval evidence (read-only audit **`BLOCKED_ENVIRONMENT_ABSENT`**
+  at `2026-08-01T16:51:29Z` — Environment `npm` absent from list of four;
+  detail **404**; workflow `environment: npm` wiring correct but not
+  approval-protection evidence; see
   [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
-  Owner must create Environment `npm` with a non-empty Required reviewers rule
-  and re-audit (do not perform from docs work). Next independent safe audit
-  item (no runtime mutation): read-only consolidation of external pentest
-  intake/evidence state.
+  After documenting the pentest evidence blocker, no independent safe
+  production-acceptance item remains on the current stand. Further closure
+  requires owner/external-state input: capacity remediation/larger host or
+  authorized protected strategy; create/protect Environment `npm`; or
+  third-party pentest engagement/evidence. Do not procure, simulate, or
+  perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты
 

@@ -10,6 +10,7 @@ required_evidence = [
     "docs/perf/golden-flink-submission-2026-07-30.md",
     "docs/perf/golden-operator-acceptance-2026-07-30.md",
     "docs/perf/live-iceberg-materialization-2026-08-01.md",
+    "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",
 ]
 
 [production]
@@ -26,8 +27,8 @@ verified_streaming_path = "Kafka -> PyFlink -> events.validated -> bridge -> Cli
 verified_submission_smoke = "docs/perf/golden-flink-submission-2026-07-30.md"
 verified_operator_acceptance = "docs/perf/golden-operator-acceptance-2026-07-30.md"
 verified_iceberg_materialization = "docs/perf/live-iceberg-materialization-2026-08-01.md"
+verified_full_lake_to_serving_smoke = "docs/perf/full-lake-to-serving-e2e-2026-08-01.md"
 pending_acceptance = [
-    "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke",
     "checkpoint restore and replay acceptance",
     "4h soak and rollback rehearsal on the golden topology",
 ]

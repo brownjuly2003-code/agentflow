@@ -31,6 +31,7 @@ VALIDATOR_INPUTS = (
     "docs/perf/freshness-e2e-realpath.md",
     "docs/perf/golden-flink-submission-2026-07-30.md",
     "docs/perf/live-iceberg-materialization-2026-08-01.md",
+    "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",
 )
 
 
@@ -64,7 +65,6 @@ def test_live_iceberg_materialization_evidence_is_claimed() -> None:
     evidence = "docs/perf/live-iceberg-materialization-2026-08-01.md"
     pending_item = "live Iceberg materialization from events.validated"
     remaining_pending = [
-        "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke",
         "checkpoint restore and replay acceptance",
         "4h soak and rollback rehearsal on the golden topology",
     ]
@@ -74,6 +74,32 @@ def test_live_iceberg_materialization_evidence_is_claimed() -> None:
 
     assert evidence in manifest["required_evidence"]
     assert production.get("verified_iceberg_materialization") == evidence
+    assert pending_item not in pending
+    assert pending == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_full_lake_to_serving_e2e_evidence_is_claimed() -> None:
+    """Full lake-to-serving single-event smoke PASS is machine-readable.
+
+    Scope boundary: one measured hop chain for one event —
+    orders.raw -> PyFlink -> events.validated -> Iceberg and serving bridge ->
+    ClickHouse -> API. Not production acceptance, restore/replay, soak,
+    rollback, pentest, or npm approval.
+    """
+    evidence = "docs/perf/full-lake-to-serving-e2e-2026-08-01.md"
+    pending_item = "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke"
+    remaining_pending = [
+        "checkpoint restore and replay acceptance",
+        "4h soak and rollback rehearsal on the golden topology",
+    ]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+    pending = production.get("pending_acceptance", [])
+
+    assert evidence in manifest["required_evidence"]
+    assert production.get("verified_full_lake_to_serving_smoke") == evidence
     assert pending_item not in pending
     assert pending == remaining_pending
     assert evidence in VALIDATOR_INPUTS

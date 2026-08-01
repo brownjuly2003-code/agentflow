@@ -39,19 +39,22 @@ breaking migrations требуют отдельной программы.
 Шаг 10 не объявляется выполненным. Clean-cluster Operator/Helm deploy of the
 verified Flink OCI image on exact HEAD `36ed1ec` is measured
 ([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)),
-and live Iceberg materialization from direct `events.validated` is measured at
-the narrow boundary
-([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)).
-The remaining acceptance program still includes full Kafka → PyFlink → Iceberg
-→ ClickHouse → API smoke, checkpoint restore/replay, fresh four-hour
-golden-topology soak, rollback rehearsal and third-party penetration test.
+live Iceberg materialization from direct `events.validated` is measured at the
+narrow boundary
+([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)),
+and full one-event lake-to-serving smoke is measured
+([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
+The remaining acceptance program still includes checkpoint restore/replay,
+fresh four-hour golden-topology soak, rollback rehearsal, third-party
+penetration test, and GitHub Environment `npm` approval evidence.
 
 ## Post-closure future/accepted limits
 
 - Golden-topology production acceptance — Operator/Helm deploy **PASS** on
-  2026-07-30 and direct live Iceberg materialization **PASS** on 2026-08-01;
-  full production acceptance remains `future operations`; production status
-  remains `candidate`.
+  2026-07-30, direct live Iceberg materialization **PASS** on 2026-08-01, and
+  full one-event lake-to-serving smoke **PASS** on 2026-08-01; full production
+  acceptance remains `future operations`; production status remains
+  `candidate`.
 - Third-party pen-test and remediation/retest — required before a production
   security claim, not part of self-attested closure.
 - P2-6 runtime namespace migration — `future breaking release`.
@@ -92,13 +95,17 @@ Push, PR mutations and release actions require explicit owner authorization.
   executor; Codex orchestrates and verifies. Live Iceberg materialization from
   direct `events.validated` is **PASS** at the narrow boundary — see
   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md).
+  Full one-event lake-to-serving smoke is also **PASS** — see
+  [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)
+  (working-tree / pending scoped local commit).
 - Repository-owned coverage gates are green and remain blocking. Codecov OIDC
   currently returns `Repository not found`; its upload is non-blocking
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
-- Production status remains `candidate`; five production gates remain open:
-  full Kafka → PyFlink → Iceberg → ClickHouse → API smoke, restore/replay,
-  fresh soak/rollback, external pen-test, and npm approval evidence.
+- Production status remains `candidate`; exactly four production gates remain
+  open: restore/replay, fresh soak/rollback, external pen-test, and npm
+  approval evidence. Next atomic gate is checkpoint restore/replay without
+  duplicate `(tenant_id, event_id)`.
 
 ## Сохранённые локальные артефакты
 

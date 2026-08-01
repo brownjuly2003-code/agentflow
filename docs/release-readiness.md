@@ -15,13 +15,16 @@ clean-checkout OCI build + real Flink job submission smoke is **PASS**
 clean kind + Flink Kubernetes Operator + Helm deployment of the verified image
 on exact HEAD `36ed1ec` is **PASS**
 ([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md));
-and live Iceberg materialization from direct `events.validated` is **PASS** at
-the narrow materializer boundary
-([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)).
+live Iceberg materialization from direct `events.validated` is **PASS** at the
+narrow materializer boundary
+([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md));
+and full one-event lake-to-serving smoke is **PASS**
+([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
 Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
 is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
-production Kafka claim). Full lake-to-serving E2E, recovery, soak, rollback,
-and external security evidence remain pending as listed below.
+production Kafka claim). Checkpoint restore/replay, fresh soak, rollback, and
+external security evidence remain pending as listed below. Tracked full-smoke
+evidence is currently working-tree / pending scoped local commit.
 
 ## Summary
 
@@ -123,26 +126,30 @@ production-acceptance evidence.
 3. live Iceberg materialization from direct `events.validated` injection into
    live Iceberg `agentflow.validated_events` with exact identity observed once
    (2026-08-01) — see
-   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md).
+   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md);
+4. full one-event lake-to-serving smoke through `orders.raw` → PyFlink →
+   `events.validated` → {Iceberg; bridge → ClickHouse → API} on the mixed-SHA
+   stand (2026-08-01) — see
+   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md).
 
-These close submission smoke, Operator/Helm deploy, and the narrow direct-topic
-Iceberg materialization gate. They are **not** full lake-to-serving E2E or
-production acceptance. Kafka on the acceptance stand required evidence-backed
-scaffold fixes (`enableServiceLinks: false` and controller quorum voters at
-`127.0.0.1:29093`); that is recorded as acceptance-scaffold reproducibility
-debt, not a product source of truth from untracked prompts.
+These close submission smoke, Operator/Helm deploy, the narrow direct-topic
+Iceberg materialization gate, and the full single-event hop chain. They are
+**not** full production acceptance. The direct-Iceberg gate remains valid and
+is now complemented by the full one-event path. Kafka on the acceptance stand
+required evidence-backed scaffold fixes (`enableServiceLinks: false` and
+controller quorum voters at `127.0.0.1:29093`); that is recorded as
+acceptance-scaffold reproducibility debt, not a product source of truth from
+untracked prompts.
 
-**Still required for production acceptance:**
+**Still required for production acceptance (exactly four gates):**
 
-1. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
-   ClickHouse → API (next gate);
-2. the same path replayed after checkpoint restore without duplicate
-   `(tenant_id, event_id)` rows;
-3. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
+1. the same path replayed after checkpoint restore without duplicate
+   `(tenant_id, event_id)` rows (next atomic gate);
+2. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
    artifact and topology (the existing 2026-07-19 soak predates the Iceberg
    materializer);
-4. an external penetration-test report and remediation/retest evidence;
-5. GitHub Environment `npm` created with approval protection. The workflow now
+3. an external penetration-test report and remediation/retest evidence;
+4. GitHub Environment `npm` created with approval protection. The workflow now
    requires `environment: npm` and a matching release tag, but the repository
    settings API returned `404` for that environment on 2026-07-23, so approval
    protection is not yet evidenced.

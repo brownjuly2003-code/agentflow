@@ -4,7 +4,11 @@
 **Result:** **UNSAFE_CAPACITY** (gate not re-run; restore/replay **not** accepted)
 **Context / namespace:** `kind-agentflow-golden-36ed1ec` / `agentflow`
 **SSH alias:** `deproject-mac`
-**Local HEAD (docs/state only):** `96b7a7a82bd800f0cdd94942577dc41f848fa88d`
+**Evidence commit status:** recorded in local evidence commit
+`3fb5eeec2fd35b2a66867f5c89370dc2a8bd8856` (`docs: record restore capacity blocker`;
+local-only, unpushed). That SHA is evidence documentation only — **not** a
+runtime or Operator-accepted SHA. Pre-evidence local base remains
+`96b7a7a82bd800f0cdd94942577dc41f848fa88d` (local-only, unpushed; **not** current HEAD).
 **Runtime source / Operator base:** `ed03fc47` / `36ed1ec`
 **Task id:** `chk-restore-20260801-01`
 

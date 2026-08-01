@@ -1,7 +1,8 @@
 # Checkpoint restore/replay — capacity blocker (2026-08-01)
 
 **Date:** 2026-08-01
-**Result:** **UNSAFE_CAPACITY** (gate not re-run; restore/replay **not** accepted)
+**Result:** **UNSAFE_CAPACITY** first attempt; capacity change
+**BLOCKED_BEFORE_MUTATION** (gate not re-run; restore/replay **not** accepted)
 **Context / namespace:** `kind-agentflow-golden-36ed1ec` / `agentflow`
 **SSH alias:** `deproject-mac`
 **Evidence commit status:** recorded in local evidence commit
@@ -9,24 +10,31 @@
 local-only, unpushed). That SHA is evidence documentation only — **not** a
 runtime or Operator-accepted SHA. Pre-evidence local base remains
 `96b7a7a82bd800f0cdd94942577dc41f848fa88d` (local-only, unpushed; **not** current HEAD).
+Pre-addendum local base before this capacity-change documentation:
+`6fcfac424d7fe7f7beee85d050aee828d775916b` (local-only, unpushed, ahead 5).
 **Runtime source / Operator base:** `ed03fc47` / `36ed1ec`
 **Task id:** `chk-restore-20260801-01`
 
 Control artifacts (local only):
 `.codex-grok-tasks/checkpoint-restore-replay-20260801/`
-(`runtime-result.md`, `recovery-result.md`, `protected-recovery-result.md`).
+(`runtime-result.md`, `recovery-result.md`, `protected-recovery-result.md`,
+`capacity-change-result.md`).
 
 Plan pointer: `checkpoint-restore-replay-gate.md`.
 
 ## Claim boundary
 
 This note records a **failed first attempt**, **task-only cleanup**,
-**protected recovery**, **independent recovery verification**, and a
-**read-only capacity preflight**.
+**protected recovery**, **independent recovery verification**, a
+**read-only first capacity preflight**, and a later authorized
+**capacity-change attempt stopped before mutation**
+(`BLOCKED_BEFORE_MUTATION`).
 
 It is **not** checkpoint restore/replay acceptance. It does **not** prove
 savepoint restore, Kafka dedup of `(tenant_id, event_id)`, or lake-to-serving
 exactness after restore. E1/E2 counts remain **zero**; TTL **never started**.
+Capacity preflight, protected recovery, and later health snapshots are **not**
+acceptance PASS.
 
 Repository-side `pending_acceptance` is unchanged:
 
@@ -139,6 +147,8 @@ restore/replay.
 
 ## Measured capacity math and safe retry threshold
 
+### First-attempt capacity preflight (earlier read-only; pre-capacity-change)
+
 Read-only capacity preflight verdict: **`UNSAFE_CAPACITY`** for a second
 concurrent task Flink with **768m JM + 768m TM** while protected Flink remains
 live on the current ~5924 MB Kind node.
@@ -152,7 +162,7 @@ live on the current ~5924 MB Kind node.
 | Conservative pre-apply available target | ~1.9–2.0 GiB |
 | Measured best-case deficit vs target | ~0.9–1.0 GiB |
 
-Implications:
+Implications recorded at that time:
 
 - Protected can remain untouched **only if** the second Flink is **not**
   started under current capacity.
@@ -160,8 +170,65 @@ Implications:
   ~1.5 GiB**, then freshly remeasure available **≥ 1.9–2.0 GiB**.
 - Alternatives that shrink protected footprint or suspend the protected runtime
   require **explicit owner authorization**.
-- Capacity increase / protected suspension has **not** been approved or
-  performed in this note.
+- Capacity increase / protected suspension had **not** been performed at that
+  measurement.
+
+### Authorized capacity-change attempt — `BLOCKED_BEFORE_MUTATION`
+
+Local control evidence (not acceptance):
+`.codex-grok-tasks/checkpoint-restore-replay-20260801/capacity-change-result.md`.
+
+**Verdict:** `BLOCKED_BEFORE_MUTATION`. No memory setting changed; no
+Colima/Docker restart; no recovery, rollback, container start/stop, Flink
+patch, Helm change, or data mutation.
+
+| Item | Value |
+| --- | --- |
+| Physical Mac RAM (`sysctl hw.memsize`) | `8589934592` bytes = **exactly 8 GiB** |
+| Docker runtime | **Colima 0.10.1** (not Docker Desktop; Docker.app absent) |
+| Colima configured memory | `memory: 6` GiB (**unchanged**) |
+| `docker info` Total Memory | `6212595712` bytes ≈ **5.786 GiB** (**unchanged**) |
+| Host swap pressure (Grok preflight) | total ~5120 MiB, used ~4186 MiB; free pages ~70 MiB |
+
+Separate Kind available-memory observations (volatile; **do not average**):
+
+| Observation | Method | Value | vs ≥1.9 GiB target |
+| --- | --- | ---: | --- |
+| Grok capacity-change preflight | Kind node `stats/summary` `availableBytes` | `1825648640` (~**1.700 GiB**) | **fail** |
+| Later independent Codex read | Kind node `/proc/meminfo` | `MemTotal=6066988 kB`; `MemAvailable=676900 kB` (~**0.646 GiB**) | **fail** |
+
+Both observations fail the safety threshold independently.
+
+Why preferred +≥1.5 GiB was rejected: authorized growth toward 8192 MiB would
+set Colima to **7.5–8.0 GiB** of an **8 GiB** host, leaving **≤0.5 GiB** (or
+**0 GiB**) for macOS under existing heavy swap pressure. Preferred memory
+growth is **not clearly safe / impossible** on this host. **No mutation
+performed.**
+
+### Fresh independent post-task health (Codex after capacity preflight; health only)
+
+Not acceptance. Restore/replay was **not** retried. E1/E2 remain unproduced;
+TTL never started.
+
+| Field | Value |
+| --- | --- |
+| Protected CR UID | `0622bd9c-3cec-410c-b778-78440a3c0ba9` |
+| generation / `restartNonce` | `2` / `1` |
+| lifecycle / job | `STABLE` / `RUNNING` |
+| physical job ID | `61e8042c8422974091cc3cad20f07380` |
+| JM / TM | both Ready, restarts `0` |
+| REST | RUNNING, vertices `2/2` |
+| Checkpoints | completed `85`, failed `0`, latest `chk-85` |
+| Helm / SA UID | rev `2` deployed / `a8f4ebd8-53de-4680-b89d-83d0114db852` unchanged |
+| Task FlinkDeployment | **absent** |
+| Task topic end offset | partition 0 end offset **0** |
+| Supporting services | Kafka, Redis, Flink operator, API, serving bridge, lake materializer, ClickHouse, Iceberg REST, MinIO healthy/running |
+
+Earlier independent recovery verification recorded checkpoints completed `10` /
+latest `chk-10`; the capacity-change baseline observed completed `76` /
+latest `chk-76`; this post-task health snapshot records completed `85` /
+latest `chk-85`. These are separate timed observations of a live progressing
+job, not contradictions.
 
 ## Leftover task resources (safe cleanup candidates)
 
@@ -195,18 +262,21 @@ ssh deproject-mac "rm -rf /tmp/agentflow-chk-restore-20260801-01"
 
 ## Exact next decision
 
-**Owner/capacity decision first — not a raw retry.**
+**Preferred Docker/Colima memory growth is impossible on this 8 GiB host.**
+Gate remains **open** and capacity-blocked. Do **not** raw-retry J1 under
+current Kind available memory (both observations below the 1.9 GiB threshold).
 
-1. Choose one authorized path:
-   - prefer: grow Kind/Docker capacity ≥ ~1.5 GiB and remeasure available
-     ≥ 1.9–2.0 GiB with protected still live; **or**
-   - owner-authorized protected footprint reduction / temporary suspend of
-     protected runtime (explicit only).
-2. Optionally clean leftover task topic/Jobs/hostPath (task-only).
-3. Re-confirm protected STABLE/RUNNING, `restartNonce=1`, job
+1. Next safe work is a **read-only assessment** of an alternate, task-scoped
+   resource choreography that does not require ≥1.5 GiB more Colima memory on
+   this Mac. Any strategy that shrinks or suspends the protected workload still
+   needs **explicit owner authorization**.
+2. A larger host / additional physical RAM would reopen the preferred +≥1.5 GiB
+   path; that path is not available on this machine.
+3. Optionally clean leftover task topic/Jobs/hostPath (task-only).
+4. Re-confirm protected STABLE/RUNNING, `restartNonce=1`, job
    `61e8042c8422974091cc3cad20f07380` (or note a later authorized job id),
-   Helm rev 2, SA/CR UIDs unchanged.
-4. Only then re-run the isolated restore/replay gate under proven capacity.
+   Helm rev 2, SA/CR UIDs unchanged before any re-run.
+5. Only then re-run the isolated restore/replay gate under proven capacity.
 
 Until capacity is remediated and restore/replay assertions actually PASS,
 the gate remains **open** and blocked.

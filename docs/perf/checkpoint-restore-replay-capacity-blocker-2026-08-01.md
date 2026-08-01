@@ -2,7 +2,9 @@
 
 **Date:** 2026-08-01
 **Result:** **UNSAFE_CAPACITY** first attempt; capacity change
-**BLOCKED_BEFORE_MUTATION** (gate not re-run; restore/replay **not** accepted)
+**BLOCKED_BEFORE_MUTATION**; alternate non-protected reclaim assessment
+**INSUFFICIENT_NON_PROTECTED_RECLAIM** (gate not re-run; restore/replay
+**not** accepted)
 **Context / namespace:** `kind-agentflow-golden-36ed1ec` / `agentflow`
 **SSH alias:** `deproject-mac`
 **Evidence commit status:** recorded in local evidence commit
@@ -12,13 +14,15 @@ runtime or Operator-accepted SHA. Pre-evidence local base remains
 `96b7a7a82bd800f0cdd94942577dc41f848fa88d` (local-only, unpushed; **not** current HEAD).
 Pre-addendum local base before this capacity-change documentation:
 `6fcfac424d7fe7f7beee85d050aee828d775916b` (local-only, unpushed, ahead 5).
+Current local HEAD before this alternate-assessment documentation sync:
+`d016ffd6f2de198ad986f571551bf981718cccde` (local-only, unpushed, ahead 6).
 **Runtime source / Operator base:** `ed03fc47` / `36ed1ec`
 **Task id:** `chk-restore-20260801-01`
 
 Control artifacts (local only):
 `.codex-grok-tasks/checkpoint-restore-replay-20260801/`
 (`runtime-result.md`, `recovery-result.md`, `protected-recovery-result.md`,
-`capacity-change-result.md`).
+`capacity-change-result.md`, `alternate-capacity-assessment.md`).
 
 Plan pointer: `checkpoint-restore-replay-gate.md`.
 
@@ -26,15 +30,17 @@ Plan pointer: `checkpoint-restore-replay-gate.md`.
 
 This note records a **failed first attempt**, **task-only cleanup**,
 **protected recovery**, **independent recovery verification**, a
-**read-only first capacity preflight**, and a later authorized
+**read-only first capacity preflight**, a later authorized
 **capacity-change attempt stopped before mutation**
-(`BLOCKED_BEFORE_MUTATION`).
+(`BLOCKED_BEFORE_MUTATION`), and a completed read-only
+**alternate non-protected reclaim assessment**
+(`INSUFFICIENT_NON_PROTECTED_RECLAIM`).
 
 It is **not** checkpoint restore/replay acceptance. It does **not** prove
 savepoint restore, Kafka dedup of `(tenant_id, event_id)`, or lake-to-serving
 exactness after restore. E1/E2 counts remain **zero**; TTL **never started**.
-Capacity preflight, protected recovery, and later health snapshots are **not**
-acceptance PASS.
+Capacity preflight, protected recovery, alternate capacity assessment, and
+later health snapshots are **not** acceptance PASS.
 
 Repository-side `pending_acceptance` is unchanged:
 
@@ -230,6 +236,90 @@ latest `chk-76`; this post-task health snapshot records completed `85` /
 latest `chk-85`. These are separate timed observations of a live progressing
 job, not contradictions.
 
+### Alternate non-protected reclaim assessment — `INSUFFICIENT_NON_PROTECTED_RECLAIM`
+
+Local control evidence (not acceptance):
+`.codex-grok-tasks/checkpoint-restore-replay-20260801/alternate-capacity-assessment.md`.
+
+**Assessment time:** `2026-08-01T15:40:56Z` (Grok read-only investigation).
+**Verdict:** `INSUFFICIENT_NON_PROTECTED_RECLAIM`.
+**Mutations:** **zero** — no stop/start/scale/patch/delete/apply/produce/
+consume/restart/cleanup; protected Flink untouched.
+
+Fresh Grok Kind memory observations (volatile; **do not average**; use the
+**lower defensible** value for conservative decisions):
+
+| Method | Value | vs ≥1.9–2.0 GiB target |
+| --- | ---: | --- |
+| `/proc/meminfo` `MemAvailable` (**lowest fresh defensible**) | `546740 kB` ≈ **0.521 GiB** | **fail** |
+| Node `stats/summary` `availableBytes` | `1865945088` ≈ **1.738 GiB** | **fail** |
+
+Fresh Grok external Docker working sets:
+
+| Container | Working set |
+| --- | ---: |
+| Kind control-plane | **4.026 GiB** |
+| ClickHouse e2e | **581.1 MiB** |
+| Iceberg REST | **157.5 MiB** |
+| MinIO | **88.21 MiB** |
+
+Candidate Sets A–D (task API / bridge / materializer / ClickHouse / Iceberg
+REST / MinIO combinations; protected Flink + Kafka not reclaimable) **all fail**
+the ≥1.9–2.0 GiB pre-apply threshold from the 0.521 GiB baseline:
+
+| Set | Conservative reclaim (70% WS) | Projected available | ≥1.9 GiB? |
+| --- | ---: | ---: | --- |
+| A (API + bridge) | ~0.115 GiB | **0.636 GiB** | **no** |
+| B (A + materializer) | ~0.172 GiB | **0.693 GiB** | **no** |
+| C (B + ClickHouse) | ~0.568 GiB | **1.089 GiB** | **no** |
+| D (C + Iceberg REST + MinIO) | ~**0.737 GiB** | **~1.258 GiB** | **no** |
+
+Even maximum Set D **raw 100%** reclaim projects only
+`0.521 + ~1.053 = ~1.574 GiB` — still **below 1.9 GiB**.
+
+Dependency fact (does not create free memory): task J1/J2 itself needs Kafka +
+Flink operator; downstream exactness requires materializer/bridge plus
+Iceberg/MinIO, ClickHouse, and task API after they return. Phase ordering
+cannot solve the missing peak dual-Flink memory.
+
+Protected Flink during Grok assessment (health only; **not** acceptance):
+
+| Field | Value |
+| --- | --- |
+| CR UID | `0622bd9c-3cec-410c-b778-78440a3c0ba9` |
+| generation / `restartNonce` | `2` / `1` |
+| lifecycle / job | `STABLE` / `RUNNING` |
+| physical job ID | `61e8042c8422974091cc3cad20f07380` |
+| JM / TM | Ready, restarts `0` |
+| REST | RUNNING, vertices `2/2` |
+| Checkpoints | completed `151`, failed `0`, latest `chk-151` |
+| Helm / SA UID | rev `2` / `a8f4ebd8-53de-4680-b89d-83d0114db852` |
+| Task FlinkDeployment | **absent** |
+| Task topic end offset | partition 0 end offset **0** |
+
+### Independent Codex follow-up (later fresh snapshot; sensitivity only)
+
+Later independent Codex read (separate timed snapshot; **do not average** with
+Grok assessment values; **not** a new executable plan):
+
+| Item | Value |
+| --- | ---: |
+| Kind `/proc/meminfo` | `MemTotal=6066988 kB`; `MemAvailable=582628 kB` ≈ **0.556 GiB** |
+| Docker Kind WS | **4.1 GiB** |
+| Docker ClickHouse WS | **550.5 MiB** |
+| Docker Iceberg REST WS | **159.7 MiB** |
+| Docker MinIO WS | **87.41 MiB** |
+
+Combining this later 0.556 GiB baseline with the fresh external containers plus
+Grok-measured/derived eligible task API (~97.1 MiB), materializer (~83.1 MiB),
+and bridge (~71 MiB) still gives only about **1.58 GiB** even with **100% raw**
+reclaim — still **below 1.9 GiB**. Independent confirmation of insufficiency.
+
+Protected CR/job identities **unchanged** in the later Codex snapshot; pods
+Ready restarts `0`; REST RUNNING `2/2`; checkpoints completed `166` / failed
+`0` / latest `chk-166`; Helm rev `2`; SA UID unchanged; task CR **absent**;
+task topic end offset `0`. Health only — **not** restore/replay acceptance.
+
 ## Leftover task resources (safe cleanup candidates)
 
 Left intentionally after task CR delete and protected recovery (evidence /
@@ -263,20 +353,26 @@ ssh deproject-mac "rm -rf /tmp/agentflow-chk-restore-20260801-01"
 ## Exact next decision
 
 **Preferred Docker/Colima memory growth is impossible on this 8 GiB host.**
-Gate remains **open** and capacity-blocked. Do **not** raw-retry J1 under
-current Kind available memory (both observations below the 1.9 GiB threshold).
+Non-protected choreography alone is now **decisively insufficient**
+(`INSUFFICIENT_NON_PROTECTED_RECLAIM`). Gate remains **open** and
+capacity-blocked. Do **not** raw-retry J1. Do **not** execute Sets A–D as a
+capacity fix.
 
-1. Next safe work is a **read-only assessment** of an alternate, task-scoped
-   resource choreography that does not require ≥1.5 GiB more Colima memory on
-   this Mac. Any strategy that shrinks or suspends the protected workload still
-   needs **explicit owner authorization**.
-2. A larger host / additional physical RAM would reopen the preferred +≥1.5 GiB
-   path; that path is not available on this machine.
-3. Optionally clean leftover task topic/Jobs/hostPath (task-only).
-4. Re-confirm protected STABLE/RUNNING, `restartNonce=1`, job
-   `61e8042c8422974091cc3cad20f07380` (or note a later authorized job id),
-   Helm rev 2, SA/CR UIDs unchanged before any re-run.
+1. Restore/replay needs either a **larger host** (reopen preferred +≥1.5 GiB
+   Colima growth with safe macOS headroom) **or** explicit **owner
+   authorization** for a protected shrink/suspend/single-Flink strategy with
+   written rollback.
+2. Next **independent safe audit item** (while restore/replay stays blocked
+   awaiting owner/capacity decision): **fresh golden-topology 4h soak +
+   rollback preflight/execution**.
+3. Optionally clean leftover task topic/Jobs/hostPath (task-only; never
+   protected).
+4. Before any future restore re-run: re-confirm protected STABLE/RUNNING,
+   `restartNonce=1`, job `61e8042c8422974091cc3cad20f07380` (or a later
+   authorized job id), Helm rev 2, SA/CR UIDs unchanged, and proven available
+   memory ≥1.9–2.0 GiB.
 5. Only then re-run the isolated restore/replay gate under proven capacity.
 
 Until capacity is remediated and restore/replay assertions actually PASS,
-the gate remains **open** and blocked.
+the gate remains **open** and blocked. Repository-side `pending_acceptance`
+stays exactly unchanged. Exactly four production-acceptance gates remain.

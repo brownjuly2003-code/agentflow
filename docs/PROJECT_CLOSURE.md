@@ -97,7 +97,7 @@ Push, PR mutations and release actions require explicit owner authorization.
   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md).
   Full one-event lake-to-serving smoke is also **PASS** — see
   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)
-  (working-tree / pending scoped local commit).
+  (local evidence commit `cf247ba`, unpushed).
 - Repository-owned coverage gates are green and remain blocking. Codecov OIDC
   currently returns `Repository not found`; its upload is non-blocking
   reporting until the one-time external activation in

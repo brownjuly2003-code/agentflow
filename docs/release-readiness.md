@@ -24,7 +24,7 @@ Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
 is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
 production Kafka claim). Checkpoint restore/replay, fresh soak, rollback, and
 external security evidence remain pending as listed below. Tracked full-smoke
-evidence is currently working-tree / pending scoped local commit.
+evidence is recorded in local evidence commit `cf247ba` (local-only, unpushed).
 
 ## Summary
 

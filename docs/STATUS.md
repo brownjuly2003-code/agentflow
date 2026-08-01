@@ -32,8 +32,8 @@ API}. That closes the single-event hop chain only; it is not full
 production acceptance. Checkpoint restore/replay, fresh soak/rollback, and
 external security acceptance remain open. The earlier 4 h @ 100 eps result
 remains valid evidence for its measured pre-materializer path, not for the
-still-unaccepted full golden topology. Tracked full-smoke evidence is currently
-working-tree / pending scoped local commit.
+still-unaccepted full golden topology. Tracked full-smoke evidence is recorded
+in local evidence commit `cf247ba` (local-only, unpushed).
 
 Closing CI hardening on 2026-07-30 also verified the Python 3.11/3.12/3.13
 compatibility lanes, made `pyiceberg` optional for the core-only API path,

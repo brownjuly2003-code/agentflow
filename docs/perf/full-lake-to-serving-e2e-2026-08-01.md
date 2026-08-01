@@ -8,10 +8,11 @@
 
 **Result:** **PASS** (mixed-SHA single-event full hop chain)
 
-**Evidence commit status:** working-tree / pending scoped local commit (Codex
-will commit tracked evidence later). Local evidence base HEAD before this
-working-tree change remains `9070ec3d0c04b7b663e12f92e0d524e340cc7399`
-(local-only, unpushed, ahead 1). That SHA is **not** a runtime or Operator SHA.
+**Evidence commit status:** recorded in local evidence commit
+`cf247bad7015320541814d47f406507a218b2f05` (`docs: record full lake-to-serving smoke`;
+local-only, unpushed). That SHA is evidence/claims documentation only — **not** a
+runtime or Operator-accepted SHA. Pre-gate/pre-evidence local base remains
+`9070ec3d0c04b7b663e12f92e0d524e340cc7399` (local-only, unpushed; **not** current HEAD).
 
 ## Goal and boundary
 
@@ -59,7 +60,8 @@ remains valid and is now complemented by this full one-event path.
 | Item | Value |
 |------|-------|
 | Runtime source / `origin/main` | `ed03fc47fa5f411016e588774d61a5b5eef21213` |
-| Local evidence base HEAD (pre this working-tree change) | `9070ec3d0c04b7b663e12f92e0d524e340cc7399` (local-only, unpushed, ahead 1; **not** runtime/Operator SHA) |
+| Local evidence commit (full-smoke claims) | `cf247bad7015320541814d47f406507a218b2f05` (local-only, unpushed; evidence/claims only — **not** runtime/Operator SHA) |
+| Pre-gate/pre-evidence local base | `9070ec3d0c04b7b663e12f92e0d524e340cc7399` (local-only, unpushed; **not** current HEAD; **not** runtime/Operator SHA) |
 | Operator / Flink stand base | `36ed1ec` |
 | Cluster / context | `agentflow-golden-36ed1ec` / `kind-agentflow-golden-36ed1ec` |
 | Namespace | `agentflow` |
@@ -170,8 +172,9 @@ under `/tmp/agentflow-full-e2e-ed03fc47-20260801-01/`.
   embedded control plane rejects `api` without postgres.
 - Host-side curl to `172.20.0.1:8123` does not work on Docker Desktop Mac;
   kind-node and in-cluster paths do (same pattern as the prior Iceberg gate).
-- This documentation task does not invent a future commit hash; tracked evidence
-  remains working-tree until a later scoped local commit.
+- Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
+  (full SHA above; local-only, unpushed). This metadata sync does not invent a
+  future commit hash.
 
 ## Resources intentionally left running
 

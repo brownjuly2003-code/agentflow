@@ -26,8 +26,12 @@ production Kafka claim). Checkpoint restore/replay remains capacity-blocked;
 fresh golden 4h soak + rollback read-only preflight returned
 **`BLOCKED_RESOURCE_CAPACITY`** (canary/soak/rollback **not started**; see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
-External security evidence remains pending as listed below. Tracked full-smoke
-evidence is recorded in local evidence commit `cf247ba` (local-only, unpushed).
+External security evidence remains pending as listed below. Read-only GitHub
+Environment `npm` approval audit at `2026-08-01T16:51:29Z` returned
+**`BLOCKED_ENVIRONMENT_ABSENT`** — see
+[operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
+Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
+(local-only, unpushed).
 
 ## Summary
 
@@ -157,12 +161,24 @@ untracked prompts.
    The existing 2026-07-19 soak predates the Iceberg materializer and is
    advisory only;
 3. an external penetration-test report and remediation/retest evidence;
-4. GitHub Environment `npm` created with approval protection. The workflow now
-   requires `environment: npm` and a matching release tag, but the repository
-   settings API returned `404` for that environment on 2026-07-23, so approval
-   protection is not yet evidenced. Next independent safe audit item while
-   capacity-bound gates stay blocked: re-check that npm Environment approval
-   evidence.
+4. GitHub Environment `npm` created with approval protection. The workflow
+   correctly binds the publish job to `environment: npm` with tag/version
+   safeguards, but workflow wiring alone is not approval-protection evidence.
+   Read-only re-audit at `2026-08-01T16:51:29Z` (public repo
+   `brownjuly2003-code/agentflow`; authenticated principal had admin):
+   `GET …/environments` returned **200** with exactly four names
+   (`github-pages`, `production`, `pypi`, `staging`); `npm` was absent;
+   `GET …/environments/npm` returned **404 Not Found**. Verdict
+   **`BLOCKED_ENVIRONMENT_ABSENT`** — not auth/visibility ambiguity; no
+   non-empty required-reviewers rule can exist for a nonexistent Environment.
+   Historical successful publish runs do not prove current approval protection.
+   Evidence:
+   [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
+   Smallest owner action: create Environment named exactly `npm`, configure a
+   non-empty Required reviewers rule, then re-run a read-only GET audit (do not
+   perform from documentation work). Next independent safe audit item while
+   capacity-bound gates stay blocked: read-only consolidation of external
+   pentest intake/evidence state (do not claim a pentest was performed).
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

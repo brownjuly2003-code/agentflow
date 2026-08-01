@@ -6,10 +6,12 @@
 > topic boundary; full lake-to-serving single-event smoke **PASS** on the
 > mixed-SHA stand; golden 4h soak/rollback read-only preflight
 > **`BLOCKED_RESOURCE_CAPACITY`** — canary/soak/rollback **not started**;
-> core-only API and hardened runtime-image remediation locally **PASS**;
-> golden topology remains a production candidate, not production accepted) ·
-> release line **`v2.0.0`**. Numbers below come only from measured, in-repo
-> evidence — see the linked reports for methodology and reproduction commands.
+> GitHub Environment `npm` approval audit **`BLOCKED_ENVIRONMENT_ABSENT`**
+> (Environment missing; gate open); core-only API and hardened runtime-image
+> remediation locally **PASS**; golden topology remains a production candidate,
+> not production accepted) · release line **`v2.0.0`**. Numbers below come only
+> from measured, in-repo evidence — see the linked reports for methodology and
+> reproduction commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API
@@ -35,10 +37,16 @@ fresh golden 4h soak + rollback read-only preflight returned
 **`BLOCKED_RESOURCE_CAPACITY`** (Kind/Colima volume ~94% used / ~3.6–3.7 GiB
 free; canary/soak/rollback **not started**) — see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md).
-External security acceptance remains open. The earlier 4 h @ 100 eps result
-remains valid evidence for its measured pre-materializer path only (advisory
-for the post-Iceberg golden gate). Tracked full-smoke evidence is recorded in
-local evidence commit `cf247ba` (local-only, unpushed).
+External security acceptance remains open. Read-only GitHub API audit of
+Environment `npm` at `2026-08-01T16:51:29Z` returned
+**`BLOCKED_ENVIRONMENT_ABSENT`** (list of four environments omits `npm`;
+detail **404**; admin principal; workflow `environment: npm` wiring is
+correct but not approval-protection evidence) — see
+[operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
+The earlier 4 h @ 100 eps result remains valid evidence for its measured
+pre-materializer path only (advisory for the post-Iceberg golden gate).
+Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
+(local-only, unpushed).
 
 Closing CI hardening on 2026-07-30 also verified the Python 3.11/3.12/3.13
 compatibility lanes, made `pyiceberg` optional for the core-only API path,
@@ -93,7 +101,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, and full one-event lake-to-serving smoke now measured; restore/replay capacity-blocked; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test and npm environment approval remain unverified |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, and full one-event lake-to-serving smoke now measured; restore/replay capacity-blocked; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test open; npm Environment approval audit `BLOCKED_ENVIRONMENT_ABSENT` (Environment absent; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -169,9 +177,13 @@ program.
    [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
    (canary/soak/rollback **not started**; old 4h evidence advisory only).
    Exactly four production-acceptance gates remain overall: (1) restore/replay,
-   (2) fresh soak+rollback, (3) external pen-test, (4) npm approval. Next
-   independent safe audit item (no runtime mutation): GitHub `npm` Environment
-   approval evidence. Acceptance-scaffold Kafka reproducibility debt (kind
+   (2) fresh soak+rollback, (3) external pen-test, (4) npm approval. Gate 4
+   read-only audit **`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z`
+   ([operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md));
+   owner must create Environment `npm` with a non-empty Required reviewers rule
+   and re-audit (do not perform from docs work). Next independent safe audit
+   item (no runtime mutation): read-only consolidation of external pentest
+   intake/evidence state. Acceptance-scaffold Kafka reproducibility debt (kind
    runtime fixes for `enableServiceLinks` / controller quorum voters) is
    recorded in the Operator evidence and is not a production-acceptance claim.
 2. **External notes (not extra production-acceptance gates)** — production CDC

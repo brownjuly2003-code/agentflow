@@ -49,7 +49,10 @@ The remaining acceptance program still includes checkpoint restore/replay
 rehearsal (read-only preflight **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/
 rollback **not started** — see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)),
-third-party penetration test, and GitHub Environment `npm` approval evidence.
+third-party penetration test, and GitHub Environment `npm` approval evidence
+(read-only audit **`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z` —
+Environment missing; see
+[operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
 
 ## Post-closure future/accepted limits
 
@@ -108,8 +111,15 @@ Push, PR mutations and release actions require explicit owner authorization.
 - Production status remains `candidate`; exactly four production gates remain
   open: restore/replay (capacity-blocked), fresh soak/rollback (preflight
   **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/rollback **not started**),
-  external pen-test, and npm approval evidence. Next independent safe audit
-  item (no runtime mutation): GitHub `npm` Environment approval evidence.
+  external pen-test, and npm approval evidence (read-only audit
+  **`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z` — Environment
+  `npm` absent from list of four; detail **404**; workflow `environment: npm`
+  wiring correct but not approval-protection evidence; see
+  [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
+  Owner must create Environment `npm` with a non-empty Required reviewers rule
+  and re-audit (do not perform from docs work). Next independent safe audit
+  item (no runtime mutation): read-only consolidation of external pentest
+  intake/evidence state.
 
 ## Сохранённые локальные артефакты
 

@@ -1,11 +1,13 @@
 # Engineering Status
 
-> Updated: **2026-07-30** (clean-checkout PyFlink OCI build + submission smoke
+> Updated: **2026-08-01** (clean-checkout PyFlink OCI build + submission smoke
 > **PASS**; Flink Kubernetes Operator + Helm golden-topology deploy **PASS**;
-> core-only API and hardened runtime-image remediation locally **PASS**;
-> golden topology remains a production candidate, not production accepted) ·
-> release line **`v2.0.0`**. Numbers below come only from measured, in-repo
-> evidence — see the linked reports for methodology and reproduction commands.
+> live Iceberg materialization from `events.validated` **PASS** at the direct
+> topic boundary; core-only API and hardened runtime-image remediation locally
+> **PASS**; golden topology remains a production candidate, not production
+> accepted) · release line **`v2.0.0`**. Numbers below come only from measured,
+> in-repo evidence — see the linked reports for methodology and reproduction
+> commands.
 
 AgentFlow's product axis — **event → live metric** on the real streaming path
 (Kafka → PyFlink → `events.validated` → serving bridge → ClickHouse → API
@@ -17,10 +19,14 @@ later clean kind + Operator + Helm acceptance of exact HEAD `36ed1ec` also
 passed (stable hold, growing checkpoints, zero leadership flaps; Kafka on
 that stand used live runtime fixes, later captured in the tracked kind
 acceptance scaffold `k8s/acceptance/kafka-kraft.yaml` — not production Kafka).
-Live Iceberg materialization, lake-to-serving E2E, recovery, soak, rollback,
-and external security acceptance remain open. The earlier 4 h @ 100 eps result
-remains valid evidence for its measured pre-materializer path, not for the
-still-unaccepted full golden topology.
+On 2026-08-01 live Iceberg materialization from direct `events.validated`
+injection also **PASS**ed on the mixed-SHA stand (Operator base `36ed1ec`,
+materializer runtime source `ed03fc47`) — see
+[perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md).
+Full lake-to-serving E2E, recovery, soak, rollback, and external security
+acceptance remain open. The earlier 4 h @ 100 eps result remains valid
+evidence for its measured pre-materializer path, not for the still-unaccepted
+full golden topology.
 
 Closing CI hardening on 2026-07-30 also verified the Python 3.11/3.12/3.13
 compatibility lanes, made `pyiceberg` optional for the core-only API path,
@@ -61,6 +67,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | Multi-tenant ClickHouse write key | adversarial two-tenant suite green on live CH 25.3 (CI `test-integration` + audit stand) | [security-audit.md](security-audit.md), `tests/integration/test_clickhouse_tenant_isolation_live.py` |
 | Clean-checkout PyFlink OCI build + submission smoke | PASS clean-checkout OCI build + submission smoke on 2026-07-30 — image built, JobID `RUNNING`, not Operator/E2E | [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md) |
 | Flink Kubernetes Operator + Helm golden deploy | PASS clean kind Operator/Helm deploy of verified image on exact HEAD `36ed1ec` — CR/job stable, checkpoints `2→23`, leader flaps `0`, not lake E2E | [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md) |
+| Live Iceberg materialization from `events.validated` | PASS direct topic injection → `ed03fc47` lake materializer → live Iceberg exact identity once; not Kafka source or lake-to-serving E2E | [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md) |
 | Hardened API runtime image (local acceptance) | core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL after runtime installer removal | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) |
 | Python cloud/MCP dependency compatibility (local + isolated Mac) | 2170 unit/property tests PASS; MCP 1.29 + PyIceberg 0.11.1/core 0.7.0 clean environment and 39 focused tests PASS | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) |
 
@@ -73,7 +80,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke and Operator/Helm deploy now measured (2026-07-30); live Iceberg, lake-to-serving E2E, restore/replay, fresh soak/rollback, external pen-test, and npm environment approval remain unverified |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, and direct live Iceberg materialization now measured; full Kafka → PyFlink → Iceberg → ClickHouse → API smoke, restore/replay, fresh soak/rollback, external pen-test, and npm environment approval remain unverified |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -133,13 +140,16 @@ program.
 
 1. **Golden-topology acceptance** — clean-checkout OCI build + submission smoke
    is **PASS**
-   ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md))
-   and clean kind + Kubernetes Operator + Helm deployment of the verified image
-   on exact HEAD `36ed1ec` is also **PASS**
-   ([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)).
-   Remaining acceptance work: two-tenant Kafka → PyFlink → Iceberg →
-   ClickHouse → API smoke; checkpoint restore/replay without duplicate
-   `(tenant_id, event_id)` rows; fresh 4 h soak plus backup/rollback rehearsal.
+   ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
+   clean kind + Kubernetes Operator + Helm deployment of the verified image
+   on exact HEAD `36ed1ec` is **PASS**
+   ([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md));
+   and live Iceberg materialization from direct `events.validated` is **PASS**
+   at the narrow boundary
+   ([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)).
+   Remaining acceptance work: Kafka → PyFlink → Iceberg → ClickHouse → API
+   smoke; checkpoint restore/replay without duplicate `(tenant_id, event_id)`
+   rows; fresh 4 h soak plus backup/rollback rehearsal.
    Acceptance-scaffold Kafka reproducibility debt (kind runtime fixes for
    `enableServiceLinks` / controller quorum voters) is recorded in the Operator
    evidence and is not a production-acceptance claim.

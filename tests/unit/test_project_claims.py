@@ -30,6 +30,7 @@ VALIDATOR_INPUTS = (
     "docs/decisions/0013-golden-production-topology.md",
     "docs/perf/freshness-e2e-realpath.md",
     "docs/perf/golden-flink-submission-2026-07-30.md",
+    "docs/perf/live-iceberg-materialization-2026-08-01.md",
 )
 
 
@@ -49,6 +50,32 @@ def test_flink_submission_smoke_evidence_is_claimed() -> None:
 
     assert evidence in manifest["required_evidence"]
     assert production.get("verified_submission_smoke") == evidence
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_live_iceberg_materialization_evidence_is_claimed() -> None:
+    """Live Iceberg materialization PASS is machine-readable and fixture-wired.
+
+    Scope boundary: direct events.validated -> lake materializer -> Iceberg
+    exact identity once — not Kafka source, full lake-to-serving E2E, or
+    production acceptance.
+    """
+    evidence = "docs/perf/live-iceberg-materialization-2026-08-01.md"
+    pending_item = "live Iceberg materialization from events.validated"
+    remaining_pending = [
+        "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke",
+        "checkpoint restore and replay acceptance",
+        "4h soak and rollback rehearsal on the golden topology",
+    ]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+    pending = production.get("pending_acceptance", [])
+
+    assert evidence in manifest["required_evidence"]
+    assert production.get("verified_iceberg_materialization") == evidence
+    assert pending_item not in pending
+    assert pending == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()
 

@@ -8,17 +8,20 @@ provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
 registry links and upload evidence.
 
-**Golden-topology status (2026-07-30)**: production candidate, not production
+**Golden-topology status (2026-08-01)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
 clean-checkout OCI build + real Flink job submission smoke is **PASS**
 ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
 clean kind + Flink Kubernetes Operator + Helm deployment of the verified image
-on exact HEAD `36ed1ec` is also **PASS**
-([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)).
-That acceptance used live Kafka runtime fixes; the kind acceptance scaffold is
-now tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
-production Kafka claim). Lake-to-serving E2E, recovery, soak, rollback, and
-external security evidence remain pending as listed below.
+on exact HEAD `36ed1ec` is **PASS**
+([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md));
+and live Iceberg materialization from direct `events.validated` is **PASS** at
+the narrow materializer boundary
+([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)).
+Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
+is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
+production Kafka claim). Full lake-to-serving E2E, recovery, soak, rollback,
+and external security evidence remain pending as listed below.
 
 ## Summary
 
@@ -108,33 +111,38 @@ Component, contract, Helm, and replay tests validate the checked-in streaming,
 lake, serving, and deployment artifacts. They do not substitute for full live
 production-acceptance evidence.
 
-**Completed (limited scope, 2026-07-30):**
+**Completed (limited scope):**
 
 1. clean-checkout PyFlink OCI build and real job submission smoke on
-   `deproject-mac` — see
+   `deproject-mac` (2026-07-30) — see
    [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md);
 2. clean kind + Flink Kubernetes Operator + Helm golden-topology deployment of
    the verified OCI image on exact HEAD `36ed1ec` (stable hold, checkpoints
-   growing, zero leadership flaps) — see
-   [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md).
+   growing, zero leadership flaps; 2026-07-30) — see
+   [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md);
+3. live Iceberg materialization from direct `events.validated` injection into
+   live Iceberg `agentflow.validated_events` with exact identity observed once
+   (2026-08-01) — see
+   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md).
 
-These close submission smoke and Operator/Helm deploy only. They are **not**
-lake-to-serving E2E or production acceptance. Kafka on the acceptance stand
-required evidence-backed scaffold fixes (`enableServiceLinks: false` and
-controller quorum voters at `127.0.0.1:29093`); that is recorded as
-acceptance-scaffold reproducibility debt, not a product source of truth from
-untracked prompts.
+These close submission smoke, Operator/Helm deploy, and the narrow direct-topic
+Iceberg materialization gate. They are **not** full lake-to-serving E2E or
+production acceptance. Kafka on the acceptance stand required evidence-backed
+scaffold fixes (`enableServiceLinks: false` and controller quorum voters at
+`127.0.0.1:29093`); that is recorded as acceptance-scaffold reproducibility
+debt, not a product source of truth from untracked prompts.
 
 **Still required for production acceptance:**
 
 1. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
-   ClickHouse → API, then replayed after checkpoint restore without duplicate
+   ClickHouse → API (next gate);
+2. the same path replayed after checkpoint restore without duplicate
    `(tenant_id, event_id)` rows;
-2. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
+3. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
    artifact and topology (the existing 2026-07-19 soak predates the Iceberg
    materializer);
-3. an external penetration-test report and remediation/retest evidence;
-4. GitHub Environment `npm` created with approval protection. The workflow now
+4. an external penetration-test report and remediation/retest evidence;
+5. GitHub Environment `npm` created with approval protection. The workflow now
    requires `environment: npm` and a matching release tag, but the repository
    settings API returned `404` for that environment on 2026-07-23, so approval
    protection is not yet evidenced.

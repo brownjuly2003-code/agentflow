@@ -46,6 +46,8 @@ spec:
               value: {{ .Values.flinkJob.sessions.groupId | quote }}
             - name: FLINK_PARALLELISM
               value: {{ .Values.flinkJob.sessions.parallelism | quote }}
+            - name: FLINK_CHECKPOINT_INTERVAL_MS
+              value: {{ .Values.flinkJob.checkpointIntervalMs | quote }}
             - name: FLINK_SESSION_MAX_UNIQUE_PAGES
               value: {{ .Values.flinkJob.sessions.maxUniquePages | quote }}
             - name: FLINK_SESSION_MAX_UNIQUE_PRODUCTS

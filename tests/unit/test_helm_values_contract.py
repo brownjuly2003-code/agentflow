@@ -772,6 +772,8 @@ def test_flink_operator_workload_renders_golden_runtime():
         "flinkJob.checkpointStorage=s3://agentflow-state/checkpoints",
         "--set",
         "flinkJob.savepointStorage=s3://agentflow-state/savepoints",
+        "--set",
+        "flinkJob.checkpointIntervalMs=1250",
     )
     output = _combined_output(result)
 
@@ -797,7 +799,16 @@ def test_flink_operator_workload_renders_golden_runtime():
         parallelism_env = next(
             item["value"] for item in main_container["env"] if item["name"] == "FLINK_PARALLELISM"
         )
+        checkpoint_interval_env = next(
+            item["value"]
+            for item in main_container["env"]
+            if item["name"] == "FLINK_CHECKPOINT_INTERVAL_MS"
+        )
         assert parallelism_env == str(deployment["spec"]["job"]["parallelism"])
+        assert checkpoint_interval_env == "1250"
+        assert deployment["spec"]["flinkConfiguration"]["execution.checkpointing.interval"] == (
+            "1250 ms"
+        )
     assert "apiVersion: flink.apache.org/v1beta1" in output
     assert "kind: FlinkDeployment" in output
     assert "flinkVersion: v2_3" in output

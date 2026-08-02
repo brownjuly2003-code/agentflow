@@ -293,7 +293,8 @@ def build_pipeline() -> StreamExecutionEnvironment:
     # DeliveryGuarantee); the effective exactly-once seen at the serving layer is
     # completed downstream by the bridge's idempotent, event_id-keyed apply — see
     # src/processing/bridge_consumer.py.
-    env.enable_checkpointing(30_000)  # 30s
+    checkpoint_interval_ms = int(os.getenv("FLINK_CHECKPOINT_INTERVAL_MS", "30000"))
+    env.enable_checkpointing(checkpoint_interval_ms)
     env.get_checkpoint_config().set_min_pause_between_checkpoints(10_000)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
 

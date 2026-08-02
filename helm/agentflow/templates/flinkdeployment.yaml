@@ -44,6 +44,8 @@ spec:
               value: {{ .Values.flinkJob.groupId | quote }}
             - name: FLINK_PARALLELISM
               value: {{ .Values.flinkJob.parallelism | quote }}
+            - name: FLINK_CHECKPOINT_INTERVAL_MS
+              value: {{ .Values.flinkJob.checkpointIntervalMs | quote }}
             - name: AGENTFLOW_PROFILE
               value: {{ .Values.config.profile | default "dev" | quote }}
             - name: AWS_REGION

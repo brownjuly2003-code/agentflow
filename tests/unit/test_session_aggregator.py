@@ -702,6 +702,7 @@ def test_on_timer_sets_expected_funnel_stage(
 def test_build_pipeline_uses_defaults_and_wires_stream(session_aggregator, monkeypatch):
     env = _FakeExecutionEnvironment()
     session_aggregator.StreamExecutionEnvironment.current_env = env
+    monkeypatch.delenv("FLINK_CHECKPOINT_INTERVAL_MS", raising=False)
     monkeypatch.delenv("FLINK_PARALLELISM", raising=False)
     monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
 
@@ -759,12 +760,14 @@ def test_build_pipeline_sets_bounded_restart_strategy(session_aggregator, monkey
 def test_build_pipeline_respects_environment_overrides(session_aggregator, monkeypatch):
     env = _FakeExecutionEnvironment()
     session_aggregator.StreamExecutionEnvironment.current_env = env
+    monkeypatch.setenv("FLINK_CHECKPOINT_INTERVAL_MS", "1250")
     monkeypatch.setenv("FLINK_PARALLELISM", "5")
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
     session_aggregator.build_pipeline()
     source, _, _ = env.from_source_args
 
+    assert env.checkpointing == 1250
     assert env.parallelism == 5
     assert source["bootstrap_servers"] == "kafka:29092"
     assert env.stream.sink["bootstrap_servers"] == "kafka:29092"

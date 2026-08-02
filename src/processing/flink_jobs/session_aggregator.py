@@ -149,7 +149,10 @@ def build_pipeline(
     sink_topic: str | None = None,
 ) -> StreamExecutionEnvironment:
     env = env or StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(CHECKPOINT_INTERVAL_MS)
+    checkpoint_interval_ms = int(
+        os.getenv("FLINK_CHECKPOINT_INTERVAL_MS", str(CHECKPOINT_INTERVAL_MS))
+    )
+    env.enable_checkpointing(checkpoint_interval_ms)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
 
     # Bounded restart budget — same rationale as stream_processor.build_pipeline:

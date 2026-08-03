@@ -294,8 +294,9 @@ def build_pipeline() -> StreamExecutionEnvironment:
     # completed downstream by the bridge's idempotent, event_id-keyed apply — see
     # src/processing/bridge_consumer.py.
     checkpoint_interval_ms = int(os.getenv("FLINK_CHECKPOINT_INTERVAL_MS", "30000"))
+    checkpoint_min_pause_ms = int(os.getenv("FLINK_CHECKPOINT_MIN_PAUSE_MS", "10000"))
     env.enable_checkpointing(checkpoint_interval_ms)
-    env.get_checkpoint_config().set_min_pause_between_checkpoints(10_000)
+    env.get_checkpoint_config().set_min_pause_between_checkpoints(checkpoint_min_pause_ms)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
 
     # Bounded restart budget: with the default infinite fixed-delay strategy a

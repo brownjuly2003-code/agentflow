@@ -280,6 +280,7 @@ flinkJob:
   # spec.flinkConfiguration. Keep values quoted (for example, "384m").
   memoryConfiguration: {}
   checkpointIntervalMs: 30000
+  checkpointMinPauseMs: 10000
   checkpointStorage: ""
   savepointStorage: ""
   upgradeMode: savepoint

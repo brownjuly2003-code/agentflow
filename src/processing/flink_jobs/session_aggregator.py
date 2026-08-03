@@ -40,6 +40,7 @@ SESSION_GAP_MINUTES = 30
 SESSION_GAP_MS = SESSION_GAP_MINUTES * 60 * 1000
 WATERMARK_OUT_OF_ORDERNESS_SECONDS = 10
 CHECKPOINT_INTERVAL_MS = 30_000
+CHECKPOINT_MIN_PAUSE_MS = 10_000
 MAX_UNIQUE_PAGES = int(os.getenv("FLINK_SESSION_MAX_UNIQUE_PAGES", "1000"))
 MAX_UNIQUE_PRODUCTS = int(os.getenv("FLINK_SESSION_MAX_UNIQUE_PRODUCTS", "1000"))
 
@@ -152,7 +153,11 @@ def build_pipeline(
     checkpoint_interval_ms = int(
         os.getenv("FLINK_CHECKPOINT_INTERVAL_MS", str(CHECKPOINT_INTERVAL_MS))
     )
+    checkpoint_min_pause_ms = int(
+        os.getenv("FLINK_CHECKPOINT_MIN_PAUSE_MS", str(CHECKPOINT_MIN_PAUSE_MS))
+    )
     env.enable_checkpointing(checkpoint_interval_ms)
+    env.get_checkpoint_config().set_min_pause_between_checkpoints(checkpoint_min_pause_ms)
     env.set_parallelism(int(os.getenv("FLINK_PARALLELISM", "2")))
 
     # Bounded restart budget — same rationale as stream_processor.build_pipeline:

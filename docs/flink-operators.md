@@ -23,7 +23,7 @@ Flink operator.
 
 ## Checkpointing
 
-`src/processing/flink_jobs/checkpointing.py` configures production-safe defaults:
+`src/processing/flink_jobs/checkpointing.py` provides reusable checkpoint defaults:
 - interval: 60 seconds
 - mode: exactly-once
 - min pause between checkpoints: 30 seconds
@@ -33,6 +33,13 @@ Flink operator.
 - storage: `FLINK_CHECKPOINT_DIR` or `file:///tmp/flink-checkpoints`
 
 This allows session state to survive a job restart after the latest completed checkpoint is restored.
+
+The operator-managed stream and session jobs use
+`flinkJob.checkpointIntervalMs` (30 seconds by default) and
+`flinkJob.checkpointMinPauseMs` (10 seconds by default). Helm applies both to
+the `FlinkDeployment` configuration and passes them to the Python jobs as
+`FLINK_CHECKPOINT_INTERVAL_MS` and `FLINK_CHECKPOINT_MIN_PAUSE_MS`, so a short
+checkpoint interval is not silently constrained by a fixed pause.
 
 For constrained Kubernetes profiles, `flinkJob.memoryConfiguration` passes an
 explicit process-memory breakdown to both operator-managed jobs. Keys are

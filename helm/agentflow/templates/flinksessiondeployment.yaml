@@ -17,6 +17,7 @@ spec:
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: {{ .Values.flinkJob.taskSlots | quote }}
     execution.checkpointing.interval: {{ printf "%d ms" (int .Values.flinkJob.checkpointIntervalMs) | quote }}
+    execution.checkpointing.min-pause: {{ printf "%d ms" (int .Values.flinkJob.checkpointMinPauseMs) | quote }}
     execution.checkpointing.mode: EXACTLY_ONCE
     execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
     state.checkpoints.dir: {{ $checkpointStorage | quote }}
@@ -51,6 +52,8 @@ spec:
               value: {{ .Values.flinkJob.sessions.parallelism | quote }}
             - name: FLINK_CHECKPOINT_INTERVAL_MS
               value: {{ .Values.flinkJob.checkpointIntervalMs | quote }}
+            - name: FLINK_CHECKPOINT_MIN_PAUSE_MS
+              value: {{ .Values.flinkJob.checkpointMinPauseMs | quote }}
             - name: FLINK_SESSION_MAX_UNIQUE_PAGES
               value: {{ .Values.flinkJob.sessions.maxUniquePages | quote }}
             - name: FLINK_SESSION_MAX_UNIQUE_PRODUCTS

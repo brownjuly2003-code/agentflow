@@ -670,6 +670,7 @@
         "taskSlots",
         "memoryConfiguration",
         "checkpointIntervalMs",
+        "checkpointMinPauseMs",
         "checkpointStorage",
         "savepointStorage",
         "upgradeMode",
@@ -732,6 +733,10 @@
         "checkpointIntervalMs": {
           "type": "integer",
           "minimum": 1
+        },
+        "checkpointMinPauseMs": {
+          "type": "integer",
+          "minimum": 0
         },
         "checkpointStorage": {
           "type": "string"

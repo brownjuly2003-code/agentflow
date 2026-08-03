@@ -41,17 +41,20 @@ def build_kafka_source_ddl(
     bootstrap_servers: str,
     topics: Sequence[str],
     group_id: str,
+    startup_mode: str = "earliest-offset",
     security_properties: Mapping[str, str] | None = None,
 ) -> str:
     if not topics:
         raise ValueError("Kafka ingress requires at least one topic")
+    if startup_mode not in {"earliest-offset", "group-offsets"}:
+        raise ValueError(f"Unsupported Kafka startup mode: {startup_mode}")
     topic_list = ";".join(topics)
     options = [
         ("connector", "kafka"),
         ("topic", topic_list),
         ("properties.bootstrap.servers", bootstrap_servers),
         ("properties.group.id", group_id),
-        ("scan.startup.mode", "earliest-offset"),
+        ("scan.startup.mode", startup_mode),
         ("format", "raw"),
         ("raw.charset", "UTF-8"),
     ]
@@ -111,6 +114,7 @@ def build_kafka_ingress_stream(
             bootstrap_servers=bootstrap_servers,
             topics=topics,
             group_id=group_id,
+            startup_mode=os.getenv("AGENTFLOW_KAFKA_STARTUP_MODE", "earliest-offset"),
             security_properties=security_properties,
         )
     )

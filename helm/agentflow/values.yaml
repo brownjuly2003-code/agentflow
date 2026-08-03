@@ -274,6 +274,7 @@ flinkJob:
     - cdc.mysql.agentflow_demo.products_current
     - cdc.mysql.agentflow_demo.sessions_aggregated
   groupId: agentflow-stream-processor
+  kafkaStartupMode: earliest-offset
   parallelism: 2
   taskSlots: 2
   # Optional explicit Flink process-memory settings, rendered into both jobs'

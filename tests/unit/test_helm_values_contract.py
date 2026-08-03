@@ -776,6 +776,8 @@ def test_flink_operator_workload_renders_golden_runtime():
         "flinkJob.checkpointIntervalMs=1250",
         "--set",
         "flinkJob.checkpointMinPauseMs=250",
+        "--set",
+        "flinkJob.kafkaStartupMode=group-offsets",
     )
     output = _combined_output(result)
 
@@ -811,9 +813,21 @@ def test_flink_operator_workload_renders_golden_runtime():
             for item in main_container["env"]
             if item["name"] == "FLINK_CHECKPOINT_MIN_PAUSE_MS"
         )
+        kafka_startup_mode_env = next(
+            (
+                item["value"]
+                for item in main_container["env"]
+                if item["name"] == "AGENTFLOW_KAFKA_STARTUP_MODE"
+            ),
+            None,
+        )
         assert parallelism_env == str(deployment["spec"]["job"]["parallelism"])
         assert checkpoint_interval_env == "1250"
         assert checkpoint_min_pause_env == "250"
+        if deployment["metadata"]["labels"]["app.kubernetes.io/component"] == "stream-processor":
+            assert kafka_startup_mode_env == "group-offsets"
+        else:
+            assert kafka_startup_mode_env is None
         assert deployment["spec"]["flinkConfiguration"]["execution.checkpointing.interval"] == (
             "1250 ms"
         )

@@ -46,6 +46,8 @@ spec:
               value: {{ join "," .Values.flinkJob.inputTopics | quote }}
             - name: AGENTFLOW_FLINK_GROUP_ID
               value: {{ .Values.flinkJob.groupId | quote }}
+            - name: AGENTFLOW_KAFKA_STARTUP_MODE
+              value: {{ .Values.flinkJob.kafkaStartupMode | quote }}
             - name: FLINK_PARALLELISM
               value: {{ .Values.flinkJob.parallelism | quote }}
             - name: FLINK_CHECKPOINT_INTERVAL_MS

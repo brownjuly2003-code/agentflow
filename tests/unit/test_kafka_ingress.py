@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from src.processing.flink_jobs.kafka_ingress import (
     build_kafka_source_ddl,
     configured_input_topics,
@@ -40,6 +42,27 @@ def test_kafka_source_ddl_includes_security_properties() -> None:
     assert "'properties.security.protocol' = 'SASL_SSL'" in ddl
     assert "'properties.sasl.mechanism' = 'SCRAM-SHA-512'" in ddl
     assert "'properties.sasl.jaas.config'" in ddl
+
+
+def test_kafka_source_ddl_accepts_group_offsets_for_safe_stateless_cutover() -> None:
+    ddl = build_kafka_source_ddl(
+        bootstrap_servers="kafka:9092",
+        topics=("orders.raw",),
+        group_id="agentflow-golden-soak-rv-20260802-01",
+        startup_mode="group-offsets",
+    )
+
+    assert "'scan.startup.mode' = 'group-offsets'" in ddl
+
+
+def test_kafka_source_ddl_rejects_unknown_startup_mode() -> None:
+    with pytest.raises(ValueError, match="Unsupported Kafka startup mode"):
+        build_kafka_source_ddl(
+            bootstrap_servers="kafka:9092",
+            topics=("orders.raw",),
+            group_id="agentflow-stream-processor",
+            startup_mode="specific-offsets",
+        )
 
 
 def test_row_to_envelope_preserves_payload_and_kafka_identity() -> None:

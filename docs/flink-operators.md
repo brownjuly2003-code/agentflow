@@ -21,6 +21,15 @@ Behavior:
 launch functions delegate to `session_aggregator.py`; it contains no second
 Flink operator.
 
+## Stream processor Kafka startup
+
+The operator-managed stream processor defaults to
+`flinkJob.kafkaStartupMode: earliest-offset`, preserving clean-bootstrap and
+replay behavior. For a deliberately stateless cutover where the existing
+consumer group has known committed offsets, set it to `group-offsets`; Helm
+passes the value as `AGENTFLOW_KAFKA_STARTUP_MODE`. The job rejects other
+startup modes instead of silently choosing a different offset boundary.
+
 ## Checkpointing
 
 `src/processing/flink_jobs/checkpointing.py` provides reusable checkpoint defaults:

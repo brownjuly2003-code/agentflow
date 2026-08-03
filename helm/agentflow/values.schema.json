@@ -666,6 +666,7 @@
         "kafkaBootstrapServers",
         "inputTopics",
         "groupId",
+        "kafkaStartupMode",
         "parallelism",
         "taskSlots",
         "memoryConfiguration",
@@ -711,6 +712,10 @@
         "groupId": {
           "type": "string",
           "minLength": 1
+        },
+        "kafkaStartupMode": {
+          "type": "string",
+          "enum": ["earliest-offset", "group-offsets"]
         },
         "parallelism": {
           "type": "integer",

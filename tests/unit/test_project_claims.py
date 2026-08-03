@@ -32,6 +32,7 @@ VALIDATOR_INPUTS = (
     "docs/perf/golden-flink-submission-2026-07-30.md",
     "docs/perf/live-iceberg-materialization-2026-08-01.md",
     "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",
+    "docs/perf/checkpoint-restore-replay-2026-08-02.md",
 )
 
 
@@ -65,7 +66,6 @@ def test_live_iceberg_materialization_evidence_is_claimed() -> None:
     evidence = "docs/perf/live-iceberg-materialization-2026-08-01.md"
     pending_item = "live Iceberg materialization from events.validated"
     remaining_pending = [
-        "checkpoint restore and replay acceptance",
         "4h soak and rollback rehearsal on the golden topology",
     ]
     manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
@@ -91,7 +91,6 @@ def test_full_lake_to_serving_e2e_evidence_is_claimed() -> None:
     evidence = "docs/perf/full-lake-to-serving-e2e-2026-08-01.md"
     pending_item = "Kafka -> PyFlink -> Iceberg -> ClickHouse -> API smoke"
     remaining_pending = [
-        "checkpoint restore and replay acceptance",
         "4h soak and rollback rehearsal on the golden topology",
     ]
     manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
@@ -100,6 +99,24 @@ def test_full_lake_to_serving_e2e_evidence_is_claimed() -> None:
 
     assert evidence in manifest["required_evidence"]
     assert production.get("verified_full_lake_to_serving_smoke") == evidence
+    assert pending_item not in pending
+    assert pending == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_checkpoint_restore_replay_evidence_is_claimed() -> None:
+    """Restore/replay PASS is machine-readable without elevating production."""
+    evidence = "docs/perf/checkpoint-restore-replay-2026-08-02.md"
+    pending_item = "checkpoint restore and replay acceptance"
+    remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+    pending = production.get("pending_acceptance", [])
+
+    assert manifest["production"]["status"] == "candidate"
+    assert evidence in manifest["required_evidence"]
+    assert production.get("verified_checkpoint_restore_replay") == evidence
     assert pending_item not in pending
     assert pending == remaining_pending
     assert evidence in VALIDATOR_INPUTS

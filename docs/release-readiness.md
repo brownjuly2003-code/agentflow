@@ -8,7 +8,7 @@ provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
 registry links and upload evidence.
 
-**Golden-topology status (2026-08-01)**: production candidate, not production
+**Golden-topology status (2026-08-02)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
 clean-checkout OCI build + real Flink job submission smoke is **PASS**
 ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
@@ -20,10 +20,13 @@ narrow materializer boundary
 ([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md));
 and full one-event lake-to-serving smoke is **PASS**
 ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
+Isolated checkpoint restore/replay is also **PASS** with distinct J1/J2,
+savepoint restore linkage, exact-once E1/E2 counts across all measured
+lake/serving surfaces, DLQ `0`, and lag `0`
+([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
 Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
 is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
-production Kafka claim). Checkpoint restore/replay remains capacity-blocked;
-fresh golden 4h soak + rollback read-only preflight returned
+production Kafka claim). Fresh golden 4h soak + rollback read-only preflight returned
 **`BLOCKED_RESOURCE_CAPACITY`** (canary/soak/rollback **not started**; see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
 External security evidence remains pending as listed below. Read-only
@@ -140,22 +143,25 @@ production-acceptance evidence.
 4. full one-event lake-to-serving smoke through `orders.raw` → PyFlink →
    `events.validated` → {Iceberg; bridge → ClickHouse → API} on the mixed-SHA
    stand (2026-08-01) — see
-   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md).
+   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md);
+5. isolated checkpoint restore/replay with E1 accepted on J1, non-empty
+   savepoint, byte-identical E1 replay plus E2 while suspended, distinct J2
+   restored from that savepoint, and exact no-duplicate lake/serving counts
+   (2026-08-02) — see
+   [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md).
 
 These close submission smoke, Operator/Helm deploy, the narrow direct-topic
-Iceberg materialization gate, and the full single-event hop chain. They are
-**not** full production acceptance. The direct-Iceberg gate remains valid and
-is now complemented by the full one-event path. Kafka on the acceptance stand
+Iceberg materialization gate, the full single-event hop chain, and checkpoint
+restore/replay. They are **not** full production acceptance. The direct-Iceberg
+gate remains valid and is now complemented by the full one-event path. Kafka on the acceptance stand
 required evidence-backed scaffold fixes (`enableServiceLinks: false` and
 controller quorum voters at `127.0.0.1:29093`); that is recorded as
 acceptance-scaffold reproducibility debt, not a product source of truth from
 untracked prompts.
 
-**Still required for production acceptance (exactly four gates):**
+**Still required for production acceptance (exactly three gates):**
 
-1. the same path replayed after checkpoint restore without duplicate
-   `(tenant_id, event_id)` rows (capacity-blocked; not accepted);
-2. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
+1. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
    (**1_440_000** events) through the full post-Iceberg path with exact
    lake/serving counts, plus Helm rollback rehearsal to verified rev **2**
    (never rev 1). Read-only preflight **`BLOCKED_RESOURCE_CAPACITY`** —
@@ -163,7 +169,7 @@ untracked prompts.
    ([perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
    The existing 2026-07-19 soak predates the Iceberg materializer and is
    advisory only;
-3. an external penetration-test report and remediation/retest evidence.
+2. an external penetration-test report and remediation/retest evidence.
    Read-only evidence/readiness audit at `2026-08-01T17:11:58Z` (local HEAD
    before documentation `ebde86f`; public repo `brownjuly2003-code/agentflow`)
    returned **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**. Canonical intake remains
@@ -186,7 +192,7 @@ untracked prompts.
    summary under `docs/operations/`, complete intake, evidence-linked
    security/status/readiness updates, then read-only re-audit. Do not procure,
    simulate, or perform a pen-test from documentation work;
-4. GitHub Environment `npm` created with approval protection. The workflow
+3. GitHub Environment `npm` created with approval protection. The workflow
    correctly binds the publish job to `environment: npm` with tag/version
    safeguards, but workflow wiring alone is not approval-protection evidence.
    Read-only re-audit at `2026-08-01T16:51:29Z` (public repo
@@ -201,9 +207,8 @@ untracked prompts.
    [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
    Smallest owner action: create Environment named exactly `npm`, configure a
    non-empty Required reviewers rule, then re-run a read-only GET audit (do not
-   perform from documentation work). After documenting the external-pentest
-   evidence blocker, no independent safe production-acceptance item remains on
-   the current stand; further closure requires owner/external-state input.
+   perform from documentation work). Current tracked evidence leaves all three
+   remaining gates dependent on capacity or external owner input.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

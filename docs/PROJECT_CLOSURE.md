@@ -44,8 +44,10 @@ narrow boundary
 ([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md)),
 and full one-event lake-to-serving smoke is measured
 ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
-The remaining acceptance program still includes checkpoint restore/replay
-(capacity-blocked), fresh four-hour golden-topology soak plus rollback
+Checkpoint restore/replay is also measured with exact no-duplicate assertions
+after a savepoint restore
+([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
+The remaining acceptance program includes fresh four-hour golden-topology soak plus rollback
 rehearsal (read-only preflight **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/
 rollback **not started** — see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)),
@@ -62,9 +64,9 @@ missing; see
 
 - Golden-topology production acceptance — Operator/Helm deploy **PASS** on
   2026-07-30, direct live Iceberg materialization **PASS** on 2026-08-01, and
-  full one-event lake-to-serving smoke **PASS** on 2026-08-01; full production
-  acceptance remains `future operations`; production status remains
-  `candidate`.
+  full one-event lake-to-serving smoke **PASS** on 2026-08-01; checkpoint
+  restore/replay **PASS** on 2026-08-02; full production acceptance remains
+  `future operations`; production status remains `candidate`.
 - Third-party pen-test and remediation/retest — required before a production
   security claim, not part of self-attested closure; evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
@@ -86,7 +88,7 @@ missing; see
 
 Push, PR mutations and release actions require explicit owner authorization.
 
-## Текущий closing handoff — 2026-08-01
+## Текущий closing handoff — 2026-08-02
 
 - Python compatibility 3.11/3.12/3.13 is green on pushed SHA `72b9609`.
 - The remaining main-CI failures on that SHA (Ruff 0.16 SDK Markdown and
@@ -110,12 +112,16 @@ Push, PR mutations and release actions require explicit owner authorization.
   Full one-event lake-to-serving smoke is also **PASS** — see
   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)
   (local evidence commit `cf247ba`, unpushed).
+  Isolated checkpoint restore/replay is **PASS** with distinct J1/J2,
+  savepoint restore linkage, exact-once E1/E2 counts across Kafka, Iceberg,
+  ClickHouse, and API, DLQ `0`, and source lag `0` — see
+  [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md).
 - Repository-owned coverage gates are green and remain blocking. Codecov OIDC
   currently returns `Repository not found`; its upload is non-blocking
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
-- Production status remains `candidate`; exactly four production gates remain
-  open: restore/replay (capacity-blocked), fresh soak/rollback (preflight
+- Production status remains `candidate`; exactly three production gates remain
+  open: fresh soak/rollback (preflight
   **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/rollback **not started**),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
@@ -126,12 +132,10 @@ Push, PR mutations and release actions require explicit owner authorization.
   detail **404**; workflow `environment: npm` wiring correct but not
   approval-protection evidence; see
   [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
-  After documenting the pentest evidence blocker, no independent safe
-  production-acceptance item remains on the current stand. Further closure
-  requires owner/external-state input: capacity remediation/larger host or
-  authorized protected strategy; create/protect Environment `npm`; or
-  third-party pentest engagement/evidence. Do not procure, simulate, or
-  perform a pen-test from docs work.
+  Current tracked evidence leaves those three gates dependent on capacity or
+  external owner input: capacity remediation for soak/rollback,
+  create/protect Environment `npm`, or third-party pentest engagement/evidence.
+  Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты
 

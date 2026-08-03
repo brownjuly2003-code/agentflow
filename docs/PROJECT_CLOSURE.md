@@ -50,12 +50,12 @@ after a savepoint restore
 The remaining acceptance program includes fresh four-hour golden-topology soak
 plus rollback rehearsal (latest canary
 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** after zero baseline and `2000/2000`
-delivery; subsequent recovery
-**`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`** after preparing tracked
-min-pause `0 ms` + anti-replay `group-offsets` source; the authorized apply
-stopped before mutation at `1,683,140 kB < 1,900,000 kB` Kind MemAvailable;
-canary2 and 4h soak/rollback **not started** — see
-[perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)),
+delivery; corrected revision 3 later reached **`RUNTIME_HOLD_PASS`** in a
+930-second read-only readiness-baselined checkpoint hold with completed
+checkpoints `7675→8614` and failed `1→1`; this closes only the hold
+prerequisite, while canary2 and 4h soak/corrected rollback remain **not
+started** — see
+[perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md)),
 and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
@@ -71,8 +71,11 @@ and a non-empty `required_reviewers` rule
   2026-07-30, direct live Iceberg materialization **PASS** on 2026-08-01, and
   full one-event lake-to-serving smoke **PASS** on 2026-08-01; checkpoint
   restore/replay **PASS** on 2026-08-02; npm Environment approval protection
-  **PASS** on 2026-08-03 UTC; full production acceptance remains `future
-  operations`; production status remains `candidate`.
+  **PASS** on 2026-08-03 UTC; the readiness-baselined checkpoint hold is also
+  **`RUNTIME_HOLD_PASS`** on 2026-08-03, without traffic or mutation
+  ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md));
+  full production acceptance remains `future operations`; production status
+  remains `candidate`.
 - Third-party pen-test and remediation/retest — required before a production
   security claim, not part of self-attested closure; evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
@@ -94,7 +97,7 @@ and a non-empty `required_reviewers` rule
 
 Push, PR mutations and release actions require explicit owner authorization.
 
-## Текущий closing handoff — 2026-08-02
+## Текущий closing handoff — 2026-08-03
 
 - Python compatibility 3.11/3.12/3.13 is green on pushed SHA `72b9609`.
 - The remaining main-CI failures on that SHA (Ruff 0.16 SDK Markdown and
@@ -128,18 +131,17 @@ Push, PR mutations and release actions require explicit owner authorization.
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
 - Production status remains `candidate`; exactly two production gates remain
   open: fresh soak/rollback (latest canary
-  **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; subsequent recovery
-  **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**; canary2/4h/rollback **not
-  started**),
+  **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; subsequent readiness-baselined hold
+  **`RUNTIME_HOLD_PASS`**; canary2/4h/corrected rollback **not started**),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
   The npm approval gate is **PASS**
   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-  Current tracked evidence leaves the two remaining gates dependent on restored
-  Kind memory headroom + application of the exact safe-cutover pack + exact
-  canary2 before soak/rollback, or third-party pentest engagement/evidence.
+  Current tracked evidence leaves the two remaining gates dependent on exact
+  canary2 before the 4h soak/corrected rollback, or third-party pentest
+  engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты

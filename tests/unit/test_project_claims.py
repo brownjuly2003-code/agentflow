@@ -35,6 +35,7 @@ VALIDATOR_INPUTS = (
     "docs/perf/checkpoint-restore-replay-2026-08-02.md",
     "docs/operations/npm-environment-approval-2026-08-03.md",
     "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md",
+    "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md",
 )
 
 
@@ -151,14 +152,28 @@ def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
     assert evidence in manifest["required_evidence"]
     assert production.get("latest_soak_attempt") == evidence
     assert production.get("latest_soak_attempt_result") == "failed-canary-catchup-rate-floor"
+    assert production.get("pending_acceptance", []) == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_ready_baselined_hold_pass_is_claimed_without_closing_the_soak_gate() -> None:
+    """The read-only hold PASS advances recovery evidence, not acceptance."""
+    evidence = "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md"
+    failed_canary = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
+    remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+
+    assert production["status"] == "candidate"
+    assert evidence in manifest["required_evidence"]
+    assert production.get("verified_ready_baselined_checkpoint_hold") == evidence
+    assert production.get("latest_soak_attempt") == failed_canary
+    assert production.get("latest_soak_attempt_result") == "failed-canary-catchup-rate-floor"
     assert production.get("latest_soak_recovery_evidence") == evidence
+    assert production.get("latest_soak_recovery_state") == "ready-baselined-hold-pass"
     assert (
-        production.get("latest_soak_recovery_state")
-        == "blocked-resource-headroom-before-safe-cutover"
-    )
-    assert (
-        production.get("latest_soak_recovery_source")
-        == "78742d0a80206b31219c6d06b84952236235cd74"
+        production.get("latest_soak_recovery_source") == "78742d0a80206b31219c6d06b84952236235cd74"
     )
     assert (
         production.get("latest_soak_recovery_image")
@@ -168,6 +183,15 @@ def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
     assert production.get("pending_acceptance", []) == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()
+
+    for relative in (
+        "docs/STATUS.md",
+        "docs/release-readiness.md",
+        "docs/PROJECT_CLOSURE.md",
+    ):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert "ready-baselined-checkpoint-hold-2026-08-03.md" in text
+        assert "RUNTIME_HOLD_PASS" in text
 
 
 def test_flink_submission_smoke_evidence_documents_live_compose_commands() -> None:

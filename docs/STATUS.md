@@ -7,12 +7,11 @@
 > mixed-SHA stand; isolated checkpoint restore/replay **PASS** with exact
 > no-duplicate lake/serving assertions; golden 4h soak/rollback canary
 > **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** — baseline and delivery passed, exact
-> catch-up failed; recovery preflight
-> **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`** — anti-replay
-> `group-offsets` recovery source/pack is verified, but the authorized deploy
-> stopped before mutation at Kind `MemAvailable=1,683,140 kB` versus the
-> required `1,900,000 kB`; canary2 and 4h
-> soak/rollback were **not started**;
+> catch-up failed; the corrected revision-3 recovery later reached
+> **`RUNTIME_HOLD_PASS`** in a 930-second read-only readiness-baselined hold
+> (completed checkpoints `7675→8614`, failed `1→1`, delta `0`); this closes
+> only the hold prerequisite, while canary2 and 4h soak/rollback were **not
+> started**;
 > external pentest evidence audit **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
 > (evidence/readiness only; not a pen-test; gate open); GitHub Environment
 > `npm` approval protection **PASS** (one required reviewer; gate closed);
@@ -60,10 +59,16 @@ the immutable canary1 events (validated end offset `4000`, all task group lags
 [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md).
 Tracked commit `78742d0` now adds a default-preserving, fail-closed
 `group-offsets` cutover mode and the verified recovery pack renders min-pause
-`0 ms`. Its authorized stand preflight stopped before staging/build/Helm at
+`0 ms`. Its first authorized stand preflight stopped before staging/build/Helm at
 **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**: Kind
-`MemAvailable=1,683,140 kB` was below the required `1,900,000 kB`. No runtime
-resource, image, topic, offset, Job, evidence file, or release changed.
+`MemAvailable=1,683,140 kB` was below the required `1,900,000 kB`. A later
+controlled cutover deployed the corrected revision 3, and the separately
+authorized read-only readiness-baselined checkpoint hold then returned
+**`RUNTIME_HOLD_PASS`**: over `930 s`, completed checkpoints advanced
+`7675→8614` (`+939`, required `837`) while failed checkpoints remained `1`
+(delta `0`). No traffic, runtime mutation, canary2, soak, or rollback occurred
+during that hold — see
+[perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md).
 External security acceptance remains open. Read-only external-pentest
 evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** (intake not present/unclaimed; all seven
@@ -122,6 +127,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | Live Iceberg materialization from `events.validated` | PASS direct topic injection → `ed03fc47` lake materializer → live Iceberg exact identity once; narrower gate still valid, now complemented by full one-event path | [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md) |
 | Full lake-to-serving single-event smoke | PASS mixed-SHA one event through `orders.raw` → PyFlink → `events.validated` → {Iceberg; bridge → ClickHouse → API}; not production acceptance, restore/replay, soak, or multi-tenant | [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md) |
 | Checkpoint restore/replay | PASS isolated E1 → checkpoint/savepoint → byte-identical E1 replay + E2 → distinct restored J2; both identities exact once across Kafka/Iceberg/ClickHouse/API, DLQ 0, lag 0 | [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md) |
+| Readiness-baselined checkpoint hold | **`RUNTIME_HOLD_PASS`** for the corrected revision-3 job: 930 s, completed `7675→8614`, failed `1→1`; read-only and no traffic; not canary, soak, rollback, or production acceptance | [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md) |
 | GitHub Environment `npm` approval protection | PASS exact Environment binding + non-empty `required_reviewers` rule for one User; self-review permitted, not a four-eyes claim | [operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md) |
 | Hardened API runtime image (local acceptance) | core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL after runtime installer removal | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) |
 | Python cloud/MCP dependency compatibility (local + isolated Mac) | 2170 unit/property tests PASS; MCP 1.29 + PyIceberg 0.11.1/core 0.7.0 clean environment and 39 focused tests PASS | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) |
@@ -135,7 +141,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, and npm Environment approval protection now measured; fresh soak/rollback canary `FAIL_CANARY_CATCHUP_RATE_FLOOR`, then safe-cutover preflight `BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER` (canary2/4h/rollback not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, npm Environment approval protection, and the corrected revision-3 readiness-baselined hold now measured; the hold is `RUNTIME_HOLD_PASS`, but canary2/4h/rollback remain not started; external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -210,25 +216,30 @@ program.
    **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** in
    [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)
    (baseline and 2000/2000 delivery passed; exact catch-up failed; 4h
-   soak/rollback **not started**). Its subsequent recovery preflight is
-   The pinned rev2 still omits effective min-pause and remains on ~30 s
-   checkpoints. Commit `78742d0` and its exact pack add min-pause `0 ms` plus
-   anti-replay `group-offsets`, but the authorized apply preflight returned
-   **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`** before mutation
-   (`1,683,140 kB < 1,900,000 kB` Kind MemAvailable). Canary2 was not started;
-   old 4h evidence is advisory only.
+   soak/rollback **not started**). The first recovery preflight was
+   **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**, but a later controlled
+   cutover deployed the exact corrected revision-3 pack. Its subsequent
+   930-second read-only readiness-baselined checkpoint hold is
+   **`RUNTIME_HOLD_PASS`** with completed checkpoints `7675→8614` and failed
+   checkpoints `1→1`
+   ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md)).
+   This closes only the hold prerequisite. Canary2 remains the next traffic
+   gate; the 4h soak and corrected rollback rehearsal remain separate and were
+   not started. Historical revisions 1 and 2 are not rollback targets for the
+   corrected runtime; the prepared recovery target is revision 3. Old 4h
+   evidence is advisory only.
    Exactly two production-acceptance gates remain overall: (1) fresh
-   soak+rollback (`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER` after the failed
-   canary); (2) external pen-test
+   soak+rollback (readiness-baselined hold `RUNTIME_HOLD_PASS`; canary2, 4h
+   soak, and corrected rollback not started); (2) external pen-test
    (**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at
    `2026-08-01T17:11:58Z` —
    [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md);
    evidence/readiness only, not a pen-test; intake not present/unclaimed; all
    seven criteria fail). The npm approval gate is **PASS**
    ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-   Current tracked evidence leaves the two remaining gates dependent on
-   restored Kind memory headroom for the exact safe-cutover pack, or an
-   external pentest owner. Do not
+   Current tracked evidence leaves the two remaining gates dependent on a
+   separately authorized canary2 followed by the 4h soak/corrected rollback,
+   or an external pentest owner. Do not
    procure, simulate, or perform a pen-test from docs work.
    Acceptance-scaffold Kafka reproducibility
    debt (kind runtime fixes for `enableServiceLinks` / controller quorum

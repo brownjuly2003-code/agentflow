@@ -276,6 +276,9 @@ flinkJob:
   groupId: agentflow-stream-processor
   parallelism: 2
   taskSlots: 2
+  # Optional explicit Flink process-memory settings, rendered into both jobs'
+  # spec.flinkConfiguration. Keep values quoted (for example, "384m").
+  memoryConfiguration: {}
   checkpointIntervalMs: 30000
   checkpointStorage: ""
   savepointStorage: ""

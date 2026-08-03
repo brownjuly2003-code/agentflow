@@ -34,6 +34,38 @@ Flink operator.
 
 This allows session state to survive a job restart after the latest completed checkpoint is restored.
 
+For constrained Kubernetes profiles, `flinkJob.memoryConfiguration` passes an
+explicit process-memory breakdown to both operator-managed jobs. Keys are
+limited to `jobmanager.memory.*` and `taskmanager.memory.*`, and values must be
+strings such as `"384m"`. The map is empty by default, so the standard 2 GiB
+profile keeps Flink's defaults.
+
+The following breakdown has been runtime-verified with a 896 MiB JobManager
+and a 768 MiB TaskManager:
+
+```yaml
+flinkJob:
+  jobManager:
+    memory: 896m
+  taskManager:
+    memory: 768m
+  memoryConfiguration:
+    jobmanager.memory.heap.size: "384m"
+    jobmanager.memory.off-heap.size: "64m"
+    jobmanager.memory.jvm-metaspace.size: "256m"
+    jobmanager.memory.jvm-overhead.min: "128m"
+    jobmanager.memory.jvm-overhead.max: "256m"
+    taskmanager.memory.framework.heap.size: "64m"
+    taskmanager.memory.framework.off-heap.size: "64m"
+    taskmanager.memory.task.heap.size: "192m"
+    taskmanager.memory.managed.size: "32m"
+    taskmanager.memory.network.min: "32m"
+    taskmanager.memory.network.max: "32m"
+    taskmanager.memory.jvm-metaspace.size: "128m"
+    taskmanager.memory.jvm-overhead.min: "128m"
+    taskmanager.memory.jvm-overhead.max: "256m"
+```
+
 ## Local Run
 
 1. Install the Flink runtime manifest **in its own venv**:

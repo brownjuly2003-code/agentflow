@@ -668,6 +668,7 @@
         "groupId",
         "parallelism",
         "taskSlots",
+        "memoryConfiguration",
         "checkpointIntervalMs",
         "checkpointStorage",
         "savepointStorage",
@@ -717,6 +718,16 @@
         "taskSlots": {
           "type": "integer",
           "minimum": 1
+        },
+        "memoryConfiguration": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(jobmanager|taskmanager)\\.memory\\.[a-z0-9.-]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "checkpointIntervalMs": {
           "type": "integer",

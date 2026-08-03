@@ -27,6 +27,9 @@ spec:
     s3.endpoint: {{ .Values.flinkJob.stateBackend.endpoint | quote }}
     s3.path.style.access: {{ .Values.flinkJob.stateBackend.pathStyleAccess | quote }}
     {{- end }}
+    {{- range $key, $value := .Values.flinkJob.memoryConfiguration }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
   podTemplate:
     spec:
       {{- with .Values.imagePullSecrets }}

@@ -827,6 +827,61 @@ def test_flink_operator_workload_renders_golden_runtime():
     assert "configmaps" in output
 
 
+def test_flink_operator_workloads_render_explicit_low_memory_configuration():
+    memory_configuration = {
+        "jobmanager.memory.heap.size": "384m",
+        "jobmanager.memory.off-heap.size": "64m",
+        "jobmanager.memory.jvm-metaspace.size": "256m",
+        "jobmanager.memory.jvm-overhead.min": "128m",
+        "jobmanager.memory.jvm-overhead.max": "256m",
+        "taskmanager.memory.framework.heap.size": "64m",
+        "taskmanager.memory.framework.off-heap.size": "64m",
+        "taskmanager.memory.task.heap.size": "192m",
+        "taskmanager.memory.managed.size": "32m",
+        "taskmanager.memory.network.min": "32m",
+        "taskmanager.memory.network.max": "32m",
+        "taskmanager.memory.jvm-metaspace.size": "128m",
+        "taskmanager.memory.jvm-overhead.min": "128m",
+        "taskmanager.memory.jvm-overhead.max": "256m",
+    }
+    memory_args: list[str] = []
+    for key, value in memory_configuration.items():
+        escaped_key = key.replace(".", "\\.")
+        memory_args.extend(["--set-string", f"flinkJob.memoryConfiguration.{escaped_key}={value}"])
+
+    result = _run_helm_template(
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "flinkJob.checkpointStorage=file:///mnt/flink-state/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=file:///mnt/flink-state/savepoints",
+        "--set-string",
+        "flinkJob.jobManager.memory=896m",
+        "--set-string",
+        "flinkJob.taskManager.memory=768m",
+        *memory_args,
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    flink_deployments = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document and document.get("kind") == "FlinkDeployment"
+    ]
+    assert len(flink_deployments) == 2
+    for deployment in flink_deployments:
+        flink_configuration = deployment["spec"]["flinkConfiguration"]
+        assert {
+            key: flink_configuration[key] for key in memory_configuration
+        } == memory_configuration
+        assert deployment["spec"]["jobManager"]["resource"]["memory"] == "896m"
+        assert deployment["spec"]["taskManager"]["resource"]["memory"] == "768m"
+
+
 def _rule_covers(
     rules: list[dict],
     *,

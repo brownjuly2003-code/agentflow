@@ -31,6 +31,10 @@ baseline **PASS** and producer delivery `2000/2000`, then failed closed at
 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; the 4h producer, observer, and rollback
 were **not started**
 ([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
+A subsequent preflight found clean rev1/rev2 already deployed with corrected
+interval/CPU, but returned **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**:
+runtime source `ed03fc47` omits effective checkpoint min-pause and still
+checkpoints at ~30 s. Canary2 was not started.
 External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
@@ -173,8 +177,10 @@ untracked prompts.
    ([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
    The earlier
    [resource preflight](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
-   is retained as historical evidence for its stand. Corrected harness/profile
-   settings remain local-only until a clean install and canary2 pass.
+   is retained as historical evidence for its stand. Clean rev1/rev2 is now
+   present with corrected interval/CPU, but recovery is
+   **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`** on the pinned source; a revised
+   authorized runtime pack and canary2 PASS are still required.
    The existing 2026-07-19 soak predates the Iceberg materializer and is
    advisory only;
 2. an external penetration-test report and remediation/retest evidence.
@@ -209,7 +215,8 @@ is `false`, so this is approval protection but not a four-eyes claim. See
 The prior
 [absence audit](operations/npm-environment-approval-blocker-2026-08-01.md)
 remains historical evidence, not current state. Current tracked evidence leaves
-the two remaining gates dependent on capacity or an external pentest owner.
+the two remaining gates dependent on a revised authorized runtime pack or an
+external pentest owner.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

@@ -35,6 +35,8 @@ verified_checkpoint_restore_replay = "docs/perf/checkpoint-restore-replay-2026-0
 verified_npm_environment_approval = "docs/operations/npm-environment-approval-2026-08-03.md"
 latest_soak_attempt = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
 latest_soak_attempt_result = "failed-canary-catchup-rate-floor"
+latest_soak_recovery_evidence = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
+latest_soak_recovery_state = "blocked-runtime-min-pause-not-rendered"
 pending_acceptance = [
     "4h soak and rollback rehearsal on the golden topology",
 ]

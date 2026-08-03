@@ -7,7 +7,10 @@
 > mixed-SHA stand; isolated checkpoint restore/replay **PASS** with exact
 > no-duplicate lake/serving assertions; golden 4h soak/rollback canary
 > **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** — baseline and delivery passed, exact
-> catch-up failed, and the 4h soak/rollback was **not started**;
+> catch-up failed; recovery preflight
+> **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`** — corrected interval/CPU are
+> deployed, but effective checkpoints remain ~30 s; canary2 and 4h
+> soak/rollback were **not started**;
 > external pentest evidence audit **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
 > (evidence/readiness only; not a pen-test; gate open); GitHub Environment
 > `npm` approval protection **PASS** (one required reviewer; gate closed);
@@ -45,8 +48,13 @@ The 2026-08-01 resource preflight remains historical. A later isolated stand
 reached the canary: zero baseline **PASS**, producer delivery `2000/2000` with
 failures `0`, then verifier **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** at ClickHouse
 pipeline `1092/2000` and orders `546/2000`. The 4h producer, observer, and
-rollback were **not started**. Prepared local harness/profile corrections still
-require a clean runtime install and unique-namespace canary2 — see
+rollback were **not started**. The next preflight found that clean rev1/rev2
+had already been installed with interval `1000`, JM CPU `0.5`, and TM CPU `1`.
+It stopped at **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**: runtime source
+`ed03fc47` does not render checkpoint minimum pause, the active CR omits it,
+and observed checkpoint cadence remains ~30 s. That reinstall also replayed
+the immutable canary1 events (validated end offset `4000`, all task group lags
+`0`); no canary2 Job or evidence exists — see
 [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md).
 External security acceptance remains open. Read-only external-pentest
 evidence/readiness audit at `2026-08-01T17:11:58Z` returned
@@ -119,7 +127,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, and npm Environment approval protection now measured; fresh soak/rollback canary `FAIL_CANARY_CATCHUP_RATE_FLOOR` (4h/rollback not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, and npm Environment approval protection now measured; fresh soak/rollback canary `FAIL_CANARY_CATCHUP_RATE_FLOOR`, then recovery `BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED` (canary2/4h/rollback not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -194,18 +202,24 @@ program.
    **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** in
    [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)
    (baseline and 2000/2000 delivery passed; exact catch-up failed; 4h
-   soak/rollback **not started**; old 4h evidence advisory only).
+   soak/rollback **not started**). Its subsequent recovery preflight is
+   **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**: rev2 already has corrected
+   interval/CPU, but the pinned runtime omits effective min-pause and remains
+   on ~30 s checkpoints; canary2 was not started. Old 4h evidence is advisory
+   only.
    Exactly two production-acceptance gates remain overall: (1) fresh
-   soak+rollback (`FAIL_CANARY_CATCHUP_RATE_FLOOR`); (2) external pen-test
+   soak+rollback (`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED` after the failed
+   canary); (2) external pen-test
    (**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at
    `2026-08-01T17:11:58Z` —
    [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md);
    evidence/readiness only, not a pen-test; intake not present/unclaimed; all
    seven criteria fail). The npm approval gate is **PASS**
    ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-   Current tracked evidence leaves the two remaining gates dependent on
-   capacity or an external pentest owner. Do not procure, simulate, or perform
-   a pen-test from docs work. Acceptance-scaffold Kafka reproducibility
+   Current tracked evidence leaves the two remaining gates dependent on a
+   revised authorized runtime pack or an external pentest owner. Do not
+   procure, simulate, or perform a pen-test from docs work.
+   Acceptance-scaffold Kafka reproducibility
    debt (kind runtime fixes for `enableServiceLinks` / controller quorum
    voters) is recorded in the Operator evidence and is not a
    production-acceptance claim.

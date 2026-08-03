@@ -151,6 +151,11 @@ def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
     assert evidence in manifest["required_evidence"]
     assert production.get("latest_soak_attempt") == evidence
     assert production.get("latest_soak_attempt_result") == "failed-canary-catchup-rate-floor"
+    assert production.get("latest_soak_recovery_evidence") == evidence
+    assert (
+        production.get("latest_soak_recovery_state")
+        == "blocked-runtime-min-pause-not-rendered"
+    )
     assert production.get("pending_acceptance", []) == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()

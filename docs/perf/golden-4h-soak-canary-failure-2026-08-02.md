@@ -71,10 +71,57 @@ These corrections are **not runtime-accepted**: no corrected reinstall,
 15-minute hold, unique-namespace canary2, soak, or rollback was performed by
 this evidence slice.
 
-The next runtime gate is therefore a clean corrected rev1/rev2 install,
-health/checkpoint hold, then fail-closed canary2 baseline → producer → verifier
-with a new namespace. The 4h producer may start only after exact canary2 PASS.
-Remote deployment remains a separate authorized operation.
+At the time of the initial diagnosis, the planned next runtime gate was a clean
+corrected rev1/rev2 install, health/checkpoint hold, then fail-closed canary2.
+The addendum below supersedes that plan after discovering the reinstall had
+already occurred. The 4h producer may start only after exact canary2 PASS.
+
+## Recovery preflight addendum — 2026-08-03
+
+- **Result:** **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**
+- **Read-only observation (UTC):** `2026-08-03T03:56:09Z`
+- **Runtime mutation in this addendum:** **none**
+
+The next-turn preflight found that the intended clean reinstall had already
+run outside this evidence slice. Helm history was newly based at revision 1
+installed and revision 2 deployed at `13:47` remote time (`+03`, approximately
+`10:47Z`), after the failed canary. The active recovery state was:
+
+| Surface | Observed state |
+|---|---|
+| Helm values | checkpoint interval `1000`; JM CPU `0.5`; TM CPU `1`; inert marker `1001` |
+| FlinkDeployment | UID `031f8387-3436-4408-bc99-7fbcd58ccfbc`; `STABLE` / `RUNNING` |
+| Flink job | JID `1a0c82da8e7f91391a716bb9e8fb8357`; tasks `2/2` running |
+| Task pods | JobManager and TaskManager Ready; restarts `0` |
+| Checkpoints | completed `2040`, failed `0`, but recent trigger timestamps differ by approximately `30,000 ms` |
+| Canary2 | no Jobs and no evidence |
+
+The active CR contains `execution.checkpointing.interval: 1000 ms` but does
+not contain `execution.checkpointing.min-pause`. Runtime source `ed03fc47`
+predates the tracked chart support that renders this key, so the process keeps
+its approximately 30-second effective cadence. A canary whose exact catch-up
+budget is only `22.222... s` must not run under that configuration.
+
+The reinstall also replayed the immutable canary1 input from earliest offsets:
+
+- `orders.raw` end offset `2000`;
+- `events.validated` end offset `4000`;
+- `events.deadletter` end offset `0`;
+- source, lake, and serving consumer-group lags all `0`;
+- `events.validated` offsets `0` and `2000` contain the same canary1 event id
+  `...000000000001`; their enrichment processing times are `10:07:16Z` and
+  `10:49:29Z`, respectively.
+
+This is replay evidence, not active traffic, but it proves that another blind
+uninstall/reinstall would repeat work and cannot be treated as an idempotent
+preflight action. Topics, offsets, evidence, Jobs, and data remain untouched.
+
+Before canary2, a revised authorized runtime pack must explicitly render an
+effective checkpoint minimum pause compatible with the 1-second interval
+while preserving the pinned-source and rollback contracts. Because the
+existing task contract permits exactly 14 memory injections and pins source
+`ed03fc47`, that scope expansion is not assumed here. Product status remains
+`candidate`; canary2, 4h soak, and rollback remain open.
 
 ## Mutation boundary
 

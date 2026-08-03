@@ -47,10 +47,11 @@ and full one-event lake-to-serving smoke is measured
 Checkpoint restore/replay is also measured with exact no-duplicate assertions
 after a savepoint restore
 ([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
-The remaining acceptance program includes fresh four-hour golden-topology soak plus rollback
-rehearsal (read-only preflight **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/
-rollback **not started** — see
-[perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)),
+The remaining acceptance program includes fresh four-hour golden-topology soak
+plus rollback rehearsal (latest canary
+**`FAIL_CANARY_CATCHUP_RATE_FLOOR`** after zero baseline and `2000/2000`
+delivery; 4h soak/rollback **not started** — see
+[perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)),
 and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
@@ -122,17 +123,17 @@ Push, PR mutations and release actions require explicit owner authorization.
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
 - Production status remains `candidate`; exactly two production gates remain
-  open: fresh soak/rollback (preflight
-  **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/rollback **not started**),
+  open: fresh soak/rollback (latest canary
+  **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; 4h soak/rollback **not started**),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
   The npm approval gate is **PASS**
   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-  Current tracked evidence leaves the two remaining gates dependent on
-  capacity remediation for soak/rollback or third-party pentest
-  engagement/evidence.
+  Current tracked evidence leaves the two remaining gates dependent on a
+  corrected clean runtime install + exact canary2 before soak/rollback, or
+  third-party pentest engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты

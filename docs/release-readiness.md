@@ -26,9 +26,11 @@ lake/serving surfaces, DLQ `0`, and lag `0`
 ([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
 Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
 is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
-production Kafka claim). Fresh golden 4h soak + rollback read-only preflight returned
-**`BLOCKED_RESOURCE_CAPACITY`** (canary/soak/rollback **not started**; see
-[perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
+production Kafka claim). A later isolated golden soak canary reached zero
+baseline **PASS** and producer delivery `2000/2000`, then failed closed at
+**`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; the 4h producer, observer, and rollback
+were **not started**
+([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
 External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
@@ -165,9 +167,14 @@ untracked prompts.
 1. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
    (**1_440_000** events) through the full post-Iceberg path with exact
    lake/serving counts, plus Helm rollback rehearsal to verified rev **2**
-   (never rev 1). Read-only preflight **`BLOCKED_RESOURCE_CAPACITY`** —
-   canary/soak/rollback **not started**
-   ([perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)).
+   (never rev 1). The latest canary reached baseline and exact producer
+   delivery, then returned **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; 4h
+   soak/rollback was **not started**
+   ([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
+   The earlier
+   [resource preflight](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
+   is retained as historical evidence for its stand. Corrected harness/profile
+   settings remain local-only until a clean install and canary2 pass.
    The existing 2026-07-19 soak predates the Iceberg materializer and is
    advisory only;
 2. an external penetration-test report and remediation/retest evidence.

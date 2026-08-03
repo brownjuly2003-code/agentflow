@@ -5,8 +5,9 @@
 > live Iceberg materialization from `events.validated` **PASS** at the direct
 > topic boundary; full lake-to-serving single-event smoke **PASS** on the
 > mixed-SHA stand; isolated checkpoint restore/replay **PASS** with exact
-> no-duplicate lake/serving assertions; golden 4h soak/rollback read-only preflight
-> **`BLOCKED_RESOURCE_CAPACITY`** — canary/soak/rollback **not started**;
+> no-duplicate lake/serving assertions; golden 4h soak/rollback canary
+> **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** — baseline and delivery passed, exact
+> catch-up failed, and the 4h soak/rollback was **not started**;
 > external pentest evidence audit **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
 > (evidence/readiness only; not a pen-test; gate open); GitHub Environment
 > `npm` approval protection **PASS** (one required reviewer; gate closed);
@@ -40,10 +41,13 @@ run **PASS**ed with distinct J1/J2, exact savepoint restore linkage, E1/E2
 present once on all measured lake/serving surfaces, DLQ `0`, and source lag
 `0` — see
 [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md).
-Fresh golden 4h soak + rollback read-only preflight returned
-**`BLOCKED_RESOURCE_CAPACITY`** (Kind/Colima volume ~94% used / ~3.6–3.7 GiB
-free; canary/soak/rollback **not started**) — see
-[perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md).
+The 2026-08-01 resource preflight remains historical. A later isolated stand
+reached the canary: zero baseline **PASS**, producer delivery `2000/2000` with
+failures `0`, then verifier **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** at ClickHouse
+pipeline `1092/2000` and orders `546/2000`. The 4h producer, observer, and
+rollback were **not started**. Prepared local harness/profile corrections still
+require a clean runtime install and unique-namespace canary2 — see
+[perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md).
 External security acceptance remains open. Read-only external-pentest
 evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** (intake not present/unclaimed; all seven
@@ -110,12 +114,12 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 
 | Area | Locally verified state |
 |------|------------------------|
-| Claims and documentation | machine-readable topology, runtime, SDK, Python, and quality claims agree; 13 project-claims tests pass and strict MkDocs builds |
+| Claims and documentation | machine-readable topology, runtime, SDK, Python, and quality claims agree; 14 project-claims tests pass and strict MkDocs builds |
 | Runtime and deployment | pinned PyFlink 2.3 OCI definition and Helm `FlinkDeployment` agree; Helm lint passes and 32 Helm contract tests pass |
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, and npm Environment approval protection now measured; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, and npm Environment approval protection now measured; fresh soak/rollback canary `FAIL_CANARY_CATCHUP_RATE_FLOOR` (4h/rollback not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -186,12 +190,13 @@ program.
    ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md));
    and isolated checkpoint restore/replay is **PASS**
    ([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
-   Fresh soak/rollback remains open: its read-only preflight is
-   **`BLOCKED_RESOURCE_CAPACITY`** in
-   [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
-   (canary/soak/rollback **not started**; old 4h evidence advisory only).
+   Fresh soak/rollback remains open: its latest canary is
+   **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** in
+   [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)
+   (baseline and 2000/2000 delivery passed; exact catch-up failed; 4h
+   soak/rollback **not started**; old 4h evidence advisory only).
    Exactly two production-acceptance gates remain overall: (1) fresh
-   soak+rollback (`BLOCKED_RESOURCE_CAPACITY`); (2) external pen-test
+   soak+rollback (`FAIL_CANARY_CATCHUP_RATE_FLOOR`); (2) external pen-test
    (**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at
    `2026-08-01T17:11:58Z` —
    [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md);

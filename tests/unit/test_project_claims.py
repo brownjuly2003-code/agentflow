@@ -34,6 +34,7 @@ VALIDATOR_INPUTS = (
     "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",
     "docs/perf/checkpoint-restore-replay-2026-08-02.md",
     "docs/operations/npm-environment-approval-2026-08-03.md",
+    "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md",
 )
 
 
@@ -134,6 +135,22 @@ def test_npm_environment_approval_evidence_is_claimed() -> None:
     assert production["status"] == "candidate"
     assert evidence in manifest["required_evidence"]
     assert production.get("verified_npm_environment_approval") == evidence
+    assert production.get("pending_acceptance", []) == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
+    """The latest failed canary supersedes preflight state, not acceptance."""
+    evidence = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
+    remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+
+    assert production["status"] == "candidate"
+    assert evidence in manifest["required_evidence"]
+    assert production.get("latest_soak_attempt") == evidence
+    assert production.get("latest_soak_attempt_result") == "failed-canary-catchup-rate-floor"
     assert production.get("pending_acceptance", []) == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()

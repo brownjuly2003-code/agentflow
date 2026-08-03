@@ -33,9 +33,10 @@ External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
 [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
-Read-only GitHub Environment `npm` approval audit at `2026-08-01T16:51:29Z`
-returned **`BLOCKED_ENVIRONMENT_ABSENT`** — see
-[operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
+Read-only GitHub Environment `npm` verification recorded at
+`2026-08-03T03:18:11Z` is **PASS**: the Environment exists and its non-empty
+`required_reviewers` rule names user `brownjuly2003-code` — see
+[operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md).
 Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
 (local-only, unpushed).
 
@@ -159,7 +160,7 @@ controller quorum voters at `127.0.0.1:29093`); that is recorded as
 acceptance-scaffold reproducibility debt, not a product source of truth from
 untracked prompts.
 
-**Still required for production acceptance (exactly three gates):**
+**Still required for production acceptance (exactly two gates):**
 
 1. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
    (**1_440_000** events) through the full post-Iceberg path with exact
@@ -191,24 +192,17 @@ untracked prompts.
    residual-risk record; access revocation evidence. After receipt: redacted
    summary under `docs/operations/`, complete intake, evidence-linked
    security/status/readiness updates, then read-only re-audit. Do not procure,
-   simulate, or perform a pen-test from documentation work;
-3. GitHub Environment `npm` created with approval protection. The workflow
-   correctly binds the publish job to `environment: npm` with tag/version
-   safeguards, but workflow wiring alone is not approval-protection evidence.
-   Read-only re-audit at `2026-08-01T16:51:29Z` (public repo
-   `brownjuly2003-code/agentflow`; authenticated principal had admin):
-   `GET …/environments` returned **200** with exactly four names
-   (`github-pages`, `production`, `pypi`, `staging`); `npm` was absent;
-   `GET …/environments/npm` returned **404 Not Found**. Verdict
-   **`BLOCKED_ENVIRONMENT_ABSENT`** — not auth/visibility ambiguity; no
-   non-empty required-reviewers rule can exist for a nonexistent Environment.
-   Historical successful publish runs do not prove current approval protection.
-   Evidence:
-   [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
-   Smallest owner action: create Environment named exactly `npm`, configure a
-   non-empty Required reviewers rule, then re-run a read-only GET audit (do not
-   perform from documentation work). Current tracked evidence leaves all three
-   remaining gates dependent on capacity or external owner input.
+   simulate, or perform a pen-test from documentation work.
+
+The GitHub Environment `npm` gate is closed. A read-only GET recorded at
+`2026-08-03T03:18:11Z` returned the exact Environment with one non-empty
+`required_reviewers` rule for user `brownjuly2003-code`; `prevent_self_review`
+is `false`, so this is approval protection but not a four-eyes claim. See
+[operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md).
+The prior
+[absence audit](operations/npm-environment-approval-blocker-2026-08-01.md)
+remains historical evidence, not current state. Current tracked evidence leaves
+the two remaining gates dependent on capacity or an external pentest owner.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

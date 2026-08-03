@@ -12,6 +12,7 @@ required_evidence = [
     "docs/perf/live-iceberg-materialization-2026-08-01.md",
     "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",
     "docs/perf/checkpoint-restore-replay-2026-08-02.md",
+    "docs/operations/npm-environment-approval-2026-08-03.md",
 ]
 
 [production]
@@ -30,6 +31,7 @@ verified_operator_acceptance = "docs/perf/golden-operator-acceptance-2026-07-30.
 verified_iceberg_materialization = "docs/perf/live-iceberg-materialization-2026-08-01.md"
 verified_full_lake_to_serving_smoke = "docs/perf/full-lake-to-serving-e2e-2026-08-01.md"
 verified_checkpoint_restore_replay = "docs/perf/checkpoint-restore-replay-2026-08-02.md"
+verified_npm_environment_approval = "docs/operations/npm-environment-approval-2026-08-03.md"
 pending_acceptance = [
     "4h soak and rollback rehearsal on the golden topology",
 ]

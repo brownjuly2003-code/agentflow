@@ -33,6 +33,7 @@ VALIDATOR_INPUTS = (
     "docs/perf/live-iceberg-materialization-2026-08-01.md",
     "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",
     "docs/perf/checkpoint-restore-replay-2026-08-02.md",
+    "docs/operations/npm-environment-approval-2026-08-03.md",
 )
 
 
@@ -119,6 +120,21 @@ def test_checkpoint_restore_replay_evidence_is_claimed() -> None:
     assert production.get("verified_checkpoint_restore_replay") == evidence
     assert pending_item not in pending
     assert pending == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+
+
+def test_npm_environment_approval_evidence_is_claimed() -> None:
+    """The external npm approval gate is evidenced without elevating production."""
+    evidence = "docs/operations/npm-environment-approval-2026-08-03.md"
+    remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+
+    assert production["status"] == "candidate"
+    assert evidence in manifest["required_evidence"]
+    assert production.get("verified_npm_environment_approval") == evidence
+    assert production.get("pending_acceptance", []) == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()
 

@@ -9,8 +9,8 @@
 > **`BLOCKED_RESOURCE_CAPACITY`** — canary/soak/rollback **not started**;
 > external pentest evidence audit **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
 > (evidence/readiness only; not a pen-test; gate open); GitHub Environment
-> `npm` approval audit **`BLOCKED_ENVIRONMENT_ABSENT`** (Environment missing;
-> gate open); core-only API and hardened runtime-image remediation locally
+> `npm` approval protection **PASS** (one required reviewer; gate closed);
+> core-only API and hardened runtime-image remediation locally
 > **PASS**; golden topology remains a production candidate, not production
 > accepted) · release line **`v2.0.0`**. Numbers below come only from measured,
 > in-repo evidence — see the linked reports for methodology and reproduction
@@ -50,11 +50,11 @@ evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 gate criteria fail; no repository-visible or public-GitHub third-party evidence;
 **not** a penetration test) — see
 [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
-Read-only GitHub API audit of Environment `npm` at `2026-08-01T16:51:29Z`
-returned **`BLOCKED_ENVIRONMENT_ABSENT`** (list of four environments omits
-`npm`; detail **404**; admin principal; workflow `environment: npm` wiring is
-correct but not approval-protection evidence) — see
-[operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md).
+Read-only GitHub API verification of Environment `npm`, recorded at
+`2026-08-03T03:18:11Z`, is **PASS**: the exact Environment exists with one
+non-empty `required_reviewers` rule for user `brownjuly2003-code`. Self-review
+is permitted, so this is not a four-eyes claim — see
+[operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md).
 The earlier 4 h @ 100 eps result remains valid evidence for its measured
 pre-materializer path only (advisory for the post-Iceberg golden gate).
 Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
@@ -102,6 +102,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | Live Iceberg materialization from `events.validated` | PASS direct topic injection → `ed03fc47` lake materializer → live Iceberg exact identity once; narrower gate still valid, now complemented by full one-event path | [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md) |
 | Full lake-to-serving single-event smoke | PASS mixed-SHA one event through `orders.raw` → PyFlink → `events.validated` → {Iceberg; bridge → ClickHouse → API}; not production acceptance, restore/replay, soak, or multi-tenant | [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md) |
 | Checkpoint restore/replay | PASS isolated E1 → checkpoint/savepoint → byte-identical E1 replay + E2 → distinct restored J2; both identities exact once across Kafka/Iceberg/ClickHouse/API, DLQ 0, lag 0 | [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md) |
+| GitHub Environment `npm` approval protection | PASS exact Environment binding + non-empty `required_reviewers` rule for one User; self-review permitted, not a four-eyes claim | [operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md) |
 | Hardened API runtime image (local acceptance) | core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL after runtime installer removal | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) |
 | Python cloud/MCP dependency compatibility (local + isolated Mac) | 2170 unit/property tests PASS; MCP 1.29 + PyIceberg 0.11.1/core 0.7.0 clean environment and 39 focused tests PASS | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) |
 
@@ -109,12 +110,12 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 
 | Area | Locally verified state |
 |------|------------------------|
-| Claims and documentation | machine-readable topology, runtime, SDK, Python, and quality claims agree; 7 validator tests pass and strict MkDocs builds |
+| Claims and documentation | machine-readable topology, runtime, SDK, Python, and quality claims agree; 13 project-claims tests pass and strict MkDocs builds |
 | Runtime and deployment | pinned PyFlink 2.3 OCI definition and Helm `FlinkDeployment` agree; Helm lint passes and 32 Helm contract tests pass |
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, and checkpoint restore/replay now measured; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open); npm Environment approval audit `BLOCKED_ENVIRONMENT_ABSENT` (Environment absent; gate open) |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, and npm Environment approval protection now measured; fresh 4h soak/rollback preflight `BLOCKED_RESOURCE_CAPACITY` (not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -189,25 +190,24 @@ program.
    **`BLOCKED_RESOURCE_CAPACITY`** in
    [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
    (canary/soak/rollback **not started**; old 4h evidence advisory only).
-   Exactly three production-acceptance gates remain overall: (1) fresh
+   Exactly two production-acceptance gates remain overall: (1) fresh
    soak+rollback (`BLOCKED_RESOURCE_CAPACITY`); (2) external pen-test
    (**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at
    `2026-08-01T17:11:58Z` —
    [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md);
    evidence/readiness only, not a pen-test; intake not present/unclaimed; all
-   seven criteria fail); (3) npm approval (**`BLOCKED_ENVIRONMENT_ABSENT`** at
-   `2026-08-01T16:51:29Z` —
-   [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
-   Current tracked evidence leaves those three gates dependent on capacity or
-   external owner input. Do not procure, simulate, or perform a pen-test from
-   docs work. Acceptance-scaffold Kafka reproducibility
+   seven criteria fail). The npm approval gate is **PASS**
+   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
+   Current tracked evidence leaves the two remaining gates dependent on
+   capacity or an external pentest owner. Do not procure, simulate, or perform
+   a pen-test from docs work. Acceptance-scaffold Kafka reproducibility
    debt (kind runtime fixes for `enableServiceLinks` / controller quorum
    voters) is recorded in the Operator evidence and is not a
    production-acceptance claim.
 2. **External notes (not extra production-acceptance gates)** — production CDC
    onboarding/credentials, public production-grade benchmark work, and Codecov
-   repository activation remain outside those four gates. Pen-test and npm
-   approval are already counted in item 1; they are not additional gates here.
+   repository activation remain outside those two gates. The pen-test is
+   already counted in item 1; the npm approval gate is closed.
 3. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
    (tree/`agentflow_runtime` + shim) waits for a release branch:
    [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).

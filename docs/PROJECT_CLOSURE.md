@@ -51,22 +51,23 @@ The remaining acceptance program includes fresh four-hour golden-topology soak p
 rehearsal (read-only preflight **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/
 rollback **not started** — see
 [perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)),
-third-party penetration test (read-only evidence audit
+and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
-[operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)),
-and GitHub Environment `npm` approval evidence (read-only audit
-**`BLOCKED_ENVIRONMENT_ABSENT`** at `2026-08-01T16:51:29Z` — Environment
-missing; see
-[operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
+[operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
+GitHub Environment `npm` approval protection is now **PASS**: the read-only
+verification recorded at `2026-08-03T03:18:11Z` found the exact Environment
+and a non-empty `required_reviewers` rule
+([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
 
 ## Post-closure future/accepted limits
 
 - Golden-topology production acceptance — Operator/Helm deploy **PASS** on
   2026-07-30, direct live Iceberg materialization **PASS** on 2026-08-01, and
   full one-event lake-to-serving smoke **PASS** on 2026-08-01; checkpoint
-  restore/replay **PASS** on 2026-08-02; full production acceptance remains
-  `future operations`; production status remains `candidate`.
+  restore/replay **PASS** on 2026-08-02; npm Environment approval protection
+  **PASS** on 2026-08-03 UTC; full production acceptance remains `future
+  operations`; production status remains `candidate`.
 - Third-party pen-test and remediation/retest — required before a production
   security claim, not part of self-attested closure; evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
@@ -120,21 +121,18 @@ Push, PR mutations and release actions require explicit owner authorization.
   currently returns `Repository not found`; its upload is non-blocking
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
-- Production status remains `candidate`; exactly three production gates remain
+- Production status remains `candidate`; exactly two production gates remain
   open: fresh soak/rollback (preflight
   **`BLOCKED_RESOURCE_CAPACITY`**; canary/soak/rollback **not started**),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
-  [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)),
-  and npm approval evidence (read-only audit **`BLOCKED_ENVIRONMENT_ABSENT`**
-  at `2026-08-01T16:51:29Z` — Environment `npm` absent from list of four;
-  detail **404**; workflow `environment: npm` wiring correct but not
-  approval-protection evidence; see
-  [operations/npm-environment-approval-blocker-2026-08-01.md](operations/npm-environment-approval-blocker-2026-08-01.md)).
-  Current tracked evidence leaves those three gates dependent on capacity or
-  external owner input: capacity remediation for soak/rollback,
-  create/protect Environment `npm`, or third-party pentest engagement/evidence.
+  [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
+  The npm approval gate is **PASS**
+  ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
+  Current tracked evidence leaves the two remaining gates dependent on
+  capacity remediation for soak/rollback or third-party pentest
+  engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты

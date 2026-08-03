@@ -36,7 +36,10 @@ verified_npm_environment_approval = "docs/operations/npm-environment-approval-20
 latest_soak_attempt = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
 latest_soak_attempt_result = "failed-canary-catchup-rate-floor"
 latest_soak_recovery_evidence = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
-latest_soak_recovery_state = "blocked-runtime-min-pause-not-rendered"
+latest_soak_recovery_state = "blocked-resource-headroom-before-safe-cutover"
+latest_soak_recovery_source = "78742d0a80206b31219c6d06b84952236235cd74"
+latest_soak_recovery_image = "agentflow-flink-local:78742d0-minpause0-groupoffsets-20260803-01"
+latest_soak_recovery_startup_mode = "group-offsets"
 pending_acceptance = [
     "4h soak and rollback rehearsal on the golden topology",
 ]

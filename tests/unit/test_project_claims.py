@@ -154,8 +154,17 @@ def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
     assert production.get("latest_soak_recovery_evidence") == evidence
     assert (
         production.get("latest_soak_recovery_state")
-        == "blocked-runtime-min-pause-not-rendered"
+        == "blocked-resource-headroom-before-safe-cutover"
     )
+    assert (
+        production.get("latest_soak_recovery_source")
+        == "78742d0a80206b31219c6d06b84952236235cd74"
+    )
+    assert (
+        production.get("latest_soak_recovery_image")
+        == "agentflow-flink-local:78742d0-minpause0-groupoffsets-20260803-01"
+    )
+    assert production.get("latest_soak_recovery_startup_mode") == "group-offsets"
     assert production.get("pending_acceptance", []) == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()

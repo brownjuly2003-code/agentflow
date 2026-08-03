@@ -123,6 +123,60 @@ existing task contract permits exactly 14 memory injections and pins source
 `ed03fc47`, that scope expansion is not assumed here. Product status remains
 `candidate`; canary2, 4h soak, and rollback remain open.
 
+## Safe runtime cutover preflight addendum — 2026-08-03
+
+- **Result:** **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**
+- **Read-only observation (UTC):** `2026-08-03T04:50:24Z`
+- **Runtime mutation in this addendum:** **none**
+
+The authorized cutover was stopped before staging, image build/load, or Helm
+mutation. Source inspection first found that applying the previous pack in
+`stateless` mode would again use `earliest-offset` and replay all 2,000 source
+records. Commit `78742d0a80206b31219c6d06b84952236235cd74` therefore adds a
+default-preserving, fail-closed Kafka startup-mode contract: normal installs
+remain `earliest-offset`, while this recovery pack pins `group-offsets` and
+rejects unsupported modes. The pack also pins checkpoint interval/min-pause
+`1000/0 ms` and unique image
+`agentflow-flink-local:78742d0-minpause0-groupoffsets-20260803-01`.
+
+Local TDD and validation completed before the stand preflight:
+
+- RED: source API rejected the new argument, Helm schema rejected the value,
+  and the pack lacked `kafkaStartupMode`;
+- GREEN focused contract: `3 passed`;
+- proportional source/Helm gate: `69 passed`, `7 skipped` because optional live
+  validation dependencies are absent on Windows;
+- Ruff, Ruff format, Helm lint, strict MkDocs build, pack verifier, manifest,
+  and incremental Git bundle verification all passed.
+
+Fresh stand evidence was fail-closed:
+
+| Surface | Observed state | Gate |
+|---|---|---|
+| Context / Helm | `kind-agentflow-reverify-ed03fc47`; rev1 superseded + rev2 deployed | PASS |
+| Live Flink | CR `STABLE`, job `RUNNING`, tasks `2/2`, JM/TM Ready, restarts `0` | PASS |
+| Checkpoints | completed `2157`, failed `0`; trigger cadence still about `30 s` | confirms correction still absent live |
+| Source group | current/end offset `2000/2000`, lag `0`, no active member | PASS for `group-offsets` cutover |
+| Lake / serving groups | current/end `4000/4000`, lag `0` | PASS |
+| Topic ends | raw/validated/DLQ `2000/4000/0` | frozen pre-mutation baseline |
+| Task Jobs / evidence | baseline+producer Complete, verifier Failed; original three evidence files only | preserved |
+| Node disk | `/var` `49%` used | PASS |
+| macOS memory | `66%` free | PASS |
+| Kind memory | `MemAvailable=1,683,140 kB` | **FAIL** vs required `1,900,000 kB` |
+
+The memory deficit was `216,860 kB`. The gate exists to avoid overlapping or
+thrashing the 896 MiB JobManager and 768 MiB TaskManager during replacement.
+No speculative suspend, resource deletion, build retry, or threshold weakening
+was attempted. The old release, image, JID, CR/ServiceAccount UIDs, topics,
+offsets, Jobs, evidence, and shared workloads remain unchanged.
+
+The next cutover precondition is fresh Kind `MemAvailable >= 1,900,000 kB`
+with the same zero-lag/end-offset baseline. Only then may the exact bundle be
+staged, the unique image built and loaded, and one controlled Helm upgrade run.
+Post-upgrade verification must prove raw/validated/DLQ offsets unchanged before
+traffic, source/lake/serving lag `0`, rendered `group-offsets` and `1000/0 ms`,
+and effective checkpoint cadence inside the canary budget.
+
 ## Mutation boundary
 
 This evidence slice made no remote or runtime mutation and did not change the

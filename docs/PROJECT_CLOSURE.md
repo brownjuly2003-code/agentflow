@@ -51,7 +51,9 @@ The remaining acceptance program includes fresh four-hour golden-topology soak
 plus rollback rehearsal (latest canary
 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** after zero baseline and `2000/2000`
 delivery; subsequent recovery
-**`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`** with effective ~30 s checkpoints;
+**`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`** after preparing tracked
+min-pause `0 ms` + anti-replay `group-offsets` source; the authorized apply
+stopped before mutation at `1,683,140 kB < 1,900,000 kB` Kind MemAvailable;
 canary2 and 4h soak/rollback **not started** — see
 [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)),
 and third-party penetration test (read-only evidence audit
@@ -127,7 +129,7 @@ Push, PR mutations and release actions require explicit owner authorization.
 - Production status remains `candidate`; exactly two production gates remain
   open: fresh soak/rollback (latest canary
   **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; subsequent recovery
-  **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**; canary2/4h/rollback **not
+  **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**; canary2/4h/rollback **not
   started**),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
@@ -135,9 +137,9 @@ Push, PR mutations and release actions require explicit owner authorization.
   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
   The npm approval gate is **PASS**
   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-  Current tracked evidence leaves the two remaining gates dependent on a
-  revised authorized runtime pack + exact canary2 before soak/rollback, or
-  third-party pentest engagement/evidence.
+  Current tracked evidence leaves the two remaining gates dependent on restored
+  Kind memory headroom + application of the exact safe-cutover pack + exact
+  canary2 before soak/rollback, or third-party pentest engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты

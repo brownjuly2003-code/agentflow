@@ -36,6 +36,8 @@ VALIDATOR_INPUTS = (
     "docs/operations/npm-environment-approval-2026-08-03.md",
     "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md",
     "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md",
+    "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md",
+    "docs/perf/golden-4h-soak-start-2026-08-07.md",
 )
 
 
@@ -142,7 +144,7 @@ def test_npm_environment_approval_evidence_is_claimed() -> None:
 
 
 def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
-    """The latest failed canary supersedes preflight state, not acceptance."""
+    """Historical failed canary remains required evidence; gate stays open."""
     evidence = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
     remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
     manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
@@ -150,8 +152,8 @@ def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
 
     assert production["status"] == "candidate"
     assert evidence in manifest["required_evidence"]
-    assert production.get("latest_soak_attempt") == evidence
-    assert production.get("latest_soak_attempt_result") == "failed-canary-catchup-rate-floor"
+    # Superseded as *latest* attempt by kind residual PASS + soak start, but retained.
+    assert production.get("latest_soak_attempt") != evidence
     assert production.get("pending_acceptance", []) == remaining_pending
     assert evidence in VALIDATOR_INPUTS
     assert (ROOT / evidence).is_file()
@@ -160,7 +162,6 @@ def test_failed_soak_canary_is_claimed_without_closing_the_gate() -> None:
 def test_ready_baselined_hold_pass_is_claimed_without_closing_the_soak_gate() -> None:
     """The read-only hold PASS advances recovery evidence, not acceptance."""
     evidence = "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md"
-    failed_canary = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
     remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
     manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
     production = manifest["production"]
@@ -168,8 +169,6 @@ def test_ready_baselined_hold_pass_is_claimed_without_closing_the_soak_gate() ->
     assert production["status"] == "candidate"
     assert evidence in manifest["required_evidence"]
     assert production.get("verified_ready_baselined_checkpoint_hold") == evidence
-    assert production.get("latest_soak_attempt") == failed_canary
-    assert production.get("latest_soak_attempt_result") == "failed-canary-catchup-rate-floor"
     assert production.get("latest_soak_recovery_evidence") == evidence
     assert production.get("latest_soak_recovery_state") == "ready-baselined-hold-pass"
     assert (
@@ -192,6 +191,48 @@ def test_ready_baselined_hold_pass_is_claimed_without_closing_the_soak_gate() ->
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert "ready-baselined-checkpoint-hold-2026-08-03.md" in text
         assert "RUNTIME_HOLD_PASS" in text
+
+
+def test_kind_residual_canary_pass_is_claimed_without_closing_the_soak_gate() -> None:
+    """Kind residual canary PASS does not clear dual-mean soak acceptance."""
+    evidence = "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md"
+    remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+
+    assert production["status"] == "candidate"
+    assert evidence in manifest["required_evidence"]
+    assert production.get("latest_kind_residual_canary") == evidence
+    assert production.get("latest_kind_residual_canary_result") == (
+        "pass-residual-7p51s-budget-20s"
+    )
+    assert production.get("pending_acceptance", []) == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+    text = (ROOT / evidence).read_text(encoding="utf-8")
+    assert "PASS_KIND_RESIDUAL_20" in text
+    assert "not" in text.lower() and "production" in text.lower()
+
+
+def test_soak_start_running_is_claimed_without_closing_the_gate() -> None:
+    """In-progress 4h soak is the latest attempt; acceptance stays open."""
+    evidence = "docs/perf/golden-4h-soak-start-2026-08-07.md"
+    remaining_pending = ["4h soak and rollback rehearsal on the golden topology"]
+    manifest = tomllib.loads((ROOT / "config" / "project_claims.toml").read_text(encoding="utf-8"))
+    production = manifest["production"]
+
+    assert production["status"] == "candidate"
+    assert evidence in manifest["required_evidence"]
+    assert production.get("latest_soak_attempt") == evidence
+    assert production.get("latest_soak_attempt_result") == (
+        "running-after-kind-residual-canary-pass"
+    )
+    assert production.get("pending_acceptance", []) == remaining_pending
+    assert evidence in VALIDATOR_INPUTS
+    assert (ROOT / evidence).is_file()
+    text = (ROOT / evidence).read_text(encoding="utf-8")
+    assert "SOAK_RUNNING" in text
+    assert "not PASS" in text or "not**" in text.lower() or "does **not** claim" in text
 
 
 def test_flink_submission_smoke_evidence_documents_live_compose_commands() -> None:

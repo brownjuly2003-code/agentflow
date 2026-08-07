@@ -4,6 +4,10 @@
 #   - enableServiceLinks: false (avoids injected KAFKA_PORT breaking cp-kafka)
 #   - controller voters on 127.0.0.1 (avoids kind Service hairpin deadlock)
 #   - explicit inter-broker listener + widened probe windows
+# Durability (2026-08-07 kind reverify):
+#   - hostPath /var/agentflow-kafka-kraft -> /var/lib/kafka/data (topics survive pod restart)
+#   - KAFKA_LOG_DIRS explicit; without this, restarts wipe topics (AUTO_CREATE=false)
+#   - topic bootstrap: orders.raw/events.validated partitions=2 (soak/canary stand)
 # Apply on a clean kind stand:
 #   kubectl apply -f k8s/acceptance/kafka-kraft.yaml
 # Topic Job is idempotent via --if-not-exists; re-run requires deleting the Job.
@@ -62,6 +66,8 @@ spec:
               value: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
               value: PLAINTEXT
+            - name: KAFKA_LOG_DIRS
+              value: /var/lib/kafka/data
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
@@ -76,6 +82,16 @@ spec:
               value: "45000"
             - name: CLUSTER_ID
               value: AgentFlowKafkaCluster01
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
           readinessProbe:
             tcpSocket:
               port: 9092
@@ -90,6 +106,11 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
+      volumes:
+        - name: kafka-data
+          hostPath:
+            path: /var/agentflow-kafka-kraft
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
@@ -145,7 +166,9 @@ spec:
                 sleep 5
               done
               kafka-topics --bootstrap-server "${bootstrap}" --list >/dev/null
-              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic orders.raw --partitions 1 --replication-factor 1
-              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic events.validated --partitions 1 --replication-factor 1
+              # partitions=2 matches kind reverify soak/canary topology (cannot decrease later)
+              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic orders.raw --partitions 2 --replication-factor 1
+              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic events.validated --partitions 2 --replication-factor 1
               kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic events.deadletter --partitions 1 --replication-factor 1
+              kafka-topics --bootstrap-server "${bootstrap}" --create --if-not-exists --topic orders.status --partitions 1 --replication-factor 1
               kafka-topics --bootstrap-server "${bootstrap}" --list

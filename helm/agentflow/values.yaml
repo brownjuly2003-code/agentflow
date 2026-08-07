@@ -241,16 +241,26 @@ lakeMaterializer:
 
 # Durable Kafka -> ClickHouse serving materializer. Standalone mode is valid
 # only with the external ClickHouse backend.
+# Throughput defaults (batchMax 1024 + CPU headroom) match the 2026-08-07 kind
+# bridge path work (slice E): larger apply batches under canary/soak load.
+# Override per environment if the stand is memory/CPU constrained.
 servingBridge:
   enabled: false
   replicaCount: 1
   kafkaBootstrapServers: ""
   groupId: agentflow-serving-bridge
   offsetReset: earliest
-  batchMax: 256
+  batchMax: 1024
   metricsPort: 9108
-  # Empty object falls back to top-level resources.
-  resources: {}
+  # Prefer explicit bridge resources over generic chart resources so serving
+  # lag is not CPU-starved when co-scheduled with Flink on small kind nodes.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
 
 # Apache Flink Kubernetes Operator application-mode workload. The operator CRDs
 # and controller are cluster prerequisites; this chart owns the application CR.

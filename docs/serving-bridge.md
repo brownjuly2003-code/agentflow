@@ -90,7 +90,7 @@ The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Broker list. |
 | `AGENTFLOW_BRIDGE_GROUP_ID` | `agentflow-serving-bridge` | Consumer group. Stable: offsets are the bridge's restart state. |
 | `AGENTFLOW_BRIDGE_OFFSET_RESET` | `earliest` | Standalone process. Replaying the topic's backlog is safe — the guard collapses what already landed. |
-| `AGENTFLOW_BRIDGE_BATCH_MAX` | `256` | Messages per poll. |
+| `AGENTFLOW_BRIDGE_BATCH_MAX` | `1024` (Helm `servingBridge.batchMax`; code fallback `256`) | Messages per poll. Larger batches reduce apply round-trips under canary/soak load. |
 | `AGENTFLOW_BRIDGE_METRICS_PORT` | `9108` | Scrape endpoint; `0` disables it. |
 | `AGENTFLOW_SERVING_BRIDGE_ENABLED` | `false` | In-process arm only (DuckDB backend). |
 

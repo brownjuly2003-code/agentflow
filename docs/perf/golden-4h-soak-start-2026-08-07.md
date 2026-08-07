@@ -31,9 +31,19 @@ Untracked runtime packet:
 | Soak verify Job | deferred until producer Complete (watchdog) |
 | Helm rollback | not started; target rev **3** if verify PASS |
 
+## Session-close snapshot (2026-08-07, human session ended while RUNNING)
+
+At close (~12:34Z sample): delivered **~72k / 1.44M**, eps **~100**, failures **0**,
+ABORT **none**, observer Running, Flink STABLE/RUNNING, verify Job not yet created.
+Mac watchdog still waiting for producer Complete.
+
+Full next-session handoff (untracked):
+`.codex-grok-tasks/session-close-20260807-soak-running/NEXT_SESSION.md`.
+
 ## Next
 
-1. Wait producer Complete (~16:22Z UTC).  
-2. Watchdog applies soak verify under `dual_mean_90`.  
-3. On PASS: corrected rollback to Helm revision **3**.  
-4. Publish final soak/rollback evidence and update claims only after outcomes.
+1. Wait producer Complete (~**16:22Z** UTC).  
+2. Watchdog applies soak verify under `dual_mean_90` → writes `result-final.txt`.  
+3. On PASS: corrected rollback to Helm revision **3** (never rev 1/2).  
+4. Publish final soak/rollback evidence and update claims only after outcomes.  
+5. Do **not** kill soak Jobs without explicit abort; do **not** claim PASS early.

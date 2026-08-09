@@ -837,3 +837,72 @@ Any remediation (WAL cleanup, host ClickHouse/Iceberg recovery, pod or
 deployment mutation, restart, redesign, traffic, Flink, watcher, hold,
 production transition, or push) requires a **separate authorized
 slice**. This RCA stops at evidence and classification.
+
+## Host dependency lifecycle RCA — 2026-08-09
+
+One bounded read-only host-side investigation identified the exact owners and
+lifecycle state behind the ClickHouse and Iceberg REST connection refusals.
+Observation UTC: `2026-08-09T23:09:37Z`. No container, Compose, Colima, or
+Kubernetes mutation was performed.
+
+### Ownership and live state
+
+| Dependency | Compose owner | State | Finished UTC | OOM / error | Restart policy / count |
+| --- | --- | --- | --- | --- | --- |
+| ClickHouse | `agentflow-ch-rv-20260802-01` | exited `137` | `17:52:49.269Z` | false / empty | `no` / `0` |
+| Iceberg REST | `agentflow-iceberg-rv-20260802-01` | exited `137` | `17:52:48.723Z` | false / empty | `no` / `0` |
+| MinIO | same Iceberg project | exited `0` | `17:52:40.782Z` | false / empty | `no` / `0` |
+
+Compose labels map ClickHouse to
+`/tmp/agentflow-chk-restore-rv-20260802-01/clickhouse-compose.yml` and Iceberg
+REST to `/tmp/agentflow-iceberg-ed03fc47-20260801-01/docker-compose.iceberg.yml`.
+The ClickHouse task manifest explicitly sets `restart: "no"`; the Iceberg
+manifest's omitted policy resolves to Docker policy `no`.
+
+Docker network `kind` maps `172.18.0.0/16` to gateway `172.18.0.1`, so the
+failed workload addresses map directly to these owners. The only running
+Docker container at observation was the kind control-plane, which restarted
+at `20:21:47.642Z` under policy `on-failure`; no dependency port publisher was
+running.
+
+### Causal evidence
+
+- Iceberg REST was serving normal metadata activity through `17:51:44.106Z`.
+- MinIO logged `Exiting on signal: TERMINATED` at `17:52:38.393Z` and exited
+  cleanly two seconds later.
+- MinIO, Iceberg REST, and ClickHouse all finished within nine seconds;
+  neither exit-137 container was OOM-killed and Docker recorded no state
+  error.
+- The option-A application slice records exactly one Colima restart. Its
+  handoff commit followed at `18:17:03Z`; no other intended runtime mutation
+  was recorded in that slice.
+- All dependency restart counts remain zero. The later rollback recovered the
+  kind control-plane but did not relaunch the external Compose projects.
+
+### Classification and claim boundary
+
+**`ROOT_CAUSE_PROVEN`** for the missing endpoints. Operational root cause:
+**`COLIMA_RESTART_DEPENDENCY_LIFECYCLE_GAP`**. Required external Compose
+services stopped with the Colima restart and remained stopped because their
+restart policies were `no`; the restart workflow lacked a dependency restore
+or fail-closed post-restart health gate.
+
+The direct Docker daemon event line naming the `17:52Z` VM shutdown was not
+retained, but the synchronized termination signal/state, absence of OOM or
+Docker errors, single documented restart, and zero restart counts establish
+the trigger at high confidence. No dependency was started and no recovery
+claim is made. Restoring these services would not fix the independent API
+DuckDB WAL failure. Clock and idle-I/O gates remain failed/open; production
+remains `candidate`.
+
+Artifacts:
+`.codex-grok-tasks/host-dependency-lifecycle-rca-20260809-codex01/{evidence.md,result.json,result.md}`.
+
+### Exact next safe boundary
+
+In a separate slice, design and test a fail-closed external-dependency
+recovery gate before any live Compose start. It must preserve the named
+ClickHouse volume and MinIO/Iceberg data, distinguish one-shot `minio-init`
+from long-running services, require health before workload verification, and
+define rollback/stop conditions. API WAL, clock, idle-I/O, traffic, Flink,
+watcher, hold, production transition, and push remain separate boundaries.

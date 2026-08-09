@@ -665,3 +665,106 @@ API, bridge, and materializer `CrashLoopBackOff` plus the Redis/Kafka restart
 deltas. Capture current/previous logs and termination/dependency evidence
 without another restart or workload mutation. Do not resume clock remediation,
 run a hold, arm the watcher, launch Flink/traffic, accept production, or push.
+
+## Next-session transparent operator snapshot — post-rollback
+
+This is the current navigation entry and supersedes every earlier
+`Next-session resume`, option-A application, and deferred-verification
+instruction. Earlier sections remain evidence history only.
+
+### Repository truth at snapshot entry
+
+| Field | Value |
+| --- | --- |
+| Branch / entry HEAD | `main` / `77d1e9f` (`docs(ops): record failed clock verification rollback`) |
+| Ahead of `origin/main` | `41` before the commit containing this snapshot |
+| Tracked worktree | clean at entry |
+| Canonical tracked outcome | this file; the snapshot commit is current HEAD after the docs-only slice |
+| Ignored durable state | `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md` |
+| Push | not authorized; not performed |
+| Production | `candidate` |
+
+The two existing untracked control/evidence directories and nine protected
+untracked files remain owner data. The last local validator confirmed all nine
+file SHA-256 values unchanged. Do not clean, stage, rewrite, or move them.
+
+### Evidence authority and reading order
+
+| Order | Artifact | Meaning |
+| --- | --- | --- |
+| 1 | `.codex-grok-tasks/clock-focused-verification-20260809-grok01/rollback-result.json` | final machine-readable truth after rollback |
+| 2 | `.codex-grok-tasks/clock-focused-verification-20260809-grok01/result.md` | concise human summary and boundaries |
+| 3 | this section and the preceding rollback section | canonical tracked operator record |
+| 4 | `verification-result.json` / `helper-result-v2.json` | immutable **pre-rollback** failure snapshot; `rollback_executed=false` is correct only at that capture time |
+| 5 | `progress.json` and the first raw temp bundle | superseded helper-attempt evidence; its empty guest-NTP value was a helper transport defect, not a runtime assertion |
+
+The valid focused-run raw evidence is
+`%TEMP%\colima-clock-focused-verify-v2-20260809T201621Z-f8ce608d`.
+The earlier incomplete helper bundle is
+`%TEMP%\colima-clock-focused-verify-20260809T195815Z-0102b8d3`.
+
+### Execution and retry ledger
+
+| Executor / attempt | Outcome | Reuse rule |
+| --- | --- | --- |
+| Grok `deproject-clock-focused-20260809-grok01`, `grok-4.5-build` | cancelled after an stdin-consuming remote wrapper, redirected-output deadlock, and PowerShell 5.1 serialization error; no valid focused run | do not reuse the helper or its false rollback classification |
+| Grok `deproject-clock-focused-20260809-grok02`, `grok-4.5-build` | cancelled after the corrected helper self-test still nested `ArrayList` values; no live run | do not relaunch; current self-test artifact was later replaced by the verified Codex result |
+| Codex takeover | replaced nested arrays with direct `.ToArray()`, passed self-test `3/3`, ran one focused verification, detected the real pod failure, and completed the exact rollback | outcome is final for option A; do not rerun the helper or rollback |
+
+No Grok process, local helper, yielded command cell, producer, watcher, or
+other write-capable background process is known active at handoff.
+
+### Last observed runtime truth
+
+| Surface | Last observed state |
+| --- | --- |
+| Colima profile | running |
+| Config / backup SHA-256 | both `e1abf039d7a563038d28bff9c6124b0344a9b90c1a2ac4b3e7e708351e9599af` |
+| Guest clock service | NTP `yes`; timesyncd `active/enabled` |
+| kind node | `agentflow-reverify-ed03fc47-control-plane` Ready |
+| API | exact pod `...-kk8tf`; `CrashLoopBackOff`, Ready false, restarts `34`, last reason `Error` |
+| Bridge | exact pod `...-htrwj`; `CrashLoopBackOff`, Ready false, restarts `35`, last reason `Error` |
+| Redis | exact pod `...-9j9mn`; Ready true, restarts `3`, last reason `Unknown` |
+| Materializer | exact pod `...-l8q89`; `CrashLoopBackOff`, Ready false, restarts `41`, last reason `Error` |
+| Kafka | exact pod `...-8mkq8`; Ready true, restarts `3`, last reason `Unknown` |
+
+These are last observations after the single 301.3-second post-rollback wait,
+not a promise that live state will remain unchanged. If identities or counts
+differ next session, record the new observation and do not overwrite this
+historical evidence.
+
+### Current gate matrix and claim boundary
+
+| Gate | State | Boundary |
+| --- | --- | --- |
+| Option A | **FAIL / rolled back** | do not reapply without a new owner-approved design |
+| Workload recovery | **FAIL** | three pods were in `CrashLoopBackOff`; cause unresolved |
+| Clock stability | **FAIL remains** | no post-rollback clock sample; do not infer stability from service state |
+| Idle I/O full PSI | **FAIL remains** | independent gate; no cause proved |
+| Historical memory/disk/containerd checks | prior PASS only | not refreshed after rollback |
+| 12-snapshot focused clock run | not started | pod fail-closed gate stopped it |
+| 15-minute hold | not started | blocked by workload, clock, and I/O gates |
+| Watcher / Flink / traffic | blocked | do not launch |
+| Production / push | `candidate` / unauthorized | do not accept or push |
+
+Do not claim that rollback recovered the workloads, that option A passed, or
+that the clock/I/O gates are green. Do not assign a root cause from restart
+counts or `CrashLoopBackOff` alone.
+
+### Exact next-session resume sequence
+
+1. Check the latest user message for a hard stop, then run fresh
+   `git status --short --branch` and `git log -3 --oneline`. Trust disk over
+   chat memory and preserve every unrelated untracked path.
+2. Read `rollback-result.json`, `result.md`, and this snapshot before any
+   remote query. Treat `verification-result.json` as pre-rollback evidence.
+3. Confirm no writer is active. Do **not** rerun the helper, rollback, Colima
+   restart, option-A application, 12-snapshot run, or 15-minute hold.
+4. Perform one bounded read-only workload recovery RCA. Capture pod identity,
+   current and previous logs, termination state, relevant events, and direct
+   dependency evidence for API, bridge, and materializer; include Redis and
+   Kafka restart deltas. If pods recovered meanwhile, preserve their previous
+   termination evidence instead of declaring the issue resolved.
+5. Stop after evidence and causal classification. Any restart, config edit,
+   pod mutation, cleanup, clock redesign/application, watcher, Flink, traffic,
+   production transition, or push is a separate authorization boundary.

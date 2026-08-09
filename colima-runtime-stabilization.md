@@ -1,5 +1,7 @@
 # Colima runtime stabilization
 
+Last updated: 2026-08-09.
+
 ## Goal
 
 Prove a stable Colima/kind baseline before any new traffic, then use the
@@ -36,11 +38,11 @@ not running yet and are configured for 896 MiB each.
 
 The kind Kafka heap now matches the existing Docker E2E setting:
 `-Xms256m -Xmx512m`. The scoped rollout on context
-`kind-agentflow-reverify-ed03fc47` preserved `/var/agentflow-kafka-kraft` and
-all five required topics. Kafka working memory fell to 462.6 MB, reclaiming
-about 632 MB, and the guest memory gate rose above 1.9 GiB. All five project
-pods returned to `Running`; the lake materializer recovered after one
-Kafka-induced restart.
+`kind-agentflow-reverify-ed03fc47` preserved `/var/agentflow-kafka-kraft`, the
+four project topics, and `__consumer_offsets`. Kafka working memory fell to
+462.6 MB, reclaiming about 632 MB, and the guest memory gate rose above
+1.9 GiB. All five project pods returned to `Running`; the lake materializer
+recovered after one Kafka-induced restart.
 
 ## Tasks
 
@@ -51,7 +53,7 @@ Kafka-induced restart.
 - [x] Cap the kind Kafka JVM heap at 512 MiB and perform one scoped rollout.
   Verify: contract test first failed on the missing setting, then all eight
   Kafka scaffold tests passed; Deployment became available; Kafka used
-  462.6 MB; all required topics remained present.
+  462.6 MB; all previously present topics remained present.
 - [ ] Run a 15-minute idle hold with one private JSON snapshot per minute
   outside the repository.
   Verify: all 15 runs exit `0`; no new clock/stall/error lines; clock-delta
@@ -86,3 +88,14 @@ Kafka-induced restart.
 This slice starts no traffic or Flink runtime. Its only cluster mutation was
 the scoped Kafka heap rollout; it performs no Colima restart, Docker cleanup,
 production transition, or push.
+
+## Next-session resume
+
+1. Read the latest authoritative sections at the end of `AGENT_STATE.md` and
+   `docs/SESSION_HANDOFF.md`; they supersede older capacity-blocked summaries.
+2. Treat `e9f76f9` as the implementation baseline. The following docs-only
+   handoff commit does not change the runtime or product code.
+3. Run the pending 15-minute idle hold. Do not start Flink traffic until the
+   complete hold and the failure-evidence watcher prerequisites are green.
+4. If the hold is green, arm the watcher in a new host-persistent directory;
+   only then resume the named full-process launch with a fresh identity.

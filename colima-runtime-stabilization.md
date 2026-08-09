@@ -264,23 +264,106 @@ recovered after one Kafka-induced restart.
 
 ## Boundary
 
-This slice starts no traffic or Flink runtime. Its only cluster mutation was
-the scoped Kafka heap rollout; it performs no Colima restart, Docker cleanup,
-production transition, or push.
+Across the stabilization work recorded here, the only cluster mutation was the
+scoped Kafka heap rollout. The clock RCA was read-only. No slice started
+traffic or the Flink runtime, restarted Colima, cleaned Docker storage,
+accepted production, or pushed commits.
+
+## Next-session operator snapshot — 2026-08-09
+
+This is the compact, authoritative starting point for the next session. Older
+sections remain evidence history, but they must not be interpreted as pending
+instructions when they conflict with this snapshot.
+
+### Repository and artifact state
+
+| Item | State at handoff |
+| --- | --- |
+| Entry branch / HEAD | `main` at `84ffda2`; 36 commits ahead of `origin/main` before this documentation-only update |
+| Handoff commit | the commit containing this snapshot; confirm its exact hash with `git log -1 --oneline` |
+| Tracked worktree at entry | clean after the clock-RCA commit |
+| Push | not authorized; not performed |
+| Live diagnostic smoke | `%TEMP%\deproject-colima-smoke-20260809T150346Z\diagnostics.json` |
+| First hold bundle | `%TEMP%\deproject-colima-idle-hold-20260809T134556Z` |
+| Instrumented hold bundle | `%TEMP%\deproject-colima-idle-hold-20260809T151626Z` |
+| Runtime mutation in clock RCA | none |
+
+The following untracked paths were already present and are outside this work;
+preserve them unless the user explicitly changes their ownership:
+`.codex-grok-tasks/`, `.grok-prompts/`, `AGENTS.md`,
+`checkpoint-restore-replay-gate.md`,
+`corrected-rollback-pair-local-design.md`, `docs/operations/cycle-guard.md`,
+`fresh-zero-failure-job-lifetime.md`, `golden-4h-soak-rollback-gate.md`,
+`plan_sol_23_07_26`, `production-gates-reverification-2026-08-01.md`, and
+`tests/unit/test_golden_4h_soak_verify.py`.
+
+### Current gate matrix
+
+| Gate | State | Decisive evidence / implication |
+| --- | --- | --- |
+| Diagnostic runner | PASS | latest smoke and all 15 hold samples completed with all `17/17` checks passing |
+| Clock stability | FAIL | `2485.431859 ms` spread; `DUAL_TIME_AUTHORITY_OSCILLATION` isolated |
+| Idle I/O full PSI | FAIL | non-zero in 6/15 samples, maximum `0.23`; cause not proved |
+| Memory | PASS | `MemAvailable=2,170,584..2,256,396 kB`; memory full PSI stayed zero |
+| Disk | PASS | 60% used, 31 GiB free |
+| Docker / containerd | PASS | containerd active, `NRestarts=0`, no new matching error line |
+| Failure-evidence watcher | BLOCKED | do not arm before a complete green stabilization hold |
+| Flink / traffic | BLOCKED | do not launch before watcher and stabilization prerequisites are green |
+| Production | `candidate` only | no production acceptance and no push |
+
+### What is observed, inferred, and still unknown
+
+**Observed:** VM and kind share one clock; Lima logs a successful host-time
+adjustment about every ten seconds from roughly `-2.45 s`; active timesyncd
+reports a `-2.465089 s` NTP correction; the hold contains one near-host sample
+and 14 samples near `-2.4 s`; the relevant Lima and systemd source paths have
+the matching ten-second set-time and external-change resync behavior.
+
+**Bounded inference:** those independent facts identify two active time
+authorities oscillating the same VM clock. They explain the measured clock
+spread without requiring a separate kind or container clock fault.
+
+**Not established:** no direct macOS-to-NTP measurement was made; no supported
+persistent switch for either Lima host sync or guest timesyncd has been chosen;
+no rollback has been tested; no post-remediation clock sample or hold exists;
+and the etcd/Kafka write correlation does not establish the cause of I/O PSI.
+
+### Diagnostic retry ledger
+
+| Attempt | Result | Reuse guidance |
+| --- | --- | --- |
+| Individual read-only host/VM/kind and root-journal probes | succeeded and produced the RCA evidence above | evidence is durable; do not rerun without a new hypothesis |
+| Piped remote shell probe | quoting ended with `unexpected EOF`; no live action occurred | do not retry this wrapper |
+| Base64/LF wrapper probe | quoting stripped Python literals and raised `NameError`; no live action occurred | do not retry this wrapper |
+| Two non-interactive Colima version wrappers | stopped on missing SSH `PATH`, then missing Lima dependency lookup; neither reached the VM | use an explicit proven argv/PATH method only if a future design question truly requires it |
+
+### Exact next atomic slice
+
+Name the slice **single-authority clock remediation design**. It is design-only
+and ends before a live change. It must:
+
+1. Verify the supported persistence/configuration surface for both options:
+   retain Lima host sync and disable guest NTP, or retain guest NTP and disable
+   Lima host sync.
+2. Select one authority using persistence across Colima restarts, rollback
+   simplicity, host/NTP correctness, and impact on the kind node as criteria.
+3. Record the exact file/service change, prechecks, focused clock verification,
+   failure stop condition, and exact rollback command.
+4. Leave the I/O PSI failure independent and open. Do not combine its
+   remediation with the clock change.
+
+A later separately named runtime slice may apply the selected clock change.
+Only after its focused verification is green may another separately named
+15-minute hold be considered.
 
 ## Next-session resume
 
-1. Read the latest authoritative sections at the end of `AGENT_STATE.md` and
-   `docs/SESSION_HANDOFF.md`; they supersede older capacity-blocked summaries.
-2. Treat the instrumented hold above as the current runtime result. Preserve
-   both raw temp bundles and do not repeat the smoke or hold without a narrowed
-   hypothesis and a selected remediation.
-3. Treat `DUAL_TIME_AUTHORITY_OSCILLATION` as the clock root cause. In the next
-   separate slice, select one authoritative clock path and document the exact
-   reversible change, preconditions, verification, and rollback before any
-   live mutation. Do not restart or resize Colima implicitly.
-4. Keep the recurring I/O full PSI gate open. The current data bounds etcd and
-   Kafka as the largest writers but does not prove causation; any remediation
-   and subsequent hold require separate scoped decisions.
-5. Keep the watcher, Flink process, traffic, and production acceptance blocked
-   until a later complete hold is green.
+1. Check the latest user message for a hard stop, then refresh `git status` and
+   `HEAD`; if they differ from this snapshot, trust the newer repository state.
+2. Read the latest blocks in `AGENT_STATE.md` and `docs/SESSION_HANDOFF.md`,
+   then use the operator snapshot above as the current detailed contract.
+3. Preserve the listed untracked paths and all three private evidence paths.
+   Do not repeat the passing smoke, either failed hold, or failed wrappers.
+4. Perform only the **single-authority clock remediation design** slice above;
+   do not change time settings, restart/resize Colima, or mix in I/O work.
+5. Keep watcher, Flink, traffic, production acceptance, and push blocked.

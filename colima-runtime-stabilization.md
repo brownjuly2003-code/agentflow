@@ -92,6 +92,22 @@ Ruff check, Ruff format check, Python compilation, CLI help smoke, and diff
 checks passed. This implementation slice did not run the updated runner against
 the live stand and did not repeat the 15-minute hold.
 
+### Live diagnostic smoke — 2026-08-09
+
+At `2026-08-09T15:03:55Z`, the committed runner from `088b8ae` completed one
+read-only live smoke with exit `0` and `status=complete`. All `17/17` checks
+passed. The bracketed clock sample reported `offset_ns=17625662`
+(`+17.625662 ms`) and `round_trip_ns=122481000` (`122.481 ms`); the emitted
+values satisfy the midpoint-offset and endpoint-difference equations.
+
+`container_io_inventory` returned `19` non-empty, uniquely identified owner
+rows. Every row included pod/container identity and numeric read/write byte and
+operation counters from cgroup v2; no unavailable or unsupported row was
+accepted. The private artifact is
+`%TEMP%\deproject-colima-smoke-20260809T150346Z\diagnostics.json`, outside the
+repository. This smoke closes the instrumentation check only: the earlier
+15-minute hold remains failed and was not rerun.
+
 ## Memory ownership and remediation
 
 The active project stack owned the pressure; there was no unrelated service
@@ -132,14 +148,13 @@ recovered after one Kafka-induced restart.
   Verify: capability evidence identifies the PID-selection root cause; TDD RED
   fails both new contracts; focused tests, lint, format, compile, and help
   smoke pass after implementation.
-- [ ] If the hold fails, inventory only the failing surface before mutation.
+- [x] If the hold fails, inventory only the failing surface before mutation.
   Verify: I/O failure has a bounded Docker/storage owner list; memory failure
   has a measured deficit; clock failure has timestamped host/guest samples.
   Do not prune, restart, resize, or stop protected workloads during inventory.
-  The clock samples are preserved, but the first bounded I/O sampler could
-  not map the 19 CRI containers to usable cgroup statistics. Corrected
-  instrumentation is locally verified; fresh live owner output remains
-  pending.
+  The first bounded I/O sampler could not map the 19 CRI containers, but the
+  corrected live smoke returned 19 unique cgroup v2 owner rows and a precise
+  timestamped clock pair without mutation.
 - [ ] Perform one authorized remediation, then repeat the same hold.
   Verify: the selected gate is green before traffic. A larger host is required
   when the 1.9 GiB restore threshold cannot be sustained safely; a controlled
@@ -167,12 +182,13 @@ production transition, or push.
 
 1. Read the latest authoritative sections at the end of `AGENT_STATE.md` and
    `docs/SESSION_HANDOFF.md`; they supersede older capacity-blocked summaries.
-2. Treat `e9f76f9` as the implementation baseline. The following docs-only
-   handoff commit does not change the runtime or product code.
-3. Treat the `2026-08-09` hold as failed; do not raw-retry it. Run one fresh
-   read-only smoke of the updated diagnostic runner to a new private temp path.
-   Require `status=complete`, precise clock fields, and non-empty CRI I/O rows.
-4. In a later runtime slice, run one fresh complete hold and evaluate clock
-   offset spread plus per-owner I/O deltas. Only after that hold is green, arm
-   the watcher in a new host-persistent directory and resume the named process
-   with a fresh identity.
+2. Treat `088b8ae` as the diagnostic implementation baseline and the live
+   smoke above as instrumentation evidence. Do not repeat that smoke without a
+   new failing hypothesis.
+3. Treat the earlier `2026-08-09` hold as failed; do not raw-retry its old
+   snapshots. In the next separate runtime slice, run one fresh complete
+   15-minute hold into a new private temp directory and evaluate precise clock
+   offset spread plus per-owner I/O deltas.
+4. Only after that fresh hold is green, arm the watcher in a new
+   host-persistent directory and resume the named process with a fresh
+   identity.

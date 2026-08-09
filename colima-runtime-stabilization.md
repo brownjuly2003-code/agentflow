@@ -14,16 +14,16 @@ remediation measurements were added after the scoped Kafka rollout:
 
 | Signal | Current result |
 | --- | --- |
-| Diagnostic process | `RUNNER_EXIT=0`, `status=complete`, all 16 checks PASS |
+| Diagnostic process | latest hold: 15/15 exits `0`, 15/15 `status=complete`, all 17 checks PASS per snapshot |
 | Host / Docker memory | 8 GiB host; 6.77 GiB Docker; host swap 1.45 GiB used |
-| Guest memory | Before: `MemAvailable=1,603,104 kB` (~1.53 GiB); after Kafka cap: `2,393,824 kB` (~2.28 GiB) |
-| Disk | 59% used; 31 GiB free |
-| I/O pressure | `some avg10=8.37`, `full avg10=1.73` |
+| Guest memory | latest hold: `MemAvailable=2,170,584..2,256,396 kB` (~2.070..2.152 GiB); memory `full avg10=0` |
+| Disk | latest hold: 60% used; 31 GiB free |
+| I/O pressure | latest hold: `full avg10=0..0.23`, non-zero in 6/15 samples |
 | containerd | active since 2026-08-02; `NRestarts=0` |
-| Clock | five samples held guest-host delta at exactly -2 seconds |
+| Clock | latest precise offset `-2447.147103..+38.284756 ms`; spread `2485.431859 ms` |
 | Recent journal | bounded 48-hour queries returned no new clock-jump, kernel-stall, or containerd-error lines |
-| 15-minute idle hold | **FAIL** on clock-delta spread and recurring I/O full PSI; traffic remained blocked |
-| Diagnostic instrumentation | bracketed nanosecond clock plus cgroup v1/v2 CRI I/O ownership implemented and locally verified |
+| 15-minute idle hold | latest instrumented repeat **FAIL** on clock-offset spread and recurring I/O full PSI; traffic remains blocked |
+| Diagnostic instrumentation | live-verified bracketed clock plus 19 stable cgroup v2 CRI I/O owners |
 
 The empty recent-journal queries do not invalidate the historical soak RCA;
 older failure evidence remains authoritative. The memory gate is green after
@@ -108,6 +108,40 @@ accepted. The private artifact is
 repository. This smoke closes the instrumentation check only: the earlier
 15-minute hold remains failed and was not rerun.
 
+## Instrumented idle hold outcome — 2026-08-09
+
+The fresh read-only hold ran from `2026-08-09T15:16:26.755Z` through
+`2026-08-09T15:33:40.931Z` for `1034.175` seconds. All 15 runner invocations
+exited `0`, reported `status=complete`, and passed all 17 checks. Their captured
+timestamps span `1016` seconds. The private snapshots are under
+`%TEMP%\deproject-colima-idle-hold-20260809T151626Z`, outside the repository.
+
+The fail-closed verdict is
+**`HOLD_FAIL_CLOCK_OFFSET_SPREAD_AND_IO_FULL_PSI`**:
+
+- Precise clock offsets ranged from `-2447.147103` to `+38.284756 ms`, a
+  `2485.431859 ms` spread against the `<=1000 ms` gate. Fourteen samples stayed
+  between `-2447.147103` and `-2404.103907 ms`; sample 03 moved to
+  `+38.284756 ms`, then sample 04 returned to `-2444.009873 ms`. The sampled
+  host and guest clocks remained monotonic, round trips were
+  `115.997..176.793 ms`, and the clock-jump journal stayed empty.
+- I/O `full avg10` ranged from `0` to `0.23` and was non-zero in samples 02,
+  04, 06, 09, 12, and 14. Across the complete hold, etcd had the largest
+  observed write delta (`34.988 MiB`, 13,017 writes); Kafka was second
+  (`9.891 MiB` written plus `2.090 MiB` read, 6,495 writes). They were also the
+  two largest write deltas on every non-zero-PSI interval. This is bounded
+  ownership correlation, not proof that either workload caused the PSI.
+- All 19 cgroup v2 owner identities remained stable and every cumulative
+  counter stayed monotonic. Memory remained green at `2.070..2.152 GiB`
+  available with memory `full avg10=0`; disk remained 60% used with 31 GiB
+  free.
+- containerd stayed active with `NRestarts=0`. Its seven historical matching
+  lines were byte-identical in all snapshots, while clock-jump and kernel-stall
+  outputs remained empty.
+
+No remediation, retry, Flink process, watcher, traffic, restart, cleanup,
+resize, production transition, or push followed the failed hold.
+
 ## Memory ownership and remediation
 
 The active project stack owned the pressure; there was no unrelated service
@@ -136,9 +170,8 @@ recovered after one Kafka-induced restart.
   462.6 MB; all previously present topics remained present.
 - [x] Run a 15-minute idle hold with one private JSON snapshot per minute
   outside the repository.
-  Verify: all 15 runs exit `0`; no new clock/stall/error lines; clock-delta
-  spread <=1 second. All runs exited `0`, but the clock spread failed at
-  `3` seconds.
+  Verify: the latest instrumented repeat collected 15/15 complete snapshots
+  over 1034.175 seconds, but precise clock spread failed at 2485.431859 ms.
 - [x] Apply the gate appropriate to the next runtime task.
   Verify: disk <=80% and >=15 GiB free; memory full PSI remains 0; I/O full
   PSI returns to 0 during the idle hold; `MemAvailable>=1.5 GiB` for a soak
@@ -159,6 +192,8 @@ recovered after one Kafka-induced restart.
   Verify: the selected gate is green before traffic. A larger host is required
   when the 1.9 GiB restore threshold cannot be sustained safely; a controlled
   Colima restart requires a separate runtime gate and rollback record.
+  The instrumented repeat still failed clock and I/O gates; no subsequent
+  remediation was selected or performed.
 - [ ] Before any future soak, launch the Flink failure-evidence watcher to a
   new host-persistent directory and wait for `state=armed`.
   Verify: watcher armed, task readiness/checkpoints green, and no consumed
@@ -182,13 +217,14 @@ production transition, or push.
 
 1. Read the latest authoritative sections at the end of `AGENT_STATE.md` and
    `docs/SESSION_HANDOFF.md`; they supersede older capacity-blocked summaries.
-2. Treat `088b8ae` as the diagnostic implementation baseline and the live
-   smoke above as instrumentation evidence. Do not repeat that smoke without a
-   new failing hypothesis.
-3. Treat the earlier `2026-08-09` hold as failed; do not raw-retry its old
-   snapshots. In the next separate runtime slice, run one fresh complete
-   15-minute hold into a new private temp directory and evaluate precise clock
-   offset spread plus per-owner I/O deltas.
-4. Only after that fresh hold is green, arm the watcher in a new
-   host-persistent directory and resume the named process with a fresh
-   identity.
+2. Treat the instrumented hold above as the current runtime result. Preserve
+   both raw temp bundles and do not repeat the smoke or hold without a narrowed
+   hypothesis and a selected remediation.
+3. In the next separate read-only diagnostic slice, inspect the host/guest time
+   synchronization path around the sample-03 `+2.472 s` offset excursion. Do
+   not restart or resize Colima and do not change time settings in that slice.
+4. Keep the recurring I/O full PSI gate open. The current data bounds etcd and
+   Kafka as the largest writers but does not prove causation; any remediation
+   and subsequent hold require separate scoped decisions.
+5. Keep the watcher, Flink process, traffic, and production acceptance blocked
+   until a later complete hold is green.

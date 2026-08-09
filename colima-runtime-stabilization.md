@@ -356,6 +356,62 @@ restart, clock samples, or a failed service assertion. Do not run the
 15-minute hold in the same slice; that is a separate gate after focused clock
 verification is green.
 
+### Option-A application outcome — focused verification deferred
+
+The owner authorized option A on 2026-08-09. The provision is applied and the
+single allowed Colima restart completed remotely, but focused verification is
+**incomplete**, not PASS. The owner explicitly deferred the remaining
+read-only checks to the next session and authorized a longer client timeout.
+
+| Item | Captured evidence and current status |
+| --- | --- |
+| Latest pre-change host clock | Network Time `On`, server `time.apple.com`; three NTP offsets `+0.003245`, `+0.003216`, and `+0.003180 s`; maximum absolute offset `0.003245 s`; spread `0.000065 s` — PASS |
+| Pre-change runtime | Colima running; kind node `Ready`; five workload pods `Running/Ready`; no Jobs or matching producer, soak, watcher, or Flink host process |
+| Rollback backup | `/Users/julia/.colima/agentflow-fc5-7113966/colima.yaml.pre-single-clock-authority`, SHA-256 `e1abf039d7a563038d28bff9c6124b0344a9b90c1a2ac4b3e7e708351e9599af`; byte-identical to the original config |
+| Applied config | `/Users/julia/.colima/agentflow-fc5-7113966/colima.yaml`, SHA-256 `6bc948c1c8b000e11f889af20b3dca1f8718a0cb327853ea687f424bf51ac31e`; YAML contract matched the exact provision above |
+| Restart ledger | `colima --profile agentflow-fc5-7113966 restart` was launched exactly once. The client timed out after `184.1 s`, while remote PID `22315` continued and later exited. Do not start another restart merely because of the client timeout |
+| Verified after remote exit | Colima `running`; guest `NTP=no`; `systemd-timesyncd.service` `inactive/disabled`; `lima-guestagent.service` `active`; kind node `Ready` |
+| Still missing | Post-restart five-pod recovery comparison, 12 diagnostic snapshots, and three post-change NTP samples. The aggregate observation command timed out after `60.9 s` after printing the green service states and `Ready` node, before returning pod evidence |
+| Temporary files | The remote helper and config candidate were removed. The local helper is removed in the documentation handoff; only the intentional rollback backup remains |
+
+The first config-apply attempt created the backup but stopped before replacing
+the config because expected `diff -u` exit `1` met `set -e`. A corrected helper
+was transferred with SHA-256
+`a4222f27d955ef09e14517d0150fd7ca65db9d4fe760a33dec0b105a55d75d3a`,
+reused the backup only after an exact hash match, accepted only diff exit `1`,
+and applied the validated candidate. No second restart, rollback, hold, Flink
+process, watcher, traffic, or production transition followed.
+
+#### Exact next-session resume sequence
+
+1. Check the latest user message, local `git status`, and `HEAD`. Preserve the
+   protected untracked paths and the rollback backup. Do not edit the config,
+   restart Colima, or repeat host-time remediation during resume discovery.
+2. Read-only confirm no `colima ... restart` process remains, config hash is
+   `6bc948c1...31e`, backup hash is `e1abf039...9599af`, Colima is running,
+   guest NTP is `no`, timesyncd is `inactive/disabled`, and guestagent is
+   `active`. Any contradiction is a real failure and enters exact rollback.
+3. Confirm the kind node is `Ready` and recover the same five pod identities:
+   API `...-kk8tf`, bridge `...-htrwj`, Redis `...-9j9mn`, materializer
+   `...-l8q89`, and Kafka `...-8mkq8`. Require all `Running/Ready` and no
+   restart increase above `0`, `0`, `1`, `6`, and `0`, respectively.
+4. Capture 12 fresh private `scripts/diagnose_colima_runtime.py` snapshots ten
+   seconds apart. Set the overall client command timeout to at least `600 s`.
+   If the tool yields before completion, continue waiting on the **same**
+   process in intervals no longer than `50 s`; never launch a duplicate.
+5. Require all 12 exits `0`, `status=complete`, and every diagnostic check
+   PASS. Host and guest clocks must stay monotonic; every absolute `offset_ns`
+   must be at most `250,000,000`, and offset spread must be at most
+   `250,000,000 ns`.
+6. Run three query-only `/usr/bin/sntp 185.125.190.58` samples ten seconds
+   apart. Require maximum absolute offset `<=0.100 s` and spread `<=0.050 s`.
+7. Any actual assertion failure, unreachable required surface, or incomplete
+   run after the extended timeout triggers the exact rollback below without a
+   raw retry. If all checks pass, preserve the backup and stop; the 15-minute
+   hold is a separate later slice.
+8. Do not investigate I/O PSI, arm the watcher, launch Flink or traffic,
+   accept production, or push in this focused-verification resume slice.
+
 ### Exact rollback
 
 If the VM remains reachable, restore the profile config, re-enable guest NTP,

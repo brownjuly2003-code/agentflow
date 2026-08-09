@@ -263,6 +263,32 @@ Also require no active producer, soak, failure watcher, or Flink process and a
 recorded inventory of the currently running kind workloads. Do not combine
 clock work with the independent I/O PSI investigation.
 
+### Host-clock remediation outcome — 2026-08-09
+
+The separately authorized host-only slice corrected the macOS prerequisite.
+A fresh entry query reproduced the failure at `-2.474351 +/- 0.008335 s`.
+The privileged pre-change getters then proved the narrower root cause:
+Network Time was `Off`, while its configured server was already
+`time.apple.com`.
+
+One native macOS Authorization Services action enabled Network Time and ran
+`sntp -sS time.apple.com`; no credential was requested or handled by the
+automation. `systemsetup` emitted its internal `Error:-99` diagnostic before
+reporting `setUsingNetworkTime: On`, and the final privileged getters confirmed
+Network Time `On` with server `time.apple.com`.
+
+Three subsequent query-only samples against `185.125.190.58`, ten seconds
+apart, returned `+0.004907`, `+0.005006`, and `+0.004896 s`. Maximum absolute
+offset was `0.005006 s` and spread was `0.000110 s`, so both the `0.100 s`
+absolute-offset and `0.050 s` spread gates passed. The temporary applet,
+source, and result paths were removed after the result was captured.
+
+This establishes only the macOS host-clock prerequisite at capture time. No
+Colima config, VM, kind workload, guest service, watcher, Flink process, or
+traffic was changed. A later separately authorized option-A application must
+rerun every fail-closed precheck above; any regression stops it before the
+profile config is copied or edited.
+
 ### Exact planned change
 
 After every precheck is green, copy the current profile configuration once:

@@ -20,7 +20,7 @@ remediation measurements were added after the scoped Kafka rollout:
 | Disk | latest hold: 60% used; 31 GiB free |
 | I/O pressure | latest hold: `full avg10=0..0.23`, non-zero in 6/15 samples |
 | containerd | active since 2026-08-02; `NRestarts=0` |
-| Clock | latest precise offset `-2447.147103..+38.284756 ms`; spread `2485.431859 ms`; dual Lima/systemd time authorities isolated |
+| Clock | option A selected: Lima/macOS host authority; current host/NTP precheck FAIL at `-2.470866 +/- 0.006419 s`; no remediation applied |
 | Recent journal | bounded 48-hour queries returned no new clock-jump, kernel-stall, or containerd-error lines |
 | 15-minute idle hold | latest instrumented repeat **FAIL** on clock-offset spread and recurring I/O full PSI; traffic remains blocked |
 | Diagnostic instrumentation | live-verified bracketed clock plus 19 stable cgroup v2 CRI I/O owners |
@@ -192,6 +192,163 @@ No remediation or hold retry followed. The next separate slice must choose
 one authoritative clock path and specify an explicit rollback before any live
 change. The independent recurring I/O full-PSI gate remains open.
 
+## Single-authority clock remediation design — option A selected
+
+The owner selected **option A** on 2026-08-09: retain Lima host-to-guest time
+sync and disable guest NTP. This section is a design and runbook only. It does
+not authorize a macOS clock change, a Colima restart, or a guest service
+change.
+
+### Persistence surfaces and decision
+
+| Criterion | Option A: Lima/macOS host | Option B: guest NTP |
+| --- | --- | --- |
+| Supported persistence | Per-profile Colima `colima.yaml` supports `mode: system` provisions; Lima runs them on every VM boot | Lima `2.1.1` exposes no narrow time-sync switch; `plain: true` disables the entire guest agent, mounts, and port forwarding |
+| Rollback | Remove the provision, run `timedatectl set-ntp true`, and restart the same profile | Remove a systemd capability drop-in and restart `lima-guestagent`; Lima would still issue `SyncTime` every ten seconds |
+| Time correctness | Aligns macOS, Colima, kind, and host-side producers, but inherits macOS absolute clock error | Follows external NTP, but blocking `CAP_SYS_TIME` is not a native Lima control |
+| Runtime impact | Leaves `lima-guestagent` unchanged and creates no recurring error log | Failed `SyncTime` calls would warn every ten seconds and add log I/O while the I/O PSI gate is already open |
+
+Option A is the smaller supported and reversible change. Its hard precondition
+is that the macOS host already agrees with external NTP. A read-only
+`/usr/bin/sntp 185.125.190.58` query returned
+`-2.470866 +/- 0.006419 s`; option A therefore **cannot be applied yet**.
+Correcting and validating the host clock is a separate authorized runtime
+slice.
+
+Version-specific sources:
+
+- Colima `0.10.1` stores a named profile at
+  `$HOME/.colima/<profile>/colima.yaml` and passes `system` provisions to
+  Lima: [profile configuration](https://github.com/abiosoft/colima/blob/v0.10.1/docs/FAQ.md#can-config-file-be-used-instead-of-cli-flags)
+  and [provision schema](https://github.com/abiosoft/colima/blob/v0.10.1/embedded/defaults/colima.yaml#L207-L234).
+- Lima `2.1.1` runs idempotent provisions on every boot and starts host time
+  synchronization without a configuration guard:
+  [provision lifecycle](https://github.com/lima-vm/lima/blob/v2.1.1/templates/default.yaml#L183-L286)
+  and [host sync](https://raw.githubusercontent.com/lima-vm/lima/v2.1.1/pkg/hostagent/timesync.go).
+- systemd `v255` defines `timedatectl set-ntp false` as disabling and stopping
+  known NTP services, with `true` as the inverse:
+  [timedatectl](https://raw.githubusercontent.com/systemd/systemd/v255/man/timedatectl.xml).
+
+### Fail-closed prechecks
+
+Run these only in the separately authorized runtime slice, from a shell on the
+Mac host. Do not continue if any command or assertion fails:
+
+```bash
+profile='agentflow-fc5-7113966'
+config="/Users/julia/.colima/${profile}/colima.yaml"
+backup="${config}.pre-single-clock-authority"
+export PATH='/Users/julia/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin'
+
+/bin/test -f "$config"
+/bin/test "$(/usr/bin/grep -c '^provision: null$' "$config")" -eq 1
+/bin/test ! -e "$backup"
+colima --profile "$profile" status
+sudo /usr/sbin/systemsetup -getusingnetworktime
+sudo /usr/sbin/systemsetup -getnetworktimeserver
+for sample in 1 2 3; do
+  /usr/bin/sntp 185.125.190.58
+  /bin/sleep 10
+done
+```
+
+`systemsetup` must report network time `On` and a non-empty server. For all
+three query-only `sntp` samples, the absolute first field must be at most
+`0.100 s`, and the maximum-minus-minimum offset must be at most `0.050 s`.
+The already observed `-2.470866 s` fails this gate. Stop before copying or
+editing the config until a separate host-clock remediation has made this
+precheck green.
+
+Also require no active producer, soak, failure watcher, or Flink process and a
+recorded inventory of the currently running kind workloads. Do not combine
+clock work with the independent I/O PSI investigation.
+
+### Exact planned change
+
+After every precheck is green, copy the current profile configuration once:
+
+```bash
+/bin/cp -p "$config" "$backup"
+/usr/bin/shasum -a 256 "$config" "$backup"
+```
+
+The two hashes must match. Replace the single current `provision: null` line in
+`/Users/julia/.colima/agentflow-fc5-7113966/colima.yaml` with exactly:
+
+```yaml
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+      timedatectl set-ntp false
+      active_state="$(systemctl show systemd-timesyncd.service --property=ActiveState --value)"
+      unit_state="$(systemctl show systemd-timesyncd.service --property=UnitFileState --value)"
+      test "$active_state" = inactive
+      test "$unit_state" = disabled
+```
+
+`mode: system` is deliberate: Lima's built-in boot scripts may start
+`systemd-timesyncd` earlier, while this root provision runs afterward on every
+boot and fails the boot probe if the service remains active or enabled. Do not
+edit Colima's generated `_lima` instance files.
+
+The runtime change is then exactly one controlled restart of the named
+profile:
+
+```bash
+colima --profile "$profile" restart
+```
+
+That restart affects the entire VM and kind cluster and therefore requires a
+separate latest-user authorization. It is not authorized by this design.
+
+### Focused verification and stop condition
+
+After the restart, require all of the following before considering another
+idle hold:
+
+1. `colima --profile "$profile" status` reports running.
+2. `colima --profile "$profile" ssh -- timedatectl show --property=NTP --value`
+   reports `no`.
+3. `colima --profile "$profile" ssh -- systemctl show
+   systemd-timesyncd.service --property=UnitFileState
+   --property=ActiveState --value` reports `disabled` and `inactive`.
+4. `colima --profile "$profile" ssh -- systemctl is-active
+   lima-guestagent.service` reports `active`.
+5. The kind node is `Ready`, and the pre-change workload inventory recovers
+   without launching Flink, traffic, or a watcher.
+6. Capture 12 fresh private `scripts/diagnose_colima_runtime.py` snapshots ten
+   seconds apart. Every invocation must exit `0`, report `status=complete`,
+   and pass all checks. Host and guest clocks must remain monotonic; every
+   absolute `offset_ns` must be at most `250,000,000`, and the 12-sample
+   offset spread must be at most `250,000,000 ns`.
+7. Three post-change `sntp` queries must still satisfy the precheck thresholds.
+
+Any failure stops the slice and triggers rollback. Do not raw-retry the
+restart, clock samples, or a failed service assertion. Do not run the
+15-minute hold in the same slice; that is a separate gate after focused clock
+verification is green.
+
+### Exact rollback
+
+If the VM remains reachable, restore the profile config, re-enable guest NTP,
+and restart once:
+
+```bash
+/bin/cp -p "$backup" "$config"
+colima --profile "$profile" ssh -- sudo timedatectl set-ntp true
+colima --profile "$profile" restart
+colima --profile "$profile" ssh -- timedatectl show --property=NTP --value
+```
+
+The final command must report `yes`, and `systemd-timesyncd.service` must be
+`enabled` and `active`. If the changed config prevents the VM from starting,
+restore the backup first, start the profile with
+`colima --profile "$profile" start`, then run `timedatectl set-ntp true` and
+verify the same states. Preserve the backup until a later full stabilization
+hold is green.
+
 ## Memory ownership and remediation
 
 The active project stack owned the pressure; there was no unrelated service
@@ -243,6 +400,11 @@ recovered after one Kafka-induced restart.
   every ten seconds; active systemd-timesyncd detects the external step and
   resynchronizes it to NTP. The observed states and source semantics identify
   `DUAL_TIME_AUTHORITY_OSCILLATION`.
+- [x] Design one reversible single-authority remediation. Verify: both
+  persistence surfaces are compared; the owner selected Lima/macOS host
+  authority; exact prechecks, profile change, focused verification, stop
+  condition, and rollback are recorded above. No live change was made, and
+  the current `-2.470866 s` host/NTP offset blocks application.
 - [ ] Perform one authorized remediation, then repeat the same hold.
   Verify: the selected gate is green before traffic. A larger host is required
   when the 1.9 GiB restore threshold cannot be sustained safely; a controlled
@@ -323,10 +485,15 @@ the matching ten-second set-time and external-change resync behavior.
 authorities oscillating the same VM clock. They explain the measured clock
 spread without requiring a separate kind or container clock fault.
 
-**Not established:** no direct macOS-to-NTP measurement was made; no supported
-persistent switch for either Lima host sync or guest timesyncd has been chosen;
-no rollback has been tested; no post-remediation clock sample or hold exists;
-and the etcd/Kafka write correlation does not establish the cause of I/O PSI.
+**Newly established:** a direct query from macOS to the guest's NTP IP measured
+`-2.470866 +/- 0.006419 s`. The owner selected Lima/macOS host authority, and
+the supported persistent surface is a per-profile Colima `mode: system`
+provision that disables guest NTP. The exact rollback is documented above.
+
+**Not established:** the macOS clock has not been corrected, the selected
+change and rollback have not been executed, no post-remediation clock sample
+or hold exists, and the etcd/Kafka write correlation does not establish the
+cause of I/O PSI.
 
 ### Diagnostic retry ledger
 
@@ -337,24 +504,18 @@ and the etcd/Kafka write correlation does not establish the cause of I/O PSI.
 | Base64/LF wrapper probe | quoting stripped Python literals and raised `NameError`; no live action occurred | do not retry this wrapper |
 | Two non-interactive Colima version wrappers | stopped on missing SSH `PATH`, then missing Lima dependency lookup; neither reached the VM | use an explicit proven argv/PATH method only if a future design question truly requires it |
 
-### Exact next atomic slice
+### Selected remediation and next runtime boundary
 
-Name the slice **single-authority clock remediation design**. It is design-only
-and ends before a live change. It must:
+The **single-authority clock remediation design** is complete and selected
+option A. No runtime change has occurred. The current host/NTP offset fails the
+new `<=0.100 s` precheck, so the next separate slice may only correct and
+validate macOS host time with explicit runtime authorization. It must stop
+without editing Colima if the three-sample host/NTP gate remains red.
 
-1. Verify the supported persistence/configuration surface for both options:
-   retain Lima host sync and disable guest NTP, or retain guest NTP and disable
-   Lima host sync.
-2. Select one authority using persistence across Colima restarts, rollback
-   simplicity, host/NTP correctness, and impact on the kind node as criteria.
-3. Record the exact file/service change, prechecks, focused clock verification,
-   failure stop condition, and exact rollback command.
-4. Leave the I/O PSI failure independent and open. Do not combine its
-   remediation with the clock change.
-
-A later separately named runtime slice may apply the selected clock change.
-Only after its focused verification is green may another separately named
-15-minute hold be considered.
+Only a later separately authorized slice may apply the profile provision and
+controlled Colima restart. A 15-minute hold remains a third separate slice
+after focused clock verification is green. The I/O PSI gate stays independent
+and open throughout.
 
 ## Next-session resume
 
@@ -364,6 +525,8 @@ Only after its focused verification is green may another separately named
    then use the operator snapshot above as the current detailed contract.
 3. Preserve the listed untracked paths and all three private evidence paths.
    Do not repeat the passing smoke, either failed hold, or failed wrappers.
-4. Perform only the **single-authority clock remediation design** slice above;
-   do not change time settings, restart/resize Colima, or mix in I/O work.
-5. Keep watcher, Flink, traffic, production acceptance, and push blocked.
+4. Treat the design above as complete. Do not apply it while the macOS/NTP
+   precheck remains red.
+5. The next separate slice requires explicit authorization for macOS host-time
+   correction and validation. Do not edit Colima or mix in I/O work there.
+6. Keep watcher, Flink, traffic, production acceptance, and push blocked.

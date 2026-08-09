@@ -612,3 +612,56 @@ and open throughout.
 5. The next separate slice requires explicit authorization for macOS host-time
    correction and validation. Do not edit Colima or mix in I/O work there.
 6. Keep watcher, Flink, traffic, production acceptance, and push blocked.
+
+## Focused verification failed; option A rolled back — 2026-08-09
+
+This section supersedes the pending focused-verification instructions above.
+Option A is **not accepted**. The exact documented rollback completed, but the
+same five workloads did not recover to their pre-change readiness/restart
+contract.
+
+### Focused verification outcome
+
+- Entry HEAD was `d3029db`. The repaired PowerShell 5.1 helper self-test passed
+  all three gates: 200,000-byte async stdout drain, collection JSON roundtrip,
+  and missing-field classification as `INCOMPLETE`.
+- The read-only run from `2026-08-09T20:16:21Z` through `20:16:26Z` confirmed
+  no active restart process, the applied config and backup hashes, Colima
+  running, guest NTP `no`, timesyncd `inactive/disabled`, guestagent `active`,
+  and the kind node `Ready`.
+- Pod recovery failed on the exact identities. API, bridge, Redis,
+  materializer, and Kafka had restart counts `31`, `31`, `2`, `37`, and `2`;
+  API, bridge, and materializer were not Ready. This exceeded the required
+  baselines `0`, `0`, `1`, `6`, and `0`.
+- The fail-closed stop occurred before any of the 12 diagnostic snapshots or
+  three post-change NTP samples. Raw evidence is under
+  `%TEMP%\colima-clock-focused-verify-v2-20260809T201621Z-f8ce608d`.
+
+### Exact rollback and post-rollback state
+
+- The original profile config was restored from the preserved backup. Both
+  files now have SHA-256
+  `e1abf039d7a563038d28bff9c6124b0344a9b90c1a2ac4b3e7e708351e9599af`.
+- Guest NTP was enabled and exactly one rollback restart ran to exit `0` in
+  `228.6 s`. Post-restart checks showed Colima running, guest NTP `yes`,
+  timesyncd `active/enabled`, and the kind node `Ready`.
+- One bounded 300-second wait for all five exact pods timed out. The final
+  projection showed API, bridge, and materializer in `CrashLoopBackOff` with
+  restart counts `34`, `35`, and `41`; Redis and Kafka were Ready with restart
+  counts `3` and `3`.
+- No cause is assigned from the projection alone. No further restart, pod
+  mutation, traffic, Flink process, watcher, 15-minute hold, production
+  transition, or push occurred. The rollback backup remains preserved.
+
+### Current boundary and next slice
+
+The profile is back on its pre-option-A guest-NTP configuration. No
+post-rollback clock sample was taken, so clock stability is not reclassified;
+the prior failed clock and I/O full-PSI gates remain open. Production remains
+`candidate`.
+
+The next separate atomic slice is bounded read-only workload recovery RCA for
+API, bridge, and materializer `CrashLoopBackOff` plus the Redis/Kafka restart
+deltas. Capture current/previous logs and termination/dependency evidence
+without another restart or workload mutation. Do not resume clock remediation,
+run a hold, arm the watcher, launch Flink/traffic, accept production, or push.

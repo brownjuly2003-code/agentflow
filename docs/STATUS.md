@@ -1,6 +1,6 @@
 # Engineering Status
 
-> Updated: **2026-08-03** (clean-checkout PyFlink OCI build + submission smoke
+> Updated: **2026-08-09** (clean-checkout PyFlink OCI build + submission smoke
 > **PASS**; Flink Kubernetes Operator + Helm golden-topology deploy **PASS**;
 > live Iceberg materialization from `events.validated` **PASS** at the direct
 > topic boundary; full lake-to-serving single-event smoke **PASS** on the
@@ -9,9 +9,12 @@
 > **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** — baseline and delivery passed, exact
 > catch-up failed; the corrected revision-3 recovery later reached
 > **`RUNTIME_HOLD_PASS`** in a 930-second read-only readiness-baselined hold
-> (completed checkpoints `7675→8614`, failed `1→1`, delta `0`); this closes
-> only the hold prerequisite, while canary2 and 4h soak/rollback were **not
-> started**;
+> (completed checkpoints `7675→8614`, failed `1→1`, delta `0`); a later kind
+> residual canary **PASS** unlocked soak attempts; latest identity
+> `golden-4h-soak-rv-20260807-05` producer **PASS** (`1_440_000` delivered,
+> failures `0`) but overall soak **`SOAK_FAIL`** on terminal Flink health
+> before dual-mean verify could PASS — corrected rollback **not started**
+> ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md));
 > external pentest evidence audit **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**
 > (evidence/readiness only; not a pen-test; gate open); GitHub Environment
 > `npm` approval protection **PASS** (one required reviewer; gate closed);
@@ -69,6 +72,13 @@ authorized read-only readiness-baselined checkpoint hold then returned
 (delta `0`). No traffic, runtime mutation, canary2, soak, or rollback occurred
 during that hold — see
 [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md).
+A later kind residual canary **PASS** unlocked soak traffic
+([perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md));
+multiple soak identities were attempted; latest
+`golden-4h-soak-rv-20260807-05` producer **PASS**ed but overall soak
+**`SOAK_FAIL`**ed on terminal Flink health before dual-mean verify could PASS;
+corrected rollback was **not started** — see
+[perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md).
 External security acceptance remains open. Read-only external-pentest
 evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** (intake not present/unclaimed; all seven
@@ -141,7 +151,7 @@ recorded in [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md).
 | CDC and materializers | fail-closed CDC attribution plus separate Iceberg and ClickHouse consumers; 43 CDC and 56 lake/serving component tests pass |
 | SDKs | checked Python/TypeScript capability matrix; TypeScript typecheck and all 50 Vitest tests pass |
 | Lifecycle and query paths | role-aware lifecycle, deterministic partial search status, canonical tenant-scoped session job, and bounded HTTP readiness deadline are covered by targeted tests |
-| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, npm Environment approval protection, and the corrected revision-3 readiness-baselined hold now measured; the hold is `RUNTIME_HOLD_PASS`, but canary2/4h/rollback remain not started; external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
+| Acceptance boundary | clean build/submission smoke, Operator/Helm deploy, direct live Iceberg materialization, full one-event lake-to-serving smoke, checkpoint restore/replay, npm Environment approval protection, and the corrected revision-3 readiness-baselined hold now measured; the hold is `RUNTIME_HOLD_PASS`; kind residual canary later PASS; latest 4h soak identity `-05` is `SOAK_FAIL` (producer PASS, dual-mean ABORT, corrected rollback not started); external pen-test evidence audit `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` (not a pen-test; gate open) |
 
 ## Bridge write-path throughput — drain ceiling measured
 
@@ -212,25 +222,32 @@ program.
    ([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md));
    and isolated checkpoint restore/replay is **PASS**
    ([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
-   Fresh soak/rollback remains open: its latest canary is
+   Fresh soak/rollback remains open. Historical canary1 is
    **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** in
    [perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)
-   (baseline and 2000/2000 delivery passed; exact catch-up failed; 4h
-   soak/rollback **not started**). The first recovery preflight was
+   (baseline and 2000/2000 delivery passed; exact catch-up failed). The first
+   recovery preflight was
    **`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**, but a later controlled
    cutover deployed the exact corrected revision-3 pack. Its subsequent
    930-second read-only readiness-baselined checkpoint hold is
    **`RUNTIME_HOLD_PASS`** with completed checkpoints `7675→8614` and failed
    checkpoints `1→1`
    ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md)).
-   This closes only the hold prerequisite. Canary2 remains the next traffic
-   gate; the 4h soak and corrected rollback rehearsal remain separate and were
-   not started. Historical revisions 1 and 2 are not rollback targets for the
-   corrected runtime; the prepared recovery target is revision 3. Old 4h
-   evidence is advisory only.
+   A later kind residual canary **PASS** unlocked soak traffic
+   ([perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md)).
+   Multiple soak identities were then attempted; latest
+   `golden-4h-soak-rv-20260807-05` producer completed PASS (`1_440_000`
+   delivered, failures `0`) but the soak gate failed closed with
+   **`SOAK_FAIL`** on terminal Flink health before dual-mean verify could
+   PASS; corrected rollback was **not started** — see
+   [perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md).
+   Historical revisions 1 and 2 are not rollback targets for the corrected
+   runtime; the prepared recovery target is revision 3. Old 4h evidence is
+   advisory only.
    Exactly two production-acceptance gates remain overall: (1) fresh
-   soak+rollback (readiness-baselined hold `RUNTIME_HOLD_PASS`; canary2, 4h
-   soak, and corrected rollback not started); (2) external pen-test
+   soak+rollback (readiness-baselined hold `RUNTIME_HOLD_PASS`; kind residual
+   canary PASS; latest soak `SOAK_FAIL`; corrected rollback not started;
+   combined gate open); (2) external pen-test
    (**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at
    `2026-08-01T17:11:58Z` —
    [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md);
@@ -238,7 +255,7 @@ program.
    seven criteria fail). The npm approval gate is **PASS**
    ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
    Current tracked evidence leaves the two remaining gates dependent on a
-   separately authorized canary2 followed by the 4h soak/corrected rollback,
+   newly identified soak/rollback run with retained Flink exception evidence,
    or an external pentest owner. Do not
    procure, simulate, or perform a pen-test from docs work.
    Acceptance-scaffold Kafka reproducibility

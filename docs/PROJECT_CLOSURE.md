@@ -48,14 +48,16 @@ Checkpoint restore/replay is also measured with exact no-duplicate assertions
 after a savepoint restore
 ([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
 The remaining acceptance program includes fresh four-hour golden-topology soak
-plus rollback rehearsal (latest canary
+plus rollback rehearsal (historical canary1
 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`** after zero baseline and `2000/2000`
 delivery; corrected revision 3 later reached **`RUNTIME_HOLD_PASS`** in a
 930-second read-only readiness-baselined checkpoint hold with completed
-checkpoints `7675→8614` and failed `1→1`; this closes only the hold
-prerequisite, while canary2 and 4h soak/corrected rollback remain **not
-started** — see
-[perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md)),
+checkpoints `7675→8614` and failed `1→1` — see
+[perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md);
+kind residual canary later **PASS**; latest soak identity `-05` producer
+**PASS** but overall **`SOAK_FAIL`** on terminal Flink health before dual-mean
+verify could PASS; corrected rollback **not started** — see
+[perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)),
 and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
@@ -130,18 +132,20 @@ Push, PR mutations and release actions require explicit owner authorization.
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
 - Production status remains `candidate`; exactly two production gates remain
-  open: fresh soak/rollback (latest canary
+  open: fresh soak/rollback (historical canary1
   **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; subsequent readiness-baselined hold
-  **`RUNTIME_HOLD_PASS`**; canary2/4h/corrected rollback **not started**),
+  **`RUNTIME_HOLD_PASS`**; kind residual canary **PASS**; latest soak `-05`
+  **`SOAK_FAIL`** after producer PASS; corrected rollback **not started** —
+  [perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
   The npm approval gate is **PASS**
   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-  Current tracked evidence leaves the two remaining gates dependent on exact
-  canary2 before the 4h soak/corrected rollback, or third-party pentest
-  engagement/evidence.
+  Current tracked evidence leaves the two remaining gates dependent on a
+  newly identified soak/rollback run with retained Flink exception evidence,
+  or third-party pentest engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты

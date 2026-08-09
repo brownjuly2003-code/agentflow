@@ -8,7 +8,7 @@ provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
 registry links and upload evidence.
 
-**Golden-topology status (2026-08-03)**: production candidate, not production
+**Golden-topology status (2026-08-09)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
 clean-checkout OCI build + real Flink job submission smoke is **PASS**
 ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
@@ -28,13 +28,12 @@ Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
 is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
 production Kafka claim). A later isolated golden soak canary reached zero
 baseline **PASS** and producer delivery `2000/2000`, then failed closed at
-**`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; the 4h producer, observer, and rollback
-were **not started**
+**`FAIL_CANARY_CATCHUP_RATE_FLOOR`**
 ([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
 A subsequent preflight found clean rev1/rev2 already deployed with corrected
 interval/CPU, but returned **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**:
 runtime source `ed03fc47` omits effective checkpoint min-pause and still
-checkpoints at ~30 s. Canary2 was not started.
+checkpoints at ~30 s.
 Tracked commit `78742d0` and its verified pack now add min-pause `0 ms` plus a
 default-preserving anti-replay `group-offsets` cutover. The authorized apply
 preflight first stopped before remote mutation at
@@ -44,9 +43,16 @@ controlled cutover deployed corrected revision 3. Its separately authorized
 read-only readiness-baselined checkpoint hold returned
 **`RUNTIME_HOLD_PASS`** after `930 s`: completed checkpoints advanced
 `7675→8614` (`+939`, required `837`) and failed checkpoints remained `1`
-(delta `0`). This closes only the hold prerequisite; no traffic, canary2,
-four-hour soak, or rollback ran — see
+(delta `0`). That hold closed only its prerequisite — see
 [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md).
+A later kind residual canary **PASS** unlocked soak traffic
+([perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md)).
+Multiple soak identities were attempted; latest
+`golden-4h-soak-rv-20260807-05` producer **PASS**ed (`1_440_000` delivered,
+failures `0`) but overall soak **`SOAK_FAIL`**ed on terminal Flink health
+before dual-mean verify could PASS; corrected Helm rollback was **not
+started**
+([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
 External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
@@ -188,10 +194,9 @@ untracked prompts.
 1. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
    (**1_440_000** events) through the full post-Iceberg path with exact
    lake/serving counts, plus a corrected Helm rollback rehearsal whose prepared
-   recovery target is revision **3** (never historical revision 1 or 2). The
-   latest canary reached baseline and exact producer
-   delivery, then returned **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; 4h
-   soak/rollback was **not started**
+   recovery target is revision **3** (never historical revision 1 or 2).
+   Historical canary1 reached baseline and exact producer delivery, then
+   returned **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**
    ([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
    The earlier
    [resource preflight](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
@@ -199,8 +204,16 @@ untracked prompts.
    anti-replay pack is now deployed as revision 3, and its readiness-baselined
    hold is **`RUNTIME_HOLD_PASS`**
    ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md)).
-   Require a separately authorized canary2 PASS before the four-hour producer;
-   the soak and corrected rollback rehearsal remain unexecuted.
+   A later kind residual canary **PASS** unlocked soak attempts
+   ([perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md)).
+   Latest soak identity `golden-4h-soak-rv-20260807-05` completed the
+   producer (**PASS**, `1_440_000` delivered, failures `0`) but failed the
+   soak gate with **`SOAK_FAIL`** on terminal Flink health before dual-mean
+   verify could PASS; corrected rollback was **not started**
+   ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+   The combined soak/rollback acceptance gate remains open. A future newly
+   identified soak run should retain JobManager/TaskManager logs and Flink
+   exception-history evidence before retry.
    The existing 2026-07-19 soak predates the Iceberg materializer and is
    advisory only;
 2. an external penetration-test report and remediation/retest evidence.
@@ -235,8 +248,9 @@ is `false`, so this is approval protection but not a four-eyes claim. See
 The prior
 [absence audit](operations/npm-environment-approval-blocker-2026-08-01.md)
 remains historical evidence, not current state. Current tracked evidence leaves
-the two remaining gates dependent on canary2 followed by the four-hour
-soak/corrected rollback, or an external pentest owner.
+the two remaining gates dependent on a newly identified soak plus corrected
+rollback after retained Flink exception evidence, or an external pentest
+owner.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

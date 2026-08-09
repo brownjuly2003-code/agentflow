@@ -17,6 +17,7 @@ required_evidence = [
     "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md",
     "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md",
     "docs/perf/golden-4h-soak-start-2026-08-07.md",
+    "docs/perf/golden-4h-soak-05-failure-2026-08-08.md",
 ]
 
 [production]
@@ -37,8 +38,8 @@ verified_full_lake_to_serving_smoke = "docs/perf/full-lake-to-serving-e2e-2026-0
 verified_checkpoint_restore_replay = "docs/perf/checkpoint-restore-replay-2026-08-02.md"
 verified_npm_environment_approval = "docs/operations/npm-environment-approval-2026-08-03.md"
 verified_ready_baselined_checkpoint_hold = "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md"
-latest_soak_attempt = "docs/perf/golden-4h-soak-start-2026-08-07.md"
-latest_soak_attempt_result = "running-after-kind-residual-canary-pass"
+latest_soak_attempt = "docs/perf/golden-4h-soak-05-failure-2026-08-08.md"
+latest_soak_attempt_result = "soak-fail-unresolved-flink-terminal-failure"
 latest_kind_residual_canary = "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md"
 latest_kind_residual_canary_result = "pass-residual-7p51s-budget-20s"
 latest_soak_recovery_evidence = "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md"

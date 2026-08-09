@@ -1,4 +1,10 @@
-# Golden 4h soak — START (in progress)
+# Golden 4h soak — START (historical snapshot: identity `-01`)
+
+> **Historical start snapshot only.** This document records the `-01` start
+> and mid-run `SOAK_RUNNING` state. It is **not** the latest soak outcome.
+> Latest terminal evidence for identity `-05`:
+> [golden-4h-soak-05-failure-2026-08-08.md](golden-4h-soak-05-failure-2026-08-08.md)
+> (`SOAK_FAIL`; producer PASS; dual-mean ABORT; corrected rollback not started).
 
 - **Start (UTC):** `2026-08-07T12:21:52Z` (preflight) / producer ~`12:22:28Z`
 - **Result (this document):** **`SOAK_RUNNING`** — not PASS
@@ -13,7 +19,9 @@
 
 This document records that a full soak was **started** after a kind residual
 canary PASS. It does **not** claim soak PASS, mean≥90, rollback PASS, or
-production acceptance. `production.status` remains **`candidate`**.
+production acceptance. `production.status` remains **`candidate`**. For the
+later `-05` terminal fail and claim boundary, see
+[golden-4h-soak-05-failure-2026-08-08.md](golden-4h-soak-05-failure-2026-08-08.md).
 
 Untracked runtime packet:
 `.codex-grok-tasks/golden-4h-soak-runtime-20260807-01/`.
@@ -40,10 +48,11 @@ Mac watchdog still waiting for producer Complete.
 Full next-session handoff (untracked):
 `.codex-grok-tasks/session-close-20260807-soak-running/NEXT_SESSION.md`.
 
-## Next
+## Next (historical at `-01` start; superseded)
 
-1. Wait producer Complete (~**16:22Z** UTC).  
-2. Watchdog applies soak verify under `dual_mean_90` → writes `result-final.txt`.  
-3. On PASS: corrected rollback to Helm revision **3** (never rev 1/2).  
-4. Publish final soak/rollback evidence and update claims only after outcomes.  
-5. Do **not** kill soak Jobs without explicit abort; do **not** claim PASS early.
+At the time of this `-01` snapshot the planned path was: wait for producer
+Complete, apply `dual_mean_90` verify, then corrected rollback to Helm
+revision **3** only on PASS. Later identities `-01`…`-05` were attempted;
+latest terminal outcome is **`SOAK_FAIL`** for `-05` — see
+[golden-4h-soak-05-failure-2026-08-08.md](golden-4h-soak-05-failure-2026-08-08.md).
+Do **not** treat this start document as soak PASS or as the current outcome.

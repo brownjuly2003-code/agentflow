@@ -906,3 +906,35 @@ ClickHouse volume and MinIO/Iceberg data, distinguish one-shot `minio-init`
 from long-running services, require health before workload verification, and
 define rollback/stop conditions. API WAL, clock, idle-I/O, traffic, Flink,
 watcher, hold, production transition, and push remain separate boundaries.
+
+## External dependency recovery gate — 2026-08-09
+
+The local design/test boundary is complete. The implementation is
+`scripts/recover_external_dependencies.py`; the operator contract is
+`docs/operations/external-dependency-recovery-gate.md`.
+
+The CLI defaults to a read-only remote preflight. Live recovery requires both
+`--execute` and the exact acknowledgement
+`COLIMA_RESTART_DEPENDENCY_LIFECYCLE_GAP`. Before starting anything, the gate
+requires the recorded Compose services and labels, the existing ClickHouse
+named volume and mount, the existing MinIO container layer, the successful
+exited `minio-init`, and the running kind control-plane.
+
+The live path, which was not run in this slice, uses only scoped
+`docker compose start` operations. It waits for ClickHouse and MinIO health,
+runs `minio-init` as a one-shot to `exited (0)`, starts Iceberg REST, and then
+probes all three endpoints from the kind control-plane. A failure stops only
+services started by that invocation in reverse order, without container or
+volume removal. Pre-existing healthy services remain running.
+
+Focused local tests cover ordering, preflight failure before mutation,
+one-shot failure, scoped rollback, preservation of pre-existing services, and
+the ban on create/recreate/delete command shapes. No SSH, Docker, Compose,
+Colima, or Kubernetes command was executed during implementation or testing.
+
+### Exact next safe boundary
+
+Run the default read-only preflight in a separate slice and preserve its JSON
+result. A live `--execute` run remains a later explicit runtime mutation.
+Workload recovery, the API WAL failure, clock and idle-I/O gates, traffic,
+Flink, watcher, hold, production transition, and push remain separate.

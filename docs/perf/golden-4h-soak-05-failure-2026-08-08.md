@@ -116,6 +116,8 @@ not authorization to rerun.
 
 ## Related historical surfaces
 
+- Cross-run causal analysis for consumed attempts `-01` through `-05`:
+  [golden-4h-soak-failures-01-05-rca-2026-08-09.md](golden-4h-soak-failures-01-05-rca-2026-08-09.md)
 - Kind residual canary prerequisite PASS:
   [golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md)
 - Historical `-01` start snapshot (superseded as current soak outcome):

@@ -68,6 +68,8 @@ spec:
               value: PLAINTEXT
             - name: KAFKA_LOG_DIRS
               value: /var/lib/kafka/data
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xms256m -Xmx512m"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR

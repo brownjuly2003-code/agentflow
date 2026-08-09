@@ -123,6 +123,30 @@ def test_generated_commands_are_read_only() -> None:
         assert "kubectl" not in spec.command
 
 
+def test_guest_checks_bound_clock_and_runtime_signal_history() -> None:
+    module = _load_module()
+    config = module.DiagnosticConfig(
+        ssh_host="deproject-mac",
+        colima_profile="agentflow-fc5-7113966",
+        timeout_seconds=15,
+    )
+
+    checks = {
+        spec.name: spec.command
+        for spec in module.build_guest_checks(
+            config,
+            "agentflow-reverify-ed03fc47-control-plane",
+        )
+    }
+
+    assert {"clock_pair", "clock_jumps", "kernel_stalls", "containerd_errors"} <= checks.keys()
+    assert "host_epoch=" in checks["clock_pair"]
+    assert "guest_epoch=" in checks["clock_pair"]
+    for name in ("clock_jumps", "kernel_stalls", "containerd_errors"):
+        assert "--since '48 hours ago'" in checks[name]
+        assert "tail -n 100" in checks[name]
+
+
 def test_unsafe_profile_and_node_names_are_rejected() -> None:
     module = _load_module()
 

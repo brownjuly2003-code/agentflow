@@ -16,6 +16,7 @@ MANIFEST_PATH = PROJECT_ROOT / "k8s" / "acceptance" / "kafka-kraft.yaml"
 
 REQUIRED_TOPICS = ("orders.raw", "events.validated", "events.deadletter")
 REQUIRED_IMAGE = "confluentinc/cp-kafka:7.7.0"
+EXPECTED_HEAP_OPTS = "-Xms256m -Xmx512m"
 CONTROLLER_VOTERS = "1@127.0.0.1:29093"
 ACCEPTANCE_NAMESPACE = "agentflow"
 
@@ -87,6 +88,14 @@ def test_acceptance_kafka_scaffold_controller_voters_and_inter_broker() -> None:
     assert env["KAFKA_CONTROLLER_QUORUM_VOTERS"] == CONTROLLER_VOTERS
     assert env["KAFKA_INTER_BROKER_LISTENER_NAME"] == "PLAINTEXT"
     assert "kafka:29093" not in env["KAFKA_CONTROLLER_QUORUM_VOTERS"]
+
+
+def test_acceptance_kafka_scaffold_caps_heap_for_colima() -> None:
+    dep = _by_kind("Deployment")[0]
+    container = dep["spec"]["template"]["spec"]["containers"][0]
+    env = _env_map(container)
+
+    assert env["KAFKA_HEAP_OPTS"] == EXPECTED_HEAP_OPTS
 
 
 def test_acceptance_kafka_scaffold_service_exposes_broker_and_controller_ports() -> None:

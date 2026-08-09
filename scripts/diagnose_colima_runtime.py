@@ -177,8 +177,15 @@ def build_guest_checks(config: DiagnosticConfig, node_name: str) -> tuple[CheckS
     if not SAFE_IDENTIFIER.fullmatch(node_name):
         raise ValueError(f"unsafe kind node: {node_name!r}")
     prefix = f"{_docker_environment(config)} docker exec {node_name}"
+    journal = f"{prefix} journalctl -b --since '48 hours ago' --no-pager -o short-iso"
     return (
         CheckSpec("guest_time", f"{prefix} date -u +%s"),
+        CheckSpec(
+            "clock_pair",
+            "host_epoch=$(date -u +%s); "
+            + f"guest_epoch=$({prefix} date -u +%s); "
+            + 'printf \'host_epoch=%s guest_epoch=%s\\n\' "$host_epoch" "$guest_epoch"',
+        ),
         CheckSpec("guest_uptime", f"{prefix} cat /proc/uptime"),
         CheckSpec(
             "guest_memory",
@@ -196,6 +203,23 @@ def build_guest_checks(config: DiagnosticConfig, node_name: str) -> tuple[CheckS
             "containerd_metadata",
             f"{prefix} systemctl show containerd -p ActiveEnterTimestamp -p NRestarts "
             + "--no-pager",
+        ),
+        CheckSpec(
+            "clock_jumps",
+            f"{journal} | grep -F 'Time jumped backwards' | tail -n 100",
+        ),
+        CheckSpec(
+            "kernel_stalls",
+            f"{prefix} journalctl -k -b --since '48 hours ago' --no-pager "
+            + "-o short-iso | grep -E -i "
+            + "'blocked for more than|I/O error|oom|out of memory|overlay.*"
+            + "(sync|writeback|stall)' | tail -n 100",
+        ),
+        CheckSpec(
+            "containerd_errors",
+            f"{prefix} journalctl -u containerd -b --since '48 hours ago' --no-pager "
+            + "-o short-iso | grep -E -i "
+            + "'error|timeout|deadline|blocked|failed' | tail -n 100",
         ),
     )
 

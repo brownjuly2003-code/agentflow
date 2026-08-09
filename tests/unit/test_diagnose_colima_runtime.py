@@ -140,11 +140,46 @@ def test_guest_checks_bound_clock_and_runtime_signal_history() -> None:
     }
 
     assert {"clock_pair", "clock_jumps", "kernel_stalls", "containerd_errors"} <= checks.keys()
-    assert "host_epoch=" in checks["clock_pair"]
-    assert "guest_epoch=" in checks["clock_pair"]
+    assert "host_before_ns=" in checks["clock_pair"]
+    assert "guest_ns=" in checks["clock_pair"]
+    assert "host_after_ns=" in checks["clock_pair"]
+    assert "offset_ns=" in checks["clock_pair"]
+    assert "round_trip_ns=" in checks["clock_pair"]
+    assert "time.time_ns()" in checks["clock_pair"]
+    assert "date -u +%s%N" in checks["clock_pair"]
+    assert "host_epoch=" not in checks["clock_pair"]
     for name in ("clock_jumps", "kernel_stalls", "containerd_errors"):
         assert "--since '48 hours ago'" in checks[name]
         assert "tail -n 100" in checks[name]
+
+
+def test_container_io_inventory_uses_exact_pid_and_supports_cgroup_modes() -> None:
+    module = _load_module()
+    config = module.DiagnosticConfig(
+        ssh_host="deproject-mac",
+        colima_profile="agentflow-fc5-7113966",
+        timeout_seconds=15,
+    )
+
+    checks = {
+        spec.name: spec.command
+        for spec in module.build_guest_checks(
+            config,
+            "agentflow-reverify-ed03fc47-control-plane",
+        )
+    }
+    command = checks["container_io_inventory"]
+
+    assert "crictl ps -q" in command
+    assert "-o go-template" in command
+    assert "{{.info.pid}}" in command
+    assert "{{.status.metadata.name}}" in command
+    assert "io.kubernetes.pod.name" in command
+    assert "cgroup2fs" in command
+    assert "/io.stat" in command
+    assert "blkio.throttle.io_service_bytes_recursive" in command
+    assert "blkio.throttle.io_serviced_recursive" in command
+    assert "container_id=%s" in command
 
 
 def test_unsafe_profile_and_node_names_are_rejected() -> None:

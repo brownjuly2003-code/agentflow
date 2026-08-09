@@ -23,6 +23,7 @@ remediation measurements were added after the scoped Kafka rollout:
 | Clock | five samples held guest-host delta at exactly -2 seconds |
 | Recent journal | bounded 48-hour queries returned no new clock-jump, kernel-stall, or containerd-error lines |
 | 15-minute idle hold | **FAIL** on clock-delta spread and recurring I/O full PSI; traffic remained blocked |
+| Diagnostic instrumentation | bracketed nanosecond clock plus cgroup v1/v2 CRI I/O ownership implemented and locally verified |
 
 The empty recent-journal queries do not invalidate the historical soak RCA;
 older failure evidence remains authoritative. The memory gate is green after
@@ -66,6 +67,31 @@ transition, or push was started. The next separate slice must make the
 clock-pair and cgroup-mode-aware I/O owner diagnostics reliable before another
 hold is attempted.
 
+## Diagnostic instrumentation follow-up — 2026-08-09
+
+One owner-authorized, read-only capability probe established the runtime
+interfaces before implementation:
+
+- macOS host `python3 time.time_ns()` and guest `date +%s%N` both returned
+  nanosecond timestamps; the bracketed sample round trip was `259,220,000 ns`.
+- The guest uses `cgroup2fs`; PID 1 belongs to `/init.scope`.
+- `crictl inspect` supports `go-template`. Its JSON contained a nested PID `1`
+  before the actual runtime PID `84724`, proving why the earlier first-match
+  `sed` parser selected the wrong process and returned `0/19` owners.
+
+`scripts/diagnose_colima_runtime.py` now brackets the guest timestamp with
+host nanosecond samples and emits `offset_ns` plus `round_trip_ns`. Its new
+`container_io_inventory` check reads the exact `.info.pid`, pod, and container
+name through `go-template`, then reports cumulative read/write bytes and I/O
+counts from cgroup v2 `io.stat` or cgroup v1 `blkio` counters. Missing or
+unsupported evidence fails the check instead of producing a false complete
+inventory.
+
+TDD RED was `2 failed, 4 passed`; focused GREEN was `6 passed in 0.82s`.
+Ruff check, Ruff format check, Python compilation, CLI help smoke, and diff
+checks passed. This implementation slice did not run the updated runner against
+the live stand and did not repeat the 15-minute hold.
+
 ## Memory ownership and remediation
 
 The active project stack owned the pressure; there was no unrelated service
@@ -102,12 +128,18 @@ recovered after one Kafka-induced restart.
   PSI returns to 0 during the idle hold; `MemAvailable>=1.5 GiB` for a soak
   preflight or `>=1.9 GiB` for dual-Flink restore/replay. Disk and memory
   passed; recurring non-zero I/O full PSI failed the stability gate.
+- [x] Implement precise clock and cgroup-aware I/O owner diagnostics.
+  Verify: capability evidence identifies the PID-selection root cause; TDD RED
+  fails both new contracts; focused tests, lint, format, compile, and help
+  smoke pass after implementation.
 - [ ] If the hold fails, inventory only the failing surface before mutation.
   Verify: I/O failure has a bounded Docker/storage owner list; memory failure
   has a measured deficit; clock failure has timestamped host/guest samples.
   Do not prune, restart, resize, or stop protected workloads during inventory.
   The clock samples are preserved, but the first bounded I/O sampler could
-  not map the 19 CRI containers to usable cgroup statistics.
+  not map the 19 CRI containers to usable cgroup statistics. Corrected
+  instrumentation is locally verified; fresh live owner output remains
+  pending.
 - [ ] Perform one authorized remediation, then repeat the same hold.
   Verify: the selected gate is green before traffic. A larger host is required
   when the 1.9 GiB restore threshold cannot be sustained safely; a controlled
@@ -137,8 +169,10 @@ production transition, or push.
    `docs/SESSION_HANDOFF.md`; they supersede older capacity-blocked summaries.
 2. Treat `e9f76f9` as the implementation baseline. The following docs-only
    handoff commit does not change the runtime or product code.
-3. Treat the `2026-08-09` hold as failed; do not raw-retry it. First implement
-   and test precise clock-pair sampling plus cgroup-mode-aware I/O ownership.
-4. Only after a later complete hold is green, arm the watcher in a new
-   host-persistent directory; only then resume the named full-process launch
+3. Treat the `2026-08-09` hold as failed; do not raw-retry it. Run one fresh
+   read-only smoke of the updated diagnostic runner to a new private temp path.
+   Require `status=complete`, precise clock fields, and non-empty CRI I/O rows.
+4. In a later runtime slice, run one fresh complete hold and evaluate clock
+   offset spread plus per-owner I/O deltas. Only after that hold is green, arm
+   the watcher in a new host-persistent directory and resume the named process
    with a fresh identity.

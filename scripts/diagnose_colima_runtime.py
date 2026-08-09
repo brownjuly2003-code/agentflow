@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -144,6 +145,116 @@ def _docker_environment(config: DiagnosticConfig) -> str:
     return f"PATH={REMOTE_PATH} DOCKER_HOST={socket}"
 
 
+def _precise_clock_command(prefix: str) -> str:
+    host_time_ns = f"PATH={REMOTE_PATH} python3 -c 'import time; print(time.time_ns())'"
+    return (
+        f"host_before_ns=$({host_time_ns}); "
+        + f"guest_ns=$({prefix} date -u +%s%N); "
+        + f"host_after_ns=$({host_time_ns}); "
+        + "host_midpoint_ns=$(((host_before_ns + host_after_ns) / 2)); "
+        + "offset_ns=$((guest_ns - host_midpoint_ns)); "
+        + "round_trip_ns=$((host_after_ns - host_before_ns)); "
+        + "printf 'host_before_ns=%s guest_ns=%s host_after_ns=%s "
+        + "offset_ns=%s round_trip_ns=%s\\n' "
+        + '"$host_before_ns" "$guest_ns" "$host_after_ns" '
+        + '"$offset_ns" "$round_trip_ns"'
+    )
+
+
+def _container_io_inventory_command(prefix: str) -> str:
+    script = """\
+set -eu
+cgroup_fs=$(stat -fc %T /sys/fs/cgroup)
+container_ids=$(crictl ps -q | sort)
+[ -n "$container_ids" ] || { printf 'no running CRI containers\\n' >&2; exit 2; }
+pid_and_name_template='{{.info.pid}} {{.status.metadata.name}}'
+pod_template='{{index .status.labels "io.kubernetes.pod.name"}}'
+inspect_template="$pid_and_name_template $pod_template"
+output_format='container_id=%s\\tpod=%s\\tcontainer=%s\\t'
+output_format="$output_format"'cgroup_mode=%s\\tread_bytes=%s\\twrite_bytes=%s\\t'
+output_format="$output_format"'read_ios=%s\\twrite_ios=%s\\n'
+for container_id in $container_ids; do
+  details=$(crictl inspect -o go-template --template "$inspect_template" "$container_id")
+  set -- $details
+  if [ "$#" -ne 3 ]; then
+    printf 'invalid inspect metadata for %s\\n' "$container_id" >&2
+    exit 2
+  fi
+  proc_id=$1
+  container_name=$2
+  pod_name=$3
+  case "$proc_id" in
+    ''|*[!0-9]*) printf 'invalid runtime pid for %s\\n' "$container_id" >&2; exit 2 ;;
+  esac
+  if [ ! -r "/proc/$proc_id/cgroup" ]; then
+    printf 'missing cgroup for %s\\n' "$container_id" >&2
+    exit 2
+  fi
+  case "$cgroup_fs" in
+    cgroup2fs)
+      cgroup_mode=v2
+      cgroup_path=$(awk -F: '$1 == "0" { print $3; exit }' "/proc/$proc_id/cgroup")
+      io_path="/sys/fs/cgroup${cgroup_path}/io.stat"
+      if [ ! -r "$io_path" ]; then
+        printf 'missing v2 io.stat for %s\\n' "$container_id" >&2
+        exit 2
+      fi
+      set -- $(awk '{
+        for (field = 2; field <= NF; field++) {
+          split($field, pair, "=")
+          if (pair[1] == "rbytes") read_bytes += pair[2]
+          else if (pair[1] == "wbytes") write_bytes += pair[2]
+          else if (pair[1] == "rios") read_ios += pair[2]
+          else if (pair[1] == "wios") write_ios += pair[2]
+        }
+      } END {
+        printf "%.0f %.0f %.0f %.0f\\n", read_bytes, write_bytes, read_ios, write_ios
+      }' "$io_path")
+      read_bytes=$1
+      write_bytes=$2
+      read_ios=$3
+      write_ios=$4
+      ;;
+    tmpfs)
+      cgroup_mode=v1
+      cgroup_path=$(awk -F: '$2 ~ /(^|,)blkio(,|$)/ { print $3; exit }' "/proc/$proc_id/cgroup")
+      bytes_path="/sys/fs/cgroup/blkio${cgroup_path}/blkio.throttle.io_service_bytes_recursive"
+      ios_path="/sys/fs/cgroup/blkio${cgroup_path}/blkio.throttle.io_serviced_recursive"
+      if [ ! -r "$bytes_path" ] || [ ! -r "$ios_path" ]; then
+        bytes_path="/sys/fs/cgroup/blkio${cgroup_path}/blkio.io_service_bytes_recursive"
+        ios_path="/sys/fs/cgroup/blkio${cgroup_path}/blkio.io_serviced_recursive"
+      fi
+      if [ ! -r "$bytes_path" ] || [ ! -r "$ios_path" ]; then
+        printf 'missing v1 blkio counters for %s\\n' "$container_id" >&2
+        exit 2
+      fi
+      read_bytes=$(awk '
+        $2 == "Read" { total += $3 }
+        END { printf "%.0f\\n", total + 0 }
+      ' "$bytes_path")
+      write_bytes=$(awk '
+        $2 == "Write" { total += $3 }
+        END { printf "%.0f\\n", total + 0 }
+      ' "$bytes_path")
+      read_ios=$(awk '
+        $2 == "Read" { total += $3 }
+        END { printf "%.0f\\n", total + 0 }
+      ' "$ios_path")
+      write_ios=$(awk '
+        $2 == "Write" { total += $3 }
+        END { printf "%.0f\\n", total + 0 }
+      ' "$ios_path")
+      ;;
+    *) printf 'unsupported cgroup filesystem: %s\\n' "$cgroup_fs" >&2; exit 2 ;;
+  esac
+  printf "$output_format" \
+    "$container_id" "$pod_name" "$container_name" "$cgroup_mode" \
+    "$read_bytes" "$write_bytes" "$read_ios" "$write_ios"
+done
+"""
+    return f"{prefix} sh -c {shlex.quote(script)}"
+
+
 def build_base_checks(config: DiagnosticConfig) -> tuple[CheckSpec, ...]:
     """Return host and Docker checks that cannot mutate the runtime."""
 
@@ -180,12 +291,7 @@ def build_guest_checks(config: DiagnosticConfig, node_name: str) -> tuple[CheckS
     journal = f"{prefix} journalctl -b --since '48 hours ago' --no-pager -o short-iso"
     return (
         CheckSpec("guest_time", f"{prefix} date -u +%s"),
-        CheckSpec(
-            "clock_pair",
-            "host_epoch=$(date -u +%s); "
-            + f"guest_epoch=$({prefix} date -u +%s); "
-            + 'printf \'host_epoch=%s guest_epoch=%s\\n\' "$host_epoch" "$guest_epoch"',
-        ),
+        CheckSpec("clock_pair", _precise_clock_command(prefix)),
         CheckSpec("guest_uptime", f"{prefix} cat /proc/uptime"),
         CheckSpec(
             "guest_memory",
@@ -204,6 +310,7 @@ def build_guest_checks(config: DiagnosticConfig, node_name: str) -> tuple[CheckS
             f"{prefix} systemctl show containerd -p ActiveEnterTimestamp -p NRestarts "
             + "--no-pager",
         ),
+        CheckSpec("container_io_inventory", _container_io_inventory_command(prefix)),
         CheckSpec(
             "clock_jumps",
             f"{journal} | grep -F 'Time jumped backwards' | tail -n 100",

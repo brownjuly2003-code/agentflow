@@ -20,7 +20,7 @@ remediation measurements were added after the scoped Kafka rollout:
 | Disk | latest hold: 60% used; 31 GiB free |
 | I/O pressure | latest hold: `full avg10=0..0.23`, non-zero in 6/15 samples |
 | containerd | active since 2026-08-02; `NRestarts=0` |
-| Clock | latest precise offset `-2447.147103..+38.284756 ms`; spread `2485.431859 ms` |
+| Clock | latest precise offset `-2447.147103..+38.284756 ms`; spread `2485.431859 ms`; dual Lima/systemd time authorities isolated |
 | Recent journal | bounded 48-hour queries returned no new clock-jump, kernel-stall, or containerd-error lines |
 | 15-minute idle hold | latest instrumented repeat **FAIL** on clock-offset spread and recurring I/O full PSI; traffic remains blocked |
 | Diagnostic instrumentation | live-verified bracketed clock plus 19 stable cgroup v2 CRI I/O owners |
@@ -142,6 +142,56 @@ The fail-closed verdict is
 No remediation, retry, Flink process, watcher, traffic, restart, cleanup,
 resize, production transition, or push followed the failed hold.
 
+## Clock synchronization root cause — 2026-08-09
+
+A bounded read-only follow-up isolated the clock failure without changing time
+settings or restarting Colima:
+
+- The Colima VM and kind node have the same boot ID
+  (`2b4f1010-adc0-4eb3-8318-d37d57ada761`), the same time namespace
+  (`time:[4026531834]`), zero time-namespace offsets, and the same `hpet`
+  clocksource. The kind node therefore has no independent clock to remediate.
+- Colima `0.10.1` is using Lima `2.1.1`. During the exact hold window,
+  `lima-guestagent` logged a successful host-time adjustment about every ten
+  seconds, almost always from a guest-minus-host drift near `-2.45 s`.
+  Both services stayed active; `systemd-timesyncd` reported `NRestarts=0`.
+- `systemd-timesyncd` was also active, NTP-synchronized to
+  `185.125.190.58 (ntp.ubuntu.com)`, and reported `Offset=-2.465089 s`,
+  `Delay=7.130 ms`, `Jitter=6.401 ms`, and `PacketCount=56908`. Its service
+  lifetime makes that packet count approximately one request per 11 seconds,
+  consistent with the external ten-second clock-change cadence rather than
+  the displayed 32-second normal poll interval alone.
+- The Lima `2.1.1` host agent calls `SyncTime` every ten seconds with
+  `time.Now()`; the guest agent measures `guest_now - host_time` and, outside
+  a 100 ms threshold, calls `SetSystemTime(host_time)`. The systemd `v255`
+  implementation watches for an external clock change and immediately sends
+  a new NTP request. Its displayed offset is the signed NTP correction and is
+  passed to `clock_adjtime`; a negative value therefore moves the local guest
+  clock backward toward NTP.
+- No matching macOS sleep/wake, `timed`, or `powerd` event and no
+  info-level timesyncd event occurred in the hold window. Their absence does
+  not contradict the loop: the normal external-change resync path is logged
+  only at debug level in systemd.
+
+The bounded root-cause verdict is **`DUAL_TIME_AUTHORITY_OSCILLATION`**: Lima
+periodically advances the guest to the macOS host clock, while
+`systemd-timesyncd` observes that external step, immediately queries NTP, and
+returns the guest roughly 2.45 seconds backward. This explains both stable
+states in the hold: sample 03 caught the post-Lima state near the host
+(`+38.284756 ms`), while the other 14 samples caught the post-NTP state around
+`-2.4 s`. Official implementation references are Lima
+[`timesync.go`](https://github.com/lima-vm/lima/blob/v2.1.1/pkg/hostagent/timesync.go)
+and
+[`server.go`](https://github.com/lima-vm/lima/blob/v2.1.1/pkg/guestagent/api/server/server.go),
+plus systemd
+[`timesyncd-manager.c`](https://github.com/systemd/systemd/blob/v255/src/timesync/timesyncd-manager.c)
+and
+[`timedatectl.c`](https://github.com/systemd/systemd/blob/v255/src/timedate/timedatectl.c).
+
+No remediation or hold retry followed. The next separate slice must choose
+one authoritative clock path and specify an explicit rollback before any live
+change. The independent recurring I/O full-PSI gate remains open.
+
 ## Memory ownership and remediation
 
 The active project stack owned the pressure; there was no unrelated service
@@ -188,6 +238,11 @@ recovered after one Kafka-induced restart.
   The first bounded I/O sampler could not map the 19 CRI containers, but the
   corrected live smoke returned 19 unique cgroup v2 owner rows and a precise
   timestamped clock pair without mutation.
+- [x] Isolate the clock-offset-spread mechanism without changing runtime time
+  settings. Verify: VM and kind share one clock; Lima adjusts it to the host
+  every ten seconds; active systemd-timesyncd detects the external step and
+  resynchronizes it to NTP. The observed states and source semantics identify
+  `DUAL_TIME_AUTHORITY_OSCILLATION`.
 - [ ] Perform one authorized remediation, then repeat the same hold.
   Verify: the selected gate is green before traffic. A larger host is required
   when the 1.9 GiB restore threshold cannot be sustained safely; a controlled
@@ -220,9 +275,10 @@ production transition, or push.
 2. Treat the instrumented hold above as the current runtime result. Preserve
    both raw temp bundles and do not repeat the smoke or hold without a narrowed
    hypothesis and a selected remediation.
-3. In the next separate read-only diagnostic slice, inspect the host/guest time
-   synchronization path around the sample-03 `+2.472 s` offset excursion. Do
-   not restart or resize Colima and do not change time settings in that slice.
+3. Treat `DUAL_TIME_AUTHORITY_OSCILLATION` as the clock root cause. In the next
+   separate slice, select one authoritative clock path and document the exact
+   reversible change, preconditions, verification, and rollback before any
+   live mutation. Do not restart or resize Colima implicitly.
 4. Keep the recurring I/O full PSI gate open. The current data bounds etcd and
    Kafka as the largest writers but does not prove causation; any remediation
    and subsequent hold require separate scoped decisions.

@@ -974,3 +974,20 @@ preconditions are verified, but it remains a separate runtime-mutation slice.
 It must not be combined with workload verification, API WAL remediation,
 clock or idle-I/O work, traffic, Flink, watcher, hold, production transition,
 or push.
+
+### Next-session transparency pointer
+
+The self-contained operator snapshot is the `Next-session transparent
+resume` section in
+`docs/operations/external-dependency-recovery-gate.md`. It records the exact
+remote identities and invocation, the eight read-only Docker calls, local
+evidence hashes, the absence of a raw per-command SSH transcript, data
+ownership, unchanged failure gates, rollback expectations, and the next
+decision boundary.
+
+Do not repeat the already-green standalone preflight merely to refresh its
+timestamp. A later acknowledged `--execute` invocation runs the same
+fail-closed preflight internally before any mutation. Dependency recovery
+success would authorize only a separate workload-verification decision; it
+would not resolve or waive the API WAL, clock, idle-I/O, traffic, soak, or
+production gates.

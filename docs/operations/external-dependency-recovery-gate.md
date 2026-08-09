@@ -111,3 +111,78 @@ python -m ruff check scripts/recover_external_dependencies.py `
 The tests pin one-shot ordering, preflight-before-mutation, named-volume
 failure, reverse rollback, preservation of a pre-existing healthy service,
 and the absence of create/recreate/delete Compose commands.
+
+## Next-session transparent resume
+
+Use this section as the compact-safe operator snapshot. Refresh
+`git status --short --branch --untracked-files=no` and `git log -2 --oneline`
+first; repository state is authoritative if it differs from the snapshot.
+
+### Recorded identities
+
+| Field | Recorded value |
+| --- | --- |
+| Evidence commit | `f5c7f6c2e7db7113719941362ba79e1b661f79c2` |
+| Branch at capture | `main`, ahead of `origin/main` by 46 |
+| Executor | Codex; no Grok or delegated agent |
+| SSH host | `deproject-mac` |
+| Colima profile | `agentflow-fc5-7113966` |
+| Docker socket | `/Users/julia/.colima/agentflow-fc5-7113966/docker.sock` |
+| Kind node | `agentflow-reverify-ed03fc47-control-plane` |
+| ClickHouse project/container | `agentflow-ch-rv-20260802-01` |
+| ClickHouse Compose file | `/tmp/agentflow-chk-restore-rv-20260802-01/clickhouse-compose.yml` |
+| ClickHouse volume | `agentflow-ch-rv-20260802-01-data` |
+| Iceberg project | `agentflow-iceberg-rv-20260802-01` |
+| Iceberg Compose file | `/tmp/agentflow-iceberg-ed03fc47-20260801-01/docker-compose.iceberg.yml` |
+
+The exact preflight invocation was
+`.venv/Scripts/python.exe scripts/recover_external_dependencies.py`, with no
+additional arguments. It issued eight separate bounded remote Docker calls:
+two `compose config --services` calls, one named-volume inspection, four
+dependency-container inspections, and one kind-node inspection. It issued no
+Docker exec or mutating command.
+
+The CLI records normalized gate output, not a raw transcript of each SSH
+command. That missing per-command transcript is an explicit evidence limit;
+the fixed command construction remains reviewable in
+`scripts/recover_external_dependencies.py`. Exact local evidence is untracked
+by Git and therefore available only in this workspace:
+
+- `preflight-output.json` — SHA-256
+  `d83472b5320fe4740d8972a616566cc9da6df0b82ace2a8651aefb892b1c4573`;
+- `result.json` — SHA-256
+  `4121ca63aa8ddfd1bd0ebf87f4c232d406f0d004dc9be24b049f6028a4db4db1`.
+
+Both files are under
+`.codex-grok-tasks/external-dependency-recovery-preflight-20260809-codex01/`.
+If they are absent or their hashes differ, trust the committed summary only
+and report the local-evidence gap; do not recreate evidence by silently
+rerunning the preflight.
+
+### Current claim boundary
+
+- The preflight is complete and should not be repeated without new runtime
+  state or a narrowed diagnostic reason.
+- Dependency readiness is false because all dependency containers remain
+  exited. Workload recovery is also false.
+- Restoring ClickHouse and Iceberg/MinIO cannot repair the independent API
+  DuckDB WAL replay failure. API remediation remains a separate slice.
+- Option A remains failed and rolled back. Clock stability and idle-I/O remain
+  failed/open. Traffic, Flink, watcher, hold, and production transition remain
+  unperformed and out of scope; production is `candidate`, and push remains
+  unauthorized.
+- MinIO data lives in the existing container writable layer rather than a
+  named volume. A missing/replaced MinIO container is therefore a hard
+  preflight failure, not permission to create a replacement.
+
+### Next decision
+
+The next direct dependency action is one separately authorized live recovery
+with the exact `--execute` command above. Do not run another standalone
+preflight first: `recover_dependencies` repeats the same fail-closed preflight
+internally before its first start operation.
+
+If live recovery succeeds, preserve its JSON and stop the slice with
+`ready_for_workload_verification: true`; workload verification is a later
+slice. If it fails, preserve the original and rollback errors plus the
+post-rollback container states, then stop. Do not raw-retry the recovery.

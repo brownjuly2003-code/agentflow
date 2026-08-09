@@ -768,3 +768,72 @@ counts or `CrashLoopBackOff` alone.
 5. Stop after evidence and causal classification. Any restart, config edit,
    pod mutation, cleanup, clock redesign/application, watcher, Flink, traffic,
    production transition, or push is a separate authorization boundary.
+
+## Workload recovery RCA — 2026-08-09
+
+Read-only RCA after option-A rollback. Executor: local Grok CLI (launcher
+`grok-4.5`, actual `grok-4.5-build`). Observation UTC:
+`2026-08-09T22:46:11Z`. Context `kind-agentflow-reverify-ed03fc47` / namespace
+`agentflow`. No remediation, restart, traffic, Flink, watcher, hold,
+production transition, or push. Grok wrote the artifacts, then stopped
+`cancelled` at a disallowed acceptance command; Codex owns the independent
+gate and scoped local documentation commit.
+
+### Evidence
+
+Same five pod identities as the post-rollback snapshot
+(`…-kk8tf`, `…-htrwj`, `…-l8q89`, `…-9j9mn`, `…-8mkq8`). Live restart counts
+advanced for the crashloopers; Redis/Kafka stayed Ready at baseline `3/3`
+(delta `0`).
+
+| Role | Ready | Restarts (Δ vs post-rollback 34/35/41/3/3) | Last term | Decisive log fact |
+| --- | --- | --- | --- | --- |
+| API | false | 61 (+27) | Error / exit 3 | DuckDB WAL replay InternalException on `/data/agentflow_fresh_20260807.duckdb.wal` during lifespan `db_pool.initialize()` |
+| Bridge | false | 62 (+27) | Error / exit 1 | configured ClickHouse HTTP endpoint refused connection in `ClickHouseSink.ensure_schema` |
+| Materializer | false | 68 (+27) | Error / exit 1 | Iceberg REST `172.18.0.1:8181` connection refused at `load_catalog` |
+| Redis | true | 3 (+0) | Unknown / 255 @ 20:20:19Z | Ready; previous SIGTERM 20:18:19Z (rollback Colima residue) |
+| Kafka | true | 3 (+0) | Unknown / 255 @ 20:20:19Z | Ready; previous SIGTERM 20:18:19Z (rollback Colima residue) |
+
+Redis endpoint `10.244.0.5:6379` and Kafka endpoint `10.244.0.9:9092` are
+ready. API Service has no ready endpoints. Continuous `BackOff` events after
+~20:24Z are restart residue, not root cause.
+
+The independent Codex gate confirmed the same identities, exit codes, and
+three error chains. By `2026-08-09T22:51:25Z`, restart counts had advanced to
+API/bridge/materializer `62/63/69`, while Redis/Kafka remained `3/3`.
+
+Execution transparency: one read-only PATH-discovery query and bounded remote
+log-filter pipelines exceeded the prompt's Kubernetes-only/single-command
+shape. They performed no mutation, secret read, restart, or traffic action.
+No inline pod-spec environment values are retained in the final artifacts.
+
+Artifacts:
+`.codex-grok-tasks/workload-recovery-rca-20260809-grok01/{evidence.md,result.json,result.md}`.
+
+### Classification
+
+**`ROOT_CAUSE_PROVEN`**. Three distinct primary application startup failures,
+each cited from container logs and matching exit codes:
+
+1. API dies on local emptyDir DuckDB WAL replay failure (not Redis).
+2. Bridge dies on its configured ClickHouse endpoint refusing the connection (not Kafka).
+3. Materializer dies on host-gateway Iceberg REST connection refused (not Kafka).
+
+`CrashLoopBackOff` and elevated restart counts are downstream residue of those
+primary errors. Gaps that remain (host process state for the ClickHouse and
+Iceberg REST endpoints, WAL origin without exec) do not leave the CrashLoop
+causes unresolved.
+
+### Claim boundary
+
+- Workload recovery remains **FAIL**.
+- Option A remains **FAIL / rolled back**.
+- No clock stability or idle I/O green claim from this slice.
+- No unsupported fix claim; no secrets; no production acceptance.
+
+### Exact next safe boundary
+
+Any remediation (WAL cleanup, host ClickHouse/Iceberg recovery, pod or
+deployment mutation, restart, redesign, traffic, Flink, watcher, hold,
+production transition, or push) requires a **separate authorized
+slice**. This RCA stops at evidence and classification.

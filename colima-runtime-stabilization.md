@@ -938,3 +938,39 @@ Run the default read-only preflight in a separate slice and preserve its JSON
 result. A live `--execute` run remains a later explicit runtime mutation.
 Workload recovery, the API WAL failure, clock and idle-I/O gates, traffic,
 Flink, watcher, hold, production transition, and push remain separate.
+
+## External dependency recovery preflight — 2026-08-09
+
+The default recovery-gate preflight ran once against the recorded remote
+Colima Docker socket from `23:38:16.610Z` through `23:38:22.032Z`. It exited
+`0` with `status: preflight_passed`, `execute: false`, and
+`ready_for_workload_verification: false`.
+
+The fail-closed checks accepted the exact Compose service sets, container
+ownership/images/restart policies, ClickHouse named volume and mount, MinIO
+container layer, successful exited `minio-init`, and running kind
+control-plane. Observed dependency state remained unchanged:
+
+| Service | State | Exit | Recorded health |
+| --- | --- | ---: | --- |
+| ClickHouse | exited | 137 | unhealthy |
+| Iceberg REST | exited | 137 | n/a |
+| MinIO | exited | 0 | unhealthy |
+| `minio-init` | exited | 0 | n/a |
+
+The `unhealthy` values are stale Docker health state on exited containers,
+not live endpoint results. The command performed Compose config and Docker
+inspection only: no `--execute`, start/stop, Docker exec, Colima/Kubernetes
+mutation, workload verification, traffic, secret read, production transition,
+or push occurred.
+
+Exact JSON evidence:
+`.codex-grok-tasks/external-dependency-recovery-preflight-20260809-codex01/{preflight-output.json,result.json}`.
+
+### Exact next safe boundary
+
+A live `--execute` dependency recovery is now locally designed and its
+preconditions are verified, but it remains a separate runtime-mutation slice.
+It must not be combined with workload verification, API WAL remediation,
+clock or idle-I/O work, traffic, Flink, watcher, hold, production transition,
+or push.

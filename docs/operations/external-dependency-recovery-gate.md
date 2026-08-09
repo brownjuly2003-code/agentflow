@@ -44,6 +44,24 @@ result has `status: preflight_passed` and keeps
 unexpected service, unsafe state, or persistence mismatch exits nonzero
 before a start/stop operation.
 
+### Latest recorded preflight
+
+The default preflight ran once from commit `5b5e746` on 2026-08-09 from
+`23:38:16.610Z` through `23:38:22.032Z`. It exited `0` with
+`status: preflight_passed`, `execute: false`, and
+`ready_for_workload_verification: false`.
+
+The recorded containers remained stopped: ClickHouse and Iceberg REST exited
+`137`; MinIO and `minio-init` exited `0`. The `unhealthy` values retained on
+the exited ClickHouse and MinIO containers are their last Docker health
+state, not live endpoint checks. No container start/stop, Docker exec,
+Colima/Kubernetes mutation, workload verification, or secret read occurred.
+
+Exact local evidence:
+`.codex-grok-tasks/external-dependency-recovery-preflight-20260809-codex01/`.
+Preflight success proves that the recorded owners and persistence
+prerequisites are intact; it does not establish dependency readiness.
+
 ## Separately authorized live recovery
 
 Only a later live-recovery slice may run:

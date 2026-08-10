@@ -991,3 +991,43 @@ fail-closed preflight internally before any mutation. Dependency recovery
 success would authorize only a separate workload-verification decision; it
 would not resolve or waive the API WAL, clock, idle-I/O, traffic, soak, or
 production gates.
+
+## Workload recovery verification — 2026-08-10
+
+One bounded read-only workload verification observed the existing pods at
+`2026-08-10T00:30:13.1767165Z`. Eight separate Kubernetes metadata, endpoint,
+event, and bounded-log queries all exited `0`; none was retried. No workload,
+dependency, Kubernetes object, Colima profile, or application source code was
+mutated, and no pod `exec` or traffic was performed.
+
+| Workload | Ready | Restarts (prior / current) | Decisive current evidence |
+| --- | --- | ---: | --- |
+| API | no | 62 / 80 | exit `3`; DuckDB WAL replay internal error |
+| Bridge | yes | 63 / 82 | `bridge_started`, backend `clickhouse` |
+| Materializer | yes | 69 / 88 | successful 256-record materialization batches |
+| Redis | yes | 3 / 3 | endpoint `10.244.0.5:6379` |
+| Kafka | yes | 3 / 3 | endpoints on `9092` and `29093` |
+
+The pod names and UIDs were unchanged from the prior RCA. Bridge and
+materializer recovered after external dependency recovery; Redis and Kafka
+remained stable. API alone stayed in `CrashLoopBackOff`, with its last startup
+failing while replaying `/data/agentflow_fresh_20260807.duckdb.wal`:
+`Calling DatabaseManager::GetDefaultDatabase with no default database set`.
+Its empty service endpoint is a downstream readiness consequence.
+
+Classification: **`WORKLOAD_RECOVERY_PARTIAL`**, **`ROOT_CAUSE_PROVEN`**;
+remaining primary failure: **`API_DUCKDB_WAL_REPLAY_FAILURE`**. External
+dependency recovery is consumed and must not be repeated merely to retest the
+independent API failure. Clock stability, idle-I/O, traffic, soak, and
+production gates remain failed/open; production remains `candidate`.
+
+Artifacts:
+`.codex-grok-tasks/workload-recovery-verification-20260810-codex01/{evidence.md,result.json,result.md}`.
+
+### Exact next safe boundary
+
+In a separate slice, perform a local/read-only ownership and design diagnosis
+of the API DuckDB persistence and WAL recovery contract before any cleanup,
+pod `exec`, restart, or runtime mutation is considered. Define data ownership,
+preservation, rollback, and acceptance criteria; do not infer authorization to
+delete or replace the database or WAL.

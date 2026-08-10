@@ -190,6 +190,29 @@ was limited to the gate's scoped starts of existing containers. No Kubernetes
 mutation, Colima profile/configuration change, traffic, production transition,
 push, container recreation/removal, or volume deletion occurred.
 
+## Latest bounded workload verification
+
+One subsequent read-only verification observed the existing API, bridge,
+materializer, Redis, and Kafka pods at `2026-08-10T00:30:13.1767165Z`. Eight
+separate Kubernetes metadata, endpoint, event, and bounded-log queries all
+exited `0`; none was retried and no runtime mutation or pod `exec` occurred.
+
+External dependency recovery restored the bridge and materializer. Both are
+ready: bridge logged `bridge_started` with backend `clickhouse`, and the
+materializer logged successful 256-record batches. Redis and Kafka remain
+ready with restart deltas of zero.
+
+API alone remains non-ready. Its unchanged pod reached 80 restarts, up 18
+from the prior independent observation, and its last startup exited `3` while
+replaying `/data/agentflow_fresh_20260807.duckdb.wal` with
+`Calling DatabaseManager::GetDefaultDatabase with no default database set`.
+The API service has no endpoint because its only pod is not ready.
+
+Classification: `WORKLOAD_RECOVERY_PARTIAL`, `ROOT_CAUSE_PROVEN`; remaining
+primary failure: `API_DUCKDB_WAL_REPLAY_FAILURE`. Exact local evidence is
+untracked under
+`.codex-grok-tasks/workload-recovery-verification-20260810-codex01/`.
+
 ## Next-session transparent resume
 
 Use this section as the compact-safe operator snapshot. Refresh
@@ -245,9 +268,11 @@ rerunning the preflight.
   `ready_for_workload_verification=true` at the successful gate boundary.
 - Latest read-only post-state: ClickHouse/MinIO running healthy, Iceberg REST
   running, and `minio-init` exited `0`.
-- Workload recovery is unverified, not PASS.
-- Restoring ClickHouse and Iceberg/MinIO cannot repair the independent API
-  DuckDB WAL replay failure. API remediation remains a separate slice.
+- Workload recovery is partial, not PASS: bridge and materializer recovered,
+  while API remains non-ready.
+- Restoring ClickHouse and Iceberg/MinIO did not repair the independent API
+  DuckDB WAL replay failure. Dependency recovery is consumed and must not be
+  repeated merely to retest API; remediation remains a separate slice.
 - Option A remains failed and rolled back. Clock stability and idle-I/O remain
   failed/open. Traffic, Flink, watcher, hold, and production transition remain
   unperformed and out of scope; production is `candidate`, and push remains
@@ -258,8 +283,8 @@ rerunning the preflight.
 
 ### Next decision
 
-Run one bounded read-only workload verification: capture exact API, bridge,
-materializer, Redis, and Kafka pod identities, readiness, restart deltas, and
-current/previous termination evidence for any non-ready workload. Do not
-restart or mutate workloads or dependencies. Stop after an evidence-backed
-classification; API DuckDB WAL remediation remains a later separate slice.
+In a separate slice, perform a local/read-only ownership and design diagnosis
+of the API DuckDB persistence and WAL recovery contract before any cleanup,
+pod `exec`, restart, or runtime mutation is considered. Establish data
+ownership, preservation, rollback, and acceptance criteria. Do not delete or
+replace the database or WAL without a separately reviewed authorization.

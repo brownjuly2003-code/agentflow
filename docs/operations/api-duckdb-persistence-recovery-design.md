@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-10
 
-**Status:** Design only — not executed
+**Status:** Corrected design — runtime capability proof still required; not
+executed or approved as an operator runbook
 
 **Repository HEAD at authoring:** `319c8d67ce39a33a928d6c1e93566d468034f9e1`
 
@@ -34,8 +35,8 @@ PASS/consumed and must not be repeated for this failure.
   `API_DUCKDB_WAL_REPLAY_FAILURE`.
 - Distinction among chart defaults, historical runtime patches, and live
   values that remain unqueried.
-- Exact next separately authorized gate (metadata / preservation-feasibility
-  only).
+- Corrected quiesce-and-capture controls and the exact evidence required by a
+  later separately authorized capability gate.
 
 ### Explicit non-goals / boundary
 
@@ -593,19 +594,306 @@ quiesce mechanism. Containerd task-pause has a narrower blast radius for a
 running task, but its availability, flush behavior, and guaranteed resume are
 also unproved; it does not apply while no task exists.
 
-### Corrective design boundary
+### Corrected design disposition
 
-Status is `DESIGN_CHANGES_REQUIRED`; E17 remains `METADATA_PASS` /
-`PRESERVATION_PARTIAL`. The next separate safe slice is local documentation
-only: revise the candidate against every E19 finding, make unknown live values
-explicit fail-closed inputs, and verify the finding-to-control mapping. Do not
-launch another reviewer merely to repeat this verdict.
+The E18 sequence is historical review input, not the corrected mechanism.
+The design below closes the E19 design findings without treating any unknown
+live capability as present. Its status is
+`DESIGN_CORRECTED_RUNTIME_BLOCKED`; E17 remains `METADATA_PASS` /
+`PRESERVATION_PARTIAL` until a later authorized capability gate proves one
+branch eligible and a still-later runtime slice performs capture.
 
-Only a corrected-and-reverified design may become a separate tracked runbook.
-Runtime preflight, kubelet or containerd control, helper injection,
-filesystem/database-byte access or copy, capture, cleanup, restore, traffic,
-production transition, and push remain outside this documentation slice and
-require their own authorization.
+## Corrected quiesce-and-capture design — 2026-08-10
+
+This section is a fail-closed technical design, not an operator runbook. It
+contains no executable commands and authorizes no runtime interaction. Its
+only possible success claim is an immutable, externally verified archive of
+quiescent on-disk bytes. It cannot claim that DuckDB can replay, open, or
+recover those bytes.
+
+<!-- E19_CORRECTED_DESIGN_START -->
+
+### C01 — Branch selection and state machine
+
+Exactly one branch may be selected from fresh evidence. An attempt must not
+switch branches after its first quiescing action:
+
+| Branch | Eligibility | Quiescence proof | Automatic recovery action |
+| --- | --- | --- | --- |
+| `PAUSED_TASK` | The exact API container task exists; pause/resume support, complete cgroup freeze, task identity, kubelet probe budget, and runtime monitoring are proved | The exact task and all its threads remain frozen; only its recorded pre-existing descriptors may remain open; no other writer exists | An independent watchdog resumes the exact task |
+| `KUBELET_GAP` | No target task exists; live node/Pod policy yields a safe timing envelope; the independent watchdog and exact source mount are proved | Kubelet remains inactive, the target task remains absent, and no process has an open descriptor on the source mount | An independent watchdog starts kubelet |
+| `BLOCKED` | Either branch has an unknown or failed prerequisite | None | No quiescing action is allowed |
+
+`PAUSED_TASK` is narrower than stopping kubelet, but it is ineligible if a
+kubelet probe can kill or replace the frozen task inside the proved window.
+If the task exits or changes identity before pause completes, the attempt
+aborts; it does not fall through to `KUBELET_GAP`. `KUBELET_GAP` is last
+resort on this single-node control-plane and is ineligible unless every C03
+inequality passes with margin.
+
+An ephemeral container is never a quiescence branch. It can only add another
+volume reader while kubelet remains free to restart the API process. No helper
+is injected by this design.
+
+The only allowed state progression is:
+
+```text
+PRECHECK -> RECOVERY_ARMED -> QUIESCED -> SOURCE_STABLE -> ARCHIVE_BUILDING
+         -> NODE_CANDIDATE_SEALED -> RUNTIME_RESUMED -> NODE_VERIFIED
+         -> HOST_MASTER_VERIFIED -> CAPTURE_ONLY_PASS
+```
+
+Any missing proof, timeout, identity change, monitor gap, or unexpected state
+transitions to `ABORT_AND_RESUME`; it never skips forward or promotes an
+incomplete artifact.
+
+### C02 — Capability evidence contract
+
+Every input below is **Unknown** until a separately authorized, timestamped
+evidence pack proves it. Unknown, stale, ambiguous, or contradictory evidence
+makes the affected branch `BLOCKED`.
+
+| Input | Required evidence | Fail-closed rule |
+| --- | --- | --- |
+| `I01_CLUSTER_POLICY` | Live node-monitor grace, taint/eviction behavior, Pod tolerations, probe timing, and single-node control-plane policy | No default value may be substituted; no eligible timing envelope means no quiescence |
+| `I02_IDENTITY` | Deployment/ReplicaSet/Pod UID, deletion timestamp, node, image digest, container ID, task ID, and exact single-replica ownership | Any drift, duplicate target, deletion intent, or incomplete identity blocks the attempt |
+| `I03_MOUNT` | Kubelet root, exact Pod-UID/volume-derived `emptyDir` source, mount ID/device, mount provenance, namespace visibility, and source/destination separation | Fuzzy filename search, multiple matches, symlink escape, or unsupported visibility blocks the attempt |
+| `I04_RUNTIME` | Exact pause/resume semantics, cgroup-wide frozen-state proof, task events, and host visibility of processes/descriptors | `PAUSED_TASK` is blocked unless pause and guaranteed recovery can both be observed |
+| `I05_WATCHDOG` | Recovery timer independence, monotonic activation, exact target action, liveness, firing evidence, and verified cancellation | Neither branch may quiesce before its branch-specific watchdog is proved armed |
+| `I06_TOOLS` | Exact flush, tar, archive-list, hash, permission, and filesystem-sync tool versions and required semantics | Missing or incompatible behavior blocks archive creation |
+| `I07_INVENTORY_SPACE` | Source metadata inventory, archive-size upper bound, free node staging space, and free host space including explicit margin | No optimistic compression or sparse assumption may replace a proved upper bound |
+| `I08_HOST_DESTINATION` | Empty unique destination, durable filesystem, same-directory atomic rename, sync semantics, and retention ownership | An existing, ephemeral, ambiguous, or non-durable destination blocks host promotion |
+| `I09_TIME_SOURCE` | Monotonic clock, resolution, command-start overhead, monitor delay, and recovery-action latency | Unbounded timing or wall-clock-only accounting blocks both branches |
+
+The future capability gate may inspect only the metadata required above under
+its own explicit authorization. It may not pause a task, stop kubelet, inject
+a helper, open DuckDB, hash/copy database bytes, or create a capture.
+If an input such as pause/resume or watchdog behavior requires an active
+rehearsal rather than inspection of existing evidence, the read-only gate must
+emit `CAPABILITY_REHEARSAL_REQUIRED`; it may not upgrade that input from
+Unknown. Any isolated rehearsal is another separately authorized slice and
+must not target this Pod or its volume.
+
+### C03 — Timing envelope
+
+The design removes E18's fixed 75-second watchdog and 15-second wait. The
+future evidence pack must define these branch-specific values before any
+quiescing action:
+
+- `T_risk`: earliest proved unsafe transition. For `PAUSED_TASK`, this
+  includes kubelet probe kill/restart. For `KUBELET_GAP`, it includes Node
+  condition, taint/eviction, and control-plane policy boundaries.
+- `M`: explicit positive margin covering clock resolution, scheduling jitter,
+  monitor delay, command startup, and measured recovery-action latency.
+- `T_safe = T_risk - M`.
+- `T_work_limit`: hard monotonic limit from the first quiescing action through
+  successful task resume or kubelet-active proof. It includes quiescence,
+  stable inventory, mount flush, archive creation, candidate seal, and
+  recovery.
+- `T_watchdog`: monotonic deadline at which the already armed independent
+  watchdog performs the branch-specific recovery action.
+
+Both branches require:
+
+```text
+0 < T_work_limit < T_watchdog < T_safe
+```
+
+Each stage has its own sub-deadline and their worst-case sum must not exceed
+`T_work_limit`. Node-candidate hashing and host copy occur only after runtime
+resumption, so they consume no quiescence budget. If `T_risk`, `M`, any stage
+bound, or the inequality cannot be proved, the branch is ineligible. A timeout
+triggers C11 once; it never extends the deadline or retries the same attempt.
+
+### C04 — Identity and mount provenance
+
+Before arming recovery, the evidence must pin the exact owner chain, Pod UID,
+node, image digest, container/task identity, volume name/type/size limit, and
+both configured DuckDB paths. The Pod must have no deletion timestamp and no
+second `/data` consumer.
+
+The source path must be derived from the pinned Pod UID and volume name, then
+matched to one exact mount ID and device through mount metadata. It must be
+inside the proved kubelet root, resolve without symlink escape, and correspond
+to the live Pod mount. The staging and host destinations must be empty, unique,
+outside that mount, and must not alias it through bind mounts, links, or path
+normalization. Kind node-image internals remain unsupported: any path mismatch
+or ambiguous match blocks the design rather than falling back to a search for
+`*.duckdb`.
+
+### C05 — Complete inventory contract
+
+A provisional metadata-only inventory is captured before quiescence for drift
+detection. After C06 proves quiescence, two full source-metadata inventories
+separated by a proved sample interval must match exactly. Each record contains
+relative path, object type, apparent size, allocated blocks, mtime, inode,
+device, ownership, mode, symlink target, hard-link group, and a non-secret
+digest of xattr/ACL metadata.
+
+The authoritative preservation set is the entire exact source mount, not a
+filename allowlist:
+
+1. The configured primary base path and the observed failing WAL path must be
+   present as regular files. Missing or unexpectedly empty members block the
+   attempt rather than creating replacements.
+2. The configured usage base/WAL paths are recorded as present or absent;
+   every member that exists is included. Absence is evidence, never a reason
+   to create a file during capture.
+3. Every other sidecar, temporary, hidden, directory, and unknown entry below
+   the source is included. Unsupported special files or a path escaping the
+   source block the attempt.
+4. The archive never dereferences symlinks and never crosses a filesystem.
+5. After sealing, the archive member manifest must match the stable source
+   inventory one-for-one. Compare size for regular files, symlink target for
+   symlinks, hard-link relationships, and the applicable ownership/mode/
+   xattr/ACL metadata for each object type. Missing, duplicate, truncated, or
+   unexpected members invalidate the candidate.
+
+This all-entry rule closes the base/WAL/sidecar completeness gap without
+inventing DuckDB sidecar naming conventions.
+
+### C06 — Continuous quiescence and descriptor proof
+
+Quiescence must remain continuously observable from its first proof until the
+archive closes and the node candidate is sealed.
+
+- `KUBELET_GAP` requires kubelet inactive, no target containerd task, and zero
+  open descriptors by any node-visible process on the exact source mount.
+- `PAUSED_TASK` requires the pinned task and every thread in its cgroup to
+  remain frozen. Only that task's recorded, stable descriptors may remain
+  open; all other processes must have zero descriptors on the source mount.
+- Descriptor inspection must cover the host PID view and relevant mount
+  namespaces and compare resolved mount IDs/inodes, not only path strings.
+  Incomplete namespace visibility is a blocker, not a zero-FD result.
+- An independent monitor observes kubelet state, watchdog state, target task
+  identity/state, cgroup frozen state when applicable, the pinned Pod UID,
+  deletion timestamp and owner state, mount identity, and runtime events
+  throughout archive creation. Monitor loss or any writer-possible transition
+  invalidates the attempt immediately.
+- Once the branch-specific state and descriptor proof hold, the exact source
+  filesystem is flushed. Only after a successful flush are the two C05 stable
+  inventories taken while the monitor remains green. Flush failure, mount
+  drift, or a subsequent inventory/runtime-state change triggers C11.
+
+Two samples alone are never treated as continuous proof.
+
+### C07 — Node archive and seal
+
+The archive is created in a unique empty node staging directory outside the
+source mount. Space must exceed the inventory-derived uncompressed upper bound
+plus the proved margin on both node and host. The archive preserves numeric
+ownership, sparse layout, xattrs, ACLs, and link metadata, does not dereference
+symlinks, and is restricted to the one proved source filesystem.
+
+Archive output begins with a `.building` identity under a hard C03 deadline.
+Timeout, nonzero exit, disk-full, archive-time omission/change warning, or
+monitor event stops the writer and labels the artifact `.partial`; a partial
+artifact is never hashed, renamed as a candidate, or promoted. Structural and
+member-manifest comparison occurs after runtime resumption under C09.
+
+Only after a clean archive close and green continuous monitor may the artifact
+and staging directory be flushed, made non-writable, and atomically renamed to
+`.sealed-candidate`. The sealed candidate is now independent of resumed live
+writers. Hashing and structural/member verification intentionally wait until
+after C08, reducing the quiescence window.
+
+### C08 — Runtime resumption and watchdog disposition
+
+Runtime recovery precedes candidate verification and host copy:
+
+- `PAUSED_TASK` resumes the exact pinned task and proves that the cgroup is no
+  longer frozen or records its normal exit/restart transition.
+- `KUBELET_GAP` starts kubelet and proves the service active.
+
+The watchdog is cancelled only after the normal recovery action is proved.
+Cancellation must itself be verified. A fired, missing, or indeterminate
+watchdog, failed task resume, or failed kubelet-active proof makes the overall
+attempt failed and stops further promotion. The sealed node candidate, if one
+exists, is retained as labelled evidence but is not called a master.
+
+After recovery, require the same Pod UID with no deletion timestamp and the
+Node to return Ready. Failure to restore the runtime boundary is an incident,
+not permission to delete/replace the Pod or modify database files.
+
+### C09 — Node verification and host-master promotion
+
+Only after C08 passes may the non-writable node candidate be SHA-256 hashed,
+structurally opened as an archive, and compared against the C05 manifest. The
+node candidate remains immutable. Validation never opens DuckDB.
+
+Host copy writes to a unique `.incoming` path. After a complete copy, flush
+the file and destination directory, compare host and node SHA-256, verify the
+same archive/member manifest, make the host artifact non-writable, then use a
+proved same-directory atomic rename to its final master name. A failed copy,
+flush, hash, manifest, permission, or rename leaves only a labelled host
+`.partial`; it is never retried or promoted automatically. The sealed node
+candidate is retained until a separate cleanup decision.
+
+The evidence manifest records identities, selected branch, capability-pack
+identity, monotonic stage timings, watchdog/monitor results, source inventory,
+archive member inventory, node and host hashes, resumption proof, and every
+non-secret command result. It excludes credentials and database contents.
+
+### C10 — Claim boundary
+
+`CAPTURE_ONLY_PASS` means only that an immutable host master reproduces the
+quiescent filesystem bytes represented by the complete inventory. It is not
+proof that DuckDB can replay the WAL, that any logical table is recoverable,
+that the API is Ready, or that production gates pass. Every database open,
+repair, restore, or data-continuity test remains an offline later slice on a
+new disposable clone derived from the master.
+
+### C11 — Abort and rollback contract
+
+| Failure boundary | Mandatory response | Artifact disposition |
+| --- | --- | --- |
+| Precondition, identity, mount, space, or timing proof fails | Do not quiesce; emit `BLOCKED` | No artifact |
+| Pause/stop or first quiescence proof fails | Perform the already armed recovery action; verify runtime boundary; stop | No candidate; any scratch is `.partial` |
+| Monitor, task, kubelet, mount, inventory, flush, tar, or deadline changes during archive | Stop archive once; perform recovery; never continue the archive | `.building` becomes labelled `.partial`; never hash or promote |
+| Watchdog fires or its state is indeterminate | Treat capture as invalid; prove recovery action and stop | Retain only labelled partial/evidence |
+| Normal task resume or kubelet-active proof fails | Escalate runtime incident; do not perform host promotion or destructive recovery | Retain a sealed node candidate only as non-master evidence |
+| Node verification or host copy/hash/manifest/promotion fails | Leave live runtime untouched; stop without automatic retry | Retain sealed node candidate; host output remains `.partial` |
+| Full capture succeeds | Stop before DuckDB open, cleanup, repair, restore, or Pod change | Retain both node candidate and immutable host master |
+
+Every rollback leaves the live DB/WAL bytes untouched. No branch may delete,
+rename, checkpoint, open, repair, restore, or replace live data or the Pod.
+
+### E19 finding-to-control mapping
+
+| Finding | E19 concern | Corrected controls | Design disposition |
+| --- | --- | --- | --- |
+| `F01` | Fixed watchdog exceeds default grace | C02, C03, C11 | Closed: no constants; failed inequality blocks the branch |
+| `F02` | Single-node kubelet blast radius | C01, C02, C03, C08, C11 | Closed: kubelet is last resort with explicit policy/timing/resumption proof |
+| `F03` | Base/WAL/sidecar completeness undefined | C05, C07, C09 | Closed: whole-mount stable inventory and exact archive-manifest equality |
+| `F04` | Two samples do not prevent writer return | C03, C06, C07, C11 | Closed: continuous monitor through immutable candidate seal |
+| `F05` | Host path-only FD scan can miss namespaces | C02, C04, C06 | Closed: mount-ID/inode proof across host PID and relevant mount namespaces |
+| `F06` | Preservation is not DuckDB recovery | C10 | Closed: capture-only filesystem claim |
+| `F07` | Kind node internals and fuzzy paths are unsafe | C02, C04 | Closed: exact UID/volume/mount provenance or `BLOCKED` |
+| `F08` | Tar, timeout, partial, hash, and promotion gaps | C02, C03, C07, C09, C11 | Closed: bounded build, immutable candidate, post-resume verification, no partial promotion |
+| `F09` | Preconditions and rollback incomplete | C01–C09, C11 | Closed: one fail-closed state machine and recovery-first abort matrix |
+| `F10` | Live capabilities remain unknown | C02 | Deferred fail-closed: every Unknown keeps the affected branch ineligible |
+
+### Corrected design result and next gate
+
+All ten E19 findings map to explicit controls. `F01`–`F09` are closed at the
+design level; `F10` deliberately remains an evidence dependency rather than
+an assumed fact. The corrected status is `DESIGN_CORRECTED_RUNTIME_BLOCKED`,
+not runbook approval and not `PRESERVATION_FEASIBLE`.
+
+The next possible slice requires separate authorization for a bounded,
+read-only **API DuckDB quiesce capability gate** that records C02 inputs and
+evaluates C01/C03 branch eligibility. It must stop at `PAUSED_TASK_ELIGIBLE`,
+`KUBELET_GAP_ELIGIBLE`, `CAPABILITY_REHEARSAL_REQUIRED`, or
+`QUIESCE_AND_COPY_MECHANISM_NOT_ESTABLISHED`; it must not quiesce, copy/hash
+database bytes, create an archive, or mutate the runtime. No such capability
+interaction is authorized or performed here.
+
+Only after one branch is proved eligible may a separate tracked operator
+runbook be written and reviewed. Runtime preflight, pause/stop, helper
+injection, filesystem/database-byte access or copy, capture, cleanup, restore,
+traffic, production transition, and push remain separately unauthorized.
+
+<!-- E19_CORRECTED_DESIGN_END -->
 
 ## Open questions and data-owner decisions
 
@@ -630,10 +918,10 @@ require their own authorization.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy mechanism remains unresolved after E19.** The independent
-   Grok review returned `ACCEPT_WITH_CHANGES`; the timing, blast-radius,
-   continuous-writer, inventory, and promotion defects remain uncorrected, so
-   no operator runbook is approved.
+8. **Quiesce-and-copy runtime eligibility remains unresolved after E19.** The
+   corrected design maps all ten findings to controls, but every live
+   capability input remains Unknown. Status is
+   `DESIGN_CORRECTED_RUNTIME_BLOCKED`; no operator runbook is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -642,14 +930,14 @@ require their own authorization.
 | Design document created | Yes (this file) |
 | Ownership/lifetime/recovery contract established from repository + preserved evidence | Yes |
 | Live metadata / preservation-feasibility gate executed | **Yes, read-only** (`METADATA_PASS`; `PRESERVATION_PARTIAL`) |
+| E19 corrective design findings mapped | **Yes, 10/10** (`F01`–`F10`) |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
-| Quiesce-and-capture runbook approved | **No** (`DESIGN_CHANGES_REQUIRED`) |
+| Quiesce-and-capture runbook approved | **No** (`DESIGN_CORRECTED_RUNTIME_BLOCKED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next authorized action | One local-only corrective design revision against E19; no runtime interaction |
+| Next possible action | Separately authorized read-only capability gate; none performed or authorized here |
 
 ---
 
-*End of design. The metadata gate and later Grok design review were read-only
-and changed no runtime state. No database-byte access was authorized or
-performed.*
+*End of design. The metadata gate, Grok review, and corrected-design slice
+changed no runtime state. No database-byte access was authorized or performed.*

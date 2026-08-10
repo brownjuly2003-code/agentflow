@@ -1,7 +1,7 @@
 # External dependency recovery gate
 
-**Status:** implemented and locally tested on 2026-08-09; live recovery has
-not been executed.
+**Status:** implemented and locally tested on 2026-08-09; one live recovery
+failed safe at the Iceberg REST endpoint gate and rolled back.
 
 This runbook covers the current
 `COLIMA_RESTART_DEPENDENCY_LIFECYCLE_GAP`: restoring the existing ClickHouse,
@@ -112,6 +112,43 @@ The tests pin one-shot ordering, preflight-before-mutation, named-volume
 failure, reverse rollback, preservation of a pre-existing healthy service,
 and the absence of create/recreate/delete Compose commands.
 
+## Latest recorded live recovery
+
+One separately authorized recovery ran from entry HEAD `8209cf6` on
+2026-08-09. Grok executed the exact acknowledged command once through
+`local_grok_cli` (`grok-4.5-build`; run
+`deproject-dep-live-20260809-grok01`). The command exited `1`; stdout was
+empty and stderr reported `curl (7)` connection failure to
+`172.18.0.1:8181` during the Iceberg REST `/v1/config` kind-network probe.
+No ready JSON was emitted and `ready_for_workload_verification` remains
+false.
+
+The recovery command was not retried. Its failure path reported no rollback
+error. Grok's one post-rollback read-only preflight and one independent Codex
+preflight both returned `preflight_passed` with every dependency stopped:
+ClickHouse and MinIO exited `0`, `minio-init` exited `0`, and Iceberg REST
+exited `143`. The retained `unhealthy` values for stopped ClickHouse and
+MinIO are historical Docker health state, not live readiness.
+
+The failure proves that the single Iceberg REST probe ran before the endpoint
+accepted a connection. It does not prove that the endpoint could never become
+ready: the current state machine waits only for the container's `running`
+state and then performs one immediate `/v1/config` probe. Classification:
+`ICEBERG_REST_READINESS_GATE_INCOMPLETE`.
+
+Exact local evidence is untracked under
+`.codex-grok-tasks/external-dependency-live-recovery-20260809-grok01/`:
+
+- `result.json` — SHA-256
+  `641a1a7a7ff22f9666ef514233f7b37b16fec86ff4cbaed5d1f5916c40ece0a9`;
+- `post-rollback-preflight.json` — SHA-256
+  `38c7b8f93c275556266ff2f0e0ca94cc9fba05a11c84845aa0d969726f56c763`;
+- `recovery-stderr.txt` — SHA-256
+  `cc952c2ee7191ec3c4b755c64c4a09e53b3ec038f4f6af48b4ddfa82c0f99da1`.
+
+No workload verification, API WAL work, Kubernetes or Colima mutation,
+traffic, production transition, commit by Grok, or push occurred.
+
 ## Next-session transparent resume
 
 Use this section as the compact-safe operator snapshot. Refresh
@@ -161,8 +198,8 @@ rerunning the preflight.
 
 ### Current claim boundary
 
-- The preflight is complete and should not be repeated without new runtime
-  state or a narrowed diagnostic reason.
+- The first live recovery identity is consumed. Do not repeat it without a
+  tested readiness-gate change or new diagnostic evidence.
 - Dependency readiness is false because all dependency containers remain
   exited. Workload recovery is also false.
 - Restoring ClickHouse and Iceberg/MinIO cannot repair the independent API
@@ -177,12 +214,12 @@ rerunning the preflight.
 
 ### Next decision
 
-The next direct dependency action is one separately authorized live recovery
-with the exact `--execute` command above. Do not run another standalone
-preflight first: `recover_dependencies` repeats the same fail-closed preflight
-internally before its first start operation.
+The next atomic slice is local TDD for a bounded Iceberg REST readiness wait
+from the kind node. It must retry transient connection refusal only within
+the configured timeout, fail immediately if the container becomes terminal,
+and preserve the existing start order and reverse rollback contract. End that
+slice after focused local tests; do not run another live recovery in it.
 
-If live recovery succeeds, preserve its JSON and stop the slice with
-`ready_for_workload_verification: true`; workload verification is a later
-slice. If it fails, preserve the original and rollback errors plus the
-post-rollback container states, then stop. Do not raw-retry the recovery.
+A later, separately authorized runtime slice may make one new live attempt
+only after the readiness change is locally green. Preserve a new evidence
+identity and stop after success or after one failure/rollback record.

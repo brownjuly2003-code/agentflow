@@ -221,6 +221,132 @@ def test_recovery_orders_one_shot_and_requires_all_dependency_gates() -> None:
     ]
 
 
+def test_recovery_retries_transient_iceberg_connection_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    config = _config(module)
+    backend = FakeBackend(module, config)
+    iceberg_url = "http://172.18.0.1:8181/v1/config"
+    attempts = 0
+    original_probe = backend.probe_from_kind
+
+    def flaky_probe(kind_node: str, url: str) -> str:
+        nonlocal attempts
+        if url == iceberg_url:
+            attempts += 1
+            if attempts == 1:
+                backend.events.append(("probe", kind_node, url))
+                raise module.RecoveryError(
+                    "remote Docker command failed: curl: (7) Failed to connect"
+                )
+        return original_probe(kind_node, url)
+
+    backend.probe_from_kind = flaky_probe
+    monkeypatch.setattr(
+        module.time,
+        "sleep",
+        lambda seconds: backend.events.append(("sleep", seconds)),
+    )
+
+    result = module.recover_dependencies(config, backend)
+
+    assert result["ready_for_workload_verification"] is True
+    assert attempts == 2
+    assert ("sleep", 2) in backend.events
+    assert [
+        event for event in backend.events if event[:1] == ("probe",) and event[2] == iceberg_url
+    ] == [
+        ("probe", config.kind_node, iceberg_url),
+        ("probe", config.kind_node, iceberg_url),
+    ]
+
+
+def test_recovery_fails_when_iceberg_stops_during_readiness_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    config = _config(module)
+    backend = FakeBackend(module, config)
+    iceberg_name = f"{config.iceberg_project}-iceberg-rest-1"
+    iceberg_url = "http://172.18.0.1:8181/v1/config"
+    original_probe = backend.probe_from_kind
+
+    def stopped_probe(kind_node: str, url: str) -> str:
+        if url != iceberg_url:
+            return original_probe(kind_node, url)
+        backend.events.append(("probe", kind_node, url))
+        backend.states[iceberg_name]["status"] = "exited"
+        backend.states[iceberg_name]["exit_code"] = 1
+        raise module.RecoveryError("remote Docker command failed: curl: (7) Failed to connect")
+
+    backend.probe_from_kind = stopped_probe
+    monkeypatch.setattr(
+        module.time,
+        "sleep",
+        lambda _seconds: pytest.fail("terminal state must not be retried"),
+    )
+
+    with pytest.raises(
+        module.RecoveryError,
+        match="stopped before endpoint became ready",
+    ):
+        module.recover_dependencies(config, backend)
+
+    iceberg_probes = [
+        event for event in backend.events if event[:1] == ("probe",) and event[2] == iceberg_url
+    ]
+    assert iceberg_probes == [("probe", config.kind_node, iceberg_url)]
+
+
+def test_recovery_bounds_transient_iceberg_readiness_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    config = _config(module)
+    backend = FakeBackend(module, config)
+    iceberg_url = "http://172.18.0.1:8181/v1/config"
+    original_probe = backend.probe_from_kind
+    monotonic_values = iter((100.0, 131.0))
+
+    def refused_probe(kind_node: str, url: str) -> str:
+        if url != iceberg_url:
+            return original_probe(kind_node, url)
+        backend.events.append(("probe", kind_node, url))
+        raise module.RecoveryError("remote Docker command failed: curl: (7) Failed to connect")
+
+    backend.probe_from_kind = refused_probe
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(
+        module.RecoveryError,
+        match="Iceberg REST endpoint readiness gate timed out",
+    ):
+        module.recover_dependencies(config, backend)
+
+    iceberg_probes = [
+        event for event in backend.events if event[:1] == ("probe",) and event[2] == iceberg_url
+    ]
+    assert iceberg_probes == [("probe", config.kind_node, iceberg_url)]
+
+
+def test_recovery_does_not_retry_nontransient_iceberg_probe_error() -> None:
+    module = _load_module()
+    config = _config(module)
+    backend = FakeBackend(module, config)
+    iceberg_url = "http://172.18.0.1:8181/v1/config"
+    backend.fail_probe_url = iceberg_url
+
+    with pytest.raises(module.RecoveryError, match="probe failed"):
+        module.recover_dependencies(config, backend)
+
+    iceberg_probes = [
+        event for event in backend.events if event[:1] == ("probe",) and event[2] == iceberg_url
+    ]
+    assert iceberg_probes == [("probe", config.kind_node, iceberg_url)]
+
+
 def test_missing_named_volume_fails_before_any_mutation() -> None:
     module = _load_module()
     config = _config(module)

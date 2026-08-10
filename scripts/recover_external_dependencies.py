@@ -518,6 +518,29 @@ def _rollback_started(backend: Any, started: Sequence[ServiceRef]) -> list[str]:
     return errors
 
 
+def _wait_for_iceberg_rest(
+    config: RecoveryConfig,
+    backend: Any,
+    container_name: str,
+) -> str:
+    deadline = time.monotonic() + config.timeout_seconds
+    url = "http://172.18.0.1:8181/v1/config"
+    while True:
+        try:
+            return backend.probe_from_kind(config.kind_node, url)
+        except RecoveryError as error:
+            if "curl: (7)" not in str(error):
+                raise
+            state = backend.inspect_container(container_name)
+            if state.get("status") in {"dead", "exited", "removing"}:
+                raise RecoveryError(
+                    f"container {container_name} stopped before endpoint became ready"
+                ) from error
+            if time.monotonic() >= deadline:
+                raise RecoveryError("Iceberg REST endpoint readiness gate timed out") from error
+            time.sleep(2)
+
+
 def recover_dependencies(config: RecoveryConfig, backend: Any) -> dict[str, object]:
     """Start existing dependency containers, gate health, and roll back on failure."""
     states = preflight_recovery(config, backend)
@@ -574,10 +597,7 @@ def recover_dependencies(config: RecoveryConfig, backend: Any) -> dict[str, obje
             config.kind_node,
             "http://172.18.0.1:9000/minio/health/live",
         )
-        iceberg_probe = backend.probe_from_kind(
-            config.kind_node,
-            "http://172.18.0.1:8181/v1/config",
-        )
+        iceberg_probe = _wait_for_iceberg_rest(config, backend, iceberg_name)
         try:
             iceberg_payload = json.loads(iceberg_probe)
         except json.JSONDecodeError as error:

@@ -1,7 +1,8 @@
 # External dependency recovery gate
 
-**Status:** implemented and locally tested on 2026-08-09; one live recovery
-failed safe at the Iceberg REST endpoint gate and rolled back.
+**Status:** one live recovery failed safe and rolled back on 2026-08-09; the
+bounded Iceberg REST readiness correction is implemented and locally tested,
+but has not been exercised live.
 
 This runbook covers the current
 `COLIMA_RESTART_DEPENDENCY_LIFECYCLE_GAP`: restoring the existing ClickHouse,
@@ -78,10 +79,14 @@ The acknowledgement is intentionally exact. The execution order is:
 2. Start the existing MinIO container and require Docker health.
 3. Restart `minio-init`, treat it as a one-shot, and require `exited (0)`.
 4. Start Iceberg REST and require its container to remain running.
-5. From the kind control-plane, require successful ClickHouse `/ping`, MinIO
-   `/minio/health/live`, and Iceberg REST `/v1/config` probes.
+5. From the kind control-plane, require successful ClickHouse `/ping` and
+   MinIO `/minio/health/live` probes.
+6. Retry only Iceberg REST `/v1/config` connection-refusal (`curl (7)`)
+   failures every two seconds within the configured timeout. Inspect fresh
+   container state after each refusal; fail immediately on a terminal state
+   or any non-connection-refusal error.
 
-Only after all five stages does the JSON result set
+Only after all six stages does the JSON result set
 `ready_for_workload_verification: true`. That result authorizes a separate
 workload-verification decision; it is not itself a workload recovery claim.
 
@@ -110,7 +115,8 @@ python -m ruff check scripts/recover_external_dependencies.py `
 
 The tests pin one-shot ordering, preflight-before-mutation, named-volume
 failure, reverse rollback, preservation of a pre-existing healthy service,
-and the absence of create/recreate/delete Compose commands.
+bounded Iceberg connection-refusal retry, terminal-state stop, non-transient
+error propagation, and the absence of create/recreate/delete Compose commands.
 
 ## Latest recorded live recovery
 
@@ -130,11 +136,13 @@ ClickHouse and MinIO exited `0`, `minio-init` exited `0`, and Iceberg REST
 exited `143`. The retained `unhealthy` values for stopped ClickHouse and
 MinIO are historical Docker health state, not live readiness.
 
-The failure proves that the single Iceberg REST probe ran before the endpoint
-accepted a connection. It does not prove that the endpoint could never become
-ready: the current state machine waits only for the container's `running`
-state and then performs one immediate `/v1/config` probe. Classification:
-`ICEBERG_REST_READINESS_GATE_INCOMPLETE`.
+The failure proved that the single Iceberg REST probe ran before the endpoint
+accepted a connection. It did not prove that the endpoint could never become
+ready: the state machine at entry HEAD waited only for container `running`
+and then performed one immediate `/v1/config` probe. Classification:
+`ICEBERG_REST_READINESS_GATE_INCOMPLETE`. The current local implementation
+retries only that observed transient error under a bounded condition wait; no
+live retry has occurred.
 
 Exact local evidence is untracked under
 `.codex-grok-tasks/external-dependency-live-recovery-20260809-grok01/`:
@@ -200,6 +208,8 @@ rerunning the preflight.
 
 - The first live recovery identity is consumed. Do not repeat it without a
   tested readiness-gate change or new diagnostic evidence.
+- The bounded readiness-gate change is locally green. Dependency state is
+  unchanged because no second live recovery ran.
 - Dependency readiness is false because all dependency containers remain
   exited. Workload recovery is also false.
 - Restoring ClickHouse and Iceberg/MinIO cannot repair the independent API
@@ -214,12 +224,7 @@ rerunning the preflight.
 
 ### Next decision
 
-The next atomic slice is local TDD for a bounded Iceberg REST readiness wait
-from the kind node. It must retry transient connection refusal only within
-the configured timeout, fail immediately if the container becomes terminal,
-and preserve the existing start order and reverse rollback contract. End that
-slice after focused local tests; do not run another live recovery in it.
-
-A later, separately authorized runtime slice may make one new live attempt
-only after the readiness change is locally green. Preserve a new evidence
-identity and stop after success or after one failure/rollback record.
+The next direct dependency action is one separately authorized runtime slice
+for a new live recovery attempt. It must use a new evidence identity, preserve
+the exact command output, and stop after success or after one failure/rollback
+record. Workload verification remains a later separate slice.

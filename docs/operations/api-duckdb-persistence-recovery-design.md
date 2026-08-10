@@ -74,6 +74,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E15 | [docs/disaster-recovery.md](../disaster-recovery.md), [scripts/backup.py](../../scripts/backup.py), [verify_backup.py](../../scripts/verify_backup.py), [restore.py](../../scripts/restore.py) | Local DuckDB/config backup tooling; not proved wired to this emptyDir; not first-line preservation against a failing open (see invariant 10) |
 | E16 | [`.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml`](../../.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml) | **Historical task Deployment baseline** (preserved manifest, not a live 2026-08-10 query and **not** a claim that this file was rendered by the tracked Helm chart): Deployment `agentflow-chk-restore-rv-api-20260802-01`; `DUCKDB_PATH=/data/agentflow.duckdb`; `AGENTFLOW_USAGE_DB_PATH=/data/agentflow_api.duckdb`; `AGENTFLOW_PROCESS_ROLE=all`; no explicit `AGENTFLOW_CONTROLPLANE_STORE` (application default therefore `embedded` at that baseline); `/data` is `emptyDir` with `sizeLimit: 256Mi`. Later E9 changes the two DuckDB env paths and scales the Deployment but does not change volume or process-role fields. E16 alone cannot rule out later mutation; E17 independently resolves the current live fields |
 | E17 | [metadata/preservation gate `result.json`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/evidence.md) | **Observed** `2026-08-10T01:18:15.0702826Z`–`01:19:42.9195636Z`; five bounded read-only Kubernetes metadata queries, all exit 0, no retries; safe fields only; no logs, `exec`, filesystem/database-byte access, or mutation |
+| E18 | [`second-opinion-api-duckdb-quiesce-capture-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-20260810.md) | Local, intentionally untracked review packet written `2026-08-10T01:51:50.4624998Z`; SHA-256 `baf90a58125abfa2e1a47fe36bc8fd43d47e3d99f1548eaa01af0175e0d3e776`; records a candidate only, not an approved runbook. One bounded `claude -p` review returned exit 1 with no text; no duplicate review, delegated file edit, or runtime action followed. This later slice changes documentation only |
 
 ## Current failure data-flow trace
 
@@ -529,6 +530,70 @@ or copying while restart attempts continue remain forbidden.
 | `result.md` | `d7c3f43f60ec605797ca2e6e4cef21f5c80e95c28c36a7cee3e0a2f0be6eb10f` |
 | `evidence.md` | `8a4f0e6d34698c7dc9ac5eaeb72a197a7563606bb1b966d7b2ed2b786f1322a4` |
 
+## Quiesce-and-capture design review hold — 2026-08-10
+
+A later local-only slice investigated one possible emergency preservation
+mechanism but did **not** approve or execute it. E18 contains the exact
+adversarial review request. It must not be treated as an operator runbook.
+
+### Primary-source findings
+
+| Source | What it establishes | What it does not establish |
+| --- | --- | --- |
+| [Kubernetes volumes / `emptyDir`](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) | `emptyDir` survives a container crash and is deleted when its Pod is removed from the node | Safety of copying files during DuckDB replay |
+| [Kubernetes Pod lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/) | Kubelet performs restart-policy restarts; stopping/restarting kubelet does not itself stop local Pod containers; a long outage can lead to node-unhealthy handling and eviction | A stand-specific safe kubelet-stop duration |
+| [Kubernetes 1.32 controller-manager reference](https://v1-32.docs.kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/) | Default `node-monitor-grace-period` is 50 seconds | The live flag value or workload tolerations on this stand |
+| [Kubernetes EphemeralContainer API](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#EphemeralContainer) | Ephemeral containers may declare volume mounts and a target container | Runtime support, cross-restart PID visibility, admission, or safe quiescence here |
+| [Docker `cp`](https://docs.docker.com/reference/cli/docker/container/cp/) | A file can be copied from a container filesystem to the local machine | Crash consistency of a file being concurrently changed |
+| [Kind node-image boundary](https://kind.sigs.k8s.io/docs/design/node-image/) | Kind explicitly warns users not to depend on node-image internals | Stability of kubelet host paths or systemd details across node images |
+| [systemd `--on-active` implementation](https://github.com/systemd/systemd/blob/main/src/run/run.c) | `systemd-run` supports a delayed transient timer | Availability and exact behavior on the live Kind node without a capability check |
+
+### Candidate considered, not selected
+
+The candidate was to stop only `kubelet.service` under an independent
+auto-start watchdog, wait fail-closed for the CrashLoop container to exit,
+prove no running API task or open file descriptor below the exact `emptyDir`,
+flush pending filesystem writes, create a read-only uncompressed tar in node
+staging, resume kubelet, and then copy/hash that sealed staging archive to the
+macOS host. No command implementing this sequence was written or executed.
+
+The candidate remains **unapproved** because all of the following still need
+independent review or live read-only capability proof:
+
+1. The exact kubelet root and `emptyDir` source path depend on unsupported
+   Kind node-image internals and must fail closed on any mismatch.
+2. The watchdog, kubelet-stop budget, live node-monitor settings, Pod
+   tolerations, and single-node blast radius have not been validated.
+3. Zero running containers is not by itself proof of zero open file
+   descriptors or a stable complete base/WAL/sidecar set.
+4. `sync` plus tar semantics, tool availability, archive completeness,
+   timeout behavior, and external destination durability remain unreviewed.
+5. Ephemeral-container and containerd task-pause alternatives still contain
+   runtime-support, namespace, capability, timing, or concurrent-copy gaps;
+   neither is accepted as safer.
+
+### Review attempt and stop reason
+
+One bounded second-opinion call used `claude -p` with the exact E18 request.
+It returned exit code 1 and no review text. No files were delegated, no writer
+was started, and no automatic alternate review was launched. The design
+therefore stops at `DESIGN_REVIEW_BLOCKED`; this does not change E17's
+`PRESERVATION_PARTIAL` result.
+
+### Exact resume contract
+
+The next session must first verify E18's path and SHA-256, then obtain one
+independent adversarial verdict (`ACCEPT`, `ACCEPT_WITH_CHANGES`, or `REJECT`)
+on that packet. The user's earlier Grok allowance makes a single bounded
+Grok review an available route, but it has **not** run. Batch all findings
+into one response; do not launch repeated reviewers.
+
+Only an accepted or corrected-and-reverified design may become a separate
+tracked runbook. Runtime preflight, kubelet or containerd control, helper
+injection, filesystem/database-byte access or copy, capture, cleanup, restore,
+traffic, production transition, and push remain outside this documentation
+slice and require their own authorization.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -552,9 +617,9 @@ or copying while restart attempts continue remain forbidden.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy mechanism remains unresolved after E17.** No reviewed
-   exact mechanism was established within the read-only gate. It requires a
-   separate design/review slice before any independently authorized capture.
+8. **Quiesce-and-copy mechanism remains unresolved after E18.** A candidate
+   exists only as an adversarial review packet. Its independent review failed
+   to return a verdict, so no operator runbook is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -564,11 +629,13 @@ or copying while restart attempts continue remain forbidden.
 | Ownership/lifetime/recovery contract established from repository + preserved evidence | Yes |
 | Live metadata / preservation-feasibility gate executed | **Yes, read-only** (`METADATA_PASS`; `PRESERVATION_PARTIAL`) |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
+| Quiesce-and-capture runbook approved | **No** (`DESIGN_REVIEW_BLOCKED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next authorized action | Separate design/review of an exact rollback-capable quiesce-and-capture mechanism; runtime capture requires independent authorization |
+| Next authorized action | One bounded independent review of E18; no runtime interaction |
 
 ---
 
-*End of design. The metadata gate was read-only; no runtime mutation or
-database-byte access was authorized or performed.*
+*End of design. The metadata gate was read-only; the later design-review
+attempt changed no runtime state. No database-byte access was authorized or
+performed.*

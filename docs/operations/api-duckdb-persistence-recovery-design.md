@@ -64,7 +64,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E5 | [same pack `evidence.md`](../../.codex-grok-tasks/workload-recovery-verification-20260810-codex01/evidence.md) | Decisive API previous-log and workload identities; no filesystem inspection |
 | E6 | [colima-runtime-stabilization.md](../../colima-runtime-stabilization.md) “Workload recovery RCA” and later sections | RCA at `2026-08-09T22:46:11Z`; verification section at `2026-08-10T00:30:13Z`; emptyDir stated as local API path class, WAL origin still unproven without `exec` |
 | E7 | [external-dependency-recovery-gate.md](external-dependency-recovery-gate.md) latest workload result / next decision | Dependency recovery PASS/consumed; does not repair API WAL |
-| E8 | [`.codex-grok-tasks/golden-4h-soak-api-emptydir-recovery-reinstall-20260802.md`](../../.codex-grok-tasks/golden-4h-soak-api-emptydir-recovery-reinstall-20260802.md) | **Historical** task brief (2026-08-02): prior API pod failed on `/data/agentflow_api.duckdb.wal`; task required `/data` to be verified `emptyDir` before pod delete; **not re-queried on 2026-08-10** |
+| E8 | [`.codex-grok-tasks/golden-4h-soak-api-emptydir-recovery-reinstall-20260802.md`](../../.codex-grok-tasks/golden-4h-soak-api-emptydir-recovery-reinstall-20260802.md) | **Historical** task brief (2026-08-02): prior API pod failed on `/data/agentflow_api.duckdb.wal`; task required `/data` to be verified `emptyDir` before pod delete. E17 independently confirms the current `emptyDir`; E8's destructive pod-delete precedent is not safe or authorized now |
 | E9 | [`.codex-grok-tasks/golden-4h-soak-runtime-20260807-05/_fix_api_and_resume.sh`](../../.codex-grok-tasks/golden-4h-soak-runtime-20260807-05/_fix_api_and_resume.sh) | **Historical runtime patch provenance** (2026-08-07): set both `AGENTFLOW_USAGE_DB_PATH` and `DUCKDB_PATH` to `*_fresh_20260807.duckdb` when no hostPath; not the tracked chart default |
 | E10 | [same pack `runtime-result.md`](../../.codex-grok-tasks/golden-4h-soak-runtime-20260807-05/runtime-result.md) | Summary emphasized usage-path fix; does not erase the dual env patch in E9 |
 | E11 | [`.codex-grok-tasks/full-e2e-live-execute-20260801.md`](../../.codex-grok-tasks/full-e2e-live-execute-20260801.md) | Earlier deployment profile: ClickHouse serving + `DUCKDB_PATH=/data/agentflow.duckdb` + `AGENTFLOW_USAGE_DB_PATH=/data/agentflow_api.duckdb` on task `emptyDir` |
@@ -72,7 +72,8 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E13 | [src/serving/api/main.py](../../src/serving/api/main.py), [db_pool.py](../../src/serving/db_pool.py), [duckdb_connection.py](../../src/serving/duckdb_connection.py) | Startup path that opens `DUCKDB_PATH` |
 | E14 | [control_plane/store.py](../../src/serving/control_plane/store.py), [embedded.py](../../src/serving/control_plane/embedded.py), [ADR 0009](../decisions/0009-control-plane-state-and-scaling-gate.md), [ADR 0010](../decisions/0010-control-plane-externalization-postgres.md) | Conditional ownership of embedded vs PostgreSQL control-plane state |
 | E15 | [docs/disaster-recovery.md](../disaster-recovery.md), [scripts/backup.py](../../scripts/backup.py), [verify_backup.py](../../scripts/verify_backup.py), [restore.py](../../scripts/restore.py) | Local DuckDB/config backup tooling; not proved wired to this emptyDir; not first-line preservation against a failing open (see invariant 10) |
-| E16 | [`.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml`](../../.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml) | **Historical task Deployment baseline** (preserved manifest, not a live 2026-08-10 query and **not** a claim that this file was rendered by the tracked Helm chart): Deployment `agentflow-chk-restore-rv-api-20260802-01`; `DUCKDB_PATH=/data/agentflow.duckdb`; `AGENTFLOW_USAGE_DB_PATH=/data/agentflow_api.duckdb`; `AGENTFLOW_PROCESS_ROLE=all`; no explicit `AGENTFLOW_CONTROLPLANE_STORE` (application default therefore `embedded` at that baseline); `/data` is `emptyDir` with `sizeLimit: 256Mi`. Later E9 changes the two DuckDB env paths and scales the Deployment but does not change volume or process-role fields. Unrecorded later mutation is **not** ruled out |
+| E16 | [`.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml`](../../.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml) | **Historical task Deployment baseline** (preserved manifest, not a live 2026-08-10 query and **not** a claim that this file was rendered by the tracked Helm chart): Deployment `agentflow-chk-restore-rv-api-20260802-01`; `DUCKDB_PATH=/data/agentflow.duckdb`; `AGENTFLOW_USAGE_DB_PATH=/data/agentflow_api.duckdb`; `AGENTFLOW_PROCESS_ROLE=all`; no explicit `AGENTFLOW_CONTROLPLANE_STORE` (application default therefore `embedded` at that baseline); `/data` is `emptyDir` with `sizeLimit: 256Mi`. Later E9 changes the two DuckDB env paths and scales the Deployment but does not change volume or process-role fields. E16 alone cannot rule out later mutation; E17 independently resolves the current live fields |
+| E17 | [metadata/preservation gate `result.json`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/evidence.md) | **Observed** `2026-08-10T01:18:15.0702826Z`–`01:19:42.9195636Z`; five bounded read-only Kubernetes metadata queries, all exit 0, no retries; safe fields only; no logs, `exec`, filesystem/database-byte access, or mutation |
 
 ## Current failure data-flow trace
 
@@ -129,7 +130,7 @@ readiness consequence, not a second root cause (E3, E7).
 
 ### Task Deployment baseline vs chart defaults (Historical provenance, E16 → E9)
 
-**Historical provenance chain — not a fresh 2026-08-10 live query.** The
+**Historical provenance chain — independent of the later E17 live query.** The
 preserved task manifest (E16) establishes the task Deployment baseline for
 `agentflow-chk-restore-rv-api-20260802-01`. It is **not** claimed to have been
 rendered by the tracked Helm chart (E12); it is a preserved task artifact that
@@ -149,10 +150,11 @@ The later 2026-08-07 script (E9) changes the two DuckDB env paths to the
 and scales the Deployment, but does **not** change the volume or process-role
 fields in that historical chain.
 
-**Current uncertainty remains explicit:** unrecorded mutation after E9 is not
-ruled out. Exact live env values, volume source, and control-plane store kind
-must still be confirmed with a separately authorized read-only metadata query
-before any runtime preservation or recovery work.
+**E17 resolves the metadata uncertainty at its observation time:** the fresh
+env paths, ClickHouse serving backend, process role, and 256Mi `emptyDir` are
+live. The control-plane store env is absent, so `embedded` remains the
+application-default inference. File presence/content and backup existence
+remain unknown because E17 intentionally performed no filesystem access.
 
 ### Application open path (Repository contract, E13)
 
@@ -188,11 +190,11 @@ usage path.
 
 | Asset | Owner / store | Lifetime | Recoverability from repository tooling | Notes for this stand |
 | --- | --- | --- | --- | --- |
-| Kubernetes `/data` volume | Chart: PVC if `persistence.enabled`, else `emptyDir` | PVC: independent of pod; `emptyDir`: survives container restart in same pod, **destroyed on pod deletion** | Chart documents PVC; no automatic backup of either volume type | **Historical provenance (E16 baseline, E8 proof, E9 did not change volume fields):** task Deployment used `emptyDir` (`sizeLimit: 256Mi` in E16). **Unknown now without a fresh pod-spec query** after possible later unrecorded mutation; do not pretend re-verification on 2026-08-10 |
+| Kubernetes `/data` volume | Chart: PVC if `persistence.enabled`, else `emptyDir` | PVC: independent of pod; `emptyDir`: survives container restart in same pod, **destroyed on pod deletion** | Chart documents PVC; no automatic backup of either volume type | **Observed live in E17:** current Pod uses `emptyDir`, default medium, `sizeLimit: 256Mi`; do not delete or replace the Pod before external preservation |
 | `DUCKDB_PATH` base + `.wal` | API process via `DuckDBPool` / `connect_duckdb`; on embedded control plane, also hosts webhook/alert/outbox/dead-letter tables through `query_engine._conn` | Lives on `/data` (or `:memory:` if configured) | `scripts/backup.py` can checkpoint+archive local DuckDB+WAL when pointed at openable files, but **must not** be first-line preservation against the sole failing live set (invariant 10) | **Observed** failure on `agentflow_fresh_20260807.duckdb.wal`. Base+WAL are one preservation set. Path names: E16 baseline → E9 fresh rename |
 | `AGENTFLOW_USAGE_DB_PATH` base + `.wal` | `AuthManager` private DuckDB file on embedded profile; PostgreSQL adapter when `controlPlane.store=postgres` | Same volume lifetime rules as `/data` for file-backed path | Included as usage role by backup tooling when present and openable; same first-line restriction as primary | Earlier CrashLoop used `agentflow_api.duckdb.wal` (E8); historical patch moved usage to `agentflow_api_fresh_20260807.duckdb` (E9). Current remaining failure is **not** that usage WAL |
 | ClickHouse serving data | External Compose/ClickHouse volume `agentflow-ch-rv-20260802-01-data` (dependency gate identities) | Outside API pod `/data` | **Not** covered by `scripts/backup.py` / disaster-recovery DuckDB runbook | Bridge recovered with backend `clickhouse` after dependency recovery (E3, E7). Independent of API WAL |
-| Embedded control-plane state | Default `controlPlane.store=embedded`: tables on serving DuckDB connection (`DUCKDB_PATH`); usage/sessions on separate usage file | Per-pod / per-file | Local DuckDB backup only if files are reachable and openable | **Conditional.** Live `AGENTFLOW_CONTROLPLANE_STORE` value was not re-dumped in E3–E5. E16 baseline has no explicit store env → application default `embedded`; chart default and ADR single-replica profile are also embedded |
+| Embedded control-plane state | Default `controlPlane.store=embedded`: tables on serving DuckDB connection (`DUCKDB_PATH`); usage/sessions on separate usage file | Per-pod / per-file | Local DuckDB backup only if files are reachable and openable | **Conditional.** E17 confirms `AGENTFLOW_CONTROLPLANE_STORE` is absent; application default, chart default, and ADR single-replica profile imply `embedded`, but this remains an inference rather than an explicit live env value |
 | PostgreSQL control-plane state | Only when `controlPlane.store=postgres` + DSN secret | External to API pod | No PITR/base-backup path implemented in this repo (disaster-recovery.md) | Not proved active for this deployment from supplied evidence |
 | YAML/config included by backup | Non-secret `config/` members via `scripts/backup.py` | Host/project files or ConfigMap/Secret mounts | Archived with SHA-256 manifest | Secrets (`api_keys`, `webhooks`, `tenants`) **excluded** by policy |
 | YAML/config excluded / K8s-mounted | Helm mounts config ConfigMap and secret material under `/etc/agentflow/...` | Cluster objects, not DuckDB files | Not recovered from DuckDB backup archive | Re-apply from source of truth / secret manager, not from DuckDB WAL repair |
@@ -201,12 +203,12 @@ usage path.
 
 | Logical class | Lives in `DUCKDB_PATH` when… | Lives in usage path when… | Lives in PostgreSQL when… | Lives in ClickHouse when… | Missing runtime evidence for this pod |
 | --- | --- | --- | --- | --- | --- |
-| Serving entity tables / pipeline journal | `serving.backend=duckdb` (chart default) | never | never | `serving.backend=clickhouse` (historical e2e/soak profile E11; E16 task baseline also uses ClickHouse serving) | Live `SERVING_BACKEND` not re-queried in E3–E5 |
-| Webhook queue/log, alert history, outbox, dead-letter | embedded store on `query_engine._conn` → `DUCKDB_PATH` | never | `controlPlane.store=postgres` | never (CH rejected for this state in ADR 0010) | Live control-plane store kind not re-queried; E16 baseline implies embedded default |
-| `api_usage` / `api_sessions` | never on shared conn (ADR 0010 inventory) | embedded AuthManager file | postgres store | never | Live usage path may still be the 2026-08-07 fresh name (E9), unconfirmed now |
+| Serving entity tables / pipeline journal | `serving.backend=duckdb` (chart default) | never | never | `serving.backend=clickhouse` (historical e2e/soak profile E11; E16 task baseline also uses ClickHouse serving) | E17 confirms live `SERVING_BACKEND=clickhouse` |
+| Webhook queue/log, alert history, outbox, dead-letter | embedded store on `query_engine._conn` → `DUCKDB_PATH` | never | `controlPlane.store=postgres` | never (CH rejected for this state in ADR 0010) | E17 confirms the store env is absent; embedded remains the application-default inference |
+| `api_usage` / `api_sessions` | never on shared conn (ADR 0010 inventory) | embedded AuthManager file | postgres store | never | E17 confirms the live fresh usage path; store placement still follows the conditional store inference |
 | Webhook registrations / alert rules files | N/A (YAML paths / ConfigMap mounts, not DuckDB) | N/A | postgres rows when externalized | N/A | Exact live registration paths not re-queried |
 
-## Chart defaults vs historical patches vs live unknown
+## Chart defaults vs historical patches vs live metadata
 
 | Layer | What is known | What must not be assumed |
 | --- | --- | --- |
@@ -216,11 +218,11 @@ usage path.
 | Historical emptyDir proof (2026-08-02, E8) | Prior API pod `/data` verified `emptyDir`; recovery by **pod delete** intentionally discarded volume contents | That pod delete is still safe or authorized; that emptyDir still holds without a fresh query |
 | Historical fix script (2026-08-07, E9–E10) | No hostPath → `set env` both usage and primary to `*_fresh_20260807.duckdb`; scales Deployment; does **not** change volume or process-role fields relative to the E16 baseline chain; summary text focused on usage | That only usage was changed; current failure is on the primary fresh WAL; that no later unrecorded mutation occurred |
 | Latest read-only verification (2026-08-10, E3–E5) | Crash on `/data/agentflow_fresh_20260807.duckdb.wal`; same pod UID as pre-dependency-recovery | Live env dump, volume source, file inventory, hashes, or existence of a backup |
+| Metadata / preservation gate (2026-08-10, E17) | Same Pod UID; live fresh paths; ClickHouse serving; process role `all`; 256Mi `emptyDir`; no existing helper/init/ephemeral path; `PRESERVATION_PARTIAL` | File inventory/content/hashes, a verified backup, or a reviewed quiesce-and-copy mechanism |
 
-**Unknown without a fresh authorized runtime query:** exact Deployment env
-values, volume source on the current pod template, file listing under `/data`,
-file sizes/mtimes/hashes, whether base DB exists beside the WAL, and whether
-any external backup of those files exists.
+**Still unknown after E17:** file listing under `/data`, file sizes/mtimes/
+hashes, whether the base DB exists beside the WAL, whether any external backup
+of those files exists, and an exact reviewed quiesce-and-copy mechanism.
 
 ## Recovery invariants
 
@@ -461,6 +463,72 @@ restart attempts continue.
 - Explicit statement whether a verified pre-existing backup was found
   (default from current evidence: **not known / not found**).
 
+## Metadata and preservation-feasibility gate outcome — 2026-08-10
+
+The separately authorized read-only metadata gate defined above was executed
+once against `deproject-mac`, context
+`kind-agentflow-reverify-ed03fc47`, namespace `agentflow`. E17 is the
+sanitized evidence pack.
+
+| Gate | Result | Decisive evidence |
+| --- | --- | --- |
+| Metadata | `METADATA_PASS` | Live Deployment → ReplicaSet → Pod ownership chain matches preserved identity; live env and `/data` source are now confirmed |
+| Preservation feasibility | `PRESERVATION_PARTIAL` | `QUIESCE_AND_COPY_MECHANISM_NOT_ESTABLISHED` |
+| Capture | Not authorized and not performed | No database-byte inventory, copy, open, checkpoint, or sealed master |
+| Production | `candidate` (unchanged) | This gate is not readiness, continuity, soak, traffic, or production acceptance |
+
+### Live metadata observed
+
+- Deployment `agentflow-chk-restore-rv-api-20260802-01` UID
+  `a2f14325-e1e5-4122-9d08-74c73a573d5a`, generation 4, desired/updated 1,
+  ready/available 0; ReplicaSet revision 2 and hash `59489dd45c`.
+- The sole matching Pod remains
+  `agentflow-chk-restore-rv-api-20260802-01-59489dd45c-kk8tf`, UID
+  `c9d26829-c57f-4550-a86f-cdcc41e719fd`: no drift from E3. It was
+  `Ready=False`, `CrashLoopBackOff`, restart count 90; last observed
+  termination was `Error`, exit 3, at `2026-08-10T01:16:26Z`.
+- `DUCKDB_PATH=/data/agentflow_fresh_20260807.duckdb`,
+  `AGENTFLOW_USAGE_DB_PATH=/data/agentflow_api_fresh_20260807.duckdb`,
+  `SERVING_BACKEND=clickhouse`, and `AGENTFLOW_PROCESS_ROLE=all` are live.
+  `AGENTFLOW_CONTROLPLANE_STORE` is absent; `embedded` remains an
+  application-default **Inference**, not an explicit env value.
+- `/data` is a read-write `emptyDir` named `data`, default medium,
+  `sizeLimit: 256Mi`; its lifetime is the current Pod.
+- `restartPolicy=Always`. The Pod has one regular container, zero init
+  containers, zero ephemeral containers, no declared shared process
+  namespace, and no other existing container that mounts `/data`.
+
+### Feasibility decision and boundary
+
+The metadata closes the former live identity/volume/env gaps but does not
+provide a reviewed crash-consistent capture path. The only existing `/data`
+consumer is the repeatedly starting API process, while Pod replacement would
+destroy this `emptyDir`. A bounded repository/evidence search found no
+previously reviewed exact helper, signal, node-runtime, or kubelet-volume
+procedure that both quiesces open attempts and copies the complete
+base/WAL/sidecar set to host-persistent external storage.
+
+Adding a helper or ephemeral container, changing/scaling the workload, or
+controlling the process from the node would be an additional runtime mutation
+outside this gate. Consequently the gate stops at `PRESERVATION_PARTIAL` with
+`QUIESCE_AND_COPY_MECHANISM_NOT_ESTABLISHED`. It did not probe such mechanisms
+live, list database files, query logs, or read/copy database bytes. No verified
+backup of the current set is known or identified; no runtime backup search was
+performed.
+
+Any continuation must be a new, separately authorized slice: first design and
+review an exact rollback-capable quiesce-and-capture mechanism, then authorize
+runtime capture independently. Pod delete/replacement, path rotation, cleanup,
+or copying while restart attempts continue remain forbidden.
+
+### Artifact integrity
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `result.json` | `e6e98176c68541e44966fd1b24d88a33f3305f3714138d1b64032371b78d195b` |
+| `result.md` | `d7c3f43f60ec605797ca2e6e4cef21f5c80e95c28c36a7cee3e0a2f0be6eb10f` |
+| `evidence.md` | `8a4f0e6d34698c7dc9ac5eaeb72a197a7563606bb1b966d7b2ed2b786f1322a4` |
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -473,20 +541,20 @@ restart attempts continue.
    was not the API WAL failure mode.
 3. **Is any verified backup of the current `/data` files known outside this
    workspace?** Supplied evidence does not identify one.
-4. **Confirm live volume source and env** after 2026-08-07 patches without
-   assuming chart defaults or treating E16/E9 as a live re-query.
-5. **Confirm live `SERVING_BACKEND` and `AGENTFLOW_CONTROLPLANE_STORE`** so
-   data-continuity checks target the correct store (E16 baseline implies
-   embedded default only historically).
+4. **Live volume source and env are resolved by E17:** `/data` is the
+   current Pod's 256Mi `emptyDir`; both fresh DuckDB paths are live.
+5. **Live store selection is partially resolved by E17:**
+   `SERVING_BACKEND=clickhouse` is explicit; `AGENTFLOW_CONTROLPLANE_STORE`
+   is absent, so `embedded` is still the application-default inference.
 6. **Whether future durability (PVC + backup wiring + single-writer
    enforcement already in chart) is required before any further soak** —
    separate program, not this design’s execution.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Which reviewed quiesce-and-copy mechanism** (if any) can stop CrashLoop
-   open attempts and capture bytes without unauthorized destructive mutation —
-   decided only in authorized runtime slices, not by this document.
+8. **Quiesce-and-copy mechanism remains unresolved after E17.** No reviewed
+   exact mechanism was established within the read-only gate. It requires a
+   separate design/review slice before any independently authorized capture.
 
 ## Claim boundary for this documentation slice
 
@@ -494,11 +562,13 @@ restart attempts continue.
 | --- | --- |
 | Design document created | Yes (this file) |
 | Ownership/lifetime/recovery contract established from repository + preserved evidence | Yes |
+| Live metadata / preservation-feasibility gate executed | **Yes, read-only** (`METADATA_PASS`; `PRESERVATION_PARTIAL`) |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next authorized action | Separate metadata / preservation-feasibility gate or explicit blocker if runtime interaction is not authorized |
+| Next authorized action | Separate design/review of an exact rollback-capable quiesce-and-capture mechanism; runtime capture requires independent authorization |
 
 ---
 
-*End of design. No runtime mutation was authorized or performed by this document.*
+*End of design. The metadata gate was read-only; no runtime mutation or
+database-byte access was authorized or performed.*

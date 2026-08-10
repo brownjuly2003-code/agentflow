@@ -1,8 +1,7 @@
 # External dependency recovery gate
 
-**Status:** one live recovery failed safe and rolled back on 2026-08-09; the
-bounded Iceberg REST readiness correction is implemented and locally tested,
-but has not been exercised live.
+**Status:** the post-fix live recovery passed on 2026-08-10 UTC; external
+dependencies are ready for a separate workload-verification decision.
 
 This runbook covers the current
 `COLIMA_RESTART_DEPENDENCY_LIFECYCLE_GAP`: restoring the existing ClickHouse,
@@ -141,8 +140,8 @@ accepted a connection. It did not prove that the endpoint could never become
 ready: the state machine at entry HEAD waited only for container `running`
 and then performed one immediate `/v1/config` probe. Classification:
 `ICEBERG_REST_READINESS_GATE_INCOMPLETE`. The current local implementation
-retries only that observed transient error under a bounded condition wait; no
-live retry has occurred.
+retries only that observed transient error under a bounded condition wait.
+The corrected gate was later exercised successfully in the attempt below.
 
 Exact local evidence is untracked under
 `.codex-grok-tasks/external-dependency-live-recovery-20260809-grok01/`:
@@ -156,6 +155,40 @@ Exact local evidence is untracked under
 
 No workload verification, API WAL work, Kubernetes or Colima mutation,
 traffic, production transition, commit by Grok, or push occurred.
+
+## Latest successful live recovery
+
+One new recovery ran from entry HEAD `084977e` during the UTC capture interval
+`2026-08-10T00:21:28.7044870Z`–`00:22:26.5794844Z`. Codex executed the exact
+acknowledged command once; it exited `0` with `status=ready` and
+`ready_for_workload_verification=true`.
+
+All four dependency gates passed. The invocation started only the existing
+ClickHouse, MinIO, and Iceberg REST services; `minio-init` completed as an
+exited-zero one-shot. The result preserved the existing ClickHouse named
+volume and MinIO container writable layer. No rollback or second recovery
+attempt occurred.
+
+One independent read-only post-recovery preflight returned
+`preflight_passed`: ClickHouse and MinIO were running and healthy, Iceberg REST
+was running with exit code `0`, and `minio-init` remained exited with code
+`0`. Its `ready_for_workload_verification=false` field reflects default
+read-only mode; the live recovery result is the readiness authority.
+
+Exact local evidence is untracked under
+`.codex-grok-tasks/external-dependency-live-recovery-20260809-codex02/`:
+
+- `recovery-stdout.json` — SHA-256
+  `e2d2ee13aa2e8366d195a6248d9815142ec2d78614f49944633fee70df05e5d6`;
+- `post-recovery-preflight.json` — SHA-256
+  `e99685e603a9f39f64b74470b0927a73b1dabe37e21897767fc406256e39bd76`;
+- `result.json` — SHA-256
+  `af26308b069f5338fcdbac819f13cb2b544f3c3755e2fcd12d48edb2e804028c`.
+
+No workload verification or API WAL remediation occurred. Runtime mutation
+was limited to the gate's scoped starts of existing containers. No Kubernetes
+mutation, Colima profile/configuration change, traffic, production transition,
+push, container recreation/removal, or volume deletion occurred.
 
 ## Next-session transparent resume
 
@@ -206,12 +239,13 @@ rerunning the preflight.
 
 ### Current claim boundary
 
-- The first live recovery identity is consumed. Do not repeat it without a
-  tested readiness-gate change or new diagnostic evidence.
-- The bounded readiness-gate change is locally green. Dependency state is
-  unchanged because no second live recovery ran.
-- Dependency readiness is false because all dependency containers remain
-  exited. Workload recovery is also false.
+- The failed Grok recovery and successful Codex recovery identities are both
+  consumed. Do not repeat either.
+- External dependency recovery is PASS and
+  `ready_for_workload_verification=true` at the successful gate boundary.
+- Latest read-only post-state: ClickHouse/MinIO running healthy, Iceberg REST
+  running, and `minio-init` exited `0`.
+- Workload recovery is unverified, not PASS.
 - Restoring ClickHouse and Iceberg/MinIO cannot repair the independent API
   DuckDB WAL replay failure. API remediation remains a separate slice.
 - Option A remains failed and rolled back. Clock stability and idle-I/O remain
@@ -224,7 +258,8 @@ rerunning the preflight.
 
 ### Next decision
 
-The next direct dependency action is one separately authorized runtime slice
-for a new live recovery attempt. It must use a new evidence identity, preserve
-the exact command output, and stop after success or after one failure/rollback
-record. Workload verification remains a later separate slice.
+Run one bounded read-only workload verification: capture exact API, bridge,
+materializer, Redis, and Kafka pod identities, readiness, restart deltas, and
+current/previous termination evidence for any non-ready workload. Do not
+restart or mutate workloads or dependencies. Stop after an evidence-backed
+classification; API DuckDB WAL remediation remains a later separate slice.

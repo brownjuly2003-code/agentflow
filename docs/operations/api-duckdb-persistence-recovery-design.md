@@ -74,7 +74,8 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E15 | [docs/disaster-recovery.md](../disaster-recovery.md), [scripts/backup.py](../../scripts/backup.py), [verify_backup.py](../../scripts/verify_backup.py), [restore.py](../../scripts/restore.py) | Local DuckDB/config backup tooling; not proved wired to this emptyDir; not first-line preservation against a failing open (see invariant 10) |
 | E16 | [`.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml`](../../.codex-grok-tasks/checkpoint-restore-reverify-20260802-01/api-deployment.yaml) | **Historical task Deployment baseline** (preserved manifest, not a live 2026-08-10 query and **not** a claim that this file was rendered by the tracked Helm chart): Deployment `agentflow-chk-restore-rv-api-20260802-01`; `DUCKDB_PATH=/data/agentflow.duckdb`; `AGENTFLOW_USAGE_DB_PATH=/data/agentflow_api.duckdb`; `AGENTFLOW_PROCESS_ROLE=all`; no explicit `AGENTFLOW_CONTROLPLANE_STORE` (application default therefore `embedded` at that baseline); `/data` is `emptyDir` with `sizeLimit: 256Mi`. Later E9 changes the two DuckDB env paths and scales the Deployment but does not change volume or process-role fields. E16 alone cannot rule out later mutation; E17 independently resolves the current live fields |
 | E17 | [metadata/preservation gate `result.json`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/evidence.md) | **Observed** `2026-08-10T01:18:15.0702826Z`–`01:19:42.9195636Z`; five bounded read-only Kubernetes metadata queries, all exit 0, no retries; safe fields only; no logs, `exec`, filesystem/database-byte access, or mutation |
-| E18 | [`second-opinion-api-duckdb-quiesce-capture-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-20260810.md) | Local, intentionally untracked review packet written `2026-08-10T01:51:50.4624998Z`; SHA-256 `baf90a58125abfa2e1a47fe36bc8fd43d47e3d99f1548eaa01af0175e0d3e776`; records a candidate only, not an approved runbook. One bounded `claude -p` review returned exit 1 with no text; no duplicate review, delegated file edit, or runtime action followed. This later slice changes documentation only |
+| E18 | [`second-opinion-api-duckdb-quiesce-capture-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-20260810.md) | Local, intentionally untracked review packet written `2026-08-10T01:51:50.4624998Z`; SHA-256 `baf90a58125abfa2e1a47fe36bc8fd43d47e3d99f1548eaa01af0175e0d3e776`; records a candidate only, not an approved runbook. One bounded `claude -p` review returned exit 1 with no text; E19 is the later independent review of this unchanged packet |
+| E19 | [`second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md) | Local, intentionally untracked review record; SHA-256 `9ce977a4f5fc5254f07398404f3b52c96df12ffd6d0fdc8fd1e63d29c52fae22`. One read-only `local_grok_cli` session (`grok-4.5`, `019fe976-40d9-7563-ad22-aea8c9f4d8fc`) returned final verdict `ACCEPT_WITH_CHANGES`. Its first process-only response could not read files; the same session was resumed once with exact verified E18 text. No API fallback, file edit, web, or runtime action occurred |
 
 ## Current failure data-flow trace
 
@@ -557,42 +558,54 @@ flush pending filesystem writes, create a read-only uncompressed tar in node
 staging, resume kubelet, and then copy/hash that sealed staging archive to the
 macOS host. No command implementing this sequence was written or executed.
 
-The candidate remains **unapproved** because all of the following still need
-independent review or live read-only capability proof:
+### Independent Grok verdict
 
-1. The exact kubelet root and `emptyDir` source path depend on unsupported
-   Kind node-image internals and must fail closed on any mismatch.
-2. The watchdog, kubelet-stop budget, live node-monitor settings, Pod
-   tolerations, and single-node blast radius have not been validated.
-3. Zero running containers is not by itself proof of zero open file
-   descriptors or a stable complete base/WAL/sidecar set.
-4. `sync` plus tar semantics, tool availability, archive completeness,
-   timeout behavior, and external destination durability remain unreviewed.
-5. Ephemeral-container and containerd task-pause alternatives still contain
-   runtime-support, namespace, capability, timing, or concurrent-copy gaps;
-   neither is accepted as safer.
+E19 records the single independent content review. The read-only
+`local_grok_cli` session returned `ACCEPT_WITH_CHANGES`; it approved neither
+execution nor an operator runbook. The preservation skeleton is viable only
+after these design defects are corrected and reverified:
 
-### Review attempt and stop reason
+1. The fixed 75-second watchdog exceeds the documented Kubernetes 1.32
+   default 50-second node-monitor grace. A corrected design must prove a live
+   safe budget and require
+   `stop + wait + sync + tar + kubelet-active < safe budget < watchdog` with
+   explicit margin, or reject kubelet-stop.
+2. Stopping kubelet on a single-node Kind control-plane has the widest blast
+   radius. It must be last-resort only, with an explicit outage model and
+   aborts on Node or Pod lifecycle drift.
+3. The required base/WAL/sidecar inventory is undefined. Pre-quiesce exact
+   paths and post-tar member/size checks must prove completeness before any
+   artifact can be promoted.
+4. Two zero-task samples do not prevent task or kubelet reactivation during
+   tar. The archive must be invalidated on any possible writer return, and the
+   file-descriptor proof must work across the exact host path or relevant
+   mount namespace.
+5. Tar success, timeout, disk-full, immutable hash, `.partial`, staging
+   retention, rollback, and watchdog-cancellation rules need one fail-closed
+   contract. Success means only a sealed filesystem-level artifact, not a
+   replayable DuckDB database.
 
-One bounded second-opinion call used `claude -p` with the exact E18 request.
-It returned exit code 1 and no review text. No files were delegated, no writer
-was started, and no automatic alternate review was launched. The design
-therefore stops at `DESIGN_REVIEW_BLOCKED`; this does not change E17's
-`PRESERVATION_PARTIAL` result.
+The reviewer classified live grace, tolerations, kubelet root, exact
+`emptyDir` path, systemd behavior, runtime APIs, tools, space, and host-copy
+path as capability evidence for a later separately authorized read-only
+probe, not as facts the design may assume. An ephemeral container is not a
+quiesce mechanism. Containerd task-pause has a narrower blast radius for a
+running task, but its availability, flush behavior, and guaranteed resume are
+also unproved; it does not apply while no task exists.
 
-### Exact resume contract
+### Corrective design boundary
 
-The next session must first verify E18's path and SHA-256, then obtain one
-independent adversarial verdict (`ACCEPT`, `ACCEPT_WITH_CHANGES`, or `REJECT`)
-on that packet. The user's earlier Grok allowance makes a single bounded
-Grok review an available route, but it has **not** run. Batch all findings
-into one response; do not launch repeated reviewers.
+Status is `DESIGN_CHANGES_REQUIRED`; E17 remains `METADATA_PASS` /
+`PRESERVATION_PARTIAL`. The next separate safe slice is local documentation
+only: revise the candidate against every E19 finding, make unknown live values
+explicit fail-closed inputs, and verify the finding-to-control mapping. Do not
+launch another reviewer merely to repeat this verdict.
 
-Only an accepted or corrected-and-reverified design may become a separate
-tracked runbook. Runtime preflight, kubelet or containerd control, helper
-injection, filesystem/database-byte access or copy, capture, cleanup, restore,
-traffic, production transition, and push remain outside this documentation
-slice and require their own authorization.
+Only a corrected-and-reverified design may become a separate tracked runbook.
+Runtime preflight, kubelet or containerd control, helper injection,
+filesystem/database-byte access or copy, capture, cleanup, restore, traffic,
+production transition, and push remain outside this documentation slice and
+require their own authorization.
 
 ## Open questions and data-owner decisions
 
@@ -617,9 +630,10 @@ slice and require their own authorization.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy mechanism remains unresolved after E18.** A candidate
-   exists only as an adversarial review packet. Its independent review failed
-   to return a verdict, so no operator runbook is approved.
+8. **Quiesce-and-copy mechanism remains unresolved after E19.** The independent
+   Grok review returned `ACCEPT_WITH_CHANGES`; the timing, blast-radius,
+   continuous-writer, inventory, and promotion defects remain uncorrected, so
+   no operator runbook is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -629,13 +643,13 @@ slice and require their own authorization.
 | Ownership/lifetime/recovery contract established from repository + preserved evidence | Yes |
 | Live metadata / preservation-feasibility gate executed | **Yes, read-only** (`METADATA_PASS`; `PRESERVATION_PARTIAL`) |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
-| Quiesce-and-capture runbook approved | **No** (`DESIGN_REVIEW_BLOCKED`) |
+| Quiesce-and-capture runbook approved | **No** (`DESIGN_CHANGES_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next authorized action | One bounded independent review of E18; no runtime interaction |
+| Next authorized action | One local-only corrective design revision against E19; no runtime interaction |
 
 ---
 
-*End of design. The metadata gate was read-only; the later design-review
-attempt changed no runtime state. No database-byte access was authorized or
+*End of design. The metadata gate and later Grok design review were read-only
+and changed no runtime state. No database-byte access was authorized or
 performed.*

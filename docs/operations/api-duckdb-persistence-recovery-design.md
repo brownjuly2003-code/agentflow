@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-10
 
-**Status:** Corrected design — runtime capability proof still required; not
-executed or approved as an operator runbook
+**Status:** `CAPABILITY_REHEARSAL_REQUIRED`; neither corrected runtime branch
+is eligible or approved as an operator runbook
 
 **Repository HEAD at authoring:** `319c8d67ce39a33a928d6c1e93566d468034f9e1`
 
@@ -44,8 +44,10 @@ PASS/consumed and must not be repeated for this failure.
   Deployment edit, Helm upgrade, volume recreation, backup/restore execution,
   offline repair attempt, traffic, soak, clock/I/O work, Flink work, production
   transition, or push.
-- No SSH, Docker, Kubernetes, live pod `exec`/copy, or any runtime mutation in
-  this slice.
+- E17 and E20 are the only live interactions recorded here; both were bounded
+  read-only metadata gates. The design/review/documentation slices used no
+  live interaction, and neither gate used workload Pod `exec`/copy or runtime
+  mutation.
 - No redesign of external-dependency recovery, ClickHouse/Iceberg lifecycle,
   Kafka durability, clock stability, idle I/O, soak, or production gates.
 - This document does not authorize remediation. It defines the contract a later
@@ -77,6 +79,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E17 | [metadata/preservation gate `result.json`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-metadata-preservation-feasibility-20260810-codex01/evidence.md) | **Observed** `2026-08-10T01:18:15.0702826Z`–`01:19:42.9195636Z`; five bounded read-only Kubernetes metadata queries, all exit 0, no retries; safe fields only; no logs, `exec`, filesystem/database-byte access, or mutation |
 | E18 | [`second-opinion-api-duckdb-quiesce-capture-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-20260810.md) | Local, intentionally untracked review packet written `2026-08-10T01:51:50.4624998Z`; SHA-256 `baf90a58125abfa2e1a47fe36bc8fd43d47e3d99f1548eaa01af0175e0d3e776`; records a candidate only, not an approved runbook. One bounded `claude -p` review returned exit 1 with no text; E19 is the later independent review of this unchanged packet |
 | E19 | [`second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md) | Local, intentionally untracked review record; SHA-256 `9ce977a4f5fc5254f07398404f3b52c96df12ffd6d0fdc8fd1e63d29c52fae22`. One read-only `local_grok_cli` session (`grok-4.5`, `019fe976-40d9-7563-ad22-aea8c9f4d8fc`) returned final verdict `ACCEPT_WITH_CHANGES`. Its first process-only response could not read files; the same session was resumed once with exact verified E18 text. No API fallback, file edit, web, or runtime action occurred |
+| E20 | [capability gate `result.json`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/evidence.md) | **Observed** `2026-08-10T02:54:35Z`–`02:59:59Z`; bounded read-only host, Kind node, and Kubernetes metadata. SHA-256: JSON `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423`, summary `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6`, ledger `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f`. Result: `CAPABILITY_REHEARSAL_REQUIRED`; no database contents read or runtime mutation |
 
 ## Current failure data-flow trace
 
@@ -880,13 +883,15 @@ design level; `F10` deliberately remains an evidence dependency rather than
 an assumed fact. The corrected status is `DESIGN_CORRECTED_RUNTIME_BLOCKED`,
 not runbook approval and not `PRESERVATION_FEASIBLE`.
 
-The next possible slice requires separate authorization for a bounded,
-read-only **API DuckDB quiesce capability gate** that records C02 inputs and
-evaluates C01/C03 branch eligibility. It must stop at `PAUSED_TASK_ELIGIBLE`,
+At the close of the corrected-design slice, the next possible slice required
+separate authorization for a bounded, read-only **API DuckDB quiesce
+capability gate** that records C02 inputs and evaluates C01/C03 branch
+eligibility. It had to stop at `PAUSED_TASK_ELIGIBLE`,
 `KUBELET_GAP_ELIGIBLE`, `CAPABILITY_REHEARSAL_REQUIRED`, or
-`QUIESCE_AND_COPY_MECHANISM_NOT_ESTABLISHED`; it must not quiesce, copy/hash
-database bytes, create an archive, or mutate the runtime. No such capability
-interaction is authorized or performed here.
+`QUIESCE_AND_COPY_MECHANISM_NOT_ESTABLISHED`; it could not quiesce, copy/hash
+database bytes, create an archive, or mutate the runtime. E20 below records
+the later separately authorized read-only gate; it does not retroactively
+expand the corrected-design slice.
 
 Only after one branch is proved eligible may a separate tracked operator
 runbook be written and reviewed. Runtime preflight, pause/stop, helper
@@ -894,6 +899,71 @@ injection, filesystem/database-byte access or copy, capture, cleanup, restore,
 traffic, production transition, and push remain separately unauthorized.
 
 <!-- E19_CORRECTED_DESIGN_END -->
+
+## Quiesce capability gate outcome — 2026-08-10
+
+The separately authorized read-only C02/C03 gate ran once against
+`deproject-mac`, Kubernetes context `kind-agentflow-reverify-ed03fc47`, and
+namespace `agentflow`. E20 is the sanitized evidence pack. It records 12 SSH
+invocations (10 exit zero and two bounded command-shape exits), 10 Kubernetes
+read calls, no raw retries, two narrowed query corrections, and one Docker
+context method change. The workload identity remained stable throughout the
+observation.
+
+| Gate field | Result |
+| --- | --- |
+| Preservation status | `PRESERVATION_PARTIAL` |
+| C01 classification | `CAPABILITY_REHEARSAL_REQUIRED` |
+| `PAUSED_TASK` eligible | **No** |
+| `KUBELET_GAP` eligible | **No** |
+| Capture authorized or performed | **No** |
+| Production | `candidate` (unchanged) |
+
+### Capability input disposition
+
+| Input | E20 status | Decisive constraint |
+| --- | --- | --- |
+| I01 cluster policy | `UNKNOWN_TIMING_ENVELOPE` | The selected live controller flags are absent; C02 forbids substituting documented defaults, so `T_risk` and `T_safe` remain Unknown |
+| I02 identity | `PASS_POINT_IN_TIME` | Deployment, ReplicaSet, Pod, Node, image, and volume identities did not drift during the gate |
+| I03 mount | `PARTIAL_BLOCKED` | The exact UID-derived source exists, but kubelet root is not explicit and the cross-namespace FD scan exited 2; this is not zero-descriptor proof |
+| I04 runtime | `REHEARSAL_REQUIRED` | containerd pause/resume help exists, but the target container was exited, no matching task existed, and behavior is unproved |
+| I05 watchdog | `REHEARSAL_REQUIRED` | systemd timer flags exist, but independent monotonic firing, recovery action, and cancellation are unproved |
+| I06 tools | `PARTIAL_BLOCKED` | Archive/flush/hash tools exist; `getfacl` and `getfattr` are absent and no C05-compatible alternative is proved |
+| I07 inventory/space | `PARTIAL` | Four regular files total 33,836 apparent and 40,960 allocated bytes, but the point-in-time inventory is neither quiesced nor a proved archive upper bound |
+| I08 host destination | `BLOCKED_DESTINATION_ABSENT_AND_UNREHEARSED` | `/Users/julia/agentflow-preservation` is absent; no atomic rename or directory-sync behavior was tested |
+| I09 time source | `REHEARSAL_REQUIRED` | The host monotonic clock is suitable; node timing, command overhead, monitoring delay, recovery latency, and the C03 inequality remain unbounded |
+
+The exact source observed was
+`/var/lib/kubelet/pods/c9d26829-c57f-4550-a86f-cdcc41e719fd/volumes/kubernetes.io~empty-dir/data`
+on ext4 `/var`. The four-name base/WAL inventory is provisional metadata only:
+no file content was opened, hashed, copied, checkpointed, or repaired. The API
+remained `CrashLoopBackOff`, Ready false, restart count 109; at the runtime
+query the CRI container was exited and no matching containerd task existed.
+
+### Decision and next authorization boundary
+
+Neither corrected branch satisfies C02/C03. `PAUSED_TASK` lacks a live task
+and behavioral/timing proof. `KUBELET_GAP` lacks a proved timing envelope,
+independent watchdog, descriptor proof, complete metadata tooling, and durable
+host-promotion behavior. The only valid gate result is therefore
+`CAPABILITY_REHEARSAL_REQUIRED`, not an eligible branch and not runbook
+approval.
+
+No workload Pod exec/logs, pause/resume, signal, scale, restart, kubelet
+stop/start, timer/helper/archive/destination creation, database-byte access,
+capture, cleanup, restore, traffic, production transition, or push occurred.
+A later isolated rehearsal or setup is a new separately authorized slice. It
+must use non-target scratch state and must not operate on this Pod or its
+volume. Until such evidence passes, no operator runbook or capture is
+approved.
+
+### E20 artifact integrity
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `result.json` | `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423` |
+| `result.md` | `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6` |
+| `evidence.md` | `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f` |
 
 ## Open questions and data-owner decisions
 
@@ -918,10 +988,10 @@ traffic, production transition, and push remain separately unauthorized.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility remains unresolved after E19.** The
-   corrected design maps all ten findings to controls, but every live
-   capability input remains Unknown. Status is
-   `DESIGN_CORRECTED_RUNTIME_BLOCKED`; no operator runbook is approved.
+8. **Quiesce-and-copy runtime eligibility is fail-closed after E20.** The
+   capability gate found neither branch eligible. Status is
+   `CAPABILITY_REHEARSAL_REQUIRED`; any isolated non-target rehearsal/setup
+   requires separate authorization, and no operator runbook is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -931,13 +1001,15 @@ traffic, production transition, and push remain separately unauthorized.
 | Ownership/lifetime/recovery contract established from repository + preserved evidence | Yes |
 | Live metadata / preservation-feasibility gate executed | **Yes, read-only** (`METADATA_PASS`; `PRESERVATION_PARTIAL`) |
 | E19 corrective design findings mapped | **Yes, 10/10** (`F01`–`F10`) |
+| Live quiesce capability gate executed | **Yes, read-only** (`CAPABILITY_REHEARSAL_REQUIRED`; neither branch eligible) |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
-| Quiesce-and-capture runbook approved | **No** (`DESIGN_CORRECTED_RUNTIME_BLOCKED`) |
+| Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Separately authorized read-only capability gate; none performed or authorized here |
+| Next possible action | Separately authorized isolated rehearsal/setup on non-target scratch state; none performed or authorized here |
 
 ---
 
-*End of design. The metadata gate, Grok review, and corrected-design slice
-changed no runtime state. No database-byte access was authorized or performed.*
+*End of design. The metadata gate, capability gate, Grok review, and
+corrected-design slice changed no runtime state. No database-byte access was
+authorized or performed.*

@@ -308,7 +308,8 @@ def check_watchdog() -> tuple[str, dict[str, object]]:
 
 def check_descriptors() -> tuple[str, dict[str, object]]:
     descriptor_path = work_root / "descriptor-probe"
-    descriptor_path.write_text("scratch\n", encoding="ascii", newline="\n")
+    with descriptor_path.open("w", encoding="ascii", newline="\n") as stream:
+        stream.write("scratch\n")
     resolved = descriptor_path.resolve(strict=True)
     with descriptor_path.open("rb"):
         proc_fd = Path("/proc/self/fd")
@@ -347,7 +348,8 @@ def check_descriptors() -> tuple[str, dict[str, object]]:
 
 def check_metadata() -> tuple[str, dict[str, object]]:
     metadata_path = work_root / "metadata-probe"
-    metadata_path.write_text("scratch\n", encoding="ascii", newline="\n")
+    with metadata_path.open("w", encoding="ascii", newline="\n") as stream:
+        stream.write("scratch\n")
     os.chmod(metadata_path, 0o640)
     xattr_roundtrip = False
     xattr_error = ""

@@ -84,6 +84,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), [runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md), and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/evidence.md) | **Attempted once; transport blocked** `2026-08-11`. The fixed Windows invocation exited `1` after remote Bash exited `2` on CRLF-translated control lines, before any probe result. The exact scratch root was absent in the one cleanup check. Evidence SHA-256: JSON `916bd1216b3868216085bf9edd6d7f1e0ddd4fb9f3c0ee872584ebf9bcb455ea`, summary `1f82271c394fd0cee6a8429d7d2a5fdd315943ef378917f9118f0e43659c32c4`, ledger `d5a05e236cf5e6cec81a6e69d360f274ec3badcfcacc35b88fb6f2aa681ec6bf` |
 | E23 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local transport fix verified; not executed** `2026-08-11`. Remote stdin is explicit UTF-8 bytes with no CR and stdout/stderr are decoded fail-closed. TDD RED `1 failed`; final focused gate `33 passed`. SHA-256: script `d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`, test `74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc` |
 | E24 | [replacement runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Five probes passed; descriptor visibility and metadata capability were blocked when remote `Path.write_text` rejected `newline`. Exact cleanup passed. SHA-256: JSON `389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`, summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`, ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71` |
+| E25 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local compatibility fix verified; not executed** `2026-08-11`. Both affected probes now create LF text through explicit `Path.open`; behavioral extraction tests run against a legacy `Path.write_text` signature. RED `2 failed`; final focused gate `35 passed`. SHA-256: script `d7bf34f28369b51565cf8125c62b949532b95e867f2b4c120f8472da0cc5f273`, test `a6b8f66e2e7af42b0ee2107bc57608f495baaaf22d711f7b2515c863cf7e051d` |
 
 ## Current failure data-flow trace
 
@@ -1130,6 +1131,33 @@ embedded text writes. It must use an explicit LF file-open path accepted by
 the remote API and must not execute SSH. A later live attempt requires a new
 runbook, identity, and explicit authorization.
 
+## E25 remote text compatibility correction — 2026-08-11
+
+E25 replaces the two incompatible
+`Path.write_text(..., newline="\n")` calls with explicit
+`Path.open("w", encoding="ascii", newline="\n")` contexts and ordinary
+`write` calls. Probe order, target boundaries, result schema, cleanup, SSH
+transport, and single-attempt behavior are unchanged.
+
+The behavioral regression test extracts only the descriptor and metadata
+functions plus their imports from the embedded AST. It installs a legacy
+`Path.write_text` signature and deterministic fake `lsof`, proving both
+functions reach their intended logic without the E24 `TypeError` and without
+SSH. A fresh-basetemp RED produced `2 failed`; targeted GREEN produced
+`2 passed`; the final focused suite passed `35/35`. Ruff lint/format, outer
+and embedded compile, compatibility token scan, default non-executing CLI,
+UTF-8/LF, exact scope, and diff checks passed.
+
+The first local RED command encountered a stale default pytest basetemp, and
+the first GREEN exposed Windows open-file unlink behavior in the test harness.
+Both were test-environment diagnostics; the final fake-`lsof` path models the
+remote POSIX behavior without weakening the product assertion.
+
+No SSH, `--execute`, scratch action, new run ID, target access, Grok, or
+background writer ran. The next separate candidate is a docs-only E26 runbook
+with a new conservative identity and current protected hashes. It must not
+execute the rehearsal; a later live gate requires fresh authorization.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1153,11 +1181,11 @@ runbook, identity, and explicit authorization.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility remains fail-closed after E24.** E24
-   produced five `PASS` and two `BLOCKED` non-target results; descriptor and
-   metadata capability remain unproved. Status remains
-   `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is approved.
-   Fix compatibility locally before defining any new rehearsal identity.
+8. **Quiesce-and-copy runtime eligibility remains fail-closed after E25.** E24
+   produced five `PASS` and two `BLOCKED` non-target results. E25 fixed those
+   two compatibility paths locally, but no new live evidence exists. Status
+   remains `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is
+   approved. Define a new runbook before any separately authorized rehearsal.
 
 ## Claim boundary for this documentation slice
 
@@ -1173,14 +1201,15 @@ runbook, identity, and explicit authorization.
 | Exact E22 cleanup proved | **Yes**; one read-only exact-path check exited `0` |
 | Windows LF transport corrected | **Yes, local TDD only**; no new SSH or scratch action |
 | Replacement E24 rehearsal | **Blocked**; five `PASS`, two `BLOCKED`, cleanup proved |
+| E25 remote text compatibility | **Fixed and tested locally**; no new SSH or scratch action |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Local TDD compatibility fix for the two embedded `Path.write_text` calls; no SSH in that slice |
+| Next possible action | Author a docs-only E26 runbook/evidence identity using E25 hashes; no live rehearsal in that slice |
 
 ---
 
-*End of design. E24 executed once against non-target scratch, was blocked in
-two compatibility checks, and cleaned its exact root. No target or
+*End of design. E25 fixed the two E24 compatibility paths locally but did not
+execute SSH. E24 remains consumed with exact cleanup proved. No target or
 database-byte access was authorized or performed.*

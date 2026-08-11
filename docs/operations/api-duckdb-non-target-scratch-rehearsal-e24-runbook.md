@@ -58,9 +58,15 @@ SHA-256: JSON
 summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`,
 ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71`.
 
-The next separate candidate is a local TDD compatibility fix for the two
-embedded `Path.write_text(..., newline="\n")` calls. It must not run SSH. A
-later rehearsal requires a new identity and separate authorization.
+E25 later completed the local compatibility fix for both embedded
+`Path.write_text(..., newline="\n")` calls. It used explicit LF file opens
+and a behavioral legacy-signature test; no SSH ran. Protected post-fix hashes
+are script
+`d7bf34f28369b51565cf8125c62b949532b95e867f2b4c120f8472da0cc5f273`
+and test
+`a6b8f66e2e7af42b0ee2107bc57608f495baaaf22d711f7b2515c863cf7e051d`.
+E24 remains consumed. A later rehearsal requires a new runbook, identity, and
+separate authorization.
 
 ## Historical preflight — do not reuse
 

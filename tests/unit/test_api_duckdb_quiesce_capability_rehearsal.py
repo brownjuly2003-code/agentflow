@@ -7,6 +7,7 @@ All subprocess/SSH behavior is faked. No live remote command may run.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import subprocess
@@ -437,6 +438,65 @@ def test_payload_implements_all_seven_bounded_scratch_checks() -> None:
 
     assert 'rm -rf -- "${SCRATCH_ROOT}/work"' in payload
     assert 'cat "${SCRATCH_ROOT}/${SENTINEL_NAME}"' in payload
+
+
+@pytest.mark.parametrize("function_name", ["check_descriptors", "check_metadata"])
+def test_remote_probe_file_setup_supports_legacy_path_write_text(
+    function_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    tree = ast.parse(module.REMOTE_PROBE_PYTHON)
+    required_functions = {"bounded_error", function_name}
+    selected: list[ast.stmt] = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        or (isinstance(node, ast.FunctionDef) and node.name in required_functions)
+    ]
+    namespace: dict[str, Any] = {"work_root": tmp_path}
+    exec(  # noqa: S102 - execute only selected repository-owned probe definitions
+        compile(ast.Module(body=selected, type_ignores=[]), "<remote-probe-test>", "exec"),
+        namespace,
+    )
+
+    original_write_text = Path.write_text
+
+    def legacy_write_text(
+        path: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> int:
+        return original_write_text(path, data, encoding=encoding, errors=errors)
+
+    monkeypatch.setattr(Path, "write_text", legacy_write_text)
+    if function_name == "check_descriptors":
+        descriptor_path = (tmp_path / "descriptor-probe").resolve()
+        process_id = namespace["os"].getpid()
+        monkeypatch.setattr(
+            namespace["shutil"],
+            "which",
+            lambda name: "lsof" if name == "lsof" else None,
+        )
+
+        def successful_lsof(*args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=args[0],
+                returncode=0,
+                stdout=f"p{process_id}\nn{descriptor_path}\n",
+                stderr="",
+            )
+
+        monkeypatch.setattr(namespace["subprocess"], "run", successful_lsof)
+    else:
+        monkeypatch.setattr(namespace["shutil"], "which", lambda _name: None)
+
+    status, evidence = namespace[function_name]()
+
+    assert status in {"PASS", "PARTIAL", "BLOCKED"}
+    assert "unexpected keyword argument 'newline'" not in json.dumps(evidence)
 
 
 def test_payload_keeps_target_claims_false_after_scratch_checks() -> None:

@@ -1420,6 +1420,65 @@ not treat a fallback discovery or another inspector invocation as automatic
 next work; any later distinct gate requires fresh explicit owner
 authorization.
 
+## C05 node xattr additional-roots discovery terminal result — 2026-08-11
+
+Authorized second one-shot bounded metadata-only discovery over the exact
+additional allowlisted non-target roots. Evidence identity:
+`.codex-grok-tasks/c05-node-xattr-additional-discovery-20260811-grok01/`.
+Route/model: `local_grok_cli`; requested `grok-4.5`, actual
+`grok-4.5-build`. Remote controller executed exactly once before this
+docs-only closure. Entry HEAD
+`3253ad780fbc90dfdfe7b4acf87c9aaf525287fd`.
+
+Exact additional allowlist:
+`/usr/share`, `/usr/include`, `/usr/libexec`, `/var/lib/apt`,
+`/var/lib/systemd`, `/var/cache/debconf`, `/var/spool`, `/srv`.
+
+**Observed result.** Classification
+`C05_NODE_XATTR_DISCOVERY_NO_SAFE_VALUE_PATH`. Discovery status
+`NO_SAFE_XATTR_PATH` (exit `0`). Entries examined: `2007` across all 8
+additional allowlisted roots. Selected path: `null`. Inspector invocations:
+`0`; raw retries: `0`; total xattrs: `0`. Controller exit: `0`; strict
+JSON: true; result status `METADATA_INSPECTION_NOT_RUN`.
+
+Evidence pack SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `execution.json` | `df792962a138cdc778fb0b07c69afa573fb6f8b4e20911a421b362b6af3eaf0b` |
+| `discovery.json` | `9319dff407cf222fde3324592bf5953defa00c430e3139f7e730eb92d7c2573b` |
+| `result.json` | `71a012663fe62251367b4f04080824892327d53c1ef796368b3796e657afaf21` |
+| `result.md` | `256b989a1b4c6f7e685d38f385ce16b39f838ace817a5649f169657fe92277ab` |
+| `evidence.md` | `ea67f4764b3196a2423aa9f4afc5899aed4d0c643247b4b0aac2ae7b7ff7aced` |
+
+Protected SHA-256 unchanged:
+
+- Base controller:
+  `2601f65eb3270d3827927ad4c8122545149391597cf2d16179b61a43d221047d`
+- Additional controller:
+  `cfe6d72a52fc936e7bffb4b1f0234e7beb38e9678d3c6ccdd1ed0210e39eb00f`
+- Inspector (`scripts/inspect_posix_metadata.py`):
+  `3a9a7e0714be3a8db5b70eb72273899611932e6b432e3e9067fc1d58ccba4dc9`
+- Focused test (`tests/unit/test_inspect_posix_metadata.py`):
+  `bac58980103049c2af2586345b0e6b7f4f17f73f0996d1fb828724290cd6a72c`
+
+**Claim boundary.** This is non-target discovery-only terminal evidence for
+the authorized additional-roots gate. It does **not** approve C05, a capture
+branch, recovery, or production. No regular-file contents, target path,
+`/data`, kubelet Pod-volume path, or DuckDB/WAL bytes were accessed. No
+remote write, mutation, E27, restart, recovery, traffic, production action,
+commit, or push occurred. Inspector was not invoked because no safe
+value-bearing path was selected. E26 remains consumed and immutable. Both
+runtime branches remain ineligible; authoritative status remains
+`CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`; production remains
+`candidate`.
+
+The owner authorization and evidence identity are fully consumed. A generic
+`continue` / `продолжи` does **not** authorize another remote command. Do
+not treat a fallback discovery or another inspector invocation as automatic
+next work; any later distinct gate requires fresh explicit owner
+authorization.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1472,11 +1531,13 @@ authorization.
 | Local C05 POSIX metadata inspector (API+CLI+unit tests) | **Yes, local only**; unit-tested; live non-target node gate recorded below |
 | C05 Kind-node metadata capability (non-target `/usr/bin`) | **Executed once**; `C05_NODE_METADATA_API_PASS_VALUE_DIGEST_UNEXERCISED`; 376 entries; 0 xattrs; non-target only |
 | C05 node xattr discovery (allowlisted non-target roots) | **Executed once**; `C05_NODE_XATTR_DISCOVERY_NO_SAFE_VALUE_PATH`; discovery `NO_SAFE_XATTR_PATH`; 5205 entries / 8 roots; selected path `null`; inspector invocations `0` |
+| C05 node xattr additional-roots discovery | **Executed once**; `C05_NODE_XATTR_DISCOVERY_NO_SAFE_VALUE_PATH`; discovery `NO_SAFE_XATTR_PATH`; 2007 entries / 8 additional roots; selected path `null`; inspector invocations `0`; result status `METADATA_INSPECTION_NOT_RUN` |
 | Next possible action | No automatic next work from this pack. Owner authorization and evidence identity are consumed. Do not treat fallback discovery or inspector invocation as automatic next work; any later distinct gate requires fresh explicit owner authorization. No E27, target DB-byte access, or C05/branch/capture/production approval from this pack |
 
 ---
 
-*End of design. E26 remains consumed. The C05 node metadata and xattr-discovery
-gates are non-target evidence only and do not approve C05, capture, recovery, or
-production. Discovery selected no safe value path; no inspector ran under that
-authorization. No target or database-byte access was authorized or performed.*
+*End of design. E26 remains consumed. The C05 node metadata and both
+xattr-discovery gates are non-target evidence only and do not approve C05,
+capture, recovery, or production. Both discoveries selected no safe value
+path; no inspector ran under those authorizations. No target or
+database-byte access was authorized or performed.*

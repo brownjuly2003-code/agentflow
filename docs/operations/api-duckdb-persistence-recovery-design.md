@@ -1207,6 +1207,54 @@ the C05 metadata-preservation gap and proves a fail-closed ACL/xattr method
 compatible with observed host capabilities. It must not create E27 or access
 the target Pod/volume or DuckDB/WAL bytes.
 
+## C05 metadata classification correction — 2026-08-11
+
+This local TDD correction fixes only the embedded metadata status aggregation
+after the consumed E26 non-target rehearsal. It does **not** rewrite E26.
+
+**E26 remains immutable historical evidence.** Its recorded outcome stays
+`SCRATCH_REHEARSAL_BLOCKED` and consumed. No E26 JSON, classification,
+runbook, timestamp, or hash is altered by this slice.
+
+**Local aggregation bug.** The embedded `check_metadata` probe already
+recorded per-signal evidence (`mode_roundtrip`, `xattr_roundtrip`,
+`acl_roundtrip`), and the design already allowed metadata to be `PARTIAL`
+when only a subset of mode/xattr/ACL behavior is available. The aggregation
+branch, however, promoted to `PARTIAL` only when xattr or ACL succeeded, so
+mode-only success (exactly the E26 evidence shape: mode true, xattr false,
+ACL false) was misclassified as `BLOCKED`. That ignored successful mode-only
+evidence.
+
+**Corrected future aggregation.** Future non-target runs of the same probe
+classify as:
+
+- `PASS` when mode, xattr, and ACL all round-trip;
+- `PARTIAL` when any non-empty subset succeeds, including mode-only;
+- `BLOCKED` only when all three signals fail.
+
+This is a classification correction only. It does not invent ACL/xattr values,
+relax C05, or reclassify the historical E26 pack.
+
+**Ownership boundary that remains closed.** Host `/tmp` scratch (E26's
+execution surface) does **not** satisfy Linux Kind-node C05/I06. E20 already
+observed GNU tar 1.34 with `--xattrs`/`--acls` inside the Kind node while
+`getfacl` and `getfattr` were absent. GNU tar primary documentation states
+that `--compare` covers size, mode, owner, modification date, and contents; it
+does not claim ACL/xattr value comparison. Double-verbose `--xattrs` listing
+reports attribute names and lengths, not values. Tar flags, listing, or
+compare alone therefore do **not** prove C05's non-secret ACL/xattr digest
+contract.
+
+**Runtime and production status unchanged.** Both branches remain ineligible.
+Authoritative status remains `CAPABILITY_REHEARSAL_REQUIRED` /
+`PRESERVATION_PARTIAL`. Production remains `candidate`. No capture operator
+runbook is approved.
+
+**Next separate candidate.** A later local design/implementation may define a
+node-scoped non-secret metadata inspector or an explicitly authorized
+read-only node capability check that can prove ACL/xattr value digests under
+C05 without target mutation. No E27 rehearsal identity is reserved here.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse

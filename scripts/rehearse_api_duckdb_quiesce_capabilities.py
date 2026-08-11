@@ -398,7 +398,7 @@ def check_metadata() -> tuple[str, dict[str, object]]:
     metadata_path.unlink(missing_ok=True)
     if xattr_roundtrip and acl_roundtrip and mode_preserved:
         status = "PASS"
-    elif xattr_roundtrip or acl_roundtrip:
+    elif mode_preserved or xattr_roundtrip or acl_roundtrip:
         status = "PARTIAL"
     else:
         status = "BLOCKED"

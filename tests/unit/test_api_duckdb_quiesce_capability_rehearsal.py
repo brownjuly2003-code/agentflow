@@ -521,3 +521,109 @@ def test_payload_keeps_target_claims_false_after_scratch_checks() -> None:
         "PAUSED_TASK": "ineligible",
         "KUBELET_GAP": "ineligible",
     }
+
+
+def _extract_check_metadata(module: Any, work_root: Path) -> dict[str, Any]:
+    """Load only the embedded check_metadata probe and its local helpers."""
+    tree = ast.parse(module.REMOTE_PROBE_PYTHON)
+    required_functions = {"bounded_error", "check_metadata"}
+    selected: list[ast.stmt] = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        or (isinstance(node, ast.FunctionDef) and node.name in required_functions)
+    ]
+    namespace: dict[str, Any] = {"work_root": work_root}
+    exec(  # noqa: S102 - execute only selected repository-owned probe definitions
+        compile(ast.Module(body=selected, type_ignores=[]), "<remote-probe-metadata>", "exec"),
+        namespace,
+    )
+    return namespace
+
+
+class _ModeStatResult:
+    """Minimal stat stand-in that exposes only the mode bits under test."""
+
+    def __init__(self, st_mode: int) -> None:
+        self.st_mode = st_mode
+
+
+@pytest.mark.parametrize(
+    ("mode_ok", "xattr_ok", "acl_ok", "expected_status"),
+    [
+        (True, False, False, "PARTIAL"),
+        (False, False, False, "BLOCKED"),
+        (True, True, True, "PASS"),
+    ],
+)
+def test_check_metadata_aggregates_mode_xattr_acl_subset(
+    mode_ok: bool,
+    xattr_ok: bool,
+    acl_ok: bool,
+    expected_status: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Mode-only success is PARTIAL; none PASS subset is BLOCKED; all three is PASS."""
+    module = _load_module()
+    namespace = _extract_check_metadata(module, tmp_path)
+    os_mod = namespace["os"]
+    shutil_mod = namespace["shutil"]
+    subprocess_mod = namespace["subprocess"]
+
+    def controlled_stat(path: Path, *args: Any, **kwargs: Any) -> _ModeStatResult:
+        del args, kwargs
+        if path.name != "metadata-probe":
+            return _ModeStatResult(0o040700)
+        return _ModeStatResult(0o100640 if mode_ok else 0o100600)
+
+    monkeypatch.setattr(Path, "stat", controlled_stat)
+    monkeypatch.setattr(os_mod, "chmod", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(os_mod, "getuid", lambda: 1000, raising=False)
+
+    if xattr_ok:
+
+        def setxattr(_path: Any, _name: str, _value: bytes) -> None:
+            return None
+
+        def getxattr(_path: Any, _name: str) -> bytes:
+            return b"scratch"
+
+        def removexattr(_path: Any, _name: str) -> None:
+            return None
+
+        monkeypatch.setattr(os_mod, "setxattr", setxattr, raising=False)
+        monkeypatch.setattr(os_mod, "getxattr", getxattr, raising=False)
+        monkeypatch.setattr(os_mod, "removexattr", removexattr, raising=False)
+    else:
+
+        def missing_xattr(*_args: Any, **_kwargs: Any) -> None:
+            raise OSError("xattr unavailable")
+
+        monkeypatch.setattr(os_mod, "setxattr", missing_xattr, raising=False)
+
+    if acl_ok:
+        monkeypatch.setattr(
+            shutil_mod,
+            "which",
+            lambda name: f"/usr/bin/{name}" if name in {"getfacl", "setfacl"} else None,
+        )
+
+        def successful_acl(*args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=args[0],
+                returncode=0,
+                stdout="user::rw-\n",
+                stderr="",
+            )
+
+        monkeypatch.setattr(subprocess_mod, "run", successful_acl)
+    else:
+        monkeypatch.setattr(shutil_mod, "which", lambda _name: None)
+
+    status, evidence = namespace["check_metadata"]()
+
+    assert status == expected_status
+    assert evidence["mode_roundtrip"] is mode_ok
+    assert evidence["xattr_roundtrip"] is xattr_ok
+    assert evidence["acl_roundtrip"] is acl_ok

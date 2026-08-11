@@ -1,25 +1,26 @@
 # API DuckDB E24 non-target scratch rehearsal runbook
 
 **Date:** 2026-08-11
-**Status:** `READY_FOR_ONE_NON_TARGET_SCRATCH_RUN_E24`; not executed
-**Audience:** next-session Codex operator
+**Status:** `CONSUMED_SCRATCH_REHEARSAL_BLOCKED`; do not execute or reuse
+**Audience:** historical evidence and future compatibility-fix author
 
 ## Purpose and current truth
 
-This runbook defines one replacement non-target scratch rehearsal after E23
+This runbook preserves the consumed E24 non-target scratch rehearsal after E23
 fixed Windows LF transport in
 [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py).
-The earlier E22 identity is consumed and must not be retried. No E24 SSH or
-`--execute` invocation has run; all seven authoritative capability results
-remain `NOT_RUN`, both runtime branches remain ineligible, and status remains
-`CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`.
+The one E24 invocation returned five `PASS` and two `BLOCKED` results. The
+exact root was absent in the single cleanup check. Both runtime branches remain
+ineligible, and status remains `CAPABILITY_REHEARSAL_REQUIRED` /
+`PRESERVATION_PARTIAL`.
 
-This document is not execution authority. A latest user message must
-explicitly authorize the isolated E24 non-target scratch run. It never
-authorizes target Pod/volume access, DuckDB/WAL access, capture, repair,
-recovery, traffic, production transition, or push.
+This identity, command, root, and evidence directory must not be reused. A
+future attempt requires a local compatibility fix, a new runbook, a new
+identity, and fresh explicit authorization. This document never authorizes
+target Pod/volume access, DuckDB/WAL access, capture, repair, recovery,
+traffic, production transition, or push.
 
-## Fixed E24 identity
+## Consumed E24 identity — historical only
 
 | Field | Exact value |
 | --- | --- |
@@ -37,7 +38,31 @@ remote scratch root was deliberately not queried; the harness rejects an
 existing exact root before probe work. A collision consumes E24 without a
 fallback identity.
 
-## Preflight
+## Consumed outcome
+
+The single invocation ran from `2026-08-11T13:32:12.1197300Z` through
+`2026-08-11T13:32:29.3139985Z`, exited `0`, and returned the exact executed
+schema. Timing, scratch pause/resume, watchdog, same-directory rename, and
+file/directory sync passed. Descriptor visibility and metadata capability
+were blocked before their operations because the remote `Path.write_text`
+API rejected the `newline` keyword with `TypeError`.
+
+The one read-only cleanup check exited `0`, proving the exact per-run root
+absent. Local evidence:
+[`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json),
+[`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md),
+and
+[`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md).
+SHA-256: JSON
+`389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`,
+summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`,
+ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71`.
+
+The next separate candidate is a local TDD compatibility fix for the two
+embedded `Path.write_text(..., newline="\n")` calls. It must not run SSH. A
+later rehearsal requires a new identity and separate authorization.
+
+## Historical preflight — do not reuse
 
 1. Read the authoritative top blocks of `AGENT_STATE.md` and
    `docs/SESSION_HANDOFF.md`, then this entire runbook.
@@ -54,10 +79,10 @@ fallback identity.
 Any failed preflight ends the slice before SSH. Do not query or reserve a
 fallback remote identity.
 
-## Single authorized invocation
+## Consumed invocation — do not rerun
 
-Capture UTC immediately before the command. Run the following once from
-`D:\DE_project`, allowing the command tool at least 120 seconds:
+The consumed contract captured UTC around and ran the following command once
+from `D:\DE_project`:
 
 ```powershell
 python scripts/rehearse_api_duckdb_quiesce_capabilities.py `
@@ -67,14 +92,12 @@ python scripts/rehearse_api_duckdb_quiesce_capabilities.py `
   --scratch-root /tmp/agentflow-api-duckdb-capability-rehearsal/api-duckdb-scratch-e24-20260811-01
 ```
 
-Do not pipe or redirect stdout in Windows PowerShell 5.1. Let the command tool
-capture stdout/stderr, then capture UTC immediately after exit. Preserve valid
-stdout byte-for-byte as UTF-8/LF `result.json`; never reconstruct probe fields
-from memory.
+The command tool captured stdout/stderr directly without a PowerShell pipe or
+redirect. Exact valid stdout became UTF-8/LF `result.json`; no probe field was
+reconstructed from memory.
 
-The invocation is single-attempt. Timeout, nonzero exit, malformed JSON,
-schema rejection, transport loss, identity collision, or any `BLOCKED` check
-ends the run. Do not retry or switch identity automatically.
+E24 remains single-attempt and consumed. Its `BLOCKED` results ended the run;
+no retry or identity switch occurred.
 
 ## Result contract
 
@@ -99,21 +122,20 @@ Even seven `PASS` values do not prove target containerd/cgroup behavior,
 cross-namespace descriptors, target watchdog recovery, `T_safe`, I04/I05/I09,
 branch eligibility, capture, or DuckDB recoverability.
 
-## Cleanup verification
+## Recorded cleanup verification
 
-After the invocation returns, perform exactly one read-only check:
+The consumed contract performed exactly one read-only check:
 
 ```powershell
 ssh deproject-mac "test ! -e /tmp/agentflow-api-duckdb-capability-rehearsal/api-duckdb-scratch-e24-20260811-01"
 ```
 
-Exit `0` proves the per-run root absent. Any other result is
-`SCRATCH_CLEANUP_UNPROVED`; record it and stop. Do not run `rm`, a cleanup
-helper, a second check, or another rehearsal.
+It exited `0`, proving the per-run root absent. No `rm`, cleanup helper,
+second check, or another rehearsal ran.
 
-## Evidence pack
+## Recorded evidence pack
 
-Only after the invocation, create the reserved directory with:
+The reserved local directory contains:
 
 - `result.json`: exact valid stdout, or a minimal fail-closed transport record
   with no invented probe data;
@@ -122,11 +144,9 @@ Only after the invocation, create the reserved directory with:
 - `evidence.md`: UTC start/end, command shape, exit code, bounded stderr,
   protected hashes, schema checks, and explicit non-actions.
 
-Validate duplicate-key strict JSON, UTF-8/LF, cross-artifact facts, secret
-patterns, local links, and SHA-256 for all three files. Record the outcome in
-the canonical design and both top handoff blocks once. Commit only verified
-tracked docs with explicit pathspec; keep local evidence untracked. Push
-remains unauthorized.
+The pack passed duplicate-key strict JSON, UTF-8/LF, cross-artifact, secret,
+and SHA-256 checks. The outcome is recorded in the canonical design and both
+top handoff blocks. Local evidence remains untracked and push unauthorized.
 
 ## Prohibited fallback
 

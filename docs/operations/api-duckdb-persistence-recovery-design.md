@@ -83,7 +83,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E21 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; fail-closed non-target scratch setup harness. Default plan returns `REHEARSAL_SETUP_READY_NOT_EXECUTED`, all seven checks `NOT_RUN`, and both branches ineligible. No SSH or live rehearsal ran |
 | E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), [runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md), and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/evidence.md) | **Attempted once; transport blocked** `2026-08-11`. The fixed Windows invocation exited `1` after remote Bash exited `2` on CRLF-translated control lines, before any probe result. The exact scratch root was absent in the one cleanup check. Evidence SHA-256: JSON `916bd1216b3868216085bf9edd6d7f1e0ddd4fb9f3c0ee872584ebf9bcb455ea`, summary `1f82271c394fd0cee6a8429d7d2a5fdd315943ef378917f9118f0e43659c32c4`, ledger `d5a05e236cf5e6cec81a6e69d360f274ec3badcfcacc35b88fb6f2aa681ec6bf` |
 | E23 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local transport fix verified; not executed** `2026-08-11`. Remote stdin is explicit UTF-8 bytes with no CR and stdout/stderr are decoded fail-closed. TDD RED `1 failed`; final focused gate `33 passed`. SHA-256: script `d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`, test `74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc` |
-| E24 | [replacement non-target rehearsal runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) | **Ready, not executed** `2026-08-11`. Fixes new run ID `api-duckdb-scratch-e24-20260811-01`, exact scratch root, local evidence identity, current E23 hashes, one invocation, one cleanup check, result classes, and prohibited fallback. The remote root was not queried and the local evidence directory was absent |
+| E24 | [replacement runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Five probes passed; descriptor visibility and metadata capability were blocked when remote `Path.write_text` rejected `newline`. Exact cleanup passed. SHA-256: JSON `389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`, summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`, ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71` |
 
 ## Current failure data-flow trace
 
@@ -1110,6 +1110,26 @@ queried; collision handling remains inside the harness and consumes E24
 without fallback. A latest explicit authorization for the isolated E24 run is
 still required before the documented command may execute.
 
+### Consumed E24 outcome
+
+The later authorized invocation exited `0` with valid strict JSON and five
+`PASS` plus two `BLOCKED` results. Timing, scratch pause/resume, watchdog,
+same-directory rename, and file/directory sync passed. Descriptor visibility
+and metadata capability both stopped at the same compatibility boundary:
+remote `Path.write_text` rejected its `newline` keyword before either probe's
+intended operation. No remote interpreter-version claim is inferred.
+
+The one cleanup check exited `0`, proving exact E24 root
+`/tmp/agentflow-api-duckdb-capability-rehearsal/api-duckdb-scratch-e24-20260811-01`
+absent. No retry, fallback identity, manual cleanup, target action, or Grok
+run occurred. E24 is consumed; both branches remain ineligible and status remains
+`CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`.
+
+The next separate candidate is a local TDD compatibility fix for both
+embedded text writes. It must use an explicit LF file-open path accepted by
+the remote API and must not execute SSH. A later live attempt requires a new
+runbook, identity, and explicit authorization.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1133,11 +1153,11 @@ still required before the documented command may execute.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility remains fail-closed after E24.** The
-   Windows LF transport is fixed and tested locally, but the single live E22
-   identity remains consumed and every capability result remains `NOT_RUN`.
-   Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook
-   is approved. E24 is ready only for a separately authorized non-target run.
+8. **Quiesce-and-copy runtime eligibility remains fail-closed after E24.** E24
+   produced five `PASS` and two `BLOCKED` non-target results; descriptor and
+   metadata capability remain unproved. Status remains
+   `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is approved.
+   Fix compatibility locally before defining any new rehearsal identity.
 
 ## Claim boundary for this documentation slice
 
@@ -1152,15 +1172,15 @@ still required before the documented command may execute.
 | Seven non-target scratch probes implemented | **Yes**; the first live identity was transport-blocked before probe execution |
 | Exact E22 cleanup proved | **Yes**; one read-only exact-path check exited `0` |
 | Windows LF transport corrected | **Yes, local TDD only**; no new SSH or scratch action |
-| Replacement E24 runbook ready | **Yes, docs only**; not execution authority |
+| Replacement E24 rehearsal | **Blocked**; five `PASS`, two `BLOCKED`, cleanup proved |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | After latest explicit E24 non-target authorization, perform at most its one invocation and one cleanup check |
+| Next possible action | Local TDD compatibility fix for the two embedded `Path.write_text` calls; no SSH in that slice |
 
 ---
 
-*End of design. E24 is a docs-only replacement identity and has not executed.
-E22 remains consumed, E23 remains local-only, and no target or database-byte
-access was authorized or performed.*
+*End of design. E24 executed once against non-target scratch, was blocked in
+two compatibility checks, and cleaned its exact root. No target or
+database-byte access was authorized or performed.*

@@ -759,13 +759,23 @@ def parse_remote_json(text: str) -> dict[str, Any]:
     return payload
 
 
+def _decode_process_stream(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def execute_rehearsal_setup(
     *,
     ssh_host: str,
     run_id: str,
     scratch_root: str,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
-    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    runner: (
+        Callable[..., subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]] | None
+    ) = None,
 ) -> dict[str, Any]:
     """Run the guarded non-target rehearsal once. Never retry on failure."""
     if not 5 <= timeout_seconds <= 300:
@@ -781,11 +791,8 @@ def execute_rehearsal_setup(
     try:
         completed = run(  # noqa: S603 - fixed argv vector, shell=False
             argv,
-            input=REMOTE_PAYLOAD,
+            input=REMOTE_PAYLOAD.encode("utf-8"),
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=timeout_seconds,
             check=False,
             shell=False,
@@ -795,14 +802,16 @@ def execute_rehearsal_setup(
     except OSError as error:
         raise RehearsalError(f"BLOCKED: could not run scratch rehearsal: {error}") from error
 
+    stdout = _decode_process_stream(completed.stdout)
+    stderr = _decode_process_stream(completed.stderr)
     if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout or "").strip()
+        detail = (stderr or stdout).strip()
         raise RehearsalError(
             f"BLOCKED: remote scratch rehearsal failed with nonzero exit "
             f"{completed.returncode}: {detail}"
         )
 
-    remote = parse_remote_json(completed.stdout)
+    remote = parse_remote_json(stdout)
     return {
         "status": remote["status"],
         "execute": True,

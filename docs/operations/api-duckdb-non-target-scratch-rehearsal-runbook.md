@@ -1,24 +1,26 @@
 # API DuckDB non-target scratch rehearsal runbook
 
 **Date:** 2026-08-11
-**Status:** `READY_FOR_ONE_NON_TARGET_SCRATCH_RUN`; not executed
-**Audience:** next-session Codex operator
+**Status:** `CONSUMED_TRANSPORT_BLOCKED`; do not execute or reuse
+**Audience:** historical evidence and future runbook author
 
 ## Purpose and current truth
 
-This runbook preserves the exact next-session contract for E22 in
+This runbook preserves the consumed execution contract for E22 in
 [the canonical recovery design](api-duckdb-persistence-recovery-design.md).
-The harness and its seven probes are implemented at commit `26a468b`, but no
-SSH or `--execute` invocation has run. Every observed capability remains
-`NOT_RUN`; the authoritative runtime status is still
+Its one invocation exited before probe execution after Windows text-mode stdin
+translated the remote payload to CRLF. The exact scratch root was absent in
+the single cleanup check. Every observed capability remains `NOT_RUN`; the
+authoritative runtime status is still
 `CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`.
 
-This runbook is not authority to act. A latest user message must explicitly
-continue or authorize the isolated non-target scratch run. It never authorizes
-target Pod/volume access, DuckDB bytes, capture, repair, recovery, traffic,
-production transition, or push.
+The transport defect was fixed locally after this attempt, but this run ID,
+scratch root, evidence identity, command, and historical hashes must not be
+reused. A future attempt requires a new runbook and explicit authorization.
+This document never authorizes target Pod/volume access, DuckDB bytes,
+capture, repair, recovery, traffic, production transition, or push.
 
-## Fixed identity for the next run
+## Consumed identity — historical only
 
 | Field | Exact value |
 | --- | --- |
@@ -30,12 +32,18 @@ production transition, or push.
 | Expected script SHA-256 | `e44540da356644272c35e131939da0b2f1c9b00a68a42f0e8f30d01bb6d780b0` |
 | Expected test SHA-256 | `734dbad7e14ac82b2cc1bea74105649710e007d66a4bc3031efb169b3d0da46e` |
 
+The verified post-fix hashes are script
+`d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`
+and focused test
+`74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc`.
+They are inputs for a future new runbook, not permission to reuse E22.
+
 The run ID is reserved and the local evidence directory was absent when this
 runbook was written. The remote scratch root was not queried in this docs-only
 slice. The harness rejects an existing exact root before its probe work; that
 collision consumes no fallback identity. Stop and document it.
 
-## Resume preflight
+## Historical preflight — do not reuse
 
 1. Read the top blocks of `AGENT_STATE.md` and `docs/SESSION_HANDOFF.md`, then
    this entire runbook. Lower `START HERE` blocks are historical.
@@ -51,7 +59,7 @@ collision consumes no fallback identity. Stop and document it.
 
 Any failed preflight ends the slice before SSH.
 
-## Single authorized invocation
+## Consumed invocation — do not rerun
 
 Run this command once from `D:\DE_project`:
 

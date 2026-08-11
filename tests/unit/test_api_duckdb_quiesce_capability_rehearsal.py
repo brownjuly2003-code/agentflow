@@ -220,6 +220,35 @@ def test_ssh_argv_uses_shell_false_and_distinct_untrusted_entries() -> None:
     assert "-s" in argv
 
 
+def test_execute_sends_remote_payload_as_utf8_lf_bytes() -> None:
+    module = _load_module()
+    captured: dict[str, Any] = {}
+
+    def capture_runner(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout=json.dumps(_executed_remote_payload()).encode("utf-8"),
+            stderr=b"",
+        )
+
+    result = module.execute_rehearsal_setup(
+        ssh_host=DEFAULT_HOST,
+        run_id=RUN_ID,
+        scratch_root=SAFE_SCRATCH_ROOT,
+        runner=capture_runner,
+    )
+
+    transmitted = captured["input"]
+    assert isinstance(transmitted, bytes)
+    assert transmitted == module.REMOTE_PAYLOAD.encode("utf-8")
+    assert b"\r" not in transmitted
+    assert captured.get("text") is not True
+    assert "encoding" not in captured
+    assert result["status"] == EXECUTED_STATUS
+
+
 def test_strict_json_rejects_duplicates_malformed_and_schema_mismatch() -> None:
     module = _load_module()
 

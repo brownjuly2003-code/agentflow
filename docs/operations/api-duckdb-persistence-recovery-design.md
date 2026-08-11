@@ -82,6 +82,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E20 | [capability gate `result.json`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/evidence.md) | **Observed** `2026-08-10T02:54:35Z`–`02:59:59Z`; bounded read-only host, Kind node, and Kubernetes metadata. SHA-256: JSON `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423`, summary `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6`, ledger `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f`. Result: `CAPABILITY_REHEARSAL_REQUIRED`; no database contents read or runtime mutation |
 | E21 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; fail-closed non-target scratch setup harness. Default plan returns `REHEARSAL_SETUP_READY_NOT_EXECUTED`, all seven checks `NOT_RUN`, and both branches ineligible. No SSH or live rehearsal ran |
 | E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), [runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md), and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/evidence.md) | **Attempted once; transport blocked** `2026-08-11`. The fixed Windows invocation exited `1` after remote Bash exited `2` on CRLF-translated control lines, before any probe result. The exact scratch root was absent in the one cleanup check. Evidence SHA-256: JSON `916bd1216b3868216085bf9edd6d7f1e0ddd4fb9f3c0ee872584ebf9bcb455ea`, summary `1f82271c394fd0cee6a8429d7d2a5fdd315943ef378917f9118f0e43659c32c4`, ledger `d5a05e236cf5e6cec81a6e69d360f274ec3badcfcacc35b88fb6f2aa681ec6bf` |
+| E23 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local transport fix verified; not executed** `2026-08-11`. Remote stdin is explicit UTF-8 bytes with no CR and stdout/stderr are decoded fail-closed. TDD RED `1 failed`; final focused gate `33 passed`. SHA-256: script `d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`, test `74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc` |
 
 ## Current failure data-flow trace
 
@@ -1068,6 +1069,29 @@ remote payload as explicit LF bytes and covers the real subprocess boundary.
 That slice must not execute a live rehearsal. A later live attempt requires a
 new explicit authorization and a new conservative identity.
 
+## Windows LF transport correction — 2026-08-11
+
+E23 closes the local transport defect without reusing the consumed E22
+identity. `execute_rehearsal_setup` now encodes `REMOTE_PAYLOAD` as UTF-8
+bytes and leaves subprocess text mode disabled, so Windows cannot translate
+LF to CRLF. A bounded decoder normalizes real byte stdout/stderr while
+preserving compatibility with injected test runners and replacement behavior
+for invalid UTF-8 diagnostics.
+
+The regression test captures the actual runner kwargs, requires a byte input
+equal to `REMOTE_PAYLOAD.encode("utf-8")`, rejects every CR byte, and proves
+byte stdout still reaches strict JSON validation. Its RED result was one
+failure on the former string input; the final focused suite passed `33/33`.
+Ruff lint/format, compile, default non-executing CLI, UTF-8/LF, exact two-file
+scope, and diff checks passed.
+
+No SSH, `--execute`, scratch access, alternate run ID, target access, Grok,
+or background writer ran. E22 remains consumed and its runbook is historical.
+The next separate candidate is to author a new conservative runbook and
+evidence identity using the current protected hashes. That docs-only slice
+must not execute the rehearsal; live execution remains a later explicitly
+authorized gate.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1091,12 +1115,12 @@ new explicit authorization and a new conservative identity.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility remains fail-closed after E22.** The
-   seven non-target probes are implemented, but the single live attempt was
-   transport-blocked before probe execution and every capability result
-   remains `NOT_RUN`. Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no
-   capture operator runbook is approved. Fix and test the Windows LF transport
-   locally before requesting a separately authorized new non-target identity.
+8. **Quiesce-and-copy runtime eligibility remains fail-closed after E23.** The
+   Windows LF transport is fixed and tested locally, but the single live E22
+   identity remains consumed and every capability result remains `NOT_RUN`.
+   Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook
+   is approved. Author a new non-target runbook before requesting separate
+   live authorization.
 
 ## Claim boundary for this documentation slice
 
@@ -1110,14 +1134,15 @@ new explicit authorization and a new conservative identity.
 | Non-target rehearsal harness setup | **Yes, local only** (`REHEARSAL_SETUP_READY_NOT_EXECUTED`; seven checks `NOT_RUN`) |
 | Seven non-target scratch probes implemented | **Yes**; the first live identity was transport-blocked before probe execution |
 | Exact E22 cleanup proved | **Yes**; one read-only exact-path check exited `0` |
+| Windows LF transport corrected | **Yes, local TDD only**; no new SSH or scratch action |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Local TDD fix for byte-for-byte LF SSH payload transport; no live rehearsal in that slice |
+| Next possible action | Author a new conservative non-target runbook/evidence identity using E23 hashes; no live rehearsal in that docs slice |
 
 ---
 
-*End of design. The E22 attempt reached only the fixed non-target SSH
-transport, failed before probe execution, and left its exact scratch root
-absent. No target or database-byte access was authorized or performed.*
+*End of design. E23 fixed the Windows LF transport locally but did not execute
+SSH. The E22 identity remains consumed with its exact scratch root absent. No
+target or database-byte access was authorized or performed.*

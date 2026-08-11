@@ -14,9 +14,11 @@ exact root was absent in the single cleanup check. Both runtime branches remain
 ineligible, and status remains `CAPABILITY_REHEARSAL_REQUIRED` /
 `PRESERVATION_PARTIAL`.
 
-This identity, command, root, and evidence directory must not be reused. A
-future attempt requires a local compatibility fix, a new runbook, a new
-identity, and fresh explicit authorization. This document never authorizes
+This identity, command, root, and evidence directory must not be reused. E25
+completed the local compatibility fix, and the separate
+[E26 runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) defines
+a fresh identity. It still requires new explicit authorization. This document
+never authorizes
 target Pod/volume access, DuckDB/WAL access, capture, repair, recovery,
 traffic, production transition, or push.
 
@@ -65,8 +67,8 @@ are script
 `d7bf34f28369b51565cf8125c62b949532b95e867f2b4c120f8472da0cc5f273`
 and test
 `a6b8f66e2e7af42b0ee2107bc57608f495baaaf22d711f7b2515c863cf7e051d`.
-E24 remains consumed. A later rehearsal requires a new runbook, identity, and
-separate authorization.
+E24 remains consumed. The E26 runbook supplies a new identity, but its one
+live rehearsal still requires separate explicit authorization.
 
 ## Historical preflight — do not reuse
 

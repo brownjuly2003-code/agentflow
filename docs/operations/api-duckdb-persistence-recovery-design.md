@@ -85,6 +85,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E23 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local transport fix verified; not executed** `2026-08-11`. Remote stdin is explicit UTF-8 bytes with no CR and stdout/stderr are decoded fail-closed. TDD RED `1 failed`; final focused gate `33 passed`. SHA-256: script `d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`, test `74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc` |
 | E24 | [replacement runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Five probes passed; descriptor visibility and metadata capability were blocked when remote `Path.write_text` rejected `newline`. Exact cleanup passed. SHA-256: JSON `389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`, summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`, ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71` |
 | E25 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local compatibility fix verified; not executed** `2026-08-11`. Both affected probes now create LF text through explicit `Path.open`; behavioral extraction tests run against a legacy `Path.write_text` signature. RED `2 failed`; final focused gate `35 passed`. SHA-256: script `d7bf34f28369b51565cf8125c62b949532b95e867f2b4c120f8472da0cc5f273`, test `a6b8f66e2e7af42b0ee2107bc57608f495baaaf22d711f7b2515c863cf7e051d` |
+| E26 | [fresh non-target runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) | **Ready, not authorized or executed** `2026-08-11`. Reserves one unused run ID, exact scratch root and local evidence directory, protects the E25 implementation/test hashes, permits one later invocation and one cleanup check, and preserves all fail-closed target and production boundaries. |
 
 ## Current failure data-flow trace
 
@@ -1154,9 +1155,33 @@ Both were test-environment diagnostics; the final fake-`lsof` path models the
 remote POSIX behavior without weakening the product assertion.
 
 No SSH, `--execute`, scratch action, new run ID, target access, Grok, or
-background writer ran. The next separate candidate is a docs-only E26 runbook
-with a new conservative identity and current protected hashes. It must not
-execute the rehearsal; a later live gate requires fresh authorization.
+background writer ran during E25. The separate E26 section below now records
+a fresh conservative identity and current protected hashes. E26 remains
+unexecuted; its later live gate requires fresh authorization.
+
+## E26 fresh rehearsal runbook — 2026-08-11
+
+The tracked
+[E26 runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) reserves
+run ID `api-duckdb-scratch-e26-20260811-01`, exact root
+`/tmp/agentflow-api-duckdb-capability-rehearsal/api-duckdb-scratch-e26-20260811-01`,
+and local evidence directory
+`.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/`.
+It protects implementation commit
+`82a00622aa6f21b7c87a72edeafc979d1d213093` and the E25 script/test hashes.
+
+The runbook permits at most one later invocation and one exact-path cleanup
+check, only after a fresh user message explicitly authorizes E26. At authoring
+time the run ID was unused in the tracked workspace, the local evidence
+directory was absent, and the remote root was not queried. This docs-only
+slice ran no SSH, `--execute`, scratch action, target access, Grok, delegation,
+or background writer.
+
+E26 readiness adds no live evidence. Both branches remain ineligible, runtime
+status remains `CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`, and
+production remains `candidate`. A collision or failed invocation consumes E26
+without a fallback identity; seven non-target `PASS` values would still not
+authorize target capture or improve production readiness.
 
 ## Open questions and data-owner decisions
 
@@ -1181,11 +1206,11 @@ execute the rehearsal; a later live gate requires fresh authorization.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility remains fail-closed after E25.** E24
+8. **Quiesce-and-copy runtime eligibility remains fail-closed after E26.** E24
    produced five `PASS` and two `BLOCKED` non-target results. E25 fixed those
-   two compatibility paths locally, but no new live evidence exists. Status
-   remains `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is
-   approved. Define a new runbook before any separately authorized rehearsal.
+   two compatibility paths locally, and E26 now defines a fresh runbook, but
+   no new live evidence exists. Status remains
+   `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -1202,14 +1227,15 @@ execute the rehearsal; a later live gate requires fresh authorization.
 | Windows LF transport corrected | **Yes, local TDD only**; no new SSH or scratch action |
 | Replacement E24 rehearsal | **Blocked**; five `PASS`, two `BLOCKED`, cleanup proved |
 | E25 remote text compatibility | **Fixed and tested locally**; no new SSH or scratch action |
+| E26 replacement runbook | **Ready, not authorized or executed**; fresh identity and fail-closed evidence contract recorded |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Author a docs-only E26 runbook/evidence identity using E25 hashes; no live rehearsal in that slice |
+| Next possible action | Wait for fresh explicit authorization before the one E26 non-target rehearsal; otherwise stop before SSH |
 
 ---
 
-*End of design. E25 fixed the two E24 compatibility paths locally but did not
-execute SSH. E24 remains consumed with exact cleanup proved. No target or
-database-byte access was authorized or performed.*
+*End of design. E26 is documented but not authorized or executed. E24 remains
+consumed with exact cleanup proved, and E25 remains a local-only fix. No target
+or database-byte access was authorized or performed.*

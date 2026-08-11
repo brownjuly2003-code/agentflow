@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Fail-closed setup harness for a future non-target API DuckDB capability rehearsal.
+"""Fail-closed harness for a non-target API DuckDB capability rehearsal.
 
 Default CLI mode emits a deterministic setup/plan JSON and never runs remote
-commands. Future isolated scratch execution requires ``--execute``, the exact
-acknowledgement token, a validated run id, and a unique path under the fixed
-scratch prefix. This slice does not prove I04/I05/I09, approve a branch or
-runbook, or improve production status.
+commands. Isolated scratch execution runs seven bounded probes only after
+``--execute``, the exact acknowledgement token, a validated run id, and a
+unique path under the fixed scratch prefix. Scratch results do not prove
+I04/I05/I09, approve a branch or runbook, or improve production status.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 SETUP_STATUS = "REHEARSAL_SETUP_READY_NOT_EXECUTED"
-EXECUTED_SETUP_STATUS = "REHEARSAL_SETUP_EXECUTED"
+EXECUTED_REHEARSAL_STATUS = "NON_TARGET_SCRATCH_REHEARSAL_EXECUTED"
 EXECUTION_ACK = "NON_TARGET_SCRATCH_REHEARSAL_ONLY"
 DEFAULT_SSH_HOST = "deproject-mac"
 SCRATCH_ROOT_PREFIX = "/tmp/agentflow-api-duckdb-capability-rehearsal/"  # noqa: S108
@@ -60,7 +60,7 @@ CLAIM_BOUNDARY: dict[str, Any] = {
     "runbook_approved": False,
     "production_status_improved": False,
     "claim_scope": (
-        "Non-target scratch capability rehearsal setup only. "
+        "Non-target scratch capability rehearsal only. "
         "Does not prove I04/I05/I09, approve a runbook/branch, capture "
         "target bytes, or improve production readiness."
     ),
@@ -75,36 +75,418 @@ REMOTE_RESULT_KEYS = frozenset(
         "status",
         "execute",
         "capability_checks",
+        "check_evidence",
         "branch_eligibility",
     }
 )
 
+REMOTE_PROBE_PYTHON = r"""
+from __future__ import annotations
 
-def _remote_success_json() -> str:
-    return json.dumps(
+import json
+import os
+import platform
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+EXECUTED_STATUS = "NON_TARGET_SCRATCH_REHEARSAL_EXECUTED"
+FIXED_PREFIX = "/tmp/agentflow-api-duckdb-capability-rehearsal/"
+SENTINEL_NAME = ".agentflow-capability-rehearsal-sentinel"
+CHECK_NAMES = (
+    "timing/monotonic bounds",
+    "scratch pause/resume behavior",
+    "independent watchdog arm/fire/cancel behavior",
+    "descriptor visibility on an exact scratch mount/path",
+    "metadata tool/ACL/xattr capability",
+    "same-directory atomic rename",
+    "file and directory sync behavior",
+)
+
+run_id = sys.argv[1]
+scratch_root = Path(sys.argv[2])
+expected_root = Path(FIXED_PREFIX) / run_id
+if scratch_root.as_posix() != expected_root.as_posix():
+    raise RuntimeError("scratch root identity mismatch")
+sentinel = scratch_root / SENTINEL_NAME
+if not sentinel.is_file() or sentinel.read_text(encoding="utf-8").strip() != run_id:
+    raise RuntimeError("scratch sentinel mismatch")
+work_root = scratch_root / "work"
+work_root.mkdir(mode=0o700)
+
+capability_checks: dict[str, str] = {}
+check_evidence: dict[str, dict[str, object]] = {}
+
+
+def bounded_error(error: Exception) -> str:
+    return str(error).replace("\n", " ")[:240]
+
+
+def wait_until(predicate, timeout_seconds: float) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return predicate()
+
+
+def stop_process(process: subprocess.Popen[str], *, continued: bool = True) -> None:
+    if process.poll() is not None:
+        return
+    if not continued:
+        os.kill(process.pid, signal.SIGCONT)
+    process.terminate()
+    try:
+        process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1.0)
+
+
+def record(name: str, check) -> None:
+    try:
+        status, evidence = check()
+        if status not in {"PASS", "PARTIAL", "BLOCKED"}:
+            raise RuntimeError("invalid scratch status")
+        if not isinstance(evidence, dict):
+            raise RuntimeError("invalid scratch evidence")
+    except Exception as error:
+        status = "BLOCKED"
+        evidence = {
+            "error_type": type(error).__name__,
+            "error": bounded_error(error),
+        }
+    evidence = {"scope": "non-target scratch only", **evidence}
+    capability_checks[name] = status
+    check_evidence[name] = evidence
+
+
+def check_timing() -> tuple[str, dict[str, object]]:
+    deltas: list[int] = []
+    previous = time.monotonic_ns()
+    for _ in range(2000):
+        current = time.monotonic_ns()
+        if current > previous:
+            deltas.append(current - previous)
+        previous = current
+    if not deltas:
+        return "BLOCKED", {"reason": "monotonic clock did not advance"}
+
+    launch_latencies: list[int] = []
+    for _ in range(3):
+        started = time.monotonic_ns()
+        completed = subprocess.run(
+            [sys.executable, "-c", "pass"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+        launch_latencies.append(time.monotonic_ns() - started)
+        if completed.returncode != 0:
+            return "BLOCKED", {"reason": "scratch process launch failed"}
+    return "PASS", {
+        "monotonic_resolution_ns": min(deltas),
+        "process_launch_max_ns": max(launch_latencies),
+        "samples": len(deltas),
+        "target_timing_envelope_proved": False,
+    }
+
+
+def read_counter(path: Path) -> int:
+    try:
+        return int(path.read_text(encoding="ascii"))
+    except (FileNotFoundError, ValueError):
+        return -1
+
+
+def check_pause_resume() -> tuple[str, dict[str, object]]:
+    counter = work_root / "pause-counter"
+    child_source = r'''
+import os
+import sys
+import time
+from pathlib import Path
+
+counter = Path(sys.argv[1])
+value = 0
+while True:
+    temporary = counter.with_suffix(".tmp")
+    with temporary.open("w", encoding="ascii", newline="\n") as stream:
+        stream.write(str(value))
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, counter)
+    value += 1
+    time.sleep(0.02)
+'''
+    process = subprocess.Popen(
+        [sys.executable, "-c", child_source, str(counter)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    continued = True
+    try:
+        if not wait_until(lambda: read_counter(counter) >= 2, 2.0):
+            return "BLOCKED", {"reason": "scratch writer did not advance"}
+        os.kill(process.pid, signal.SIGSTOP)
+        continued = False
+        time.sleep(0.08)
+        stopped_value = read_counter(counter)
+        time.sleep(0.16)
+        stable_value = read_counter(counter)
+        os.kill(process.pid, signal.SIGCONT)
+        continued = True
+        resumed = wait_until(lambda: read_counter(counter) > stable_value, 2.0)
+        if stopped_value < 0 or stable_value != stopped_value or not resumed:
+            return "BLOCKED", {
+                "stopped_value": stopped_value,
+                "stable_value": stable_value,
+                "resumed": resumed,
+            }
+        return "PASS", {
+            "stopped_value": stopped_value,
+            "stable_sample_seconds": 0.16,
+            "resumed": True,
+            "containerd_or_cgroup_proved": False,
+        }
+    finally:
+        stop_process(process, continued=continued)
+        counter.unlink(missing_ok=True)
+        counter.with_suffix(".tmp").unlink(missing_ok=True)
+
+
+def start_watchdog(marker: Path, delay_seconds: float) -> subprocess.Popen[str]:
+    source = (
+        "import sys,time; from pathlib import Path; "
+        "time.sleep(float(sys.argv[2])); "
+        "Path(sys.argv[1]).write_text('fired\\n', encoding='ascii')"
+    )
+    return subprocess.Popen(
+        [sys.executable, "-c", source, str(marker), str(delay_seconds)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+
+
+def check_watchdog() -> tuple[str, dict[str, object]]:
+    fire_marker = work_root / "watchdog-fired"
+    cancel_marker = work_root / "watchdog-cancelled"
+    fired = start_watchdog(fire_marker, 0.12)
+    started = time.monotonic_ns()
+    try:
+        fired.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        stop_process(fired)
+        return "BLOCKED", {"reason": "scratch watchdog did not fire"}
+    fire_latency_ns = time.monotonic_ns() - started
+    if fired.returncode != 0 or not fire_marker.is_file():
+        return "BLOCKED", {"reason": "scratch watchdog marker absent"}
+
+    cancelled = start_watchdog(cancel_marker, 0.35)
+    time.sleep(0.05)
+    stop_process(cancelled)
+    time.sleep(0.38)
+    cancellation_held = not cancel_marker.exists()
+    fire_marker.unlink(missing_ok=True)
+    cancel_marker.unlink(missing_ok=True)
+    if not cancellation_held:
+        return "BLOCKED", {"reason": "cancelled watchdog still fired"}
+    return "PASS", {
+        "fire_latency_ns": fire_latency_ns,
+        "cancellation_verified": True,
+        "independent_scratch_process": True,
+        "target_recovery_action_proved": False,
+    }
+
+
+def check_descriptors() -> tuple[str, dict[str, object]]:
+    descriptor_path = work_root / "descriptor-probe"
+    descriptor_path.write_text("scratch\n", encoding="ascii", newline="\n")
+    resolved = descriptor_path.resolve(strict=True)
+    with descriptor_path.open("rb"):
+        proc_fd = Path("/proc/self/fd")
+        if proc_fd.is_dir():
+            visible = any(
+                entry.resolve(strict=False) == resolved for entry in proc_fd.iterdir()
+            )
+            method = "proc-self-fd"
+        else:
+            lsof = shutil.which("lsof")
+            if lsof is None:
+                descriptor_path.unlink(missing_ok=True)
+                return "BLOCKED", {"reason": "no descriptor inspection tool"}
+            completed = subprocess.run(
+                [lsof, "-F", "pn", "--", str(resolved)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+            )
+            visible = (
+                completed.returncode == 0
+                and f"p{os.getpid()}" in completed.stdout
+                and f"n{resolved}" in completed.stdout
+            )
+            method = "lsof"
+    descriptor_path.unlink(missing_ok=True)
+    if not visible:
+        return "BLOCKED", {"reason": "open scratch descriptor was not visible"}
+    return "PASS", {
+        "method": method,
+        "exact_path_visible": True,
+        "cross_namespace_target_proved": False,
+    }
+
+
+def check_metadata() -> tuple[str, dict[str, object]]:
+    metadata_path = work_root / "metadata-probe"
+    metadata_path.write_text("scratch\n", encoding="ascii", newline="\n")
+    os.chmod(metadata_path, 0o640)
+    xattr_roundtrip = False
+    xattr_error = ""
+    attribute = (
+        "com.agentflow.rehearsal"
+        if platform.system() == "Darwin"
+        else "user.agentflow_rehearsal"
+    )
+    try:
+        os.setxattr(metadata_path, attribute, b"scratch")
+        xattr_roundtrip = os.getxattr(metadata_path, attribute) == b"scratch"
+        os.removexattr(metadata_path, attribute)
+    except (AttributeError, OSError) as error:
+        xattr_error = bounded_error(error)
+
+    acl_roundtrip = False
+    acl_tools = "absent"
+    getfacl = shutil.which("getfacl")
+    setfacl = shutil.which("setfacl")
+    if getfacl and setfacl:
+        acl_tools = "getfacl/setfacl"
+        set_result = subprocess.run(
+            [setfacl, "-m", f"u:{os.getuid()}:r", str(metadata_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+        )
+        get_result = subprocess.run(
+            [getfacl, "-cp", str(metadata_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+        )
+        acl_roundtrip = set_result.returncode == 0 and get_result.returncode == 0
+        subprocess.run(
+            [setfacl, "-b", str(metadata_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+        )
+
+    mode_preserved = metadata_path.stat().st_mode & 0o777 == 0o640
+    metadata_path.unlink(missing_ok=True)
+    if xattr_roundtrip and acl_roundtrip and mode_preserved:
+        status = "PASS"
+    elif xattr_roundtrip or acl_roundtrip:
+        status = "PARTIAL"
+    else:
+        status = "BLOCKED"
+    return status, {
+        "mode_roundtrip": mode_preserved,
+        "xattr_roundtrip": xattr_roundtrip,
+        "xattr_error": xattr_error,
+        "acl_roundtrip": acl_roundtrip,
+        "acl_tools": acl_tools,
+    }
+
+
+def check_atomic_rename() -> tuple[str, dict[str, object]]:
+    building = work_root / "rename.building"
+    sealed = work_root / "rename.sealed"
+    content = b"non-target scratch rename\n"
+    building.write_bytes(content)
+    same_device = building.stat().st_dev == work_root.stat().st_dev
+    os.replace(building, sealed)
+    valid = same_device and not building.exists() and sealed.read_bytes() == content
+    sealed.unlink(missing_ok=True)
+    if not valid:
+        return "BLOCKED", {"reason": "same-directory replace verification failed"}
+    return "PASS", {
+        "same_device": True,
+        "source_absent_after_replace": True,
+        "destination_content_verified": True,
+    }
+
+
+def check_sync() -> tuple[str, dict[str, object]]:
+    building = work_root / "sync.building"
+    durable = work_root / "sync.durable"
+    with building.open("wb") as stream:
+        stream.write(b"non-target scratch sync\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(building, durable)
+    directory_fd = os.open(work_root, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    durable_ok = durable.read_bytes() == b"non-target scratch sync\n"
+    durable.unlink(missing_ok=True)
+    if not durable_ok:
+        return "BLOCKED", {"reason": "synced file content mismatch"}
+    return "PASS", {
+        "file_fsync": True,
+        "same_directory_replace": True,
+        "directory_fsync": True,
+    }
+
+
+record(CHECK_NAMES[0], check_timing)
+record(CHECK_NAMES[1], check_pause_resume)
+record(CHECK_NAMES[2], check_watchdog)
+record(CHECK_NAMES[3], check_descriptors)
+record(CHECK_NAMES[4], check_metadata)
+record(CHECK_NAMES[5], check_atomic_rename)
+record(CHECK_NAMES[6], check_sync)
+
+print(
+    json.dumps(
         {
-            "status": EXECUTED_SETUP_STATUS,
+            "status": EXECUTED_STATUS,
             "execute": True,
-            "capability_checks": dict.fromkeys(PLANNED_CHECKS, "NOT_RUN"),
+            "capability_checks": capability_checks,
+            "check_evidence": check_evidence,
             "branch_eligibility": {
                 "PAUSED_TASK": "ineligible",
                 "KUBELET_GAP": "ineligible",
             },
         },
         separators=(",", ":"),
+        sort_keys=True,
     )
+)
+"""
 
 
 def _build_remote_payload() -> str:
-    # Setup-only remote protocol. Host, run id, and scratch root arrive as
-    # discrete argv entries after ``bash -s --`` and are never shell-
-    # interpolated locally.
+    # Host, run id, and scratch root arrive as discrete argv entries after
+    # ``bash -s --`` and are never shell-interpolated locally.
     blocked_outside = '{"status":"BLOCKED","reason":"scratch root outside fixed prefix"}'
     blocked_base = '{"status":"BLOCKED","reason":"scratch root must not be the base directory"}'
     blocked_match = '{"status":"BLOCKED","reason":"scratch root must equal prefix plus run id"}'
     blocked_exists = '{"status":"BLOCKED","reason":"scratch root must be a new empty path"}'
-    success = _remote_success_json()
-    return f"""\
+    blocked_base_type = '{"status":"BLOCKED","reason":"scratch base is not a plain directory"}'
+    shell_prefix = f"""\
 set -eu
 umask 077
 
@@ -112,6 +494,7 @@ RUN_ID="${{1:?run id required}}"
 SCRATCH_ROOT="${{2:?scratch root required}}"
 FIXED_PREFIX="{SCRATCH_ROOT_PREFIX}"
 SENTINEL_NAME="{SENTINEL_NAME}"
+BASE_ROOT="${{FIXED_PREFIX%/}}"
 
 case "${{SCRATCH_ROOT}}" in
   "${{FIXED_PREFIX}}"*)
@@ -142,17 +525,25 @@ if [ -e "${{SCRATCH_ROOT}}" ]; then
   exit 23
 fi
 
+if [ -e "${{BASE_ROOT}}" ]; then
+  if [ ! -d "${{BASE_ROOT}}" ] || [ -L "${{BASE_ROOT}}" ]; then
+    printf '%s\\n' '{blocked_base_type}' >&2
+    exit 24
+  fi
+else
+  mkdir -- "${{BASE_ROOT}}"
+fi
+
 cleanup() {{
   status=$?
-  if [ -n "${{SCRATCH_ROOT:-}}" ] && [ -f "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}" ]; then
-    case "${{SCRATCH_ROOT}}" in
-      "${{FIXED_PREFIX}}"*)
-        if [ -f "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}" ]; then
-          rm -f -- "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}"
-          rmdir -- "${{SCRATCH_ROOT}}" 2>/dev/null || true
-        fi
-        ;;
-    esac
+  if [ "${{SCRATCH_ROOT:-}}" = "${{expected:-}}" ]; then
+    if [ -f "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}" ]; then
+      if [ "$(cat "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}")" = "${{RUN_ID}}" ]; then
+        rm -rf -- "${{SCRATCH_ROOT}}/work"
+        rm -f -- "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}"
+        rmdir -- "${{SCRATCH_ROOT}}" 2>/dev/null || true
+      fi
+    fi
   fi
   return "${{status}}"
 }}
@@ -161,8 +552,9 @@ trap cleanup EXIT
 mkdir -- "${{SCRATCH_ROOT}}"
 printf '%s\\n' "${{RUN_ID}}" > "${{SCRATCH_ROOT}}/${{SENTINEL_NAME}}"
 
-printf '%s\\n' '{success}'
+python3 - "${{RUN_ID}}" "${{SCRATCH_ROOT}}" <<'PY'
 """
+    return shell_prefix + REMOTE_PROBE_PYTHON + "\nPY\n"
 
 
 REMOTE_PAYLOAD = _build_remote_payload()
@@ -328,8 +720,8 @@ def parse_remote_json(text: str) -> dict[str, Any]:
         raise RehearsalError(
             f"remote JSON schema mismatch: expected exactly {sorted(REMOTE_RESULT_KEYS)}"
         )
-    if payload["status"] != EXECUTED_SETUP_STATUS:
-        raise RehearsalError("remote JSON schema mismatch: unexpected setup status")
+    if payload["status"] != EXECUTED_REHEARSAL_STATUS:
+        raise RehearsalError("remote JSON schema mismatch: unexpected rehearsal status")
     if payload["execute"] is not True:
         raise RehearsalError("remote JSON schema mismatch: execute must be true")
 
@@ -338,8 +730,25 @@ def parse_remote_json(text: str) -> dict[str, Any]:
         raise RehearsalError("remote JSON schema mismatch: capability_checks must be an object")
     if set(checks) != set(PLANNED_CHECKS):
         raise RehearsalError("remote JSON schema mismatch: capability check set differs")
-    if any(checks[name] != "NOT_RUN" for name in PLANNED_CHECKS):
-        raise RehearsalError("remote JSON schema mismatch: setup checks must remain NOT_RUN")
+    allowed_statuses = {"PASS", "PARTIAL", "BLOCKED"}
+    if any(checks[name] not in allowed_statuses for name in PLANNED_CHECKS):
+        raise RehearsalError("remote JSON schema mismatch: invalid executed check status")
+
+    evidence = payload.get("check_evidence")
+    if not isinstance(evidence, Mapping):
+        raise RehearsalError("remote JSON schema mismatch: check_evidence must be an object")
+    if set(evidence) != set(PLANNED_CHECKS):
+        raise RehearsalError("remote JSON schema mismatch: evidence check set differs")
+    for name in PLANNED_CHECKS:
+        item = evidence[name]
+        if not isinstance(item, Mapping):
+            raise RehearsalError(
+                f"remote JSON schema mismatch: evidence for {name!r} must be an object"
+            )
+        if item.get("scope") != "non-target scratch only":
+            raise RehearsalError(
+                f"remote JSON schema mismatch: evidence for {name!r} has unsafe scope"
+            )
 
     branches = payload.get("branch_eligibility")
     if not isinstance(branches, Mapping):
@@ -358,7 +767,7 @@ def execute_rehearsal_setup(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
 ) -> dict[str, Any]:
-    """Run the guarded setup payload once. Never retries on failure."""
+    """Run the guarded non-target rehearsal once. Never retry on failure."""
     if not 5 <= timeout_seconds <= 300:
         raise ValueError("timeout must be between 5 and 300 seconds")
 
@@ -382,20 +791,20 @@ def execute_rehearsal_setup(
             shell=False,
         )
     except subprocess.TimeoutExpired as error:
-        raise RehearsalError("BLOCKED: remote rehearsal setup timed out; no retry") from error
+        raise RehearsalError("BLOCKED: remote scratch rehearsal timed out; no retry") from error
     except OSError as error:
-        raise RehearsalError(f"BLOCKED: could not run remote rehearsal setup: {error}") from error
+        raise RehearsalError(f"BLOCKED: could not run scratch rehearsal: {error}") from error
 
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()
         raise RehearsalError(
-            f"BLOCKED: remote rehearsal setup failed with nonzero exit "
+            f"BLOCKED: remote scratch rehearsal failed with nonzero exit "
             f"{completed.returncode}: {detail}"
         )
 
     remote = parse_remote_json(completed.stdout)
     return {
-        "status": remote.get("status", EXECUTED_SETUP_STATUS),
+        "status": remote["status"],
         "execute": True,
         "ssh_host": ssh_host,
         "run_id": run_id,
@@ -406,6 +815,7 @@ def execute_rehearsal_setup(
         "capability_checks": {
             name: str(remote["capability_checks"][name]) for name in PLANNED_CHECKS
         },
+        "check_evidence": {name: dict(remote["check_evidence"][name]) for name in PLANNED_CHECKS},
         "branch_eligibility": {
             "PAUSED_TASK": str(remote["branch_eligibility"]["PAUSED_TASK"]),
             "KUBELET_GAP": str(remote["branch_eligibility"]["KUBELET_GAP"]),
@@ -427,7 +837,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--execute",
         action="store_true",
-        help=("run the guarded non-target scratch setup once over SSH (requires --acknowledge)"),
+        help=("run seven guarded non-target scratch probes over SSH (requires --acknowledge)"),
     )
     parser.add_argument(
         "--acknowledge",

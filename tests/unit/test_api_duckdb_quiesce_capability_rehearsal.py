@@ -23,6 +23,7 @@ RUN_ID = "cap-rehearsal-20260811-01"
 SAFE_SCRATCH_ROOT = f"/tmp/agentflow-api-duckdb-capability-rehearsal/{RUN_ID}"
 ACK = "NON_TARGET_SCRATCH_REHEARSAL_ONLY"
 DEFAULT_HOST = "deproject-mac"
+EXECUTED_STATUS = "NON_TARGET_SCRATCH_REHEARSAL_EXECUTED"
 
 PLANNED_CHECKS = (
     "timing/monotonic bounds",
@@ -59,6 +60,22 @@ def _load_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _executed_remote_payload(*, statuses: dict[str, str] | None = None) -> dict[str, Any]:
+    capability_checks = statuses or dict.fromkeys(PLANNED_CHECKS, "PASS")
+    return {
+        "status": EXECUTED_STATUS,
+        "execute": True,
+        "capability_checks": capability_checks,
+        "check_evidence": {
+            name: {"scope": "non-target scratch only", "observed": True} for name in PLANNED_CHECKS
+        },
+        "branch_eligibility": {
+            "PAUSED_TASK": "ineligible",
+            "KUBELET_GAP": "ineligible",
+        },
+    }
 
 
 def test_plan_mode_performs_no_subprocess_and_emits_claim_boundary(
@@ -224,6 +241,7 @@ def test_strict_json_rejects_duplicates_malformed_and_schema_mismatch() -> None:
     [
         {"status": "CAPTURE_ONLY_PASS"},
         {"execute": False},
+        {"capability_checks": dict.fromkeys(PLANNED_CHECKS, "NOT_RUN")},
         {
             "branch_eligibility": {
                 "PAUSED_TASK": "eligible",
@@ -236,15 +254,7 @@ def test_remote_json_rejects_claim_boundary_upgrades(
     overrides: dict[str, Any],
 ) -> None:
     module = _load_module()
-    payload: dict[str, Any] = {
-        "status": "REHEARSAL_SETUP_EXECUTED",
-        "execute": True,
-        "capability_checks": dict.fromkeys(PLANNED_CHECKS, "NOT_RUN"),
-        "branch_eligibility": {
-            "PAUSED_TASK": "ineligible",
-            "KUBELET_GAP": "ineligible",
-        },
-    }
+    payload = _executed_remote_payload()
     payload.update(overrides)
 
     with pytest.raises(module.RehearsalError, match="schema"):
@@ -294,15 +304,7 @@ def test_nonzero_and_timeout_are_blocked_without_retry(
     def capture_runner(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         captured["args"] = args
         captured["kwargs"] = kwargs
-        payload = {
-            "status": "REHEARSAL_SETUP_EXECUTED",
-            "execute": True,
-            "capability_checks": dict.fromkeys(PLANNED_CHECKS, "NOT_RUN"),
-            "branch_eligibility": {
-                "PAUSED_TASK": "ineligible",
-                "KUBELET_GAP": "ineligible",
-            },
-        }
+        payload = _executed_remote_payload()
         return subprocess.CompletedProcess(
             args=args[0] if args else [],
             returncode=0,
@@ -318,6 +320,39 @@ def test_nonzero_and_timeout_are_blocked_without_retry(
     )
     assert captured["kwargs"].get("shell") is False
     assert result["execute"] is True
+    assert result["status"] == EXECUTED_STATUS
+    assert result["check_evidence"] == _executed_remote_payload()["check_evidence"]
+
+
+def test_remote_json_accepts_all_bounded_statuses_with_exact_evidence() -> None:
+    module = _load_module()
+    statuses = {
+        name: ("PASS", "PARTIAL", "BLOCKED")[index % 3] for index, name in enumerate(PLANNED_CHECKS)
+    }
+    payload = _executed_remote_payload(statuses=statuses)
+
+    parsed = module.parse_remote_json(json.dumps(payload))
+
+    assert parsed == payload
+    assert "NOT_RUN" not in parsed["capability_checks"].values()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda payload: payload["check_evidence"].pop(PLANNED_CHECKS[0]),
+        lambda payload: payload["check_evidence"].update({"unexpected": {}}),
+        lambda payload: payload["check_evidence"].update({PLANNED_CHECKS[0]: "not-an-object"}),
+        lambda payload: payload.update({"unexpected": True}),
+    ],
+)
+def test_remote_json_rejects_inexact_evidence_schema(mutate: Any) -> None:
+    module = _load_module()
+    payload = _executed_remote_payload()
+    mutate(payload)
+
+    with pytest.raises(module.RehearsalError, match="schema"):
+        module.parse_remote_json(json.dumps(payload))
 
 
 def test_setup_result_keeps_checks_not_run_and_branches_ineligible() -> None:
@@ -348,3 +383,52 @@ def test_payload_is_fail_closed_and_excludes_prohibited_target_ops() -> None:
     assert "SENTINEL" in payload.upper() or module.SENTINEL_NAME in payload
     assert "rm -rf /" not in payload
     assert "kubectl" not in payload
+
+
+def test_payload_implements_all_seven_bounded_scratch_checks() -> None:
+    module = _load_module()
+    payload = module.REMOTE_PAYLOAD
+    required_tokens = (
+        "time.monotonic_ns",
+        "signal.SIGSTOP",
+        "signal.SIGCONT",
+        "watchdog",
+        "lsof",
+        "os.setxattr",
+        "os.replace",
+        "os.fsync",
+        "check_evidence",
+        EXECUTED_STATUS,
+    )
+    for token in required_tokens:
+        assert token in payload
+
+    for check_name in PLANNED_CHECKS:
+        assert check_name in payload
+
+    assert 'rm -rf -- "${SCRATCH_ROOT}/work"' in payload
+    assert 'cat "${SCRATCH_ROOT}/${SENTINEL_NAME}"' in payload
+
+
+def test_payload_keeps_target_claims_false_after_scratch_checks() -> None:
+    module = _load_module()
+    result = module.execute_rehearsal_setup(
+        ssh_host=DEFAULT_HOST,
+        run_id=RUN_ID,
+        scratch_root=SAFE_SCRATCH_ROOT,
+        runner=lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout=json.dumps(_executed_remote_payload()),
+            stderr="",
+        ),
+    )
+
+    assert set(result["capability_checks"].values()) == {"PASS"}
+    assert result["claim_boundary"]["i04_proved"] is False
+    assert result["claim_boundary"]["i05_proved"] is False
+    assert result["claim_boundary"]["i09_proved"] is False
+    assert result["branch_eligibility"] == {
+        "PAUSED_TASK": "ineligible",
+        "KUBELET_GAP": "ineligible",
+    }

@@ -1308,6 +1308,35 @@ explicitly authorized read-only non-target/node capability invocation that
 creates a **new** evidence identity. No target database-byte access and no
 E27 rehearsal are authorized by this slice.
 
+## C05 Kind-node metadata capability gate — 2026-08-11
+
+Authorized one-shot non-target node-only gate. Evidence identity:
+`.codex-grok-tasks/c05-node-metadata-capability-20260811-grok01/`. Control
+runner:
+`.grok-prompts/c05-node-metadata-capability-runner-20260811-grok01.py`.
+Transport: local OpenSSH to `deproject-mac`, Docker context
+`colima-agentflow-fc5-7113966`, Kind node
+`agentflow-reverify-ed03fc47-control-plane`, exact non-target root `/usr/bin`.
+Inspector stdin-only; no remote file create/write/delete.
+
+**Observed result.** Classification
+`C05_NODE_METADATA_API_PASS_VALUE_DIGEST_UNEXERCISED`. Inspector status
+`METADATA_INSPECTION_PASS` (exit 0). Entry count `376`. Total xattr count
+represented by digests `0` (APIs available; no observed entry had an xattr
+value, so value digests were unexercised). Inspector invocations `1`; raw
+retries `0`. Result SHA-256
+`92874862c6d9d2883729e8603b92fda0454730edbe9eecdb2bcca294b7910fd7`.
+Protected inspector SHA-256 remains
+`3a9a7e0714be3a8db5b70eb72273899611932e6b432e3e9067fc1d58ccba4dc9`.
+
+**Claim boundary.** This is non-target node-only evidence. It does **not**
+approve C05, a capture branch, recovery, or production. It does **not** access
+target Pod/volume, `/data`, kubelet Pod-volume paths, or DuckDB/WAL bytes, and
+does not open or hash regular-file contents. E26 remains consumed and
+immutable. Both runtime branches remain ineligible; authoritative status
+remains `CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`; production
+remains `candidate`.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1357,11 +1386,12 @@ E27 rehearsal are authorized by this slice.
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Local C05 POSIX metadata inspector (API+CLI+unit tests) | **Yes, local only**; unexecuted on Kind node; no live evidence |
-| Next possible action | Separately authorized read-only non-target/node capability invocation with a new evidence identity; no E27, no target DB-byte access |
+| Local C05 POSIX metadata inspector (API+CLI+unit tests) | **Yes, local only**; unit-tested; live non-target node gate recorded below |
+| C05 Kind-node metadata capability (non-target `/usr/bin`) | **Executed once**; `C05_NODE_METADATA_API_PASS_VALUE_DIGEST_UNEXERCISED`; 376 entries; 0 xattrs; non-target only |
+| Next possible action | Separate explicit authorization only; no E27, no target DB-byte access, no C05/branch/capture/production approval from this pack |
 
 ---
 
-*End of design. E26 executed once against non-target scratch, was blocked in
-metadata capability, and cleaned its exact root. No target or database-byte
-access was authorized or performed.*
+*End of design. E26 remains consumed. The C05 node metadata gate is
+non-target node-only evidence and does not approve C05, capture, recovery, or
+production. No target or database-byte access was authorized or performed.*

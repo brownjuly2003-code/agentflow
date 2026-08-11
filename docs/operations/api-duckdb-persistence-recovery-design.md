@@ -1303,10 +1303,9 @@ or runtime ready.
 **Independent review.** One local QA/fix follow-up corrected strict blocked
 JSON for CLI parse failures, POSIX-only root/path handling, literal backslash
 filename preservation, and nested-directory drift detection. The final
-focused suite passes 14 tests. The next separate gate is a separately and
-explicitly authorized read-only non-target/node capability invocation that
-creates a **new** evidence identity. No target database-byte access and no
-E27 rehearsal are authorized by this slice.
+focused suite passes 14 tests. The later separately authorized read-only
+non-target/node capability invocation is recorded below. No target
+database-byte access or E27 rehearsal was authorized by that local slice.
 
 ## C05 Kind-node metadata capability gate — 2026-08-11
 
@@ -1336,6 +1335,40 @@ does not open or hash regular-file contents. E26 remains consumed and
 immutable. Both runtime branches remain ineligible; authoritative status
 remains `CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`; production
 remains `candidate`.
+
+### Next-session transparent resume
+
+Repository entry for this transparency update is
+`a5f6951bb10c67b2966a215a85fa2f70b7f82391`; `main` was ahead of
+`origin/main` by 70 with a clean tracked tree and index. The scoped successor
+contains this tracked clarification. The evidence pack remains intentionally
+local and untracked under the identity above.
+
+Evidence pack SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `execution.json` | `657b0fe1d4f7cce38a9c0994582b896f3e10a38b1b0832c4ea6fa083e4983186` |
+| `preflight.json` | `74eb6030fea6af54ed23f8725d0187d8655e85844040e874389a162fb992b68d` |
+| `result.json` | `92874862c6d9d2883729e8603b92fda0454730edbe9eecdb2bcca294b7910fd7` |
+| `result.md` | `2435abb07e99c476426688167cd4b62f1305aaa5610954a36e6a3b5ae410eb17` |
+| `evidence.md` | `25497fec31e9cb53dcadbe7545709bb455054649892a3a7f6b38bc233ffb8f18` |
+
+The owner authorization for this one-shot slice is fully consumed: the
+inspector ran once, raw retry count is zero, and no writer remains active.
+A generic `continue` / `продолжи` message does **not** authorize another SSH,
+Docker exec, discovery probe, or inspector run.
+
+The remaining gap is precise: `listxattr` and `getxattr` exist in the Kind
+node, but all 376 `/usr/bin` records had `xattr_count=0`, so no real xattr
+value passed through the length-prefixed digest path. A distinct future gate
+may close only this gap by using bounded metadata-only discovery to select an
+existing non-target path with at least one xattr, then invoking the inspector
+once under a new evidence identity. It requires fresh explicit owner
+authorization, must not reuse `/usr/bin` or this identity, and must stop
+without fallback if no safe value-bearing non-target path is found. Target
+Pod/volume, kubelet Pod-volume paths, `/data`, DuckDB/WAL bytes, E27, remote
+mutation, restart/recovery, production action, and push remain prohibited.
 
 ## Open questions and data-owner decisions
 
@@ -1388,7 +1421,7 @@ remains `candidate`.
 | External dependency recovery re-run | **No** (must remain consumed) |
 | Local C05 POSIX metadata inspector (API+CLI+unit tests) | **Yes, local only**; unit-tested; live non-target node gate recorded below |
 | C05 Kind-node metadata capability (non-target `/usr/bin`) | **Executed once**; `C05_NODE_METADATA_API_PASS_VALUE_DIGEST_UNEXERCISED`; 376 entries; 0 xattrs; non-target only |
-| Next possible action | Separate explicit authorization only; no E27, no target DB-byte access, no C05/branch/capture/production approval from this pack |
+| Next possible action | Fresh explicit authorization only: bounded metadata-only discovery of an existing xattr-bearing non-target path plus at most one inspector run under a new evidence identity; do not reuse `/usr/bin` or this identity; no fallback, E27, target DB-byte access, or C05/branch/capture/production approval from this pack |
 
 ---
 

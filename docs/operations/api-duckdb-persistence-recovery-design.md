@@ -81,7 +81,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E19 | [`second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md) | Local, intentionally untracked review record; SHA-256 `9ce977a4f5fc5254f07398404f3b52c96df12ffd6d0fdc8fd1e63d29c52fae22`. One read-only `local_grok_cli` session (`grok-4.5`, `019fe976-40d9-7563-ad22-aea8c9f4d8fc`) returned final verdict `ACCEPT_WITH_CHANGES`. Its first process-only response could not read files; the same session was resumed once with exact verified E18 text. No API fallback, file edit, web, or runtime action occurred |
 | E20 | [capability gate `result.json`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/evidence.md) | **Observed** `2026-08-10T02:54:35Z`–`02:59:59Z`; bounded read-only host, Kind node, and Kubernetes metadata. SHA-256: JSON `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423`, summary `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6`, ledger `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f`. Result: `CAPABILITY_REHEARSAL_REQUIRED`; no database contents read or runtime mutation |
 | E21 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; fail-closed non-target scratch setup harness. Default plan returns `REHEARSAL_SETUP_READY_NOT_EXECUTED`, all seven checks `NOT_RUN`, and both branches ineligible. No SSH or live rehearsal ran |
-| E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; seven bounded non-target probes now cover monotonic timing, scratch pause/resume, watchdog fire/cancel, exact-path descriptor visibility, mode/xattr/ACL metadata, same-directory replace, and file/directory sync. Executed results may be only `PASS`, `PARTIAL`, or `BLOCKED`; target claims remain false and both branches ineligible |
+| E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), and [next-session runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md) | **Implemented, not executed** `2026-08-11`; seven bounded non-target probes now cover monotonic timing, scratch pause/resume, watchdog fire/cancel, exact-path descriptor visibility, mode/xattr/ACL metadata, same-directory replace, and file/directory sync. Executed results may be only `PASS`, `PARTIAL`, or `BLOCKED`; target claims remain false and both branches ineligible |
 
 ## Current failure data-flow trace
 
@@ -1025,6 +1025,21 @@ from `1 failed, 31 passed` to final `32 passed`. Ruff lint/format, outer Python
 compile, embedded remote-source compile, default CLI, and scoped diff checks
 passed. No delegation or background writer ran.
 
+### Exact next-session execution contract
+
+The tracked
+[non-target scratch rehearsal runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md)
+is the sole operational resume recipe for E22. It fixes one run ID, scratch
+root, evidence directory, acknowledgement, implementation hashes, command
+shape, result classifications, cleanup proof, and stop conditions. It also
+forbids PowerShell stdout redirection so the raw JSON is not silently
+re-encoded, and forbids a second identity or retry after any timeout, nonzero,
+schema failure, `BLOCKED` result, or cleanup uncertainty.
+
+The runbook does not itself authorize execution. A latest user message must
+explicitly continue or authorize that isolated non-target run. Target access
+and every later capture/recovery action remain separately unauthorized.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1051,7 +1066,9 @@ passed. No delegation or background writer ran.
 8. **Quiesce-and-copy runtime eligibility remains fail-closed after E22.** The
    seven non-target probes are implemented but unexecuted and every capability
    result is still `NOT_RUN`. Status remains `CAPABILITY_REHEARSAL_REQUIRED`;
-   no operator runbook is approved.
+   no capture operator runbook is approved. The separate
+   [scratch rehearsal runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md)
+   governs only the next non-target evidence run.
 
 ## Claim boundary for this documentation slice
 
@@ -1068,7 +1085,7 @@ passed. No delegation or background writer ran.
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | One bounded E22 `--execute` run with a new scratch run ID/evidence identity; target Pod/volume access remains unauthorized |
+| Next possible action | Follow the [E22 scratch runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md) for its one reserved run/evidence identity; target Pod/volume access remains unauthorized |
 
 ---
 

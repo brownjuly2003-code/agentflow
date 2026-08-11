@@ -85,7 +85,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E23 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local transport fix verified; not executed** `2026-08-11`. Remote stdin is explicit UTF-8 bytes with no CR and stdout/stderr are decoded fail-closed. TDD RED `1 failed`; final focused gate `33 passed`. SHA-256: script `d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`, test `74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc` |
 | E24 | [replacement runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Five probes passed; descriptor visibility and metadata capability were blocked when remote `Path.write_text` rejected `newline`. Exact cleanup passed. SHA-256: JSON `389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`, summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`, ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71` |
 | E25 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local compatibility fix verified; not executed** `2026-08-11`. Both affected probes now create LF text through explicit `Path.open`; behavioral extraction tests run against a legacy `Path.write_text` signature. RED `2 failed`; final focused gate `35 passed`. SHA-256: script `d7bf34f28369b51565cf8125c62b949532b95e867f2b4c120f8472da0cc5f273`, test `a6b8f66e2e7af42b0ee2107bc57608f495baaaf22d711f7b2515c863cf7e051d` |
-| E26 | [fresh non-target runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) | **Ready, not authorized or executed** `2026-08-11`. Reserves one unused run ID, exact scratch root and local evidence directory, protects the E25 implementation/test hashes, permits one later invocation and one cleanup check, and preserves all fail-closed target and production boundaries. |
+| E26 | [fresh non-target runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Six probes passed; metadata tool/ACL/xattr capability was blocked because ACL tools were absent and remote Python exposed no `os.setxattr`. Exact cleanup passed. SHA-256: JSON `fa73f2f095f094cf0210e18fd78a8940752f0c939e5f44e3efcb3aec4811d783`, summary `26dfa578d261a576b3bb7efa6488de6045a77805f83aac46ea0641fb6ed78811`, ledger `bc0bcaa6671725bbb2c51c2cc37f0a172558d322d8526d334ed058baab7c689c` |
 
 ## Current failure data-flow trace
 
@@ -1183,6 +1183,30 @@ production remains `candidate`. A collision or failed invocation consumes E26
 without a fallback identity; seven non-target `PASS` values would still not
 authorize target capture or improve production readiness.
 
+### Consumed E26 outcome
+
+The later authorized invocation exited `0` with valid strict JSON and six
+`PASS` plus one `BLOCKED` result. Timing, scratch pause/resume, watchdog,
+descriptor visibility, same-directory rename, and file/directory sync passed.
+Descriptor visibility proved only the exact non-target scratch path through
+`lsof`; cross-namespace target coverage remains unproved.
+
+Metadata tool/ACL/xattr capability was `BLOCKED`. Mode round-trip passed, but
+ACL tools were absent and remote Python exposed no `os.setxattr`, so neither
+ACL nor xattr round-trip was proved. This is an observed capability gap, not
+the E24 text-write compatibility failure and not evidence about target bytes.
+
+The one cleanup check exited `0`, proving exact E26 root
+`/tmp/agentflow-api-duckdb-capability-rehearsal/api-duckdb-scratch-e26-20260811-01`
+absent. No retry, fallback identity, manual cleanup, target action, or Grok
+run occurred. E26 is consumed; both branches remain ineligible and status
+remains `CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`.
+
+The next separate candidate is a local design/capability slice that resolves
+the C05 metadata-preservation gap and proves a fail-closed ACL/xattr method
+compatible with observed host capabilities. It must not create E27 or access
+the target Pod/volume or DuckDB/WAL bytes.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1206,10 +1230,10 @@ authorize target capture or improve production readiness.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility remains fail-closed after E26.** E24
-   produced five `PASS` and two `BLOCKED` non-target results. E25 fixed those
-   two compatibility paths locally, and E26 now defines a fresh runbook, but
-   no new live evidence exists. Status remains
+8. **Quiesce-and-copy runtime eligibility remains fail-closed after E26.** E26
+   produced six `PASS` and one `BLOCKED` non-target result. The remaining
+   metadata gap is observed: mode round-trip passed, ACL tools were absent,
+   and remote Python exposed no `os.setxattr`. Status remains
    `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is approved.
 
 ## Claim boundary for this documentation slice
@@ -1227,15 +1251,15 @@ authorize target capture or improve production readiness.
 | Windows LF transport corrected | **Yes, local TDD only**; no new SSH or scratch action |
 | Replacement E24 rehearsal | **Blocked**; five `PASS`, two `BLOCKED`, cleanup proved |
 | E25 remote text compatibility | **Fixed and tested locally**; no new SSH or scratch action |
-| E26 replacement runbook | **Ready, not authorized or executed**; fresh identity and fail-closed evidence contract recorded |
+| E26 replacement rehearsal | **Blocked**; six `PASS`, metadata capability `BLOCKED`, cleanup proved |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Wait for fresh explicit authorization before the one E26 non-target rehearsal; otherwise stop before SSH |
+| Next possible action | Local design/capability resolution for a C05-compatible fail-closed ACL/xattr method; no E27 or target access |
 
 ---
 
-*End of design. E26 is documented but not authorized or executed. E24 remains
-consumed with exact cleanup proved, and E25 remains a local-only fix. No target
-or database-byte access was authorized or performed.*
+*End of design. E26 executed once against non-target scratch, was blocked in
+metadata capability, and cleaned its exact root. No target or database-byte
+access was authorized or performed.*

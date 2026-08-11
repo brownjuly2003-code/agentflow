@@ -80,6 +80,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E18 | [`second-opinion-api-duckdb-quiesce-capture-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-20260810.md) | Local, intentionally untracked review packet written `2026-08-10T01:51:50.4624998Z`; SHA-256 `baf90a58125abfa2e1a47fe36bc8fd43d47e3d99f1548eaa01af0175e0d3e776`; records a candidate only, not an approved runbook. One bounded `claude -p` review returned exit 1 with no text; E19 is the later independent review of this unchanged packet |
 | E19 | [`second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md) | Local, intentionally untracked review record; SHA-256 `9ce977a4f5fc5254f07398404f3b52c96df12ffd6d0fdc8fd1e63d29c52fae22`. One read-only `local_grok_cli` session (`grok-4.5`, `019fe976-40d9-7563-ad22-aea8c9f4d8fc`) returned final verdict `ACCEPT_WITH_CHANGES`. Its first process-only response could not read files; the same session was resumed once with exact verified E18 text. No API fallback, file edit, web, or runtime action occurred |
 | E20 | [capability gate `result.json`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/evidence.md) | **Observed** `2026-08-10T02:54:35Z`–`02:59:59Z`; bounded read-only host, Kind node, and Kubernetes metadata. SHA-256: JSON `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423`, summary `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6`, ledger `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f`. Result: `CAPABILITY_REHEARSAL_REQUIRED`; no database contents read or runtime mutation |
+| E21 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; fail-closed non-target scratch setup harness. Default plan returns `REHEARSAL_SETUP_READY_NOT_EXECUTED`, all seven checks `NOT_RUN`, and both branches ineligible. No SSH or live rehearsal ran |
 
 ## Current failure data-flow trace
 
@@ -965,6 +966,34 @@ approved.
 | `result.md` | `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6` |
 | `evidence.md` | `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f` |
 
+## Non-target rehearsal harness setup — 2026-08-11
+
+The separately authorized setup slice added E21 without changing E20's
+runtime classification. The Python 3.11+ standard-library harness defaults to
+a deterministic non-mutating plan and requires `--execute`, the exact
+`NON_TARGET_SCRATCH_REHEARSAL_ONLY` acknowledgement, a conservative run ID,
+and an exact new path below
+`/tmp/agentflow-api-duckdb-capability-rehearsal/` before its one guarded SSH
+call is reachable. Unsafe, traversal-prone, base, target, and out-of-prefix
+paths fail before subprocess execution. Remote output uses strict
+duplicate-key and exact claim-boundary validation with no retry.
+
+The remote payload in this setup slice only creates and removes a sentinel-
+guarded empty scratch directory. It deliberately leaves timing, pause/resume,
+watchdog, descriptor, metadata, atomic-rename, and sync checks `NOT_RUN`; it
+does not establish I01–I09 evidence or make either branch eligible. The
+default CLI plan ran locally once. No `--execute`, SSH, Docker, Kubernetes,
+containerd, systemd, target Pod/volume access, database-byte access, capture,
+repair, recovery, traffic, production transition, or push occurred.
+
+One `local_grok_cli` implementation attempt was cancelled at a disallowed
+compound hash command before file changes. The single narrowed follow-up
+(`grok-4.5`, actual `grok-4.5-build`) created both scoped files but produced no
+final log and was terminated after the six-poll budget. Codex then verified
+the protected hashes, reviewed the complete files, tightened the remote schema
+fail-closed after a `3 failed, 21 passed` RED, and obtained `24 passed` plus
+Ruff lint/format and bytecode-compile passes. No Grok process remains active.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -988,10 +1017,10 @@ approved.
 7. **Root-cause forensics** (why WAL unreplayable) only after a sealed master
    and disposable working clones exist; Colima restart remains Inference
    until then.
-8. **Quiesce-and-copy runtime eligibility is fail-closed after E20.** The
-   capability gate found neither branch eligible. Status is
-   `CAPABILITY_REHEARSAL_REQUIRED`; any isolated non-target rehearsal/setup
-   requires separate authorization, and no operator runbook is approved.
+8. **Quiesce-and-copy runtime eligibility remains fail-closed after E21.** The
+   non-target harness setup is ready but unexecuted and every planned check is
+   `NOT_RUN`. Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no operator
+   runbook is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -1002,14 +1031,15 @@ approved.
 | Live metadata / preservation-feasibility gate executed | **Yes, read-only** (`METADATA_PASS`; `PRESERVATION_PARTIAL`) |
 | E19 corrective design findings mapped | **Yes, 10/10** (`F01`–`F10`) |
 | Live quiesce capability gate executed | **Yes, read-only** (`CAPABILITY_REHEARSAL_REQUIRED`; neither branch eligible) |
+| Non-target rehearsal harness setup | **Yes, local only** (`REHEARSAL_SETUP_READY_NOT_EXECUTED`; seven checks `NOT_RUN`) |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Separately authorized isolated rehearsal/setup on non-target scratch state; none performed or authorized here |
+| Next possible action | A separate bounded slice to implement and verify actual non-target scratch checks behind E21's guard; target Pod/volume access remains unauthorized |
 
 ---
 
-*End of design. The metadata gate, capability gate, Grok review, and
-corrected-design slice changed no runtime state. No database-byte access was
+*End of design. The metadata gate, capability gate, Grok review, corrected
+design, and E21 setup changed no runtime state. No database-byte access was
 authorized or performed.*

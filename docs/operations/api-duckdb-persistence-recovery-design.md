@@ -1255,6 +1255,59 @@ node-scoped non-secret metadata inspector or an explicitly authorized
 read-only node capability check that can prove ACL/xattr value digests under
 C05 without target mutation. No E27 rehearsal identity is reserved here.
 
+## C05 local POSIX metadata inspector — 2026-08-11
+
+Local-only TDD slice. Product surface:
+`scripts/inspect_posix_metadata.py` with focused unit tests in
+`tests/unit/test_inspect_posix_metadata.py`. Standard-library reader only;
+no SSH, Docker, kubectl, tar, subprocess, or database libraries; never opens
+or hashes regular-file contents.
+
+**Fail-closed contract.** Requires a POSIX-absolute `--root` (leading `/`;
+Windows drive/UNC spellings rejected), pinned `--expected-device` /
+`--expected-inode`, and positive `--max-entries`. CLI parse/validation
+failures (missing required flags, invalid integers) emit the same bounded
+`METADATA_INSPECTION_BLOCKED` JSON/exit contract rather than raw argparse
+text; `--help` remains exit 0. Succeeds only when effective UID is zero, the
+root is a real directory (not a symlink), and root `lstat` device/inode match
+the caller pins. Traversal uses `lstat` / `follow_symlinks=False` only; never
+resolves or walks through symlinks; never crosses the root device; admits only
+directory, regular file, and symlink objects. Relative paths preserve literal
+backslash characters in filenames (no `\\`→`/` rewrite). Enforces
+`max_entries` (including root). Detects point-in-time drift on per-entry
+identity metadata, xattr name sets, each directory's identity after its
+subtree is walked, and whole-root stability after traversal. Any
+validation/inspection failure returns no successful partial inventory
+(`METADATA_INSPECTION_BLOCKED`, empty records, nonzero CLI exit). Success
+emits one strict JSON object with `METADATA_INSPECTION_PASS`, schema version,
+root identity, effective UID, deterministic records, and a claim boundary
+stating metadata-only / no C05 / branch / capture / production approval.
+
+**Non-secret xattr/ACL digest.** Uses `os.listxattr` and `os.getxattr` with
+`follow_symlinks=False`. Sorts attribute names by encoded bytes and hashes a
+length-prefixed name/value stream (SHA-256). Emits only xattr count, combined
+digest, and booleans for `system.posix_acl_access` /
+`system.posix_acl_default` presence. Raw xattr names and values never leave
+the process. Missing xattr APIs or read errors fail closed.
+
+**Live evidence status.** This inspector is implemented and unit-tested
+locally only. It has **not** been executed on the Linux Kind node and
+therefore adds **no** live evidence identity. E26 remains consumed and
+immutable. GNU tar alone still does not prove xattr/ACL value digests (see
+classification correction above). Runtime and production status are unchanged:
+both branches remain ineligible; authoritative status remains
+`CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`; production remains
+`candidate`. This slice does not relax C05 and does not call the tool, branch,
+or runtime ready.
+
+**Independent review.** One local QA/fix follow-up corrected strict blocked
+JSON for CLI parse failures, POSIX-only root/path handling, literal backslash
+filename preservation, and nested-directory drift detection. The final
+focused suite passes 14 tests. The next separate gate is a separately and
+explicitly authorized read-only non-target/node capability invocation that
+creates a **new** evidence identity. No target database-byte access and no
+E27 rehearsal are authorized by this slice.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1304,7 +1357,8 @@ C05 without target mutation. No E27 rehearsal identity is reserved here.
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Local design/capability resolution for a C05-compatible fail-closed ACL/xattr method; no E27 or target access |
+| Local C05 POSIX metadata inspector (API+CLI+unit tests) | **Yes, local only**; unexecuted on Kind node; no live evidence |
+| Next possible action | Separately authorized read-only non-target/node capability invocation with a new evidence identity; no E27, no target DB-byte access |
 
 ---
 

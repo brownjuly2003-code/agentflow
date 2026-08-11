@@ -81,7 +81,7 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E19 | [`second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md) | Local, intentionally untracked review record; SHA-256 `9ce977a4f5fc5254f07398404f3b52c96df12ffd6d0fdc8fd1e63d29c52fae22`. One read-only `local_grok_cli` session (`grok-4.5`, `019fe976-40d9-7563-ad22-aea8c9f4d8fc`) returned final verdict `ACCEPT_WITH_CHANGES`. Its first process-only response could not read files; the same session was resumed once with exact verified E18 text. No API fallback, file edit, web, or runtime action occurred |
 | E20 | [capability gate `result.json`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/evidence.md) | **Observed** `2026-08-10T02:54:35Z`–`02:59:59Z`; bounded read-only host, Kind node, and Kubernetes metadata. SHA-256: JSON `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423`, summary `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6`, ledger `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f`. Result: `CAPABILITY_REHEARSAL_REQUIRED`; no database contents read or runtime mutation |
 | E21 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; fail-closed non-target scratch setup harness. Default plan returns `REHEARSAL_SETUP_READY_NOT_EXECUTED`, all seven checks `NOT_RUN`, and both branches ineligible. No SSH or live rehearsal ran |
-| E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), and [next-session runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md) | **Implemented, not executed** `2026-08-11`; seven bounded non-target probes now cover monotonic timing, scratch pause/resume, watchdog fire/cancel, exact-path descriptor visibility, mode/xattr/ACL metadata, same-directory replace, and file/directory sync. Executed results may be only `PASS`, `PARTIAL`, or `BLOCKED`; target claims remain false and both branches ineligible |
+| E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), [runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md), and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/evidence.md) | **Attempted once; transport blocked** `2026-08-11`. The fixed Windows invocation exited `1` after remote Bash exited `2` on CRLF-translated control lines, before any probe result. The exact scratch root was absent in the one cleanup check. Evidence SHA-256: JSON `916bd1216b3868216085bf9edd6d7f1e0ddd4fb9f3c0ee872584ebf9bcb455ea`, summary `1f82271c394fd0cee6a8429d7d2a5fdd315943ef378917f9118f0e43659c32c4`, ledger `d5a05e236cf5e6cec81a6e69d360f274ec3badcfcacc35b88fb6f2aa681ec6bf` |
 
 ## Current failure data-flow trace
 
@@ -1040,6 +1040,34 @@ The runbook does not itself authorize execution. A latest user message must
 explicitly continue or authorize that isolated non-target run. Target access
 and every later capture/recovery action remain separately unauthorized.
 
+## Non-target scratch rehearsal attempt — 2026-08-11
+
+The latest explicit continuation authorized the runbook's fixed E22 identity.
+Its preflight passed: the protected script and focused-test SHA-256 values
+matched, the tracked tree was clean, the reserved local evidence directory was
+absent, and no matching E22 process was active.
+
+The one allowed invocation was consumed and classified
+`SCRATCH_REHEARSAL_TRANSPORT_BLOCKED`. The local harness exited `1` after
+remote Bash exited `2` while parsing carriage-return-terminated `set`,
+`umask`, blank, and `case` lines. No stdout JSON or probe evidence existed.
+The sender uses `subprocess.run(..., input=REMOTE_PAYLOAD, text=True,
+encoding="utf-8")`; on Windows this text stdin boundary translated LF to
+CRLF before Bash parsed the payload.
+
+The one permitted read-only cleanup check exited `0`, proving the exact
+per-run root absent. No retry, alternate identity, manual cleanup, target
+fallback, or Grok run occurred. The local evidence pack passed strict unique
+JSON, UTF-8/LF, cross-artifact, and SHA-256 checks. All seven authoritative
+capability results therefore remain `NOT_RUN`; `PAUSED_TASK` and
+`KUBELET_GAP` remain ineligible, and the runtime status remains
+`CAPABILITY_REHEARSAL_REQUIRED` / `PRESERVATION_PARTIAL`.
+
+The next separate candidate is a local TDD transport fix that sends the
+remote payload as explicit LF bytes and covers the real subprocess boundary.
+That slice must not execute a live rehearsal. A later live attempt requires a
+new explicit authorization and a new conservative identity.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1064,11 +1092,11 @@ and every later capture/recovery action remain separately unauthorized.
    and disposable working clones exist; Colima restart remains Inference
    until then.
 8. **Quiesce-and-copy runtime eligibility remains fail-closed after E22.** The
-   seven non-target probes are implemented but unexecuted and every capability
-   result is still `NOT_RUN`. Status remains `CAPABILITY_REHEARSAL_REQUIRED`;
-   no capture operator runbook is approved. The separate
-   [scratch rehearsal runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md)
-   governs only the next non-target evidence run.
+   seven non-target probes are implemented, but the single live attempt was
+   transport-blocked before probe execution and every capability result
+   remains `NOT_RUN`. Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no
+   capture operator runbook is approved. Fix and test the Windows LF transport
+   locally before requesting a separately authorized new non-target identity.
 
 ## Claim boundary for this documentation slice
 
@@ -1080,15 +1108,16 @@ and every later capture/recovery action remain separately unauthorized.
 | E19 corrective design findings mapped | **Yes, 10/10** (`F01`–`F10`) |
 | Live quiesce capability gate executed | **Yes, read-only** (`CAPABILITY_REHEARSAL_REQUIRED`; neither branch eligible) |
 | Non-target rehearsal harness setup | **Yes, local only** (`REHEARSAL_SETUP_READY_NOT_EXECUTED`; seven checks `NOT_RUN`) |
-| Seven non-target scratch probes implemented | **Yes, local only** (not executed; no new capability evidence) |
+| Seven non-target scratch probes implemented | **Yes**; the first live identity was transport-blocked before probe execution |
+| Exact E22 cleanup proved | **Yes**; one read-only exact-path check exited `0` |
 | Live preservation, cleanup, restore, or API recovery executed | **No** |
 | Quiesce-and-capture runbook approved | **No** (`CAPABILITY_REHEARSAL_REQUIRED`) |
 | Production readiness improved | **No** |
 | External dependency recovery re-run | **No** (must remain consumed) |
-| Next possible action | Follow the [E22 scratch runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md) for its one reserved run/evidence identity; target Pod/volume access remains unauthorized |
+| Next possible action | Local TDD fix for byte-for-byte LF SSH payload transport; no live rehearsal in that slice |
 
 ---
 
-*End of design. The metadata gate, capability gate, Grok review, corrected
-design, E21 setup, and E22 implementation changed no runtime state. No
-database-byte access was authorized or performed.*
+*End of design. The E22 attempt reached only the fixed non-target SSH
+transport, failed before probe execution, and left its exact scratch root
+absent. No target or database-byte access was authorized or performed.*

@@ -54,7 +54,7 @@ RUN --mount=type=cache,id=flink-sql-connector-kafka-5.0.0-2.2,target=/var/cache/
          test "${acquired}" = "1"; \
        fi \
     && verify_jar "${cache_jar}" \
-    && cp -f "${cache_jar}" "${install_jar}" \
+    && install -m 0644 "${cache_jar}" "${install_jar}" \
     && verify_jar "${install_jar}" \
     && mkdir -p /opt/flink/plugins/s3-fs-hadoop \
     && ln -s "/opt/flink/opt/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" "/opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" \

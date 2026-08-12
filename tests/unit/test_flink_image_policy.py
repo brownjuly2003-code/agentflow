@@ -128,17 +128,40 @@ def test_temp_download_is_verified_before_cache_promotion() -> None:
 def test_cached_artifact_is_reverified_before_install() -> None:
     text = _dockerfile()
 
-    # After the cache-miss fi, cache is re-verified then copied into /opt/flink/lib.
-    assert 'cp -f "${cache_jar}" "${install_jar}"' in text
+    # After the cache-miss fi, cache is re-verified then installed into /opt/flink/lib.
+    install_cmd = 'install -m 0644 "${cache_jar}" "${install_jar}"'
+    assert install_cmd in text
     assert 'verify_jar "${install_jar}"' in text
     # Gate + post-miss re-check both call verify_jar on the cache path.
     assert text.count('verify_jar "${cache_jar}"') >= 2
-    # Order on the install path: re-verify cache → copy → re-verify install.
+    # Order on the install path: re-verify cache → install → re-verify install.
     # Use the last cache verify (post-fi) so the if-gate match is not mistaken.
     reverify_cache = text.rindex('verify_jar "${cache_jar}"')
-    copy_install = text.index('cp -f "${cache_jar}" "${install_jar}"')
+    install_pos = text.index(install_cmd)
     reverify_install = text.index('verify_jar "${install_jar}"')
-    assert reverify_cache < copy_install < reverify_install
+    assert reverify_cache < install_pos < reverify_install
+
+
+def test_runtime_jar_installed_with_deterministic_mode_0644() -> None:
+    """mktemp/cp leave root-owned 0600 JARs unreadable by USER flink SPI load.
+
+    The verified cache artifact must be installed to ${install_jar} with mode
+    0644 before the final verify_jar on the installed path. Plain cp is
+    forbidden: it preserves the cache source mode (often 0600 from mktemp).
+    """
+    text = _dockerfile()
+
+    install_cmd = 'install -m 0644 "${cache_jar}" "${install_jar}"'
+    assert install_cmd in text
+    assert 'cp -f "${cache_jar}" "${install_jar}"' not in text
+    # Do not widen the cached source or chmod the whole lib tree.
+    assert 'chmod 0644 "${cache_jar}"' not in text
+    assert "chmod -R" not in text
+
+    reverify_cache = text.rindex('verify_jar "${cache_jar}"')
+    install_pos = text.index(install_cmd)
+    reverify_install = text.index('verify_jar "${install_jar}"')
+    assert reverify_cache < install_pos < reverify_install
 
 
 def test_old_single_direct_curl_to_lib_is_absent() -> None:

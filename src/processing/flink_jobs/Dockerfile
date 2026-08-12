@@ -1,4 +1,4 @@
-FROM flink:2.3.0-scala_2.12-java17@sha256:12a034b71a4d6d55227d14fe0ba69b0612c065a1dfaa756de4858fc56148c99c
+FROM flink:2.3.0-scala_2.12-java17@sha256:07745f54f8e5f0d3d1d351643b69bfbcbb426ba8720d6636d2940fd4638f6e58
 
 ARG FLINK_VERSION=2.3.0
 # The externalised Kafka connector is versioned <connector>-<flink minor> and

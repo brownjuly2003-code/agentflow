@@ -690,10 +690,7 @@ def test_serving_bridge_renders_as_separate_clickhouse_consumer():
     ]
     assert len(deployments) == 1
     container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
-    env = {
-        item["name"]: item.get("value")
-        for item in container["env"]
-    }
+    env = {item["name"]: item.get("value") for item in container["env"]}
     assert env["REDIS_URL"] == "redis://redis.data.svc:6379/0"
     # Chart defaults persist the kind-stand throughput knobs (2026-08-07 E):
     # batch_max 1024 and dedicated CPU/mem headroom for the serving bridge.

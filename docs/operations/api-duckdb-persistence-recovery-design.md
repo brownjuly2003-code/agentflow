@@ -1479,6 +1479,57 @@ not treat a fallback discovery or another inspector invocation as automatic
 next work; any later distinct gate requires fresh explicit owner
 authorization.
 
+## C05 synthetic non-target xattr value gate — 2026-08-11
+
+Authorized one-shot reversible mutation in the exact Kind-node scratch path
+`/tmp/c05-node-xattr-synthetic-20260811-codex02`. Evidence identity:
+`.codex-grok-tasks/c05-node-xattr-synthetic-20260811-codex02/`. Executor:
+Codex on Mac through Docker SDK 7.1.0 and Colima socket
+`~/.colima/agentflow-fc5-7113966/docker.sock`; Docker Engine 29.2.1. Entry
+HEAD `dceea5a61a12a42859f8b0ec033e4a7729c4b69e`; node
+`agentflow-reverify-ed03fc47-control-plane`, pinned container ID
+`0545702c4bc4ffdb5402b324af5dd51af71bed57ca7078707c931eae8aee365b`.
+Grok was unavailable on Mac and did not run.
+
+**Observed result.** Classification
+`C05_SYNTHETIC_XATTR_VALUE_DIGEST_PASS`. The controller created one isolated
+scratch directory and one test file, wrote xattr `user.c05_probe`, and invoked
+the protected inspector exactly once. Inspector status
+`METADATA_INSPECTION_PASS`; entry count `2`; the test file had
+`xattr_count=1`. Observed and independently computed length-prefixed xattr
+digests matched:
+`78ee82b3c9a3d3b73b0342ca4da637b96ccdd2e6ea5529def7a34967dea70c7c`.
+Mutation invocations `1`, inspector invocations `1`, cleanup invocations `1`,
+runtime retries `0`. Exact cleanup passed and an independent post-state probe
+confirmed the scratch path absent.
+
+Evidence pack SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `preflight.json` | `f35f32ebef61cab9ced4fc629b34a2256d0f759b7c2f62712ae707fc64ee90c3` |
+| `execution.json` | `f29925a8b96d364fb58e969d234949ec385dc64e460665c640ca922c54f0bad2` |
+| `inspector.json` | `e64cae7052bf3820894e4a102df9ad8db82d3fc9c09b743a674049df34729647` |
+| `result.json` | `83362b030d6d22c0c9b690d7f21bfa08ac6838b7ba97badde49760ed17c413ee` |
+| `result.md` | `1d5b052591160003ae15add07fc42fdff82d44510c32a015b2f41f7affd65f1c` |
+| `evidence.md` | `9171a1cffe37d279afa2e61f7c4330dcf8ef855779cb4da45e1514556be6a082` |
+
+Protected SHA-256 values remained unchanged:
+
+- `scripts/inspect_posix_metadata.py`:
+  `3a9a7e0714be3a8db5b70eb72273899611932e6b432e3e9067fc1d58ccba4dc9`
+- `tests/unit/test_inspect_posix_metadata.py`:
+  `bac58980103049c2af2586345b0e6b7f4f17f73f0996d1fb828724290cd6a72c`
+
+**Claim boundary.** This closes only the previously unexercised real-value
+digest path for the node Python xattr APIs and protected inspector. The source
+was a synthetic non-target scratch file. It does **not** prove ACL or xattr
+capture/restore preservation, target-volume feasibility, C05 approval, branch
+eligibility, capture, recovery, or production readiness. No target Pod/volume,
+`/data`, kubelet Pod-volume path, DuckDB/WAL byte, workload/dependency restart,
+traffic, production action, or push occurred. The authorization and evidence
+identity are consumed; no automatic successor gate is created.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1503,10 +1554,12 @@ authorization.
    and disposable working clones exist; Colima restart remains Inference
    until then.
 8. **Quiesce-and-copy runtime eligibility remains fail-closed after E26.** E26
-   produced six `PASS` and one `BLOCKED` non-target result. The remaining
-   metadata gap is observed: mode round-trip passed, ACL tools were absent,
-   and remote Python exposed no `os.setxattr`. Status remains
-   `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook is approved.
+   remains an immutable six-`PASS`, one-`BLOCKED` non-target result. The later
+   synthetic Kind-node gate proves `setxattr`/`getxattr` and the inspector's
+   value-digest path only for a newly created scratch file. It does not prove
+   ACL/xattr capture-and-restore preservation or target-volume feasibility.
+   Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook
+   is approved.
 
 ## Claim boundary for this documentation slice
 
@@ -1532,12 +1585,13 @@ authorization.
 | C05 Kind-node metadata capability (non-target `/usr/bin`) | **Executed once**; `C05_NODE_METADATA_API_PASS_VALUE_DIGEST_UNEXERCISED`; 376 entries; 0 xattrs; non-target only |
 | C05 node xattr discovery (allowlisted non-target roots) | **Executed once**; `C05_NODE_XATTR_DISCOVERY_NO_SAFE_VALUE_PATH`; discovery `NO_SAFE_XATTR_PATH`; 5205 entries / 8 roots; selected path `null`; inspector invocations `0` |
 | C05 node xattr additional-roots discovery | **Executed once**; `C05_NODE_XATTR_DISCOVERY_NO_SAFE_VALUE_PATH`; discovery `NO_SAFE_XATTR_PATH`; 2007 entries / 8 additional roots; selected path `null`; inspector invocations `0`; result status `METADATA_INSPECTION_NOT_RUN` |
+| C05 synthetic non-target xattr value gate | **Executed once; PASS**; one isolated scratch file, one real xattr value, inspector `METADATA_INSPECTION_PASS`, observed digest matched independent calculation, exact cleanup and independent absence check passed; no C05/branch/capture/production approval |
 | Next possible action | No automatic next work from this pack. Owner authorization and evidence identity are consumed. Do not treat fallback discovery or inspector invocation as automatic next work; any later distinct gate requires fresh explicit owner authorization. No E27, target DB-byte access, or C05/branch/capture/production approval from this pack |
 
 ---
 
-*End of design. E26 remains consumed. The C05 node metadata and both
-xattr-discovery gates are non-target evidence only and do not approve C05,
-capture, recovery, or production. Both discoveries selected no safe value
-path; no inspector ran under those authorizations. No target or
-database-byte access was authorized or performed.*
+*End of design. E26 remains consumed. The C05 node metadata, both
+xattr-discovery gates, and the synthetic xattr value gate are non-target
+evidence only and do not approve C05, capture, recovery, or production. The
+synthetic gate closes only the inspector value-digest execution gap and passed
+exact cleanup. No target or database-byte access was authorized or performed.*

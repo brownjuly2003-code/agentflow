@@ -212,7 +212,8 @@ def test_kind_residual_canary_pass_is_claimed_without_closing_the_soak_gate() ->
     assert (ROOT / evidence).is_file()
     text = (ROOT / evidence).read_text(encoding="utf-8")
     assert "PASS_KIND_RESIDUAL_20" in text
-    assert "not" in text.lower() and "production" in text.lower()
+    assert "not" in text.lower()
+    assert "production" in text.lower()
 
 
 def test_soak_failure_is_latest_attempt_without_closing_the_gate() -> None:
@@ -238,7 +239,8 @@ def test_soak_failure_is_latest_attempt_without_closing_the_gate() -> None:
     failure_text = (ROOT / failure_evidence).read_text(encoding="utf-8")
     assert "SOAK_FAIL" in failure_text
     assert "UNRESOLVED_FLINK_TERMINAL_FAILURE" in failure_text
-    assert "not" in failure_text.lower() and "production" in failure_text.lower()
+    assert "not" in failure_text.lower()
+    assert "production" in failure_text.lower()
     historical_text = (ROOT / historical_start).read_text(encoding="utf-8")
     assert "SOAK_RUNNING" in historical_text
 

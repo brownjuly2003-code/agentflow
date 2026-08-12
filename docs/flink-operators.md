@@ -21,9 +21,18 @@ Behavior:
 launch functions delegate to `session_aggregator.py`; it contains no second
 Flink operator.
 
+## Stream processor Kafka startup
+
+The operator-managed stream processor defaults to
+`flinkJob.kafkaStartupMode: earliest-offset`, preserving clean-bootstrap and
+replay behavior. For a deliberately stateless cutover where the existing
+consumer group has known committed offsets, set it to `group-offsets`; Helm
+passes the value as `AGENTFLOW_KAFKA_STARTUP_MODE`. The job rejects other
+startup modes instead of silently choosing a different offset boundary.
+
 ## Checkpointing
 
-`src/processing/flink_jobs/checkpointing.py` configures production-safe defaults:
+`src/processing/flink_jobs/checkpointing.py` provides reusable checkpoint defaults:
 - interval: 60 seconds
 - mode: exactly-once
 - min pause between checkpoints: 30 seconds
@@ -33,6 +42,45 @@ Flink operator.
 - storage: `FLINK_CHECKPOINT_DIR` or `file:///tmp/flink-checkpoints`
 
 This allows session state to survive a job restart after the latest completed checkpoint is restored.
+
+The operator-managed stream and session jobs use
+`flinkJob.checkpointIntervalMs` (30 seconds by default) and
+`flinkJob.checkpointMinPauseMs` (10 seconds by default). Helm applies both to
+the `FlinkDeployment` configuration and passes them to the Python jobs as
+`FLINK_CHECKPOINT_INTERVAL_MS` and `FLINK_CHECKPOINT_MIN_PAUSE_MS`, so a short
+checkpoint interval is not silently constrained by a fixed pause.
+
+For constrained Kubernetes profiles, `flinkJob.memoryConfiguration` passes an
+explicit process-memory breakdown to both operator-managed jobs. Keys are
+limited to `jobmanager.memory.*` and `taskmanager.memory.*`, and values must be
+strings such as `"384m"`. The map is empty by default, so the standard 2 GiB
+profile keeps Flink's defaults.
+
+The following breakdown has been runtime-verified with a 896 MiB JobManager
+and a 768 MiB TaskManager:
+
+```yaml
+flinkJob:
+  jobManager:
+    memory: 896m
+  taskManager:
+    memory: 768m
+  memoryConfiguration:
+    jobmanager.memory.heap.size: "384m"
+    jobmanager.memory.off-heap.size: "64m"
+    jobmanager.memory.jvm-metaspace.size: "256m"
+    jobmanager.memory.jvm-overhead.min: "128m"
+    jobmanager.memory.jvm-overhead.max: "256m"
+    taskmanager.memory.framework.heap.size: "64m"
+    taskmanager.memory.framework.off-heap.size: "64m"
+    taskmanager.memory.task.heap.size: "192m"
+    taskmanager.memory.managed.size: "32m"
+    taskmanager.memory.network.min: "32m"
+    taskmanager.memory.network.max: "32m"
+    taskmanager.memory.jvm-metaspace.size: "128m"
+    taskmanager.memory.jvm-overhead.min: "128m"
+    taskmanager.memory.jvm-overhead.max: "256m"
+```
 
 ## Local Run
 

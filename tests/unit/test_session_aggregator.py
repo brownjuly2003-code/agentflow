@@ -105,6 +105,14 @@ class _FakeStream:
         self.sink = sink
 
 
+class _FakeCheckpointConfig:
+    def __init__(self):
+        self.min_pause_between_checkpoints = None
+
+    def set_min_pause_between_checkpoints(self, value):
+        self.min_pause_between_checkpoints = value
+
+
 class _FakeExecutionEnvironment:
     current_env = None
 
@@ -114,6 +122,7 @@ class _FakeExecutionEnvironment:
 
     def __init__(self):
         self.checkpointing = None
+        self.checkpoint_config = _FakeCheckpointConfig()
         self.parallelism = None
         self.from_source_args = None
         self.configured = None
@@ -121,6 +130,9 @@ class _FakeExecutionEnvironment:
 
     def enable_checkpointing(self, interval):
         self.checkpointing = interval
+
+    def get_checkpoint_config(self):
+        return self.checkpoint_config
 
     def set_parallelism(self, value):
         self.parallelism = value
@@ -702,6 +714,8 @@ def test_on_timer_sets_expected_funnel_stage(
 def test_build_pipeline_uses_defaults_and_wires_stream(session_aggregator, monkeypatch):
     env = _FakeExecutionEnvironment()
     session_aggregator.StreamExecutionEnvironment.current_env = env
+    monkeypatch.delenv("FLINK_CHECKPOINT_INTERVAL_MS", raising=False)
+    monkeypatch.delenv("FLINK_CHECKPOINT_MIN_PAUSE_MS", raising=False)
     monkeypatch.delenv("FLINK_PARALLELISM", raising=False)
     monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
 
@@ -710,6 +724,7 @@ def test_build_pipeline_uses_defaults_and_wires_stream(session_aggregator, monke
 
     assert result is env
     assert env.checkpointing == 30_000
+    assert env.checkpoint_config.min_pause_between_checkpoints == 10_000
     assert env.parallelism == 2
     assert source["bootstrap_servers"] == "localhost:9092"
     assert source["topics"] == "events.validated"
@@ -759,12 +774,16 @@ def test_build_pipeline_sets_bounded_restart_strategy(session_aggregator, monkey
 def test_build_pipeline_respects_environment_overrides(session_aggregator, monkeypatch):
     env = _FakeExecutionEnvironment()
     session_aggregator.StreamExecutionEnvironment.current_env = env
+    monkeypatch.setenv("FLINK_CHECKPOINT_INTERVAL_MS", "1250")
+    monkeypatch.setenv("FLINK_CHECKPOINT_MIN_PAUSE_MS", "250")
     monkeypatch.setenv("FLINK_PARALLELISM", "5")
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
     session_aggregator.build_pipeline()
     source, _, _ = env.from_source_args
 
+    assert env.checkpointing == 1250
+    assert env.checkpoint_config.min_pause_between_checkpoints == 250
     assert env.parallelism == 5
     assert source["bootstrap_servers"] == "kafka:29092"
     assert env.stream.sink["bootstrap_servers"] == "kafka:29092"

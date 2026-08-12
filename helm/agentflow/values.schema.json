@@ -666,9 +666,12 @@
         "kafkaBootstrapServers",
         "inputTopics",
         "groupId",
+        "kafkaStartupMode",
         "parallelism",
         "taskSlots",
+        "memoryConfiguration",
         "checkpointIntervalMs",
+        "checkpointMinPauseMs",
         "checkpointStorage",
         "savepointStorage",
         "upgradeMode",
@@ -710,6 +713,10 @@
           "type": "string",
           "minLength": 1
         },
+        "kafkaStartupMode": {
+          "type": "string",
+          "enum": ["earliest-offset", "group-offsets"]
+        },
         "parallelism": {
           "type": "integer",
           "minimum": 1
@@ -718,9 +725,23 @@
           "type": "integer",
           "minimum": 1
         },
+        "memoryConfiguration": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(jobmanager|taskmanager)\\.memory\\.[a-z0-9.-]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "checkpointIntervalMs": {
           "type": "integer",
           "minimum": 1
+        },
+        "checkpointMinPauseMs": {
+          "type": "integer",
+          "minimum": 0
         },
         "checkpointStorage": {
           "type": "string"

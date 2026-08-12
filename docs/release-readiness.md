@@ -8,17 +8,61 @@ provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
 registry links and upload evidence.
 
-**Golden-topology status (2026-07-30)**: production candidate, not production
+**Golden-topology status (2026-08-09)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
 clean-checkout OCI build + real Flink job submission smoke is **PASS**
 ([perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md));
 clean kind + Flink Kubernetes Operator + Helm deployment of the verified image
-on exact HEAD `36ed1ec` is also **PASS**
-([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md)).
-That acceptance used live Kafka runtime fixes; the kind acceptance scaffold is
-now tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
-production Kafka claim). Lake-to-serving E2E, recovery, soak, rollback, and
-external security evidence remain pending as listed below.
+on exact HEAD `36ed1ec` is **PASS**
+([perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md));
+live Iceberg materialization from direct `events.validated` is **PASS** at the
+narrow materializer boundary
+([perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md));
+and full one-event lake-to-serving smoke is **PASS**
+([perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)).
+Isolated checkpoint restore/replay is also **PASS** with distinct J1/J2,
+savepoint restore linkage, exact-once E1/E2 counts across all measured
+lake/serving surfaces, DLQ `0`, and lag `0`
+([perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md)).
+Operator acceptance used live Kafka runtime fixes; the kind acceptance scaffold
+is tracked at `k8s/acceptance/kafka-kraft.yaml` with a unit contract (not a
+production Kafka claim). A later isolated golden soak canary reached zero
+baseline **PASS** and producer delivery `2000/2000`, then failed closed at
+**`FAIL_CANARY_CATCHUP_RATE_FLOOR`**
+([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
+A subsequent preflight found clean rev1/rev2 already deployed with corrected
+interval/CPU, but returned **`BLOCKED_RUNTIME_MIN_PAUSE_NOT_RENDERED`**:
+runtime source `ed03fc47` omits effective checkpoint min-pause and still
+checkpoints at ~30 s.
+Tracked commit `78742d0` and its verified pack now add min-pause `0 ms` plus a
+default-preserving anti-replay `group-offsets` cutover. The authorized apply
+preflight first stopped before remote mutation at
+**`BLOCKED_RESOURCE_HEADROOM_BEFORE_SAFE_CUTOVER`**: Kind
+`MemAvailable=1,683,140 kB` was below the required `1,900,000 kB`. A later
+controlled cutover deployed corrected revision 3. Its separately authorized
+read-only readiness-baselined checkpoint hold returned
+**`RUNTIME_HOLD_PASS`** after `930 s`: completed checkpoints advanced
+`7675→8614` (`+939`, required `837`) and failed checkpoints remained `1`
+(delta `0`). That hold closed only its prerequisite — see
+[perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md).
+A later kind residual canary **PASS** unlocked soak traffic
+([perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md)).
+Multiple soak identities were attempted; latest
+`golden-4h-soak-rv-20260807-05` producer **PASS**ed (`1_440_000` delivered,
+failures `0`) but overall soak **`SOAK_FAIL`**ed on terminal Flink health
+before dual-mean verify could PASS; corrected Helm rollback was **not
+started**
+([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+External security evidence remains pending as listed below. Read-only
+external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
+**`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
+[operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
+Read-only GitHub Environment `npm` verification recorded at
+`2026-08-03T03:18:11Z` is **PASS**: the Environment exists and its non-empty
+`required_reviewers` rule names user `brownjuly2003-code` — see
+[operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md).
+Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
+(local-only, unpushed).
 
 ## Summary
 
@@ -108,36 +152,105 @@ Component, contract, Helm, and replay tests validate the checked-in streaming,
 lake, serving, and deployment artifacts. They do not substitute for full live
 production-acceptance evidence.
 
-**Completed (limited scope, 2026-07-30):**
+**Completed (limited scope):**
 
 1. clean-checkout PyFlink OCI build and real job submission smoke on
-   `deproject-mac` — see
+   `deproject-mac` (2026-07-30) — see
    [perf/golden-flink-submission-2026-07-30.md](perf/golden-flink-submission-2026-07-30.md);
 2. clean kind + Flink Kubernetes Operator + Helm golden-topology deployment of
    the verified OCI image on exact HEAD `36ed1ec` (stable hold, checkpoints
-   growing, zero leadership flaps) — see
-   [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md).
+   growing, zero leadership flaps; 2026-07-30) — see
+   [perf/golden-operator-acceptance-2026-07-30.md](perf/golden-operator-acceptance-2026-07-30.md);
+3. live Iceberg materialization from direct `events.validated` injection into
+   live Iceberg `agentflow.validated_events` with exact identity observed once
+   (2026-08-01) — see
+   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md);
+4. full one-event lake-to-serving smoke through `orders.raw` → PyFlink →
+   `events.validated` → {Iceberg; bridge → ClickHouse → API} on the mixed-SHA
+   stand (2026-08-01) — see
+   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md);
+5. isolated checkpoint restore/replay with E1 accepted on J1, non-empty
+   savepoint, byte-identical E1 replay plus E2 while suspended, distinct J2
+   restored from that savepoint, and exact no-duplicate lake/serving counts
+   (2026-08-02) — see
+   [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md);
+6. corrected revision-3 readiness-baselined checkpoint hold, read-only for
+   `930 s`, with completed checkpoints `7675→8614`, failed `1→1`, and no
+   traffic or runtime mutation (2026-08-03) — see
+   [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md).
 
-These close submission smoke and Operator/Helm deploy only. They are **not**
-lake-to-serving E2E or production acceptance. Kafka on the acceptance stand
+These close submission smoke, Operator/Helm deploy, the narrow direct-topic
+Iceberg materialization gate, the full single-event hop chain, and checkpoint
+restore/replay; they also close the readiness-baselined hold prerequisite.
+They are **not** full production acceptance. The direct-Iceberg gate remains
+valid and is now complemented by the full one-event path. Kafka on the acceptance stand
 required evidence-backed scaffold fixes (`enableServiceLinks: false` and
 controller quorum voters at `127.0.0.1:29093`); that is recorded as
 acceptance-scaffold reproducibility debt, not a product source of truth from
 untracked prompts.
 
-**Still required for production acceptance:**
+**Still required for production acceptance (exactly two gates):**
 
-1. one tenant-scoped event observed through Kafka → PyFlink → Iceberg →
-   ClickHouse → API, then replayed after checkpoint restore without duplicate
-   `(tenant_id, event_id)` rows;
-2. a fresh four-hour soak, backup/restore, and rollback rehearsal on that same
-   artifact and topology (the existing 2026-07-19 soak predates the Iceberg
-   materializer);
-3. an external penetration-test report and remediation/retest evidence;
-4. GitHub Environment `npm` created with approval protection. The workflow now
-   requires `environment: npm` and a matching release tag, but the repository
-   settings API returned `404` for that environment on 2026-07-23, so approval
-   protection is not yet evidenced.
+1. a fresh four-hour soak at **100 delivered eps** for **14_400 s**
+   (**1_440_000** events) through the full post-Iceberg path with exact
+   lake/serving counts, plus a corrected Helm rollback rehearsal whose prepared
+   recovery target is revision **3** (never historical revision 1 or 2).
+   Historical canary1 reached baseline and exact producer delivery, then
+   returned **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**
+   ([perf/golden-4h-soak-canary-failure-2026-08-02.md](perf/golden-4h-soak-canary-failure-2026-08-02.md)).
+   The earlier
+   [resource preflight](perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
+   is retained as historical evidence for its stand. The corrected
+   anti-replay pack is now deployed as revision 3, and its readiness-baselined
+   hold is **`RUNTIME_HOLD_PASS`**
+   ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md)).
+   A later kind residual canary **PASS** unlocked soak attempts
+   ([perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md)).
+   Latest soak identity `golden-4h-soak-rv-20260807-05` completed the
+   producer (**PASS**, `1_440_000` delivered, failures `0`) but failed the
+   soak gate with **`SOAK_FAIL`** on terminal Flink health before dual-mean
+   verify could PASS; corrected rollback was **not started**
+   ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+   The combined soak/rollback acceptance gate remains open. A future newly
+   identified soak run should retain JobManager/TaskManager logs and Flink
+   exception-history evidence before retry.
+   The existing 2026-07-19 soak predates the Iceberg materializer and is
+   advisory only;
+2. an external penetration-test report and remediation/retest evidence.
+   Read-only evidence/readiness audit at `2026-08-01T17:11:58Z` (local HEAD
+   before documentation `ebde86f`; public repo `brownjuly2003-code/agentflow`)
+   returned **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**. Canonical intake remains
+   **not present / unclaimed** with empty decision-record fields and all
+   acceptance checklist boxes open. Bounded tracked scan found only the blank
+   intake; GitHub unified `search/issues` returned `total_count = 0` for
+   `pentest`, exact phrase `penetration test`, `retest`, and `assessor`; nine
+   releases have zero assets; Actions artifacts (`total_count = 3106`) had zero
+   name matches after full pagination. All seven gate criteria fail. Internal
+   Bandit/Safety/Trivy, Scorecard, S12/offline tests, and runtime image scans
+   are not third-party pen-test evidence. This audit was **not** a penetration
+   test. Evidence:
+   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md).
+   Minimum owner packet: independent assessor + independence statement;
+   engagement type; exact target/artifact/commit; dates; scope/exclusions/RoE;
+   credential owner/rotation plan without secrets; data-handling confirmation;
+   remediation owner; immutable full-report location; redacted summary; finding
+   inventory; remediation/risk-acceptance map; retest confirmations;
+   residual-risk record; access revocation evidence. After receipt: redacted
+   summary under `docs/operations/`, complete intake, evidence-linked
+   security/status/readiness updates, then read-only re-audit. Do not procure,
+   simulate, or perform a pen-test from documentation work.
+
+The GitHub Environment `npm` gate is closed. A read-only GET recorded at
+`2026-08-03T03:18:11Z` returned the exact Environment with one non-empty
+`required_reviewers` rule for user `brownjuly2003-code`; `prevent_self_review`
+is `false`, so this is approval protection but not a four-eyes claim. See
+[operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md).
+The prior
+[absence audit](operations/npm-environment-approval-blocker-2026-08-01.md)
+remains historical evidence, not current state. Current tracked evidence leaves
+the two remaining gates dependent on a newly identified soak plus corrected
+rollback after retained Flink exception evidence, or an external pentest
+owner.
 
 Wiring AgentFlow to a live production source also needs inputs that live
 outside the repo: CDC source onboarding (runbook in

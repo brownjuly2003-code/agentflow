@@ -689,11 +689,16 @@ def test_serving_bridge_renders_as_separate_clickhouse_consumer():
         == "serving-bridge"
     ]
     assert len(deployments) == 1
-    env = {
-        item["name"]: item.get("value")
-        for item in deployments[0]["spec"]["template"]["spec"]["containers"][0]["env"]
-    }
+    container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
+    env = {item["name"]: item.get("value") for item in container["env"]}
     assert env["REDIS_URL"] == "redis://redis.data.svc:6379/0"
+    # Chart defaults persist the kind-stand throughput knobs (2026-08-07 E):
+    # batch_max 1024 and dedicated CPU/mem headroom for the serving bridge.
+    assert env["AGENTFLOW_BRIDGE_BATCH_MAX"] == "1024"
+    assert container["resources"] == {
+        "requests": {"cpu": "500m", "memory": "512Mi"},
+        "limits": {"cpu": "2", "memory": "1Gi"},
+    }
 
 
 def test_serving_bridge_rejects_duckdb_backend():
@@ -772,6 +777,12 @@ def test_flink_operator_workload_renders_golden_runtime():
         "flinkJob.checkpointStorage=s3://agentflow-state/checkpoints",
         "--set",
         "flinkJob.savepointStorage=s3://agentflow-state/savepoints",
+        "--set",
+        "flinkJob.checkpointIntervalMs=1250",
+        "--set",
+        "flinkJob.checkpointMinPauseMs=250",
+        "--set",
+        "flinkJob.kafkaStartupMode=group-offsets",
     )
     output = _combined_output(result)
 
@@ -797,7 +808,37 @@ def test_flink_operator_workload_renders_golden_runtime():
         parallelism_env = next(
             item["value"] for item in main_container["env"] if item["name"] == "FLINK_PARALLELISM"
         )
+        checkpoint_interval_env = next(
+            item["value"]
+            for item in main_container["env"]
+            if item["name"] == "FLINK_CHECKPOINT_INTERVAL_MS"
+        )
+        checkpoint_min_pause_env = next(
+            item["value"]
+            for item in main_container["env"]
+            if item["name"] == "FLINK_CHECKPOINT_MIN_PAUSE_MS"
+        )
+        kafka_startup_mode_env = next(
+            (
+                item["value"]
+                for item in main_container["env"]
+                if item["name"] == "AGENTFLOW_KAFKA_STARTUP_MODE"
+            ),
+            None,
+        )
         assert parallelism_env == str(deployment["spec"]["job"]["parallelism"])
+        assert checkpoint_interval_env == "1250"
+        assert checkpoint_min_pause_env == "250"
+        if deployment["metadata"]["labels"]["app.kubernetes.io/component"] == "stream-processor":
+            assert kafka_startup_mode_env == "group-offsets"
+        else:
+            assert kafka_startup_mode_env is None
+        assert deployment["spec"]["flinkConfiguration"]["execution.checkpointing.interval"] == (
+            "1250 ms"
+        )
+        assert deployment["spec"]["flinkConfiguration"]["execution.checkpointing.min-pause"] == (
+            "250 ms"
+        )
     assert "apiVersion: flink.apache.org/v1beta1" in output
     assert "kind: FlinkDeployment" in output
     assert "flinkVersion: v2_3" in output
@@ -814,6 +855,61 @@ def test_flink_operator_workload_renders_golden_runtime():
     assert "kind: Role" in output
     assert "kind: RoleBinding" in output
     assert "configmaps" in output
+
+
+def test_flink_operator_workloads_render_explicit_low_memory_configuration():
+    memory_configuration = {
+        "jobmanager.memory.heap.size": "384m",
+        "jobmanager.memory.off-heap.size": "64m",
+        "jobmanager.memory.jvm-metaspace.size": "256m",
+        "jobmanager.memory.jvm-overhead.min": "128m",
+        "jobmanager.memory.jvm-overhead.max": "256m",
+        "taskmanager.memory.framework.heap.size": "64m",
+        "taskmanager.memory.framework.off-heap.size": "64m",
+        "taskmanager.memory.task.heap.size": "192m",
+        "taskmanager.memory.managed.size": "32m",
+        "taskmanager.memory.network.min": "32m",
+        "taskmanager.memory.network.max": "32m",
+        "taskmanager.memory.jvm-metaspace.size": "128m",
+        "taskmanager.memory.jvm-overhead.min": "128m",
+        "taskmanager.memory.jvm-overhead.max": "256m",
+    }
+    memory_args: list[str] = []
+    for key, value in memory_configuration.items():
+        escaped_key = key.replace(".", "\\.")
+        memory_args.extend(["--set-string", f"flinkJob.memoryConfiguration.{escaped_key}={value}"])
+
+    result = _run_helm_template(
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "flinkJob.checkpointStorage=file:///mnt/flink-state/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=file:///mnt/flink-state/savepoints",
+        "--set-string",
+        "flinkJob.jobManager.memory=896m",
+        "--set-string",
+        "flinkJob.taskManager.memory=768m",
+        *memory_args,
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    flink_deployments = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document and document.get("kind") == "FlinkDeployment"
+    ]
+    assert len(flink_deployments) == 2
+    for deployment in flink_deployments:
+        flink_configuration = deployment["spec"]["flinkConfiguration"]
+        assert {
+            key: flink_configuration[key] for key in memory_configuration
+        } == memory_configuration
+        assert deployment["spec"]["jobManager"]["resource"]["memory"] == "896m"
+        assert deployment["spec"]["taskManager"]["resource"]["memory"] == "768m"
 
 
 def _rule_covers(

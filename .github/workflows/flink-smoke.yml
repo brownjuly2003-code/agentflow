@@ -58,7 +58,7 @@ jobs:
               grep "$marker" <<<"$logs" || true
               exit 0
             fi
-            cid="$(docker compose $COMPOSE_FILES ps -q flink-job-runner 2>/dev/null || true)"
+            cid="$(docker compose $COMPOSE_FILES ps -aq flink-job-runner 2>/dev/null || true)"
             if [ -n "$cid" ]; then
               state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
               if [ "$state" = "exited" ]; then

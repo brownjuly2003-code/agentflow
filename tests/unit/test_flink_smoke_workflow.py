@@ -8,6 +8,7 @@ criterion, and guaranteed teardown. Action SHA-pinning is enforced globally by
 test_workflow_action_pinning.py.
 """
 
+import re
 from pathlib import Path
 
 import yaml
@@ -72,6 +73,23 @@ def test_smoke_criterion_is_job_submission() -> None:
     # live cluster when T-2 was fixed (#59).
     assert "Job has been submitted with JobID" in run
     assert "exit 1" in run, "must fail when the job is never submitted"
+
+
+def test_exited_runner_lookup_includes_stopped_containers() -> None:
+    run = _submit_step(_load()["jobs"]["flink-smoke"])["run"]
+    # `docker compose ps` omits exited containers unless --all/-a is set; without
+    # it the one-shot runner ID goes empty after exit and the loop waits out the
+    # full 600s deadline instead of failing promptly. Option order may vary
+    # (-aq / -qa / --all -q / -q --all), but plain `ps -q` must not pass.
+    ps_lookups = re.findall(
+        r"docker compose \$COMPOSE_FILES ps\s+[^\n]*?flink-job-runner",
+        run,
+    )
+    assert ps_lookups, "expected a compose ps lookup for flink-job-runner"
+    assert any(
+        re.search(r"(?:--all|(?<![a-zA-Z0-9-])-a(?![a-zA-Z0-9-])|-[a-zA-Z]*a[a-zA-Z]*)", cmd)
+        for cmd in ps_lookups
+    ), "container lookup must include stopped containers (ps --all / -a)"
 
 
 def test_stack_is_always_torn_down() -> None:

@@ -1,15 +1,37 @@
 # Colima runtime stabilization
 
-Last updated: 2026-08-09.
+Last updated: 2026-08-17.
 
 ## Goal
 
 Prove a stable Colima/kind baseline before any new traffic, then use the
 smallest evidence-backed remediation if the hold fails.
 
+## Latest read-only Mac snapshot - 2026-08-17
+
+A fresh bounded read-only diagnostic snapshot was captured through SSH alias
+`deproject-mac` at `2026-08-17T14:51:19Z` and written locally to
+`.codex-grok-tasks/mac-readonly-baseline-20260817-codex01/diagnostics.json`.
+It did not start Colima, query target DuckDB bytes, mutate Kubernetes, launch
+traffic, arm the watcher, run a hold, or push.
+
+| Signal | Result |
+| --- | --- |
+| Overall diagnostic status | **`partial`** |
+| Host reachability | PASS; host time query returned `2026-08-17T14:51:11Z` |
+| Host memory | PASS; host RAM `8589934592` bytes; swap `844 MiB` used |
+| Colima profile | **not running**: `colima [profile=agentflow-fc5-7113966] is not running` |
+| Docker socket | unavailable: `/Users/julia/.colima/agentflow-fc5-7113966/docker.sock` missing |
+| kind node / guest checks | no node name returned; guest checks were not run |
+
+This supersedes only live availability assumptions. It does not invalidate the
+historical 2026-08-09 RCA or mark any clock, I/O, workload, watcher, Flink,
+traffic, soak, rollback, or production gate green. Before any future Mac
+runtime slice, Colima availability is now a separate fail-closed prerequisite.
+
 ## Current evidence
 
-Baseline captured read-only on 2026-08-09 after runner commit `895e660`;
+Historical baseline captured read-only on 2026-08-09 after runner commit `895e660`;
 remediation measurements were added after the scoped Kafka rollout:
 
 | Signal | Current result |

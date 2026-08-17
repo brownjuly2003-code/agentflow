@@ -7,6 +7,37 @@ Last updated: 2026-08-17.
 Prove a stable Colima/kind baseline before any new traffic, then use the
 smallest evidence-backed remediation if the hold fails.
 
+## Latest authorized workload CrashLoop RCA - 2026-08-17
+
+One authorized immutable read-only CrashLoop RCA capture ran exactly once
+through `.grok-prompts/workload-crashloop-rca-20260817-grok01.py` (route
+`local_grok_cli`; requested model `grok-4.5`; actual model not claimed).
+Evidence directory:
+`.codex-grok-tasks/workload-crashloop-rca-20260817-grok01/`.
+UTC bounds `2026-08-17T17:23:30Z` → `2026-08-17T17:23:40Z`. Process exit `0`,
+`overall_status=complete`, `retries=0`, `runtime_mutation_performed=false`.
+All 12 remote checks passed; no truncation, redaction, withheld payload, or
+failed check.
+
+| Signal | Result |
+| --- | --- |
+| Capture completeness | **`complete`** (not readiness / stability / soak / production) |
+| Overall RCA class | **`ROOT_CAUSE_PROVEN`** |
+| API | CrashLoopBackOff restarts `1610` (Δ`+19`); **PROVEN** DuckDB WAL replay InternalException on `/data/agentflow_fresh_20260807.duckdb.wal` |
+| Bridge | CrashLoopBackOff restarts `113` (Δ`+19`); **PROVEN** ClickHouse connection refused; host CH `exited` exit `255` |
+| Lake materializer | CrashLoopBackOff restarts `140` (Δ`+19`); **PROVEN** Iceberg REST `:8181` refused; host Iceberg REST `exited` exit `255` |
+| Redis / Kafka | Ready; restart Δ `0`; logs skipped as not necessary |
+| ClickHouse / Iceberg REST / MinIO | Host containers exited exit `255` ~`14:59:43Z` (lifecycle only; stop-reason beyond exit code not proved) |
+| MinIO-init | exited exit `0` (historical successful init) |
+| Remediation / production | **not authorized** / **not ready** |
+
+Capture completeness must not be read as workload ready, clock stable,
+idle-I/O stable, soak passed, or production ready. No second invocation,
+mutation, recovery, traffic, Flink, watcher, hold, deployment, production
+transition, commit, or push occurred. Any remediation requires fresh exact
+authorization. Analysis artifacts: `result.json`, `result.md`, `evidence.md`
+beside runner-owned `capture.json` / `capture-result.json`.
+
 ## Latest authorized post-start read-only snapshot - 2026-08-17
 
 One authorized bounded read-only post-start status/diagnostic/workload snapshot

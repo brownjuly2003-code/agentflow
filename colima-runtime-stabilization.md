@@ -7,6 +7,44 @@ Last updated: 2026-08-17.
 Prove a stable Colima/kind baseline before any new traffic, then use the
 smallest evidence-backed remediation if the hold fails.
 
+## Latest authorized post-start read-only snapshot - 2026-08-17
+
+One authorized bounded read-only post-start status/diagnostic/workload snapshot
+ran exactly once through the immutable local runner
+`.grok-prompts/mac-readonly-poststart-20260817-grok01.py` (local Grok CLI;
+requested model `grok-4.5`). Evidence directory:
+`.codex-grok-tasks/mac-readonly-poststart-20260817-grok01/`.
+UTC bounds `2026-08-17T15:45:23Z` → `2026-08-17T15:45:51Z`. Process exit `0`,
+`overall_status=complete`, `retries=0`, `runtime_mutation_performed=false`.
+
+| Signal | Result |
+| --- | --- |
+| Capture completeness | **`complete`** (not readiness/stability/soak/production) |
+| Diagnostic | **`complete`**, `returncode=0`, `timed_out=false`, `24951 ms` |
+| Colima profile | running: `agentflow-fc5-7113966` |
+| kind node | `agentflow-reverify-ed03fc47-control-plane` `Ready` |
+| docker_info | PASS (was timeout in the ~15:05Z post-start partial) |
+| Clock sample | `offset_ns=26122525` (single sample only; 12-sample gate not run) |
+| Guest PSI sample | `some avg10=8.58`, `full avg10=7.98` |
+| API / bridge / lake | `CrashLoopBackOff` restarts `1591` / `94` / `121`; not Ready |
+| Redis | `1/1 Running` Ready; endpoint `10.244.0.13:6379` |
+| Kafka | `1/1 Running` Ready; endpoints `10.244.0.9:9092,10.244.0.9:29093` |
+| API endpoints | empty |
+
+Compared with the prior same-day post-start snapshot (~15:05Z), diagnostic
+capture moved from `partial` to `complete`, Kafka became Ready with endpoints,
+and API/bridge/lake remained not Ready with higher restart counts. No causality
+is claimed. No second invocation, mutation, recovery, traffic, Flink, watcher,
+clock gate, hold, deployment, production transition, or push occurred.
+
+Artifact SHA-256 from `result.json`: `diagnostics.json`
+`14AA0ABADC375292D5123B265EC4528338FCE0E903780E5CBBF764A1E008A580`;
+`diagnostics.raw.json`
+`C88CDB17C64C0DB33BA944237FC0009D2AADA3343B35E7EBE0696844B42D1141`;
+`workload-snapshot.json`
+`DB9908BE9B971D68A2B12BDD53621DB87DB5E56727A019B6B64E19997E8DE8EF`.
+`result.json` self-hash is independently verified by Codex later.
+
 ## Latest read-only Mac snapshot - 2026-08-17
 
 A fresh bounded read-only diagnostic snapshot was captured through SSH alias

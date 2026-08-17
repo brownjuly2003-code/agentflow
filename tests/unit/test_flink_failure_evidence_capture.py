@@ -118,6 +118,19 @@ def test_watcher_arms_only_on_healthy_snapshot_and_triggers_on_terminal_state():
     ) == ["pod_restarts=2 baseline=0"]
 
 
+def test_failure_surface_classification_distinguishes_observation_flink_and_topology():
+    module = _load_module()
+
+    assert module.classify_failure_surfaces(
+        [
+            "flink_job_state=FAILED",
+            "jobmanager_deployment_status=MISSING",
+            "pod_total=1 expected=2",
+        ],
+        snapshot_errors=["watch_flink_pods: timeout"],
+    ) == ["api_observation", "terminal_flink", "pod_topology"]
+
+
 def test_capture_preserves_all_required_surfaces_without_specs_or_mutations(tmp_path):
     module = _load_module()
     events = {
@@ -249,6 +262,8 @@ def test_capture_preserves_all_required_surfaces_without_specs_or_mutations(tmp_
     assert "DO_NOT_PERSIST" not in persisted_pods
     assert "DO_NOT_PERSIST" not in persisted_events
     assert "OOMKilled" in persisted_pods
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["failure_surfaces"] == ["terminal_flink"]
 
     assert any(call[0] == "logs" and "--previous=true" in call for call in client.calls)
     first_flink_log = next(

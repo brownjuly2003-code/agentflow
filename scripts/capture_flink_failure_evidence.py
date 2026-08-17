@@ -412,6 +412,33 @@ def failure_reasons(
     return reasons
 
 
+def classify_failure_surfaces(
+    trigger_reasons: list[str],
+    *,
+    snapshot_errors: list[str] | None = None,
+) -> list[str]:
+    surfaces = []
+    if snapshot_errors:
+        surfaces.append("api_observation")
+    if any(
+        reason.startswith(
+            (
+                "flink_job_state=",
+                "flink_lifecycle_state=",
+                "jobmanager_deployment_status=",
+            )
+        )
+        for reason in trigger_reasons
+    ):
+        surfaces.append("terminal_flink")
+    if any(
+        reason.startswith(("pod_total=", "pod_ready=", "pod_restarts="))
+        for reason in trigger_reasons
+    ):
+        surfaces.append("pod_topology")
+    return surfaces
+
+
 def _load_json(result: CommandResult, *, label: str) -> tuple[dict[str, Any], str | None]:
     if result.returncode != 0:
         detail = result.stderr.strip() or f"command exited {result.returncode}"
@@ -784,6 +811,7 @@ def capture_evidence(
         "schema_version": 1,
         "captured_at_utc": captured_at.astimezone(UTC).isoformat(),
         "trigger_reasons": trigger_reasons,
+        "failure_surfaces": classify_failure_surfaces(trigger_reasons),
         "context": config.context,
         "namespace": config.namespace,
         "flink_deployment": config.flink_deployment,
@@ -884,6 +912,10 @@ def watch(
             "baseline_restarts": baseline_restarts if armed else None,
             "snapshot_errors": snapshot_errors,
             "trigger_reasons": reasons,
+            "failure_surfaces": classify_failure_surfaces(
+                reasons,
+                snapshot_errors=snapshot_errors,
+            ),
         }
         _write_private_json(state_path, state)
         _append_private_jsonl(chronology_path, state)

@@ -29,6 +29,47 @@ historical 2026-08-09 RCA or mark any clock, I/O, workload, watcher, Flink,
 traffic, soak, rollback, or production gate green. Before any future Mac
 runtime slice, Colima availability is now a separate fail-closed prerequisite.
 
+## Authorized Colima start - 2026-08-17
+
+After the user authorized launches, one bounded start of the existing Mac
+profile was attempted through SSH alias `deproject-mac`. Evidence is stored
+locally under `.codex-grok-tasks/mac-colima-start-20260817-codex01/`.
+
+Pre-start evidence at `2026-08-17T14:58:08Z` showed no matching Colima/Lima
+process, `colima [profile=agentflow-fc5-7113966] is not running`, and both the
+current profile config and rollback backup at SHA-256
+`e1abf039d7a563038d28bff9c6124b0344a9b90c1a2ac4b3e7e708351e9599af`. This
+means the live config matched the historical rollback/original config, not the
+previously documented option-A applied config hash.
+
+The single `colima --profile agentflow-fc5-7113966 start` began at
+`2026-08-17T14:58:26Z` and reached `start_rc=0` at
+`2026-08-17T15:03:10Z`. Post-start status reported the profile running under
+macOS Virtualization.Framework with Docker socket
+`/Users/julia/.colima/agentflow-fc5-7113966/docker.sock`. The local wrapper
+process exited `255` only because the final Bash `exit` consumed a CRLF-tainted
+`0`; the transcript's Colima result and immediate status are authoritative.
+
+The post-start diagnostic snapshot at `2026-08-17T15:05:14Z` remained
+`partial`, not complete: host time, host memory, Colima status, kind node,
+guest clock, guest memory, guest disk, containerd active state, and log scans
+were captured, but `docker_info` timed out and the guest I/O pressure sample was
+already saturated (`some avg10=99.60`, `full avg10=91.80`). The kind node was
+`agentflow-reverify-ed03fc47-control-plane`; single-sample clock offset was
+`151670054 ns`, but the required 12-sample clock gate was not run.
+
+A read-only Kubernetes snapshot at `2026-08-17T15:05:46Z` showed the node
+`Ready`, but the AgentFlow workload was not recovered: API was
+`CrashLoopBackOff` with restart count `1581`, bridge was `Error` at restart
+count `85`, lake materializer was `CrashLoopBackOff` at restart count `111`,
+Redis was `Running` and Ready, and Kafka was `Running` but `0/1` Ready. API and
+Kafka service endpoints were empty.
+
+No restart, config edit, rollback, workload/dependency recovery command, pod
+exec, traffic, Flink launch, watcher, hold, production transition, or push
+occurred in this slice. Treat Colima availability as restored but runtime
+stability and workload readiness as still blocked by follow-up diagnostics.
+
 ## Current evidence
 
 Historical baseline captured read-only on 2026-08-09 after runner commit `895e660`;

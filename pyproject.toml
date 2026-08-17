@@ -261,7 +261,7 @@ ignore = ["S101", "S311"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-p", "no:schemathesis", "--basetemp=.tmp/pytest-basetemp"]
+addopts = ["-p", "no:schemathesis"]
 cache_dir = ".tmp/pytest-cache"
 markers = [
     "integration: marks tests requiring Docker services",
@@ -282,8 +282,8 @@ asyncio_mode = "auto"
 # is now mutated. The serving modules are mutated as a top-level `serving` package
 # against duckdb-free narrow tests: mutmut's trampoline rejects a module name
 # starting with `src.`, which (not duckdb) was the real blocker. (The gate runner
-# also strips the repo's relative pytest --basetemp inside the mutmut workspace --
-# under py3.11 it breaks coverage->mutant mapping for file-I/O targets like
+# keeps mutmut workspaces free of relative pytest --basetemp overrides because
+# under py3.11 they break coverage->mutant mapping for file-I/O targets like
 # key_rotation; see scripts/mutation_report.py.) manager.py runs at an honest 0.80
 # threshold (not 0.90): it is a
 # large stateful auth class whose residual survivors are equivalent mutants

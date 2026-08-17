@@ -130,7 +130,7 @@ def test_pytest_uses_stable_local_test_environment():
 
     assert "-p" in addopts
     assert "no:schemathesis" in addopts
-    assert "--basetemp=.tmp/pytest-basetemp" in addopts
+    assert not any(option.startswith("--basetemp") for option in addopts)
     assert pytest_options.get("cache_dir") == ".tmp/pytest-cache"
 
 
@@ -341,5 +341,5 @@ def test_pytest_workflows_prepare_tmp_parent_directory():
     for relative_path in pytest_workflows:
         workflow_text = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
         assert "mkdir -p .tmp" in workflow_text, (
-            f"{relative_path} must create .tmp before pytest uses --basetemp=.tmp/..."
+            f"{relative_path} must create .tmp before pytest uses cache_dir=.tmp/..."
         )

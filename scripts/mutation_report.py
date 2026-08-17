@@ -47,10 +47,10 @@ class ModuleTarget:
 # swaps in a fake top-level `duckdb` module and mutates manager duckdb-free.
 # auth/key_rotation does the same (fake `duckdb`, stub the connect path) and pins
 # the create/rotate/revoke/grace lifecycle; it is the last serving surface to go
-# live. Its mutants are only mappable because build_workspace_pyproject drops the
-# repo's relative pytest --basetemp from the workspace config -- under py3.11 that
-# relative tmp path breaks coverage.py's line->mutant attribution for key_rotation
-# (which writes its key store under tmp_path) and the module scores zero.
+# live. Its mutants are only mappable because build_workspace_pyproject keeps the
+# workspace free of relative pytest --basetemp overrides -- under py3.11 that path
+# shape breaks coverage.py's line->mutant attribution for key_rotation (which
+# writes its key store under tmp_path) and the module scores zero.
 MODULE_TARGETS = {
     Path("agentflow/retry.py"): ModuleTarget(
         threshold=0.75,
@@ -212,13 +212,12 @@ def render_mutmut_section(module_path: Path, tests: tuple[str, ...]) -> str:
 
 def build_workspace_pyproject(module_path: Path, target: ModuleTarget) -> str:
     original = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    # Drop the repo's RELATIVE pytest --basetemp (.tmp/pytest-basetemp) from the
-    # workspace config. Inside the mutmut workspace under py3.11 that relative tmp
-    # path defeats coverage.py's line->file attribution for file-I/O-heavy targets
-    # (auth/key_rotation writes its rotated key store under tmp_path), so mutmut
-    # maps zero tests to the generated mutants and reports "could not find any test
-    # case for any mutant" -> the module scores zero. Default (absolute) basetemp
-    # attributes coverage correctly. (TOML tolerates the trailing comma left behind.)
+    # Keep the generated mutmut workspace free of relative pytest --basetemp
+    # overrides. Under py3.11 that path shape defeats coverage.py's line->file
+    # attribution for file-I/O-heavy targets (auth/key_rotation writes its rotated
+    # key store under tmp_path), so mutmut maps zero tests to the generated mutants.
+    # The root config intentionally avoids --basetemp; this remains a defensive
+    # strip if an override is reintroduced.
     original = re.sub(r'\s*,?\s*"--basetemp=[^"]*"', "", original)
     rendered = render_mutmut_section(module_path, target.tests)
     if not MUTMUT_SECTION_RE.search(original):

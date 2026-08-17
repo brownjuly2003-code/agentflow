@@ -38,6 +38,34 @@ transition, commit, or push occurred. Any remediation requires fresh exact
 authorization. Analysis artifacts: `result.json`, `result.md`, `evidence.md`
 beside runner-owned `capture.json` / `capture-result.json`.
 
+## Follow-up external exit-255 forensics - 2026-08-17
+
+Local saved-evidence forensics, with no new Mac access, classifies the shared
+dependency failure as **`STRONGLY_CORROBORATED_OPERATIONAL_CAUSE`**. The target
+Colima profile and Docker socket were already unavailable at `14:51Z` and
+again at `14:58:08Z`, before the one authorized start began at `14:58:26Z`.
+
+During the subsequent boot, Docker recorded ClickHouse, Iceberg REST, and
+MinIO as exit `255` within 19 ms at approximately `14:59:43Z`. Moby's restore
+path uses exit `255` when a container persisted as running has no surviving
+task or retained exit status; without an exit timestamp, `FinishedAt` is set
+to reconciliation time. Therefore `14:59:43Z` is not the original stop time
+and `255` is not an application exit from the three services.
+
+Their non-recovery is **proved**: all three had effective restart policy `no`
+and restart count `0`. Docker therefore recovered neither service after the
+VM/daemon returned, while kind/Kubernetes performed their own reconciliation.
+
+The initiating event remains **not proved**. Saved evidence cannot distinguish
+manual Colima stop, macOS reboot/shutdown, power loss, VM crash, or another
+host-level event before `14:51Z`. Docker records `OOMKilled=false`, but the
+lost task/exit status does not exclude an unrecorded event or host/VM-level
+pressure. Determining that trigger requires a separately authorized read-only
+collection of retained Lima/serial, macOS unified, and prior-boot Docker logs.
+No restart, recovery, runtime mutation, or production transition was
+authorized or performed. Evidence:
+`.codex-grok-tasks/external-exit255-forensics-20260817-codex01/`.
+
 ## Latest authorized post-start read-only snapshot - 2026-08-17
 
 One authorized bounded read-only post-start status/diagnostic/workload snapshot

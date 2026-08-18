@@ -4,6 +4,13 @@
 The watcher is deliberately read-only: its Kubernetes command surface is
 limited to ``get``, ``logs``, and ``exec ... cat``.  It must be armed by a
 healthy RUNNING pod topology before a future soak starts traffic.
+
+HA-recoverable job states and ``pod_total``/``pod_ready`` dips are
+transitional: after arming, the watcher waits ``--transitional-grace-seconds``
+(default 90) so a Kubernetes-HA restore of the same job does not exit the
+process. Immediate terminal states, failed lifecycle/JM status, and container
+restart deltas still capture on the first armed sample. The soak PASS/FAIL
+verdict is decided by observer/watchdog/verify, not by this watcher.
 """
 
 from __future__ import annotations
@@ -21,17 +28,25 @@ from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import quote
 
-TERMINAL_JOB_STATES = frozenset(
+IMMEDIATE_TERMINAL_JOB_STATES = frozenset(
     {
         "CANCELED",
         "CANCELLING",
         "FAILED",
         "FAILING",
+        "FINISHED",
+    }
+)
+TRANSITIONAL_JOB_STATES = frozenset(
+    {
+        "CREATED",
+        "INITIALIZING",
         "RECONCILING",
         "RESTARTING",
         "SUSPENDED",
     }
 )
+TERMINAL_JOB_STATES = IMMEDIATE_TERMINAL_JOB_STATES | TRANSITIONAL_JOB_STATES
 FAILED_LIFECYCLE_STATES = frozenset({"ERROR", "FAILED"})
 FAILED_JM_STATES = frozenset({"ERROR", "MISSING"})
 OBSERVER_EVIDENCE_FILES = (
@@ -410,6 +425,19 @@ def failure_reasons(
     if restarts > baseline_restarts:
         reasons.append(f"pod_restarts={restarts} baseline={baseline_restarts}")
     return reasons
+
+
+def is_immediate_reason(reason: str) -> bool:
+    """Return True when a failure reason must capture without the HA grace window."""
+    if reason.startswith("flink_job_state="):
+        return reason.rsplit("=", 1)[1] in IMMEDIATE_TERMINAL_JOB_STATES
+    return reason.startswith(
+        (
+            "flink_lifecycle_state=",
+            "jobmanager_deployment_status=",
+            "pod_restarts=",
+        )
+    )
 
 
 def classify_failure_surfaces(
@@ -851,7 +879,17 @@ def watch(
     poll_interval_seconds: float,
     timeout_seconds: float,
     stop_file: Path | None,
+    transitional_grace_seconds: float = 90.0,
 ) -> int:
+    """Arm on a healthy snapshot, then capture the first non-transient failure.
+
+    Transitional job states and ``pod_total``/``pod_ready`` dips open a grace
+    window instead of capturing immediately. Recovery inside the window is
+    logged as ``transient_recovered`` and the watcher stays armed. Immediate
+    terminal states, failed lifecycle/JM status, and pod restart deltas still
+    capture on the first armed sample. ``transitional_grace_seconds=0``
+    restores the legacy immediate behaviour.
+    """
     output_dir = Path(config.output_dir)
     _ensure_private_dir(output_dir)
     chronology_path = output_dir / "failure-watcher-chronology.jsonl"
@@ -860,6 +898,9 @@ def watch(
     armed = False
     baseline_restarts = 0
     sample = 0
+    transitional_since_mono: float | None = None
+    transitional_since_utc: datetime | None = None
+    transitional_reasons: list[str] = []
 
     while True:
         sample += 1
@@ -888,20 +929,76 @@ def watch(
         cr, pods, snapshot_errors = _snapshot(client, config)
         total, ready, restarts = _pod_summary(pods)
         job_state = str(_status_value(cr, "status", "jobStatus", "state") or "").upper()
+        healthy = (not snapshot_errors) and is_healthy_snapshot(
+            cr, pods, expected_pods=config.expected_pods
+        )
         reasons: list[str] = []
         if not snapshot_errors:
-            if not armed and is_healthy_snapshot(cr, pods, expected_pods=config.expected_pods):
+            if not armed and healthy:
                 armed = True
                 baseline_restarts = restarts
             elif armed:
+                if healthy and transitional_since_mono is not None:
+                    recovered = {
+                        "state": "transient_recovered",
+                        "armed": True,
+                        "sample": sample,
+                        "utc": captured_at.isoformat(),
+                        "transitional_seconds": time.monotonic() - transitional_since_mono,
+                        "recovered_reasons": list(transitional_reasons),
+                    }
+                    _append_private_jsonl(chronology_path, recovered)
+                    if restarts <= baseline_restarts:
+                        baseline_restarts = restarts
+                    transitional_since_mono = None
+                    transitional_since_utc = None
+                    transitional_reasons = []
                 reasons = failure_reasons(
                     cr,
                     pods,
                     baseline_restarts=baseline_restarts,
                     expected_pods=config.expected_pods,
                 )
+
+        capture_now = False
+        in_transitional = False
+        transitional_seconds: float | None = None
+        if reasons:
+            immediate = any(is_immediate_reason(reason) for reason in reasons)
+            if immediate or transitional_grace_seconds <= 0:
+                capture_now = True
+                transitional_since_mono = None
+                transitional_since_utc = None
+                transitional_reasons = []
+            else:
+                now_mono = time.monotonic()
+                if transitional_since_mono is None:
+                    transitional_since_mono = now_mono
+                    transitional_since_utc = captured_at
+                transitional_reasons = list(reasons)
+                transitional_seconds = now_mono - transitional_since_mono
+                if transitional_seconds >= transitional_grace_seconds:
+                    reasons = [
+                        *reasons,
+                        (
+                            f"transitional_persisted={int(transitional_seconds)}s"
+                            f">= {int(transitional_grace_seconds)}s"
+                        ),
+                    ]
+                    capture_now = True
+                    transitional_since_mono = None
+                    transitional_since_utc = None
+                    transitional_reasons = []
+                else:
+                    in_transitional = True
+        elif armed and transitional_since_mono is not None and not healthy:
+            in_transitional = True
+            transitional_seconds = time.monotonic() - transitional_since_mono
+
         state = {
-            "state": "armed" if armed else "waiting_for_healthy",
+            "state": (
+                "transitional" if in_transitional else "armed" if armed else "waiting_for_healthy"
+            ),
             "armed": armed,
             "sample": sample,
             "utc": captured_at.isoformat(),
@@ -917,9 +1014,14 @@ def watch(
                 snapshot_errors=snapshot_errors,
             ),
         }
+        if in_transitional:
+            state["transitional_since_utc"] = (
+                transitional_since_utc.isoformat() if transitional_since_utc is not None else None
+            )
+            state["transitional_seconds"] = transitional_seconds
         _write_private_json(state_path, state)
         _append_private_jsonl(chronology_path, state)
-        if reasons:
+        if capture_now:
             result = capture_evidence(
                 client,
                 config,
@@ -983,6 +1085,15 @@ def _parser() -> argparse.ArgumentParser:
     _add_common_arguments(watch_parser)
     watch_parser.add_argument("--poll-interval-seconds", type=float, default=10.0)
     watch_parser.add_argument("--timeout-seconds", type=float, default=21600.0)
+    watch_parser.add_argument(
+        "--transitional-grace-seconds",
+        type=float,
+        default=90.0,
+        help=(
+            "seconds to wait on HA-recoverable job states and pod_total/pod_ready "
+            "dips before capturing (0 = legacy immediate capture)"
+        ),
+    )
     watch_parser.add_argument("--stop-file", type=Path)
 
     capture_parser = subparsers.add_parser("capture", help="capture immediately")
@@ -1023,6 +1134,7 @@ def main(argv: list[str] | None = None) -> int:
         poll_interval_seconds=args.poll_interval_seconds,
         timeout_seconds=args.timeout_seconds,
         stop_file=args.stop_file,
+        transitional_grace_seconds=args.transitional_grace_seconds,
     )
 
 

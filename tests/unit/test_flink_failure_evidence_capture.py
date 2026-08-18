@@ -9,6 +9,8 @@ import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = PROJECT_ROOT / "scripts" / "capture_flink_failure_evidence.py"
 
@@ -383,3 +385,240 @@ def test_capture_marks_missing_flink_pods_incomplete(tmp_path):
     assert not manifest["complete"]
     assert "flink_logs: pod_total=0 expected=2" in result.errors
     assert (result.bundle_dir / "logs" / "pod-count.error.txt").is_file()
+
+
+class _FakeClock:
+    def __init__(self, start: float = 1_000.0) -> None:
+        self.now = start
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += float(seconds)
+
+
+class _UnusedClient:
+    def run(self, *args: str):
+        raise AssertionError(f"kubectl should not run during watch unit tests: {args}")
+
+
+def _watch_config(module, tmp_path: Path):
+    return module.CaptureConfig(
+        context="kind-agentflow",
+        namespace="agentflow",
+        flink_deployment="flink",
+        pod_selector="app=flink",
+        flink_rest_service="flink-rest",
+        flink_rest_port=8081,
+        observer_job="observer",
+        observer_container="observer",
+        observer_evidence_dir="/evidence",
+        output_dir=tmp_path,
+        log_since="6h",
+    )
+
+
+def _install_clock(module, monkeypatch) -> _FakeClock:
+    clock = _FakeClock()
+    monkeypatch.setattr(module.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(module.time, "sleep", clock.sleep)
+    return clock
+
+
+def _queue_snapshots(module, monkeypatch, snapshots, *, stop_file: Path | None = None):
+    remaining = list(snapshots)
+
+    def fake_snapshot(client, config):
+        if not remaining:
+            raise AssertionError("watch requested more snapshots than queued")
+        snapshot = remaining.pop(0)
+        if stop_file is not None and not remaining:
+            stop_file.write_text("stop\n", encoding="utf-8")
+        return snapshot
+
+    monkeypatch.setattr(module, "_snapshot", fake_snapshot)
+
+
+def _stub_capture(module, monkeypatch, tmp_path: Path) -> dict:
+    calls: dict = {"count": 0, "reasons": None}
+
+    def fake_capture(client, config, *, trigger_reasons, cr=None, pods=None, captured_at=None):
+        calls["count"] += 1
+        calls["reasons"] = list(trigger_reasons)
+        bundle = tmp_path / "stub-bundle"
+        bundle.mkdir(exist_ok=True)
+        return module.CaptureResult(bundle, ())
+
+    monkeypatch.setattr(module, "capture_evidence", fake_capture)
+    return calls
+
+
+def _chronology(path: Path) -> list[dict]:
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
+
+def test_transitional_state_recovering_within_grace_does_not_capture(tmp_path, monkeypatch):
+    module = _load_module()
+    clock = _install_clock(module, monkeypatch)
+    sleeps = {"n": 0}
+
+    def sleep_then_stop(seconds: float) -> None:
+        clock.sleep(seconds)
+        sleeps["n"] += 1
+        # arm + transitional + recovered; leave the last state file as armed
+        if sleeps["n"] >= 3:
+            raise RuntimeError("stop-after-recovery")
+
+    def ban_capture(*_args, **_kwargs):
+        raise AssertionError("capture_evidence must not run for a recovered HA blip")
+
+    monkeypatch.setattr(module.time, "sleep", sleep_then_stop)
+    monkeypatch.setattr(module, "capture_evidence", ban_capture)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(), []),
+            (_cr(), _pods(), []),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="stop-after-recovery"):
+        module.watch(
+            _UnusedClient(),
+            _watch_config(module, tmp_path),
+            poll_interval_seconds=1.0,
+            timeout_seconds=0,
+            stop_file=None,
+            transitional_grace_seconds=90.0,
+        )
+
+    bundle_dirs = [
+        path for path in tmp_path.iterdir() if path.is_dir() and path.name.startswith("failure-")
+    ]
+    assert bundle_dirs == []
+    state = json.loads((tmp_path / "failure-watcher-state.json").read_text(encoding="utf-8"))
+    assert state["state"] == "armed"
+    recovered = [
+        entry
+        for entry in _chronology(tmp_path / "failure-watcher-chronology.jsonl")
+        if entry.get("state") == "transient_recovered"
+    ]
+    assert len(recovered) == 1
+    assert "flink_job_state=SUSPENDED" in recovered[0]["recovered_reasons"]
+
+
+def test_transitional_state_persisting_past_grace_captures(tmp_path, monkeypatch):
+    module = _load_module()
+    _install_clock(module, monkeypatch)
+    calls = _stub_capture(module, monkeypatch, tmp_path)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(), []),
+        ],
+    )
+
+    rc = module.watch(
+        _UnusedClient(),
+        _watch_config(module, tmp_path),
+        poll_interval_seconds=90.0,
+        timeout_seconds=0,
+        stop_file=None,
+        transitional_grace_seconds=90.0,
+    )
+
+    assert rc == 2
+    assert calls["count"] == 1
+    assert any(reason.startswith("transitional_persisted=") for reason in calls["reasons"])
+    assert "flink_job_state=SUSPENDED" in calls["reasons"]
+
+
+def test_immediate_terminal_state_still_captures_on_first_sample(tmp_path, monkeypatch):
+    module = _load_module()
+    _install_clock(module, monkeypatch)
+    calls = _stub_capture(module, monkeypatch, tmp_path)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="FAILED"), _pods(), []),
+        ],
+    )
+
+    rc = module.watch(
+        _UnusedClient(),
+        _watch_config(module, tmp_path),
+        poll_interval_seconds=1.0,
+        timeout_seconds=0,
+        stop_file=None,
+        transitional_grace_seconds=90.0,
+    )
+
+    assert rc == 2
+    assert calls["count"] == 1
+    assert calls["reasons"] == ["flink_job_state=FAILED"]
+
+
+def test_grace_zero_restores_legacy_behaviour(tmp_path, monkeypatch):
+    module = _load_module()
+    _install_clock(module, monkeypatch)
+    calls = _stub_capture(module, monkeypatch, tmp_path)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(), []),
+        ],
+    )
+
+    rc = module.watch(
+        _UnusedClient(),
+        _watch_config(module, tmp_path),
+        poll_interval_seconds=1.0,
+        timeout_seconds=0,
+        stop_file=None,
+        transitional_grace_seconds=0,
+    )
+
+    assert rc == 2
+    assert calls["count"] == 1
+    assert calls["reasons"] == ["flink_job_state=SUSPENDED"]
+
+
+def test_pod_restart_delta_is_immediate_even_during_transition(tmp_path, monkeypatch):
+    module = _load_module()
+    _install_clock(module, monkeypatch)
+    calls = _stub_capture(module, monkeypatch, tmp_path)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(restarts=1), []),
+        ],
+    )
+
+    rc = module.watch(
+        _UnusedClient(),
+        _watch_config(module, tmp_path),
+        poll_interval_seconds=1.0,
+        timeout_seconds=0,
+        stop_file=None,
+        transitional_grace_seconds=90.0,
+    )
+
+    assert rc == 2
+    assert calls["count"] == 1
+    assert "flink_job_state=SUSPENDED" in calls["reasons"]
+    assert "pod_restarts=2 baseline=0" in calls["reasons"]
+    assert not any(reason.startswith("transitional_persisted=") for reason in calls["reasons"])

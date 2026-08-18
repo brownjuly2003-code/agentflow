@@ -672,6 +672,7 @@
         "memoryConfiguration",
         "checkpointIntervalMs",
         "checkpointMinPauseMs",
+        "restartStrategy",
         "checkpointStorage",
         "savepointStorage",
         "upgradeMode",
@@ -742,6 +743,29 @@
         "checkpointMinPauseMs": {
           "type": "integer",
           "minimum": 0
+        },
+        "restartStrategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxFailuresPerInterval",
+            "failureRateIntervalMs",
+            "delayMs"
+          ],
+          "properties": {
+            "maxFailuresPerInterval": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "failureRateIntervalMs": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "delayMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         },
         "checkpointStorage": {
           "type": "string"

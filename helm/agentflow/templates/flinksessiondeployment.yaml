@@ -20,6 +20,10 @@ spec:
     execution.checkpointing.min-pause: {{ printf "%d ms" (int .Values.flinkJob.checkpointMinPauseMs) | quote }}
     execution.checkpointing.mode: EXACTLY_ONCE
     execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+    restart-strategy.type: failure-rate
+    restart-strategy.failure-rate.max-failures-per-interval: {{ int .Values.flinkJob.restartStrategy.maxFailuresPerInterval | quote }}
+    restart-strategy.failure-rate.failure-rate-interval: {{ printf "%d ms" (int .Values.flinkJob.restartStrategy.failureRateIntervalMs) | quote }}
+    restart-strategy.failure-rate.delay: {{ printf "%d ms" (int .Values.flinkJob.restartStrategy.delayMs) | quote }}
     state.checkpoints.dir: {{ $checkpointStorage | quote }}
     state.savepoints.dir: {{ $savepointStorage | quote }}
     high-availability.type: kubernetes
@@ -54,6 +58,12 @@ spec:
               value: {{ .Values.flinkJob.checkpointIntervalMs | quote }}
             - name: FLINK_CHECKPOINT_MIN_PAUSE_MS
               value: {{ .Values.flinkJob.checkpointMinPauseMs | quote }}
+            - name: FLINK_RESTART_MAX_FAILURES_PER_INTERVAL
+              value: {{ .Values.flinkJob.restartStrategy.maxFailuresPerInterval | quote }}
+            - name: FLINK_RESTART_FAILURE_RATE_INTERVAL_MS
+              value: {{ .Values.flinkJob.restartStrategy.failureRateIntervalMs | quote }}
+            - name: FLINK_RESTART_DELAY_MS
+              value: {{ .Values.flinkJob.restartStrategy.delayMs | quote }}
             - name: FLINK_SESSION_MAX_UNIQUE_PAGES
               value: {{ .Values.flinkJob.sessions.maxUniquePages | quote }}
             - name: FLINK_SESSION_MAX_UNIQUE_PRODUCTS

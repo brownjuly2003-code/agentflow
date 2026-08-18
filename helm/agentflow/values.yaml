@@ -292,6 +292,13 @@ flinkJob:
   memoryConfiguration: {}
   checkpointIntervalMs: 30000
   checkpointMinPauseMs: 10000
+  # Single source for the bounded restart budget. Both PyFlink jobs always
+  # force restart-strategy=failure-rate from FLINK_RESTART_* env, so the CR
+  # declares the same values instead of a silently overridden strategy.
+  restartStrategy:
+    maxFailuresPerInterval: 3
+    failureRateIntervalMs: 300000
+    delayMs: 10000
   checkpointStorage: ""
   savepointStorage: ""
   upgradeMode: savepoint

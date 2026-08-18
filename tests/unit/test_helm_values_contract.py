@@ -971,3 +971,53 @@ def test_flink_role_grants_operator_deployments_and_events():
         resources={"events"},
         verbs={"create", "patch"},
     ), "Flink Role must grant core events create/patch"
+
+
+def test_flink_jobs_declare_restart_strategy_aligned_with_application():
+    """The CR must declare the failure-rate strategy the jobs actually force.
+
+    stream_processor and session_aggregator always configure
+    restart-strategy=failure-rate from FLINK_RESTART_* env; an unaligned CR
+    (for example fixed-delay) silently misrepresents the effective restart
+    budget (soak-01..05 RCA amplifier).
+    """
+    result = _run_helm_template(
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka:9092",
+        "--set",
+        "flinkJob.checkpointStorage=s3://agentflow-ckpt/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=s3://agentflow-ckpt/savepoints",
+    )
+    assert result.returncode == 0, _combined_output(result)
+
+    flink_deployments = {
+        str(document["metadata"]["name"]): document
+        for document in yaml.safe_load_all(result.stdout)
+        if document and document.get("kind") == "FlinkDeployment"
+    }
+    suffixes = {
+        name.rsplit("-", 2)[-2] + "-" + name.rsplit("-", 2)[-1] for name in flink_deployments
+    }
+    assert suffixes == {"stream-processor", "session-aggregator"}
+
+    for name, document in flink_deployments.items():
+        configuration = document["spec"]["flinkConfiguration"]
+        assert configuration["restart-strategy.type"] == "failure-rate", name
+        assert configuration["restart-strategy.failure-rate.max-failures-per-interval"] == "3", name
+        assert (
+            configuration["restart-strategy.failure-rate.failure-rate-interval"] == "300000 ms"
+        ), name
+        assert configuration["restart-strategy.failure-rate.delay"] == "10000 ms", name
+
+        containers = document["spec"]["podTemplate"]["spec"]["containers"]
+        env = {
+            entry["name"]: entry.get("value")
+            for container in containers
+            for entry in container.get("env", [])
+        }
+        assert env["FLINK_RESTART_MAX_FAILURES_PER_INTERVAL"] == "3", name
+        assert env["FLINK_RESTART_FAILURE_RATE_INTERVAL_MS"] == "300000", name
+        assert env["FLINK_RESTART_DELAY_MS"] == "10000", name

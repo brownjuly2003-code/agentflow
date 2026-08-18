@@ -93,6 +93,73 @@ is accepted; do not switch to `unless-stopped` without a new owner decision.
   records skipped by the reset-to-END; the sink is idempotent, a backfill
   is possible but not required by any gate.
 
+## Soak `-06` FAIL and the retry-loop exit decision - 2026-08-18 evening
+
+Identity `golden-4h-soak-rv-20260818-06` was launched by a bounded Grok
+executor slice (`.codex-grok-tasks/golden-4h-soak-launch-20260818-grok02/`,
+`RESULT=SOAK_LAUNCHED`, 11 listed commands, no forbidden action) and died
+from the stand, not the app (`result-final.txt` =
+`RESULT=FAIL reason=abort_file_present`; producer 36 754/36 754 delivered,
+0 failures before the abort):
+
+- 22:13:02Z the kind API server stalled under the launch load (`TLS
+  handshake timeout`, a transient `jobs.batch is forbidden` for
+  `kubernetes-admin` that cleared within a minute); 22:13:12Z the JobManager's
+  fabric8 `LeaderElector` failed to renew the `…-cluster-config-map` lock;
+  22:13:48Z the job was **suspended**, TM-1 disconnected, and Kubernetes HA
+  restored the **same** job id `80e6e2be…` by 22:15:04Z (new TM pod).
+- The failure watcher treated the single `SUSPENDED` sample as terminal,
+  captured `…watcher-20260818-06/out/failure-20260818T221410Z` and exited,
+  so it was blind afterwards.
+- ~22:20Z a second, real topology loss (`tasks 0/2`, `pods_ready 1/1`) →
+  observer `ABORT flink_led_topology_loss` (2×60 s streak already applied)
+  → watchdog FAIL. The CR then cycled `CREATED/RECONCILING` and finally
+  reached terminal `FAILED`; host load averaged 5+ and `kubectl get pods`
+  timed out on the API server. Facts:
+  `.codex-grok-tasks/soak-loop-exit-analysis-20260818-grok03/input/incident-20260818-06.md`.
+
+Read-only Grok analysis of all attempts
+(`.codex-grok-tasks/soak-loop-exit-analysis-20260818-grok03/analysis.md`):
+every documented soak death (`20260802-01` canary, `20260807-01..05`,
+`20260818-06`) sits in host capacity / k8s API / Flink HA / instrumentation
+false-attribution or process discipline — none implicates application code.
+The soak CR combines `high-availability.type: kubernetes` with
+`upgradeMode: stateless` and a 1 s / 2 s checkpoint cadence, so leader-lease
+renewals and checkpoint bookkeeping ride the same overloaded API server;
+`heartbeat.*` is unset. The chart declares failure-rate 3 / 300 s / 10 s while
+the live soak CR env still forces `FLINK_RESTART_*` = 30 / 600 s / 15 s
+(pre-existing drift, not tonight's cause; owner to reconcile with the next
+identity).
+
+**Decided and landed (robustness only, gate semantics unchanged):**
+
+- `6c2f049` — watcher: `--transitional-grace-seconds` (default 90 s) for
+  SUSPENDED/RESTARTING/RECONCILING/CREATED/INITIALIZING and pod-count dips;
+  FAILED/CANCELED/FINISHED, failed lifecycle/JM status and container restart
+  deltas still capture immediately; recovery inside the window is logged as
+  `transient_recovered` and the watcher stays armed (18 unit tests).
+- `1927906` — `scripts/soak/stamp_soak_identity.py`: one-command identity
+  stamping from a runtime mirror (unresolved-token check, SHA pins,
+  MANIFEST/DIFF/LAUNCH_ORDER). The stamped `-07` pack
+  (`.codex-grok-tasks/golden-4h-soak-runtime-20260819-07/`, EVENT_PREFIX
+  `f8b2c3d4-e5f6-4a71-b829-`, ORDER_PREFIX `ORD-20260819-0700`) applies:
+  checkpoint interval/min-pause 10 s in `flinkConfiguration` **and** in the
+  CR env by name (full `containers` list in the merge, post-recover
+  assertion); baseline waited by a 15 s poll instead of `kubectl wait`;
+  watcher armed inside the start script after baseline PASS and before
+  observer/producer, poll 30 s; `_status.sh` REST snippet fixed. Rule for
+  the executor: no host-side kubectl/ssh polling in the first 15 minutes
+  after `SOAK_RUNNING`. Never rerun `-06`.
+
+**Owner decisions still open:** (a) launch `-07` on this host (tomorrow,
+fresh Mac) versus moving the 4 h gate off the 8 GiB nested stand; (b) the
+structural exit — a `workflow_dispatch` CI soak on `ubuntu-latest` (16 GiB,
+6 h) — needs push authorization (main is 18 commits ahead of origin); a
+design and draft workflow are being prepared under
+`.codex-grok-tasks/ci-soak-design-20260818-grok06/`; (c) any gate re-scope
+(duration, allowed restarts, rate) is explicitly **not** recommended
+silently and stays the owner's call.
+
 ## Latest authorized workload CrashLoop RCA - 2026-08-17
 
 One authorized immutable read-only CrashLoop RCA capture ran exactly once

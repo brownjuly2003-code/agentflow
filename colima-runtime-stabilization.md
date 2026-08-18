@@ -1,11 +1,93 @@
 # Colima runtime stabilization
 
-Last updated: 2026-08-17.
+Last updated: 2026-08-18.
 
 ## Goal
 
 Prove a stable Colima/kind baseline before any new traffic, then use the
 smallest evidence-backed remediation if the hold fails.
+
+## Post-recovery hold and clock re-verification - 2026-08-18
+
+Context: the API workload was recovered the same day by the WAL
+discard-and-restart slice (evidence
+`.codex-grok-tasks/api-wal-discard-recovery-20260818-cc01/`); all five
+project workloads were Ready simultaneously for the first time since
+2026-08-09 before these measurements.
+
+### Clock gate: GREEN (12-sample contract)
+
+Twelve read-only `scripts/diagnose_colima_runtime.py` snapshots ~10 s apart:
+12/12 `status=complete`, 17/17 checks each, max |`offset_ns`| `230.610 ms`,
+spread `202.726 ms` (both within the 250 ms contract), clock-jump journal
+empty, samples monotonic. The `DUAL_TIME_AUTHORITY_OSCILLATION` amplitude
+fell from `2485.4 ms` (2026-08-09 instrumented hold) to `202.7 ms` after the
+macOS Network Time host fix alone, with guest NTP still enabled. Option A
+stays rolled back and is no longer needed at this amplitude. Snapshots:
+`.codex-grok-tasks/api-wal-discard-recovery-20260818-cc01/snap-*.json`.
+
+### 15-minute idle hold — all gates green except literal-zero I/O
+
+Fifteen per-minute snapshots
+(`.codex-grok-tasks/idle-hold-20260818-cc01/hold-*.json`), 15/15
+`complete`, 17/17 checks each:
+
+| Surface | Result |
+| --- | --- |
+| Clock | PASS — offsets `+32.8..+207.2 ms`, spread `171.4 ms`, no jumps |
+| Memory | PASS — `full avg10=0` in 15/15; `MemAvailable` `2.96..3.03 GiB` (≥1.9 GiB restore threshold) |
+| Disk | PASS — 72% used, 22 GiB free |
+| containerd | PASS — active, `NRestarts=0`, no kernel stalls |
+| I/O `full avg10` | non-zero 15/15: `0.95..2.73` in the first ~7 samples decaying to `0.12..0.75`; literal `0.00` never observed |
+
+Cross-hold I/O ownership (cgroup-v2 write deltas over the hold) reproduces
+the 2026-08-09 fingerprint exactly: etcd `19.03 MiB` and Kafka `5.89 MiB`
+written in 15 minutes; every other container ≤0.23 MiB. This remains bounded
+ownership correlation, but it is now consistent across three holds: the
+control plane's steady etcd WAL/compaction churn makes a literal-zero
+`full avg10` unreachable on this nested-VM host while kind exists.
+
+### Proposed re-scoped idle-I/O gate (owner decision pending)
+
+The `-04` disaster signature was stall-class pressure: `containerd-shim`
+blocked >122 s, kernel stalls, memory exhaustion, sustained high PSI —
+not sub-1.0 steady-state churn. Proposal for the next soak preflight,
+**not adopted until the owner approves**: replace "I/O full PSI returns
+to 0" with "final five hold samples have io `full avg10 <= 1.0` AND
+`kernel_stalls` empty AND memory `full avg10 = 0` AND containerd
+`NRestarts=0`". Today's hold passes that formulation; the original
+literal-zero gate remains the gate of record until re-scoped.
+
+### Dependency restart-policy decision
+
+The Compose dependencies (ClickHouse/MinIO/Iceberg REST) keep
+`restart: no` deliberately: after a host/VM interruption the fail-closed
+`scripts/recover_external_dependencies.py` preflight must inspect identity,
+volume, and image ownership before anything starts, instead of Docker
+auto-starting services over a possibly inconsistent state. The cost (one
+authorized recovery command after each VM stop) was paid on 2026-08-18 and
+is accepted; do not switch to `unless-stopped` without a new owner decision.
+
+### Pre-soak alignment landed the same day
+
+- Both Helm FlinkDeployments now declare the `failure-rate` restart strategy
+  the PyFlink jobs always force, single-sourced from
+  `flinkJob.restartStrategy` values into both `spec.flinkConfiguration` and
+  the `FLINK_RESTART_*` env (defaults unchanged: 3 / 300000 ms / 10000 ms).
+  Contract test `test_flink_jobs_declare_restart_strategy_aligned_with_application`.
+- The observer abort precedence from the `-01`..`-05` RCA is now a tracked,
+  unit-tested policy module `scripts/soak_observer_policy.py` (terminal
+  Flink state decides immediately; API observation failures can only abort
+  as `pods_api_unhealthy`; Flink-led degradation is never stored as a pod
+  topology reason). Future soak packs must embed or import it.
+- Lake materializer materialization proof: one labeled smoke event
+  (`smoke-materializer-20260818-01`, tenant `smoke-test`) produced to
+  `events.validated` was consumed and appended
+  (`lake_batch_materialized consumed=1 appended=1 duplicates=0`, sync
+  commit moved partition 0 to `712487`). Known residual: partition 1 keeps
+  a historical committed offset `601277` with lag `113390` of soak-05-era
+  records skipped by the reset-to-END; the sink is idempotent, a backfill
+  is possible but not required by any gate.
 
 ## Latest authorized workload CrashLoop RCA - 2026-08-17
 

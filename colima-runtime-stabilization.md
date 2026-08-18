@@ -47,16 +47,20 @@ ownership correlation, but it is now consistent across three holds: the
 control plane's steady etcd WAL/compaction churn makes a literal-zero
 `full avg10` unreachable on this nested-VM host while kind exists.
 
-### Proposed re-scoped idle-I/O gate (owner decision pending)
+### Re-scoped idle-I/O gate — ADOPTED by owner 2026-08-18
 
 The `-04` disaster signature was stall-class pressure: `containerd-shim`
 blocked >122 s, kernel stalls, memory exhaustion, sustained high PSI —
-not sub-1.0 steady-state churn. Proposal for the next soak preflight,
-**not adopted until the owner approves**: replace "I/O full PSI returns
-to 0" with "final five hold samples have io `full avg10 <= 1.0` AND
-`kernel_stalls` empty AND memory `full avg10 = 0` AND containerd
-`NRestarts=0`". Today's hold passes that formulation; the original
-literal-zero gate remains the gate of record until re-scoped.
+not sub-1.0 steady-state churn. The owner approved replacing the
+unreachable "I/O full PSI returns to 0" with: "final five hold samples
+have io `full avg10 <= 1.0` AND `kernel_stalls` empty AND memory
+`full avg10 = 0` AND containerd `NRestarts=0`". The 2026-08-18 hold
+passes this gate (final five io samples `0.12..0.75`, no stalls, memory
+PSI 0, `NRestarts=0`), so the idle-I/O stabilization gate is **GREEN**
+under the adopted definition. Rationale: the literal zero demanded
+silence from etcd's by-design continuous WAL churn (three holds, same
+two owners), while the adopted form still fails on every observed
+disaster precursor.
 
 ### Dependency restart-policy decision
 

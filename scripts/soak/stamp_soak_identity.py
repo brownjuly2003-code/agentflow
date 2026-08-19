@@ -2,7 +2,9 @@
 """Stamp a new golden-soak identity from an existing runtime mirror.
 
 Deterministic: the same arguments produce byte-identical outputs. Refuses to
-overwrite an existing --out-dir unless --force is given.
+overwrite an existing --out-dir unless --force is given. All validation runs
+in a sibling staging directory; the previous out-dir is replaced only after
+every check passes.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import argparse
 import difflib
 import hashlib
 import json
+import os
 import py_compile
 import re
 import shutil
@@ -22,6 +25,7 @@ from pathlib import Path
 
 ENV_REWRITE_MARKER = "STAMP_ENV_REWRITE_BY_NAME"
 ENV_POST_ASSERT_MARKER = "STAMP_ENV_POST_ASSERT"
+RV_MARKER = "STAMP_RESOURCE_VERSION"
 TEXT_SUFFIXES = frozenset({".sh", ".py", ".yaml", ".yml", ".md", ".json", ".txt"})
 SKIP_DIR_NAMES = frozenset({"__pycache__"})
 SKIP_SUFFIXES = frozenset({".pyc"})
@@ -44,6 +48,26 @@ GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 DEFAULT_DOCKER_HOST = "unix:///Users/julia/.colima/agentflow-fc5-7113966/docker.sock"
 DEFAULT_WATCHER_SCRIPT = "scripts/capture_flink_failure_evidence.py"
 CONSUMED_SOURCE_NOTE = "20260818-06"
+HA_LEASE_KEY = "high-availability.kubernetes.leader-election.lease-duration"
+HA_RENEW_KEY = "high-availability.kubernetes.leader-election.renew-deadline"
+HA_RETRY_KEY = "high-availability.kubernetes.leader-election.retry-period"
+
+SHORT_MARKER_TEMPLATES: tuple[str, ...] = (
+    "RECOVER_{n}_PASS",
+    "RECOVER_{n}_",
+    "soak -{n}",
+    "soak-{n}",
+    "identity -{n}",
+    "identity {n}",
+    "-{n} traffic",
+    "for soak {n}",
+)
+LEFTOVER_SHORT_TEMPLATES: tuple[str, ...] = (
+    "RECOVER_{n}",
+    "soak -{n}",
+    "soak-{n}",
+    "identity -{n}",
+)
 
 _ASSIGNMENT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 _WAIT_BLOCK_RE = re.compile(
@@ -64,6 +88,16 @@ _CHECKPOINT_INTERVAL_RE = re.compile(r'("execution\.checkpointing\.interval"\s*:
 _CHECKPOINT_PAUSE_RE = re.compile(r'("execution\.checkpointing\.min-pause"\s*:\s*")[^"]*(")')
 _VERIFY_SHA_RE = re.compile(r"^VERIFY_SHA=.*$", re.M)
 _PRODUCER_SHA_RE = re.compile(r"^PRODUCER_SHA=.*$", re.M)
+_PATCH_FAIL_RE = re.compile(r'\[\[ \$RC -eq 0 \]\] \|\| fail "patch_failed rc=\$RC"\n?')
+_HA_LEASE_RE = re.compile(
+    r'("high-availability\.kubernetes\.leader-election\.lease-duration"\s*:\s*")[^"]*(")'
+)
+_HA_RENEW_RE = re.compile(
+    r'("high-availability\.kubernetes\.leader-election\.renew-deadline"\s*:\s*")[^"]*(")'
+)
+_HA_RETRY_RE = re.compile(
+    r'("high-availability\.kubernetes\.leader-election\.retry-period"\s*:\s*")[^"]*(")'
+)
 
 
 class StampError(Exception):
@@ -84,6 +118,9 @@ class StampConfig:
     watcher_grace_seconds: int
     watcher_script: Path
     force: bool
+    ha_lease_duration_seconds: int | None = None
+    ha_renew_deadline_seconds: int | None = None
+    ha_retry_period_seconds: int | None = None
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -115,6 +152,60 @@ def find_bash() -> Path | None:
     if which:
         return Path(which)
     return None
+
+
+def identity_short_suffix(identity: str) -> str:
+    if "-" not in identity:
+        raise StampError(f"identity has no hyphenated short suffix: {identity}")
+    suffix = identity.rsplit("-", 1)[-1]
+    if not suffix.isdigit():
+        raise StampError(f"identity short suffix is not numeric: {identity}")
+    return suffix
+
+
+def recover_result_string(identity: str) -> str:
+    return f"FLINK_RECOVER_{identity_short_suffix(identity)}_PASS"
+
+
+def leftover_short_markers(text: str, old_suffix: str) -> list[str]:
+    found: list[str] = []
+    for template in LEFTOVER_SHORT_TEMPLATES:
+        token = template.format(n=old_suffix)
+        if token in text:
+            found.append(token)
+    return found
+
+
+def apply_short_markers(
+    text: str, relative: str, old_suffix: str, new_suffix: str
+) -> tuple[str, list[dict[str, object]], int]:
+    locations: list[dict[str, object]] = []
+    pairs = [
+        (template.format(n=old_suffix), template.format(n=new_suffix))
+        for template in SHORT_MARKER_TEMPLATES
+    ]
+    for old, new in pairs:
+        if not old or old == new:
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if old in line:
+                locations.append(
+                    {
+                        "file": relative,
+                        "line": line_no,
+                        "pattern": old,
+                        "replacement": new,
+                    }
+                )
+    count = 0
+    for old, new in pairs:
+        if not old or old == new:
+            continue
+        n = text.count(old)
+        if n:
+            text = text.replace(old, new)
+            count += n
+    return text, locations, count
 
 
 def parse_assignment(text: str, name: str) -> str:
@@ -163,6 +254,58 @@ def missing_required(source_dir: Path) -> list[str]:
         if not (source_dir / relative).is_file():
             missing.append(relative)
     return missing
+
+
+def resolved(path: Path) -> Path:
+    return path.expanduser().resolve()
+
+
+def out_overlaps_source(out_dir: Path, source_dir: Path) -> str | None:
+    out_r = resolved(out_dir)
+    src_r = resolved(source_dir)
+    if out_r == src_r:
+        return "out-dir resolves to source-dir"
+    try:
+        out_r.relative_to(src_r)
+        return "out-dir is a descendant of source-dir"
+    except ValueError:
+        pass
+    try:
+        src_r.relative_to(out_r)
+        return "out-dir is an ancestor of source-dir"
+    except ValueError:
+        pass
+    return None
+
+
+def staging_dir_for(out_dir: Path) -> Path:
+    return out_dir.parent / f"{out_dir.name}.stamp-tmp-{os.getpid()}"
+
+
+def replace_out_dir(stage_dir: Path, out_dir: Path) -> None:
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    try:
+        stage_dir.rename(out_dir)
+    except OSError as exc:
+        try:
+            shutil.move(str(stage_dir), str(out_dir))
+        except OSError as exc2:
+            raise StampError(
+                f"validated stage at {posix(stage_dir)} but failed to move onto "
+                f"out-dir {posix(out_dir)}: {exc2}"
+            ) from exc2
+        del exc
+
+
+def require_anchor(text: str, needle: str, transform: str, file_name: str) -> None:
+    if needle not in text:
+        raise StampError(f"transform {transform} missing anchor in {file_name}: {needle}")
+
+
+def require_marker(text: str, needle: str, transform: str, file_name: str) -> None:
+    if needle not in text:
+        raise StampError(f"transform {transform} output marker missing in {file_name}: {needle}")
 
 
 def poll_loop(kubectl_token: str) -> str:
@@ -282,6 +425,41 @@ def env_post_assert_python(interval_ms: int, min_pause_ms: int) -> str:
     )
 
 
+def resource_version_python() -> str:
+    return (
+        f"# {RV_MARKER}\n"
+        'rv = (cr.get("metadata") or {}).get("resourceVersion")\n'
+        'if rv is None or str(rv).strip() == "":\n'
+        '    raise SystemExit("live_cr_resource_version_missing")\n'
+        'merge.setdefault("metadata", {})["resourceVersion"] = rv\n'
+    )
+
+
+def patch_conflict_block() -> str:
+    return (
+        "if [[ $RC -ne 0 ]]; then\n"
+        "  if echo \"$PATCH_OUT\" | grep -Eqi '409|Conflict'; then\n"
+        '    fail "patch_conflict"\n'
+        "  fi\n"
+        '  fail "patch_failed rc=$RC"\n'
+        "fi\n"
+    )
+
+
+def stop_own_watcher_fn() -> str:
+    return (
+        "stop_own_watcher() {\n"
+        '  if [[ -n "${WPID:-}" ]] && kill -0 "$WPID" 2>/dev/null; then\n'
+        '    kill "$WPID" 2>/dev/null || true\n'
+        "    for _w in $(seq 1 10); do\n"
+        '      kill -0 "$WPID" 2>/dev/null || break\n'
+        "      sleep 1\n"
+        "    done\n"
+        "  fi\n"
+        "}\n"
+    )
+
+
 def _heredoc_span(text: str, needle: str) -> tuple[int, int] | None:
     idx = text.find(needle)
     if idx < 0:
@@ -300,64 +478,151 @@ def _heredoc_span(text: str, needle: str) -> tuple[int, int] | None:
     return start, end
 
 
-def transform_recover(text: str, interval_ms: int, min_pause_ms: int) -> str:
+def _write_idx(block: str) -> int:
+    for needle in ('Path("$OUT/fix-merge.json")', 'out / "fix-merge.json"', "fix-merge.json"):
+        found = block.find(needle)
+        if found < 0:
+            continue
+        if needle == "fix-merge.json":
+            found = block.rfind("\n", 0, found) + 1
+        return found
+    return -1
+
+
+def _inject_ha_keys(text: str, cfg: StampConfig) -> str:
+    lease = cfg.ha_lease_duration_seconds
+    renew = cfg.ha_renew_deadline_seconds
+    retry = cfg.ha_retry_period_seconds
+    if lease is None or renew is None or retry is None:
+        return text
+    require_anchor(text, "flinkConfiguration", "ha_lease", "_flink_recover.sh")
+    lease_val = f"{lease} s"
+    renew_val = f"{renew} s"
+    retry_val = f"{retry} s"
+    if HA_LEASE_KEY in text:
+        text = _HA_LEASE_RE.sub(rf"\g<1>{lease_val}\2", text)
+        text = _HA_RENEW_RE.sub(rf"\g<1>{renew_val}\2", text)
+        text = _HA_RETRY_RE.sub(rf"\g<1>{retry_val}\2", text)
+    else:
+        require_anchor(
+            text,
+            "execution.checkpointing.interval",
+            "ha_lease",
+            "_flink_recover.sh",
+        )
+        entries = (
+            f'      "{HA_LEASE_KEY}": "{lease_val}",\n'
+            f'      "{HA_RENEW_KEY}": "{renew_val}",\n'
+            f'      "{HA_RETRY_KEY}": "{retry_val}",\n'
+        )
+        lines = text.splitlines(keepends=True)
+        inserted = False
+        for index, line in enumerate(lines):
+            if "execution.checkpointing.interval" in line:
+                lines.insert(index + 1, entries)
+                inserted = True
+                break
+        if not inserted:
+            raise StampError(
+                "transform ha_lease missing anchor in _flink_recover.sh: "
+                "execution.checkpointing.interval"
+            )
+        text = "".join(lines)
+    require_marker(text, HA_LEASE_KEY, "ha_lease", "_flink_recover.sh")
+    require_marker(text, f'"{lease_val}"', "ha_lease", "_flink_recover.sh")
+    require_marker(text, HA_RENEW_KEY, "ha_lease", "_flink_recover.sh")
+    require_marker(text, HA_RETRY_KEY, "ha_lease", "_flink_recover.sh")
+    if "high-availability.type" in text and re.search(
+        r'high-availability\.type"\s*:\s*"NONE"', text
+    ):
+        raise StampError("refusing to set high-availability.type: NONE")
+    return text
+
+
+def transform_recover(text: str, cfg: StampConfig) -> str:
+    file_name = "_flink_recover.sh"
+    if not _CHECKPOINT_INTERVAL_RE.search(text):
+        raise StampError(
+            f"transform checkpoint_values missing anchor in {file_name}: "
+            "execution.checkpointing.interval"
+        )
+    if not _CHECKPOINT_PAUSE_RE.search(text):
+        raise StampError(
+            f"transform checkpoint_values missing anchor in {file_name}: "
+            "execution.checkpointing.min-pause"
+        )
+    interval_ms = cfg.checkpoint_interval_ms
+    min_pause_ms = cfg.checkpoint_min_pause_ms
     text = _CHECKPOINT_INTERVAL_RE.sub(rf"\g<1>{interval_ms} ms\2", text)
     text = _CHECKPOINT_PAUSE_RE.sub(rf"\g<1>{min_pause_ms} ms\2", text)
+    require_marker(
+        text,
+        f'"{interval_ms} ms"',
+        "checkpoint_values",
+        file_name,
+    )
+    require_marker(
+        text,
+        f'"{min_pause_ms} ms"',
+        "checkpoint_values",
+        file_name,
+    )
 
     live_get = (
         '"$KUBECTL" --context "$CTX" -n "$NS" get flinkdeployment "$CR" '
         '-o json > "$OUT/flink-cr-live.json" || fail "live_cr_fetch_failed"\n\n'
     )
     span = _heredoc_span(text, "fix-merge.json")
-    if span is not None:
-        start, end = span
-        if "flink-cr-live.json" not in text:
-            text = text[:start] + live_get + text[start:]
-            start += len(live_get)
-            end += len(live_get)
-        block = text[start:end]
-        if ENV_REWRITE_MARKER not in block:
-            injected = False
-            for anchor in ("from pathlib import Path\n", "import json\n"):
-                if anchor in block:
-                    block = block.replace(
-                        anchor,
-                        anchor + env_rewrite_python(interval_ms, min_pause_ms),
-                        1,
-                    )
-                    injected = True
-                    break
-            if not injected:
-                nl = block.find("\n")
-                injected_src = env_rewrite_python(interval_ms, min_pause_ms)
-                block = block[: nl + 1] + injected_src + block[nl + 1 :]
-        assign = (
-            'merge.setdefault("spec", {})["podTemplate"] = {"spec": {"containers": containers}}\n'
+    if span is None:
+        raise StampError(
+            f"transform env_by_name_rewrite missing anchor in {file_name}: fix-merge.json"
         )
-        if assign not in block:
-            write_idx = block.find('Path("$OUT/fix-merge.json")')
-            if write_idx < 0:
-                write_idx = block.find('out / "fix-merge.json"')
-            if write_idx < 0:
-                write_idx = block.find("fix-merge.json")
-                if write_idx >= 0:
-                    write_idx = block.rfind("\n", 0, write_idx) + 1
-            if write_idx >= 0:
-                block = block[:write_idx] + assign + block[write_idx:]
-        text = text[:start] + block + text[end:]
-    elif ENV_REWRITE_MARKER not in text:
-        text = (
-            text.rstrip()
-            + "\n\n# "
-            + ENV_REWRITE_MARKER
-            + "\n# Rewrite FLINK_CHECKPOINT_INTERVAL_MS / "
-            + "FLINK_CHECKPOINT_MIN_PAUSE_MS by name\n"
-            + "# inside spec.podTemplate.spec.containers[*].env and include the "
-            + "full containers list\n"
-            + "# in the merge (JSON merge patch replaces lists whole).\n"
-        )
+    start, end = span
+    if "flink-cr-live.json" not in text:
+        text = text[:start] + live_get + text[start:]
+        start += len(live_get)
+        end += len(live_get)
+    block = text[start:end]
+    if ENV_REWRITE_MARKER not in block:
+        injected = False
+        for anchor in ("from pathlib import Path\n", "import json\n"):
+            if anchor in block:
+                block = block.replace(
+                    anchor,
+                    anchor + env_rewrite_python(interval_ms, min_pause_ms),
+                    1,
+                )
+                injected = True
+                break
+        if not injected:
+            raise StampError(
+                f"transform env_by_name_rewrite missing anchor in {file_name}: "
+                "import json / from pathlib import Path"
+            )
+    assign = 'merge.setdefault("spec", {})["podTemplate"] = {"spec": {"containers": containers}}\n'
+    if assign not in block:
+        write_idx = _write_idx(block)
+        if write_idx < 0:
+            raise StampError(
+                f"transform env_by_name_rewrite missing anchor in {file_name}: fix-merge.json write"
+            )
+        block = block[:write_idx] + assign + block[write_idx:]
+    if RV_MARKER not in block:
+        write_idx = _write_idx(block)
+        if write_idx < 0:
+            raise StampError(
+                f"transform resource_version missing anchor in {file_name}: fix-merge.json write"
+            )
+        block = block[:write_idx] + resource_version_python() + block[write_idx:]
+    text = text[:start] + block + text[end:]
+    require_marker(text, ENV_REWRITE_MARKER, "env_by_name_rewrite", file_name)
+    require_marker(text, "containers", "env_by_name_rewrite", file_name)
+    require_marker(text, "flink-cr-live.json", "env_by_name_rewrite", file_name)
+    require_marker(text, "resourceVersion", "resource_version", file_name)
+    require_marker(text, RV_MARKER, "resource_version", file_name)
 
-    if "flink-cr-final.json" in text and ENV_POST_ASSERT_MARKER not in text:
+    require_anchor(text, "flink-cr-final.json", "post_recover_env_assert", file_name)
+    if ENV_POST_ASSERT_MARKER not in text:
         assert_line = (
             'assert fc.get("restart-strategy.type")=="failure-rate", '
             'fc.get("restart-strategy.type")\n'
@@ -367,37 +632,65 @@ def transform_recover(text: str, interval_ms: int, min_pause_ms: int) -> str:
             text = text.replace(assert_line, assert_line + payload, 1)
         else:
             load_line = 'cr=json.load(open(out/"flink-cr-final.json"))\n'
-            if load_line in text:
-                text = text.replace(load_line, load_line + payload, 1)
+            if load_line not in text:
+                raise StampError(
+                    f"transform post_recover_env_assert missing anchor in {file_name}: "
+                    "restart-strategy assert / flink-cr-final.json load"
+                )
+            text = text.replace(load_line, load_line + payload, 1)
+    require_marker(text, ENV_POST_ASSERT_MARKER, "post_recover_env_assert", file_name)
+
+    require_anchor(text, "patch_failed", "patch_conflict", file_name)
+    if "patch_conflict" not in text:
+        if not _PATCH_FAIL_RE.search(text):
+            raise StampError(
+                f"transform patch_conflict missing anchor in {file_name}: "
+                '[[ $RC -eq 0 ]] || fail "patch_failed"'
+            )
+        text = _PATCH_FAIL_RE.sub(patch_conflict_block(), text, count=1)
+    require_marker(text, "patch_conflict", "patch_conflict", file_name)
+
+    text = _inject_ha_keys(text, cfg)
     return text
 
 
 def transform_start(text: str, identity: str) -> str:
+    file_name = "_remote_soak_start.sh"
     text = text.replace(
         "baseline → observer → producer",
         "baseline → watcher → observer → producer",
     )
-    if _WAIT_BLOCK_RE.search(text):
+    if not (_WAIT_BLOCK_RE.search(text) or _WAIT_LINE_RE.search(text)):
+        if ".status.succeeded" not in text:
+            raise StampError(
+                f"transform kubectl_wait_to_poll missing anchor in {file_name}: "
+                "wait --for=condition=complete"
+            )
+    elif _WAIT_BLOCK_RE.search(text):
         kubectl_token = _WAIT_BLOCK_RE.search(text).group("k")
         text = _WAIT_BLOCK_RE.sub(poll_loop(kubectl_token), text, count=1)
-    elif _WAIT_LINE_RE.search(text):
+    else:
         line = _WAIT_LINE_RE.search(text).group(0)
         kubectl_token = '"$KUBECTL"' if "$KUBECTL" in line else "kubectl"
         text = _WAIT_LINE_RE.sub(poll_loop(kubectl_token).rstrip("\n"), text, count=1)
+    require_marker(text, ".status.succeeded", "kubectl_wait_to_poll", file_name)
 
-    if 'log "baseline PASS"' in text and "watcher_not_armed" not in text:
+    require_anchor(text, 'log "baseline PASS"', "watcher_arm", file_name)
+    if "watcher_not_armed" not in text:
         text = text.replace(
             'log "baseline PASS"\n',
             'log "baseline PASS"\n' + watcher_arm_block(identity),
             1,
         )
+    require_marker(text, "watcher_not_armed", "watcher_arm", file_name)
     return text
 
 
 def transform_watcher_start(text: str, poll_seconds: int, grace_seconds: int) -> str:
+    file_name = "_watcher_start.sh"
     match = _WATCH_INVOKE_RE.search(text)
     if match is None:
-        raise StampError("_watcher_start.sh: watch invocation not found")
+        raise StampError(f"transform watcher_flags missing anchor in {file_name}: watch")
     flags = f" --poll-interval-seconds {poll_seconds} --transitional-grace-seconds {grace_seconds}"
     start = match.end()
     rest = text[start:]
@@ -406,11 +699,50 @@ def transform_watcher_start(text: str, poll_seconds: int, grace_seconds: int) ->
         rest,
     )
     if existing is not None:
-        return text[:start] + flags + rest[existing.end() :]
-    return text[:start] + flags + rest
+        text = text[:start] + flags + rest[existing.end() :]
+    else:
+        text = text[:start] + flags + rest
+    invoke_line = next(
+        (line for line in text.splitlines() if "python3" in line and " watch" in line),
+        "",
+    )
+    if f"--poll-interval-seconds {poll_seconds}" not in invoke_line:
+        raise StampError(
+            f"transform watcher_flags output marker missing in {file_name}: --poll-interval-seconds"
+        )
+    if f"--transitional-grace-seconds {grace_seconds}" not in invoke_line:
+        raise StampError(
+            f"transform watcher_flags output marker missing in {file_name}: "
+            "--transitional-grace-seconds"
+        )
+
+    require_anchor(text, "watcher_not_armed_after_180s", "watcher_stop_on_timeout", file_name)
+    require_anchor(text, "watcher_exited_early", "watcher_stop_on_timeout", file_name)
+    if "stop_own_watcher" not in text:
+        text = text.replace(
+            'fail "watcher_exited_early"',
+            'stop_own_watcher; fail "watcher_exited_early"',
+        )
+        text = text.replace(
+            'fail "watcher_not_armed_after_180s pid=$WPID"',
+            'stop_own_watcher; fail "watcher_not_armed_after_180s pid=$WPID"',
+        )
+        inserted = False
+        for anchor in ('fail(){ log "FAIL_CLOSED: $*"; echo "RESULT=FAIL reason=$*"; exit 1; }\n',):
+            if anchor in text:
+                text = text.replace(anchor, anchor + stop_own_watcher_fn(), 1)
+                inserted = True
+                break
+        if not inserted:
+            marker = 'log "starting watcher"\n'
+            require_anchor(text, marker.rstrip("\n"), "watcher_stop_on_timeout", file_name)
+            text = text.replace(marker, stop_own_watcher_fn() + "\n" + marker, 1)
+    require_marker(text, 'kill "$WPID"', "watcher_stop_on_timeout", file_name)
+    return text
 
 
 def transform_status(text: str) -> str:
+    file_name = "_status.sh"
     if "export DOCKER_HOST" not in text:
         export_line = f'export DOCKER_HOST="{DEFAULT_DOCKER_HOST}"\n'
         if text.startswith("#!"):
@@ -420,25 +752,36 @@ def transform_status(text: str) -> str:
             text = export_line + text
 
     if "<<'PY'" in text and "jobs-overview-status.json" in text:
+        require_marker(text, "jobs-overview-status.json", "status_heredoc", file_name)
         return text
 
     snippet = status_heredoc()
     if _STATUS_ONELINER_RE.search(text):
-        return _STATUS_ONELINER_RE.sub(snippet, text, count=1)
-    if _STATUS_ONELINER_LINE_RE.search(text):
-        return _STATUS_ONELINER_LINE_RE.sub(snippet, text, count=1)
-    if "BROKEN_FLINK_REST_ONELINER" in text:
-        return text.replace("BROKEN_FLINK_REST_ONELINER", snippet, 1)
-    raise StampError("_status.sh: broken flink REST one-liner not found")
+        text = _STATUS_ONELINER_RE.sub(snippet, text, count=1)
+    elif _STATUS_ONELINER_LINE_RE.search(text):
+        text = _STATUS_ONELINER_LINE_RE.sub(snippet, text, count=1)
+    elif "BROKEN_FLINK_REST_ONELINER" in text:
+        text = text.replace("BROKEN_FLINK_REST_ONELINER", snippet, 1)
+    else:
+        raise StampError(
+            f"transform status_heredoc missing anchor in {file_name}: broken flink REST one-liner"
+        )
+    require_marker(text, "python3 - <<'PY'", "status_heredoc", file_name)
+    require_marker(text, "jobs-overview-status.json", "status_heredoc", file_name)
+    return text
 
 
 def rewrite_sha_pins(text: str, verify_sha: str, producer_sha: str) -> str:
+    file_name = "_remote_soak_start.sh"
     if not _VERIFY_SHA_RE.search(text):
-        raise StampError("VERIFY_SHA= not found in _remote_soak_start.sh")
+        raise StampError(f"transform sha_pins missing anchor in {file_name}: VERIFY_SHA=")
     if not _PRODUCER_SHA_RE.search(text):
-        raise StampError("PRODUCER_SHA= not found in _remote_soak_start.sh")
+        raise StampError(f"transform sha_pins missing anchor in {file_name}: PRODUCER_SHA=")
     text = _VERIFY_SHA_RE.sub(f"VERIFY_SHA={verify_sha}", text, count=1)
-    return _PRODUCER_SHA_RE.sub(f"PRODUCER_SHA={producer_sha}", text, count=1)
+    text = _PRODUCER_SHA_RE.sub(f"PRODUCER_SHA={producer_sha}", text, count=1)
+    require_marker(text, f"VERIFY_SHA={verify_sha}", "sha_pins", file_name)
+    require_marker(text, f"PRODUCER_SHA={producer_sha}", "sha_pins", file_name)
+    return text
 
 
 def launch_order_markdown(cfg: StampConfig, source_event: str, source_order: str) -> str:
@@ -449,6 +792,36 @@ def launch_order_markdown(cfg: StampConfig, source_event: str, source_order: str
     runtime = f"/tmp/agentflow-soak-runtime-{ident}"  # noqa: S108
     recover_out = f"/tmp/agentflow-flink-recover-{ident}"  # noqa: S108
     evidence = f"/var/agentflow-task-state/golden-4h-soak-rv-{ident}"
+    recover_result = recover_result_string(ident)
+    facts = [
+        f"- identity: `{ident}`",
+        f"- source identity: `{cfg.source_identity}`",
+        f"- RUN_LABEL: `golden-4h-soak-rv-{ident}`",
+        f"- EVENT_PREFIX: `{cfg.event_prefix}` (was `{source_event}`)",
+        f"- ORDER_PREFIX: `{cfg.order_prefix}` (was `{source_order}`)",
+        f"- recover result string: `{recover_result}`",
+        f"- pack: `{pack}/`",
+        f"- control scripts: `{ctl}/`",
+        f"- watcher dir: `{watcher}/`",
+        f"- runtime out: `{runtime}/`",
+        f"- recover out: `{recover_out}/`",
+        f"- evidence hostPath: `{evidence}`",
+        f"- checkpoint interval / min-pause: `{cfg.checkpoint_interval_ms} ms` / "
+        f"`{cfg.checkpoint_min_pause_ms} ms` (flinkConfiguration + matching env)",
+        f"- watcher poll / transitional grace: `{cfg.watcher_poll_seconds}s` / "
+        f"`{cfg.watcher_grace_seconds}s`",
+    ]
+    if cfg.ha_lease_duration_seconds is not None:
+        facts.append(
+            f"- job-HA lease / renew / retry: `{cfg.ha_lease_duration_seconds} s` / "
+            f"`{cfg.ha_renew_deadline_seconds} s` / `{cfg.ha_retry_period_seconds} s`"
+        )
+    facts.extend(
+        [
+            "- Kafka group unchanged: `agentflow-golden-soak-rv-20260802-01`",
+            "- kind context / namespace / CR name+UID / node / ClickHouse container unchanged",
+        ]
+    )
     return "\n".join(
         [
             f"# Soak {ident} launch order",
@@ -463,23 +836,7 @@ def launch_order_markdown(cfg: StampConfig, source_event: str, source_order: str
             "",
             "## Identity facts",
             "",
-            f"- identity: `{ident}`",
-            f"- source identity: `{cfg.source_identity}`",
-            f"- RUN_LABEL: `golden-4h-soak-rv-{ident}`",
-            f"- EVENT_PREFIX: `{cfg.event_prefix}` (was `{source_event}`)",
-            f"- ORDER_PREFIX: `{cfg.order_prefix}` (was `{source_order}`)",
-            f"- pack: `{pack}/`",
-            f"- control scripts: `{ctl}/`",
-            f"- watcher dir: `{watcher}/`",
-            f"- runtime out: `{runtime}/`",
-            f"- recover out: `{recover_out}/`",
-            f"- evidence hostPath: `{evidence}`",
-            f"- checkpoint interval / min-pause: `{cfg.checkpoint_interval_ms} ms` / "
-            f"`{cfg.checkpoint_min_pause_ms} ms` (flinkConfiguration + matching env)",
-            f"- watcher poll / transitional grace: `{cfg.watcher_poll_seconds}s` / "
-            f"`{cfg.watcher_grace_seconds}s`",
-            "- Kafka group unchanged: `agentflow-golden-soak-rv-20260802-01`",
-            "- kind context / namespace / CR name+UID / node / ClickHouse container unchanged",
+            *facts,
             "",
             "## SCP targets",
             "",
@@ -495,8 +852,9 @@ def launch_order_markdown(cfg: StampConfig, source_event: str, source_order: str
             "2. Warm the operator mutating webhook with a server-side dry-run",
             "   annotation patch on FlinkDeployment `agentflow-soak-rv-stream-processor`.",
             f"3. Recover: `bash {ctl}/_flink_recover.sh`",
-            "   (nonce bump, CP stretch + env-by-name rewrite, wait STABLE/RUNNING,",
-            "   REST 2/2, 90 s checkpoint-growth hold, post-recover env assertion).",
+            f"   Expect `RESULT={recover_result}` (nonce bump, CP stretch + env-by-name",
+            "   rewrite, wait STABLE/RUNNING, REST 2/2, 90 s checkpoint-growth hold,",
+            "   post-recover env assertion).",
             f"4. Start: `nohup bash {ctl}/_remote_soak_start.sh`",
             "   Inside start, in order: preflight → Gate A → **baseline with a 15 s",
             "   `.status.succeeded` / `.status.failed` poll (600 s budget, not",
@@ -575,6 +933,57 @@ def run_bash_n(bash: Path, script: Path) -> None:
         raise StampError(f"bash -n failed: {script.name}: {detail}")
 
 
+def _write_tree(
+    root: Path,
+    stamped: dict[str, str],
+    binary_files: dict[str, bytes],
+    watcher_rel: str,
+    watcher_bytes: bytes,
+) -> dict[str, bytes]:
+    written: dict[str, bytes] = {}
+    for relative, text in stamped.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = encode_text(text)
+        target.write_bytes(payload)
+        written[relative] = payload
+    for relative, payload in binary_files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        written[relative] = payload
+    watcher_target = root / watcher_rel
+    watcher_target.parent.mkdir(parents=True, exist_ok=True)
+    watcher_target.write_bytes(watcher_bytes)
+    written[watcher_rel] = watcher_bytes
+    return written
+
+
+def _validate_stage(stage_dir: Path, written: dict[str, bytes]) -> str:
+    bash = find_bash()
+    bash_status = "skipped"
+    if bash is not None:
+        for relative in sorted(written):
+            if relative.endswith(".sh"):
+                run_bash_n(bash, stage_dir / relative)
+        bash_status = "ok"
+    with tempfile.TemporaryDirectory(prefix="stamp-soak-py-compile-") as tmp:
+        tmp_dir = Path(tmp)
+        for relative in sorted(written):
+            if not relative.endswith(".py"):
+                continue
+            cfile = tmp_dir / (relative.replace("/", "_") + "c")
+            try:
+                py_compile.compile(
+                    str(stage_dir / relative),
+                    cfile=str(cfile),
+                    doraise=True,
+                )
+            except py_compile.PyCompileError as exc:
+                raise StampError(f"py_compile failed: {relative}: {exc}") from exc
+    return bash_status
+
+
 def stamp(cfg: StampConfig) -> dict[str, object]:
     if not cfg.source_dir.is_dir():
         raise StampError(f"source-dir not found: {posix(cfg.source_dir)}")
@@ -583,12 +992,17 @@ def stamp(cfg: StampConfig) -> dict[str, object]:
     missing = missing_required(cfg.source_dir)
     if missing:
         raise StampError("missing required source files: " + ", ".join(missing))
+    overlap = out_overlaps_source(cfg.out_dir, cfg.source_dir)
+    if overlap is not None:
+        raise StampError(f"refusing unsafe out-dir: {overlap}")
     if cfg.out_dir.exists() and not cfg.force:
         raise StampError(
             f"refusing to overwrite existing out-dir: {posix(cfg.out_dir)} (use --force)"
         )
-    if cfg.out_dir.exists() and cfg.force:
-        shutil.rmtree(cfg.out_dir)
+
+    old_suffix = identity_short_suffix(cfg.source_identity)
+    new_suffix = identity_short_suffix(cfg.identity)
+    recover_result = recover_result_string(cfg.identity)
 
     start_src = decode_text((cfg.source_dir / "_remote_soak_start.sh").read_bytes())
     source_event = parse_assignment(start_src, "EVENT_PREFIX")
@@ -601,6 +1015,7 @@ def stamp(cfg: StampConfig) -> dict[str, object]:
         "event_prefix": [],
         "order_prefix": [],
     }
+    short_marker_locations: list[dict[str, object]] = []
     binary_files: dict[str, bytes] = {}
 
     for path in iter_source_files(cfg.source_dir):
@@ -620,10 +1035,13 @@ def stamp(cfg: StampConfig) -> dict[str, object]:
             prefix_locations["order_prefix"].append({"file": relative, "line": line_no})
         text, event_n = replace_token(text, source_event, cfg.event_prefix)
         text, order_n = replace_token(text, source_order, cfg.order_prefix)
+        text, short_locs, short_n = apply_short_markers(text, relative, old_suffix, new_suffix)
+        short_marker_locations.extend(short_locs)
         substitutions[relative] = {
             "identity": ident_n,
             "event_prefix": event_n,
             "order_prefix": order_n,
+            "short_markers": short_n,
         }
         stamped[relative] = text
 
@@ -631,11 +1049,7 @@ def stamp(cfg: StampConfig) -> dict[str, object]:
     start_name = "_remote_soak_start.sh"
     watcher_name = "_watcher_start.sh"
     status_name = "_status.sh"
-    stamped[recover_name] = transform_recover(
-        stamped[recover_name],
-        cfg.checkpoint_interval_ms,
-        cfg.checkpoint_min_pause_ms,
-    )
+    stamped[recover_name] = transform_recover(stamped[recover_name], cfg)
     stamped[start_name] = transform_start(stamped[start_name], cfg.identity)
     stamped[watcher_name] = transform_watcher_start(
         stamped[watcher_name],
@@ -655,98 +1069,90 @@ def stamp(cfg: StampConfig) -> dict[str, object]:
     watcher_text = decode_text(watcher_bytes) if is_text_name(watcher_rel) else None
 
     unresolved: list[str] = []
+    leftover_hits: list[str] = []
     for relative, text in stamped.items():
         if cfg.source_identity in text:
             unresolved.append(relative)
+        left = leftover_short_markers(text, old_suffix)
+        if left:
+            leftover_hits.append(f"{relative} ({', '.join(left)})")
     if watcher_text is not None and cfg.source_identity in watcher_text:
         unresolved.append(watcher_rel)
+    if watcher_text is not None:
+        left = leftover_short_markers(watcher_text, old_suffix)
+        if left:
+            leftover_hits.append(f"{watcher_rel} ({', '.join(left)})")
     unresolved.sort()
     if unresolved:
         raise StampError("unresolved source-identity tokens remain: " + ", ".join(unresolved))
+    if leftover_hits:
+        raise StampError(
+            "unresolved short identity markers remain: " + "; ".join(sorted(leftover_hits))
+        )
+    if recover_result not in stamped[recover_name]:
+        raise StampError(f"{recover_result} missing from {recover_name}")
 
-    cfg.out_dir.mkdir(parents=True, exist_ok=True)
-    written: dict[str, bytes] = {}
-    for relative, text in stamped.items():
-        target = cfg.out_dir / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        payload = encode_text(text)
-        target.write_bytes(payload)
-        written[relative] = payload
-    for relative, payload in binary_files.items():
-        target = cfg.out_dir / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(payload)
-        written[relative] = payload
-    watcher_target = cfg.out_dir / watcher_rel
-    watcher_target.parent.mkdir(parents=True, exist_ok=True)
-    watcher_target.write_bytes(watcher_bytes)
-    written[watcher_rel] = watcher_bytes
+    stage_dir = staging_dir_for(cfg.out_dir)
+    if stage_dir.exists():
+        shutil.rmtree(stage_dir)
+    try:
+        stage_dir.mkdir(parents=True, exist_ok=False)
+        written = _write_tree(stage_dir, stamped, binary_files, watcher_rel, watcher_bytes)
+        bash_status = _validate_stage(stage_dir, written)
 
-    bash = find_bash()
-    bash_status = "skipped"
-    if bash is not None:
+        new_text_files: dict[str, str] = {}
+        if watcher_text is not None:
+            new_text_files[watcher_rel] = watcher_text
+        diff_text = unified_diff_md(originals, stamped, new_text_files)
+        launch_text = launch_order_markdown(cfg, source_event, source_order)
+        if recover_result not in launch_text:
+            raise StampError(f"{recover_result} missing from LAUNCH_ORDER.md")
+        (stage_dir / "DIFF_VS_SOURCE.md").write_bytes(encode_text(diff_text))
+        (stage_dir / "LAUNCH_ORDER.md").write_bytes(encode_text(launch_text))
+        written["DIFF_VS_SOURCE.md"] = encode_text(diff_text)
+        written["LAUNCH_ORDER.md"] = encode_text(launch_text)
+
+        files_meta: dict[str, object] = {}
         for relative in sorted(written):
-            if relative.endswith(".sh"):
-                run_bash_n(bash, cfg.out_dir / relative)
-        bash_status = "ok"
+            entry: dict[str, object] = {"sha256": sha256_bytes(written[relative])}
+            if relative in substitutions:
+                entry["substitutions"] = substitutions[relative]
+            files_meta[relative] = entry
 
-    with tempfile.TemporaryDirectory(prefix="stamp-soak-py-compile-") as tmp:
-        tmp_dir = Path(tmp)
-        for relative in sorted(written):
-            if not relative.endswith(".py"):
-                continue
-            cfile = tmp_dir / (relative.replace("/", "_") + "c")
-            try:
-                py_compile.compile(
-                    str(cfg.out_dir / relative),
-                    cfile=str(cfile),
-                    doraise=True,
-                )
-            except py_compile.PyCompileError as exc:
-                raise StampError(f"py_compile failed: {relative}: {exc}") from exc
-
-    new_text_files: dict[str, str] = {}
-    if watcher_text is not None:
-        new_text_files[watcher_rel] = watcher_text
-    diff_text = unified_diff_md(originals, stamped, new_text_files)
-    launch_text = launch_order_markdown(cfg, source_event, source_order)
-    (cfg.out_dir / "DIFF_VS_SOURCE.md").write_bytes(encode_text(diff_text))
-    (cfg.out_dir / "LAUNCH_ORDER.md").write_bytes(encode_text(launch_text))
-    written["DIFF_VS_SOURCE.md"] = encode_text(diff_text)
-    written["LAUNCH_ORDER.md"] = encode_text(launch_text)
-
-    files_meta: dict[str, object] = {}
-    for relative in sorted(written):
-        entry: dict[str, object] = {"sha256": sha256_bytes(written[relative])}
-        if relative in substitutions:
-            entry["substitutions"] = substitutions[relative]
-        files_meta[relative] = entry
-
-    manifest: dict[str, object] = {
-        "bash_syntax_check": bash_status,
-        "event_prefix": cfg.event_prefix,
-        "files": files_meta,
-        "identity": cfg.identity,
-        "knobs": {
-            "checkpoint_interval_ms": cfg.checkpoint_interval_ms,
-            "checkpoint_min_pause_ms": cfg.checkpoint_min_pause_ms,
-            "watcher_grace_seconds": cfg.watcher_grace_seconds,
-            "watcher_poll_seconds": cfg.watcher_poll_seconds,
-            "watcher_script": posix(cfg.watcher_script),
-        },
-        "order_prefix": cfg.order_prefix,
-        "out_dir": posix(cfg.out_dir),
-        "prefix_locations": prefix_locations,
-        "py_compile": "ok",
-        "source_dir": posix(cfg.source_dir),
-        "source_event_prefix": source_event,
-        "source_identity": cfg.source_identity,
-        "source_order_prefix": source_order,
-        "unresolved": [],
-        "watcher_script_sha256": sha256_bytes(watcher_bytes),
-    }
-    manifest_text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    (cfg.out_dir / "MANIFEST.json").write_bytes(encode_text(manifest_text))
+        manifest: dict[str, object] = {
+            "bash_syntax_check": bash_status,
+            "event_prefix": cfg.event_prefix,
+            "files": files_meta,
+            "identity": cfg.identity,
+            "knobs": {
+                "checkpoint_interval_ms": cfg.checkpoint_interval_ms,
+                "checkpoint_min_pause_ms": cfg.checkpoint_min_pause_ms,
+                "ha_lease_duration_seconds": cfg.ha_lease_duration_seconds,
+                "ha_renew_deadline_seconds": cfg.ha_renew_deadline_seconds,
+                "ha_retry_period_seconds": cfg.ha_retry_period_seconds,
+                "watcher_grace_seconds": cfg.watcher_grace_seconds,
+                "watcher_poll_seconds": cfg.watcher_poll_seconds,
+                "watcher_script": posix(cfg.watcher_script),
+            },
+            "order_prefix": cfg.order_prefix,
+            "out_dir": posix(cfg.out_dir),
+            "prefix_locations": prefix_locations,
+            "py_compile": "ok",
+            "short_marker_locations": short_marker_locations,
+            "source_dir": posix(cfg.source_dir),
+            "source_event_prefix": source_event,
+            "source_identity": cfg.source_identity,
+            "source_order_prefix": source_order,
+            "unresolved": [],
+            "watcher_script_sha256": sha256_bytes(watcher_bytes),
+        }
+        manifest_text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+        (stage_dir / "MANIFEST.json").write_bytes(encode_text(manifest_text))
+        replace_out_dir(stage_dir, cfg.out_dir)
+    except Exception:
+        if stage_dir.exists():
+            shutil.rmtree(stage_dir, ignore_errors=True)
+        raise
     return manifest
 
 
@@ -769,9 +1175,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkpoint-min-pause-ms", type=positive_int, default=10000)
     parser.add_argument("--watcher-poll-seconds", type=positive_int, default=30)
     parser.add_argument("--watcher-grace-seconds", type=positive_int, default=90)
+    parser.add_argument("--ha-lease-duration-seconds", type=positive_int, default=None)
+    parser.add_argument("--ha-renew-deadline-seconds", type=positive_int, default=None)
+    parser.add_argument("--ha-retry-period-seconds", type=positive_int, default=None)
     parser.add_argument("--watcher-script", type=Path, default=Path(DEFAULT_WATCHER_SCRIPT))
     parser.add_argument("--force", action="store_true")
     return parser
+
+
+def _validate_ha_knobs(
+    lease: int | None, renew: int | None, retry: int | None
+) -> tuple[int | None, int | None, int | None]:
+    given = (lease, renew, retry)
+    if all(value is None for value in given):
+        return given
+    if lease is None or renew is None or retry is None:
+        raise StampError(
+            "HA lease knobs must be given together: "
+            "--ha-lease-duration-seconds --ha-renew-deadline-seconds "
+            "--ha-retry-period-seconds"
+        )
+    if renew >= lease:
+        raise StampError("ha-renew-deadline-seconds must be < ha-lease-duration-seconds")
+    if retry >= renew:
+        raise StampError("ha-retry-period-seconds must be < ha-renew-deadline-seconds")
+    return lease, renew, retry
 
 
 def config_from_args(args: argparse.Namespace) -> StampConfig:
@@ -783,6 +1211,13 @@ def config_from_args(args: argparse.Namespace) -> StampConfig:
         raise StampError("--identity is empty")
     if args.source_identity == args.identity:
         raise StampError("--identity must differ from --source-identity")
+    lease, renew, retry = _validate_ha_knobs(
+        args.ha_lease_duration_seconds,
+        args.ha_renew_deadline_seconds,
+        args.ha_retry_period_seconds,
+    )
+    identity_short_suffix(args.source_identity)
+    identity_short_suffix(args.identity)
     return StampConfig(
         source_dir=args.source_dir,
         out_dir=args.out_dir,
@@ -796,6 +1231,9 @@ def config_from_args(args: argparse.Namespace) -> StampConfig:
         watcher_grace_seconds=args.watcher_grace_seconds,
         watcher_script=args.watcher_script,
         force=args.force,
+        ha_lease_duration_seconds=lease,
+        ha_renew_deadline_seconds=renew,
+        ha_retry_period_seconds=retry,
     )
 
 

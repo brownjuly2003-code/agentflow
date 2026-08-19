@@ -622,3 +622,121 @@ def test_pod_restart_delta_is_immediate_even_during_transition(tmp_path, monkeyp
     assert "flink_job_state=SUSPENDED" in calls["reasons"]
     assert "pod_restarts=2 baseline=0" in calls["reasons"]
     assert not any(reason.startswith("transitional_persisted=") for reason in calls["reasons"])
+
+
+def _snapshot_error() -> tuple[dict, dict, list[str]]:
+    return ({}, {}, ["watch_flinkdeployment: timeout"])
+
+
+def test_transition_then_snapshot_errors_past_grace_captures(tmp_path, monkeypatch):
+    module = _load_module()
+    _install_clock(module, monkeypatch)
+    calls = _stub_capture(module, monkeypatch, tmp_path)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(), []),
+            _snapshot_error(),
+        ],
+    )
+
+    rc = module.watch(
+        _UnusedClient(),
+        _watch_config(module, tmp_path),
+        poll_interval_seconds=90.0,
+        timeout_seconds=0,
+        stop_file=None,
+        transitional_grace_seconds=90.0,
+    )
+
+    assert rc == 2
+    assert calls["count"] == 1
+    assert "flink_job_state=SUSPENDED" in calls["reasons"]
+    assert "snapshot_errors_during_transition=1" in calls["reasons"]
+
+
+def test_transition_then_snapshot_errors_recover_before_grace(tmp_path, monkeypatch):
+    module = _load_module()
+    clock = _install_clock(module, monkeypatch)
+    sleeps = {"n": 0}
+
+    def sleep_then_stop(seconds: float) -> None:
+        clock.sleep(seconds)
+        sleeps["n"] += 1
+        if sleeps["n"] >= 4:
+            raise RuntimeError("stop-after-recovery")
+
+    def ban_capture(*_args, **_kwargs):
+        raise AssertionError("capture_evidence must not run when health returns before grace")
+
+    monkeypatch.setattr(module.time, "sleep", sleep_then_stop)
+    monkeypatch.setattr(module, "capture_evidence", ban_capture)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            (_cr(state="SUSPENDED"), _pods(), []),
+            _snapshot_error(),
+            (_cr(), _pods(), []),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="stop-after-recovery"):
+        module.watch(
+            _UnusedClient(),
+            _watch_config(module, tmp_path),
+            poll_interval_seconds=1.0,
+            timeout_seconds=0,
+            stop_file=None,
+            transitional_grace_seconds=90.0,
+        )
+
+    bundle_dirs = [
+        path for path in tmp_path.iterdir() if path.is_dir() and path.name.startswith("failure-")
+    ]
+    assert bundle_dirs == []
+    recovered = [
+        entry
+        for entry in _chronology(tmp_path / "failure-watcher-chronology.jsonl")
+        if entry.get("state") == "transient_recovered"
+    ]
+    assert len(recovered) == 1
+    assert "flink_job_state=SUSPENDED" in recovered[0]["recovered_reasons"]
+
+
+def test_snapshot_errors_without_open_window_do_not_capture(tmp_path, monkeypatch):
+    module = _load_module()
+    _install_clock(module, monkeypatch)
+    stop_file = tmp_path / "stop-request"
+    calls = _stub_capture(module, monkeypatch, tmp_path)
+    _queue_snapshots(
+        module,
+        monkeypatch,
+        [
+            (_cr(), _pods(), []),
+            _snapshot_error(),
+            _snapshot_error(),
+        ],
+        stop_file=stop_file,
+    )
+
+    rc = module.watch(
+        _UnusedClient(),
+        _watch_config(module, tmp_path),
+        poll_interval_seconds=1.0,
+        timeout_seconds=0,
+        stop_file=stop_file,
+        transitional_grace_seconds=90.0,
+    )
+
+    assert rc == 0
+    assert calls["count"] == 0
+    bundle_dirs = [
+        path for path in tmp_path.iterdir() if path.is_dir() and path.name.startswith("failure-")
+    ]
+    assert bundle_dirs == []
+    state = json.loads((tmp_path / "failure-watcher-state.json").read_text(encoding="utf-8"))
+    assert state["state"] == "stopped"

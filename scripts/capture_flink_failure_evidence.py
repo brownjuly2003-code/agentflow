@@ -887,7 +887,10 @@ def watch(
     window instead of capturing immediately. Recovery inside the window is
     logged as ``transient_recovered`` and the watcher stays armed. Immediate
     terminal states, failed lifecycle/JM status, and pod restart deltas still
-    capture on the first armed sample. ``transitional_grace_seconds=0``
+    capture on the first armed sample. Snapshot errors alone do not open a
+    window and do not capture. If a window is already open and snapshot errors
+    persist until grace expires, capture with the last transitional reasons
+    plus ``snapshot_errors_during_transition=<n>``. ``transitional_grace_seconds=0``
     restores the legacy immediate behaviour.
     """
     output_dir = Path(config.output_dir)
@@ -901,6 +904,7 @@ def watch(
     transitional_since_mono: float | None = None
     transitional_since_utc: datetime | None = None
     transitional_reasons: list[str] = []
+    transitional_snapshot_errors = 0
 
     while True:
         sample += 1
@@ -953,6 +957,7 @@ def watch(
                     transitional_since_mono = None
                     transitional_since_utc = None
                     transitional_reasons = []
+                    transitional_snapshot_errors = 0
                 reasons = failure_reasons(
                     cr,
                     pods,
@@ -970,11 +975,13 @@ def watch(
                 transitional_since_mono = None
                 transitional_since_utc = None
                 transitional_reasons = []
+                transitional_snapshot_errors = 0
             else:
                 now_mono = time.monotonic()
                 if transitional_since_mono is None:
                     transitional_since_mono = now_mono
                     transitional_since_utc = captured_at
+                    transitional_snapshot_errors = 0
                 transitional_reasons = list(reasons)
                 transitional_seconds = now_mono - transitional_since_mono
                 if transitional_seconds >= transitional_grace_seconds:
@@ -989,11 +996,29 @@ def watch(
                     transitional_since_mono = None
                     transitional_since_utc = None
                     transitional_reasons = []
+                    transitional_snapshot_errors = 0
                 else:
                     in_transitional = True
         elif armed and transitional_since_mono is not None and not healthy:
-            in_transitional = True
-            transitional_seconds = time.monotonic() - transitional_since_mono
+            now_mono = time.monotonic()
+            transitional_seconds = now_mono - transitional_since_mono
+            if snapshot_errors:
+                transitional_snapshot_errors += 1
+            else:
+                transitional_snapshot_errors = 0
+            if transitional_seconds >= transitional_grace_seconds:
+                reasons = list(transitional_reasons)
+                if snapshot_errors:
+                    reasons.append(
+                        f"snapshot_errors_during_transition={transitional_snapshot_errors}"
+                    )
+                capture_now = True
+                transitional_since_mono = None
+                transitional_since_utc = None
+                transitional_reasons = []
+                transitional_snapshot_errors = 0
+            else:
+                in_transitional = True
 
         state = {
             "state": (

@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-19
 
-**Status:** live Mac rehearsal attempted; no PASS; fail-closed at Flink
-JobManager health after the single allowed retry
+**Status:** user-directed third Mac rehearsal completed; no PASS; the Flink
+JobManager health boundary reproduced
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
 
@@ -14,7 +14,7 @@ JobManager health after the single allowed retry
 - The repository contains a tracked source pack, a Docker Compose topology, a
   local runtime controller, and an identity-bound Kubernetes-pods shim.
 - It does not contain a CI workflow. The controller has now been run against
-  live containers, but neither attempt reached baseline, shim, traffic, or
+  live containers, but none of the three attempts reached baseline, shim, traffic, or
   verification, and no rehearsal PASS exists.
 - No container was built or started while either implementation slice was
   developed and verified; the later rehearsal described below was a separate
@@ -43,7 +43,7 @@ Always trust the current Git state and the tracked contracts listed below.
 | Runtime harness | Implemented; exercised through `up-core` | `scripts/golden_soak/runtime.py` validated the complete pack, rejected no pre-existing resources, built both local images on the second attempt, published FAIL evidence, and cleaned the named Compose projects |
 | Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | FAIL before baseline | Attempt 1 failed resolving the pinned Flink base through Docker DNS. After registry recovery, attempt 2 built both images but `flink-jobmanager` became unhealthy during `up-core`. Shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
+| Runtime proof | FAIL before baseline | Attempt 1 failed resolving the pinned Flink base through Docker DNS. After registry recovery, attempts 2 and 3 built both images but `flink-jobmanager` became unhealthy during `up-core`. Shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
 | Push or remote mutation | Scoped snapshot transfer only | Commit `45817b1` was archived into a new Mac directory after explicit authorization. No push, pull, fetch, checkout change, or mutation of the existing Mac worktree occurred |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
@@ -177,13 +177,27 @@ The authorized live rehearsal then produced this evidence:
   `compose-down` returned zero after removing four containers, four named
   volumes, and the project network; a fresh label query returned no project
   containers, volumes, or networks;
+- on the next user turn, the user explicitly requested attempt 3 despite the
+  recorded no-raw-retry recommendation. Its fresh output and project IDs were
+  `soak-rehearsal-2000-r3` and `agentflow-ci-soak-45817b1-r3`; snapshot SHA-256
+  and empty-resource preflights passed;
+- attempt 3 used the cached successful image builds and reproduced
+  `RESULT=FAIL reason=up_core_failed`. MinIO and ClickHouse became healthy,
+  Kafka was still starting, and the JobManager was running but unhealthy after
+  about one minute. Its fuller log reached `Trying to start actor system` and
+  continued cluster initialization, with no terminal JVM exception captured.
+  This supports, but does not prove, a startup/readiness-budget cause;
+- attempt 3 also stopped before shim or baseline. `compose-down` returned zero
+  and final label queries again found no project containers, volumes, or
+  networks;
 - pulled and locally built image cache remains on the Mac. It is outside
   Compose `down -v`, can be shared, and was not destructively removed without
   a pre-run ownership baseline.
 
 Evidence remains in `.artifacts/soak-rehearsal-2000` and
-`.artifacts/soak-rehearsal-2000-r2` under the isolated snapshot directory.
-There was no third attempt, no PASS token, and no traffic result.
+`.artifacts/soak-rehearsal-2000-r2` and
+`.artifacts/soak-rehearsal-2000-r3` under the isolated snapshot directory.
+There is no PASS token and no traffic result.
 
 Revalidate the current configuration without starting services:
 
@@ -222,7 +236,7 @@ Only the first item is the next named slice. Keep later items separate so a
 green focused gate ends each turn.
 
 1. **Flink JobManager readiness diagnosis — next slice.** Do not launch a
-   third raw rehearsal. Use the existing isolated snapshot and built image for
+   fourth raw rehearsal. Use the existing isolated snapshot and built image for
    one focused diagnostic that preserves `docker inspect .State.Health` and
    the complete JobManager logs before cleanup. Establish whether the failure
    is the healthcheck command, startup budget, JVM/module state, or another
@@ -250,7 +264,7 @@ green focused gate ends each turn.
 5. Do not modify the eight files under `scripts/golden_soak/pack/`.
 6. Preserve the isolated Mac snapshot and both FAIL evidence directories; do
    not change the existing Mac checkout.
-7. Do not run a third raw rehearsal. Diagnose the JobManager health boundary
+7. Do not run a fourth raw rehearsal. Diagnose the JobManager health boundary
    in a distinct focused slice first.
 8. After a verified correction, use a new Compose project name and empty
    output directory; keep workflow, full-soak, and Mac-gate claims outside

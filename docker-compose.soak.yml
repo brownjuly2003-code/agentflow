@@ -1,0 +1,269 @@
+# CI soak foundation overlay. This file defines a capacity-independent service
+# topology only; it contains no lifecycle controller or PASS publisher.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+x-api-image: &api-image
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+  image: agentflow-api-local:soak
+  logging: *default-logging
+
+services:
+  kafka:
+    environment:
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx768m"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  soak-topics-init:
+    image: confluentinc/cp-kafka:7.7.0
+    logging: *default-logging
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        for topic in orders.raw events.validated events.deadletter orders.status; do
+          kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic "$${topic}" --partitions 6 --replication-factor 1
+        done
+    restart: "no"
+
+  clickhouse:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  flink-jobmanager:
+    environment:
+      FLINK_CHECKPOINT_INTERVAL_MS: "10000"
+      FLINK_CHECKPOINT_MIN_PAUSE_MS: "10000"
+      FLINK_RESTART_MAX_FAILURES_PER_INTERVAL: "3"
+      FLINK_RESTART_FAILURE_RATE_INTERVAL_MS: "300000"
+      FLINK_RESTART_DELAY_MS: "10000"
+      AGENTFLOW_FLINK_GROUP_ID: agentflow-ci-soak-stream
+      AGENTFLOW_KAFKA_STARTUP_MODE: earliest-offset
+      FLINK_PARALLELISM: "2"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    deploy:
+      resources:
+        limits:
+          memory: 1800M
+
+  flink-taskmanager:
+    environment:
+      FLINK_CHECKPOINT_INTERVAL_MS: "10000"
+      FLINK_CHECKPOINT_MIN_PAUSE_MS: "10000"
+      FLINK_RESTART_MAX_FAILURES_PER_INTERVAL: "3"
+      FLINK_RESTART_FAILURE_RATE_INTERVAL_MS: "300000"
+      FLINK_RESTART_DELAY_MS: "10000"
+      AGENTFLOW_FLINK_GROUP_ID: agentflow-ci-soak-stream
+      AGENTFLOW_KAFKA_STARTUP_MODE: earliest-offset
+      FLINK_PARALLELISM: "2"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+
+  flink-job-runner:
+    depends_on:
+      soak-topics-init:
+        condition: service_completed_successfully
+    environment:
+      FLINK_CHECKPOINT_INTERVAL_MS: "10000"
+      FLINK_CHECKPOINT_MIN_PAUSE_MS: "10000"
+      FLINK_RESTART_MAX_FAILURES_PER_INTERVAL: "3"
+      FLINK_RESTART_FAILURE_RATE_INTERVAL_MS: "300000"
+      FLINK_RESTART_DELAY_MS: "10000"
+      AGENTFLOW_FLINK_GROUP_ID: agentflow-ci-soak-stream
+      AGENTFLOW_KAFKA_STARTUP_MODE: earliest-offset
+      FLINK_PARALLELISM: "2"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:0.6.0
+    logging: *default-logging
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"
+    environment:
+      CATALOG_WAREHOUSE: s3://agentflow-lake/warehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio123
+      AWS_REGION: us-east-1
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  iceberg-init:
+    <<: *api-image
+    depends_on:
+      iceberg-rest:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      AGENTFLOW_ICEBERG_CONFIG: /app/config/iceberg.yaml
+      AGENTFLOW_ICEBERG_URI: http://iceberg-rest:8181
+      AGENTFLOW_ICEBERG_WAREHOUSE: s3://agentflow-lake/warehouse
+      AGENTFLOW_S3_ENDPOINT: http://minio:9000
+      AGENTFLOW_S3_ACCESS_KEY: minio
+      AGENTFLOW_S3_SECRET_KEY: minio123
+      AGENTFLOW_S3_REGION: us-east-1
+    volumes:
+      - ./config:/app/config:ro
+      - ./scripts:/app/scripts:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        python - <<'PY'
+        import time
+        import urllib.request
+
+        endpoint = "http://iceberg-rest:8181/v1/config"
+        for attempt in range(60):
+            try:
+                with urllib.request.urlopen(endpoint, timeout=2):
+                    break
+            except Exception:
+                if attempt == 59:
+                    raise
+                time.sleep(2)
+        PY
+        python /app/scripts/init_iceberg.py --config /app/config/iceberg.yaml
+    restart: "no"
+
+  serving-init:
+    <<: *api-image
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      AGENTFLOW_SERVING_CONFIG: /app/config/serving.yaml
+      SERVING_BACKEND: clickhouse
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: agentflow
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+    command: ["python", "-m", "src.serving.provision", "--schema"]
+    restart: "no"
+    volumes:
+      - ./config:/app/config:ro
+
+  agentflow-api:
+    <<: *api-image
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      serving-init:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    environment:
+      AGENTFLOW_SERVING_CONFIG: /app/config/serving.yaml
+      AGENTFLOW_DEMO_MODE: "true"
+      SERVING_BACKEND: clickhouse
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: agentflow
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      OTEL_SDK_DISABLED: "true"
+    volumes:
+      - ./config:/app/config:ro
+      - ./contracts:/app/contracts:ro
+      - soak-api-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://localhost:8000/health/ready")
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  lake-materializer:
+    <<: *api-image
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      iceberg-init:
+        condition: service_completed_successfully
+    command: ["python", "-m", "src.processing.lake_consumer"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AGENTFLOW_LAKE_GROUP_ID: agentflow-ci-soak-lake
+      AGENTFLOW_LAKE_OFFSET_RESET: earliest
+      AGENTFLOW_ICEBERG_CONFIG: /app/config/iceberg.yaml
+      AGENTFLOW_ICEBERG_URI: http://iceberg-rest:8181
+      AGENTFLOW_ICEBERG_WAREHOUSE: s3://agentflow-lake/warehouse
+      AGENTFLOW_S3_ENDPOINT: http://minio:9000
+      AGENTFLOW_S3_ACCESS_KEY: minio
+      AGENTFLOW_S3_SECRET_KEY: minio123
+      AGENTFLOW_S3_REGION: us-east-1
+    volumes:
+      - ./config:/app/config:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  serving-bridge:
+    <<: *api-image
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      serving-init:
+        condition: service_completed_successfully
+    command: ["python", "-m", "src.processing.bridge_consumer"]
+    environment:
+      SERVING_BACKEND: clickhouse
+      AGENTFLOW_SERVING_CONFIG: /app/config/serving.yaml
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AGENTFLOW_BRIDGE_GROUP_ID: agentflow-ci-soak-serving
+      AGENTFLOW_BRIDGE_OFFSET_RESET: earliest
+      AGENTFLOW_BRIDGE_BATCH_MAX: "1024"
+      AGENTFLOW_BRIDGE_METRICS_PORT: "9108"
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: agentflow
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+    volumes:
+      - ./config:/app/config:ro
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+volumes:
+  soak-api-data:

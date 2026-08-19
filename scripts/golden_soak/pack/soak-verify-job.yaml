@@ -1,0 +1,169 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentflow-golden-4h-verify-20260819-07
+  namespace: agentflow
+  labels:
+    app.kubernetes.io/name: agentflow
+    app.kubernetes.io/component: golden-4h-verify
+    app.kubernetes.io/instance: golden-4h-soak-rv-20260819-07
+    agentflow.dev/task-id: golden-4h-soak-rv-20260819-07
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentflow
+        app.kubernetes.io/component: golden-4h-verify
+        app.kubernetes.io/instance: golden-4h-soak-rv-20260819-07
+        agentflow.dev/task-id: golden-4h-soak-rv-20260819-07
+    spec:
+      restartPolicy: Never
+      serviceAccountName: agentflow-soak-rv
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: prepare-evidence
+          image: agentflow/api:ed03fc47-iceberg-live-20260801-01
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - sh
+            - -c
+            - mkdir -p /evidence && chown -R 10001:10001 /evidence
+          volumeMounts:
+            - name: evidence
+              mountPath: /evidence
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      containers:
+        - name: verify
+          image: agentflow/api:ed03fc47-iceberg-live-20260801-01
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: RUN_LABEL
+              value: golden-4h-soak-rv-20260819-07
+            - name: SOURCE
+              value: golden-4h-soak-rv-20260819-07
+            - name: EVENT_PREFIX
+              value: "f8b2c3d4-e5f6-4a71-b829-"
+            - name: ORDER_PREFIX
+              value: ORD-20260819-0700
+            - name: EXPECTED
+              value: "1440000"
+            - name: VERIFY_PHASE
+              value: soak
+            - name: AGENTFLOW_RATE_CONTRACT
+              value: dual_mean_90
+            - name: KAFKA_VERIFY_GROUP
+              value: agentflow-golden-4h-verify-20260819-07
+            - name: EVIDENCE_DIR
+              value: /evidence
+            - name: STOP_OBSERVER
+              value: "false"
+            - name: FLINK_FAILED_CHECKPOINT_BASELINE
+              valueFrom:
+                configMapKeyRef:
+                  name: agentflow-golden-4h-soak-gate-a-20260819-07
+                  key: FLINK_FAILED_CHECKPOINT_BASELINE
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka.agentflow.svc.cluster.local:9092
+            - name: FLINK_REST_BASE
+              value: http://agentflow-soak-rv-stream-processor-rest:8081
+            - name: FLINK_SOURCE_GROUP
+              value: agentflow-golden-soak-rv-20260802-01
+            - name: LAKE_GROUP
+              value: agentflow-lake-rv-20260802-01
+            - name: SERVING_GROUP
+              value: agentflow-serving-rv-20260802-01
+            - name: FLINK_POD_SELECTOR
+              value: app=agentflow-soak-rv-stream-processor
+            - name: POD_NAMESPACE
+              value: agentflow
+            - name: KUBERNETES_API
+              value: https://kubernetes.default.svc
+            - name: AGENTFLOW_ICEBERG_CONFIG
+              value: /app/config/iceberg.yaml
+            - name: AGENTFLOW_ICEBERG_URI
+              value: http://172.18.0.1:8181
+            - name: AGENTFLOW_ICEBERG_WAREHOUSE
+              value: s3://agentflow-lake/warehouse
+            - name: AGENTFLOW_S3_ENDPOINT
+              value: http://172.18.0.1:9000
+            - name: AGENTFLOW_S3_REGION
+              value: us-east-1
+            - name: CLICKHOUSE_HOST
+              value: "172.18.0.1"
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: CLICKHOUSE_DATABASE
+              value: agentflow
+            - name: DEMO_API_KEY
+              value: demo-key
+            - name: TASK_API_BASE
+              value: http://agentflow-chk-restore-rv-api-20260802-01.agentflow.svc.cluster.local:8000
+          command:
+            - python
+            - /scripts/verify.py
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 900Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: evidence
+              mountPath: /evidence
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: agentflow-golden-4h-soak-control-20260819-07
+            defaultMode: 0444
+        - name: evidence
+          hostPath:
+            path: /var/agentflow-task-state/golden-4h-soak-rv-20260819-07
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

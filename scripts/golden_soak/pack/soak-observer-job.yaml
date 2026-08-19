@@ -1,0 +1,149 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentflow-golden-4h-observer-20260819-07
+  namespace: agentflow
+  labels:
+    app.kubernetes.io/name: agentflow
+    app.kubernetes.io/component: golden-4h-observer
+    app.kubernetes.io/instance: golden-4h-soak-rv-20260819-07
+    agentflow.dev/task-id: golden-4h-soak-rv-20260819-07
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 20000
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentflow
+        app.kubernetes.io/component: golden-4h-observer
+        app.kubernetes.io/instance: golden-4h-soak-rv-20260819-07
+        agentflow.dev/task-id: golden-4h-soak-rv-20260819-07
+    spec:
+      restartPolicy: Never
+      serviceAccountName: agentflow-soak-rv
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: prepare-evidence
+          image: agentflow/api:ed03fc47-iceberg-live-20260801-01
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - sh
+            - -c
+            - mkdir -p /evidence && chown -R 10001:10001 /evidence
+          volumeMounts:
+            - name: evidence
+              mountPath: /evidence
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      containers:
+        - name: observer
+          image: agentflow/api:ed03fc47-iceberg-live-20260801-01
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: RUN_LABEL
+              value: golden-4h-soak-rv-20260819-07
+            - name: EVIDENCE_DIR
+              value: /evidence
+            - name: FLINK_REST_BASE
+              value: http://agentflow-soak-rv-stream-processor-rest:8081
+            - name: HOST_MEMINFO_PATH
+              value: /host/proc/meminfo
+            - name: HOST_DISK_PATH
+              value: /host/var
+            - name: KUBERNETES_API
+              value: https://kubernetes.default.svc
+            - name: POD_NAMESPACE
+              value: agentflow
+            - name: FLINK_POD_SELECTOR
+              value: app=agentflow-soak-rv-stream-processor
+            - name: SA_TOKEN_PATH
+              value: /var/run/secrets/kubernetes.io/serviceaccount/token
+            - name: SA_CA_PATH
+              value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            - name: OBSERVER_DEADLINE_S
+              value: "19800"
+            - name: FLINK_FAILED_CHECKPOINT_BASELINE
+              valueFrom:
+                configMapKeyRef:
+                  name: agentflow-golden-4h-soak-gate-a-20260819-07
+                  key: FLINK_FAILED_CHECKPOINT_BASELINE
+          command:
+            - python
+            - /scripts/observer.py
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: evidence
+              mountPath: /evidence
+            - name: host-meminfo
+              mountPath: /host/proc/meminfo
+              readOnly: true
+            - name: host-var
+              mountPath: /host/var
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: agentflow-golden-4h-soak-control-20260819-07
+            defaultMode: 0444
+        - name: evidence
+          hostPath:
+            path: /var/agentflow-task-state/golden-4h-soak-rv-20260819-07
+            type: DirectoryOrCreate
+        - name: host-meminfo
+          hostPath:
+            path: /proc/meminfo
+            type: File
+        - name: host-var
+          hostPath:
+            path: /var
+            type: Directory
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi

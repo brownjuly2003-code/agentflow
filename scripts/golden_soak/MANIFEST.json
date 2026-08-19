@@ -1,0 +1,39 @@
+{
+  "contract_status": "source-reference-only",
+  "source_identity": "20260819-07",
+  "source_path": ".codex-grok-tasks/golden-4h-soak-runtime-20260819-07/pack",
+  "files": {
+    "pack/baseline.py": {
+      "bytes": 8522,
+      "sha256": "ea6db1bf37094d945f4346ee6f135434074827231e34de80a0be3252a4fa8280"
+    },
+    "pack/baseline-job.yaml": {
+      "bytes": 4294,
+      "sha256": "a1ff62f52b4a8904c0629e691cf0081b4dbe9439a0cb9be89462ff7cfc1f97bf"
+    },
+    "pack/observer.py": {
+      "bytes": 24059,
+      "sha256": "3c2de4406b57b23a7b7ea3743a63fcd2004f35f9db753dd7efe330269de6f5a9"
+    },
+    "pack/producer.py": {
+      "bytes": 16460,
+      "sha256": "192a3dee4d6a232bb22ca7590acf4457a0dbfb48edafc4e7fca2f7c2d282f781"
+    },
+    "pack/soak-observer-job.yaml": {
+      "bytes": 4749,
+      "sha256": "25fad87807d92f6d78d8cfd705ee93ba0182477f42173b2e7b4bab38d1ec2951"
+    },
+    "pack/soak-producer-job.yaml": {
+      "bytes": 3780,
+      "sha256": "61db1166b7dc4d12c0579bfa7321226d3e87b962158f99cfabf0b1346ab9aec7"
+    },
+    "pack/soak-verify-job.yaml": {
+      "bytes": 5715,
+      "sha256": "0948256270ef094490d9c27e1165bad3aaf9f08d4cc0ae2b9f476788a031de4f"
+    },
+    "pack/verify.py": {
+      "bytes": 54603,
+      "sha256": "9af870fa3a58ed4b7d2ec4118b1ae2c28868c97825556dc6651efd0f9972b8a7"
+    }
+  }
+}

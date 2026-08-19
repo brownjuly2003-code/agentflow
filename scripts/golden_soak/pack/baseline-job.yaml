@@ -1,0 +1,134 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentflow-golden-4h-baseline-20260819-07
+  namespace: agentflow
+  labels:
+    app.kubernetes.io/name: agentflow
+    app.kubernetes.io/component: golden-4h-baseline
+    app.kubernetes.io/instance: golden-4h-soak-rv-20260819-07
+    agentflow.dev/task-id: golden-4h-soak-rv-20260819-07
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentflow
+        app.kubernetes.io/component: golden-4h-baseline
+        app.kubernetes.io/instance: golden-4h-soak-rv-20260819-07
+        agentflow.dev/task-id: golden-4h-soak-rv-20260819-07
+    spec:
+      restartPolicy: Never
+      serviceAccountName: agentflow-soak-rv
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: prepare-evidence
+          image: agentflow/api:ed03fc47-iceberg-live-20260801-01
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - sh
+            - -c
+            - mkdir -p /evidence && chown -R 10001:10001 /evidence
+          volumeMounts:
+            - name: evidence
+              mountPath: /evidence
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      containers:
+        - name: baseline
+          image: agentflow/api:ed03fc47-iceberg-live-20260801-01
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: EVIDENCE_DIR
+              value: /evidence
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka.agentflow.svc.cluster.local:9092
+            - name: KAFKA_BASELINE_GROUP
+              value: agentflow-golden-4h-baseline-20260819-07
+            - name: AGENTFLOW_ICEBERG_CONFIG
+              value: /app/config/iceberg.yaml
+            - name: AGENTFLOW_ICEBERG_URI
+              value: http://172.18.0.1:8181
+            - name: AGENTFLOW_ICEBERG_WAREHOUSE
+              value: s3://agentflow-lake/warehouse
+            - name: AGENTFLOW_S3_ENDPOINT
+              value: http://172.18.0.1:9000
+            - name: AGENTFLOW_S3_REGION
+              value: us-east-1
+            - name: CLICKHOUSE_HOST
+              value: "172.18.0.1"
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: CLICKHOUSE_DATABASE
+              value: agentflow
+            - name: DEMO_API_KEY
+              value: demo-key
+            - name: TASK_API_BASE
+              value: http://agentflow-chk-restore-rv-api-20260802-01.agentflow.svc.cluster.local:8000
+          command:
+            - python
+            - /scripts/baseline.py
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: evidence
+              mountPath: /evidence
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: agentflow-golden-4h-soak-baseline-20260819-07
+            defaultMode: 0444
+        - name: evidence
+          hostPath:
+            path: /var/agentflow-task-state/golden-4h-soak-rv-20260819-07
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi

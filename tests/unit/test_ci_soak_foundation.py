@@ -81,6 +81,7 @@ def test_soak_overlay_contains_only_the_authorized_foundation_services() -> None
         "iceberg-rest",
         "kafka",
         "lake-materializer",
+        "minio",
         "serving-bridge",
         "serving-init",
         "soak-topics-init",
@@ -143,7 +144,8 @@ def test_soak_overlay_wires_consumer_groups_and_ready_api() -> None:
     assert "/health/ready" in " ".join(str(value) for value in api["healthcheck"]["test"])
 
 
-def test_soak_overlay_gives_jobmanager_healthcheck_startup_grace_only() -> None:
+def test_soak_overlay_gives_core_healthchecks_startup_grace_only() -> None:
     services = _compose()["services"]
 
     assert services["flink-jobmanager"]["healthcheck"] == {"start_period": "90s"}
+    assert services["minio"]["healthcheck"] == {"start_period": "180s"}

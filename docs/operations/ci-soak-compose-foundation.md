@@ -2,8 +2,9 @@
 
 **Last updated:** 2026-08-19
 
-**Status:** user-directed third Mac rehearsal completed; no PASS; the Flink
-JobManager health boundary reproduced
+**Status:** focused Mac diagnosis complete; insufficient Flink JobManager
+startup grace identified; diagnostic cleanup reported PASS, but its later
+independent Docker-label recheck is still pending; no rehearsal PASS
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
 
@@ -43,7 +44,7 @@ Always trust the current Git state and the tracked contracts listed below.
 | Runtime harness | Implemented; exercised through `up-core` | `scripts/golden_soak/runtime.py` validated the complete pack, rejected no pre-existing resources, built both local images on the second attempt, published FAIL evidence, and cleaned the named Compose projects |
 | Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | FAIL before baseline | Attempt 1 failed resolving the pinned Flink base through Docker DNS. After registry recovery, attempts 2 and 3 built both images but `flink-jobmanager` became unhealthy during `up-core`. Shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
+| Runtime proof | FAIL before baseline; readiness cause localized | Attempt 1 failed resolving the pinned Flink base through Docker DNS. After registry recovery, attempts 2 and 3 built both images but `flink-jobmanager` became unhealthy during `up-core`. A focused run proved that the JVM stays alive and REST becomes ready after the current no-grace health budget. Shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
 | Push or remote mutation | Scoped snapshot transfer only | Commit `45817b1` was archived into a new Mac directory after explicit authorization. No push, pull, fetch, checkout change, or mutation of the existing Mac worktree occurred |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
@@ -199,6 +200,57 @@ Evidence remains in `.artifacts/soak-rehearsal-2000` and
 `.artifacts/soak-rehearsal-2000-r3` under the isolated snapshot directory.
 There is no PASS token and no traffic result.
 
+The focused JobManager diagnosis then isolated the readiness failure:
+
+- a fresh project `agentflow-ci-soak-flinkdiag-01` started the same four core
+  services from the cached image
+  `sha256:205d6fc0427e70eb2890e8fa235e62011b6a3b79c8c08814750476228485dab3`
+  without rebuilding or running the soak controller;
+- the current JobManager healthcheck is `curl -f /overview`, interval 10s,
+  timeout 5s, five retries, and no `start_period`;
+- the JobManager remained running with zero restarts and no OOM while checks
+  failed with `curl` exit 7 because port 8081 was not listening;
+- host REST first returned HTTP 200 at the 53-second sample and Docker health
+  became `healthy` at 66 seconds. The JVM used about 267 MiB of its 1.758 GiB
+  limit and the Flink REST endpoint returned version `2.3.0` normally;
+- the full log shows ordinary actor-system, dispatcher, and REST initialization
+  with no terminal JVM exception. The earlier `jdk.compiler` warnings are not
+  the readiness cause;
+- therefore the failure is at the Compose orchestration boundary: the
+  zero-grace five-failure budget is narrower than observed variable startup,
+  and the full build/core path can mark a live JobManager unhealthy before its
+  REST endpoint opens;
+- `/opt/flink/log` was copied to
+  `.artifacts/flink-jobmanager-diag-01/flink-log` before cleanup. The diagnostic
+  trap removed its four containers, four volumes, and network, and final label
+  checks were empty.
+
+### Cleanup evidence caveat
+
+The diagnostic script itself emitted `DIAG_CLEANUP=PASS` after its scoped
+cleanup, and its immediate project-label checks were empty. A later read-only
+SSH recheck confirmed that the copied Flink log directory still exists, but it
+did **not** independently reconfirm the Docker cleanup: the non-login shell
+printed `bash: docker: command not found`, while the surrounding pipeline still
+printed misleading `REMOTE_PROJECT_*=0` markers. Disregard those three markers.
+
+Do not rerun the diagnostic to repair this evidence gap. Before creating
+another remote Compose project, run one bounded read-only label query with an
+explicit, verified Docker executable or login-shell `PATH` for project
+`agentflow-ci-soak-flinkdiag-01`. If it returns zero resources, record that
+once and continue. If it returns owned resources, remove only resources bearing
+that exact Compose project label; do not touch unrelated containers, volumes,
+networks, the cached images, or the existing Mac checkout.
+
+### Recorded authorization boundary
+
+The user authorized SSH transfer of snapshot commit `45817b1` into the isolated
+directory, rehearsal `--count 2000`, and deletion only of Docker resources
+created by that work. This history is not push authorization. A future session
+must still check the latest user message before creating or deleting remote
+resources; the existing Mac checkout, unrelated Docker resources, and image
+cache remain out of scope.
+
 Revalidate the current configuration without starting services:
 
 ```powershell
@@ -235,13 +287,14 @@ open; see `docs/perf/golden-operator-acceptance-2026-07-30.md` and
 Only the first item is the next named slice. Keep later items separate so a
 green focused gate ends each turn.
 
-1. **Flink JobManager readiness diagnosis — next slice.** Do not launch a
-   fourth raw rehearsal. Use the existing isolated snapshot and built image for
-   one focused diagnostic that preserves `docker inspect .State.Health` and
-   the complete JobManager logs before cleanup. Establish whether the failure
-   is the healthcheck command, startup budget, JVM/module state, or another
-   concrete cause before changing code or Compose. Any behavioral correction
-   must start with a failing focused test.
+1. **TDD JobManager startup-grace correction — next slice.** First close the
+   cleanup evidence gap with the single read-only Docker-label query described
+   above; do not rerun the diagnostic. Then add a failing focused contract for
+   an explicit soak-only JobManager `start_period` that safely exceeds the
+   observed 66-second readiness, make the smallest overlay change, and validate
+   the merged Compose model. Verify the corrected health boundary with one
+   focused Mac run only when the latest user message authorizes that remote
+   resource lifecycle; do not run the full rehearsal in the same slice.
 2. **Short Mac rehearsal after a verified correction — later slice.** Use a
    new Compose project and output directory with `--count 2000`. It may emit
    only `REHEARSAL_PASS`; do not describe it as a four-hour soak PASS.
@@ -262,11 +315,14 @@ green focused gate ends each turn.
    contracts in `tests/unit/test_ci_soak_{foundation,runtime}.py`.
 4. Preserve unrelated dirty and untracked files.
 5. Do not modify the eight files under `scripts/golden_soak/pack/`.
-6. Preserve the isolated Mac snapshot and both FAIL evidence directories; do
-   not change the existing Mac checkout.
-7. Do not run a fourth raw rehearsal. Diagnose the JobManager health boundary
-   in a distinct focused slice first.
-8. After a verified correction, use a new Compose project name and empty
+6. Preserve the isolated Mac snapshot and all three rehearsal FAIL evidence
+   directories; do not change the existing Mac checkout.
+7. Treat the later `REMOTE_PROJECT_*=0` output as invalid because Docker was
+   absent from that SSH shell's `PATH`; perform at most one corrected read-only
+   label query before new remote work.
+8. Do not run a fourth raw rehearsal. Implement and verify the startup-grace
+   contract in a distinct focused slice first.
+9. After a verified correction, use a new Compose project name and empty
    output directory; keep workflow, full-soak, and Mac-gate claims outside
    that slice.
 

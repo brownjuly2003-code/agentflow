@@ -5,6 +5,10 @@ This directory tracks the eight byte-exact files from source identity
 SHA-256 digests. The files are a source reference only; their Kubernetes job
 manifests are not a Docker Compose runtime contract.
 
+The canonical implementation status, gate boundary, verification evidence,
+and next-session sequence are documented in
+[`docs/operations/ci-soak-compose-foundation.md`](../../docs/operations/ci-soak-compose-foundation.md).
+
 The root Compose overlay is a **separate capacity-independent**
 traffic/exactness/Flink-quiet gate. It **does not close** the Mac
 kind/operator/HA/rollback golden-soak gate.

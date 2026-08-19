@@ -1,17 +1,21 @@
-# CI soak Compose foundation: current state and next-session handoff
+# CI soak Compose foundation and runtime harness: current state and handoff
 
 **Last updated:** 2026-08-19
 
-**Status:** foundation committed; runtime execution is not implemented
+**Status:** foundation and fail-closed runtime contract committed; live rehearsal not run
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
 
+**Runtime contract commit:** `45817b1` (`feat(ops): add fail-closed CI soak runtime harness`)
+
 ## Read this first
 
-- The repository contains a tracked source pack and a Docker Compose topology.
-- It does not contain a CI workflow, runtime harness, Kubernetes-pods
-  compatibility shim, lifecycle controller, or PASS publisher.
-- No container was built or started while the foundation was implemented.
+- The repository contains a tracked source pack, a Docker Compose topology, a
+  local runtime controller, and an identity-bound Kubernetes-pods shim.
+- It does not contain a CI workflow, and the new controller has not been run
+  against live containers.
+- No container was built or started while either implementation slice was
+  developed and verified.
 - A successful Compose configuration check is not a soak result.
 - The future CI result is a separate capacity-independent
   traffic/exactness/Flink-quiet gate. It does not close the Mac
@@ -31,10 +35,10 @@ Always trust the current Git state and the tracked contracts listed below.
 | Source identity | `20260819-07` | The manifest labels it `source-reference-only` |
 | Compose topology | Tracked, configuration-validated | `docker-compose.soak.yml`, merged with the base and Flink Compose files |
 | Foundation contract | Green at commit time | `tests/unit/test_ci_soak_foundation.py`: 6 tests passed |
-| Runtime harness | Missing | Nothing currently drives baseline, observer, producer, verifier, evidence capture, or cleanup |
-| Kubernetes-pods shim | Missing | The byte-identical verifier still needs a compatible view of exactly one JobManager and one TaskManager |
+| Runtime harness | Implemented, not rehearsed | `scripts/golden_soak/runtime.py` validates the complete pack before Docker, refuses pre-existing project resources, enforces lifecycle order, validates terminal evidence, and cleans up fail-closed |
+| Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | Not attempted | Images, health checks, traffic, exactness, disk use, and duration remain unproven |
+| Runtime proof | Not attempted | Images, live TLS/socket behavior, health checks, traffic, exactness, disk use, and duration remain unproven |
 | Push or remote mutation | Not performed | The foundation and this handoff are local commits until separately authorized |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
@@ -73,6 +77,24 @@ The foundation also fixes four design hazards before any runtime attempt:
 4. `iceberg-init` waits for the REST catalog and completes before
    `lake-materializer` starts.
 
+The runtime controller adds the following fail-closed boundary without
+changing the twelve-service overlay:
+
+1. all eight manifest paths, byte sizes, and SHA-256 values are checked before
+   the first Docker command;
+2. existing containers, volumes, or networks carrying the requested Compose
+   project label block build/up, so later `down -v` cannot adopt user data;
+3. the shim and observer are transient `docker compose run` containers with
+   explicit read-only pack/TLS mounts; the shim uses GET-only Docker socket
+   inspection bound to the original JM/TM IDs;
+4. baseline PASS precedes observer start, observer readiness precedes produce,
+   and verifier PASS precedes final identity/restart checks;
+5. bounded evidence, observer stop, transient-container removal, and
+   project-scoped cleanup run on every post-start exit path; cleanup failure
+   prevents PASS;
+6. a count below `1440000` can emit only `REHEARSAL_PASS`. The full token is a
+   capacity-independent result and still does not close the Mac rollback gate.
+
 All three Flink services carry the same checkpoint and bounded restart policy:
 
 | Variable | Value |
@@ -88,9 +110,9 @@ All three Flink services carry the same checkpoint and bounded restart policy:
 
 ## Verification evidence
 
-The implementation session used a RED-to-GREEN contract. Before the files
-existed, all six foundation tests failed. After implementation and one narrow
-manifest correction, the final evidence was:
+The foundation session used a RED-to-GREEN contract. Before the files existed,
+all six foundation tests failed. After implementation and one narrow manifest
+correction, its evidence was:
 
 - `python -m pytest tests/unit/test_ci_soak_foundation.py -q` — `6 passed`;
 - Ruff check and format check — passed;
@@ -100,10 +122,23 @@ manifest correction, the final evidence was:
 - LF/NUL and known-secret-pattern scans for all 12 foundation files — passed;
 - exact staged-path comparison and `git diff --cached --check` — passed.
 
+The runtime session also used RED-to-GREEN. The initial focused contract had
+`11 failed` because both modules were absent. The final implementation gate at
+`45817b1` was:
+
+- `python -m pytest tests/unit/test_ci_soak_runtime.py tests/unit/test_ci_soak_foundation.py -q` — `19 passed`;
+- Ruff check and format check for the two modules and focused tests — passed;
+- `py_compile` for both modules and the focused test — passed;
+- merged Compose `config --quiet` — passed without starting containers;
+- protected source-pack hashes — `8/8` matched;
+- LF/NUL, trailing-whitespace, placeholder, and known-key-pattern scan — passed;
+- exact five-path staged comparison and `git diff --cached --check` — passed.
+
 Revalidate the current configuration without starting services:
 
 ```powershell
 python -m pytest tests/unit/test_ci_soak_foundation.py -q
+python -m pytest tests/unit/test_ci_soak_runtime.py -q
 docker compose -f docker-compose.yml -f docker-compose.flink.yml -f docker-compose.soak.yml config --quiet
 ```
 
@@ -132,23 +167,18 @@ open; see `docs/perf/golden-operator-acceptance-2026-07-30.md` and
 
 ## Recommended next-session sequence
 
-Only the first item is the next named implementation slice. Keep later items
-separate so a green focused gate ends each turn.
+Only the first item is the next named slice. Keep later items separate so a
+green focused gate ends each turn.
 
-1. **Local runtime harness contract — next slice.** Add RED tests, then
-   implement a fail-closed harness and the verifier-compatible pods shim. It
-   must preserve the eight pack files byte for byte, validate their manifest
-   before use, enforce the dependency/start order, track JobManager and
-   TaskManager identity, write bounded evidence, and perform cleanup. Do not
-   add a workflow or run the four-hour soak in this slice.
-2. **Short local rehearsal — later slice.** After explicit runtime scope is
-   confirmed, run a small-count rehearsal to prove image build, readiness,
-   traffic, verifier compatibility, disk headroom, evidence, and cleanup. A
-   rehearsal result must not be labelled a soak PASS.
-3. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
+1. **Short local rehearsal — next slice.** Use a fresh dedicated Compose
+   project, a fresh output directory, and `--count 2000` to prove image build,
+   readiness, live shim TLS/socket behavior, traffic, verifier compatibility,
+   disk headroom, evidence, and cleanup. A rehearsal result must not be
+   labelled a soak PASS. Do not raw-retry a failed build or rehearsal.
+2. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
    `cancel-in-progress: false`, fail-closed finalization, and always-uploaded
    artifacts. This still does not authorize a push.
-4. **Remote rehearsal and full run — external gates.** Require explicit push
+3. **Remote rehearsal and full run — external gates.** Require explicit push
    authorization, inspect current GitHub runner limits and free disk, dispatch
    the short rehearsal first, and attempt the full run only after its evidence
    is accepted.
@@ -158,18 +188,22 @@ separate so a green focused gate ends each turn.
 1. Check the latest user message for stop or process-frustration triggers.
 2. Run `git status --short` and inspect the current `HEAD`; do not rely on an
    old ahead count in local notes.
-3. Read this document, `scripts/golden_soak/README.md`, and
-   `tests/unit/test_ci_soak_foundation.py`.
+3. Read this document, `scripts/golden_soak/README.md`, and the two focused
+   contracts in `tests/unit/test_ci_soak_{foundation,runtime}.py`.
 4. Preserve unrelated dirty and untracked files.
 5. Do not modify the eight files under `scripts/golden_soak/pack/`.
-6. Keep runtime, workflow, push, and Mac-gate claims outside the next slice
-   unless the user explicitly expands its scope.
+6. For a rehearsal, use a new Compose project name and empty output directory;
+   keep workflow, push, full-soak, and Mac-gate claims outside that slice.
 
 ## Tracked file map
 
 - `docker-compose.soak.yml` — foundation overlay.
 - `scripts/golden_soak/MANIFEST.json` — pack provenance and integrity.
 - `scripts/golden_soak/README.md` — fail-closed pack boundary.
+- `scripts/golden_soak/runtime.py` — local lifecycle/evidence/cleanup controller.
+- `scripts/golden_soak/pods_shim.py` — TLS PodList adapter bound to exact container IDs.
 - `scripts/golden_soak/pack/` — immutable eight-file source reference.
 - `tests/unit/test_ci_soak_foundation.py` — executable foundation contract.
+- `tests/unit/test_ci_soak_runtime.py` — executable runtime/shim contract.
+- `ci-soak-runtime-harness.md` — completed implementation checklist and scope boundary.
 - `docs/operations/ci-soak-compose-foundation.md` — this canonical handoff.

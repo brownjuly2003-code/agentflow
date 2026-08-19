@@ -178,3 +178,48 @@ restoration gate fails. Preserve the evidence and report the first causal
 failure. Do not rerun `r1` or `r2`, do not run from the unshared snapshot, do
 not patch project code for the proven placement failure, do not touch the
 original checkout's untracked files, and do not push.
+
+### `r3` preflight-only attempt — 2026-08-19
+
+The authorized `r3` slice did not invoke the rehearsal controller. Grok ran
+through `local_grok_cli` with requested model `grok-4.6` and actual model
+`grok-4.6-build`. The first run stopped at a headless permission boundary
+before SSH. One cause-specific run added only the implicated read-only
+PowerShell allow rules, then exceeded the six-poll execution budget without
+producing its terminal JSON. Codex terminated that process tree once; no third
+Grok run or controller retry was started.
+
+The second run created the fresh shared-root snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-8a77088-r3`, copied and
+extracted `source-8a77088.tar`, and stopped before creating either
+`run-rehearsal-r3.sh` or `.artifacts/soak-rehearsal-2000-8a77088-r3`. The
+archive SHA-256 remained
+`ed2c9c33b734304150ce8bcc1693b8aead963cc42906a603cbcc67fbe0dc8c1a`;
+all six critical Git blob identities matched the values above, and the
+extracted `scripts/init_iceberg.py` SHA-256 remained
+`226dc8301870ff837028c444c2f690c07c9181d233a8c6fa57635de24eaabada`.
+There is no durable evidence that the bind probe ran, so that gate is not
+claimed.
+
+Independent post-stop checks found no rehearsal/controller process and zero
+containers, networks, or volumes for `agentflow-ci-soak-8a77088-r3`. The four
+exact protected co-tenant IDs remained running with restart count zero; MinIO
+and ClickHouse were healthy, MinIO's health endpoint passed, Iceberg REST
+returned its `/v1/config` response, ClickHouse returned `SELECT 1`, Kind
+`/livez` returned `ok`, and `docker top` showed exactly one
+`kube-apiserver`. The original checkout remained at
+`ae9fb69db7de737b469f868f218e8d623c206959` with only its three established
+untracked roots. No tracked project code, push, full soak, traffic action, or
+other remote resource was changed.
+
+#### Next-session resume delta
+
+The existing `r3` snapshot is evidence-only and must not be adopted or
+overwritten. A later authorized rehearsal must start from fresh identities,
+recommended as shared snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-8a77088-r4`, Compose
+project `agentflow-ci-soak-8a77088-r4`, and output directory
+`.artifacts/soak-rehearsal-2000-8a77088-r4`. Re-run every read-only identity,
+hash, bind-visibility, Compose, and wrapper gate before stopping co-tenants.
+The capacity-independent rehearsal gate remains open; push remains
+unauthorized.

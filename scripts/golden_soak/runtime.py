@@ -46,6 +46,7 @@ COMPOSE_FILES = (
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{64}$")
+_EXIT_CODE_RE = re.compile(r"^(?:0|[1-9][0-9]{0,2})$")
 _FLINK_JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 _EVENT_PREFIX_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-$")
@@ -592,16 +593,16 @@ class RuntimeHarness:
             ),
             300,
         )
-        self._run_required("wait-kafka-init", self._compose("wait", "kafka-init"), 180)
-        self._run_required("wait-minio-init", self._compose("wait", "minio-init"), 180)
-        self._run_required("wait-topics-init", self._compose("wait", "soak-topics-init"), 180)
+        self._wait_one_shot("kafka-init")
+        self._wait_one_shot("minio-init")
+        self._wait_one_shot("soak-topics-init")
         self._run_required(
             "up-data-init",
             self._compose("up", "-d", "iceberg-init", "serving-init"),
             300,
         )
-        self._run_required("wait-iceberg-init", self._compose("wait", "iceberg-init"), 180)
-        self._run_required("wait-serving-init", self._compose("wait", "serving-init"), 180)
+        self._wait_one_shot("iceberg-init")
+        self._wait_one_shot("serving-init")
         self._run_required(
             "up-app",
             self._compose(
@@ -751,12 +752,93 @@ class RuntimeHarness:
                 }
             )
 
-    def _single_container_id(self, service: str, step: str) -> str:
-        output = self._run_required(step, self._compose("ps", "-q", service), 30)
+    def _single_container_id(
+        self,
+        service: str,
+        step: str,
+        *,
+        include_stopped: bool = False,
+    ) -> str:
+        compose_args = (
+            ("ps", "--all", "--quiet", "--no-trunc", service)
+            if include_stopped
+            else ("ps", "-q", service)
+        )
+        output = self._run_required(step, self._compose(*compose_args), 30)
         ids = [line.strip() for line in output.splitlines() if line.strip()]
         if len(ids) != 1 or not _CONTAINER_ID_RE.fullmatch(ids[0]):
             raise RuntimeFailure("container_identity_invalid", service)
         return ids[0]
+
+    def _wait_one_shot(self, service: str) -> None:
+        container_id = self._single_container_id(
+            service,
+            f"ps-{service}",
+            include_stopped=True,
+        )
+        output = self._run_required(
+            f"wait-{service}",
+            [self.docker_executable, "wait", container_id],
+            180,
+        )
+        values = [line.strip() for line in output.splitlines() if line.strip()]
+        if len(values) != 1 or not _EXIT_CODE_RE.fullmatch(values[0]):
+            raise RuntimeFailure("one_shot_wait_output_invalid", service)
+        exit_code = int(values[0])
+        if exit_code > 255:
+            raise RuntimeFailure("one_shot_wait_output_invalid", service)
+        self._inspect_one_shot(container_id, service=service, expected_exit_code=exit_code)
+        if exit_code != 0:
+            raise RuntimeFailure("one_shot_exit_nonzero", service)
+
+    def _inspect_one_shot(
+        self,
+        container_id: str,
+        *,
+        service: str,
+        expected_exit_code: int,
+    ) -> None:
+        output = self._run_required(
+            f"inspect-{service}",
+            [self.docker_executable, "inspect", container_id],
+            30,
+        )
+        try:
+            parsed = json.loads(output)
+        except json.JSONDecodeError as exc:
+            raise RuntimeFailure("container_inspect_invalid", service) from exc
+        if isinstance(parsed, list) and len(parsed) == 1:
+            payload = parsed[0]
+        else:
+            payload = parsed
+        if not isinstance(payload, dict):
+            raise RuntimeFailure("container_inspect_invalid", service)
+        labels = (payload.get("Config") or {}).get("Labels")
+        state = payload.get("State")
+        restart_count = payload.get("RestartCount")
+        if (
+            payload.get("Id") != container_id
+            or not isinstance(labels, dict)
+            or not isinstance(state, dict)
+            or isinstance(restart_count, bool)
+            or not isinstance(restart_count, int)
+        ):
+            raise RuntimeFailure("container_inspect_invalid", service)
+        if labels.get("com.docker.compose.project") != self.config.project_name:
+            raise RuntimeFailure("container_project_mismatch", service)
+        if labels.get("com.docker.compose.service") != service:
+            raise RuntimeFailure("container_service_mismatch", service)
+        if restart_count != 0:
+            raise RuntimeFailure("container_restarted", service)
+        if state.get("Running") is not False or state.get("Status") != "exited":
+            raise RuntimeFailure("one_shot_not_exited", service)
+        state_exit_code = state.get("ExitCode")
+        if (
+            isinstance(state_exit_code, bool)
+            or not isinstance(state_exit_code, int)
+            or state_exit_code != expected_exit_code
+        ):
+            raise RuntimeFailure("one_shot_exit_code_mismatch", service)
 
     def _inspect_container(
         self,

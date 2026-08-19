@@ -20,6 +20,13 @@ JOB_ID = "1" * 32
 JM_ID = "a" * 64
 TM_ID = "b" * 64
 OBSERVER_ID = "c" * 64
+INIT_SERVICE_IDS = {
+    "kafka-init": "1" * 64,
+    "minio-init": "2" * 64,
+    "soak-topics-init": "3" * 64,
+    "iceberg-init": "4" * 64,
+    "serving-init": "5" * 64,
+}
 
 
 def _load(path: Path, module_name: str):
@@ -64,6 +71,32 @@ def _inspect_payload(
             "Running": running,
             "Status": "running" if running else "exited",
             "Health": {"Status": "healthy" if healthy else "unhealthy"},
+        },
+    }
+
+
+def _completed_inspect_payload(
+    container_id: str,
+    service: str,
+    *,
+    project: str = PROJECT_NAME,
+    exit_code: int = 0,
+    restarts: int = 0,
+) -> dict[str, Any]:
+    return {
+        "Id": container_id,
+        "Name": f"/{project}-{service}-1",
+        "RestartCount": restarts,
+        "Config": {
+            "Labels": {
+                "com.docker.compose.project": project,
+                "com.docker.compose.service": service,
+            }
+        },
+        "State": {
+            "Running": False,
+            "Status": "exited",
+            "ExitCode": exit_code,
         },
     }
 
@@ -124,6 +157,17 @@ class FakeRunner:
             return runtime.CommandResult(
                 0,
                 json.dumps(_inspect_payload(TM_ID, "flink-taskmanager")),
+            )
+        elif step.startswith("ps-") and step.removeprefix("ps-") in INIT_SERVICE_IDS:
+            service = step.removeprefix("ps-")
+            return runtime.CommandResult(0, f"{INIT_SERVICE_IDS[service]}\n")
+        elif step.startswith("wait-") and step.removeprefix("wait-") in INIT_SERVICE_IDS:
+            return runtime.CommandResult(0, "0\n")
+        elif step.startswith("inspect-") and step.removeprefix("inspect-") in INIT_SERVICE_IDS:
+            service = step.removeprefix("inspect-")
+            return runtime.CommandResult(
+                0,
+                json.dumps(_completed_inspect_payload(INIT_SERVICE_IDS[service], service)),
             )
         elif step == "shim-start":
             return runtime.CommandResult(0, f"{'d' * 64}\n")
@@ -198,6 +242,34 @@ class ExistingProjectRunner(FakeRunner):
             runtime = _runtime()
             return runtime.CommandResult(0, "existing-volume-id\n")
         return result
+
+
+class OneShotFaultRunner(FakeRunner):
+    def __init__(self, output_dir: Path, fault: str) -> None:
+        super().__init__(output_dir)
+        self.fault = fault
+
+    def run(self, step: str, argv: list[str], **kwargs: Any):
+        result = super().run(step, argv, **kwargs)
+        runtime = _runtime()
+        if step == "wait-kafka-init" and self.fault == "exit_code":
+            return runtime.CommandResult(0, "1\n")
+        if step != "inspect-kafka-init":
+            return result
+
+        payload = _completed_inspect_payload(INIT_SERVICE_IDS["kafka-init"], "kafka-init")
+        if self.fault == "identity":
+            payload["Id"] = "6" * 64
+        elif self.fault == "project":
+            payload["Config"]["Labels"]["com.docker.compose.project"] = "wrong"
+        elif self.fault == "service":
+            payload["Config"]["Labels"]["com.docker.compose.service"] = "wrong"
+        elif self.fault == "terminal_state":
+            payload["State"]["Running"] = True
+            payload["State"]["Status"] = "running"
+        elif self.fault == "exit_code":
+            payload["State"]["ExitCode"] = 1
+        return runtime.CommandResult(0, json.dumps(payload))
 
 
 def _flink_json(path: str) -> dict[str, Any]:
@@ -298,7 +370,7 @@ def test_ordered_rehearsal_path_is_fail_closed_and_cleans_up(tmp_path: Path) -> 
         "up-init",
         "wait-kafka-init",
         "wait-minio-init",
-        "wait-topics-init",
+        "wait-soak-topics-init",
         "up-data-init",
         "wait-iceberg-init",
         "wait-serving-init",
@@ -343,6 +415,76 @@ def test_ordered_rehearsal_path_is_fail_closed_and_cleans_up(tmp_path: Path) -> 
     assert state["claim_boundary"] == "capacity-independent-compose-rehearsal"
     assert state["container_ids"] == {"jobmanager": JM_ID, "taskmanager": TM_ID}
     assert state["flink"]["job_id"] == JOB_ID
+
+
+def test_one_shot_waits_bind_stopped_containers_by_exact_identity(tmp_path: Path) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = FakeRunner(output_dir)
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is True
+    assert not [
+        call for call in runner.calls if "compose" in call["argv"] and "wait" in call["argv"]
+    ]
+    steps = [call["step"] for call in runner.calls]
+    for service, container_id in INIT_SERVICE_IDS.items():
+        ps_step = f"ps-{service}"
+        wait_step = f"wait-{service}"
+        inspect_step = f"inspect-{service}"
+        assert steps.index(ps_step) < steps.index(wait_step) < steps.index(inspect_step)
+
+        ps_call = next(call for call in runner.calls if call["step"] == ps_step)
+        assert ps_call["argv"][-5:] == (
+            "ps",
+            "--all",
+            "--quiet",
+            "--no-trunc",
+            service,
+        )
+        wait_call = next(call for call in runner.calls if call["step"] == wait_step)
+        assert wait_call["argv"] == ("C:/fake/docker.exe", "wait", container_id)
+        inspect_call = next(call for call in runner.calls if call["step"] == inspect_step)
+        assert inspect_call["argv"] == ("C:/fake/docker.exe", "inspect", container_id)
+
+
+@pytest.mark.parametrize(
+    ("fault", "reason"),
+    [
+        ("identity", "container_inspect_invalid"),
+        ("project", "container_project_mismatch"),
+        ("service", "container_service_mismatch"),
+        ("terminal_state", "one_shot_not_exited"),
+        ("exit_code", "one_shot_exit_nonzero"),
+    ],
+)
+def test_one_shot_completion_fails_closed_on_invalid_evidence(
+    tmp_path: Path,
+    fault: str,
+    reason: str,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / fault
+    runner = OneShotFaultRunner(output_dir, fault)
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is False
+    assert outcome.reason == reason
+    steps = [call["step"] for call in runner.calls]
+    assert "up-data-init" not in steps
+    assert "compose-down" in steps
 
 
 def test_shim_probe_retries_startup_noise_and_compose_runs_are_noninteractive(

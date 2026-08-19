@@ -151,11 +151,32 @@ identity).
   the executor: no host-side kubectl/ssh polling in the first 15 minutes
   after `SOAK_RUNNING`. Never rerun `-06`.
 
-**Owner decisions still open:** (a) launch `-07` on this host (tomorrow,
-fresh Mac) versus moving the 4 h gate off the 8 GiB nested stand; (b) the
-structural exit — a `workflow_dispatch` CI soak on `ubuntu-latest` (16 GiB,
-6 h) — needs push authorization (main is 18 commits ahead of origin); a
-design and draft workflow are being prepared under
+**Second opinion (Codex `gpt-5.6-sol`, effort max, read-only;
+`.codex-grok-tasks/second-opinion-exit-plan-20260818-cx01/report.md`):**
+causal chain "partially" confirmed (the second topology loss's link to the
+first API stall is plausible, not proven; the `-05` exception is still
+unknown); keep HA kubernetes (it restored the same job id — `NONE` would turn
+a transient loss terminal), add job-HA leader-election lease
+60 s / renew 45 s / retry 5 s for a Mac-only rerun, leave heartbeat unset;
+its code findings (CRITICAL: the first `-07` pack still said
+`FLINK_RECOVER_06_PASS`; HIGH: watcher grace never closing under snapshot
+errors, unsafe `--force`; MEDIUM: fail-open transforms, merge patch without
+`resourceVersion`, watcher left alive on arm timeout) were closed in
+`c862ab8` and the `-07` pack re-stamped (`FLINK_RECOVER_07_PASS`, lease keys,
+`resourceVersion` + `patch_conflict`). CI design judged sound only as a
+separate Mac-capacity-independent data-path gate (risks: lake-materializer
+before Iceberg init in the draft, JID continuity not pinned by the shim,
+14 GB public-runner SSD, 300–340 min vs the 360 min hard limit; 2–4 focused
+days). Recommendation: both — CI first, plus exactly one Mac run of the fixed
+`-07` on an idle host.
+
+**Owner decisions still open (scenarios A–E with steps, risks and what each
+closes are in `AGENT_STATE.md` / `docs/SESSION_HANDOFF.md`, block
+`SOAK06_FAILED_LOOP_EXIT_PREPARED_20260818_04`):** (a) launch the fixed `-07`
+on this host (fresh, idle Mac) versus moving the 4 h gate off the 8 GiB
+nested stand; (b) the structural exit — a `workflow_dispatch` compose soak on
+`ubuntu-latest` — needs push authorization (main is 20 commits ahead of
+origin) plus a tracked copy of the soak pack; design and drafts under
 `.codex-grok-tasks/ci-soak-design-20260818-grok06/`; (c) any gate re-scope
 (duration, allowed restarts, rate) is explicitly **not** recommended
 silently and stays the owner's call.

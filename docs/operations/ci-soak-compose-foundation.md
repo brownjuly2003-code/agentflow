@@ -2,7 +2,8 @@
 
 **Last updated:** 2026-08-19
 
-**Status:** foundation and fail-closed runtime contract committed; live rehearsal not run
+**Status:** foundation and fail-closed runtime contract committed; Mac host
+preflight complete; live rehearsal blocked on authorized source delivery
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
 
@@ -16,6 +17,9 @@
   against live containers.
 - No container was built or started while either implementation slice was
   developed and verified.
+- A read-only Mac host preflight found a ready Docker daemon and sufficient
+  disk, but the permitted Mac checkout does not contain the runtime commits or
+  files. No source was copied and no remote checkout was changed.
 - A successful Compose configuration check is not a soak result.
 - The future CI result is a separate capacity-independent
   traffic/exactness/Flink-quiet gate. It does not close the Mac
@@ -38,7 +42,7 @@ Always trust the current Git state and the tracked contracts listed below.
 | Runtime harness | Implemented, not rehearsed | `scripts/golden_soak/runtime.py` validates the complete pack before Docker, refuses pre-existing project resources, enforces lifecycle order, validates terminal evidence, and cleans up fail-closed |
 | Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | Not attempted | Images, live TLS/socket behavior, health checks, traffic, exactness, disk use, and duration remain unproven |
+| Runtime proof | Host preflight only; live run blocked | The required Mac host has Docker and disk capacity, but its checkout lacks commit `45817b1` and the runtime/overlay files. Images, live TLS/socket behavior, health checks, traffic, exactness, and duration remain unproven |
 | Push or remote mutation | Not performed | The foundation and this handoff are local commits until separately authorized |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
@@ -134,6 +138,25 @@ The runtime session also used RED-to-GREEN. The initial focused contract had
 - LF/NUL, trailing-whitespace, placeholder, and known-key-pattern scan — passed;
 - exact five-path staged comparison and `git diff --cached --check` — passed.
 
+The read-only rehearsal host preflight on 2026-08-19 established:
+
+- the project rule routes Docker-heavy verification through SSH alias
+  `deproject-mac`, so Windows Docker was not used;
+- `/usr/local/bin/docker` is available on the Mac (`client 29.5.2`, daemon
+  `29.2.1`) and the root filesystem reported 507 GiB available;
+- the Mac checkout was at `ae9fb69` and did not contain commit `45817b1`,
+  `scripts/golden_soak/runtime.py`, `scripts/golden_soak/pods_shim.py`, or
+  `docker-compose.soak.yml`;
+- the Mac checkout already had unrelated untracked paths, which must remain
+  untouched;
+- no build, container start, source transfer, checkout update, pull, or push
+  was performed.
+
+The live rehearsal therefore remains blocked until the user explicitly
+authorizes a scoped delivery of the committed source snapshot to the Mac (or
+an authorized push/fetch path). That authorization is an external mutation
+boundary and is not implied by autonomy.
+
 Revalidate the current configuration without starting services:
 
 ```powershell
@@ -170,11 +193,15 @@ open; see `docs/perf/golden-operator-acceptance-2026-07-30.md` and
 Only the first item is the next named slice. Keep later items separate so a
 green focused gate ends each turn.
 
-1. **Short local rehearsal — next slice.** Use a fresh dedicated Compose
-   project, a fresh output directory, and `--count 2000` to prove image build,
-   readiness, live shim TLS/socket behavior, traffic, verifier compatibility,
-   disk headroom, evidence, and cleanup. A rehearsal result must not be
-   labelled a soak PASS. Do not raw-retry a failed build or rehearsal.
+1. **Authorize source delivery and run the short Mac rehearsal — next
+   slice.** Explicitly authorize either a scoped committed-snapshot transfer
+   into a new Mac directory or the required push/fetch path. Preserve the
+   existing Mac checkout and its unrelated untracked files. After confirming
+   the exact runtime source identity, use a fresh dedicated Compose project, a
+   fresh output directory, and `--count 2000` to prove image build, readiness,
+   live shim TLS/socket behavior, traffic, verifier compatibility, disk
+   headroom, evidence, and cleanup. A rehearsal result must not be labelled a
+   soak PASS. Do not raw-retry a failed build or rehearsal.
 2. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
    `cancel-in-progress: false`, fail-closed finalization, and always-uploaded
    artifacts. This still does not authorize a push.
@@ -192,8 +219,11 @@ green focused gate ends each turn.
    contracts in `tests/unit/test_ci_soak_{foundation,runtime}.py`.
 4. Preserve unrelated dirty and untracked files.
 5. Do not modify the eight files under `scripts/golden_soak/pack/`.
-6. For a rehearsal, use a new Compose project name and empty output directory;
-   keep workflow, push, full-soak, and Mac-gate claims outside that slice.
+6. Do not deliver files to or change the Mac checkout without explicit remote
+   mutation authorization.
+7. For a rehearsal, verify the Mac snapshot hashes first, then use a new
+   Compose project name and empty output directory; keep workflow, full-soak,
+   and Mac-gate claims outside that slice.
 
 ## Tracked file map
 

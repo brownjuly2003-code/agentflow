@@ -288,13 +288,15 @@ Evidence remains under the `r4` output directory:
 #### Next-session resume delta
 
 Treat the `r4` snapshot, project identity, wrapper, and output as immutable
-evidence; do not adopt or rerun them. The next atomic implementation slice is
-to add a failing merged-Compose contract test, then give `serving-bridge` an
-explicit healthcheck compatible with its actual process. Check other
-non-HTTP commands built from `Dockerfile.api`, including `lake-materializer`,
-against the same inherited-healthcheck defect. Complete focused local
-verification and a separate scoped commit before requesting any new remote
-runtime attempt.
+evidence; do not adopt or rerun them. The local follow-up slice reproduced the
+defect with a RED test against the merged three-file Compose config: both
+`lake-materializer` and `serving-bridge` lacked service-level healthchecks.
+`serving-bridge` now probes its own Prometheus endpoint on port `9108`, while
+`lake-materializer`, which has no separate health endpoint, explicitly
+disables the API image's inherited probe. The regression test turned GREEN;
+the complete foundation/runtime unit gate reported `27 passed`, Ruff passed,
+and `docker compose config --quiet` accepted the merged config. This local
+verification does not claim a runtime rehearsal result.
 
 Any later authorized rehearsal must use fresh identities, recommended as
 shared snapshot

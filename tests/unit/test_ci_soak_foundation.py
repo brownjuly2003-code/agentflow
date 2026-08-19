@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FOUNDATION_ROOT = PROJECT_ROOT / "scripts" / "golden_soak"
 PACK_ROOT = FOUNDATION_ROOT / "pack"
 COMPOSE_PATH = PROJECT_ROOT / "docker-compose.soak.yml"
+COMPOSE_PATHS = (
+    PROJECT_ROOT / "docker-compose.yml",
+    PROJECT_ROOT / "docker-compose.flink.yml",
+    COMPOSE_PATH,
+)
 
 EXPECTED_PACK = {
     "baseline-job.yaml": (4294, "a1ff62f52b4a8904c0629e691cf0081b4dbe9439a0cb9be89462ff7cfc1f97bf"),
@@ -38,6 +44,22 @@ def _sha256(path: Path) -> str:
 
 def _compose() -> dict:
     return yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+
+
+def _merged_compose() -> dict:
+    command = ["docker", "compose"]
+    for path in COMPOSE_PATHS:
+        command.extend(["-f", str(path)])
+    command.extend(["config", "--format", "json"])
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return json.loads(completed.stdout)
 
 
 def test_tracked_source_pack_matches_the_recorded_identity_byte_for_byte() -> None:
@@ -142,6 +164,33 @@ def test_soak_overlay_wires_consumer_groups_and_ready_api() -> None:
     api = services["agentflow-api"]
     assert api["environment"]["AGENTFLOW_DEMO_MODE"] == "true"
     assert "/health/ready" in " ".join(str(value) for value in api["healthcheck"]["test"])
+
+
+def test_merged_soak_compose_overrides_api_healthcheck_for_background_consumers() -> None:
+    services = _merged_compose()["services"]
+
+    assert {
+        name: services[name].get("healthcheck")
+        for name in ("lake-materializer", "serving-bridge")
+    } == {
+        "lake-materializer": {"disable": True},
+        "serving-bridge": {
+            "test": [
+                "CMD",
+                "python",
+                "-c",
+                (
+                    "import urllib.request; "
+                    "urllib.request.urlopen("
+                    '"http://127.0.0.1:9108/metrics", timeout=3).read(1)'
+                ),
+            ],
+            "timeout": "5s",
+            "interval": "10s",
+            "retries": 12,
+            "start_period": "20s",
+        },
+    }
 
 
 def test_soak_overlay_gives_core_healthchecks_startup_grace_only() -> None:

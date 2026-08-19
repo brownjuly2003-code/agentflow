@@ -2,10 +2,9 @@
 
 **Last updated:** 2026-08-19
 
-**Status:** focused Mac diagnosis complete; diagnostic cleanup independently
-reconfirmed; soak-only 90-second Flink JobManager startup grace implemented
-and locally configuration-validated; no post-fix live health check or
-rehearsal PASS
+**Status:** soak-only 90-second Flink JobManager startup grace implemented and
+verified in one isolated Mac health check; cleanup independently confirmed;
+no rehearsal PASS
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
 
@@ -17,9 +16,10 @@ rehearsal PASS
 
 - The repository contains a tracked source pack, a Docker Compose topology, a
   local runtime controller, and an identity-bound Kubernetes-pods shim.
-- It does not contain a CI workflow. The controller has now been run against
-  live containers, but none of the three attempts reached baseline, shim, traffic, or
-  verification, and no rehearsal PASS exists.
+- It does not contain a CI workflow. None of the three controller attempts
+  reached baseline, shim, traffic, or verification. A later health-only run
+  verified the corrected JobManager readiness boundary without running the
+  controller; no rehearsal PASS exists.
 - No container was built or started while either implementation slice was
   developed and verified; the later rehearsal described below was a separate
   runtime slice.
@@ -47,8 +47,8 @@ Always trust the current Git state and the tracked contracts listed below.
 | Runtime harness | Implemented; exercised through `up-core` | `scripts/golden_soak/runtime.py` validated the complete pack, rejected no pre-existing resources, built both local images on the second attempt, published FAIL evidence, and cleaned the named Compose projects |
 | Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | FAIL before baseline; readiness cause localized and locally corrected | Attempt 1 failed resolving the pinned Flink base through Docker DNS. After registry recovery, attempts 2 and 3 built both images but `flink-jobmanager` became unhealthy during `up-core`. A focused run proved that the JVM stays alive and REST becomes ready after the old no-grace health budget. The 90-second soak-only correction is locally verified, but post-fix live health, shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
-| Push or remote mutation | Scoped snapshot transfer only | Commit `45817b1` was archived into a new Mac directory after explicit authorization. No push, pull, fetch, checkout change, or mutation of the existing Mac worktree occurred |
+| Runtime proof | JobManager health correction verified; rehearsal still open | The pre-fix controller attempts failed before baseline. A focused post-fix Mac run observed only `starting` then `healthy`, REST HTTP 200 at 67 seconds, Docker healthy at 73 seconds, zero restarts/OOM, and a green 20-second hold. Shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
+| Push or remote mutation | Scoped snapshot transfer and isolated health lifecycle only | Commit `45817b1` was archived into a new Mac directory, and a later fresh Compose project verified the committed `cfd7b1c` overlay. No push, pull, fetch, checkout change, image change, or mutation of the existing Mac worktree occurred |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
 the launch and recovery scripts affected by the later stamper correction in
@@ -255,17 +255,55 @@ changed, or removed. Do not repeat this cleanup query without new evidence.
   protected pack hashes. Merged Compose JSON preserved the base curl test,
   10-second interval, 5-second timeout, and five retries while normalizing the
   new start period to `1m30s`.
-- No post-fix container, image build, focused Mac health check, rehearsal,
-  traffic, workflow, push, or remote mutation occurred.
+- That local correction slice started no container or image build. The later
+  focused health check below is a separate runtime slice.
+
+### Focused post-fix Mac health check
+
+- The latest user authorization covered one fresh project,
+  `agentflow-ci-soak-health-cfd7b1c-01`, and deletion only of resources created
+  by that project. The run used evidence root
+  `/Users/julia/agentflow-ci-soak-health-cfd7b1c-20260819-01` and did not run
+  the soak controller.
+- The exact committed overlay SHA-256 was
+  `a172b5178d85a4c6e836a5dc083fe7a5b7637567ef564652b5e4d1aea89cae9a`.
+  Base and Flink Compose hashes matched the immutable `45817b1` snapshot, and
+  `--no-build --pull never` pinned cached Flink image
+  `sha256:205d6fc0427e70eb2890e8fa235e62011b6a3b79c8c08814750476228485dab3`.
+- The JobManager timeline contained 15 samples over 73 seconds and only the
+  states `starting` then `healthy`; it contained no `unhealthy`, restart, or
+  OOM sample. REST first returned HTTP 200 at 67 seconds and Docker became
+  healthy at 73 seconds. Inspect recorded the exact curl probe, `start_period`
+  90 seconds, interval 10 seconds, timeout 5 seconds, five retries, restart
+  count zero, and OOM false.
+- After a further 20-second hold, the same container identity remained healthy
+  and Flink 2.3.0 returned `/overview`. Kafka, MinIO, ClickHouse, and the
+  JobManager were all healthy before cleanup.
+- The bounded log scan found no OOM, exception, fatal line, or uppercase
+  `ERROR` level. Its sole case-insensitive `error` match was an INFO message
+  that the optional Hadoop FS provider was not packaged.
+- `result-final.txt` emitted
+  `RESULT=HEALTH_PASS reason=startup_grace_verified cleanup=PASS`. Its SHA-256
+  is `b78dda2ad1806342380d208d090da34ff08801abfd3b4c8f779aae46a6604745`;
+  timeline SHA-256 is
+  `2f2284953131ab6c8233d1d62a0d42ba646aff568c9bd72f8bc5b8ed7a1817b8`,
+  and inspect SHA-256 is
+  `10eaa2d3f1b41f8cabb1019ece6b41f7df4cfac6259fbbb819e8934c2a2b36e9`.
+- Scoped `compose down -v` removed four containers, four volumes, and the
+  project network. Fresh independent label queries returned zero containers,
+  volumes, and networks. The existing Mac checkout, source snapshot, cached
+  images, and unrelated Docker resources remained untouched.
+- This is a health-boundary PASS only. It is not `REHEARSAL_PASS`, traffic,
+  exactness, shim, duration, CI workflow, or Mac rollback evidence.
 
 ### Recorded authorization boundary
 
-The user authorized SSH transfer of snapshot commit `45817b1` into the isolated
-directory, rehearsal `--count 2000`, and deletion only of Docker resources
-created by that work. This history is not push authorization. A future session
-must still check the latest user message before creating or deleting remote
-resources; the existing Mac checkout, unrelated Docker resources, and image
-cache remain out of scope.
+The latest authorization was consumed by the single focused health lifecycle
+described above. It did not authorize another rehearsal, workflow, push, image
+deletion, existing-checkout mutation, or unrelated Docker cleanup. A future
+session must still check the latest user message before creating or deleting
+remote resources; the existing Mac checkout, unrelated Docker resources, and
+image cache remain out of scope.
 
 Revalidate the current configuration without starting services:
 
@@ -303,18 +341,14 @@ open; see `docs/perf/golden-operator-acceptance-2026-07-30.md` and
 Only the first item is the next named slice. Keep later items separate so a
 green focused gate ends each turn.
 
-1. **Focused post-fix Mac JobManager health check — next external slice.** Run
-   one isolated health-only project only when the latest user message
-   explicitly authorizes creating and deleting that exact remote Compose
-   lifecycle. Confirm the corrected health boundary and preserve bounded logs;
-   do not run the soak controller or a full rehearsal in the same slice.
-2. **Short Mac rehearsal after the focused health check — later slice.** Use a
-   new Compose project and output directory with `--count 2000`. It may emit
-   only `REHEARSAL_PASS`; do not describe it as a four-hour soak PASS.
-3. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
+1. **Short Mac rehearsal — next external slice.** Only after a new explicit
+   authorization, use a new Compose project and output directory with
+   `--count 2000`. It may emit only `REHEARSAL_PASS`; do not describe it as a
+   four-hour soak PASS or reuse the completed health project.
+2. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
    `cancel-in-progress: false`, fail-closed finalization, and always-uploaded
    artifacts. This still does not authorize a push.
-4. **Remote rehearsal and full run — external gates.** Require explicit push
+3. **Remote full run — external gate.** Require explicit push
    authorization, inspect current GitHub runner limits and free disk, dispatch
    the short rehearsal first, and attempt the full run only after its evidence
    is accepted.
@@ -333,11 +367,12 @@ green focused gate ends each turn.
 7. Treat the old `REMOTE_PROJECT_*=0` output as invalid. The corrected explicit
    Docker-path recheck is complete and found zero resources; do not repeat it
    without new evidence.
-8. Do not run a fourth raw rehearsal. The next remote action, if explicitly
-   authorized, is one fresh isolated post-fix JobManager health check only.
-9. After that focused health check is accepted, use a different new Compose
-   project name and empty output directory for the later short rehearsal; keep
-   workflow, full-soak, and Mac-gate claims outside that slice.
+8. Preserve the completed health evidence root and do not repeat its project or
+   lifecycle without new evidence.
+9. The next remote action, only if explicitly authorized, is one short
+   `--count 2000` rehearsal with a different new Compose project and empty
+   output directory. Keep workflow, full-soak, and Mac-gate claims outside
+   that slice.
 
 ## Tracked file map
 

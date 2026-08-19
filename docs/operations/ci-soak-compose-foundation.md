@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-19
 
-**Status:** foundation and fail-closed runtime contract committed; Mac host
-preflight complete; live rehearsal blocked on authorized source delivery
+**Status:** live Mac rehearsal attempted; no PASS; fail-closed at Flink
+JobManager health after the single allowed retry
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
 
@@ -13,13 +13,14 @@ preflight complete; live rehearsal blocked on authorized source delivery
 
 - The repository contains a tracked source pack, a Docker Compose topology, a
   local runtime controller, and an identity-bound Kubernetes-pods shim.
-- It does not contain a CI workflow, and the new controller has not been run
-  against live containers.
+- It does not contain a CI workflow. The controller has now been run against
+  live containers, but neither attempt reached baseline, shim, traffic, or
+  verification, and no rehearsal PASS exists.
 - No container was built or started while either implementation slice was
-  developed and verified.
-- A read-only Mac host preflight found a ready Docker daemon and sufficient
-  disk, but the permitted Mac checkout does not contain the runtime commits or
-  files. No source was copied and no remote checkout was changed.
+  developed and verified; the later rehearsal described below was a separate
+  runtime slice.
+- An authorized byte-verified snapshot was copied to a new Mac directory. The
+  existing Mac checkout and its unrelated untracked files were not changed.
 - A successful Compose configuration check is not a soak result.
 - The future CI result is a separate capacity-independent
   traffic/exactness/Flink-quiet gate. It does not close the Mac
@@ -39,11 +40,11 @@ Always trust the current Git state and the tracked contracts listed below.
 | Source identity | `20260819-07` | The manifest labels it `source-reference-only` |
 | Compose topology | Tracked, configuration-validated | `docker-compose.soak.yml`, merged with the base and Flink Compose files |
 | Foundation contract | Green at commit time | `tests/unit/test_ci_soak_foundation.py`: 6 tests passed |
-| Runtime harness | Implemented, not rehearsed | `scripts/golden_soak/runtime.py` validates the complete pack before Docker, refuses pre-existing project resources, enforces lifecycle order, validates terminal evidence, and cleans up fail-closed |
+| Runtime harness | Implemented; exercised through `up-core` | `scripts/golden_soak/runtime.py` validated the complete pack, rejected no pre-existing resources, built both local images on the second attempt, published FAIL evidence, and cleaned the named Compose projects |
 | Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | Host preflight only; live run blocked | The required Mac host has Docker and disk capacity, but its checkout lacks commit `45817b1` and the runtime/overlay files. Images, live TLS/socket behavior, health checks, traffic, exactness, and duration remain unproven |
-| Push or remote mutation | Not performed | The foundation and this handoff are local commits until separately authorized |
+| Runtime proof | FAIL before baseline | Attempt 1 failed resolving the pinned Flink base through Docker DNS. After registry recovery, attempt 2 built both images but `flink-jobmanager` became unhealthy during `up-core`. Shim TLS/socket behavior, traffic, exactness, and duration remain unproven |
+| Push or remote mutation | Scoped snapshot transfer only | Commit `45817b1` was archived into a new Mac directory after explicit authorization. No push, pull, fetch, checkout change, or mutation of the existing Mac worktree occurred |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
 the launch and recovery scripts affected by the later stamper correction in
@@ -152,10 +153,37 @@ The read-only rehearsal host preflight on 2026-08-19 established:
 - no build, container start, source transfer, checkout update, pull, or push
   was performed.
 
-The live rehearsal therefore remains blocked until the user explicitly
-authorizes a scoped delivery of the committed source snapshot to the Mac (or
-an authorized push/fetch path). That authorization is an external mutation
-boundary and is not implied by autonomy.
+The authorized live rehearsal then produced this evidence:
+
+- local `git archive` SHA-256
+  `369ac0e176b8c5479d1b1117b5c8b231ab76255fe44200ffda947c4b0f20ae86`
+  matched after transfer, and the remote Git blob IDs for `runtime.py`,
+  `pods_shim.py`, and `docker-compose.soak.yml` matched commit `45817b1`;
+- the snapshot was extracted only under
+  `/Users/julia/agentflow-ci-soak-rehearsal-45817b1-20260819-01`; the existing
+  checkout at `ae9fb69` remained untouched;
+- attempt 1 (`agentflow-ci-soak-45817b1-r1`) emitted
+  `RESULT=FAIL reason=build_flink_failed` when BuildKit DNS returned
+  `no such host` for `registry-1.docker.io`; cleanup completed and the final
+  project-label counts were zero containers, zero volumes, and zero networks;
+- host DNS and HTTPS subsequently resolved the registry, and Buildx read the
+  exact pinned Flink digest. This new evidence permitted the one bounded retry;
+- attempt 2 (`agentflow-ci-soak-45817b1-r2`) built both `flink-job-runner` and
+  `agentflow-api`, then emitted `RESULT=FAIL reason=up_core_failed` because
+  `flink-jobmanager` became unhealthy. Its captured container log contains the
+  standalone-session start plus repeated `Unknown module: jdk.compiler`
+  warnings, but no decisive healthcheck failure detail;
+- attempt 2 never reached the shim, baseline, observer, producer, or verifier.
+  `compose-down` returned zero after removing four containers, four named
+  volumes, and the project network; a fresh label query returned no project
+  containers, volumes, or networks;
+- pulled and locally built image cache remains on the Mac. It is outside
+  Compose `down -v`, can be shared, and was not destructively removed without
+  a pre-run ownership baseline.
+
+Evidence remains in `.artifacts/soak-rehearsal-2000` and
+`.artifacts/soak-rehearsal-2000-r2` under the isolated snapshot directory.
+There was no third attempt, no PASS token, and no traffic result.
 
 Revalidate the current configuration without starting services:
 
@@ -193,19 +221,20 @@ open; see `docs/perf/golden-operator-acceptance-2026-07-30.md` and
 Only the first item is the next named slice. Keep later items separate so a
 green focused gate ends each turn.
 
-1. **Authorize source delivery and run the short Mac rehearsal — next
-   slice.** Explicitly authorize either a scoped committed-snapshot transfer
-   into a new Mac directory or the required push/fetch path. Preserve the
-   existing Mac checkout and its unrelated untracked files. After confirming
-   the exact runtime source identity, use a fresh dedicated Compose project, a
-   fresh output directory, and `--count 2000` to prove image build, readiness,
-   live shim TLS/socket behavior, traffic, verifier compatibility, disk
-   headroom, evidence, and cleanup. A rehearsal result must not be labelled a
-   soak PASS. Do not raw-retry a failed build or rehearsal.
-2. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
+1. **Flink JobManager readiness diagnosis — next slice.** Do not launch a
+   third raw rehearsal. Use the existing isolated snapshot and built image for
+   one focused diagnostic that preserves `docker inspect .State.Health` and
+   the complete JobManager logs before cleanup. Establish whether the failure
+   is the healthcheck command, startup budget, JVM/module state, or another
+   concrete cause before changing code or Compose. Any behavioral correction
+   must start with a failing focused test.
+2. **Short Mac rehearsal after a verified correction — later slice.** Use a
+   new Compose project and output directory with `--count 2000`. It may emit
+   only `REHEARSAL_PASS`; do not describe it as a four-hour soak PASS.
+3. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
    `cancel-in-progress: false`, fail-closed finalization, and always-uploaded
    artifacts. This still does not authorize a push.
-3. **Remote rehearsal and full run — external gates.** Require explicit push
+4. **Remote rehearsal and full run — external gates.** Require explicit push
    authorization, inspect current GitHub runner limits and free disk, dispatch
    the short rehearsal first, and attempt the full run only after its evidence
    is accepted.
@@ -219,11 +248,13 @@ green focused gate ends each turn.
    contracts in `tests/unit/test_ci_soak_{foundation,runtime}.py`.
 4. Preserve unrelated dirty and untracked files.
 5. Do not modify the eight files under `scripts/golden_soak/pack/`.
-6. Do not deliver files to or change the Mac checkout without explicit remote
-   mutation authorization.
-7. For a rehearsal, verify the Mac snapshot hashes first, then use a new
-   Compose project name and empty output directory; keep workflow, full-soak,
-   and Mac-gate claims outside that slice.
+6. Preserve the isolated Mac snapshot and both FAIL evidence directories; do
+   not change the existing Mac checkout.
+7. Do not run a third raw rehearsal. Diagnose the JobManager health boundary
+   in a distinct focused slice first.
+8. After a verified correction, use a new Compose project name and empty
+   output directory; keep workflow, full-soak, and Mac-gate claims outside
+   that slice.
 
 ## Tracked file map
 

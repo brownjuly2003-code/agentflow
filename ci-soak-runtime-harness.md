@@ -223,3 +223,84 @@ project `agentflow-ci-soak-8a77088-r4`, and output directory
 hash, bind-visibility, Compose, and wrapper gate before stopping co-tenants.
 The capacity-independent rehearsal gate remains open; push remains
 unauthorized.
+
+### `r4` one-shot rehearsal — 2026-08-19
+
+The authorized `r4` slice used the fresh shared-root snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-8a77088-r4`, Compose
+project `agentflow-ci-soak-8a77088-r4`, and output directory
+`.artifacts/soak-rehearsal-2000-8a77088-r4`. The source archive, six critical
+Git blob identities, and `scripts/init_iceberg.py` matched the durable values
+above. A disposable container on the exact target Docker socket read the
+expected init-script SHA-256 through a read-only bind. The merged Compose
+config SHA-256 was
+`9b0ead37ba3cdad9a6508908be11fe4d50083d0e666cf3c892698a894a96969b`.
+
+`run-rehearsal-r4.sh` was derived from the verified `r2` wrapper by changing
+only the snapshot, output, and project identities. Local and remote `bash -n`
+passed, and both copies had SHA-256
+`b3c4a61f282c9d7b3c80c0fe1ddbcefe2feb5d291fd4e1a1a7dd3ece836787a6`.
+The wrapper invoked the controller exactly once with `--count 2000`; its
+preflight passed and it stopped the four protected co-tenants before the
+controller returned `1` with:
+
+```text
+RESULT=FAIL reason=up_app_failed
+```
+
+Builds, core startup, one-shot initializers, and data initialization all
+completed successfully. `up-app` failed because Compose reported
+`serving-bridge` as unhealthy. The service log shows that the bridge process
+started normally and exposed metrics on port `9108`. The service has no
+Compose-level healthcheck override, so its `agentflow-api-local:soak` image
+supplies the API healthcheck for `http://127.0.0.1:8000/health/ready`, although
+the bridge command does not start the API server on port `8000`. This is an
+incompatible inherited healthcheck in the Compose contract, not a bridge
+process crash, data-correctness result, or soak result. Producer, observer, and
+verification steps did not run.
+
+The wrapper reported `RESTORE_RESULT=PASS`. Independent checks on the exact
+Colima socket found zero `r4` containers, networks, and volumes and no active
+`r4` wrapper/controller process. The exact protected MinIO, Iceberg REST,
+ClickHouse, and Kind IDs returned with restart count zero; MinIO and
+ClickHouse were healthy, MinIO's health endpoint, Iceberg REST `/v1/config`,
+and ClickHouse `SELECT 1` all passed. Kind `/livez` became responsive within
+the bounded readiness wait, and `crictl` returned exactly one kube-apiserver
+ID. The original Mac checkout
+remained at `ae9fb69db7de737b469f868f218e8d623c206959` with only its three
+established untracked roots.
+
+Evidence remains under the `r4` output directory:
+
+- `result-final.txt`: SHA-256
+  `e4ce4bdc34a71615accbd319c33fdc2c87700a813f1d1cde5b8365fd0f76a699`.
+- `runtime-state.json`: SHA-256
+  `f1e4f4c407405ad38460bee9b4758ecfa82b230b07ca9fd2cfbf5f829d99caf3`.
+- `logs/up-app.log`: SHA-256
+  `8e4ea8833c4121ec016c4930913a510fb1d1bfeadf16283a361a974c67a94195`.
+- `logs/collect-ps.log`: SHA-256
+  `ffe8e0711114e3361d0a7ce50a739f7b16501b02cea96ceb423adf948568a346`.
+- `logs/collect-logs.log`: SHA-256
+  `ce2b1cf9ded6efd6675a03c02acc414e818cefcec594ba9aada3164649fa9f55`.
+- `logs/compose-down.log`: SHA-256
+  `140ad52faae96aaa0ddb955e454881f92b13e48aa3a90f199dfce883e132a9c5`.
+
+#### Next-session resume delta
+
+Treat the `r4` snapshot, project identity, wrapper, and output as immutable
+evidence; do not adopt or rerun them. The next atomic implementation slice is
+to add a failing merged-Compose contract test, then give `serving-bridge` an
+explicit healthcheck compatible with its actual process. Check other
+non-HTTP commands built from `Dockerfile.api`, including `lake-materializer`,
+against the same inherited-healthcheck defect. Complete focused local
+verification and a separate scoped commit before requesting any new remote
+runtime attempt.
+
+Any later authorized rehearsal must use fresh identities, recommended as
+shared snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-8a77088-r5`, Compose
+project `agentflow-ci-soak-8a77088-r5`, and output directory
+`.artifacts/soak-rehearsal-2000-8a77088-r5`. Re-run every pre-stop gate and
+invoke the controller at most once. The capacity-independent rehearsal gate
+remains open; no push, traffic test, full soak, or production gate is
+authorized or claimed.

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -24,6 +25,19 @@ OLD_ORDER = "ORD-20260101-0100"
 NEW_ORDER = "ORD-20260102-0200"
 KEPT_KAFKA = "agentflow-golden-soak-rv-20260802-01"
 KEPT_LABEL = "20260802-01"
+RESTART_MAX_FAILURES_KEY = "restart-strategy.failure-rate.max-failures-per-interval"
+RESTART_INTERVAL_KEY = "restart-strategy.failure-rate.failure-rate-interval"
+RESTART_DELAY_KEY = "restart-strategy.failure-rate.delay"
+HELM_RESTART_ENV = {
+    "FLINK_RESTART_MAX_FAILURES_PER_INTERVAL": "3",
+    "FLINK_RESTART_FAILURE_RATE_INTERVAL_MS": "300000",
+    "FLINK_RESTART_DELAY_MS": "10000",
+}
+STALE_RESTART_ENV = {
+    "FLINK_RESTART_MAX_FAILURES_PER_INTERVAL": "30",
+    "FLINK_RESTART_FAILURE_RATE_INTERVAL_MS": "600000",
+    "FLINK_RESTART_DELAY_MS": "15000",
+}
 
 
 def _load_module():
@@ -59,6 +73,9 @@ merge = {
     "flinkConfiguration": {
       "execution.checkpointing.min-pause": "2000 ms",
       "execution.checkpointing.interval": "1000 ms",
+      "restart-strategy.failure-rate.max-failures-per-interval": "3",
+      "restart-strategy.failure-rate.failure-rate-interval": "300000 ms",
+      "restart-strategy.failure-rate.delay": "10000 ms",
     }
   }
 }
@@ -213,6 +230,235 @@ def _write_watcher(root: Path) -> Path:
     path = root / "fake_watcher.py"
     _write(path, "print('fake-watcher')\n")
     return path
+
+
+def _generated_block(recover: str, marker: str, end_token: str) -> str:
+    start = recover.index(f"# {marker}")
+    end = recover.index(end_token, start)
+    return recover[start:end]
+
+
+def _exec_generated(
+    source: str,
+    source_name: str,
+    namespace: dict[str, object],
+) -> dict[str, object]:
+    exec(compile(source, source_name, "exec"), namespace)  # noqa: S102
+    return namespace
+
+
+def _rewrite_source(recover: str, marker: str, live_dir: Path, cr: dict) -> str:
+    live_dir.mkdir(parents=True, exist_ok=True)
+    (live_dir / "flink-cr-live.json").write_text(json.dumps(cr), encoding="utf-8", newline="\n")
+    block = _generated_block(recover, marker, "merge = {").replace(
+        "$OUT", live_dir.resolve().as_posix()
+    )
+    return "import json\nfrom pathlib import Path\n" + block
+
+
+def _live_env(**overrides: str | None) -> dict[str, str]:
+    values: dict[str, str] = {
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "FLINK_CHECKPOINT_INTERVAL_MS": "999",
+        "FLINK_CHECKPOINT_MIN_PAUSE_MS": "888",
+        **STALE_RESTART_ENV,
+    }
+    for name, value in overrides.items():
+        if value is None:
+            values.pop(name, None)
+        else:
+            values[name] = value
+    return values
+
+
+def _live_cr(env: dict[str, str]) -> dict:
+    return {
+        "metadata": {"resourceVersion": "7"},
+        "spec": {
+            "flinkConfiguration": {"restart-strategy.type": "failure-rate"},
+            "podTemplate": {
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "flink-main-container",
+                            "env": [{"name": name, "value": value} for name, value in env.items()],
+                        },
+                        {
+                            "name": "proxy",
+                            "env": [{"name": "PROXY_KEEP", "value": "stay"}],
+                        },
+                    ]
+                }
+            },
+        },
+    }
+
+
+def _env_values(cr: dict) -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
+    for container in cr["spec"]["podTemplate"]["spec"]["containers"]:
+        for env in container.get("env") or []:
+            found.setdefault(str(env["name"]), []).append(str(env.get("value")))
+    return found
+
+
+def _replace_recover_config(source: Path, key: str, value: str) -> None:
+    path = source / "_flink_recover.sh"
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(rf'("{re.escape(key)}"\s*:\s*")[^"]*(")')
+    updated, count = pattern.subn(rf"\g<1>{value}\2", text, count=1)
+    assert count == 1, key
+    path.write_text(updated, encoding="utf-8", newline="\n")
+
+
+def _remove_recover_config(source: Path, key: str) -> None:
+    path = source / "_flink_recover.sh"
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    kept = [line for line in lines if f'"{key}"' not in line]
+    assert len(lines) - len(kept) == 1, key
+    path.write_text("".join(kept), encoding="utf-8", newline="\n")
+
+
+def _duplicate_recover_config(source: Path, key: str) -> None:
+    path = source / "_flink_recover.sh"
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    matches = [index for index, line in enumerate(lines) if f'"{key}"' in line]
+    assert len(matches) == 1, key
+    lines.insert(matches[0] + 1, lines[matches[0]])
+    path.write_text("".join(lines), encoding="utf-8", newline="\n")
+
+
+def test_restart_env_rewrite_and_post_assert_are_generated(tmp_path: Path) -> None:
+    module = _load_module()
+    source = _template(tmp_path)
+    out = tmp_path / "out"
+    assert module.main(_stamp_args(module, source, out, _write_watcher(tmp_path))) == 0
+
+    recover = (out / "_flink_recover.sh").read_text(encoding="utf-8")
+    live = _live_cr(_live_env())
+    namespace = _exec_generated(
+        _rewrite_source(recover, module.ENV_REWRITE_MARKER, tmp_path / "live", live),
+        "<generated-restart-env-rewrite>",
+        {},
+    )
+
+    rewritten = _env_values(namespace["cr"])
+    expected = {
+        "FLINK_CHECKPOINT_INTERVAL_MS": "10000",
+        "FLINK_CHECKPOINT_MIN_PAUSE_MS": "10000",
+        **HELM_RESTART_ENV,
+    }
+    for name, value in expected.items():
+        assert rewritten[name] == [value]
+    assert rewritten["PROXY_KEEP"] == ["stay"]
+
+    post_assert = _generated_block(recover, module.ENV_POST_ASSERT_MARKER, "doc={")
+    _exec_generated(
+        post_assert,
+        "<generated-env-post-assert>",
+        {"cr": namespace["cr"]},
+    )
+
+    stale_restart = _live_cr(
+        _live_env(
+            FLINK_CHECKPOINT_INTERVAL_MS="10000",
+            FLINK_CHECKPOINT_MIN_PAUSE_MS="10000",
+        )
+    )
+    with pytest.raises(SystemExit, match="restart_env_not_applied"):
+        _exec_generated(
+            post_assert,
+            "<generated-env-post-assert-stale>",
+            {"cr": stale_restart},
+        )
+
+
+def test_restart_env_rewrite_fails_when_required_env_is_missing(tmp_path: Path) -> None:
+    module = _load_module()
+    source = _template(tmp_path)
+    out = tmp_path / "out"
+    assert module.main(_stamp_args(module, source, out, _write_watcher(tmp_path))) == 0
+    recover = (out / "_flink_recover.sh").read_text(encoding="utf-8")
+    live = _live_cr(_live_env(FLINK_RESTART_DELAY_MS=None))
+
+    with pytest.raises(SystemExit, match="restart_env_missing"):
+        _exec_generated(
+            _rewrite_source(
+                recover,
+                module.ENV_REWRITE_MARKER,
+                tmp_path / "live-missing",
+                live,
+            ),
+            "<generated-restart-env-missing>",
+            {},
+        )
+
+
+def test_existing_generated_env_blocks_are_refreshed(tmp_path: Path) -> None:
+    module = _load_module()
+    source = _template(tmp_path)
+    out = tmp_path / "out"
+    watcher = _write_watcher(tmp_path)
+    assert module.main(_stamp_args(module, source, out, watcher)) == 0
+    _replace_recover_config(out, RESTART_MAX_FAILURES_KEY, "7")
+    _replace_recover_config(out, RESTART_INTERVAL_KEY, "420000 ms")
+    _replace_recover_config(out, RESTART_DELAY_KEY, "12000 ms")
+
+    parsed = module.build_parser().parse_args(
+        _stamp_args(module, source, tmp_path / "unused", watcher)
+    )
+    refreshed = module.transform_recover(
+        (out / "_flink_recover.sh").read_text(encoding="utf-8"),
+        module.config_from_args(parsed),
+    )
+    live = _live_cr(_live_env())
+    namespace = _exec_generated(
+        _rewrite_source(
+            refreshed,
+            module.ENV_REWRITE_MARKER,
+            tmp_path / "live-refreshed",
+            live,
+        ),
+        "<generated-restart-env-refreshed>",
+        {},
+    )
+    rewritten = _env_values(namespace["cr"])
+    assert rewritten["FLINK_RESTART_MAX_FAILURES_PER_INTERVAL"] == ["7"]
+    assert rewritten["FLINK_RESTART_FAILURE_RATE_INTERVAL_MS"] == ["420000"]
+    assert rewritten["FLINK_RESTART_DELAY_MS"] == ["12000"]
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_error"),
+    [
+        ("missing", "restart_config_missing"),
+        ("duplicate", "restart_config_ambiguous"),
+        ("bad_unit", "restart_config_invalid"),
+        ("zero", "restart_config_invalid"),
+    ],
+)
+def test_restart_config_is_fail_closed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    case: str,
+    expected_error: str,
+) -> None:
+    module = _load_module()
+    source = _template(tmp_path)
+    if case == "missing":
+        _remove_recover_config(source, RESTART_DELAY_KEY)
+    elif case == "duplicate":
+        _duplicate_recover_config(source, RESTART_MAX_FAILURES_KEY)
+    elif case == "bad_unit":
+        _replace_recover_config(source, RESTART_INTERVAL_KEY, "300000 seconds")
+    else:
+        _replace_recover_config(source, RESTART_MAX_FAILURES_KEY, "0")
+
+    out = tmp_path / "out"
+    rc = module.main(_stamp_args(module, source, out, _write_watcher(tmp_path)))
+    assert rc == 1
+    assert expected_error in capsys.readouterr().err
+    assert not out.exists()
 
 
 def test_substitution_completeness(tmp_path: Path) -> None:

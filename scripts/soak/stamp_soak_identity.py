@@ -51,6 +51,12 @@ CONSUMED_SOURCE_NOTE = "20260818-06"
 HA_LEASE_KEY = "high-availability.kubernetes.leader-election.lease-duration"
 HA_RENEW_KEY = "high-availability.kubernetes.leader-election.renew-deadline"
 HA_RETRY_KEY = "high-availability.kubernetes.leader-election.retry-period"
+RESTART_MAX_FAILURES_KEY = "restart-strategy.failure-rate.max-failures-per-interval"
+RESTART_INTERVAL_KEY = "restart-strategy.failure-rate.failure-rate-interval"
+RESTART_DELAY_KEY = "restart-strategy.failure-rate.delay"
+RESTART_MAX_FAILURES_ENV = "FLINK_RESTART_MAX_FAILURES_PER_INTERVAL"
+RESTART_INTERVAL_ENV = "FLINK_RESTART_FAILURE_RATE_INTERVAL_MS"
+RESTART_DELAY_ENV = "FLINK_RESTART_DELAY_MS"
 
 SHORT_MARKER_TEMPLATES: tuple[str, ...] = (
     "RECOVER_{n}_PASS",
@@ -234,6 +240,28 @@ def replace_token(text: str, old: str, new: str) -> tuple[str, int]:
     return text.replace(old, new), text.count(old)
 
 
+def restart_env_values(text: str) -> dict[str, str]:
+    specs = (
+        (RESTART_MAX_FAILURES_KEY, RESTART_MAX_FAILURES_ENV, False),
+        (RESTART_INTERVAL_KEY, RESTART_INTERVAL_ENV, True),
+        (RESTART_DELAY_KEY, RESTART_DELAY_ENV, True),
+    )
+    values: dict[str, str] = {}
+    for key, env_name, has_ms_unit in specs:
+        matches = re.findall(rf'"{re.escape(key)}"\s*:\s*"([^"]*)"', text)
+        if not matches:
+            raise StampError(f"restart_config_missing key={key}")
+        if len(matches) != 1:
+            raise StampError(f"restart_config_ambiguous key={key} count={len(matches)}")
+        raw = matches[0].strip()
+        pattern = r"([1-9][0-9]*)\s+ms" if has_ms_unit else r"([1-9][0-9]*)"
+        match = re.fullmatch(pattern, raw)
+        if match is None:
+            raise StampError(f"restart_config_invalid key={key} value={raw!r}")
+        values[env_name] = match.group(1)
+    return values
+
+
 def iter_source_files(source_dir: Path) -> list[Path]:
     files: list[Path] = []
     for path in source_dir.rglob("*"):
@@ -372,12 +400,22 @@ def status_heredoc() -> str:
     )
 
 
-def env_rewrite_python(interval_ms: int, min_pause_ms: int) -> str:
+def _python_string_dict(values: dict[str, str]) -> str:
+    entries = "".join(f'    "{name}": "{value}",\n' for name, value in values.items())
+    return "{\n" + entries + "}"
+
+
+def env_rewrite_python(
+    interval_ms: int,
+    min_pause_ms: int,
+    restart_values: dict[str, str],
+) -> str:
     return (
         f"# {ENV_REWRITE_MARKER}\n"
         'out = Path("$OUT")\n'
         f'interval_ms = "{interval_ms}"\n'
         f'min_pause_ms = "{min_pause_ms}"\n'
+        f"restart_values = {_python_string_dict(restart_values)}\n"
         'cr = json.loads((out / "flink-cr-live.json").read_text(encoding="utf-8"))\n'
         "try:\n"
         '    containers = cr["spec"]["podTemplate"]["spec"]["containers"]\n'
@@ -387,6 +425,7 @@ def env_rewrite_python(interval_ms: int, min_pause_ms: int) -> str:
         '    raise SystemExit("podtemplate_containers_not_list")\n'
         "found_interval = False\n"
         "found_pause = False\n"
+        "found_restart = {name: False for name in restart_values}\n"
         "for container in containers:\n"
         '    for env in container.get("env") or []:\n'
         '        name = env.get("name")\n'
@@ -396,18 +435,29 @@ def env_rewrite_python(interval_ms: int, min_pause_ms: int) -> str:
         '        elif name == "FLINK_CHECKPOINT_MIN_PAUSE_MS":\n'
         '            env["value"] = min_pause_ms\n'
         "            found_pause = True\n"
+        "        elif name in restart_values:\n"
+        '            env["value"] = restart_values[name]\n'
+        "            found_restart[name] = True\n"
         "if not found_interval or not found_pause:\n"
         "    raise SystemExit(\n"
         '        f"checkpoint_env_missing interval={found_interval} pause={found_pause}"\n'
         "    )\n"
+        "missing_restart = [name for name, found in found_restart.items() if not found]\n"
+        "if missing_restart:\n"
+        '    raise SystemExit(f"restart_env_missing {missing_restart}")\n'
     )
 
 
-def env_post_assert_python(interval_ms: int, min_pause_ms: int) -> str:
+def env_post_assert_python(
+    interval_ms: int,
+    min_pause_ms: int,
+    restart_values: dict[str, str],
+) -> str:
     return (
         f"# {ENV_POST_ASSERT_MARKER}\n"
         f'_want_interval = "{interval_ms}"\n'
         f'_want_pause = "{min_pause_ms}"\n'
+        f"_want_restart = {_python_string_dict(restart_values)}\n"
         "_seen = {}\n"
         'for _container in cr["spec"]["podTemplate"]["spec"]["containers"]:\n'
         '    for _env in _container.get("env") or []:\n'
@@ -415,13 +465,17 @@ def env_post_assert_python(interval_ms: int, min_pause_ms: int) -> str:
         "        if _name in (\n"
         '            "FLINK_CHECKPOINT_INTERVAL_MS",\n'
         '            "FLINK_CHECKPOINT_MIN_PAUSE_MS",\n'
-        "        ):\n"
+        "        ) or _name in _want_restart:\n"
         '            _seen[_name] = str(_env.get("value"))\n'
         'if _seen.get("FLINK_CHECKPOINT_INTERVAL_MS") != _want_interval or _seen.get(\n'
         '    "FLINK_CHECKPOINT_MIN_PAUSE_MS"\n'
         ") != _want_pause:\n"
         '    raise SystemExit(f"checkpoint_env_not_applied {_seen}")\n'
         'print("checkpoint_env_ok", _seen)\n'
+        "_actual_restart = {name: _seen.get(name) for name in _want_restart}\n"
+        "if _actual_restart != _want_restart:\n"
+        '    raise SystemExit(f"restart_env_not_applied {_actual_restart}")\n'
+        'print("restart_env_ok", _actual_restart)\n'
     )
 
 
@@ -553,6 +607,7 @@ def transform_recover(text: str, cfg: StampConfig) -> str:
         )
     interval_ms = cfg.checkpoint_interval_ms
     min_pause_ms = cfg.checkpoint_min_pause_ms
+    desired_restart_env = restart_env_values(text)
     text = _CHECKPOINT_INTERVAL_RE.sub(rf"\g<1>{interval_ms} ms\2", text)
     text = _CHECKPOINT_PAUSE_RE.sub(rf"\g<1>{min_pause_ms} ms\2", text)
     require_marker(
@@ -583,13 +638,27 @@ def transform_recover(text: str, cfg: StampConfig) -> str:
         start += len(live_get)
         end += len(live_get)
     block = text[start:end]
-    if ENV_REWRITE_MARKER not in block:
+    rewrite_payload = env_rewrite_python(
+        interval_ms,
+        min_pause_ms,
+        desired_restart_env,
+    )
+    rewrite_marker = f"# {ENV_REWRITE_MARKER}\n"
+    if rewrite_marker in block:
+        marker_at = block.index(rewrite_marker)
+        merge_at = block.find("merge = {", marker_at)
+        if merge_at < 0:
+            raise StampError(
+                f"transform env_by_name_rewrite missing anchor in {file_name}: merge = {{"
+            )
+        block = block[:marker_at] + rewrite_payload + block[merge_at:]
+    else:
         injected = False
         for anchor in ("from pathlib import Path\n", "import json\n"):
             if anchor in block:
                 block = block.replace(
                     anchor,
-                    anchor + env_rewrite_python(interval_ms, min_pause_ms),
+                    anchor + rewrite_payload,
                     1,
                 )
                 injected = True
@@ -622,14 +691,29 @@ def transform_recover(text: str, cfg: StampConfig) -> str:
     require_marker(text, RV_MARKER, "resource_version", file_name)
 
     require_anchor(text, "flink-cr-final.json", "post_recover_env_assert", file_name)
-    if ENV_POST_ASSERT_MARKER not in text:
+    post_payload = env_post_assert_python(
+        interval_ms,
+        min_pause_ms,
+        desired_restart_env,
+    )
+    post_marker = f"# {ENV_POST_ASSERT_MARKER}\n"
+    if post_marker in text:
+        marker_at = text.index(post_marker)
+        doc_at = text.find("doc={", marker_at)
+        if doc_at < 0:
+            doc_at = text.find("doc = {", marker_at)
+        if doc_at < 0:
+            raise StampError(
+                f"transform post_recover_env_assert missing anchor in {file_name}: doc={{"
+            )
+        text = text[:marker_at] + post_payload + text[doc_at:]
+    else:
         assert_line = (
             'assert fc.get("restart-strategy.type")=="failure-rate", '
             'fc.get("restart-strategy.type")\n'
         )
-        payload = env_post_assert_python(interval_ms, min_pause_ms)
         if assert_line in text:
-            text = text.replace(assert_line, assert_line + payload, 1)
+            text = text.replace(assert_line, assert_line + post_payload, 1)
         else:
             load_line = 'cr=json.load(open(out/"flink-cr-final.json"))\n'
             if load_line not in text:
@@ -637,7 +721,7 @@ def transform_recover(text: str, cfg: StampConfig) -> str:
                     f"transform post_recover_env_assert missing anchor in {file_name}: "
                     "restart-strategy assert / flink-cr-final.json load"
                 )
-            text = text.replace(load_line, load_line + payload, 1)
+            text = text.replace(load_line, load_line + post_payload, 1)
     require_marker(text, ENV_POST_ASSERT_MARKER, "post_recover_env_assert", file_name)
 
     require_anchor(text, "patch_failed", "patch_conflict", file_name)

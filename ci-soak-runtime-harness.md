@@ -306,3 +306,86 @@ project `agentflow-ci-soak-8a77088-r5`, and output directory
 invoke the controller at most once. The capacity-independent rehearsal gate
 remains open; no push, traffic test, full soak, or production gate is
 authorized or claimed.
+
+### `r5` one-shot rehearsal — 2026-08-19
+
+The authorized `r5` slice used a fresh archive of source commit
+`4e25e392b9da52d1b7b0f44a4a0dd35bcb0240cf` in shared-root snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-8a77088-r5` with Compose
+project `agentflow-ci-soak-8a77088-r5`. The source archive SHA-256 was
+`a220a015b0d7e2f9fd07a97197bbbc8e724a6bcefdafd4af9daee22f50515b01`;
+all six critical Git blobs matched local HEAD, and the read-only bind probe saw
+the expected init-script SHA-256. The merged Compose config SHA-256 was
+`68253801857d5fe02f700c266ea76cb2079afa9017d1be9ca8c96cfda95bc6f6`
+and contained the corrected background-consumer healthchecks.
+
+`run-rehearsal-r5.sh` differed from the verified `r4` wrapper only in the
+snapshot, output, project, archive filename, and archive hash. Local and
+remote `bash -n` passed, and both copies had SHA-256
+`b732eb9ce670425eae2ef65d4732a87d112c56018fc0945e73b17f7630565dc2`.
+The wrapper invoked the controller exactly once with `--count 2000`. Its
+preflight passed, it stopped the four protected co-tenants, and the controller
+returned `1` with:
+
+```text
+RESULT=FAIL reason=shim_container_id_invalid
+```
+
+The prior healthcheck defect is no longer the first failing gate: `up-app`
+returned `0`, the Flink runner started, both Flink containers were running
+with restart count zero, and the Flink gate saw four tasks and one completed
+checkpoint with no failed checkpoints. The failure occurred immediately after
+the detached shim container was created and before shim probe, baseline,
+observer, producer, or verification.
+
+The two Flink IDs in `ps-jm.log` and `ps-tm.log` are valid 64-character IDs.
+The `shim-start.log` output, however, contains two Docker Compose progress
+lines followed by the valid 64-character shim ID. `SubprocessRunner` merges
+stderr into stdout, while `_start_shim()` applies the container-ID regex to
+the complete stripped multi-line output. Docker Compose 5.1.4 therefore makes
+the controller reject its own successful detached start. `_start_observer()`
+uses the same whole-output parsing pattern and has the same latent defect.
+This is a controller output-parsing failure, not a shim, Flink, application,
+data-correctness, or soak failure.
+
+The wrapper reported `RESTORE_RESULT=PASS`. Independent checks found zero
+`r5` containers, networks, and volumes and no active `r5` process. The exact
+four protected container IDs returned running with restart count zero; MinIO
+and ClickHouse were healthy, all required API checks passed, and exactly one
+kube-apiserver was running. The original Mac checkout remained at
+`ae9fb69db7de737b469f868f218e8d623c206959` with only its established
+untracked roots.
+
+Evidence remains under
+`<r5 snapshot>/.artifacts/soak-rehearsal-2000-8a77088-r5`:
+
+- `result-final.txt`: SHA-256
+  `76dc9b2078225585348671d6456eba77c56d839c52e2d63b93574e4fa6ab0966`.
+- `runtime-state.json`: SHA-256
+  `cb8bf505e7f7a03190cd14f4a3b2d5f94c2b9d822470a026c820b44aa0865752`.
+- `logs/shim-start.log`: SHA-256
+  `1afa8a13d54f1f96ff5524d107c98592bd969910709819d6bcbbb693a3a36756`.
+- `logs/ps-jm.log`: SHA-256
+  `08353a6f8e5bc190abaa4da33c3809fb9929e3260daaee3830bbfdede5aab6ad`.
+- `logs/ps-tm.log`: SHA-256
+  `5bc6f1b92fd501d8b18fd36fc24fd2d7ddae0b4a615ccecef09fa4a3c61e8c38`.
+- `logs/up-app.log`: SHA-256
+  `37126fa980293ee99c4ccbc2bb50da51b14d04f6e77bde778bba7483d750cf72`.
+- `logs/collect-logs.log`: SHA-256
+  `ee9b361d4a67ff34c5984269c75661bb8f1c581cda13505217736ae46a57a61b`.
+- `logs/compose-down.log`: SHA-256
+  `4afd85a2eb4cc11a3afc23a005f5533bcf9b16a8da00698dd0d60c2ce96a63e0`.
+
+#### Next-session resume delta
+
+Treat every `r5` identity and artifact as immutable evidence; do not rerun or
+adopt them. The next atomic implementation slice is test-first: make detached
+container-ID parsing accept exactly one full 64-hex line within bounded noisy
+Compose output, use that parser for both shim and observer starts, and remain
+fail-closed for zero or multiple matching IDs. The regression tests must cover
+the observed progress-prefix output as well as ambiguous output.
+
+Only after that scoped fix and focused verification may a later authorized
+rehearsal use fresh `r6` identities and a new archive of its exact source HEAD.
+The capacity-independent rehearsal gate remains open; no push, traffic test,
+full soak, or production gate is authorized or claimed.

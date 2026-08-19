@@ -59,6 +59,8 @@ services:
       resources:
         limits:
           memory: 1800M
+    healthcheck:
+      start_period: 90s
 
   flink-taskmanager:
     environment:

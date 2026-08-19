@@ -141,3 +141,9 @@ def test_soak_overlay_wires_consumer_groups_and_ready_api() -> None:
     api = services["agentflow-api"]
     assert api["environment"]["AGENTFLOW_DEMO_MODE"] == "true"
     assert "/health/ready" in " ".join(str(value) for value in api["healthcheck"]["test"])
+
+
+def test_soak_overlay_gives_jobmanager_healthcheck_startup_grace_only() -> None:
+    services = _compose()["services"]
+
+    assert services["flink-jobmanager"]["healthcheck"] == {"start_period": "90s"}

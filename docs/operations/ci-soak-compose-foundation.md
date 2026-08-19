@@ -2,9 +2,10 @@
 
 **Last updated:** 2026-08-19
 
-**Status:** soak-only 90-second Flink JobManager startup grace implemented and
-verified in one isolated Mac health check; the first post-fix rehearsal failed
-closed on a capacity-incompatible Docker context; cleanup independently
+**Status:** soak-only startup grace is implemented for the Flink JobManager and
+MinIO; a correct-context Mac rehearsal now passes `up-core` and `up-init` but
+fails closed when Docker Compose cannot wait for an already-successful
+`kafka-init` one-shot container; cleanup and co-tenant restoration independently
 confirmed; no rehearsal PASS
 
 **Foundation commit:** `9dffe47` (`feat(ops): add CI soak Compose foundation`)
@@ -13,19 +14,20 @@ confirmed; no rehearsal PASS
 
 **Startup-grace commit:** `cfd7b1c` (`fix(ops): give soak JobManager startup grace`)
 
+**MinIO startup-grace commit:** `998963d` (`fix(ops): give soak MinIO startup grace`)
+
 ## Read this first
 
 - The repository contains a tracked source pack, a Docker Compose topology, a
   local runtime controller, and an identity-bound Kubernetes-pods shim.
-- It does not contain a CI workflow. None of the three pre-fix controller
-  attempts reached baseline, shim, traffic, or verification. A later
-  health-only run verified the corrected JobManager readiness boundary without
-  running the controller. The first post-fix controller attempt also stopped
-  at `up-core`, this time after an internal Pekko startup timeout on the
-  undersized default Docker context; no rehearsal PASS exists.
-- No container was built or started while either implementation slice was
-  developed and verified; the later rehearsal described below was a separate
-  runtime slice.
+- It does not contain a CI workflow. None of the controller attempts reached
+  baseline, shim, traffic, or verification. The latest correct-context attempt
+  passed core readiness and init startup, then stopped at the controller's
+  `wait-kafka-init` boundary even though that container exited successfully;
+  no rehearsal PASS exists.
+- No container was built or started while either local startup-grace correction
+  was developed and verified; the later rehearsals described below were
+  separate runtime slices.
 - An authorized byte-verified snapshot was copied to a new Mac directory. The
   existing Mac checkout and its unrelated untracked files were not changed.
 - A successful Compose configuration check is not a soak result.
@@ -45,13 +47,13 @@ Always trust the current Git state and the tracked contracts listed below.
 | --- | --- | --- |
 | Eight-file source pack | Tracked, immutable reference | `scripts/golden_soak/pack/`; byte sizes and SHA-256 values are pinned by `MANIFEST.json` and the unit contract |
 | Source identity | `20260819-07` | The manifest labels it `source-reference-only` |
-| Compose topology | Tracked, configuration-validated | `docker-compose.soak.yml`, merged with the base and Flink Compose files; the overlay adds only a 90-second JobManager `start_period` |
+| Compose topology | Tracked, configuration-validated | `docker-compose.soak.yml`, merged with the base and Flink Compose files; the overlay adds a 90-second JobManager `start_period` and a 180-second MinIO `start_period` |
 | Foundation contract | Green at commit time | `tests/unit/test_ci_soak_foundation.py`: 7 tests passed |
-| Runtime harness | Implemented; exercised through fail-closed `up-core` | `scripts/golden_soak/runtime.py` validated the complete pack, rejected no pre-existing resources, built both local images, published bounded FAIL evidence, and cleaned every named Compose project it touched |
+| Runtime harness | Implemented; exercised through fail-closed `wait-kafka-init` | `scripts/golden_soak/runtime.py` validated the complete pack, rejected pre-existing project resources, built both local images, passed core and init startup, published bounded FAIL evidence, and cleaned every named Compose project it touched |
 | Kubernetes-pods shim | Implemented, not rehearsed | `scripts/golden_soak/pods_shim.py` exposes exactly the initial JM/TM IDs through TLS and bearer auth; replacement, restart, wrong labels, bad health, and malformed Docker responses fail closed |
 | CI workflow | Missing | No workflow dispatch, timeout, cancellation, artifact upload, or runner budget gate exists |
-| Runtime proof | JobManager health correction verified; rehearsal still open | The focused post-fix health run passed. The later post-fix rehearsal used default context `colima-nsa` (2 CPU / 2.90 GiB, versus the documented 4 CPU / 6 GiB stand), where Pekko remoting exceeded its internal 10-second startup timeout and the JobManager restarted. Shim, traffic, exactness, and duration remain unproven |
-| Push or remote mutation | Scoped snapshots and isolated Compose lifecycles only | Commit snapshots were delivered only to new Mac directories. The post-fix rehearsal rebuilt the two shared local image tags on `colima-nsa`, then removed only its four containers, four volumes, and network. No push, fetch, existing-checkout change, unrelated-resource cleanup, or image deletion occurred |
+| Runtime proof | Core readiness now passes; rehearsal still open | On the documented 4 CPU / 6.77 GiB context, Kafka, MinIO, ClickHouse, and the JobManager became healthy. `kafka-init` created all ten topics and exited zero, but Docker Compose 5.1.4 returned `no containers for project` from the following `wait` command. Shim, traffic, exactness, and duration remain unproven |
+| Push or remote mutation | Scoped snapshots and reversible isolated lifecycles only | Commit snapshots were delivered only to new Mac directories. Four exact co-tenant containers were temporarily stopped to free the required ports and restored to their original identities and health afterward. Each rehearsal project was removed. No push, fetch, existing-checkout change, image deletion, or unrelated cleanup occurred |
 
 The copied eight-file subset is not a complete Mac runtime pack. It excludes
 the launch and recovery scripts affected by the later stamper correction in
@@ -348,15 +350,79 @@ changed, or removed. Do not repeat this cleanup query without new evidence.
   `9b7ed8b8b594e0ecbb071d6c00a1973d33768f48f89b6ce704b487f4952bc159`.
   Evidence and the source archive remain in the isolated snapshot directory.
 
+### Correct-context rehearsals, MinIO grace, and init-wait failure
+
+- The Docker-target boundary was resolved operationally by setting the exact
+  `colima-agentflow-fc5-7113966` context for every controller Docker command.
+  That daemon reported four CPUs and `7269560320` bytes (6.77 GiB). Before each
+  bounded attempt, four exact co-tenant containers were temporarily stopped
+  under an identity-bound restore trap so ports 9000, 9001, 8181, and 8123 were
+  free. No port override or existing-checkout mutation was used.
+- The first correct-context attempt used the byte-verified `cfd7b1c` snapshot
+  `/Users/julia/agentflow-ci-soak-rehearsal-cfd7b1c-20260819-02`, project
+  `agentflow-ci-soak-cfd7b1c-r2`, and output
+  `.artifacts/soak-rehearsal-2000-cfd7b1c-r2`. It emitted
+  `RESULT=FAIL reason=up_core_failed` after MinIO became unhealthy at about 38
+  seconds. The base MinIO probe had a 10-second interval, 5-second timeout,
+  three retries, and no startup grace. This was a new readiness-boundary
+  failure; the corrected JobManager was not the cause.
+- Commit `998963df286fe544c004673452fb00a42029eb40` adds only
+  `healthcheck.start_period: 180s` for MinIO in the soak overlay. Its focused
+  RED run was `2 failed, 5 passed`; GREEN was `7 passed`. The independent gate
+  passed 20 foundation/runtime tests, Ruff check and format, `py_compile`,
+  merged Compose validation, and `git diff --check`. The merged MinIO probe
+  preserved the base test, interval, timeout, and retries while normalizing the
+  new grace to three minutes.
+- The post-fix attempt used archive SHA-256
+  `d4b22288f291558c75b1ae5f73a88f56f28290fbba6bf46605b2a85f6e3dd9b8`
+  in the isolated snapshot
+  `/Users/julia/agentflow-ci-soak-rehearsal-998963d-20260819-01`. Critical Git
+  blob IDs and merged Compose validation matched commit `998963d`. Its fresh
+  project and output were `agentflow-ci-soak-998963d-r1` and
+  `.artifacts/soak-rehearsal-2000-998963d-r1`.
+- The post-fix controller passed both image builds, `up-core`, and `up-init`.
+  Kafka, MinIO, ClickHouse, and the JobManager were healthy. `kafka-init`
+  created all ten requested topics, printed `Topics created.`, and appeared in
+  the later `compose ps --all` evidence as `Exited (0)`. Nevertheless, the next
+  Docker Compose 5.1.4 command, `compose wait kafka-init`, returned one with
+  `no containers for project "agentflow-ci-soak-998963d-r1"`. The terminal
+  result is therefore `RESULT=FAIL reason=wait_kafka_init_failed`.
+- The direct defect is now at the controller/Compose one-shot wait boundary,
+  not Kafka topic creation or core readiness. The evidence is consistent with
+  a selection/timing race when a fast one-shot exits between detached `up` and
+  the separate `wait` process. The exact controller correction is not yet
+  implemented and must preserve project, service, identity, and zero-exit
+  validation rather than treating the successful log text as sufficient.
+- Fail-closed evidence collection and `compose down -v` both returned zero.
+  Fresh label queries found zero containers, networks, and volumes for
+  `agentflow-ci-soak-998963d-r1`. The exact MinIO, Iceberg REST, ClickHouse,
+  and Kind control-plane co-tenants were restored as running; MinIO and
+  ClickHouse were healthy, Kind had one running kube-apiserver, and their
+  original host-port bindings were restored.
+- Post-fix evidence SHA-256 values are: result
+  `242e970dc02ba5ada1812afd212b77354bad20d86b3435d63475661a626a6e83`,
+  runtime state
+  `2834b7da9170401889ebe6869e064060557e072cc8ab3599c7bafca490fceb31`,
+  `wait-kafka-init`
+  `1d39d26beaa1faf8695bdbb997ac56966a91643ac6616e1e348d874b2e9477a5`,
+  `collect-ps`
+  `da47e9a3af49232220340f2a3e40622dd675c8b120cfb18931e6ba63b59f81fc`,
+  bounded Compose logs
+  `98b88270540a3a2842d64fe199b84db32d1c0af644fbbba75cc500b94524a653`,
+  and `compose-down`
+  `40ee90f3ddc57ab09e87355319079f7589930af73aaeea8d6750b82095958156`.
+  No baseline, shim, observer, producer, verifier, or traffic step ran.
+
 ### Recorded authorization boundary
 
-The latest authorization was consumed by the single failed rehearsal lifecycle
-described above. It did not authorize stopping the unrelated project on the
-capacity-correct context, changing the published-port topology, another
-rehearsal, workflow work, push, image deletion, existing-checkout mutation, or
-unrelated Docker cleanup. A future session must still check the latest user
-message before creating or deleting remote resources; the existing Mac
-checkout, unrelated Docker resources, and image caches remain out of scope.
+The user's direction to redo the run covered the bounded correct-context
+attempts and reversible stop/restore of the four exact port-owning co-tenants.
+That lifecycle is closed: no writer remains active, every co-tenant is restored,
+and the failed rehearsal project has no resources. The allowed diagnostic
+correction and rerun were both consumed, so another remote rehearsal must not
+be started in the same slice. The next work is a local controller correction;
+workflow work, push, image deletion, existing-checkout mutation, and unrelated
+Docker cleanup remain out of scope.
 
 Revalidate the current configuration without starting services:
 
@@ -394,15 +460,17 @@ open; see `docs/perf/golden-operator-acceptance-2026-07-30.md` and
 Only the first item is the next named slice. Keep later items separate so a
 green focused gate ends each turn.
 
-1. **Resolve the Docker-target boundary — next external slice.** Pin the
-   intended daemon instead of inheriting the current default context, and
-   require the documented capacity class plus free mandatory host ports before
-   build/up. Do not stop `agentflow-iceberg-rv-20260802-01` or introduce a port
-   override without separate authorization and design review.
-2. **Short Mac rehearsal — later external slice.** After that boundary is
-   resolved and newly authorized, use another fresh Compose project and output
-   directory with `--count 2000`. It may emit only `REHEARSAL_PASS`; do not
-   describe it as a four-hour soak PASS.
+1. **Make one-shot completion race-safe — next local slice.** Add a failing unit
+   contract for a successful init container that exits before the separate
+   wait command can select it. Replace the direct Compose wait boundary with a
+   bounded, fail-closed check that resolves the exact stopped container and
+   verifies its project label, service label, identity, terminal state, and
+   zero exit code. Cover every init service that currently uses `compose wait`.
+2. **Short Mac rehearsal — later external slice.** After the local correction
+   and focused verification are green, use the exact AgentFlow Docker context,
+   a different fresh Compose project and output directory, and `--count 2000`.
+   Preserve the identity-bound co-tenant restoration guard. The result may emit
+   only `REHEARSAL_PASS`; do not describe it as a four-hour soak PASS.
 3. **Workflow wiring — later slice.** Add dispatch inputs, a hard timeout,
    `cancel-in-progress: false`, fail-closed finalization, and always-uploaded
    artifacts. This still does not authorize a push.
@@ -420,19 +488,19 @@ green focused gate ends each turn.
    contracts in `tests/unit/test_ci_soak_{foundation,runtime}.py`.
 4. Preserve unrelated dirty and untracked files.
 5. Do not modify the eight files under `scripts/golden_soak/pack/`.
-6. Preserve the isolated Mac snapshot and all three rehearsal FAIL evidence
-   directories; do not change the existing Mac checkout.
+6. Preserve every isolated Mac snapshot and rehearsal FAIL evidence directory;
+   do not change the existing Mac checkout.
 7. Treat the old `REMOTE_PROJECT_*=0` output as invalid. The corrected explicit
    Docker-path recheck is complete and found zero resources; do not repeat it
    without new evidence.
-8. Preserve the completed health evidence root and the failed post-fix
-   rehearsal snapshot; do not repeat either project or lifecycle.
-9. Before another rehearsal, resolve the Docker-context/capacity/port boundary.
-   Do not inherit `colima-nsa`, stop the unrelated project on the AgentFlow
-   context, or alter published ports without the corresponding explicit scope.
-10. Only after that boundary is resolved and newly authorized, use a different
-   new Compose project and empty output directory for `--count 2000`. Keep
-   workflow, full-soak, and Mac-gate claims outside that slice.
+8. Preserve the completed health evidence and both correct-context FAIL
+   directories. Do not repeat their projects or lifecycles.
+9. Fix and test the one-shot completion boundary locally before another remote
+   run. Do not raw-retry `agentflow-ci-soak-998963d-r1`.
+10. For a later rehearsal, pin `colima-agentflow-fc5-7113966`, validate its
+    capacity and mandatory ports, use a new project and empty output directory,
+    and retain exact co-tenant restoration. Keep workflow, full-soak, and
+    Mac-gate claims outside that slice.
 
 ## Tracked file map
 

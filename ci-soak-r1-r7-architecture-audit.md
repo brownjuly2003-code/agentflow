@@ -2,10 +2,13 @@
 
 - **Audit date:** 2026-08-20
 - **Audited baseline:** `b151a1f98d0151bc3e84cfa93618fc85d7b78f64`
-- **Latest implementation baseline:** `809978b4e7e20b47fab19dbe91495b464a672a05`
-- **Scope:** static, local, documentation-only audit
-- **Current verdict:** `ARCHITECTURE_READY=PASS`
-- **Blocking findings:** none
+- **Gate implementation and last executed gate baseline:**
+  `809978b4e7e20b47fab19dbe91495b464a672a05`
+- **First tracked L6 documentation closure:**
+  `bfb6b442d7cec4c5ce5fbd08c38289e0720ff6ec`
+- **Scope:** original static/local audit plus the local L1-L6 closure record
+- **Last executed verdict:** `ARCHITECTURE_READY=PASS` at `809978b4...`
+- **Blocking findings in that execution:** none
 - **Completed local slices:** L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`,
   L4 / `A-03`, L5 / `A-04` + `A-05` + `A-07` + `A-08`, L6 / executable
   architecture gate (2026-08-20)
@@ -40,10 +43,10 @@ The `r7` Docker API defect is now `CLOSED-LOCAL`: the shim negotiates a bounded
 daemon-compatible API before exact container inspection. External execution of
 that corrected path remains unverified.
 
-The architecture is not ready for another rehearsal. Seven findings have local
-or static dispositions that must be completed first. A future
-`ARCHITECTURE_READY=PASS` is only permission to consider a separately
-authorized fresh preflight; it is not authorization for `r8`.
+The architecture is locally ready only in the bounded sense expressed by the
+last executed gate: all named local contracts are closed. That PASS permits
+consideration of a separately authorized fresh preflight; it is not runtime
+evidence and is not authorization for `r8`.
 
 ## 2. End-to-end architecture
 
@@ -304,6 +307,18 @@ Exact terminal evidence from `809978b4e7e20b47fab19dbe91495b464a672a05`:
 ARCHITECTURE_READY=PASS blockers=0 head=809978b4e7e20b47fab19dbe91495b464a672a05
 ```
 
+The two durable heads have different meanings:
+
+| Head | Meaning | What it does not prove |
+| --- | --- | --- |
+| `809978b4e7e20b47fab19dbe91495b464a672a05` | Exact clean implementation HEAD on which the complete executable gate ran and emitted PASS. | It does not include the later documentation closure. |
+| `bfb6b442d7cec4c5ce5fbd08c38289e0720ff6ec` | First tracked docs-only L6 closure; it changed the plan, audit, harness, and README. | The complete gate was not rerun at this HEAD, so it must not be cited as gate-execution evidence. |
+
+Any later documentation-only HEAD has the same evidence limitation unless a
+new clean execution explicitly reports that exact HEAD. Use `git status` and
+`git log` to identify the current checkout rather than substituting it into
+the recorded terminal line.
+
 `ARCHITECTURE_READY=PASS` requires all of the following:
 
 1. Findings `A-01` through `A-09` are closed by the named local acceptance
@@ -344,12 +359,15 @@ external slice without a rehearsal.
 
 The local L1-L6 closure changed the runtime/shim/bootstrap/wrapper/gate
 implementation, tests, and current documentation, but not the protected source
-pack or Compose configuration. It does not close `r7`, prove current
-Mac/co-tenant state, authorize `r8`, or establish workload, traffic, soak,
-rollback, or production readiness. No container, SSH, macOS checkout, or
-external state was used for L6, and push remains unauthorized.
+pack or Compose configuration. It does not retroactively turn attempt `r7`
+into a successful rehearsal, prove current Mac/co-tenant state, authorize
+`r8`, or establish workload, traffic, soak, rollback, or production readiness.
+No container, SSH, macOS checkout, or external state was used for L6, and push
+remains unauthorized.
 
 There is no remaining local CI-soak implementation boundary. A later external
 preflight may be considered only under fresh explicit authorization, using a
-new exact-HEAD archive and identities as described above. Local
-`ARCHITECTURE_READY=PASS` does not itself authorize that action.
+new exact-HEAD archive and identities as described above. Before relying on
+the gate for such a preflight, execute it once from a clean current checkout
+and require its terminal line to name that exact HEAD. The recorded local
+`ARCHITECTURE_READY=PASS` does not itself authorize any external action.

@@ -948,6 +948,22 @@ corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
 This section supersedes every earlier checkpoint above. It is the tracked
 starting point for any later CI-soak decision.
 
+### Evidence and HEAD map
+
+Keep these identities separate:
+
+| Identity | Exact value | Authority |
+| --- | --- | --- |
+| Gate feature commit | `44fc1a1f2ad64abc856a231545beb852a650a0c8` | Introduced the L6 entry point and tests. |
+| Gate evidence HEAD | `809978b4e7e20b47fab19dbe91495b464a672a05` | Exact clean HEAD on which the complete gate emitted PASS. |
+| First docs closure | `bfb6b442d7cec4c5ce5fbd08c38289e0720ff6ec` | Docs-only closure after the PASS; no complete gate execution occurred at this HEAD. |
+| Current checkout | Resolve with `git rev-parse HEAD` and confirm with `git status --short --branch`. | Do not describe it as gate-tested unless a terminal verdict names the same exact HEAD. |
+
+The PASS below is therefore exact historical execution evidence for
+`809978b4...`, while `bfb6b44...` and later documentation-only commits preserve
+and clarify that evidence. They do not silently move the executed verdict to a
+new HEAD.
+
 ### L6 outcome and evidence
 
 - Gate implementation commits:
@@ -977,15 +993,34 @@ starting point for any later CI-soak decision.
   checkout, external rehearsal, `r8`, traffic, soak, rollback, production
   action, push, or protected source-pack/untracked mutation occurred.
 
-The current local verdict is `ARCHITECTURE_READY=PASS`; blockers are zero.
-This is not runtime evidence and does not authorize any external action. All
-corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
+The last executed local verdict is `ARCHITECTURE_READY=PASS` at `809978b4...`;
+blockers were zero. This is not runtime evidence and does not authorize any
+external action. All corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
 
-### Next boundary
+### Exact next-session resume
 
-There is no open local CI-soak implementation slice. If the user later
-explicitly authorizes an external preflight, start from the current audit's
-post-PASS boundary: refresh exact HEAD and local status, create a new archive,
-shared-root snapshot, project/output/wrapper identities, acquire the owner
-lock, and complete every read-only pre-stop probe. Do not reuse `r1`-`r7` or
-infer authorization from this local PASS.
+1. Run only the read-only orientation commands first:
+
+   ```powershell
+   git status --short --branch
+   git log -4 --oneline
+   git rev-parse HEAD
+   ```
+
+2. Read the first block in `AGENT_STATE.md`, this final harness checkpoint,
+   then sections 8 and 9 of `ci-soak-r1-r7-architecture-audit.md`. Earlier
+   checkpoints in this file are chronology, not current instructions.
+3. Expect no active writer and a clean tracked tree/index. Preserve all
+   untracked paths shown by `git status`; the current protected list is copied
+   into the first `AGENT_STATE.md` block. Never bulk-stage them.
+4. Without fresh explicit authorization for an external preflight, there is no
+   open CI-soak implementation or runtime action. Do not create `r8`, start
+   Docker/Colima, use SSH, launch traffic/soak/rollback, or push.
+5. If that external authorization is later given, first execute the local gate
+   once from a clean current checkout and require PASS at that exact HEAD.
+   Then create a new exact-HEAD archive plus fresh shared-root
+   snapshot/project/output/wrapper identities, acquire the owner lock, and
+   complete every read-only pre-stop probe. Never reuse `r1`-`r7`.
+
+Grok was optional and was not used for L6 or this handoff. All corrected
+external paths remain `EXTERNAL-UNVERIFIED`.

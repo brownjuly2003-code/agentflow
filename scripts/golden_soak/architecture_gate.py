@@ -49,6 +49,11 @@ _PYTHON_PATHS = (
     "tests/unit/test_ci_soak_architecture_gate.py",
 )
 
+_FORMAT_PATHS = (
+    "scripts/golden_soak/architecture_gate.py",
+    "tests/unit/test_ci_soak_architecture_gate.py",
+)
+
 _TEXT_PATHS = (
     *_PYTHON_PATHS,
     "scripts/golden_soak/README.md",
@@ -150,7 +155,7 @@ def build_config(repo_root: Path) -> GateConfig:
         CommandCheck(
             name="ruff_format",
             blocker="G-RUFF",
-            argv=(*python_prefix, "ruff", "format", "--check", *_PYTHON_PATHS),
+            argv=(*python_prefix, "ruff", "format", "--check", *_FORMAT_PATHS),
             timeout_seconds=60,
         ),
         CommandCheck(

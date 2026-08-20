@@ -161,6 +161,10 @@ def test_gate_command_contract_matches_the_documented_local_checks() -> None:
         "format",
         "--check",
     )
+    assert commands["ruff_format"][5:] == (
+        "scripts/golden_soak/architecture_gate.py",
+        "tests/unit/test_ci_soak_architecture_gate.py",
+    )
     assert commands["compose_config"] == (
         "docker",
         "compose",

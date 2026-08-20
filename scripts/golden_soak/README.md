@@ -116,6 +116,33 @@ This is local L5 contract evidence only. It does not authorize an external
 rehearsal, and live Colima/Kind/ClickHouse behavior remains externally
 unverified.
 
+## Local architecture gate
+
+Run the L6 decision entry point from a clean tracked checkout:
+
+```powershell
+python scripts/golden_soak/architecture_gate.py
+```
+
+It executes the focused runtime/foundation/wrapper tests, Ruff check/format,
+`py_compile`, merged Compose validation, Git diff/clean-tree checks, the
+finding-closure register, all eight source-pack hashes, UTF-8/LF/NUL policy,
+and exact HEAD capture. Child command output is suppressed; the process emits
+exactly one line and exits zero only for PASS:
+
+```text
+ARCHITECTURE_READY=PASS blockers=0 head=<exact-40-character-head>
+```
+
+A failed or malformed check emits one deterministic `BLOCKED` line with
+ordered finding or `G-*` gate IDs and exits nonzero. The gate does not retry a
+failed command. Protected untracked evidence is ignored, while any tracked
+index/worktree difference blocks PASS.
+
+`ARCHITECTURE_READY=PASS` is local architecture evidence only. It does not
+prove current Colima/Kind/ClickHouse state or authorize a rehearsal, `r8`,
+traffic, soak, rollback, production action, or push.
+
 ## Local controller
 
 The later, separately authorized rehearsal slice can use a fresh output

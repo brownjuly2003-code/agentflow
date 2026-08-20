@@ -42,15 +42,45 @@ Do not infer a runtime PASS from successful configuration validation.
 `bootstrap.sh` is the POSIX entry point for the separately authorized wrapper
 path. It checks `/usr/local/bin/python3` and then `python3`, requires Python
 3.11 or newer, and invokes `wrapper.py` with an exact attempt identity, terminal
-result path, and `--plan-path`. The plan is bounded JSON with schema version 1
+result path, and `--plan-path`. The plan is bounded JSON with schema version 2
 and these fields:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "shared_root": "/Users/julia/agentflow-fc5-7113966",
+  "snapshot_path": "/Users/julia/agentflow-fc5-7113966/fresh-snapshot",
+  "output_parent_path": "/Users/julia/agentflow-fc5-7113966/fresh-output",
+  "owner_lock_path": "/Users/julia/agentflow-fc5-7113966/.ci-soak-owner.lock",
+  "source_probe": {
+    "command": ["/absolute/path/to/source-daemon-probe", "..."],
+    "expected_sha256": "<64 lowercase hex>",
+    "cleanup_command": ["/absolute/path/to/source-probe-cleanup-check", "..."]
+  },
+  "output_probe": {
+    "command": ["/absolute/path/to/output-daemon-probe", "..."],
+    "expected_sha256": "<64 lowercase hex>",
+    "cleanup_command": ["/absolute/path/to/output-probe-cleanup-check", "..."]
+  },
+  "clickhouse_probes": {
+    "container_health": {"command": ["..."], "expected_output": "healthy"},
+    "host_route": {"command": ["..."], "expected_output": "1"},
+    "workload_route": {"command": ["..."], "expected_output": "1"}
+  },
+  "stop_command": ["/absolute/path/to/co-tenant-stop", "..."],
   "controller_command": ["python3", "scripts/golden_soak/runtime.py", "..."],
-  "controller_result_path": "/fresh/output/result-final.txt",
-  "restore_command": ["/absolute/path/to/restore-command", "..."]
+  "controller_result_path": "/Users/julia/agentflow-fc5-7113966/fresh-output/result-final.txt",
+  "restore_command": ["/absolute/path/to/restore-command", "..."],
+  "kind_restore": {
+    "container_id": "<exact 64-character lowercase container ID>",
+    "identity_command": ["..."],
+    "running_command": ["..."],
+    "restart_count_command": ["..."],
+    "apiserver_count_command": ["..."],
+    "livez_command": ["..."],
+    "livez_max_attempts": 60,
+    "livez_consecutive_successes": 2
+  }
 }
 ```
 
@@ -61,16 +91,30 @@ scripts/golden_soak/bootstrap.sh ATTEMPT_ID WRAPPER_RESULT_PATH \
   --plan-path PLAN_PATH
 ```
 
-The wrapper executes both commands without a shell and prints plus atomically
-writes exactly one `WRAPPER_RESULT=<json>` record. That record preserves the
-controller invocation state, primary result/RC, restore result/RC, terminal
-class, first boundary, and reason. A missing supported interpreter is
-`WRAPPER_FAILURE` with `NOT_INVOKED`; a missing wrapper terminal is
-`ORCHESTRATION_STOP`; restore failure overrides a candidate controller PASS.
+All paths are absolute. The snapshot, output parent, controller result, and
+wrapper result must resolve under the declared shared root; the two daemon
+visibility commands must return their exact SHA-256 values and each cleanup
+check must return exactly `absent`. The wrapper then records exactly one result
+for each ClickHouse viewpoint: `container_health`, `host_route`, and
+`workload_route`. It does not raw-retry those probes.
 
-This is the local L4 terminal contract only. It does not yet implement the L5
-shared-root probes, network-viewpoint classification, Kind `/livez` restore
-predicate, or exclusive lock, and it does not authorize an external rehearsal.
+An atomic directory lock is acquired before path/probe preflight and held until
+restoration finishes. `owner.json` contains the attempt, PID, acquisition time,
+and an unguessable ownership token. Existing valid ownership is busy; missing
+or malformed ownership is stale/invalid and fails closed. The wrapper never
+breaks a stale lock automatically.
+
+Only after all preflight checks pass may `stop_command` run. Restoration
+requires the exact Kind container ID, `running`, restart count `0`, exactly one
+kube-apiserver, and the configured number (minimum two) of consecutive bounded
+`/livez=ok` results. The lock is released afterward. All commands run without a
+shell, and stdout is bounded for exact probes. The wrapper prints and atomically
+writes exactly one `WRAPPER_RESULT=<json>` record containing ordered check
+results as well as the original controller/restore precedence dimensions.
+
+This is local L5 contract evidence only. It does not authorize an external
+rehearsal, and live Colima/Kind/ClickHouse behavior remains externally
+unverified.
 
 ## Local controller
 

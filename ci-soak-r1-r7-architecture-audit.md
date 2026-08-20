@@ -2,11 +2,11 @@
 
 - **Audit date:** 2026-08-20
 - **Audited baseline:** `b151a1f98d0151bc3e84cfa93618fc85d7b78f64`
-- **Latest implementation baseline:** `012bcb46c95e48d8619ac50905410362d73cb8e8`
+- **Latest implementation baseline:** `2393495de842717f947da136e0c9c98a04771de0`
 - **Scope:** static, local, documentation-only audit
 - **Current verdict:** `ARCHITECTURE_READY=BLOCKED`
-- **Blocking findings:** `A-03` through `A-05`, `A-07`, and `A-08`
-- **Completed local slices:** L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09` (2026-08-20)
+- **Blocking findings:** `A-04`, `A-05`, `A-07`, and `A-08`
+- **Completed local slices:** L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`, L4 / `A-03` (2026-08-20)
 
 ## 1. Purpose, evidence rules, and verdict
 
@@ -238,7 +238,7 @@ another rehearsal unjustified; `S3` is bounded hardening or documentation.
 | ID | Severity / proof | Defect and impact | Required disposition | Acceptance evidence | Residual risk |
 | --- | --- | --- | --- | --- | --- |
 | `A-01` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | `DockerSocketInspector` fixed `v1.41`; a daemon with minimum `1.44` made every inspect fail and blocked shim/workload gates. | `CLOSED-LOCAL`: bounded unversioned discovery, validated version ordering, compatible exact inspect path, cached selection, and unchanged timeout/size/identity/fail-closed checks. | RED: 15 expected failures and one existing guard pass. GREEN: 16 focused transport cases; aggregate runtime/foundation gate `55 passed`; Ruff, format, `py_compile`, merged Compose config, and diff checks passed. | A later daemon may expose a new compatibility boundary; external preflight still reads `/version`, and the corrected path remains externally unverified. |
-| `A-03` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN` | No tracked CI-soak bootstrap/wrapper exists. Interpreter selection, fresh identities, co-tenant ownership, and pre-controller terminal outcome live in per-run artifacts; `r1` and `r3` lacked a complete terminal runtime record. | `FIX+TEST_LOCAL`: tracked bootstrap + structured wrapper result; exactly one terminal outcome, primary and restore RCs, supported-interpreter fixtures, and explicit `NOT_INVOKED` classification. | Unit/static fixtures and shell syntax gate; no controller PASS can mask wrapper/restore failure. | Interpreter executable and SSH availability remain external prerequisites. |
+| `A-03` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | No tracked CI-soak bootstrap/wrapper existed. Interpreter selection and pre-controller terminal outcomes lived in per-run artifacts; `r1` and `r3` lacked a complete terminal runtime record. | `CLOSED-LOCAL`: executable POSIX bootstrap discovers Python >=3.11, records unsupported-interpreter and wrapper-launch failures, and delegates a bounded JSON plan to a testable wrapper. The wrapper emits one structured terminal record with exact attempt identity, invocation state, primary result/RC, restore result/RC, class, boundary, and reason. | RED: seven fixtures failed at the missing implementation boundary. GREEN: nine focused cases and the `97 passed` runtime/foundation/wrapper aggregate succeeded; Ruff check/format, `py_compile`, `bash -n`, UTF-8/LF/NUL, protected pack hashes, allowlist, and diff checks passed. | Interpreter executable and SSH availability remain external prerequisites; path, restore-readiness, probe-viewpoint, and lock policy remain in L5. |
 | `A-04` | `S1`; `RUNTIME-PROVEN` | `RESTORE_RESULT=PASS` can follow kube-apiserver process presence before Kind `/livez` is ready; downstream state can be reported restored too early. | `FIX+TEST_LOCAL`: condition-based restore predicate requiring exact container identity, running/restart state, exactly one kube-apiserver, and consecutive bounded `/livez=ok`. | Fake transition sequence includes process-present/500/ok and never emits PASS early. | Real Kind startup duration remains external and bounded. |
 | `A-06` | `S1`; `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | Controller cleanup trusted `compose down` return code and could form a candidate PASS without proving labeled containers/networks/volumes were zero. | `CLOSED-LOCAL`: separate bounded post-down exact project-label queries for containers, networks, and volumes; query failure or residue becomes terminal `cleanup_failed`. | RED: six post-down residue/query-failure cases were part of the 29-case L3 failure set. GREEN: all 29 focused L3 cases and aggregate runtime/foundation gate `88 passed`; Ruff, format, `py_compile`, merged Compose config, encoding, pack hashes, and diff checks passed. | Unlabeled daemon leaks are outside project accounting; external behavior remains unverified. |
 | `A-07` | `S1`; `CODE-PROVEN`, `HYPOTHESIS` for an observed race | Project-specific emptiness does not serialize two distinct fresh projects that share fixed host ports and the same four co-tenants. | `FIX+TEST_LOCAL`: one exclusive Mac rehearsal lock acquired before preflight and held through final restoration; owner metadata and fail-closed stale-lock policy. | Two-process fixture proves only one owner enters the stop boundary. | Host crash may require manual, evidence-backed stale-lock recovery. |
@@ -269,12 +269,11 @@ mutation, traffic, soak, `r8`, deploy, or push.
    2026-08-20.** Detached shim/observer IDs are inspect-bound and carried into
    exact removal/no-replacement evidence. Post-down project-label accounting
    covers containers, networks, and volumes; any missing proof fails cleanup.
-4. **L4 — tracked bootstrap and terminal taxonomy (`A-03`).** Introduce the
-   smallest tracked POSIX bootstrap plus testable Python wrapper under
-   `scripts/golden_soak/`, with focused tests in a new
-   `tests/unit/test_ci_soak_wrapper.py`. Pin supported interpreter discovery,
-   `NOT_INVOKED` versus controller failure, primary/restore result precedence,
-   and exactly one terminal record.
+4. **L4 — tracked bootstrap and terminal taxonomy (`A-03`) — complete
+   2026-08-20.** The executable POSIX bootstrap discovers a supported Python,
+   persists bootstrap/orchestration failures, and invokes the Python wrapper
+   through a bounded plan file. The wrapper preserves `NOT_INVOKED` versus
+   controller failure, primary/restore precedence, and one terminal record.
 5. **L5 — path, probe, restore, and lock preflight (`A-04`, `A-05`, `A-07`,
    `A-08`).** Extend the tracked wrapper with shared-root containment, two
    daemon-visible path probes, named ClickHouse network viewpoints, exact Kind
@@ -285,14 +284,15 @@ mutation, traffic, soak, `r8`, deploy, or push.
    one `ARCHITECTURE_READY=PASS|BLOCKED` line with finding IDs. Update current
    docs only after all preceding local slices are green.
 
-L1 / `A-01`, L2 / `A-02`, and L3 / `A-06` + `A-09` are complete locally. The
-first next separate slice is **L4 / `A-03` only**. Combining it with another
-external rehearsal would defeat the audit's purpose.
+L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`, and L4 / `A-03` are complete
+locally. The first next separate slice is **L5 / `A-04` + `A-05` + `A-07` +
+`A-08` only**. Combining it with an external rehearsal would defeat the
+audit's purpose.
 
 ## 8. `ARCHITECTURE_READY` gate
 
 The gate is a single deterministic decision. It remains `BLOCKED` today on
-`A-03` through `A-05`, `A-07`, and `A-08`.
+`A-04`, `A-05`, `A-07`, and `A-08`.
 
 `ARCHITECTURE_READY=PASS` requires all of the following:
 
@@ -332,10 +332,13 @@ external slice without a rehearsal.
 
 ## 9. Non-claims and next boundary
 
-This audit changed no project code, pack file, test, Compose configuration,
-container, macOS checkout, or external state. It does not close `r7`, prove the
-current Mac/co-tenant state, authorize `r8`, or establish workload, traffic,
-soak, rollback, or production readiness. Push remains unauthorized.
+The local L1-L4 closure changed the runtime/shim/bootstrap implementation,
+tests, and current documentation, but not the protected source pack or Compose
+configuration. It does not close `r7`, prove current Mac/co-tenant state,
+authorize `r8`, or establish workload, traffic, soak, rollback, or production
+readiness. No container, SSH, macOS checkout, or external state was used for
+L4, and push remains unauthorized.
 
-The only next implementation boundary is L4: local test-first closure of
-`A-03` through a tracked bootstrap and exactly-one terminal taxonomy.
+The only next implementation boundary is L5: local test-first closure of
+`A-04`, `A-05`, `A-07`, and `A-08` through the tracked wrapper. It does not
+authorize an external rehearsal.

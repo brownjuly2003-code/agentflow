@@ -832,3 +832,56 @@ starting point for the next CI-soak session.
 
 L4 remains local-only. Do not combine path/restore/lock findings, launch an
 external rehearsal, prepare `r8`, reuse any `r1`-`r7` identity, or push.
+
+## Authoritative next-session resume checkpoint — L4 closed; L5 next
+
+This section supersedes every earlier checkpoint above. It is the tracked
+starting point for the next CI-soak session.
+
+### L4 outcome and evidence
+
+- Implementation baseline:
+  `2393495de842717f947da136e0c9c98a04771de0`
+  (`fix(ops): add soak wrapper terminal taxonomy`). L1 through L4 are
+  `CLOSED-LOCAL` for `A-01`, `A-02`, `A-03`, `A-06`, and `A-09`.
+- `scripts/golden_soak/bootstrap.sh` is an executable POSIX entry point. It
+  checks newline-delimited candidates in order, requires Python >=3.11, and
+  emits a durable `WRAPPER_FAILURE`/`NOT_INVOKED` result if none is supported.
+  If the wrapper does not emit a terminal record, bootstrap persists the
+  distinct `ORCHESTRATION_STOP` outcome.
+- `scripts/golden_soak/wrapper.py` reads a bounded JSON command plan, invokes
+  controller and restore commands without a shell, and writes plus prints one
+  canonical JSON record. A zero controller RC without a valid controller PASS
+  record fails closed. Restore failure overrides a candidate PASS while the
+  exact primary result and both RC dimensions remain present.
+- Test-first RED was `7 failed` at the two missing implementation files. The
+  final focused suite reported `9 passed`; the proportional runtime,
+  foundation, and wrapper aggregate reported `97 passed in 26.33s`. Ruff
+  check/format, `py_compile`, Git Bash `bash -n`, UTF-8/LF/NUL, protected pack
+  hashes, exact changed paths, executable mode, and diff checks passed.
+- The bounded plan-file transport replaced opaque JSON argv after one focused
+  diagnostic proved MSYS altered embedded quoting at the shell/native-Python
+  boundary. No diagnostic output remains in tracked code.
+- Grok was optional for this slice and was not used. The previous bounded Grok
+  route had produced no terminal output; this local fixture-only slice was
+  implemented and independently verified by Codex.
+- The golden source pack is byte-identical. No Docker daemon/container, SSH,
+  macOS checkout, `r8`, traffic, soak, rollback, production action, push, or
+  protected untracked path changed.
+
+`ARCHITECTURE_READY=BLOCKED` remains on `A-04`, `A-05`, `A-07`, and `A-08`.
+The corrected L1-L4 paths are locally proven only.
+
+### Start here
+
+1. Refresh `git status --short --branch` and `git log -4 --oneline`. Preserve
+   every established untracked path and never bulk-stage.
+2. Read the `A-04`, `A-05`, `A-07`, and `A-08` register rows and L5 plan in
+   `ci-soak-r1-r7-architecture-audit.md`. Do not reopen L1-L4 without fresh
+   failing evidence.
+3. Implement one separate test-first slice only: **L5 / `A-04` + `A-05` +
+   `A-07` + `A-08`**. Extend the tracked wrapper with the declared path,
+   probe-viewpoint, restore-readiness, and exclusive-lock contracts using fake
+   command transitions only.
+4. Keep L5 local. Do not launch an external rehearsal, prepare `r8`, reuse any
+   `r1`-`r7` identity, change the golden pack, or push.

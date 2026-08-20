@@ -37,6 +37,41 @@ docker compose -f docker-compose.yml -f docker-compose.flink.yml -f docker-compo
 
 Do not infer a runtime PASS from successful configuration validation.
 
+## Tracked bootstrap and terminal record
+
+`bootstrap.sh` is the POSIX entry point for the separately authorized wrapper
+path. It checks `/usr/local/bin/python3` and then `python3`, requires Python
+3.11 or newer, and invokes `wrapper.py` with an exact attempt identity, terminal
+result path, and `--plan-path`. The plan is bounded JSON with schema version 1
+and these fields:
+
+```json
+{
+  "schema_version": 1,
+  "controller_command": ["python3", "scripts/golden_soak/runtime.py", "..."],
+  "controller_result_path": "/fresh/output/result-final.txt",
+  "restore_command": ["/absolute/path/to/restore-command", "..."]
+}
+```
+
+The bootstrap invocation shape is:
+
+```sh
+scripts/golden_soak/bootstrap.sh ATTEMPT_ID WRAPPER_RESULT_PATH \
+  --plan-path PLAN_PATH
+```
+
+The wrapper executes both commands without a shell and prints plus atomically
+writes exactly one `WRAPPER_RESULT=<json>` record. That record preserves the
+controller invocation state, primary result/RC, restore result/RC, terminal
+class, first boundary, and reason. A missing supported interpreter is
+`WRAPPER_FAILURE` with `NOT_INVOKED`; a missing wrapper terminal is
+`ORCHESTRATION_STOP`; restore failure overrides a candidate controller PASS.
+
+This is the local L4 terminal contract only. It does not yet implement the L5
+shared-root probes, network-viewpoint classification, Kind `/livez` restore
+predicate, or exclusive lock, and it does not authorize an external rehearsal.
+
 ## Local controller
 
 The later, separately authorized rehearsal slice can use a fresh output

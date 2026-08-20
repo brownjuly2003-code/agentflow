@@ -942,3 +942,50 @@ corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
    `ARCHITECTURE_READY=PASS|BLOCKED blockers=... head=...` line.
 4. Keep L6 local. Do not launch an external rehearsal, prepare `r8`, reuse any
    `r1`-`r7` identity, change the golden pack, or push.
+
+## Authoritative next-session resume checkpoint — L6 closed; local gate PASS
+
+This section supersedes every earlier checkpoint above. It is the tracked
+starting point for any later CI-soak decision.
+
+### L6 outcome and evidence
+
+- Gate implementation commits:
+  `44fc1a1f2ad64abc856a231545beb852a650a0c8`
+  (`feat(ops): add CI soak architecture gate`) and
+  `809978b4e7e20b47fab19dbe91495b464a672a05`
+  (`fix(ops): scope soak gate format check`). L1 through L6 are complete
+  locally.
+- `scripts/golden_soak/architecture_gate.py` checks the finding register,
+  focused runtime/foundation/wrapper tests, Ruff lint and L6 changed-path
+  formatting, `py_compile`, merged Compose configuration, Git diff/clean
+  state, eight protected pack hashes, UTF-8/LF/NUL, and exact HEAD. It
+  suppresses every child command and emits one terminal line.
+- RED was `7 failed` at the missing entry-point boundary. Focused GREEN is
+  `7 passed`; Ruff check/format, `py_compile`, encoding, and diff checks passed.
+- The first clean-HEAD gate execution correctly failed closed with
+  `G-RUFF`: lint was green, while the historical unchanged foundation fixture
+  did not match the current formatter. The single QA follow-up pinned
+  changed-path formatting to the two L6 Python files without rewriting that
+  unrelated fixture. The one permitted full re-run emitted exactly:
+
+  ```text
+  ARCHITECTURE_READY=PASS blockers=0 head=809978b4e7e20b47fab19dbe91495b464a672a05
+  ```
+
+- Grok was optional and was not used. No Docker daemon/container, SSH, macOS
+  checkout, external rehearsal, `r8`, traffic, soak, rollback, production
+  action, push, or protected source-pack/untracked mutation occurred.
+
+The current local verdict is `ARCHITECTURE_READY=PASS`; blockers are zero.
+This is not runtime evidence and does not authorize any external action. All
+corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
+
+### Next boundary
+
+There is no open local CI-soak implementation slice. If the user later
+explicitly authorizes an external preflight, start from the current audit's
+post-PASS boundary: refresh exact HEAD and local status, create a new archive,
+shared-root snapshot, project/output/wrapper identities, acquire the owner
+lock, and complete every read-only pre-stop probe. Do not reuse `r1`-`r7` or
+infer authorization from this local PASS.

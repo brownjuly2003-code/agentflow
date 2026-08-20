@@ -2,13 +2,13 @@
 
 - **Audit date:** 2026-08-20
 - **Audited baseline:** `b151a1f98d0151bc3e84cfa93618fc85d7b78f64`
-- **Latest implementation baseline:** `59e1f7e3ebd59d1c6db6295e8d1e42baf797b567`
+- **Latest implementation baseline:** `809978b4e7e20b47fab19dbe91495b464a672a05`
 - **Scope:** static, local, documentation-only audit
-- **Current verdict:** `ARCHITECTURE_READY=BLOCKED`
-- **Blocking findings:** none among `A-01` through `A-09`; the executable L6
-  gate is not yet implemented
+- **Current verdict:** `ARCHITECTURE_READY=PASS`
+- **Blocking findings:** none
 - **Completed local slices:** L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`,
-  L4 / `A-03`, L5 / `A-04` + `A-05` + `A-07` + `A-08` (2026-08-20)
+  L4 / `A-03`, L5 / `A-04` + `A-05` + `A-07` + `A-08`, L6 / executable
+  architecture gate (2026-08-20)
 
 ## 1. Purpose, evidence rules, and verdict
 
@@ -281,21 +281,28 @@ mutation, traffic, soak, `r8`, deploy, or push.
    containment, two daemon-visible path probes and cleanup checks, three named
    ClickHouse viewpoints, exact Kind restoration with consecutive `/livez`
    success, and an exclusive owner lock held through restoration.
-6. **L6 — executable architecture gate and documentation closure.** Add a
-   small local gate entry point that runs the checks below and prints exactly
-   one `ARCHITECTURE_READY=PASS|BLOCKED` line with finding IDs. Update current
-   docs only after all preceding local slices are green.
+6. **L6 — executable architecture gate and documentation closure — complete
+   2026-08-20.** `scripts/golden_soak/architecture_gate.py` executes the checks
+   below without leaking child output, batches deterministic finding/`G-*`
+   blockers without retry, captures exact HEAD, and prints exactly one
+   `ARCHITECTURE_READY=PASS|BLOCKED` line.
 
-L1 through L5 are complete locally for findings `A-01` through `A-09`. The
-first next separate slice is **L6 — executable architecture gate and
-documentation closure only**. Combining it with an external rehearsal would
-defeat the audit's purpose.
+L1 through L6 are complete locally. Findings `A-01` through `A-09` are closed,
+`A-10` remains explicitly accepted, and `A-11` remains closed. No further
+local CI-soak implementation slice is open. Any later external preflight or
+rehearsal is a separately authorized operation.
 
 ## 8. `ARCHITECTURE_READY` gate
 
 The gate is a single deterministic decision. All named `A-01` through `A-09`
-local contracts are closed, but the verdict remains `BLOCKED` until L6 adds
-the executable one-line decision entry point and verifies this checklist.
+local contracts are closed, and the executable L6 entry point verified this
+checklist on the clean implementation baseline.
+
+Exact terminal evidence from `809978b4e7e20b47fab19dbe91495b464a672a05`:
+
+```text
+ARCHITECTURE_READY=PASS blockers=0 head=809978b4e7e20b47fab19dbe91495b464a672a05
+```
 
 `ARCHITECTURE_READY=PASS` requires all of the following:
 
@@ -335,14 +342,14 @@ external slice without a rehearsal.
 
 ## 9. Non-claims and next boundary
 
-The local L1-L5 closure changed the runtime/shim/bootstrap/wrapper
+The local L1-L6 closure changed the runtime/shim/bootstrap/wrapper/gate
 implementation, tests, and current documentation, but not the protected source
 pack or Compose configuration. It does not close `r7`, prove current
 Mac/co-tenant state, authorize `r8`, or establish workload, traffic, soak,
 rollback, or production readiness. No container, SSH, macOS checkout, or
-external state was used for L5, and push remains unauthorized.
+external state was used for L6, and push remains unauthorized.
 
-The only next implementation boundary is L6: add the small local architecture
-gate that evaluates the checklist and prints exactly one terminal verdict,
-then close the current documentation. It does not authorize an external
-rehearsal.
+There is no remaining local CI-soak implementation boundary. A later external
+preflight may be considered only under fresh explicit authorization, using a
+new exact-HEAD archive and identities as described above. Local
+`ARCHITECTURE_READY=PASS` does not itself authorize that action.

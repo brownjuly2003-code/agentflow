@@ -124,8 +124,9 @@ Run the L6 decision entry point from a clean tracked checkout:
 python scripts/golden_soak/architecture_gate.py
 ```
 
-It executes the focused runtime/foundation/wrapper tests, Ruff check/format,
-`py_compile`, merged Compose validation, Git diff/clean-tree checks, the
+It executes the focused runtime/foundation/wrapper tests, Ruff lint across the
+relevant sources plus format-check for the L6 changed paths, `py_compile`,
+merged Compose validation, Git diff/clean-tree checks, the
 finding-closure register, all eight source-pack hashes, UTF-8/LF/NUL policy,
 and exact HEAD capture. Child command output is suppressed; the process emits
 exactly one line and exits zero only for PASS:

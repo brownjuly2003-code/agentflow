@@ -25,6 +25,7 @@ from typing import Any, Protocol
 FULL_SOAK_COUNT = 1_440_000
 REQUIRED_RATE_EPS = 100.0
 MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
+MAX_HTTP_DIAGNOSTIC_BODY_BYTES = 4096
 MAX_JSON_BYTES = 1024 * 1024
 MAX_STATE_BYTES = 1024 * 1024
 
@@ -70,6 +71,8 @@ class CommandResult:
     returncode: int
     stdout: str
     stderr: str = ""
+    original_output_bytes: int | None = None
+    original_output_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -140,13 +143,48 @@ def _bounded_text(value: str, limit: int = MAX_COMMAND_OUTPUT_BYTES) -> str:
     return bounded.decode("utf-8", errors="replace")
 
 
-def _command_log(result: CommandResult) -> str:
-    stdout = _bounded_text(result.stdout)
-    stderr = _bounded_text(result.stderr)
+def _raw_command_log(stdout: str, stderr: str) -> str:
     if not stderr:
         return stdout
     separator = "" if not stdout or stdout.endswith("\n") else "\n"
-    return _bounded_text(f"{stdout}{separator}--- stderr ---\n{stderr}")
+    return f"{stdout}{separator}--- stderr ---\n{stderr}"
+
+
+def _captured_command_result(returncode: int, stdout: str, stderr: str = "") -> CommandResult:
+    raw_log = _raw_command_log(stdout, stderr)
+    encoded = raw_log.encode("utf-8", errors="replace")
+    return CommandResult(
+        returncode,
+        _bounded_text(stdout),
+        _bounded_text(stderr),
+        len(encoded),
+        hashlib.sha256(encoded).hexdigest(),
+    )
+
+
+def _command_log(result: CommandResult) -> tuple[str, int, str, bool]:
+    raw_log = _raw_command_log(result.stdout, result.stderr)
+    raw_encoded = raw_log.encode("utf-8", errors="replace")
+    original_bytes = (
+        result.original_output_bytes
+        if result.original_output_bytes is not None
+        else len(raw_encoded)
+    )
+    original_sha256 = result.original_output_sha256 or hashlib.sha256(raw_encoded).hexdigest()
+    output = _bounded_text(raw_log)
+    output_bytes = len(output.encode("utf-8", errors="replace"))
+    truncated = original_bytes > output_bytes or len(raw_encoded) > MAX_COMMAND_OUTPUT_BYTES
+    if truncated:
+        evidence = (
+            "--- truncation evidence ---\n"
+            f"original_output_bytes={original_bytes}\n"
+            f"original_output_sha256={original_sha256}\n"
+        )
+        evidence_bytes = len(evidence.encode("utf-8"))
+        body = _bounded_text(raw_log, MAX_COMMAND_OUTPUT_BYTES - evidence_bytes)
+        separator = "" if not body or body.endswith("\n") else "\n"
+        output = f"{body}{separator}{evidence}"
+    return output, original_bytes, original_sha256, truncated
 
 
 def _extract_single_full_line(
@@ -235,10 +273,10 @@ class SubprocessRunner:
                 timeout=timeout_s,
                 check=False,
             )
-            return CommandResult(
+            return _captured_command_result(
                 result.returncode,
-                _bounded_text(result.stdout or ""),
-                _bounded_text(result.stderr or ""),
+                result.stdout or "",
+                result.stderr or "",
             )
         except subprocess.TimeoutExpired as exc:
             captured_stdout = exc.stdout or ""
@@ -247,13 +285,13 @@ class SubprocessRunner:
                 captured_stdout = captured_stdout.decode("utf-8", errors="replace")
             if isinstance(captured_stderr, bytes):
                 captured_stderr = captured_stderr.decode("utf-8", errors="replace")
-            return CommandResult(
+            return _captured_command_result(
                 124,
-                _bounded_text(captured_stdout),
-                _bounded_text(f"{captured_stderr}\ntimeout step={step}\n"),
+                captured_stdout,
+                f"{captured_stderr}\ntimeout step={step}\n",
             )
         except OSError as exc:
-            return CommandResult(
+            return _captured_command_result(
                 127,
                 "",
                 f"runner_error step={step} type={type(exc).__name__}\n",
@@ -782,6 +820,8 @@ class RuntimeHarness:
         step: str,
         argv: list[str],
         timeout_s: float | None = None,
+        *,
+        attempt: int | None = None,
     ) -> str:
         result = self.runner.run(
             step,
@@ -789,23 +829,65 @@ class RuntimeHarness:
             cwd=self.config.project_root,
             timeout_s=timeout_s,
         )
-        self._record_step(step, result)
+        self._record_step(step, result, attempt=attempt)
         if result.returncode != 0:
             raise RuntimeFailure(f"{step}_failed", f"returncode={result.returncode}")
         return _bounded_text(result.stdout)
 
-    def _record_step(self, step: str, result: CommandResult) -> None:
-        output = _command_log(result)
+    def _record_step(
+        self,
+        step: str,
+        result: CommandResult,
+        *,
+        attempt: int | None = None,
+    ) -> None:
+        output, original_bytes, original_sha256, truncated = _command_log(result)
+        output_bytes = len(output.encode("utf-8", errors="replace"))
+        attempt_log_name = ""
+        if attempt is not None:
+            if not 1 <= attempt <= 999:
+                raise RuntimeFailure("step_attempt_invalid", step)
+            attempt_log_name = f"{step}.attempt-{attempt:03d}.log"
         if self.output_owned:
+            if attempt_log_name:
+                attempt_path = self.logs_dir / attempt_log_name
+                if attempt_path.exists():
+                    raise RuntimeFailure("step_attempt_duplicate", attempt_log_name)
+                _atomic_write_text(attempt_path, output)
             _atomic_write_text(self.logs_dir / f"{step}.log", output)
         steps = self.state.setdefault("steps", [])
-        if isinstance(steps, list):
-            steps.append(
-                {
-                    "name": step,
-                    "returncode": result.returncode,
-                    "output_bytes": len(output.encode("utf-8", errors="replace")),
-                }
+        if not isinstance(steps, list):
+            raise RuntimeFailure("runtime_state_invalid", "steps")
+        entry: dict[str, Any] = {
+            "name": step,
+            "returncode": result.returncode,
+            "output_bytes": output_bytes,
+            "original_output_bytes": original_bytes,
+            "original_output_sha256": original_sha256,
+            "output_truncated": truncated,
+        }
+        if attempt is not None:
+            entry["attempt"] = attempt
+            entry["log_file"] = attempt_log_name
+        steps.append(entry)
+        if self.output_owned and attempt is not None:
+            summary_keys = (
+                "attempt",
+                "log_file",
+                "original_output_bytes",
+                "original_output_sha256",
+                "output_bytes",
+                "output_truncated",
+                "returncode",
+            )
+            attempts = [
+                {key: item[key] for key in summary_keys}
+                for item in steps
+                if isinstance(item, dict) and item.get("name") == step and "attempt" in item
+            ]
+            _atomic_write_json(
+                self.logs_dir / f"{step}.attempts.json",
+                {"schema_version": 1, "step": step, "attempts": attempts},
             )
 
     def _single_container_id(
@@ -1130,12 +1212,31 @@ class RuntimeHarness:
         if self.runtime_dir is None:
             raise RuntimeFailure("runtime_directory_missing")
         probe = (
-            "import json,pathlib,ssl,urllib.request;"
-            "token=pathlib.Path('/shim/token').read_text().strip();"
-            "ctx=ssl.create_default_context(cafile='/shim/ca.crt');"
+            "import hashlib,json,pathlib,ssl,sys,urllib.error,urllib.request\n"
+            f"BODY_LIMIT={MAX_HTTP_DIAGNOSTIC_BODY_BYTES}\n"
+            "token=pathlib.Path('/shim/token').read_text().strip()\n"
+            "ctx=ssl.create_default_context(cafile='/shim/ca.crt')\n"
             f"req=urllib.request.Request('https://{self._shim_name()}:8443/healthz',"
-            "headers={'Authorization':'Bearer '+token});"
-            "print(urllib.request.urlopen(req,timeout=10,context=ctx).read().decode())"
+            "headers={'Authorization':'Bearer '+token})\n"
+            "try:\n"
+            "    with urllib.request.urlopen(req,timeout=10,context=ctx) as response:\n"
+            "        body=response.read(BODY_LIMIT+1)\n"
+            "except urllib.error.HTTPError as exc:\n"
+            "    body=exc.read(BODY_LIMIT+1)\n"
+            "    exc.close()\n"
+            "    complete=len(body)<=BODY_LIMIT\n"
+            "    captured=body[:BODY_LIMIT]\n"
+            "    diagnostic={'event':'shim_probe_http_error','status':int(exc.code),"
+            "'captured_body_bytes':len(body),"
+            "'captured_body_sha256':hashlib.sha256(body).hexdigest(),"
+            "'body_complete':complete,'body_truncated':not complete,"
+            "'body_preview':captured.decode('utf-8',errors='replace')}\n"
+            "    print('shim_probe_http_error '+json.dumps(diagnostic,"
+            "sort_keys=True,separators=(',',':')),file=sys.stderr,flush=True)\n"
+            "    raise SystemExit(1)\n"
+            "if len(body)>BODY_LIMIT:\n"
+            "    raise SystemExit('shim_probe_response_too_large')\n"
+            "print(body.decode('utf-8'))\n"
         )
         argv = [
             *self._compose_prefix(),
@@ -1151,14 +1252,14 @@ class RuntimeHarness:
             probe,
         ]
         deadline = self.monotonic() + 60
-        for _attempt in range(30):
+        for attempt in range(1, 31):
             result = self.runner.run(
                 "shim-probe",
                 argv,
                 cwd=self.config.project_root,
                 timeout_s=30,
             )
-            self._record_step("shim-probe", result)
+            self._record_step("shim-probe", result, attempt=attempt)
             if result.returncode == 0:
                 for line in reversed(result.stdout.splitlines()):
                     if not line.strip():
@@ -1220,11 +1321,14 @@ class RuntimeHarness:
 
     def _wait_observer_ready(self, observer_id: str) -> None:
         deadline = self.monotonic() + 90
+        attempt = 0
         while self.monotonic() <= deadline:
+            attempt += 1
             output = self._run_required(
                 "observer-ready",
                 [self.docker_executable, "logs", "--tail", "100", observer_id],
                 30,
+                attempt=attempt,
             )
             if "observer_start" in output:
                 return

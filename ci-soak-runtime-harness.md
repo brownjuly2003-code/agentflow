@@ -697,3 +697,30 @@ container, SSH, Mac checkout, `r8` identity, or external state was used.
 accepted and `A-11` stays closed. The exact next separate slice is L2 /
 `A-02` only. It must preserve bounded retry and HTTP diagnostics locally; it
 does not authorize an external rehearsal or reuse of any `r1`-`r7` identity.
+
+### A-02 durable retry and HTTP diagnostics closure — 2026-08-20
+
+L2 / `A-02` is `CLOSED-LOCAL`. Each `shim-probe` and `observer-ready` retry now
+writes `logs/<step>.attempt-###.log`, retains the backward-compatible latest
+`logs/<step>.log`, and atomically updates `logs/<step>.attempts.json` in strict
+attempt order. The summary and `runtime-state.json` record return code, written
+bytes, original combined-output bytes and SHA-256, truncation state, and exact
+attempt log name. A duplicate or invalid attempt number fails closed.
+
+The container-side probe catches `HTTPError`, records bounded status, body
+preview, captured byte count/SHA-256, and completeness before returning nonzero.
+The shim records equivalent bounded internal Docker diagnostics to stderr while
+its HTTPS response remains the same sanitized reason. Oversized previews and
+command logs stay bounded; a truncated command log embeds its original byte
+count and SHA-256.
+
+Test-first evidence: all five focused contracts failed before implementation
+at the expected missing boundaries, then all five passed. The proportional
+aggregate reported `59 passed`; Ruff check/format, `py_compile`, merged Compose
+`config --quiet`, and diff checks passed. No Docker daemon, container, SSH, Mac
+checkout, `r8` identity, or external state was used.
+
+`ARCHITECTURE_READY` remains `BLOCKED` on `A-03` through `A-09`; `A-10` stays
+accepted and `A-11` stays closed. The exact next separate slice is L3 /
+`A-06` + `A-09` only: post-down zero-resource proof and exact transient
+shim/observer identity symmetry. It does not authorize an external rehearsal.

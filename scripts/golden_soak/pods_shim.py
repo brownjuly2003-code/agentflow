@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import http.client
 import json
@@ -12,6 +13,7 @@ import socket
 import ssl
 import sys
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +22,8 @@ from typing import Any, Protocol
 MAX_REQUEST_TARGET_BYTES = 2048
 MAX_HEADER_BYTES = 8192
 MAX_DOCKER_RESPONSE_BYTES = 1024 * 1024
+MAX_DOCKER_DIAGNOSTIC_BODY_BYTES = 2048
+MAX_DOCKER_DIAGNOSTIC_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
 MAX_TOKEN_BYTES = 512
 
@@ -61,6 +65,10 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
         self.sock = connection
 
 
+def _stderr_diagnostic(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
 class DockerSocketInspector:
     """Read one exact container document from the Docker Engine API."""
 
@@ -69,21 +77,67 @@ class DockerSocketInspector:
         socket_path: Path,
         *,
         timeout_s: float = 5.0,
+        diagnostic_sink: Callable[[str], None] = _stderr_diagnostic,
     ) -> None:
         self.socket_path = socket_path
         self.timeout_s = timeout_s
+        self._diagnostic_sink = diagnostic_sink
         self._api_version: str | None = None
+
+    def _emit_diagnostic(
+        self,
+        *,
+        operation: str,
+        reason: str,
+        status: int | None,
+        body: bytes,
+        body_complete: bool,
+    ) -> None:
+        preview = body[:MAX_DOCKER_DIAGNOSTIC_BODY_BYTES]
+        payload = {
+            "body_complete": body_complete,
+            "body_preview": preview.decode("utf-8", errors="replace"),
+            "body_truncated": not body_complete or len(body) > len(preview),
+            "captured_body_bytes": len(body),
+            "captured_body_sha256": hashlib.sha256(body).hexdigest(),
+            "event": "docker_http_error",
+            "operation": operation,
+            "reason": reason,
+            "status": status,
+        }
+        line = "docker_diagnostic " + json.dumps(
+            payload,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        if len(line.encode("utf-8")) > MAX_DOCKER_DIAGNOSTIC_BYTES:
+            payload["body_preview"] = ""
+            payload["body_truncated"] = True
+            line = "docker_diagnostic " + json.dumps(
+                payload,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        try:
+            self._diagnostic_sink(line)
+        except (OSError, ValueError):
+            return
 
     def _request_json(
         self,
         path: str,
         *,
+        operation: str,
         unavailable_reason: str,
         malformed_reason: str,
         payload_reason: str,
         failed_reason: str,
     ) -> dict[str, Any]:
         connection = _UnixHTTPConnection(self.socket_path, self.timeout_s)
+        status: int | None = None
+        body = b""
         try:
             connection.request(
                 "GET",
@@ -91,21 +145,57 @@ class DockerSocketInspector:
                 headers={"Accept": "application/json", "Connection": "close"},
             )
             response = connection.getresponse()
+            status = response.status
             body = response.read(MAX_DOCKER_RESPONSE_BYTES + 1)
             if len(body) > MAX_DOCKER_RESPONSE_BYTES:
+                self._emit_diagnostic(
+                    operation=operation,
+                    reason="docker_response_too_large",
+                    status=status,
+                    body=body,
+                    body_complete=False,
+                )
                 raise ShimError("docker_response_too_large")
-            if response.status != 200:
+            if status != 200:
+                self._emit_diagnostic(
+                    operation=operation,
+                    reason=unavailable_reason,
+                    status=status,
+                    body=body,
+                    body_complete=True,
+                )
                 raise ShimError(unavailable_reason)
             try:
                 payload = json.loads(body.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                self._emit_diagnostic(
+                    operation=operation,
+                    reason=malformed_reason,
+                    status=status,
+                    body=body,
+                    body_complete=True,
+                )
                 raise ShimError(malformed_reason) from exc
             if not isinstance(payload, dict):
+                self._emit_diagnostic(
+                    operation=operation,
+                    reason=payload_reason,
+                    status=status,
+                    body=body,
+                    body_complete=True,
+                )
                 raise ShimError(payload_reason)
             return payload
         except ShimError:
             raise
         except (OSError, ValueError, http.client.HTTPException) as exc:
+            self._emit_diagnostic(
+                operation=operation,
+                reason=failed_reason,
+                status=status,
+                body=body,
+                body_complete=False,
+            )
             raise ShimError(failed_reason) from exc
         finally:
             connection.close()
@@ -113,6 +203,7 @@ class DockerSocketInspector:
     def _discover_api_version(self) -> str:
         payload = self._request_json(
             "/version",
+            operation="version",
             unavailable_reason="docker_version_unavailable",
             malformed_reason="docker_version_invalid",
             payload_reason="docker_version_invalid",
@@ -146,6 +237,7 @@ class DockerSocketInspector:
             self._api_version = self._discover_api_version()
         return self._request_json(
             f"/{self._api_version}/containers/{container_id}/json",
+            operation="inspect",
             unavailable_reason="docker_inspect_unavailable",
             malformed_reason="docker_inspect_failed",
             payload_reason="docker_payload_invalid",

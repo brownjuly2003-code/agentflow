@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -251,8 +252,30 @@ class RetryProbeRunner(FakeRunner):
         self.probe_attempts += 1
         runtime = _runtime()
         if self.probe_attempts == 1:
-            return runtime.CommandResult(1, "connection refused\n")
+            return runtime.CommandResult(
+                1,
+                "connection refused\n",
+                (
+                    'shim_probe_http_error {"status":503,'
+                    '"body_preview":"{\\"ok\\":false,\\"reason\\":\\"docker_inspect_unavailable\\"}"}\n'
+                ),
+            )
         return runtime.CommandResult(0, 'compose notice\n{"ok":true,"containers":2}\n')
+
+
+class RetryEvidenceRunner(RetryProbeRunner):
+    def __init__(self, output_dir: Path) -> None:
+        super().__init__(output_dir)
+        self.observer_attempts = 0
+
+    def run(self, step: str, argv: list[str], **kwargs: Any):
+        result = super().run(step, argv, **kwargs)
+        if step != "observer-ready":
+            return result
+        self.observer_attempts += 1
+        if self.observer_attempts == 1:
+            return _runtime().CommandResult(0, "observer booting\n")
+        return result
 
 
 class ExistingProjectRunner(FakeRunner):
@@ -337,6 +360,9 @@ def test_subprocess_runner_keeps_machine_stdout_separate_from_stderr(
     assert result.returncode == 0
     assert result.stdout == "machine\n"
     assert result.stderr == "progress\n"
+    expected_log = b"machine\n--- stderr ---\nprogress\n"
+    assert result.original_output_bytes == len(expected_log)
+    assert result.original_output_sha256 == hashlib.sha256(expected_log).hexdigest()
 
 
 def test_subprocess_runner_preserves_timeout_evidence_on_stderr(
@@ -653,6 +679,107 @@ def test_shim_probe_retries_startup_noise_and_compose_runs_are_noninteractive(
             assert "--no-TTY" in argv
 
 
+def test_retry_attempt_logs_and_ordered_summaries_preserve_every_result(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = RetryEvidenceRunner(output_dir)
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is True
+    assert runner.probe_attempts == 2
+    assert runner.observer_attempts == 2
+    for step, first_marker, second_marker in (
+        (
+            "shim-probe",
+            "docker_inspect_unavailable",
+            '"ok":true,"containers":2',
+        ),
+        ("observer-ready", "observer booting", "observer_start"),
+    ):
+        first_path = output_dir / "logs" / f"{step}.attempt-001.log"
+        second_path = output_dir / "logs" / f"{step}.attempt-002.log"
+        assert first_marker in first_path.read_text(encoding="utf-8")
+        assert second_marker in second_path.read_text(encoding="utf-8")
+        assert (output_dir / "logs" / f"{step}.log").read_bytes() == second_path.read_bytes()
+
+        summary = json.loads(
+            (output_dir / "logs" / f"{step}.attempts.json").read_text(encoding="utf-8")
+        )
+        assert summary["schema_version"] == 1
+        assert summary["step"] == step
+        assert [attempt["attempt"] for attempt in summary["attempts"]] == [1, 2]
+        expected_returncodes = [1, 0] if step == "shim-probe" else [0, 0]
+        assert [attempt["returncode"] for attempt in summary["attempts"]] == expected_returncodes
+        assert [attempt["log_file"] for attempt in summary["attempts"]] == [
+            f"{step}.attempt-001.log",
+            f"{step}.attempt-002.log",
+        ]
+        assert all(len(attempt["original_output_sha256"]) == 64 for attempt in summary["attempts"])
+
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    shim_attempts = [entry for entry in state["steps"] if entry["name"] == "shim-probe"]
+    observer_attempts = [entry for entry in state["steps"] if entry["name"] == "observer-ready"]
+    assert [entry["attempt"] for entry in shim_attempts] == [1, 2]
+    assert [entry["attempt"] for entry in observer_attempts] == [1, 2]
+
+    probe_call = next(call for call in runner.calls if call["step"] == "shim-probe")
+    probe_program = probe_call["argv"][-1]
+    compile(probe_program, "<shim-probe>", "exec")
+    assert "except urllib.error.HTTPError as exc:" in probe_program
+    assert "shim_probe_http_error" in probe_program
+    assert "captured_body_sha256" in probe_program
+
+
+def test_attempt_log_truncation_records_original_size_and_hash(tmp_path: Path) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    harness = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=FakeRunner(output_dir),
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    )
+    harness._prepare_output()  # noqa: SLF001 - evidence boundary contract
+    raw = "head\n" + ("x" * (runtime.MAX_COMMAND_OUTPUT_BYTES + 257)) + "\ntail\n"
+    raw_bytes = raw.encode("utf-8")
+    expected_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+
+    harness._record_step(  # noqa: SLF001 - evidence boundary contract
+        "shim-probe",
+        runtime.CommandResult(1, raw),
+        attempt=1,
+    )
+
+    attempt_path = output_dir / "logs" / "shim-probe.attempt-001.log"
+    written = attempt_path.read_bytes()
+    assert len(written) <= runtime.MAX_COMMAND_OUTPUT_BYTES
+    assert f"original_output_bytes={len(raw_bytes)}".encode() in written
+    assert f"original_output_sha256={expected_sha256}".encode() in written
+    assert (output_dir / "logs" / "shim-probe.log").read_bytes() == written
+    summary = json.loads(
+        (output_dir / "logs" / "shim-probe.attempts.json").read_text(encoding="utf-8")
+    )
+    assert summary["attempts"] == [
+        {
+            "attempt": 1,
+            "log_file": "shim-probe.attempt-001.log",
+            "original_output_bytes": len(raw_bytes),
+            "original_output_sha256": expected_sha256,
+            "output_bytes": len(written),
+            "output_truncated": True,
+            "returncode": 1,
+        }
+    ]
+
+
 def test_existing_compose_project_resources_block_mutation_and_cleanup(tmp_path: Path) -> None:
     runtime = _runtime()
     output_dir = tmp_path / "out"
@@ -846,6 +973,12 @@ class _ScriptedDockerTransport:
         self.closed += 1
 
 
+def _parse_docker_diagnostic(line: str) -> dict[str, Any]:
+    prefix = "docker_diagnostic "
+    assert line.startswith(prefix)
+    return json.loads(line.removeprefix(prefix))
+
+
 def test_docker_socket_inspector_discovers_compatible_api_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -959,6 +1092,65 @@ def test_docker_socket_inspector_fails_closed_during_version_discovery(
 
     assert [request[1] for request in transport.requests] == ["/version"]
     assert transport.closed == 1
+
+
+def test_docker_socket_inspector_records_bounded_non_200_body_internally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shim = _shim()
+    body = b'{"message":"client version too old","internal":"diagnostic-only"}'
+    transport = _ScriptedDockerTransport([_ScriptedDockerResponse(400, body)])
+    diagnostics: list[str] = []
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    with pytest.raises(shim.ShimError, match="^docker_version_unavailable$") as caught:
+        shim.DockerSocketInspector(
+            Path("/var/run/docker.sock"),
+            diagnostic_sink=diagnostics.append,
+        ).inspect(JM_ID)
+
+    assert str(caught.value) == "docker_version_unavailable"
+    assert "diagnostic-only" not in str(caught.value)
+    assert len(diagnostics) == 1
+    assert len(diagnostics[0].encode("utf-8")) <= shim.MAX_DOCKER_DIAGNOSTIC_BYTES
+    diagnostic = _parse_docker_diagnostic(diagnostics[0])
+    assert diagnostic == {
+        "body_complete": True,
+        "body_preview": body.decode("utf-8"),
+        "body_truncated": False,
+        "captured_body_bytes": len(body),
+        "captured_body_sha256": hashlib.sha256(body).hexdigest(),
+        "event": "docker_http_error",
+        "operation": "version",
+        "reason": "docker_version_unavailable",
+        "status": 400,
+    }
+
+
+def test_docker_socket_inspector_bounds_oversized_internal_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shim = _shim()
+    body = b"x" * (shim.MAX_DOCKER_RESPONSE_BYTES + 1)
+    transport = _ScriptedDockerTransport([_ScriptedDockerResponse(500, body)])
+    diagnostics: list[str] = []
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    with pytest.raises(shim.ShimError, match="^docker_response_too_large$"):
+        shim.DockerSocketInspector(
+            Path("/var/run/docker.sock"),
+            diagnostic_sink=diagnostics.append,
+        ).inspect(JM_ID)
+
+    assert len(diagnostics) == 1
+    assert len(diagnostics[0].encode("utf-8")) <= shim.MAX_DOCKER_DIAGNOSTIC_BYTES
+    diagnostic = _parse_docker_diagnostic(diagnostics[0])
+    assert diagnostic["status"] == 500
+    assert diagnostic["captured_body_bytes"] == len(body)
+    assert diagnostic["captured_body_sha256"] == hashlib.sha256(body).hexdigest()
+    assert diagnostic["body_complete"] is False
+    assert diagnostic["body_truncated"] is True
+    assert diagnostic["body_preview"] == "x" * shim.MAX_DOCKER_DIAGNOSTIC_BODY_BYTES
 
 
 @pytest.mark.parametrize(

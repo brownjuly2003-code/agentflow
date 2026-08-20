@@ -777,3 +777,58 @@ tracked starting point for the next CI-soak session.
    runtime evidence.
 4. Keep the golden source pack unchanged. Do not combine `A-03`, perform any
    external rehearsal, reuse `r1`-`r7` identities, or push.
+
+## Authoritative next-session resume checkpoint — L3 closed; L4 next
+
+This section supersedes the earlier checkpoint above. It is the tracked
+starting point for the next CI-soak session.
+
+### L3 outcome and evidence
+
+- Implementation baseline:
+  `012bcb46c95e48d8619ac50905410362d73cb8e8`
+  (`fix(ops): bind soak transient cleanup evidence`). L1 / `A-01`, L2 /
+  `A-02`, and L3 / `A-06` + `A-09` are `CLOSED-LOCAL`.
+- Detached shim and observer IDs are remembered before inspection, then bound
+  to the exact ID, Compose project/service/one-off labels, custom name,
+  running state, and zero restarts before the lifecycle advances.
+- Cleanup removes those exact remembered IDs, records same-name absence, runs
+  Compose down, and performs separate exact project-label queries for
+  containers, networks, and volumes. Query failure, residue, replacement, or
+  missing proof is terminal `cleanup_failed`.
+- Durable `runtime-state.json` records both transient identities and all three
+  cleanup-accounting results; bounded step logs retain the corresponding
+  command evidence.
+- Test-first RED was `29 failed, 51 deselected`. Focused GREEN was `29 passed,
+  51 deselected`; the independent proportional gate reported `88 passed in
+  31.21s`. Ruff check/format, `py_compile`, merged Compose `config --quiet`,
+  UTF-8/LF/NUL, eight protected pack hashes, and diff checks all passed.
+- Grok route transparency: `local_grok_cli`, requested model `grok-4.6`, run
+  ID `de-ci-soak-l3-identity-cleanup-20260820-grok01`. It left only the RED
+  test WIP before the bounded 10-minute run ended with no stdout/stderr;
+  Codex cancelled the single writer, completed the production patch, and
+  independently verified it. No writer remains.
+- The golden source pack is byte-identical. No Docker daemon/container, SSH,
+  macOS checkout, `r8`, traffic, soak, rollback, production action, push, or
+  protected untracked path changed.
+
+`ARCHITECTURE_READY=BLOCKED` remains on `A-03` through `A-05`, `A-07`, and
+`A-08`. The corrected L1-L3 paths are locally proven only.
+
+### Start here
+
+1. Refresh `git status --short --branch` and `git log -4 --oneline`. Preserve
+   every established untracked path and never bulk-stage.
+2. Read the `A-03` register row and L4 plan in
+   `ci-soak-r1-r7-architecture-audit.md`. Do not reopen L1-L3 without fresh
+   failing evidence.
+3. Implement one separate test-first slice only: **L4 / `A-03`**. Introduce
+   the smallest tracked POSIX bootstrap plus a testable Python wrapper under
+   `scripts/golden_soak/`, with focused coverage in
+   `tests/unit/test_ci_soak_wrapper.py`.
+4. Pin supported-interpreter discovery, `NOT_INVOKED` versus controller
+   failure, primary/restore result precedence, and exactly one terminal
+   wrapper result. Stop after local verification and a scoped commit.
+
+L4 remains local-only. Do not combine path/restore/lock findings, launch an
+external rehearsal, prepare `r8`, reuse any `r1`-`r7` identity, or push.

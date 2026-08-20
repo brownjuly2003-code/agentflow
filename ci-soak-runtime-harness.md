@@ -493,6 +493,16 @@ that token/TLS material is removed after success and failure. The existing
 synthetic probe-retry test does not exercise daemon-side bind visibility and
 did not cover this Mac-only boundary.
 
+The preferred minimal RED contract is that `runtime_dir.resolve().parent`
+equals `config.output_dir.resolve()`. `_prepare_output()` already establishes
+that directory as controller-owned before `_prepare_tls()`, and its `evidence`
+child is already used as a Docker bind. Every `:/shim:ro` mount, including the
+shim start, shim probe, and pack/observer command paths, must use the same exact
+runtime child. `_remove_runtime_dir()` must accept only a direct child with the
+project-specific prefix and must remove it on both successful and failed
+lifecycle paths. Do not solve this with a broad project-root cleanup or a
+macOS-only conditional.
+
 Only after that fix and focused verification may a later authorized rehearsal
 use fresh `r7` identities and a new archive of its exact source HEAD. The
 capacity-independent rehearsal gate remains open; no push, traffic test, full

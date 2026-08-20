@@ -2,11 +2,13 @@
 
 - **Audit date:** 2026-08-20
 - **Audited baseline:** `b151a1f98d0151bc3e84cfa93618fc85d7b78f64`
-- **Latest implementation baseline:** `2393495de842717f947da136e0c9c98a04771de0`
+- **Latest implementation baseline:** `59e1f7e3ebd59d1c6db6295e8d1e42baf797b567`
 - **Scope:** static, local, documentation-only audit
 - **Current verdict:** `ARCHITECTURE_READY=BLOCKED`
-- **Blocking findings:** `A-04`, `A-05`, `A-07`, and `A-08`
-- **Completed local slices:** L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`, L4 / `A-03` (2026-08-20)
+- **Blocking findings:** none among `A-01` through `A-09`; the executable L6
+  gate is not yet implemented
+- **Completed local slices:** L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`,
+  L4 / `A-03`, L5 / `A-04` + `A-05` + `A-07` + `A-08` (2026-08-20)
 
 ## 1. Purpose, evidence rules, and verdict
 
@@ -239,12 +241,12 @@ another rehearsal unjustified; `S3` is bounded hardening or documentation.
 | --- | --- | --- | --- | --- | --- |
 | `A-01` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | `DockerSocketInspector` fixed `v1.41`; a daemon with minimum `1.44` made every inspect fail and blocked shim/workload gates. | `CLOSED-LOCAL`: bounded unversioned discovery, validated version ordering, compatible exact inspect path, cached selection, and unchanged timeout/size/identity/fail-closed checks. | RED: 15 expected failures and one existing guard pass. GREEN: 16 focused transport cases; aggregate runtime/foundation gate `55 passed`; Ruff, format, `py_compile`, merged Compose config, and diff checks passed. | A later daemon may expose a new compatibility boundary; external preflight still reads `/version`, and the corrected path remains externally unverified. |
 | `A-03` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | No tracked CI-soak bootstrap/wrapper existed. Interpreter selection and pre-controller terminal outcomes lived in per-run artifacts; `r1` and `r3` lacked a complete terminal runtime record. | `CLOSED-LOCAL`: executable POSIX bootstrap discovers Python >=3.11, records unsupported-interpreter and wrapper-launch failures, and delegates a bounded JSON plan to a testable wrapper. The wrapper emits one structured terminal record with exact attempt identity, invocation state, primary result/RC, restore result/RC, class, boundary, and reason. | RED: seven fixtures failed at the missing implementation boundary. GREEN: nine focused cases and the `97 passed` runtime/foundation/wrapper aggregate succeeded; Ruff check/format, `py_compile`, `bash -n`, UTF-8/LF/NUL, protected pack hashes, allowlist, and diff checks passed. | Interpreter executable and SSH availability remain external prerequisites; path, restore-readiness, probe-viewpoint, and lock policy remain in L5. |
-| `A-04` | `S1`; `RUNTIME-PROVEN` | `RESTORE_RESULT=PASS` can follow kube-apiserver process presence before Kind `/livez` is ready; downstream state can be reported restored too early. | `FIX+TEST_LOCAL`: condition-based restore predicate requiring exact container identity, running/restart state, exactly one kube-apiserver, and consecutive bounded `/livez=ok`. | Fake transition sequence includes process-present/500/ok and never emits PASS early. | Real Kind startup duration remains external and bounded. |
+| `A-04` | `S1`; `RUNTIME-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | `RESTORE_RESULT=PASS` can follow kube-apiserver process presence before Kind `/livez` is ready; downstream state can be reported restored too early. | `CLOSED-LOCAL`: schema-2 restoration requires the exact container ID, `running`, restart count `0`, exactly one kube-apiserver, and at least two consecutive bounded `/livez=ok` results before PASS. | Fake transitions prove `500/ok/ok` waits for the second consecutive success and `500/ok` exhausts without PASS. The final wrapper suite is `19 passed`; the proportional aggregate is `107 passed`. | Real Kind startup duration remains external and bounded. |
 | `A-06` | `S1`; `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | Controller cleanup trusted `compose down` return code and could form a candidate PASS without proving labeled containers/networks/volumes were zero. | `CLOSED-LOCAL`: separate bounded post-down exact project-label queries for containers, networks, and volumes; query failure or residue becomes terminal `cleanup_failed`. | RED: six post-down residue/query-failure cases were part of the 29-case L3 failure set. GREEN: all 29 focused L3 cases and aggregate runtime/foundation gate `88 passed`; Ruff, format, `py_compile`, merged Compose config, encoding, pack hashes, and diff checks passed. | Unlabeled daemon leaks are outside project accounting; external behavior remains unverified. |
-| `A-07` | `S1`; `CODE-PROVEN`, `HYPOTHESIS` for an observed race | Project-specific emptiness does not serialize two distinct fresh projects that share fixed host ports and the same four co-tenants. | `FIX+TEST_LOCAL`: one exclusive Mac rehearsal lock acquired before preflight and held through final restoration; owner metadata and fail-closed stale-lock policy. | Two-process fixture proves only one owner enters the stop boundary. | Host crash may require manual, evidence-backed stale-lock recovery. |
-| `A-08` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN` | Static snapshot and generated output visibility are not one enforced pre-stop contract. `r2` and `r6` exposed the two variants; arbitrary output paths remain accepted. | `FIX+TEST_LOCAL` + `EXTERNAL_PREFLIGHT`: shared-root containment for snapshot/output parent, exact marker/hash probes through the target daemon, and cleanup of disposable probes before stop. | Path-policy tests plus a preflight transcript naming source and output probes separately. | Colima share configuration can change after local tests. |
+| `A-07` | `S1`; `CODE-PROVEN`, `HYPOTHESIS` for an observed race; `CLOSED-LOCAL` 2026-08-20 | Project-specific emptiness does not serialize two distinct fresh projects that share fixed host ports and the same four co-tenants. | `CLOSED-LOCAL`: an atomic owner-directory lock is acquired before preflight and held through final Kind restoration. Bounded owner metadata carries attempt/PID/time/token; valid ownership is busy, malformed or missing ownership fails closed, and stale locks are never broken automatically. | A two-process filesystem fixture proves only one owner enters the stop boundary while the other receives `owner_lock_busy`; invalid stale state remains in place. | Host crash may require manual, evidence-backed stale-lock recovery. |
+| `A-08` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | Static snapshot and generated output visibility are not one enforced pre-stop contract. `r2` and `r6` exposed the two variants; arbitrary output paths remain accepted. | `CLOSED-LOCAL` + `EXTERNAL_PREFLIGHT`: schema 2 requires absolute shared-root-contained snapshot/output paths, exact source and output SHA-256 probes through the target daemon, and an exact `absent` cleanup result for each disposable probe before stop. | Outside-root path fixtures fail before any command. The ordered terminal transcript names source/output visibility and cleanup separately before the stop boundary. | Colima share configuration can change after local tests. |
 | `A-02` | `S2`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | Repeated `shim-probe`/`observer-ready` logs overwrote earlier attempts; Docker non-2xx status/body was generalized, and Python `HTTPError` body was not persisted. | `CLOSED-LOCAL`: numbered immutable logs, ordered JSON summaries, original output byte/SHA-256 truncation evidence, bounded probe status/body, bounded internal Docker diagnostics, and unchanged sanitized public reasons. | RED: five focused contracts failed at the missing evidence boundaries. GREEN: all five passed; aggregate runtime/foundation gate `59 passed`; Ruff, format, `py_compile`, merged Compose config, encoding, and diff checks passed. | Attempt counts and diagnostic previews remain bounded; corrected external behavior is still unverified. |
-| `A-05` | `S2`; `RUNTIME-PROVEN` | ClickHouse host-route, container health, and workload-route probes are conflated, enabling transient transport failure to be mislabeled as service failure or ignored. | `FIX+TEST_LOCAL` + `EXTERNAL_PREFLIGHT`: named probe viewpoints and failure classes; no raw retry without a changed hypothesis. | Classification fixtures and a future transcript with one result per viewpoint. | Network topology is external and can drift. |
+| `A-05` | `S2`; `RUNTIME-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | ClickHouse host-route, container health, and workload-route probes are conflated, enabling transient transport failure to be mislabeled as service failure or ignored. | `CLOSED-LOCAL` + `EXTERNAL_PREFLIGHT`: container health, macOS host route, and Kind/workload route are fixed named probes with distinct diagnostic classifications inside the infrastructure-contract failure. Each is executed exactly once; no raw retry occurs. | Parameterized fixtures fail each viewpoint independently, retain one ordered result for all three, and prove no stop command is entered. | Network topology is external and can drift. |
 | `A-09` | `S2`; `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | Detached shim/observer IDs were parsed but not inspect-bound to expected one-off project/service/name/restart state, and no symmetric terminal identity record existed. | `CLOSED-LOCAL`: remember each parsed ID before inspect, bind exact ID/project/service/one-off/name/running/restart, remove that ID, prove same-name absence, and persist the terminal record. | RED: wrong ID/project/service/name/one-off/state/restart/shape/command plus replacement/missing-proof cases failed in the 29-case L3 set. GREEN: all focused cases and the `88 passed` aggregate gate succeeded. | Compose one-off label shape and corrected cleanup behavior remain externally unverified. |
 | `A-10` | `S3`; `CODE-PROVEN`, `ACCEPTED-RISK` | `:ro` on the Unix socket protects the filesystem entry, not Docker API authority. | `DOCUMENT_ACCEPTED`: exact hashed shim source, bearer/TLS boundary, GET-only implementation, two exact IDs, bounded responses, short lifetime. Revisit a socket proxy if the threat model includes container compromise. | Static method/path contract and existing auth/request tests. | The shim container remains daemon-privileged if compromised. |
 | `A-11` | `S2`; `CODE-PROVEN`, closed by this audit slice | `docs/operations/ci-soak-compose-foundation.md` claimed canonical/current status while stopping before the later `r4`-`r7` ledger. | `CLOSED-DOC`: a supersession notice points current runtime status to this audit and `ci-soak-runtime-harness.md`; historical topology evidence remains. | Link and consistency check across durable docs. | Historical prose intentionally remains and must not be used as resume state. |
@@ -275,24 +277,25 @@ mutation, traffic, soak, `r8`, deploy, or push.
    through a bounded plan file. The wrapper preserves `NOT_INVOKED` versus
    controller failure, primary/restore precedence, and one terminal record.
 5. **L5 — path, probe, restore, and lock preflight (`A-04`, `A-05`, `A-07`,
-   `A-08`).** Extend the tracked wrapper with shared-root containment, two
-   daemon-visible path probes, named ClickHouse network viewpoints, exact Kind
-   `/livez` restoration, and an exclusive owner lock. Tests use fake command
-   transitions only; no Mac action belongs to the slice.
+   `A-08`) — complete 2026-08-20.** The schema-2 wrapper enforces shared-root
+   containment, two daemon-visible path probes and cleanup checks, three named
+   ClickHouse viewpoints, exact Kind restoration with consecutive `/livez`
+   success, and an exclusive owner lock held through restoration.
 6. **L6 — executable architecture gate and documentation closure.** Add a
    small local gate entry point that runs the checks below and prints exactly
    one `ARCHITECTURE_READY=PASS|BLOCKED` line with finding IDs. Update current
    docs only after all preceding local slices are green.
 
-L1 / `A-01`, L2 / `A-02`, L3 / `A-06` + `A-09`, and L4 / `A-03` are complete
-locally. The first next separate slice is **L5 / `A-04` + `A-05` + `A-07` +
-`A-08` only**. Combining it with an external rehearsal would defeat the
-audit's purpose.
+L1 through L5 are complete locally for findings `A-01` through `A-09`. The
+first next separate slice is **L6 — executable architecture gate and
+documentation closure only**. Combining it with an external rehearsal would
+defeat the audit's purpose.
 
 ## 8. `ARCHITECTURE_READY` gate
 
-The gate is a single deterministic decision. It remains `BLOCKED` today on
-`A-04`, `A-05`, `A-07`, and `A-08`.
+The gate is a single deterministic decision. All named `A-01` through `A-09`
+local contracts are closed, but the verdict remains `BLOCKED` until L6 adds
+the executable one-line decision entry point and verifies this checklist.
 
 `ARCHITECTURE_READY=PASS` requires all of the following:
 
@@ -332,13 +335,14 @@ external slice without a rehearsal.
 
 ## 9. Non-claims and next boundary
 
-The local L1-L4 closure changed the runtime/shim/bootstrap implementation,
-tests, and current documentation, but not the protected source pack or Compose
-configuration. It does not close `r7`, prove current Mac/co-tenant state,
-authorize `r8`, or establish workload, traffic, soak, rollback, or production
-readiness. No container, SSH, macOS checkout, or external state was used for
-L4, and push remains unauthorized.
+The local L1-L5 closure changed the runtime/shim/bootstrap/wrapper
+implementation, tests, and current documentation, but not the protected source
+pack or Compose configuration. It does not close `r7`, prove current
+Mac/co-tenant state, authorize `r8`, or establish workload, traffic, soak,
+rollback, or production readiness. No container, SSH, macOS checkout, or
+external state was used for L5, and push remains unauthorized.
 
-The only next implementation boundary is L5: local test-first closure of
-`A-04`, `A-05`, `A-07`, and `A-08` through the tracked wrapper. It does not
-authorize an external rehearsal.
+The only next implementation boundary is L6: add the small local architecture
+gate that evaluates the checklist and prints exactly one terminal verdict,
+then close the current documentation. It does not authorize an external
+rehearsal.

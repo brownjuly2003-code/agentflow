@@ -885,3 +885,60 @@ The corrected L1-L4 paths are locally proven only.
    command transitions only.
 4. Keep L5 local. Do not launch an external rehearsal, prepare `r8`, reuse any
    `r1`-`r7` identity, change the golden pack, or push.
+
+## Authoritative next-session resume checkpoint — L5 closed; L6 next
+
+This section supersedes every earlier checkpoint above. It is the tracked
+starting point for the next CI-soak session.
+
+### L5 outcome and evidence
+
+- Implementation baseline:
+  `59e1f7e3ebd59d1c6db6295e8d1e42baf797b567`
+  (`fix(ops): enforce soak rehearsal preflight contract`). L1 through L5 are
+  `CLOSED-LOCAL` for findings `A-01` through `A-09`.
+- The CLI now accepts only bounded schema-2 plans. Snapshot, output parent,
+  controller result, and wrapper result are tied to an absolute shared-root
+  contract. Separate source/output daemon probes require exact SHA-256 values,
+  then exact cleanup evidence, before the stop boundary.
+- ClickHouse container health, macOS host route, and Kind/workload route are
+  named ordered checks with distinct diagnostic classifications. All three run
+  exactly once per preflight; a failure blocks stop without raw retry.
+- An atomic owner-directory lock is acquired before preflight and held through
+  final restoration. Owner metadata binds attempt, PID, time, and token. Valid
+  ownership is busy; malformed/missing stale state fails closed and is never
+  auto-broken. The two-process fixture proves only one owner reaches stop.
+- Restoration requires the exact Kind container ID, `running`, zero restarts,
+  exactly one kube-apiserver, and at least two consecutive bounded
+  `/livez=ok` observations. `500/ok` cannot pass; `500/ok/ok` passes only on
+  the final transition.
+- Test-first RED introduced 10 L5 failures; the two-process fixture received
+  one escaping correction and was re-confirmed at the missing owner-lock
+  boundary. Final focused verification is `19 passed`. The independent
+  runtime/foundation/wrapper aggregate reported `107 passed in 27.79s`.
+  After the single Ruff follow-up, Ruff check/format, `py_compile`, the focused
+  19 tests, and `git diff --check` passed. Git Bash `bash -n`, merged Compose
+  `config --quiet`, UTF-8/LF/NUL, eight protected pack hashes, and the exact
+  changed-path allowlist also passed.
+- Grok was optional and was not used. No Docker daemon/container, SSH, macOS
+  checkout, `r8`, traffic, soak, rollback, production action, push, or
+  protected untracked path changed. The golden source pack remains
+  byte-identical.
+
+All finding contracts `A-01` through `A-09` are closed locally. The current
+verdict remains `ARCHITECTURE_READY=BLOCKED` only because the separate L6
+executable one-line gate and final documentation closure do not yet exist. All
+corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
+
+### Start here
+
+1. Refresh `git status --short --branch` and `git log -4 --oneline`. Preserve
+   every established untracked path and never bulk-stage.
+2. Read section 8 of `ci-soak-r1-r7-architecture-audit.md`. Do not reopen
+   L1-L5 without fresh failing evidence.
+3. Implement one separate local slice only: **L6 — executable architecture
+   gate and documentation closure**. The gate must evaluate the documented
+   checks and print exactly one
+   `ARCHITECTURE_READY=PASS|BLOCKED blockers=... head=...` line.
+4. Keep L6 local. Do not launch an external rehearsal, prepare `r8`, reuse any
+   `r1`-`r7` identity, change the golden pack, or push.

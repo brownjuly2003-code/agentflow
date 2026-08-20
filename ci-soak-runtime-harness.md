@@ -592,10 +592,63 @@ Evidence remains under the `r7` output directory:
 #### Next-session resume delta
 
 Treat every `r1` through `r7` snapshot, project, wrapper, and artifact as
-immutable evidence; do not rerun or adopt them. The next named slice is local
-and test-first: add a daemon fixture whose minimum API exceeds `v1.41`, then
-replace the hardcoded version assumption with a bounded compatible API contract
-while preserving exact container identity, response-size limits, timeouts, and
-fail-closed errors. Do not prepare or launch `r8` in that local slice. Push,
+immutable evidence; do not rerun or adopt them. The previously proposed narrow
+Docker API correction is superseded as the immediate next slice. Do not edit
+project code, prepare `r8`, or launch another rehearsal before completing the
+read-only architecture audit below.
+
+##### Seven-attempt causal ledger
+
+The seven unsuccessful attempts are not seven workload or soak failures. They
+stopped at different control-plane boundaries, and none reached the complete
+baseline/observer/producer/verification sequence.
+
+| Attempt | First stopping boundary | Proven cause | Current closure evidence |
+| --- | --- | --- | --- |
+| `r1` | Wrapper, before Compose | The wrapper selected `/usr/bin/python3` 3.9.6 instead of a supported interpreter; no terminal result file exists. | Later wrappers select `/usr/local/bin/python3` and enforce Python >=3.11. Re-audit interpreter discovery and preflight ownership. |
+| `r2` | `iceberg-init` one-shot container | The snapshot was outside the Colima shared root, so the bind existed in the VM without `scripts/init_iceberg.py`; controller result was `one_shot_exit_nonzero`. | Later snapshots use the shared root and an identity-bound bind probe. `r6` proved that checking only static snapshot binds was insufficient. |
+| `r3` | Orchestration preflight; controller never ran | The first delegated run hit a headless permission boundary; the cause-specific run exhausted its poll budget after creating only a partial snapshot. There is no durable bind-probe result. | No runtime claim exists. The partial snapshot is evidence-only; audit the launch/delegation boundary separately from controller behavior. |
+| `r4` | Compose `up-app` | `serving-bridge` inherited the API image healthcheck for port `8000` although it exposes metrics on `9108`; result was `up_app_failed`. | Service-level health contracts were added for `serving-bridge` and `lake-materializer`; local config/tests passed and `r5` crossed this gate. |
+| `r5` | Detached shim identity parsing | Compose 5 progress on stderr was merged with stdout, so a valid container ID embedded in multiline output was rejected as `shim_container_id_invalid`; observer start had the same latent parser. | Commit `d20379e5781b9d6d1fc3a6f609d0c64f368b97e7` separated channels and added one shared exact-line parser; `r6` and `r7` crossed this gate. |
+| `r6` | HTTPS shim probe | Runtime token/TLS material was created under macOS `/var/folders/...`, outside the Colima shared root; `/shim` appeared empty and the probe raised `FileNotFoundError`. | Commit `3ea9bd90c3b8e26a8f885551629402aa40d52084` placed material under the owned output directory; `r7` proved token/CA visibility and HTTPS reachability. |
+| `r7` | Shim Docker inspect | `DockerSocketInspector` hardcodes API `v1.41`, below the daemon minimum `1.44`; inspect returned HTTP 400 and the shim failed closed with HTTP 503. | Root cause is proven, but the code contract remains open. Do not implement it until the architecture audit identifies all related Docker-socket/version assumptions and required tests. |
+
+##### Mandatory next-session architecture audit
+
+The next named slice is one read-only, end-to-end architecture audit. Start
+from the ledger above and trace the complete path:
+
+```text
+Windows workspace -> SSH/wrapper -> macOS filesystem -> Colima VM/Docker socket
+-> Compose -> runtime controller -> TLS shim -> Docker inspect -> Flink
+-> baseline/observer/producer/verify -> cleanup -> protected co-tenant restore
+```
+
+The audit must cover, at minimum:
+
+1. Every static and runtime-generated host path, Colima sharing rule, and
+   read-only bind, including ownership and cleanup boundaries.
+2. Python selection, Docker Engine API negotiation/minimum versions, Docker
+   Compose 5 stdout/stderr and one-shot semantics, and exact container identity.
+3. Base-image healthcheck inheritance, service overrides, readiness ordering,
+   Flink task/checkpoint gates, and observer/shim lifecycle symmetry.
+4. Probe correctness and restoration acceptance. Specifically reconcile the
+   transient ClickHouse host-route timeout and the gap between kube-apiserver
+   process presence, `RESTORE_RESULT=PASS`, and Kind `/livez` readiness.
+5. Evidence durability and failure taxonomy. Repeated probe logs are currently
+   overwritten and HTTP error bodies are not preserved reliably; distinguish
+   wrapper, controller, infrastructure, application, data, and soak failures.
+6. Cleanup idempotency, runtime-secret removal, project-resource accounting,
+   co-tenant identity/port guards, concurrency exclusion, and failure paths.
+7. Existing unit/integration coverage for every `r1`-`r7` cause, plus latent
+   variants that can be detected locally without another external rehearsal.
+
+The audit deliverable must contain an architecture diagram, an `r1`-`r7`
+traceability matrix (cause -> evidence -> correction -> test -> residual risk),
+a severity-ranked defect register, and one consolidated local remediation plan.
+It must state which findings are proven and which are hypotheses. No code change
+belongs to the audit slice. Do not authorize or predict `r8` until the audit is
+complete, all statically detectable harness-contract defects have explicit
+dispositions, and a single architecture-readiness gate is defined. Push,
 traffic, full soak, Mac rollback, and production gates remain unauthorized or
 open.

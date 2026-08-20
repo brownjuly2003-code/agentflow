@@ -505,3 +505,97 @@ archive, snapshot, project, output, and wrapper identities and fresh protected
 co-tenant preflight before any stop. The local unit gate does not prove
 Docker/Colima bind visibility or predict rehearsal PASS. Push, traffic, full
 soak, Mac rollback, and production gates remain unauthorized or open.
+
+### `r7` one-shot rehearsal — 2026-08-20
+
+The explicitly authorized `r7` slice used exact source commit
+`e1e739273146658f8f40fe217e9e1b01ee006714` from fresh shared-root snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-e1e7392-r7`, Compose
+project `agentflow-ci-soak-e1e7392-r7`, and output directory
+`.artifacts/soak-rehearsal-2000-e1e7392-r7`. The exact-HEAD archive SHA-256 was
+`d65b095c5381fb99837ff8109c7e82a88968d9aa51fe49c004a31172835aebd1`.
+The critical Git blobs were base Compose `a731a87a`, Flink Compose `838ccf89`,
+soak Compose `95f38bc1`, runtime `14492110`, shim `e5cb97f5`, and Iceberg init
+`b5f9129a`; the corresponding extracted SHA-256 values matched local HEAD.
+
+`run-rehearsal-e1e7392-r7.sh` differed from the immutable `r6` wrapper only in
+the snapshot, output, project, archive filename/hash, and runtime hash. Local
+and remote `bash -n` passed, and both copies had SHA-256
+`b8973d6125fe82adb2cdbc551e6233ea36fee94a2a11820865bd9eef8a8c3189`.
+A read-only bind probe on the exact target Docker socket saw Iceberg init SHA-256
+`226dc8301870ff837028c444c2f690c07c9181d233a8c6fa57635de24eaabada`;
+the merged Compose config SHA-256 was
+`3269b8172e8a61398be3326b60b25f7df7ba4fa86baa22281df7294b8c176873`.
+
+The first read-only preflight stopped on a five-second host curl timeout to
+ClickHouse's VM bridge address `172.18.0.1:8123`. This was a control-probe
+transport error, not a co-tenant failure: the exact ClickHouse container was
+running, healthy, restart zero, and `clickhouse-client SELECT 1` returned `1`.
+Only that probe transport changed; the single permitted full preflight rerun
+then passed before any remote resource mutation.
+
+The wrapper invoked the controller exactly once with `--count 2000`; it printed
+`PREFLIGHT_RESULT=PASS`, stopped exactly four protected co-tenants, and ended:
+
+```text
+RESULT=FAIL reason=shim_probe_failed
+CONTROLLER_RC=1
+RESTORE_RESULT=PASS
+```
+
+The prior runtime-dir correction worked. `shim-start.log` contains one valid
+container ID, `7fb70f8e298d709f19f344219c111f5c61c82ea80e973a6c43a266c8a7a019e1`.
+The probe could read token and CA material, establish HTTPS, and receive an
+HTTP response. Runtime state records 18 failed probe attempts. The per-step log
+is overwritten on each attempt, so only the final response is durable; it
+contains `urllib.error.HTTPError: HTTP Error 503: Service Unavailable` rather
+than the `r6` `/shim/token` `FileNotFoundError`. At collection time the shim was
+running, the JobManager was healthy, and the TaskManager was running without a
+Docker health object.
+
+The exact first causal failure is proven by the daemon boundary.
+`DockerSocketInspector` hardcodes Docker API `v1.41`. The target server reports
+API `1.53` and minimum supported API `1.44`; a raw identity-bound `v1.41`
+inspect returned HTTP 400 with `client version 1.41 is too old`, while the same
+`v1.53` request returned HTTP 200. Replaying the saved JobManager and
+TaskManager inspect payloads through the exact shim source returned two Ready
+items, proving that the saved identity, state, health, restart, and label
+contract itself was valid. The shim converts the rejected inspect into a
+fail-closed `/healthz` 503. This is not another bind failure, a Flink readiness
+failure, an application/data-correctness result, or a soak result.
+
+Wrapper cleanup reported PASS. The first independent postflight observed a
+transient Kind `/livez` HTTP 500 after the kube-apiserver process already
+existed. No restart or mutation was applied; the next condition-based check
+returned `ok` with exactly one kube-apiserver. The single final full postflight
+then passed: r7 containers/networks/volumes `0/0/0`, runtime-dir count zero,
+cleanup errors zero, no writer, and all four exact protected co-tenants running
+with restart count zero. MinIO, Iceberg REST, ClickHouse `SELECT 1`, Kind
+`/livez`, and the one-kube-apiserver gate passed. The original Mac checkout
+remained at `ae9fb69` with only its three established untracked paths.
+
+Evidence remains under the `r7` output directory:
+
+- `result-final.txt`: SHA-256
+  `ede962f78adfac89a7e965d3944e67e13b8e1b88223a76981c077e15a4481c44`.
+- `runtime-state.json`: SHA-256
+  `91371b945529d8833ebbaa95452a01376d4ac219889ef95fa56757a78508d650`.
+- `logs/shim-start.log`: SHA-256
+  `655baf62edf82bb033791e35ff118e72558431c790166c015a4cb134d0b26372`.
+- `logs/shim-probe.log`: SHA-256
+  `8544c9bd8f75a09aff061e7a33821aa6e6573799b07e60d5da0405cd0ebcb81a`.
+- `logs/collect-logs.log`: SHA-256
+  `c814a6931df7395b05fb2d0241d21cb2a838b890cd8e5241cb96b0528c1210b5`.
+- `logs/compose-down.log`: SHA-256
+  `a036a2251ca68fdde123779e1b65376e163342481c7a7677546957686d4761f7`.
+
+#### Next-session resume delta
+
+Treat every `r1` through `r7` snapshot, project, wrapper, and artifact as
+immutable evidence; do not rerun or adopt them. The next named slice is local
+and test-first: add a daemon fixture whose minimum API exceeds `v1.41`, then
+replace the hardcoded version assumption with a bounded compatible API contract
+while preserving exact container identity, response-size limits, timeouts, and
+fail-closed errors. Do not prepare or launch `r8` in that local slice. Push,
+traffic, full soak, Mac rollback, and production gates remain unauthorized or
+open.

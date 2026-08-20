@@ -4,7 +4,8 @@
 - **Audited baseline:** `b151a1f98d0151bc3e84cfa93618fc85d7b78f64`
 - **Scope:** static, local, documentation-only audit
 - **Current verdict:** `ARCHITECTURE_READY=BLOCKED`
-- **Blocking findings:** `A-01` through `A-09`
+- **Blocking findings:** `A-02` through `A-09`
+- **Completed local slice:** L1 / `A-01` (2026-08-20)
 
 ## 1. Purpose, evidence rules, and verdict
 
@@ -32,9 +33,11 @@ failures. `r1` stopped before Compose, `r3` never invoked the controller, and
 none of the seven reached the complete
 baseline/observer/producer/verification sequence. The first causes of `r4`,
 `r5`, and `r6` are locally closed and later attempts crossed those boundaries.
-The `r7` Docker API defect remains open.
+The `r7` Docker API defect is now `CLOSED-LOCAL`: the shim negotiates a bounded
+daemon-compatible API before exact container inspection. External execution of
+that corrected path remains unverified.
 
-The architecture is not ready for another rehearsal. Nine findings have local
+The architecture is not ready for another rehearsal. Eight findings have local
 or static dispositions that must be completed first. A future
 `ARCHITECTURE_READY=PASS` is only permission to consider a separately
 authorized fresh preflight; it is not authorization for `r8`.
@@ -137,7 +140,7 @@ actor, not part of the application runtime.
 | 6 | Build and core | build Flink/API; start Kafka, MinIO, ClickHouse, JobManager with Compose wait | bounded build/up logs | Startup grace is locally covered and was crossed after correction. |
 | 7 | Initializers | resolve one stopped container ID, `docker wait`, inspect same ID, labels/state/restarts/exit zero | exact `ps`, `wait`, `inspect` logs | Closed locally and crossed after `r4`; no direct Compose `wait` remains. |
 | 8 | App and Flink | service-specific health; one JM/TM; running, labels, restart and health; one running job, all tasks, completed checkpoint | inspect and Flink REST state | Merged healthcheck coverage is specific to current background consumers. |
-| 9 | Shim | detached start, TLS/token, exact JM/TM IDs, `/healthz` | start/probe logs; fail-closed 503 | API discovery open; retry logs/body lost; transient ID not inspect-bound (`A-01`, `A-02`, `A-09`). |
+| 9 | Shim | detached start, TLS/token, exact JM/TM IDs, `/healthz` | start/probe logs; fail-closed 503 | API discovery is closed locally; retry logs/body remain lossy and the transient ID is not inspect-bound (`A-02`, `A-09`). |
 | 10 | Baseline | Kafka/Iceberg/ClickHouse/API namespace must be zero | exact PASS token | None of `r1`-`r7` reached this step. |
 | 11 | Observe and produce | observer ready before paced ACK-counted producer; ABORT is first-write-wins | observer JSONL/latest, producer progress JSONL/final | Observer start is not inspect-bound; readiness retry log is overwritten (`A-02`, `A-09`). |
 | 12 | Verify | exact Kafka/Iceberg/ClickHouse/API/lag/Flink/pod checks and rate contract | phase-specific atomic verifier JSON and PASS token | Not externally exercised by `r1`-`r7`. |
@@ -197,7 +200,7 @@ PASS without erasing the primary controller result.
 | `r4` | Compose `up-app`; `COMPOSE_CONTRACT_FAILURE` | `RUNTIME-PROVEN`: `serving-bridge` inherited the API image probe for port 8000 while serving metrics on 9108. | `4e25e39` adds a bridge-specific probe and disables the inherited probe for `lake-materializer`; `r5` crossed this boundary. | `test_merged_soak_compose_overrides_api_healthcheck_for_background_consumers`. | Residual: any new service sharing `x-api-image` needs an explicit health disposition; enforce in the architecture gate. |
 | `r5` | shim detached-ID parse; `CONTROLLER_INTEGRATION_FAILURE` | `RUNTIME-PROVEN`: Compose 5 progress on stderr was merged into stdout and invalidated whole-output ID parsing; observer had the same latent path. | `d20379e` separates channels and uses one exact full-line parser; `r6`/`r7` crossed it. | stdout/stderr, timeout/OS error, noisy transcript, zero/multiple/embedded/partial ID tests. | Residual: transient IDs are parsed but not inspect-bound (`A-09`). |
 | `r6` | HTTPS shim probe; `INFRASTRUCTURE_CONTRACT_FAILURE` | `RUNTIME-PROVEN`: default macOS temp under `/var/folders/...` was outside the shared root, so `/shim` was empty. | `3ea9bd9` creates the runtime directory under output and guards deletion; `r7` proved token/CA visibility and HTTPS reachability. | output-child/mount equality and PASS/failure/foreign-parent cleanup tests. | `A-08`: arbitrary `--output-dir` can still be outside the shared root; no pre-stop daemon-visibility contract covers it. |
-| `r7` | Docker inspect in shim; `CONTROLLER_INTEGRATION_FAILURE` | `RUNTIME-PROVEN` and `CODE-PROVEN`: client path is fixed at `v1.41`; daemon minimum is `1.44`; raw `v1.41` returned 400 and `v1.53` returned 200. Saved JM/TM payload replay returned two Ready items. | Open. The shim still defaults to `v1.41`. | Identity/PodList/auth/request-shape tests use a fake inspector; there is no `DockerSocketInspector` transport test. | `A-01` and `A-02`: bounded version negotiation plus durable non-2xx status/body and every retry attempt. |
+| `r7` | Docker inspect in shim; `CONTROLLER_INTEGRATION_FAILURE` | `RUNTIME-PROVEN` and `CODE-PROVEN`: client path was fixed at `v1.41`; daemon minimum is `1.44`; raw `v1.41` returned 400 and `v1.53` returned 200. Saved JM/TM payload replay returned two Ready items. | `CLOSED-LOCAL`: the inspector uses unversioned `/version`, validates the daemon range, selects within client range `1.41`-`1.53`, and caches the exact path version. | Sixteen transport cases cover discovery, exact paths, cache, bounds, invalid/incompatible values, non-200, oversized, timeout, malformed JSON, and pre-I/O ID rejection. | `A-02` remains: preserve bounded status/body evidence and every retry attempt. The corrected path is `EXTERNAL-UNVERIFIED`. |
 
 ## 5. Existing coverage and latent variants
 
@@ -211,9 +214,9 @@ PASS without erasing the primary controller result.
 | Compose 5 stderr progress, multiline output, zero/multiple/partial/embedded IDs | Focused parser/channel tests. | Covered | Retain tests; no new action for the parsing cause itself. |
 | Fast one-shot exits and identity/label/state/restart/exit mismatch | Exact `ps --all`, `docker wait`, inspect tests. | Covered | Retain current one-shot contract. |
 | Runtime dir exact parent/prefix and secret cleanup after PASS/failure | Three focused `r6` tests. | Covered locally | External visibility remains `A-08`; deletion semantics are closed. |
-| Daemon minimum above fixed client API; malformed/oversized `/version`; invalid version ordering | No direct inspector transport tests. | Gap | `A-01`, `FIX+TEST_LOCAL`: bounded unversioned `/version` discovery and selected inspect-path fixtures. |
-| Inspect timeout, oversized body, malformed JSON, non-2xx status/body | Size/timeout exist in code; fake inspector bypasses transport. | Gap | `A-01`/`A-02`, `FIX+TEST_LOCAL`: Unix-socket transport fixtures and sanitized public errors with durable internal evidence. |
-| Identity, service label, running state, health, restart for JM/TM | Success and selected fake-inspector failures exist; runtime inspect branches are not exhaustively parameterized. | Partial | Close missing cases while implementing `A-01`/`A-09`; do not weaken current checks. |
+| Daemon minimum above fixed client API; malformed/oversized `/version`; invalid version ordering | Scripted `_UnixHTTPConnection` boundary tests exercise unversioned discovery and exact versioned inspect paths portably on Windows. | Covered locally | `A-01`, `CLOSED-LOCAL`: the selected range is bounded to `1.41`-`1.53`; the daemon range must be valid and overlap it. |
+| Inspect timeout, oversized body, malformed JSON, non-2xx status/body | Transport tests preserve the prior bounded, sanitized inspect outcomes; detailed response evidence is still absent. | Partial | `A-02`, `FIX+TEST_LOCAL`: retain bounded public errors while persisting sanitized status/body evidence. |
+| Identity, service label, running state, health, restart for JM/TM | Success and selected fake-inspector failures exist; runtime inspect branches are not exhaustively parameterized. | Partial | Close missing cases with `A-09`; do not weaken current checks. |
 | First and later shim-probe/observer-ready attempts | Retry success is tested, but `_record_step()` overwrites the same file. | Gap | `A-02`, `FIX+TEST_LOCAL`: attempt-indexed bounded logs plus ordered summary. |
 | Observer/shim detached identity and lifecycle symmetry | Parser and cleanup command ordering are tested. | Partial | `A-09`, `FIX+TEST_LOCAL`: inspect exact ID/labels/name/restart after start and record terminal removal. |
 | Compose down exits zero but labeled resources remain | Only nonzero `compose-down` is tested. | Gap | `A-06`, `FIX+TEST_LOCAL`: post-down containers/networks/volumes must be zero before PASS. |
@@ -233,7 +236,7 @@ another rehearsal unjustified; `S3` is bounded hardening or documentation.
 
 | ID | Severity / proof | Defect and impact | Required disposition | Acceptance evidence | Residual risk |
 | --- | --- | --- | --- | --- | --- |
-| `A-01` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN` | `DockerSocketInspector` fixes `v1.41`; a daemon with minimum `1.44` makes every inspect fail and blocks shim/workload gates. | `FIX+TEST_LOCAL`: bounded daemon version discovery, validated version ordering, compatible exact inspect path, unchanged timeout/size/identity/fail-closed checks. | RED/GREEN transport tests for API 1.53/minimum 1.44 plus malformed, non-2xx, oversized, and timeout cases. | A later daemon may expose a new compatibility boundary; external preflight still reads `/version`. |
+| `A-01` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN`; `CLOSED-LOCAL` 2026-08-20 | `DockerSocketInspector` fixed `v1.41`; a daemon with minimum `1.44` made every inspect fail and blocked shim/workload gates. | `CLOSED-LOCAL`: bounded unversioned discovery, validated version ordering, compatible exact inspect path, cached selection, and unchanged timeout/size/identity/fail-closed checks. | RED: 15 expected failures and one existing guard pass. GREEN: 16 focused transport cases; aggregate runtime/foundation gate `55 passed`; Ruff, format, `py_compile`, merged Compose config, and diff checks passed. | A later daemon may expose a new compatibility boundary; external preflight still reads `/version`, and the corrected path remains externally unverified. |
 | `A-03` | `S1`; `RUNTIME-PROVEN`, `CODE-PROVEN` | No tracked CI-soak bootstrap/wrapper exists. Interpreter selection, fresh identities, co-tenant ownership, and pre-controller terminal outcome live in per-run artifacts; `r1` and `r3` lacked a complete terminal runtime record. | `FIX+TEST_LOCAL`: tracked bootstrap + structured wrapper result; exactly one terminal outcome, primary and restore RCs, supported-interpreter fixtures, and explicit `NOT_INVOKED` classification. | Unit/static fixtures and shell syntax gate; no controller PASS can mask wrapper/restore failure. | Interpreter executable and SSH availability remain external prerequisites. |
 | `A-04` | `S1`; `RUNTIME-PROVEN` | `RESTORE_RESULT=PASS` can follow kube-apiserver process presence before Kind `/livez` is ready; downstream state can be reported restored too early. | `FIX+TEST_LOCAL`: condition-based restore predicate requiring exact container identity, running/restart state, exactly one kube-apiserver, and consecutive bounded `/livez=ok`. | Fake transition sequence includes process-present/500/ok and never emits PASS early. | Real Kind startup duration remains external and bounded. |
 | `A-06` | `S1`; `CODE-PROVEN` | Controller cleanup trusts `compose down` return code and can form a candidate PASS without proving labeled containers/networks/volumes are zero. Wrapper may later fail, producing conflicting evidence. | `FIX+TEST_LOCAL`: post-down exact label queries in the controller; any residual or query failure becomes `cleanup_failed`. | Test where down exits zero but one resource remains; terminal result must be FAIL. | Unlabeled daemon leaks are outside project accounting. |
@@ -250,13 +253,12 @@ another rehearsal unjustified; `S3` is bounded hardening or documentation.
 Each item below is a separate future atomic slice. No slice runs SSH, Docker
 mutation, traffic, soak, `r8`, deploy, or push.
 
-1. **L1 — bounded Docker API negotiation (`A-01`).** Add RED tests in
-   `tests/unit/test_ci_soak_runtime.py` for unversioned `/version`, daemon API
-   `1.53`/minimum `1.44`, invalid ordering/format, non-200, oversized body, and
-   timeout. Implement only the compatible inspect selection in
-   `scripts/golden_soak/pods_shim.py`; preserve identity, response-size,
-   timeout, and fail-closed behavior. Stop after focused runtime/foundation,
-   Ruff, format, `py_compile`, and diff gates are green.
+1. **L1 — bounded Docker API negotiation (`A-01`) — complete 2026-08-20.**
+   `DockerSocketInspector` now discovers `/version` once, validates daemon
+   maximum/minimum ordering, selects the highest compatible API within
+   `1.41`-`1.53`, caches it, and uses the exact versioned inspect path. Sixteen
+   transport cases and the aggregate/static gates are green; identity,
+   response-size, timeout, and fail-closed behavior remain enforced.
 2. **L2 — durable retry and HTTP diagnostics (`A-02`).** Start with a failing
    two-attempt probe test that requires both attempts to survive. Add
    attempt-indexed bounded evidence and sanitized Docker/HTTP status/body
@@ -282,12 +284,14 @@ mutation, traffic, soak, `r8`, deploy, or push.
    one `ARCHITECTURE_READY=PASS|BLOCKED` line with finding IDs. Update current
    docs only after all preceding local slices are green.
 
-The first next slice is **L1 / `A-01` only**. Combining another external
-rehearsal with L1 would defeat the audit's purpose.
+L1 / `A-01` is complete locally. The first next separate slice is **L2 /
+`A-02` only**. Combining it with another external rehearsal would defeat the
+audit's purpose.
 
 ## 8. `ARCHITECTURE_READY` gate
 
-The gate is a single deterministic decision. It is `BLOCKED` today.
+The gate is a single deterministic decision. It remains `BLOCKED` today on
+`A-02` through `A-09`.
 
 `ARCHITECTURE_READY=PASS` requires all of the following:
 
@@ -332,4 +336,4 @@ container, macOS checkout, or external state. It does not close `r7`, prove the
 current Mac/co-tenant state, authorize `r8`, or establish workload, traffic,
 soak, rollback, or production readiness. Push remains unauthorized.
 
-The only next implementation boundary is local test-first closure of `A-01`.
+The only next implementation boundary is local test-first closure of `A-02`.

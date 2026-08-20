@@ -26,6 +26,10 @@ MAX_TOKEN_BYTES = 512
 _CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 _PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 _NAMESPACE_RE = re.compile(r"^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$")
+_DOCKER_API_VERSION_RE = re.compile(r"^1\.(?:0|[1-9][0-9]{0,2})$")
+
+_MIN_DOCKER_API_VERSION = (1, 41)
+_MAX_DOCKER_API_VERSION = (1, 53)
 
 
 class ShimError(RuntimeError):
@@ -64,21 +68,26 @@ class DockerSocketInspector:
         self,
         socket_path: Path,
         *,
-        api_version: str = "v1.41",
         timeout_s: float = 5.0,
     ) -> None:
         self.socket_path = socket_path
-        self.api_version = api_version
         self.timeout_s = timeout_s
+        self._api_version: str | None = None
 
-    def inspect(self, container_id: str) -> dict[str, Any]:
-        if not _CONTAINER_ID_RE.fullmatch(container_id):
-            raise ShimError("container_id_invalid")
+    def _request_json(
+        self,
+        path: str,
+        *,
+        unavailable_reason: str,
+        malformed_reason: str,
+        payload_reason: str,
+        failed_reason: str,
+    ) -> dict[str, Any]:
         connection = _UnixHTTPConnection(self.socket_path, self.timeout_s)
         try:
             connection.request(
                 "GET",
-                f"/{self.api_version}/containers/{container_id}/json",
+                path,
                 headers={"Accept": "application/json", "Connection": "close"},
             )
             response = connection.getresponse()
@@ -86,17 +95,62 @@ class DockerSocketInspector:
             if len(body) > MAX_DOCKER_RESPONSE_BYTES:
                 raise ShimError("docker_response_too_large")
             if response.status != 200:
-                raise ShimError("docker_inspect_unavailable")
-            payload = json.loads(body.decode("utf-8"))
+                raise ShimError(unavailable_reason)
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ShimError(malformed_reason) from exc
             if not isinstance(payload, dict):
-                raise ShimError("docker_payload_invalid")
+                raise ShimError(payload_reason)
             return payload
         except ShimError:
             raise
-        except (OSError, ValueError, json.JSONDecodeError, http.client.HTTPException) as exc:
-            raise ShimError("docker_inspect_failed") from exc
+        except (OSError, ValueError, http.client.HTTPException) as exc:
+            raise ShimError(failed_reason) from exc
         finally:
             connection.close()
+
+    def _discover_api_version(self) -> str:
+        payload = self._request_json(
+            "/version",
+            unavailable_reason="docker_version_unavailable",
+            malformed_reason="docker_version_invalid",
+            payload_reason="docker_version_invalid",
+            failed_reason="docker_version_failed",
+        )
+        api_version_raw = payload.get("ApiVersion")
+        minimum_version_raw = payload.get("MinAPIVersion")
+        if (
+            not isinstance(api_version_raw, str)
+            or not _DOCKER_API_VERSION_RE.fullmatch(api_version_raw)
+            or not isinstance(minimum_version_raw, str)
+            or not _DOCKER_API_VERSION_RE.fullmatch(minimum_version_raw)
+        ):
+            raise ShimError("docker_version_invalid")
+
+        api_version = tuple(int(part) for part in api_version_raw.split("."))
+        minimum_version = tuple(int(part) for part in minimum_version_raw.split("."))
+        if minimum_version > api_version:
+            raise ShimError("docker_version_invalid")
+
+        selected_version = min(api_version, _MAX_DOCKER_API_VERSION)
+        required_minimum = max(minimum_version, _MIN_DOCKER_API_VERSION)
+        if selected_version < required_minimum:
+            raise ShimError("docker_api_incompatible")
+        return f"v{selected_version[0]}.{selected_version[1]}"
+
+    def inspect(self, container_id: str) -> dict[str, Any]:
+        if not _CONTAINER_ID_RE.fullmatch(container_id):
+            raise ShimError("container_id_invalid")
+        if self._api_version is None:
+            self._api_version = self._discover_api_version()
+        return self._request_json(
+            f"/{self._api_version}/containers/{container_id}/json",
+            unavailable_reason="docker_inspect_unavailable",
+            malformed_reason="docker_inspect_failed",
+            payload_reason="docker_payload_invalid",
+            failed_reason="docker_inspect_failed",
+        )
 
 
 def _validate_config(config: ShimConfig) -> None:

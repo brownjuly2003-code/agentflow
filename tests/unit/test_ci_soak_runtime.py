@@ -812,6 +812,214 @@ def test_remove_runtime_dir_rejects_matching_prefix_outside_output_parent(
     assert key.is_file()
 
 
+class _ScriptedDockerResponse:
+    def __init__(self, status: int, payload: Any) -> None:
+        self.status = status
+        self.body = payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8")
+
+    def read(self, amount: int) -> bytes:
+        return self.body[:amount]
+
+
+class _ScriptedDockerTransport:
+    def __init__(self, responses: list[_ScriptedDockerResponse | Exception]) -> None:
+        self.responses = list(responses)
+        self.connections: list[tuple[Path, float]] = []
+        self.requests: list[tuple[str, str, dict[str, str]]] = []
+        self.closed = 0
+
+    def connect(self, socket_path: Path, timeout: float):
+        self.connections.append((socket_path, timeout))
+        return self
+
+    def request(self, method: str, path: str, *, headers: dict[str, str]) -> None:
+        self.requests.append((method, path, headers))
+
+    def getresponse(self) -> _ScriptedDockerResponse:
+        assert self.responses, "unexpected Docker request"
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def close(self) -> None:
+        self.closed += 1
+
+
+def test_docker_socket_inspector_discovers_compatible_api_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shim = _shim()
+    socket_path = Path("/var/run/docker.sock")
+    jobmanager = _inspect_payload(JM_ID, "flink-jobmanager")
+    taskmanager = _inspect_payload(TM_ID, "flink-taskmanager")
+    transport = _ScriptedDockerTransport(
+        [
+            _ScriptedDockerResponse(
+                200,
+                {"ApiVersion": "1.53", "MinAPIVersion": "1.44"},
+            ),
+            _ScriptedDockerResponse(200, jobmanager),
+            _ScriptedDockerResponse(200, taskmanager),
+        ]
+    )
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+    inspector = shim.DockerSocketInspector(socket_path)
+
+    assert inspector.inspect(JM_ID) == jobmanager
+    assert inspector.inspect(TM_ID) == taskmanager
+    assert [(method, path) for method, path, _headers in transport.requests] == [
+        ("GET", "/version"),
+        ("GET", f"/v1.53/containers/{JM_ID}/json"),
+        ("GET", f"/v1.53/containers/{TM_ID}/json"),
+    ]
+    assert transport.connections == [(socket_path, 5.0)] * 3
+    assert transport.closed == 3
+    assert transport.responses == []
+
+
+def test_docker_socket_inspector_caps_api_at_supported_maximum(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shim = _shim()
+    payload = _inspect_payload(JM_ID, "flink-jobmanager")
+    transport = _ScriptedDockerTransport(
+        [
+            _ScriptedDockerResponse(
+                200,
+                {"ApiVersion": "1.60", "MinAPIVersion": "1.44"},
+            ),
+            _ScriptedDockerResponse(200, payload),
+        ]
+    )
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    assert shim.DockerSocketInspector(Path("/var/run/docker.sock")).inspect(JM_ID) == payload
+    assert transport.requests[1][1] == f"/v1.53/containers/{JM_ID}/json"
+
+
+@pytest.mark.parametrize(
+    ("version_payload", "reason"),
+    [
+        ({"ApiVersion": "1.43", "MinAPIVersion": "1.44"}, "docker_version_invalid"),
+        (
+            {"ApiVersion": "1.53/../../", "MinAPIVersion": "1.44"},
+            "docker_version_invalid",
+        ),
+        ({"ApiVersion": "1.53"}, "docker_version_invalid"),
+        ({"ApiVersion": "1.60", "MinAPIVersion": "1.54"}, "docker_api_incompatible"),
+        ({"ApiVersion": "1.40", "MinAPIVersion": "1.24"}, "docker_api_incompatible"),
+    ],
+)
+def test_docker_socket_inspector_rejects_invalid_or_incompatible_versions(
+    monkeypatch: pytest.MonkeyPatch,
+    version_payload: dict[str, str],
+    reason: str,
+) -> None:
+    shim = _shim()
+    transport = _ScriptedDockerTransport([_ScriptedDockerResponse(200, version_payload)])
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    with pytest.raises(shim.ShimError, match=f"^{reason}$"):
+        shim.DockerSocketInspector(Path("/var/run/docker.sock")).inspect(JM_ID)
+
+    assert [request[1] for request in transport.requests] == ["/version"]
+    assert transport.closed == 1
+
+
+@pytest.mark.parametrize(
+    ("case", "reason"),
+    [
+        ("non_200", "docker_version_unavailable"),
+        ("oversized", "docker_response_too_large"),
+        ("timeout", "docker_version_failed"),
+        ("malformed_json", "docker_version_invalid"),
+    ],
+)
+def test_docker_socket_inspector_fails_closed_during_version_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    reason: str,
+) -> None:
+    shim = _shim()
+    response: _ScriptedDockerResponse | Exception
+    if case == "non_200":
+        response = _ScriptedDockerResponse(500, {"message": "fixture"})
+    elif case == "oversized":
+        response = _ScriptedDockerResponse(200, b"x" * (shim.MAX_DOCKER_RESPONSE_BYTES + 1))
+    elif case == "timeout":
+        response = TimeoutError("fixture timeout")
+    else:
+        response = _ScriptedDockerResponse(200, b"{")
+    transport = _ScriptedDockerTransport([response])
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    with pytest.raises(shim.ShimError, match=f"^{reason}$"):
+        shim.DockerSocketInspector(Path("/var/run/docker.sock"), timeout_s=0.01).inspect(JM_ID)
+
+    assert [request[1] for request in transport.requests] == ["/version"]
+    assert transport.closed == 1
+
+
+@pytest.mark.parametrize(
+    ("case", "reason"),
+    [
+        ("non_200", "docker_inspect_unavailable"),
+        ("oversized", "docker_response_too_large"),
+        ("timeout", "docker_inspect_failed"),
+        ("malformed_json", "docker_inspect_failed"),
+    ],
+)
+def test_docker_socket_inspector_preserves_bounded_inspect_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    reason: str,
+) -> None:
+    shim = _shim()
+    response: _ScriptedDockerResponse | Exception
+    if case == "non_200":
+        response = _ScriptedDockerResponse(404, {"message": "fixture"})
+    elif case == "oversized":
+        response = _ScriptedDockerResponse(200, b"x" * (shim.MAX_DOCKER_RESPONSE_BYTES + 1))
+    elif case == "timeout":
+        response = TimeoutError("fixture timeout")
+    else:
+        response = _ScriptedDockerResponse(200, b"{")
+    transport = _ScriptedDockerTransport(
+        [
+            _ScriptedDockerResponse(
+                200,
+                {"ApiVersion": "1.53", "MinAPIVersion": "1.44"},
+            ),
+            response,
+        ]
+    )
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    with pytest.raises(shim.ShimError, match=f"^{reason}$"):
+        shim.DockerSocketInspector(Path("/var/run/docker.sock"), timeout_s=0.01).inspect(JM_ID)
+
+    assert [request[1] for request in transport.requests] == [
+        "/version",
+        f"/v1.53/containers/{JM_ID}/json",
+    ]
+    assert transport.closed == 2
+
+
+def test_docker_socket_inspector_rejects_bad_id_before_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shim = _shim()
+    transport = _ScriptedDockerTransport([])
+    monkeypatch.setattr(shim, "_UnixHTTPConnection", transport.connect)
+
+    with pytest.raises(shim.ShimError, match="^container_id_invalid$"):
+        shim.DockerSocketInspector(Path("/var/run/docker.sock")).inspect("not-an-id")
+
+    assert transport.requests == []
+    assert transport.connections == []
+
+
 class FakeInspector:
     def __init__(self, payloads: dict[str, Any]) -> None:
         self.payloads = payloads

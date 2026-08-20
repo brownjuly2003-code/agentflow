@@ -675,3 +675,25 @@ Docker daemon API-version discovery in `scripts/golden_soak/pods_shim.py` and
 perform SSH/Docker/Compose runtime mutation. A later external attempt still
 requires separate authorization, fresh identities, and a locally passing
 architecture-readiness gate.
+
+### A-01 local Docker API negotiation closure — 2026-08-20
+
+L1 / `A-01` is `CLOSED-LOCAL`. `DockerSocketInspector` no longer sends an
+inspect request through fixed API `v1.41`. It first performs bounded unversioned
+`GET /version`, requires valid ordered `ApiVersion` and `MinAPIVersion` values,
+selects the highest overlap with the supported `1.41`-`1.53` range, caches that
+selection, and uses it for exact identity-bound inspect paths. A missing,
+malformed, non-200, oversized, timed-out, or incompatible discovery fails
+closed; existing inspect timeout, size, payload, and identity gates remain.
+
+The test-first evidence is explicit: before implementation, 15 new transport
+cases failed on the direct `/v1.41` behavior and the pre-I/O invalid-ID guard
+passed. After implementation, all 16 focused cases passed. The proportional
+aggregate reported `55 passed`; Ruff check, Ruff format check, `py_compile`,
+merged Compose `config --quiet`, and diff checks also passed. No Docker daemon,
+container, SSH, Mac checkout, `r8` identity, or external state was used.
+
+`ARCHITECTURE_READY` remains `BLOCKED` on `A-02` through `A-09`; `A-10` stays
+accepted and `A-11` stays closed. The exact next separate slice is L2 /
+`A-02` only. It must preserve bounded retry and HTTP diagnostics locally; it
+does not authorize an external rehearsal or reuse of any `r1`-`r7` identity.

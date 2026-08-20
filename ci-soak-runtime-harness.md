@@ -724,3 +724,56 @@ checkout, `r8` identity, or external state was used.
 accepted and `A-11` stays closed. The exact next separate slice is L3 /
 `A-06` + `A-09` only: post-down zero-resource proof and exact transient
 shim/observer identity symmetry. It does not authorize an external rehearsal.
+
+## Authoritative next-session resume checkpoint — 2026-08-20
+
+This section supersedes earlier next-step statements in this file. It is the
+tracked starting point for the next CI-soak session.
+
+### Exact state and evidence
+
+- The latest implementation baseline is
+  `c798e716e4de5721ed9e8cbf37747a66c3dd4689`
+  (`fix(ops): preserve soak retry diagnostics`). Its immediate local closure
+  chain is `6492858` (r1-r7 audit), `12b0320` (L1 / `A-01`), then `c798e71`
+  (L2 / `A-02`).
+- L1 and L2 are `CLOSED-LOCAL`. The last proportional implementation gate
+  reported `59 passed`; Ruff check and format, `py_compile`, merged Compose
+  `config --quiet`, UTF-8/LF/NUL, and diff checks passed.
+- `ARCHITECTURE_READY=BLOCKED`. The remaining blockers are exactly `A-03`
+  through `A-09`; `A-10` is accepted and `A-11` is closed.
+- The corrected API-negotiation and diagnostic paths are locally proven only.
+  No Docker daemon, container, SSH, macOS checkout, `r8`, traffic, soak,
+  rollback, production action, or push was used or authorized.
+- At this handoff, the tracked implementation and index were clean. Existing
+  untracked paths are protected user artifacts: refresh status and never use a
+  bulk staging command.
+
+### Start here
+
+1. Run `git status --short --branch` and `git log -4 --oneline`; treat the
+   current HEAD plus the implementation baseline above as authoritative.
+2. Read the `A-06` and `A-09` register rows and L3 plan in
+   `ci-soak-r1-r7-architecture-audit.md`. Do not reopen L1 or L2 without new
+   failing evidence.
+3. Confirm `scripts/golden_soak/runtime.py` and
+   `tests/unit/test_ci_soak_runtime.py` have no unrelated changes before
+   editing.
+4. Implement one test-first slice only: **L3 / `A-06` + `A-09`**. Run focused
+   RED fixtures first, make the smallest runtime change, then run one
+   proportional aggregate gate and commit only the scoped files.
+
+### L3 acceptance contract
+
+1. After a successful Compose down, exact project-label queries for
+   containers, networks, and volumes must all return zero. A query failure or
+   any residual resource produces terminal `cleanup_failed`, never PASS.
+2. Each detached shim and observer ID must be inspected after start and bound
+   to the expected immutable ID, Compose project/service labels, one-off name,
+   running state, and restart state. Wrong, exited, restarted, or replaced
+   identities fail closed.
+3. Terminal cleanup evidence must name those same IDs and prove they were
+   removed without replacement; the result must remain available in durable
+   runtime evidence.
+4. Keep the golden source pack unchanged. Do not combine `A-03`, perform any
+   external rehearsal, reuse `r1`-`r7` identities, or push.

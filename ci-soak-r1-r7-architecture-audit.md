@@ -2,6 +2,7 @@
 
 - **Audit date:** 2026-08-20
 - **Audited baseline:** `b151a1f98d0151bc3e84cfa93618fc85d7b78f64`
+- **Latest implementation baseline:** `c798e716e4de5721ed9e8cbf37747a66c3dd4689`
 - **Scope:** static, local, documentation-only audit
 - **Current verdict:** `ARCHITECTURE_READY=BLOCKED`
 - **Blocking findings:** `A-03` through `A-09`

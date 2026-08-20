@@ -481,29 +481,27 @@ Evidence remains under
 - `logs/compose-down.log`: SHA-256
   `e11d2f8ed6c0ebd4ba3b83e31c05c0640a901a3c9865e7fdd3c1cd5b32ee5154`.
 
-#### Next-session resume delta
+#### Local runtime-dir TDD closure and next-session delta
 
-Treat every `r6` identity, wrapper, and artifact as immutable evidence; do not
-rerun or adopt them. The next named slice is local and test-first: add a
-regression contract proving that generated shim runtime material lives under a
-controller-owned path visible through the already shared project/output root,
-then make the smallest lifecycle change and keep cleanup strictly contained to
-that exact owned child. Cover both shim-start and shim-probe mounts and prove
-that token/TLS material is removed after success and failure. The existing
-synthetic probe-retry test does not exercise daemon-side bind visibility and
-did not cover this Mac-only boundary.
+Commit `3ea9bd90c3b8e26a8f885551629402aa40d52084` completed the local
+test-first correction. The focused contract was RED before implementation
+because unqualified `tempfile.mkdtemp()` resolved under Windows system temp
+instead of `RuntimeConfig.output_dir` (`1 failed in 1.13s`). The implementation
+now creates a project-prefixed direct child of the owned output directory and
+allows `_remove_runtime_dir()` to delete only that exact resolved parent and
+prefix.
 
-The preferred minimal RED contract is that `runtime_dir.resolve().parent`
-equals `config.output_dir.resolve()`. `_prepare_output()` already establishes
-that directory as controller-owned before `_prepare_tls()`, and its `evidence`
-child is already used as a Docker bind. Every `:/shim:ro` mount, including the
-shim start, shim probe, and pack/observer command paths, must use the same exact
-runtime child. `_remove_runtime_dir()` must accept only a direct child with the
-project-specific prefix and must remove it on both successful and failed
-lifecycle paths. Do not solve this with a broad project-root cleanup or a
-macOS-only conditional.
+Regression coverage proves that shim start, shim probe, and every
+pack/observer `:/shim:ro` mount use the same runtime child; token, certificate,
+and key material are removed after PASS and forced baseline failure; and a
+matching-prefix directory outside the exact output parent is preserved with a
+cleanup error. Independent Codex verification observed runtime/foundation
+tests `39 passed in 9.94s`; Ruff check/format, `py_compile`, UTF-8/LF/NUL, and
+`git diff --check` passed. No SSH, Docker, Compose, or Mac runtime action ran.
 
-Only after that fix and focused verification may a later authorized rehearsal
-use fresh `r7` identities and a new archive of its exact source HEAD. The
-capacity-independent rehearsal gate remains open; no push, traffic test, full
-soak, Mac rollback, or production gate is authorized or claimed.
+Treat every `r1` through `r6` identity, wrapper, and artifact as immutable
+evidence. A later fresh `r7` requires separate authorization plus new exact-HEAD
+archive, snapshot, project, output, and wrapper identities and fresh protected
+co-tenant preflight before any stop. The local unit gate does not prove
+Docker/Colima bind visibility or predict rehearsal PASS. Push, traffic, full
+soak, Mac rollback, and production gates remain unauthorized or open.

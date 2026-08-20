@@ -379,13 +379,25 @@ Evidence remains under
 #### Next-session resume delta
 
 Treat every `r5` identity and artifact as immutable evidence; do not rerun or
-adopt them. The next atomic implementation slice is test-first: make detached
-container-ID parsing accept exactly one full 64-hex line within bounded noisy
-Compose output, use that parser for both shim and observer starts, and remain
-fail-closed for zero or multiple matching IDs. The regression tests must cover
-the observed progress-prefix output as well as ambiguous output.
+adopt them. Commit `d20379e5781b9d6d1fc3a6f609d0c64f368b97e7`
+separates `SubprocessRunner` stdout and stderr, makes controller decisions from
+stdout, preserves both channels in bounded step logs, and uses one shared
+parser for shim and observer starts. The parser accepts exactly one full
+64-lowercase-hex line within noisy output and fails closed for zero, multiple,
+partial, or embedded IDs. Timeout and OS-error evidence remain on stderr.
 
-Only after that scoped fix and focused verification may a later authorized
-rehearsal use fresh `r6` identities and a new archive of its exact source HEAD.
-The capacity-independent rehearsal gate remains open; no push, traffic test,
-full soak, or production gate is authorized or claimed.
+The regression was confirmed RED against the `2cc4326` implementation: the
+runner returned the merged value `progress\nmachine\n` and exposed no separate
+stdout. Grok then completed the local implementation pass through
+`local_grok_cli` (RunId `de-ci-soak-r5-channel-20260820-grok01`, requested
+model `grok-4.6`, actual model `grok-4.6-build`); its focused result was
+`28 passed`. Independent verification reported `36 passed` across the runtime
+and foundation contracts. Ruff check, changed-path Ruff format, `py_compile`,
+staged `git diff --check`, protected-file hashes, and the stale `.output`
+consumer search also passed.
+
+No Docker lifecycle or new Mac rehearsal ran in this local correction slice;
+the Mac SSH endpoint timed out before any remote command executed. A later
+authorized rehearsal must use fresh `r6` identities and a new archive of its
+exact source HEAD. The capacity-independent rehearsal gate remains open; no
+push, traffic test, full soak, or production gate is authorized or claimed.

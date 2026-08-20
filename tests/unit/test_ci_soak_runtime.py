@@ -103,6 +103,69 @@ def _completed_inspect_payload(
     }
 
 
+def _transient_inspect_payload(
+    container_id: str,
+    *,
+    name: str,
+    project: str = PROJECT_NAME,
+    service: str = "agentflow-api",
+    oneoff: str = "True",
+    restarts: int = 0,
+    running: bool = True,
+) -> dict[str, Any]:
+    return {
+        "Id": container_id,
+        "Name": name,
+        "RestartCount": restarts,
+        "Config": {
+            "Labels": {
+                "com.docker.compose.project": project,
+                "com.docker.compose.service": service,
+                "com.docker.compose.oneoff": oneoff,
+            }
+        },
+        "State": {
+            "Running": running,
+            "Status": "running" if running else "exited",
+        },
+    }
+
+
+def _transient_name(role: str) -> str:
+    suffix = "pods-shim" if role == "shim" else "observer"
+    return f"{PROJECT_NAME}-{suffix}"
+
+
+def _transient_inspect_result(role: str, fault: str) -> tuple[int, str]:
+    if fault == "command":
+        return 1, "inspect failed\n"
+    if fault == "json":
+        return 0, "{not-json\n"
+    container_id = SHIM_ID if role == "shim" else OBSERVER_ID
+    payload = _transient_inspect_payload(
+        container_id,
+        name=f"/{_transient_name(role)}",
+    )
+    if fault == "identity":
+        payload["Id"] = "e" * 64
+    elif fault == "project":
+        payload["Config"]["Labels"]["com.docker.compose.project"] = "wrong"
+    elif fault == "service":
+        payload["Config"]["Labels"]["com.docker.compose.service"] = "wrong"
+    elif fault == "name":
+        payload["Name"] = f"/{PROJECT_NAME}-wrong"
+    elif fault == "oneoff":
+        payload["Config"]["Labels"]["com.docker.compose.oneoff"] = "False"
+    elif fault == "exited":
+        payload["State"]["Running"] = False
+        payload["State"]["Status"] = "exited"
+    elif fault == "restart":
+        payload["RestartCount"] = 1
+    else:
+        raise AssertionError(f"unknown transient inspect fault: {fault}")
+    return 0, json.dumps(payload)
+
+
 class FakeRunner:
     def __init__(
         self,
@@ -173,12 +236,32 @@ class FakeRunner:
             )
         elif step == "shim-start":
             return runtime.CommandResult(0, f"{SHIM_ID}\n")
+        elif step == "inspect-shim":
+            return runtime.CommandResult(
+                0,
+                json.dumps(
+                    _transient_inspect_payload(
+                        SHIM_ID,
+                        name=f"/{_transient_name('shim')}",
+                    )
+                ),
+            )
         elif step == "shim-probe":
             return runtime.CommandResult(0, '{"ok":true,"containers":2}\n')
         elif step == "baseline":
             return runtime.CommandResult(0, "result=PASS baseline_all_zero=1\n")
         elif step == "observer-start":
             return runtime.CommandResult(0, f"{OBSERVER_ID}\n")
+        elif step == "inspect-observer":
+            return runtime.CommandResult(
+                0,
+                json.dumps(
+                    _transient_inspect_payload(
+                        OBSERVER_ID,
+                        name=f"/{_transient_name('observer')}",
+                    )
+                ),
+            )
         elif step == "observer-ready":
             return runtime.CommandResult(0, "observer_start run=test\n")
         elif step == "producer":
@@ -313,6 +396,24 @@ class OneShotFaultRunner(FakeRunner):
         elif self.fault == "exit_code":
             payload["State"]["ExitCode"] = 1
         return runtime.CommandResult(0, json.dumps(payload))
+
+
+class ScriptedStepRunner(FakeRunner):
+    def __init__(
+        self,
+        output_dir: Path,
+        *,
+        step_results: dict[str, tuple[int, str]] | None = None,
+    ) -> None:
+        super().__init__(output_dir)
+        self.step_results = step_results or {}
+
+    def run(self, step: str, argv: list[str], **kwargs: Any):
+        result = super().run(step, argv, **kwargs)
+        if step not in self.step_results:
+            return result
+        returncode, stdout = self.step_results[step]
+        return _runtime().CommandResult(returncode, stdout)
 
 
 def _flink_json(path: str) -> dict[str, Any]:
@@ -937,6 +1038,287 @@ def test_remove_runtime_dir_rejects_matching_prefix_outside_output_parent(
     assert token.read_text(encoding="utf-8") == "keep-token\n"
     assert cert.is_file()
     assert key.is_file()
+
+
+_L3_INSPECT_CASES = [
+    (role, fault, reason)
+    for role in ("shim", "observer")
+    for fault, reason in (
+        ("identity", "container_inspect_invalid"),
+        ("project", "container_project_mismatch"),
+        ("service", "container_service_mismatch"),
+        ("name", "container_name_mismatch"),
+        ("oneoff", "container_oneoff_mismatch"),
+        ("exited", "container_not_running"),
+        ("restart", "container_restarted"),
+        ("json", "container_inspect_invalid"),
+        ("command", None),
+    )
+]
+
+
+@pytest.mark.parametrize("kind", ["containers", "networks", "volumes"])
+@pytest.mark.parametrize("mode", ["residue", "query_failed"])
+def test_l3_post_down_accounting_blocks_pass(tmp_path: Path, kind: str, mode: str) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / f"{kind}-{mode}"
+    step = f"post-down-{kind}"
+    if mode == "residue":
+        step_results = {step: (0, "residual-resource-id\n")}
+        expected_error = f"{step}_residue"
+        expected_status = "residue"
+    else:
+        step_results = {step: (1, "")}
+        expected_error = f"{step}_failed"
+        expected_status = "query_failed"
+    runner = ScriptedStepRunner(output_dir, step_results=step_results)
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is False
+    assert outcome.reason == "cleanup_failed"
+    terminal = (output_dir / "result-final.txt").read_text(encoding="utf-8")
+    assert terminal.startswith("RESULT=FAIL reason=cleanup_failed")
+    assert "PASS" not in terminal
+    steps = [call["step"] for call in runner.calls]
+    assert "compose-down" in steps
+    assert steps.index("compose-down") < steps.index("post-down-containers")
+    assert steps.index("post-down-containers") < steps.index("post-down-networks")
+    assert steps.index("post-down-networks") < steps.index("post-down-volumes")
+    query = next(call for call in runner.calls if call["step"] == step)
+    assert query["argv"][0] == "C:/fake/docker.exe"
+    assert f"label=com.docker.compose.project={PROJECT_NAME}" in query["argv"]
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    assert expected_error in state["cleanup_errors"]
+    assert state["cleanup_accounting"][kind]["kind"] == kind
+    assert state["cleanup_accounting"][kind]["status"] == expected_status
+    if mode == "residue":
+        assert state["cleanup_accounting"][kind]["count"] == 1
+    else:
+        assert "count" not in state["cleanup_accounting"][kind]
+
+
+@pytest.mark.parametrize(("role", "fault", "reason"), _L3_INSPECT_CASES)
+def test_l3_transient_inspect_fails_closed(
+    tmp_path: Path,
+    role: str,
+    fault: str,
+    reason: str | None,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / f"{role}-{fault}"
+    inspect_step = f"inspect-{role}"
+    expected_reason = reason or f"inspect_{role}_failed"
+    runner = ScriptedStepRunner(
+        output_dir,
+        step_results={inspect_step: _transient_inspect_result(role, fault)},
+    )
+    container_id = SHIM_ID if role == "shim" else OBSERVER_ID
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is False
+    assert outcome.reason == expected_reason
+    inspect_call = next(call for call in runner.calls if call["step"] == inspect_step)
+    assert inspect_call["argv"] == ("C:/fake/docker.exe", "inspect", container_id)
+    steps = [call["step"] for call in runner.calls]
+    if role == "shim":
+        assert steps.index("shim-start") < steps.index("inspect-shim")
+        assert "shim-probe" not in steps
+        assert "observer-start" not in steps
+    else:
+        assert steps.index("observer-start") < steps.index("inspect-observer")
+        assert "observer-ready" not in steps
+        assert "inspect-shim" in steps
+    remove_call = next(call for call in runner.calls if call["step"] == f"{role}-remove")
+    assert remove_call["argv"] == ("C:/fake/docker.exe", "rm", "-f", container_id)
+    assert "compose-down" in steps
+    assert "post-down-volumes" in steps
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    record = state["transient_identities"][role]
+    assert record["id"] == container_id
+    assert record["name"] == f"/{_transient_name(role)}"
+    assert record["service"] == "agentflow-api"
+    assert record["inspected"] is False
+    assert record["removed"] is True
+    assert record["no_replacement"] is True
+
+
+@pytest.mark.parametrize(
+    ("step", "returncode", "stdout"),
+    [
+        ("shim-no-replacement", 0, f"{'e' * 64}\n"),
+        ("observer-no-replacement", 0, f"{'e' * 64}\n"),
+        ("shim-no-replacement", 1, ""),
+        ("observer-no-replacement", 1, ""),
+    ],
+)
+def test_l3_replacement_or_missing_proof_fails_cleanup(
+    tmp_path: Path,
+    step: str,
+    returncode: int,
+    stdout: str,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / step / str(returncode)
+    runner = ScriptedStepRunner(output_dir, step_results={step: (returncode, stdout)})
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is False
+    assert outcome.reason == "cleanup_failed"
+    terminal = (output_dir / "result-final.txt").read_text(encoding="utf-8")
+    assert terminal.startswith("RESULT=FAIL reason=cleanup_failed")
+    assert "PASS" not in terminal
+    steps = [call["step"] for call in runner.calls]
+    assert "compose-down" in steps
+    assert "post-down-containers" in steps
+    assert "post-down-networks" in steps
+    assert "post-down-volumes" in steps
+    if step.startswith("observer-"):
+        assert steps.index("observer-no-replacement") < steps.index("shim-remove")
+        assert "shim-no-replacement" in steps
+    expected_error = f"{step}_failed" if returncode != 0 else f"{step}_present"
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    assert expected_error in state["cleanup_errors"]
+    role = "shim" if step.startswith("shim-") else "observer"
+    record = state["transient_identities"][role]
+    assert record["id"] == (SHIM_ID if role == "shim" else OBSERVER_ID)
+    assert record["inspected"] is True
+    assert record["removed"] is True
+    assert record["no_replacement"] is not True
+
+
+def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = FakeRunner(output_dir)
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is True
+    steps = [call["step"] for call in runner.calls]
+    assert steps.index("shim-start") < steps.index("inspect-shim") < steps.index("shim-probe")
+    assert (
+        steps.index("observer-start")
+        < steps.index("inspect-observer")
+        < steps.index("observer-ready")
+    )
+    assert (
+        steps.index("observer-remove")
+        < steps.index("observer-no-replacement")
+        < steps.index("shim-remove")
+        < steps.index("shim-no-replacement")
+        < steps.index("compose-down")
+        < steps.index("post-down-containers")
+        < steps.index("post-down-networks")
+        < steps.index("post-down-volumes")
+    )
+
+    inspect_shim = next(call for call in runner.calls if call["step"] == "inspect-shim")
+    inspect_observer = next(call for call in runner.calls if call["step"] == "inspect-observer")
+    assert inspect_shim["argv"] == ("C:/fake/docker.exe", "inspect", SHIM_ID)
+    assert inspect_observer["argv"] == ("C:/fake/docker.exe", "inspect", OBSERVER_ID)
+    observer_rm = next(call for call in runner.calls if call["step"] == "observer-remove")
+    shim_rm = next(call for call in runner.calls if call["step"] == "shim-remove")
+    assert observer_rm["argv"] == ("C:/fake/docker.exe", "rm", "-f", OBSERVER_ID)
+    assert shim_rm["argv"] == ("C:/fake/docker.exe", "rm", "-f", SHIM_ID)
+
+    project_label = f"label=com.docker.compose.project={PROJECT_NAME}"
+    containers = next(call for call in runner.calls if call["step"] == "post-down-containers")
+    networks = next(call for call in runner.calls if call["step"] == "post-down-networks")
+    volumes = next(call for call in runner.calls if call["step"] == "post-down-volumes")
+    assert containers["argv"] == (
+        "C:/fake/docker.exe",
+        "ps",
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "--filter",
+        project_label,
+    )
+    assert networks["argv"] == (
+        "C:/fake/docker.exe",
+        "network",
+        "ls",
+        "--quiet",
+        "--filter",
+        project_label,
+    )
+    assert volumes["argv"] == (
+        "C:/fake/docker.exe",
+        "volume",
+        "ls",
+        "--quiet",
+        "--filter",
+        project_label,
+    )
+
+    observer_proof = next(
+        call for call in runner.calls if call["step"] == "observer-no-replacement"
+    )
+    shim_proof = next(call for call in runner.calls if call["step"] == "shim-no-replacement")
+    assert observer_proof["argv"] == (
+        "C:/fake/docker.exe",
+        "ps",
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "--filter",
+        f"name={_transient_name('observer')}",
+    )
+    assert shim_proof["argv"] == (
+        "C:/fake/docker.exe",
+        "ps",
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "--filter",
+        f"name={_transient_name('shim')}",
+    )
+
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    assert "cleanup_errors" not in state
+    for role, container_id in (("shim", SHIM_ID), ("observer", OBSERVER_ID)):
+        record = state["transient_identities"][role]
+        assert record["id"] == container_id
+        assert record["name"] == f"/{_transient_name(role)}"
+        assert record["project"] == PROJECT_NAME
+        assert record["service"] == "agentflow-api"
+        assert record["oneoff"] in {"True", "true"}
+        assert record["inspected"] is True
+        assert record["removed"] is True
+        assert record["no_replacement"] is True
+    for kind in ("containers", "networks", "volumes"):
+        assert state["cleanup_accounting"][kind] == {
+            "count": 0,
+            "kind": kind,
+            "status": "empty",
+        }
+    terminal = (output_dir / "result-final.txt").read_text(encoding="utf-8").strip()
+    assert terminal.startswith("RESULT=REHEARSAL_PASS")
+    assert SHIM_ID in (output_dir / "runtime-state.json").read_text(encoding="utf-8")
+    assert OBSERVER_ID in (output_dir / "runtime-state.json").read_text(encoding="utf-8")
 
 
 class _ScriptedDockerResponse:

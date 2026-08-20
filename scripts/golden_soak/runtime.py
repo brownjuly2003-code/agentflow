@@ -744,9 +744,19 @@ class RuntimeHarness:
         }
 
         self.shim_id = self._start_shim(jobmanager_id, taskmanager_id)
+        self._inspect_transient_container(
+            self.shim_id,
+            role="shim",
+            expected_name=self._shim_name(),
+        )
         self._probe_shim()
         self._run_baseline()
         self.observer_id = self._start_observer(gate)
+        self._inspect_transient_container(
+            self.observer_id,
+            role="observer",
+            expected_name=self._observer_name(),
+        )
         self._wait_observer_ready(self.observer_id)
         self._run_producer()
         self._assert_no_abort()
@@ -1031,6 +1041,81 @@ class RuntimeHarness:
             not isinstance(health, dict) or health.get("Status") != "healthy"
         ):
             raise RuntimeFailure("container_unhealthy", service)
+
+    def _inspect_transient_container(
+        self,
+        container_id: str,
+        *,
+        role: str,
+        expected_name: str,
+    ) -> None:
+        identities = self.state.setdefault("transient_identities", {})
+        if not isinstance(identities, dict) or role in identities:
+            raise RuntimeFailure("runtime_state_invalid", "transient_identities")
+        record: dict[str, Any] = {
+            "id": container_id,
+            "name": f"/{expected_name}",
+            "project": self.config.project_name,
+            "service": "agentflow-api",
+            "oneoff": "",
+            "inspected": False,
+            "removed": False,
+            "no_replacement": False,
+        }
+        identities[role] = record
+
+        step = f"inspect-{role}"
+        result = self.runner.run(
+            step,
+            [self.docker_executable, "inspect", container_id],
+            cwd=self.config.project_root,
+            timeout_s=30,
+        )
+        self._record_step(step, result)
+        if result.returncode != 0:
+            raise RuntimeFailure(
+                f"inspect_{role}_failed",
+                f"returncode={result.returncode}",
+            )
+        try:
+            parsed = json.loads(_bounded_text(result.stdout))
+        except json.JSONDecodeError as exc:
+            raise RuntimeFailure("container_inspect_invalid", role) from exc
+        if isinstance(parsed, list) and len(parsed) == 1:
+            payload = parsed[0]
+        else:
+            payload = parsed
+        if not isinstance(payload, dict):
+            raise RuntimeFailure("container_inspect_invalid", role)
+        config = payload.get("Config")
+        state = payload.get("State")
+        restart_count = payload.get("RestartCount")
+        if (
+            payload.get("Id") != container_id
+            or not isinstance(config, dict)
+            or not isinstance(state, dict)
+            or isinstance(restart_count, bool)
+            or not isinstance(restart_count, int)
+        ):
+            raise RuntimeFailure("container_inspect_invalid", role)
+        labels = config.get("Labels")
+        if not isinstance(labels, dict):
+            raise RuntimeFailure("container_inspect_invalid", role)
+        if labels.get("com.docker.compose.project") != self.config.project_name:
+            raise RuntimeFailure("container_project_mismatch", role)
+        if labels.get("com.docker.compose.service") != "agentflow-api":
+            raise RuntimeFailure("container_service_mismatch", role)
+        if payload.get("Name") != f"/{expected_name}":
+            raise RuntimeFailure("container_name_mismatch", role)
+        oneoff = labels.get("com.docker.compose.oneoff")
+        if oneoff not in {"True", "true"}:
+            raise RuntimeFailure("container_oneoff_mismatch", role)
+        if restart_count != 0:
+            raise RuntimeFailure("container_restarted", role)
+        if state.get("Running") is not True or state.get("Status") != "running":
+            raise RuntimeFailure("container_not_running", role)
+        record["oneoff"] = oneoff
+        record["inspected"] = True
 
     def _wait_flink_gate(
         self,
@@ -1431,6 +1516,124 @@ class RuntimeHarness:
                 detail = "unreadable"
             raise RuntimeFailure("observer_abort", detail)
 
+    def _cleanup_transient(
+        self,
+        role: str,
+        container_id: str,
+        expected_name: str,
+        errors: list[str],
+    ) -> None:
+        identities = self.state.get("transient_identities")
+        record = identities.get(role) if isinstance(identities, dict) else None
+        if not isinstance(record, dict) or record.get("id") != container_id:
+            record = None
+            errors.append(f"{role}_identity_evidence_missing")
+
+        removed = self._cleanup_step(
+            f"{role}-remove",
+            [self.docker_executable, "rm", "-f", container_id],
+            errors,
+            60,
+        )
+        if record is not None:
+            record["removed"] = removed
+
+        step = f"{role}-no-replacement"
+        argv = [
+            self.docker_executable,
+            "ps",
+            "--all",
+            "--quiet",
+            "--no-trunc",
+            "--filter",
+            f"name={expected_name}",
+        ]
+        try:
+            result = self.runner.run(
+                step,
+                argv,
+                cwd=self.config.project_root,
+                timeout_s=30,
+            )
+            self._record_step(step, result)
+            no_replacement = result.returncode == 0 and not result.stdout.strip()
+            if result.returncode != 0:
+                errors.append(f"{step}_failed")
+            elif not no_replacement:
+                errors.append(f"{step}_present")
+        except Exception:  # noqa: BLE001 - cleanup must continue through all steps
+            no_replacement = False
+            errors.append(f"{step}_failed")
+        if record is not None:
+            record["no_replacement"] = no_replacement
+
+    def _record_post_down_accounting(self, errors: list[str]) -> None:
+        label_filter = f"label=com.docker.compose.project={self.config.project_name}"
+        checks = [
+            (
+                "containers",
+                [
+                    self.docker_executable,
+                    "ps",
+                    "--all",
+                    "--quiet",
+                    "--no-trunc",
+                    "--filter",
+                    label_filter,
+                ],
+            ),
+            (
+                "networks",
+                [
+                    self.docker_executable,
+                    "network",
+                    "ls",
+                    "--quiet",
+                    "--filter",
+                    label_filter,
+                ],
+            ),
+            (
+                "volumes",
+                [
+                    self.docker_executable,
+                    "volume",
+                    "ls",
+                    "--quiet",
+                    "--filter",
+                    label_filter,
+                ],
+            ),
+        ]
+        accounting: dict[str, Any] = {}
+        self.state["cleanup_accounting"] = accounting
+        for kind, argv in checks:
+            step = f"post-down-{kind}"
+            try:
+                result = self.runner.run(
+                    step,
+                    argv,
+                    cwd=self.config.project_root,
+                    timeout_s=30,
+                )
+                self._record_step(step, result)
+                if result.returncode != 0:
+                    accounting[kind] = {"kind": kind, "status": "query_failed"}
+                    errors.append(f"{step}_failed")
+                    continue
+                resources = [line for line in result.stdout.splitlines() if line.strip()]
+                status = "residue" if resources else "empty"
+                accounting[kind] = {
+                    "count": len(resources),
+                    "kind": kind,
+                    "status": status,
+                }
+                if resources:
+                    errors.append(f"{step}_residue")
+            except Exception:  # noqa: BLE001 - cleanup must continue through all steps
+                accounting[kind] = {"kind": kind, "status": "query_failed"}
+                errors.append(f"{step}_failed")
+
     def _cleanup(self) -> list[str]:
         errors: list[str] = []
         if not self.compose_touched:
@@ -1453,18 +1656,18 @@ class RuntimeHarness:
             180,
         )
         if self.observer_id:
-            self._cleanup_step(
-                "observer-remove",
-                [self.docker_executable, "rm", "-f", self.observer_id],
+            self._cleanup_transient(
+                "observer",
+                self.observer_id,
+                self._observer_name(),
                 errors,
-                60,
             )
         if self.shim_id:
-            self._cleanup_step(
-                "shim-remove",
-                [self.docker_executable, "rm", "-f", self.shim_id],
+            self._cleanup_transient(
+                "shim",
+                self.shim_id,
+                self._shim_name(),
                 errors,
-                60,
             )
         self._cleanup_step(
             "compose-down",
@@ -1472,6 +1675,7 @@ class RuntimeHarness:
             errors,
             300,
         )
+        self._record_post_down_accounting(errors)
         return errors
 
     def _cleanup_step(
@@ -1480,7 +1684,7 @@ class RuntimeHarness:
         argv: list[str],
         errors: list[str],
         timeout_s: float,
-    ) -> None:
+    ) -> bool:
         try:
             result = self.runner.run(
                 step,
@@ -1491,8 +1695,11 @@ class RuntimeHarness:
             self._record_step(step, result)
             if result.returncode != 0:
                 errors.append(f"{step}_failed")
+                return False
+            return True
         except Exception as exc:  # noqa: BLE001 - cleanup must continue through all steps
             errors.append(f"{step}_{type(exc).__name__}")
+            return False
 
     def _remove_runtime_dir(self, errors: list[str]) -> None:
         if self.runtime_dir is None:

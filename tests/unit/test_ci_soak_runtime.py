@@ -696,6 +696,122 @@ def test_failure_or_cleanup_error_never_publishes_pass(
     assert "PASS" not in terminal
 
 
+def test_shim_runtime_material_is_output_child_mounted_and_removed_after_pass(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = FakeRunner(output_dir)
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is True
+    tls_call = next(call for call in runner.calls if call["step"] == "generate-tls")
+    runtime_dir = Path(tls_call["argv"][tls_call["argv"].index("-out") + 1]).resolve().parent
+    assert runtime_dir.parent == output_dir.resolve()
+    assert runtime_dir.name.startswith(f"{PROJECT_NAME}-shim-")
+
+    required_steps = (
+        "shim-start",
+        "shim-probe",
+        "baseline",
+        "observer-start",
+        "producer",
+        "verify",
+    )
+    seen_steps: set[str] = set()
+    for call in runner.calls:
+        sources = [
+            Path(argument[: -len(":/shim:ro")]).resolve()
+            for argument in call["argv"]
+            if argument.endswith(":/shim:ro")
+        ]
+        if not sources:
+            continue
+        assert sources == [runtime_dir]
+        seen_steps.add(call["step"])
+    assert set(required_steps) <= seen_steps
+    assert not runtime_dir.exists()
+    assert not (runtime_dir / "token").exists()
+    assert not (runtime_dir / "ca.crt").exists()
+    assert not (runtime_dir / "server.key").exists()
+
+
+def test_shim_runtime_material_is_removed_after_forced_baseline_failure(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = FakeRunner(output_dir, fail_steps={"baseline"})
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is False
+    assert outcome.reason == "baseline_failed"
+    tls_call = next(call for call in runner.calls if call["step"] == "generate-tls")
+    runtime_dir = Path(tls_call["argv"][tls_call["argv"].index("-out") + 1]).resolve().parent
+    assert runtime_dir.parent == output_dir.resolve()
+    assert runtime_dir.name.startswith(f"{PROJECT_NAME}-shim-")
+
+    required_steps = ("shim-start", "shim-probe", "baseline")
+    seen_steps: set[str] = set()
+    for call in runner.calls:
+        sources = [
+            Path(argument[: -len(":/shim:ro")]).resolve()
+            for argument in call["argv"]
+            if argument.endswith(":/shim:ro")
+        ]
+        if not sources:
+            continue
+        assert sources == [runtime_dir]
+        seen_steps.add(call["step"])
+    assert set(required_steps) <= seen_steps
+    assert not runtime_dir.exists()
+    assert not (runtime_dir / "token").exists()
+    assert not (runtime_dir / "ca.crt").exists()
+    assert not (runtime_dir / "server.key").exists()
+
+
+def test_remove_runtime_dir_rejects_matching_prefix_outside_output_parent(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    foreign = tmp_path / "outside" / f"{PROJECT_NAME}-shim-foreign"
+    foreign.mkdir(parents=True)
+    token = foreign / "token"
+    cert = foreign / "ca.crt"
+    key = foreign / "server.key"
+    token.write_text("keep-token\n", encoding="utf-8", newline="\n")
+    cert.write_text("keep-cert\n", encoding="utf-8", newline="\n")
+    key.write_text("keep-key\n", encoding="utf-8", newline="\n")
+
+    harness = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=FakeRunner(output_dir),
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    )
+    harness.runtime_dir = foreign
+    errors: list[str] = []
+    harness._remove_runtime_dir(errors)  # noqa: SLF001 - boundary contract
+
+    assert errors == ["runtime_directory_cleanup_failed"]
+    assert foreign.is_dir()
+    assert token.read_text(encoding="utf-8") == "keep-token\n"
+    assert cert.is_file()
+    assert key.is_file()
+
+
 class FakeInspector:
     def __init__(self, payloads: dict[str, Any]) -> None:
         self.payloads = payloads

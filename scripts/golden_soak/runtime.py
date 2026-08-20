@@ -570,7 +570,12 @@ class RuntimeHarness:
 
     def _prepare_tls(self) -> None:
         shim_name = self._shim_name()
-        self.runtime_dir = Path(tempfile.mkdtemp(prefix=f"{self.config.project_name}-shim-"))
+        self.runtime_dir = Path(
+            tempfile.mkdtemp(
+                prefix=f"{self.config.project_name}-shim-",
+                dir=self.config.output_dir,
+            )
+        )
         token_path = self.runtime_dir / "token"
         cert_path = self.runtime_dir / "ca.crt"
         key_path = self.runtime_dir / "server.key"
@@ -1389,9 +1394,9 @@ class RuntimeHarness:
         if self.runtime_dir is None:
             return
         path = self.runtime_dir.resolve()
-        temp_root = Path(tempfile.gettempdir()).resolve()
         try:
-            path.relative_to(temp_root)
+            if path.parent != self.config.output_dir.resolve():
+                raise ValueError("unexpected runtime directory parent")
             if not path.name.startswith(f"{self.config.project_name}-shim-"):
                 raise ValueError("unexpected runtime directory name")
             shutil.rmtree(path)

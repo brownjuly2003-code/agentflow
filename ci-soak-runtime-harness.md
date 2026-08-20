@@ -652,3 +652,26 @@ complete, all statically detectable harness-contract defects have explicit
 dispositions, and a single architecture-readiness gate is defined. Push,
 traffic, full soak, Mac rollback, and production gates remain unauthorized or
 open.
+
+### r1-r7 architecture audit completion — 2026-08-20
+
+The required read-only audit is complete in
+`ci-soak-r1-r7-architecture-audit.md` against baseline
+`b151a1f98d0151bc3e84cfa93618fc85d7b78f64`. Its current deterministic verdict
+is `ARCHITECTURE_READY=BLOCKED`, with `A-01` through `A-09` as blockers.
+`A-10` is an explicitly accepted bounded Docker-socket risk; `A-11` is closed
+by marking the older foundation handoff as historical rather than current.
+
+The audit preserves these dispositions: the first causes of `r4`, `r5`, and
+`r6` are locally closed and later attempts crossed them; none of `r1`-`r7`
+completed the baseline/observer/producer/verification sequence; and every old
+snapshot, project, wrapper, and artifact remains immutable evidence. It makes
+no application, data-correctness, soak, rollback, production, or external
+readiness claim.
+
+The exact next named slice is **L1 / `A-01` only**: local test-first bounded
+Docker daemon API-version discovery in `scripts/golden_soak/pods_shim.py` and
+`tests/unit/test_ci_soak_runtime.py`. Do not combine `A-02`, prepare `r8`, or
+perform SSH/Docker/Compose runtime mutation. A later external attempt still
+requires separate authorization, fresh identities, and a locally passing
+architecture-readiness gate.

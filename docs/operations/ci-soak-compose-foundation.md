@@ -1,5 +1,13 @@
 # CI soak Compose foundation and runtime harness: current state and handoff
 
+> **Superseded runtime-status notice (2026-08-20):** The runtime status and
+> recommended next sequence below are historical through the earlier rehearsal
+> stages and must not be used as current resume state. Current authority is
+> `ci-soak-r1-r7-architecture-audit.md` together with the final completion
+> section of `ci-soak-runtime-harness.md`. This document remains a topology and
+> historical implementation reference only; do not execute its older
+> recommended rehearsal sequence.
+
 **Last updated:** 2026-08-19
 
 **Status:** soak-only startup grace is implemented for the Flink JobManager and

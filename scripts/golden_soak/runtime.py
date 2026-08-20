@@ -68,7 +68,8 @@ class RuntimeFailure(RuntimeError):  # noqa: N818 - domain term used in result t
 @dataclass(frozen=True)
 class CommandResult:
     returncode: int
-    output: str
+    stdout: str
+    stderr: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,42 @@ def _bounded_text(value: str, limit: int = MAX_COMMAND_OUTPUT_BYTES) -> str:
     return bounded.decode("utf-8", errors="replace")
 
 
+def _command_log(result: CommandResult) -> str:
+    stdout = _bounded_text(result.stdout)
+    stderr = _bounded_text(result.stderr)
+    if not stderr:
+        return stdout
+    separator = "" if not stdout or stdout.endswith("\n") else "\n"
+    return _bounded_text(f"{stdout}{separator}--- stderr ---\n{stderr}")
+
+
+def _extract_single_full_line(
+    output: str,
+    pattern: re.Pattern[str],
+    *,
+    reason: str,
+    detail: str = "",
+) -> str:
+    matches = [line.strip() for line in output.splitlines() if pattern.fullmatch(line.strip())]
+    if len(matches) != 1:
+        raise RuntimeFailure(reason, detail)
+    return matches[0]
+
+
+def _extract_single_container_id(
+    output: str,
+    *,
+    reason: str,
+    detail: str = "",
+) -> str:
+    return _extract_single_full_line(
+        output,
+        _CONTAINER_ID_RE,
+        reason=reason,
+        detail=detail,
+    )
+
+
 def _atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -191,22 +228,36 @@ class SubprocessRunner:
                 cwd=cwd,
                 env=process_env,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout_s,
                 check=False,
             )
-            return CommandResult(result.returncode, _bounded_text(result.stdout or ""))
+            return CommandResult(
+                result.returncode,
+                _bounded_text(result.stdout or ""),
+                _bounded_text(result.stderr or ""),
+            )
         except subprocess.TimeoutExpired as exc:
-            captured = exc.stdout or ""
-            if isinstance(captured, bytes):
-                captured = captured.decode("utf-8", errors="replace")
-            return CommandResult(124, _bounded_text(f"{captured}\ntimeout step={step}\n"))
+            captured_stdout = exc.stdout or ""
+            captured_stderr = exc.stderr or ""
+            if isinstance(captured_stdout, bytes):
+                captured_stdout = captured_stdout.decode("utf-8", errors="replace")
+            if isinstance(captured_stderr, bytes):
+                captured_stderr = captured_stderr.decode("utf-8", errors="replace")
+            return CommandResult(
+                124,
+                _bounded_text(captured_stdout),
+                _bounded_text(f"{captured_stderr}\ntimeout step={step}\n"),
+            )
         except OSError as exc:
-            return CommandResult(127, f"runner_error step={step} type={type(exc).__name__}\n")
+            return CommandResult(
+                127,
+                "",
+                f"runner_error step={step} type={type(exc).__name__}\n",
+            )
 
 
 def _literal_assignments(path: Path, names: set[str]) -> dict[str, str]:
@@ -736,10 +787,10 @@ class RuntimeHarness:
         self._record_step(step, result)
         if result.returncode != 0:
             raise RuntimeFailure(f"{step}_failed", f"returncode={result.returncode}")
-        return result.output
+        return _bounded_text(result.stdout)
 
     def _record_step(self, step: str, result: CommandResult) -> None:
-        output = _bounded_text(result.output)
+        output = _command_log(result)
         if self.output_owned:
             _atomic_write_text(self.logs_dir / f"{step}.log", output)
         steps = self.state.setdefault("steps", [])
@@ -765,10 +816,11 @@ class RuntimeHarness:
             else ("ps", "-q", service)
         )
         output = self._run_required(step, self._compose(*compose_args), 30)
-        ids = [line.strip() for line in output.splitlines() if line.strip()]
-        if len(ids) != 1 or not _CONTAINER_ID_RE.fullmatch(ids[0]):
-            raise RuntimeFailure("container_identity_invalid", service)
-        return ids[0]
+        return _extract_single_container_id(
+            output,
+            reason="container_identity_invalid",
+            detail=service,
+        )
 
     def _wait_one_shot(self, service: str) -> None:
         container_id = self._single_container_id(
@@ -781,10 +833,13 @@ class RuntimeHarness:
             [self.docker_executable, "wait", container_id],
             180,
         )
-        values = [line.strip() for line in output.splitlines() if line.strip()]
-        if len(values) != 1 or not _EXIT_CODE_RE.fullmatch(values[0]):
-            raise RuntimeFailure("one_shot_wait_output_invalid", service)
-        exit_code = int(values[0])
+        value = _extract_single_full_line(
+            output,
+            _EXIT_CODE_RE,
+            reason="one_shot_wait_output_invalid",
+            detail=service,
+        )
+        exit_code = int(value)
         if exit_code > 255:
             raise RuntimeFailure("one_shot_wait_output_invalid", service)
         self._inspect_one_shot(container_id, service=service, expected_exit_code=exit_code)
@@ -1061,10 +1116,10 @@ class RuntimeHarness:
             "app=agentflow-ci-soak-flink",
         ]
         output = self._run_required("shim-start", argv, 60)
-        container_id = output.strip()
-        if not _CONTAINER_ID_RE.fullmatch(container_id):
-            raise RuntimeFailure("shim_container_id_invalid")
-        return container_id
+        return _extract_single_container_id(
+            output,
+            reason="shim_container_id_invalid",
+        )
 
     def _probe_shim(self) -> None:
         if self.runtime_dir is None:
@@ -1100,7 +1155,7 @@ class RuntimeHarness:
             )
             self._record_step("shim-probe", result)
             if result.returncode == 0:
-                for line in reversed(result.output.splitlines()):
+                for line in reversed(result.stdout.splitlines()):
                     if not line.strip():
                         continue
                     try:
@@ -1153,10 +1208,10 @@ class RuntimeHarness:
             ),
             60,
         )
-        container_id = output.strip()
-        if not _CONTAINER_ID_RE.fullmatch(container_id):
-            raise RuntimeFailure("observer_container_id_invalid")
-        return container_id
+        return _extract_single_container_id(
+            output,
+            reason="observer_container_id_invalid",
+        )
 
     def _wait_observer_ready(self, observer_id: str) -> None:
         deadline = self.monotonic() + 90

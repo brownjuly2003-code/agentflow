@@ -20,6 +20,7 @@ JOB_ID = "1" * 32
 JM_ID = "a" * 64
 TM_ID = "b" * 64
 OBSERVER_ID = "c" * 64
+SHIM_ID = "d" * 64
 INIT_SERVICE_IDS = {
     "kafka-init": "1" * 64,
     "minio-init": "2" * 64,
@@ -137,7 +138,7 @@ class FakeRunner:
         )
         runtime = _runtime()
         if step in self.fail_steps:
-            return runtime.CommandResult(returncode=1, output=f"forced failure: {step}")
+            return runtime.CommandResult(returncode=1, stdout=f"forced failure: {step}")
 
         if step == "generate-tls":
             cert_path = Path(argv[argv.index("-out") + 1])
@@ -170,7 +171,7 @@ class FakeRunner:
                 json.dumps(_completed_inspect_payload(INIT_SERVICE_IDS[service], service)),
             )
         elif step == "shim-start":
-            return runtime.CommandResult(0, f"{'d' * 64}\n")
+            return runtime.CommandResult(0, f"{SHIM_ID}\n")
         elif step == "shim-probe":
             return runtime.CommandResult(0, '{"ok":true,"containers":2}\n')
         elif step == "baseline":
@@ -216,7 +217,26 @@ class FakeRunner:
             )
             return runtime.CommandResult(0, "result=PASS phase=soak expected=2000\n")
 
-        return runtime.CommandResult(returncode=0, output="")
+        return runtime.CommandResult(returncode=0, stdout="")
+
+
+class NoisyDetachedRunner(FakeRunner):
+    def run(self, step: str, argv: list[str], **kwargs: Any):
+        result = super().run(step, argv, **kwargs)
+        runtime = _runtime()
+        if step == "shim-start":
+            progress = (
+                f" Container {PROJECT_NAME}-pods-shim Creating\n"
+                f" Container {PROJECT_NAME}-pods-shim Created\n"
+            )
+            return runtime.CommandResult(0, f"{progress}{SHIM_ID}\n", progress)
+        if step == "observer-start":
+            progress = (
+                f" Container {PROJECT_NAME}-observer Creating\n"
+                f" Container {PROJECT_NAME}-observer Created\n"
+            )
+            return runtime.CommandResult(0, f"{progress}{OBSERVER_ID}\n", progress)
+        return result
 
 
 class RetryProbeRunner(FakeRunner):
@@ -297,6 +317,130 @@ def _config(runtime, output_dir: Path, *, source_root: Path = FOUNDATION_ROOT):
         count=2000,
         rate_eps=100.0,
     )
+
+
+def test_subprocess_runner_keeps_machine_stdout_separate_from_stderr(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+
+    result = runtime.SubprocessRunner().run(
+        "channel-contract",
+        [
+            sys.executable,
+            "-c",
+            "import sys; print('machine'); print('progress', file=sys.stderr)",
+        ],
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "machine\n"
+    assert result.stderr == "progress\n"
+
+
+def test_subprocess_runner_preserves_timeout_evidence_on_stderr(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+
+    result = runtime.SubprocessRunner().run(
+        "timeout-step",
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys,time;"
+                "print('machine', flush=True);"
+                "print('progress', file=sys.stderr, flush=True);"
+                "time.sleep(30)"
+            ),
+        ],
+        cwd=tmp_path,
+        timeout_s=2.0,
+    )
+
+    assert result.returncode == 124
+    assert result.stdout == "machine\n"
+    assert "progress" in result.stderr
+    assert "timeout step=timeout-step" in result.stderr
+
+
+def test_subprocess_runner_preserves_os_error_evidence_on_stderr(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime()
+
+    result = runtime.SubprocessRunner().run(
+        "os-error",
+        [str(tmp_path / "missing-runtime-binary")],
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 127
+    assert result.stdout == ""
+    assert "runner_error step=os-error type=" in result.stderr
+
+
+def test_container_id_parser_accepts_one_full_id_in_r5_compose_transcript() -> None:
+    runtime = _runtime()
+    transcript = (
+        f" Container {PROJECT_NAME}-pods-shim Creating\n"
+        f" Container {PROJECT_NAME}-pods-shim Created\n"
+        f"{SHIM_ID}\n"
+    )
+
+    assert (
+        runtime._extract_single_container_id(  # noqa: SLF001 - boundary contract
+            transcript,
+            reason="shim_container_id_invalid",
+        )
+        == SHIM_ID
+    )
+
+
+@pytest.mark.parametrize(
+    "transcript",
+    [
+        "Container created without an emitted identity\n",
+        f"{SHIM_ID}\n{OBSERVER_ID}\n",
+        f"{SHIM_ID[:63]}\n",
+        f"docker://{SHIM_ID}\n",
+    ],
+)
+def test_container_id_parser_rejects_zero_or_multiple_ids(transcript: str) -> None:
+    runtime = _runtime()
+
+    with pytest.raises(runtime.RuntimeFailure) as caught:
+        runtime._extract_single_container_id(  # noqa: SLF001 - boundary contract
+            transcript,
+            reason="detached_container_id_invalid",
+        )
+
+    assert caught.value.reason == "detached_container_id_invalid"
+
+
+def test_noisy_detached_compose_starts_complete_the_lifecycle(tmp_path: Path) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = NoisyDetachedRunner(output_dir)
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is True
+    shim_log = (output_dir / "logs" / "shim-start.log").read_text(encoding="utf-8")
+    observer_log = (output_dir / "logs" / "observer-start.log").read_text(encoding="utf-8")
+    assert SHIM_ID in shim_log
+    assert "pods-shim Created" in shim_log
+    assert "--- stderr ---" in shim_log
+    assert OBSERVER_ID in observer_log
+    assert "observer Created" in observer_log
+    assert "--- stderr ---" in observer_log
 
 
 def test_manifest_drift_blocks_all_external_commands(tmp_path: Path) -> None:

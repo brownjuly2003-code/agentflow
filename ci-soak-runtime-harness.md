@@ -401,3 +401,99 @@ the Mac SSH endpoint timed out before any remote command executed. A later
 authorized rehearsal must use fresh `r6` identities and a new archive of its
 exact source HEAD. The capacity-independent rehearsal gate remains open; no
 push, traffic test, full soak, or production gate is authorized or claimed.
+
+### `r6` one-shot rehearsal — 2026-08-20
+
+The authorized `r6` slice rehearsed exact source commit
+`5a1a3d10af082e88db0f74ee84da2b1627c072e5` from fresh shared-root snapshot
+`/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-5a1a3d1-r6`, Compose
+project `agentflow-ci-soak-5a1a3d1-r6`, and output directory
+`.artifacts/soak-rehearsal-2000-5a1a3d1-r6`. The source archive SHA-256 was
+`d60fea21fc83a174008a4121d3dffc6797c8aa27f084e4481e3205d66efc937e`.
+The exact source commit, all six critical Git blobs, runtime SHA-256
+`d4caf88cddca875e5da64060eeb33f7447462a192cd9269250b1e4241426df4d`,
+and init-script SHA-256
+`226dc8301870ff837028c444c2f690c07c9181d233a8c6fa57635de24eaabada`
+matched before any co-tenant stop. A cached-image read-only bind probe saw the
+init script through the exact target Docker socket, and the merged Compose
+config SHA-256 was
+`9f67cb0c0e8240e7f89a0a0b0d590003fa6de8adbe74fd615704827fcde44d7d`.
+
+`run-rehearsal-r6.sh` was derived from the immutable `r5` wrapper by changing
+only the snapshot, output, project, archive filename, archive hash, and runtime
+hash. Local and remote `bash -n` passed, and both copies had SHA-256
+`1bb0c90be770adb1dc3037a751fa19ab33b17b572ffe9205811557782042b55c`.
+The wrapper invoked the controller exactly once with `--count 2000`; it
+reported `PREFLIGHT_RESULT=PASS`, stopped the four protected co-tenants, and
+the controller returned `1` with:
+
+```text
+RESULT=FAIL reason=shim_probe_failed
+```
+
+The `r5` channel/parser correction worked: `shim-start.log` contains one valid
+64-character stdout ID,
+`4d9f751397c26170c6d9335e2cccfd8f8e56e7169cffb65d0a47abf6b22038bf`,
+while Docker Compose progress remained on stderr. Both builds, core and app
+startup, all identity-bound one-shot gates, Flink startup, four-task readiness,
+and the initial checkpoint gate passed. The failure occurred before baseline,
+observer, producer, or verification. All 16 shim-probe attempts returned one;
+the final probe evidence ends with:
+
+```text
+FileNotFoundError: [Errno 2] No such file or directory: '/shim/token'
+```
+
+This is a confirmed macOS/Colima bind-visibility defect in the controller.
+`_prepare_tls()` creates the token and TLS files with unqualified
+`tempfile.mkdtemp()`. On this Mac, Python therefore selected
+`/var/folders/.../T/<project>-shim-*`, outside the Colima profile's shared
+`/Users/julia/agentflow-fc5-7113966` root. Both `_start_shim()` and
+`_probe_shim()` correctly requested a read-only `/shim` bind, but the daemon
+inside the VM materialized that unshared host source as an empty directory.
+A bounded comparison on the same Docker socket proved the boundary: a marker
+under Python's `/var/folders/...` default returned `MISSING`, while a marker
+under `/Users/julia/agentflow-fc5-7113966` returned `VISIBLE`. The shim
+container was consequently observed exited `1`, and the transient probe could
+not read its token. This is not a Docker outage, service-readiness failure,
+application/data-correctness result, or soak result.
+
+The wrapper reported `RESTORE_RESULT=PASS`. Independent checks on the exact
+target socket found zero `r6` containers, networks, and volumes and no active
+wrapper/controller process. All four exact protected IDs were running with
+restart count zero; MinIO and ClickHouse were healthy, MinIO and Iceberg REST
+returned HTTP `200`, ClickHouse returned internal `Ok.`, Kind `/livez`
+returned `ok`, and `crictl` found exactly one kube-apiserver. The original Mac
+checkout retained only its three established untracked paths; no tracked file
+there was changed.
+
+Evidence remains under
+`<r6 snapshot>/.artifacts/soak-rehearsal-2000-5a1a3d1-r6`:
+
+- `result-final.txt`: SHA-256
+  `ede962f78adfac89a7e965d3944e67e13b8e1b88223a76981c077e15a4481c44`.
+- `runtime-state.json`: SHA-256
+  `085a6f1ab1b83a082fb88871b975ddc4e2c94b377aa67354adb95e2bddf39a60`.
+- `logs/shim-start.log`: SHA-256
+  `2b074ebb60efbb49d07f09b1f518e6e465fbcc4b546d7d48e2f5b4c7a8012c37`.
+- `logs/shim-probe.log`: SHA-256
+  `a905eefc4ca3d0470e536dac0f9aafbc876ffe49bc612287ac4336708a094b09`.
+- `logs/compose-down.log`: SHA-256
+  `e11d2f8ed6c0ebd4ba3b83e31c05c0640a901a3c9865e7fdd3c1cd5b32ee5154`.
+
+#### Next-session resume delta
+
+Treat every `r6` identity, wrapper, and artifact as immutable evidence; do not
+rerun or adopt them. The next named slice is local and test-first: add a
+regression contract proving that generated shim runtime material lives under a
+controller-owned path visible through the already shared project/output root,
+then make the smallest lifecycle change and keep cleanup strictly contained to
+that exact owned child. Cover both shim-start and shim-probe mounts and prove
+that token/TLS material is removed after success and failure. The existing
+synthetic probe-retry test does not exercise daemon-side bind visibility and
+did not cover this Mac-only boundary.
+
+Only after that fix and focused verification may a later authorized rehearsal
+use fresh `r7` identities and a new archive of its exact source HEAD. The
+capacity-independent rehearsal gate remains open; no push, traffic test, full
+soak, Mac rollback, or production gate is authorized or claimed.

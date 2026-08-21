@@ -455,3 +455,32 @@ This new external evidence does not alter the local A-01 through A-11
 dispositions and does not establish rehearsal, traffic, soak, rollback, or
 production readiness. Controller/stop paths were not invoked. Any next
 external runtime step needs fresh explicit authorization.
+
+### 2026-08-21 r9 rehearsal fail-closed timing finding
+
+The separately authorized `ci-soak-7e8ec87-r9-rehearsal-20260821-01`
+attempt invoked the controller once with `--count 2000`. Producer delivery
+passed at `2000/2000`, zero failures, `21.182s`, and `94.418541` eps, but the
+run terminated `RESULT=FAIL reason=verify_failed`. The verifier reported
+`catchup_rate_floor` with `291/2000` physical and unique rows on both
+ClickHouse surfaces.
+
+This run exposes one new local coverage gap beyond A-01 through A-11. For a
+2,000-event rehearsal, `dual_mean_90` sets the deadline at producer start plus
+`22.222s`; the producer end left `1.040s`. The sequential controller then
+starts a new Compose verifier container, and the verifier log appeared about
+`4.2s` after the deadline. The mocked runtime success test does not exercise
+that count-dependent launch latency, and no tracked unit contract currently
+covers `compute_catchup_deadline` or `evaluate_rate_gate`. The strict rate
+floor behaved fail-closed; it must not be relaxed to manufacture a pass.
+
+Cleanup and restoration remained correct. The wrapper recorded `stop_rc=0`,
+controller rc `1`, `restore_rc=0`, `restore_result=PASS`, and released the
+owner lock. Independent postflight found candidate resources `0/0/0`, no
+writer, all four protected exact IDs running at restart count `0`, and the old
+ClickHouse rollback ID still exited cleanly and disconnected.
+
+The r9 snapshot/project/output is consumed failure evidence. A fix and its
+failing test are a new local slice; any external validation after that fix
+needs a new exact-HEAD gate, fresh runtime identities and preflight, and fresh
+authorization.

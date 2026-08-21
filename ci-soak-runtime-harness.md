@@ -1247,3 +1247,51 @@ production result. Preserve the r9 snapshot and evidence. Starting a
 controller, stopping co-tenants, creating traffic, or using the reserved
 project/output for a rehearsal requires fresh explicit authorization. Grok
 was not used; no fetch or push occurred.
+
+## Exact-HEAD r9 rehearsal FAIL — 2026-08-21
+
+Authorized attempt `ci-soak-7e8ec87-r9-rehearsal-20260821-01` consumed the
+verified r9 snapshot, project, and output with exactly one controller
+invocation at `--count 2000`. All guarded path, source/output visibility, and
+three-viewpoint ClickHouse prechecks passed. The four exact protected
+co-tenants were stopped and later restored by the guarded wrapper.
+
+The producer returned PASS with `2000/2000` delivered, zero failures,
+`21.182s` elapsed, and `94.418541` delivered eps. Verification then failed
+closed at the enforced `dual_mean_90` boundary:
+
+```text
+RESULT=FAIL reason=verify_failed
+result=FAIL reason=catchup_rate_floor
+ch_pipeline_phys=291 ch_pipeline_uniq=291
+ch_orders_phys=291 ch_orders_uniq=291 expected=2000
+```
+
+The count-specific deadline was producer start plus `22.222s`; the observed
+producer end left `1.040s`. `verify.log` was created roughly `4.2s` after that
+deadline because the verifier is launched as a new Compose one-off container
+after producer completion. Even an exact first query at that time could not
+prove a `90 eps` applied mean. The observed first query was additionally only
+`291/2000` at both ClickHouse surfaces. This is a local orchestration/coverage
+gap exposed by the external run, not evidence that the rehearsal passed and
+not a reason to weaken the rate floor.
+
+The wrapper terminal record reports `stop_rc=0`, controller invoked with rc
+`1`, `restore_rc=0`, `restore_result=PASS`, and `lock_result=RELEASED`.
+Independent postflight found candidate project resources `0/0/0`, no writer
+or owner lock, and the four protected exact IDs running with restart count
+`0`; old ClickHouse `a8cc630e...` remained exited cleanly and disconnected.
+The Mac checkout stayed at `ae9fb69...` with its established three untracked
+paths.
+
+Terminal SHA-256 values are `91d7345c75f5d145570c9c4e5c5e716a6c5dc26d8a5859738fdf3964fbb3acef`
+for `wrapper-result.json`,
+`d1083df031a21f392f08e56ed29bbba03078fe1c31e3c5d8767de0ba31524564`
+for `result-final.txt`, and
+`b73ca3b81a529d4fffb615068a025c81b81e9827fab88570235cc5bd8cd7da17`
+for `runtime-state.json`.
+
+The r9 runtime identity is consumed immutable failure evidence. Do not rerun
+it. A later attempt requires a separate local TDD correction, a new exact-HEAD
+gate, fresh identities and preflight, and fresh external authorization. No
+full soak, rollback, cleanup, production action, fetch, or push occurred.

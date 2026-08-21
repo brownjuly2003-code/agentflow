@@ -209,24 +209,34 @@ two-real-pods topology layer on top.
       across `nl_engine`, `nl_queries`, `analytics`, `agent_query`.
 - [x] **GraceKelly serves Sonnet 5.** `claude-sonnet-5` resolves through the GK
       orchestration API today — no GK-side upgrade needed.
-- [ ] Prompt dialect: **keep DuckDB-flavored** (backend transpiles). Documented
-      in ADR 0006.
+- [x] Prompt dialect: **keep DuckDB-flavored** (backend transpiles). Documented
+      in ADR 0006 (accepted 2026-07-01): the semantic layer and NL→SQL keep
+      emitting DuckDB SQL; `ClickHouseBackend._translate_sql` does the rewrite.
 - [ ] LLM reachability: the shipped demo runs the **rule-based** translator
       because `GRACEKELLY_URL` is unset in every deploy config. To make the LLM
       path live, point `GRACEKELLY_URL` at a reachable GraceKelly instance
       (compose/K8s config, never a secret in code); otherwise leave rule-based.
-      Product choice, not a code bug.
+      Product choice, not a code bug. Still open: compose, Helm, and `k8s/`
+      do not set it; `.env.example` leaves it empty. Do not close until a
+      shipped deploy is configured and reachable.
 
 ## Phase 5 — Docs, changelog, gates
 
-- [ ] `docs/architecture.md` — replace the "serving engine is not fixed" open-
-      decision block with the decided state (link ADR 0006/0007).
-- [ ] `docs/clickhouse-migration.md` — reframe from "optional switch" to
-      "default engine; DuckDB is the local-dev/test store".
-- [ ] `CHANGELOG.md [Unreleased]` — serving default → ClickHouse, PII now
-      engine-enforced (behavior/contract note), NL→SQL model → Sonnet 5.
+- [x] `docs/architecture.md` — replace the "serving engine is not fixed" open-
+      decision block with the decided state (link ADR 0006/0007). Done: the
+      serving-engine callout records ClickHouse as the fixed shipped engine
+      and DuckDB as the local-dev/test compatibility store.
+- [x] `docs/clickhouse-migration.md` — reframe from "optional switch" to
+      "default engine; DuckDB is the local-dev/test store". Done: the guide
+      is framed as the default ClickHouse engine with DuckDB rollback /
+      local-dev compatibility.
+- [x] `CHANGELOG.md` — serving default → ClickHouse, PII now engine-enforced
+      (behavior/contract note), NL→SQL model → Sonnet 5. Landed in `[1.6.0] -
+      2026-07-02` (moved out of `[Unreleased]`).
 - [ ] Full verify: unit + integration (ClickHouse lane) green, ruff/mypy clean,
-      mutation gates re-targeted if the PII module moves.
+      mutation gates re-targeted if the PII module moves. Still open: this
+      aggregate contract is not closed by narrower historical Phase 1/2 live
+      verifies or later per-slice lint/unit notes.
 
 ## Rollback
 

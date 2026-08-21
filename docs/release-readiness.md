@@ -121,13 +121,25 @@ them; force-pushes and deletions are disabled. Dependabot security updates
 (vulnerability alerts + automated security fixes) are enabled alongside the
 weekly version-update schedule in `.github/dependabot.yml`.
 
+**Governance limitation (audit F-04, 2026-08-21).** This is a solo-maintainer
+repository: branch protection does not require pull-request reviews, and
+`enforce_admins` is off, so the maintainer's direct pushes to `main` bypass
+the required checks at push time. That is a documented limitation, not a
+four-eyes control — required checks make a red `main` visible, they do not
+make it impossible. Release tags (`v*`) are protected by a repository ruleset
+against deletion and non-fast-forward updates. Any production-acceptance
+claim must therefore verify the actual check state of the exact release SHA
+rather than rely on the branch invariant.
+
 The required `lint` job now contains strict MkDocs and claims validation. The
 required `test-unit` job contains the 80% changed-code coverage gate and depends
 on the 3.11/3.12/3.13 `python-compat` matrix, so a failed compatibility lane
 cannot be bypassed merely because its job name is not a separate protected
 context. The same job enforces a 60% full-suite line/branch floor and separate
-90% floors for security-critical modules. Codecov upload is non-blocking
-reporting until the repository is enabled in that external service; see
+90% floors for security-critical modules. The Codecov upload and badge were
+removed (audit F-06): the repository was never enabled in the external
+service, so the upload could not work and the test job no longer carries the
+`id-token: write` permission that existed only for it; see
 [operations/codecov-setup.md](operations/codecov-setup.md).
 
 The 2026-07-30 closing remediation additionally covers two clean-install

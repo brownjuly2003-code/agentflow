@@ -184,3 +184,11 @@ docs/operations/generated-external-gate-pack-*.md
 docs/operations/guarded-autopilot-*.md
 docs/operations/immutable-retention-evidence-handoff.md
 docs/operations/security-evidence-template.md
+
+# Audit F-11: local agent/tool runtimes at the checkout root. Untracked WIP
+# and consumed soak-attempt evidence live here; ignoring them prevents any
+# accidental `git add` of prompt/log artifacts into the repository.
+/.codex-runtime/
+/.codex-grok-tasks/
+/.grok-prompts/
+/.playwright-cli/

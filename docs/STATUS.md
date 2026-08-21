@@ -108,9 +108,11 @@ findings; see
 [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
 The dependency failure, resolution, and clean Mac verification are recorded in
 [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
-All repository-owned coverage floors remain blocking; Codecov upload is
-non-blocking reporting until the repository is enabled in that external
-service, as recorded in
+All repository-owned coverage floors remain blocking. The Codecov upload and
+badge were removed (audit F-06, 2026-08-21): the repository was never enabled
+in the external service, the upload failed with "Repository not found", and
+the test job no longer carries the `id-token: write` capability that existed
+only for that upload. History in
 [operations/codecov-setup.md](operations/codecov-setup.md).
 The exact post-remediation GitHub SHA must still complete all required checks
 before the external closure gate is claimed.

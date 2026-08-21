@@ -3,7 +3,6 @@
 > Event-native metrics layer: business metrics that move when events happen — measured **3.0 s p50** event-to-metric on the real Kafka→Flink→bridge path, **1.1 s p50** on the in-process demo shortcut. Live entity lookups, typed contracts, dual-language SDKs, and release-gated delivery for people, dashboards, services, and AI agents alike.
 
 [![Release gate](https://img.shields.io/badge/release_gate-v2.0_published-brightgreen)](docs/dv2-multi-branch/RELEASE_STATUS.md)
-[![codecov](https://codecov.io/gh/brownjuly2003-code/agentflow/branch/main/graph/badge.svg)](https://codecov.io/gh/brownjuly2003-code/agentflow)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -223,6 +222,11 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 # verified release slice
 python -m pytest tests/unit tests/integration tests/sdk -q
 
+# broad Windows no-Docker suite (audit F-07): sequential per-process shards
+# with a per-shard peak-memory budget under the host's 1 GiB process guard.
+# Do not run the monolithic pytest command above for this purpose on Windows.
+python scripts/run_windows_unit_shards.py tests/unit
+
 # benchmark and regression gate
 python scripts/run_benchmark.py
 python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
@@ -241,7 +245,9 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 **`v2.0.0` is the current release line** — PyPI `agentflow-runtime` /
 `agentflow-client` and npm `@yuliaedomskikh/agentflow-client`, all
 published via OIDC Trusted Publishers with SLSA provenance attestations.
-CI on `main` is green across all 15 required checks. The living
+`main` carries 15 required status checks; their live state is authoritative
+at [the checks page](https://github.com/brownjuly2003-code/agentflow/actions)
+— this README makes no standing claim about it. The living
 engineering status — what is proven, what is in progress, what is next —
 is tracked in [docs/STATUS.md](docs/STATUS.md).
 

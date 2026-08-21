@@ -11,7 +11,7 @@
 #   curl -fsS http://localhost:8000/v1/health
 #   curl -fsS -H "X-API-Key: demo-key" http://localhost:8000/v1/entity/order/ORD-20260404-1001
 
-FROM python:3.11-slim@sha256:ae52c5bef62a6bdd42cd1e8dffef86b9cd284bde9427da79839de7a4b983e7ca AS builder
+FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad5a0412fd5bfc7 AS builder
 
 WORKDIR /build
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -28,7 +28,16 @@ WORKDIR /src
 RUN pip install --no-cache-dir --upgrade pip build hatchling \
     && python -m build --wheel --outdir /tmp/dist
 
-FROM python:3.11-slim@sha256:ae52c5bef62a6bdd42cd1e8dffef86b9cd284bde9427da79839de7a4b983e7ca
+FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad5a0412fd5bfc7
+
+# Audit F-01 (mirrors Dockerfile.api): upstream slim still ships util-linux
+# 2.41-5 with four fixable HIGH CVEs (CVE-2026-53612..53615); upgrade the
+# installed util-linux binary packages until a fixed base digest exists.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        bsdutils libblkid1 libmount1 libsmartcols1 libuuid1 mount util-linux \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1

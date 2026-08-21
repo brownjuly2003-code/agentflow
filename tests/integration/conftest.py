@@ -96,7 +96,9 @@ def kafka_container():
     finally:
         client.close()
 
-    kafka = kafka_module.KafkaContainer("confluentinc/cp-kafka:7.7.0").start()
+    kafka = kafka_module.KafkaContainer("confluentinc/cp-kafka:7.7.0").start(
+        timeout=int(os.getenv("AGENTFLOW_TEST_KAFKA_START_TIMEOUT_SECONDS", "90"))
+    )
     try:
         yield kafka
     finally:

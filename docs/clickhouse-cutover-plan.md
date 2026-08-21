@@ -233,10 +233,18 @@ two-real-pods topology layer on top.
 - [x] `CHANGELOG.md` — serving default → ClickHouse, PII now engine-enforced
       (behavior/contract note), NL→SQL model → Sonnet 5. Landed in `[1.6.0] -
       2026-07-02` (moved out of `[Unreleased]`).
-- [ ] Full verify: unit + integration (ClickHouse lane) green, ruff/mypy clean,
-      mutation gates re-targeted if the PII module moves. Still open: this
-      aggregate contract is not closed by narrower historical Phase 1/2 live
-      verifies or later per-slice lint/unit notes.
+- [x] Full verify: unit + integration (ClickHouse lane) green, ruff/mypy clean,
+      mutation gates re-targeted if the PII module moves. Closed 2026-08-21
+      with layered exact-source evidence: at baseline `2d71beb`, the complete
+      unit/property lane passed `2401` tests at 78.00% branch coverage and the
+      full Ruff lint/format plus mypy gates were green. The closing
+      test-harness-only portability patch then passed its affected unit set
+      (`7 passed`), focused Ruff lint/format, Compose default/remapped-port
+      rendering, and the complete live integration job (`332 passed`, `12`
+      expected optional skips) with ClickHouse and PostgreSQL configured.
+      Mutation retargeting is not required: the removed app-side PII modules
+      remain absent from both declared and executed mutation targets, and the
+      mutation-policy test passed in the full unit lane.
 
 ## Rollback
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -249,11 +250,11 @@ def test_repo_default_config_writes_to_rest_catalog(
     rest_config = _write_iceberg_config(
         tmp_path / "config" / "rest.yaml",
         catalog_type="rest",
-        catalog_uri="http://localhost:8181",
+        catalog_uri=os.getenv("AGENTFLOW_ICEBERG_URI", "http://localhost:8181"),
         warehouse="s3://agentflow-lake/warehouse",
         namespace=namespace,
         catalog_properties={
-            "s3.endpoint": "http://localhost:9000",
+            "s3.endpoint": os.getenv("AGENTFLOW_S3_ENDPOINT", "http://localhost:9000"),
             "s3.access-key-id": "minio",
             "s3.secret-access-key": "minio123",
             "s3.region": "us-east-1",

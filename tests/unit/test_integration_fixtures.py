@@ -29,7 +29,8 @@ def test_kafka_container_ignores_missing_container_on_teardown(monkeypatch):
         def __exit__(self, exc_type, exc, traceback):
             self.stop()
 
-        def start(self):
+        def start(self, timeout=None):
+            self.timeout = timeout
             return self
 
         def stop(self):
@@ -50,9 +51,12 @@ def test_kafka_container_ignores_missing_container_on_teardown(monkeypatch):
         raise AssertionError(name)
 
     monkeypatch.setattr(integration_conftest.pytest, "importorskip", fake_importorskip)
+    monkeypatch.setenv("AGENTFLOW_TEST_KAFKA_START_TIMEOUT_SECONDS", "45")
 
     fixture = integration_conftest.kafka_container.__wrapped__()
-    assert next(fixture).image == "confluentinc/cp-kafka:7.7.0"
+    container = next(fixture)
+    assert container.image == "confluentinc/cp-kafka:7.7.0"
+    assert container.timeout == 45
 
     with pytest.raises(StopIteration):
         next(fixture)

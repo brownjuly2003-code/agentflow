@@ -75,6 +75,11 @@ integrations = [
     "langgraph>=1,<2",
     "langsmith>=0.7.31,<1",
     "llama-index-core>=0.12,<1",
+    # Mirrors integrations/pyproject.toml [mcp]: locking it here lets CI
+    # install the editable integrations package with --no-deps from the
+    # frozen root resolution (audit F-05). MCP 2 removes the low-level
+    # Server decorators the integration uses.
+    "mcp>=1.0,<2",
 ]
 contract = [
     "schemathesis==4.24.0",
@@ -96,6 +101,12 @@ dev = [
     "pytest>=8.3,<10",
     "pytest-asyncio>=0.24,<2",
     "pytest-cov>=5,<8",
+    # Previously installed ad hoc by e2e.yml / chaos.yml / mutation.yml
+    # outside any lock; declaring them here brings those lanes onto the
+    # frozen resolution (audit F-05).
+    "pytest-timeout>=2.3,<3",
+    "pytest-json-report>=1.5,<2",
+    "mutmut>=3,<4",
     "testcontainers[kafka]>=4.9,<5",
     "ruff>=0.6,<1",
     "mypy>=1.11,<3",

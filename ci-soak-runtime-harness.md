@@ -1138,3 +1138,53 @@ change or weakening the three-viewpoint gate. No external state changed. A
 future remedy must be separately authorized, preserve the protected evidence,
 define rollback, and use new runtime and preflight identities; r8 remains
 immutable.
+
+## ClickHouse dual-route rebind - 2026-08-21
+
+Explicitly authorized slice `mac-clickhouse-loopback-rebind-20260821-01`
+replaced the active ClickHouse runtime configuration without deleting its data
+volume or rollback source. Control script SHA-256 was
+`158abc6cb1725e311a969c1af0acea1527e133772ea88b41af34ada9c825bde2`;
+candidate Compose SHA-256 was
+`a5ab84cc9af25da5c4c3ab8c007a547d33df0132820e646737eec979ff46a098`.
+Local/remote hashes, macOS `bash -n`, and merged Compose validation matched
+before the first mutation.
+
+The new exact ID is
+`f0f0b82817bb87ec522f16426795df021e8d249fdc0c07a9474ac34717488c61`.
+It uses image ID
+`sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b`,
+the existing `agentflow-ch-rv-20260802-01-data` volume, and the existing Docker
+network at `172.20.0.2`. It is `running`, `healthy`, restart `0`.
+
+Exact terminal checks passed:
+
+```text
+RESULT=PASS
+REASON=dual_route_rebind_verified
+CONTAINER_ROUTE=PASS
+HOST_ROUTE=PASS
+WORKLOAD_ROUTE=PASS
+ROLLBACK=READY_SOURCE_STOPPED
+```
+
+Docker publishes both `127.0.0.1:8123` and `172.18.0.1:8123`. In-container
+`clickhouse-client`, macOS-host curl, and exact Kind-container curl each
+returned `1`. The pre/post `agentflow` aggregate matched exactly at `5` tables
+and `5,546,151` total rows. Both evidence files have SHA-256
+`753b2d3cdb245c3175b29925ec025544f300bee79eab66a8da34b84877cab2aa`;
+the terminal result hash is
+`dd764aa43cf15ad946bd958bd66a9a0cc7c54d1bf370b7b6e5129022a1e8904b`.
+
+Old exact ID `a8cc630e...` stopped cleanly with exit `0`, is disconnected from
+the network, and remains available for rollback. Docker copied the volume tree
+to the fresh evidence directory (`3,564,864 KiB` allocated versus
+`3,515,788 KiB` at source). The allocation difference is expected across
+filesystems and is not a byte-identity claim.
+
+Independent postflight found all other protected IDs running with restart `0`,
+MinIO healthy, Kind `/livez=ok`, no owner lock, and no writer. The Mac checkout
+was unchanged. No preflight, controller, rehearsal, traffic, soak, rollback
+execution, production action, fetch, or push occurred. Deleting the stopped
+source or backup, executing rollback, or starting a fresh preflight each
+requires separate authorization; r8 stays immutable.

@@ -411,3 +411,24 @@ not a local architecture defect. Do not remove the host-route viewpoint or
 substitute container/workload health for it. Rebinding or recreating the
 protected runtime is a separate mutating action requiring explicit
 authorization, rollback, and fresh identities. r8 remains immutable.
+
+### 2026-08-21 dual-route runtime remediation
+
+Authorized slice `mac-clickhouse-loopback-rebind-20260821-01` resolved the
+confirmed external binding drift without changing the local architecture
+contract. New exact ClickHouse ID `f0f0b828...` publishes both required
+viewpoints: macOS loopback `127.0.0.1:8123` and VM/workload
+`172.18.0.1:8123`. Container health, host route, and exact Kind/workload route
+all passed once after bounded readiness waits; restart count is `0`.
+
+The replacement uses the exact prior image, named data volume, and Docker
+network. The pre/post `agentflow` aggregate matched at `5` tables and
+`5,546,151` total rows. Old exact ID `a8cc630e...` remains stopped,
+clean-exited, and disconnected for rollback; a host-side volume copy is also
+retained. No data-volume deletion, code change, or r8 reuse occurred.
+
+This closes the specific host-route runtime prerequisite but is not a new
+architecture-gate execution, preflight, rehearsal, soak, rollback, or
+production result. Any later preflight still requires fresh authorization,
+an exact current-HEAD gate, and new identities. Cleanup or rollback is also a
+separate authorized action.

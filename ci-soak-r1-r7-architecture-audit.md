@@ -432,3 +432,26 @@ architecture-gate execution, preflight, rehearsal, soak, rollback, or
 production result. Any later preflight still requires fresh authorization,
 an exact current-HEAD gate, and new identities. Cleanup or rollback is also a
 separate authorized action.
+
+### 2026-08-21 exact-HEAD r9 preflight PASS
+
+Authorized attempt `ci-soak-7e8ec87-r9-preflight` executed the complete local
+gate successfully at exact source HEAD
+`7e8ec87c25bbdc8f8aa58c116ded9914470789cb`, then used a fresh archive,
+snapshot, project, output, wrapper, probes, and evidence identity. The first
+wrapper invocation exposed one stale archive basename and failed before
+Docker or evidence initialization. A single one-line correction and the one
+allowed rerun produced `PREFLIGHT_RESULT=PASS`.
+
+Container health, macOS loopback, and the exact Kind/workload ClickHouse route
+each passed with output `healthy`, `1`, and `1`. The preflight also passed
+exact protected identities, rollback preservation, source/output
+daemon-visibility, Docker API compatibility, and merged Compose validation.
+Independent postflight proved project resources `0/0/0`, zero probes, empty
+output, no owner lock, unchanged protected runtime state, and an unchanged
+Mac checkout.
+
+This new external evidence does not alter the local A-01 through A-11
+dispositions and does not establish rehearsal, traffic, soak, rollback, or
+production readiness. Controller/stop paths were not invoked. Any next
+external runtime step needs fresh explicit authorization.

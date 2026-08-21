@@ -1188,3 +1188,62 @@ was unchanged. No preflight, controller, rehearsal, traffic, soak, rollback
 execution, production action, fetch, or push occurred. Deleting the stopped
 source or backup, executing rollback, or starting a fresh preflight each
 requires separate authorization; r8 stays immutable.
+
+## Exact-HEAD r9 preflight PASS - 2026-08-21
+
+Authorized slice `ci-soak-7e8ec87-r9-preflight` used exact source and gate HEAD
+`7e8ec87c25bbdc8f8aa58c116ded9914470789cb`. The complete local gate returned
+`ARCHITECTURE_READY=PASS blockers=0` at that HEAD. Fresh immutable identities
+were:
+
+| Identity | Exact value |
+| --- | --- |
+| Snapshot | `/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-7e8ec87-r9` |
+| Reserved project | `agentflow-ci-soak-7e8ec87-r9` |
+| Reserved output | `.artifacts/soak-rehearsal-2000-7e8ec87-r9` under the snapshot |
+| Archive SHA-256 | `f52f4587f8db5a2d53876caf0c847c6a8093edff9da0b46f1d3d2d42e43df1a1` |
+| Final preflight wrapper SHA-256 | `0bc8edda7a2e933a690c32bb3956353668e417cfea396301c163f30daca0a68e` |
+
+The first invocation failed closed immediately with
+`reason=archive_missing`: the copied wrapper still named the r8 archive
+basename while the transferred file used the r9 basename. This happened
+before archive extraction, preflight-evidence/output creation, Docker access,
+owner-lock acquisition, or probe creation. One exact-line correction changed
+only that basename. Local and native macOS `bash -n`, transfer hashes, absence
+of all r9 runtime identities, and the final wrapper hash passed before the
+single allowed rerun.
+
+The corrected terminal record is `PREFLIGHT_RESULT=PASS`, `REASON=none`,
+Docker API range `1.44..1.53`, and:
+
+```text
+container_health_rc=0 output=healthy
+host_route_rc=0 output=1
+workload_route_rc=0 output=1
+STOP_COMMAND=NOT_INVOKED
+CONTROLLER=NOT_INVOKED
+```
+
+The source and output daemon-visibility hashes were
+`226dc8301870ff837028c444c2f690c07c9181d233a8c6fa57635de24eaabada`
+and `af34ca8c6da93868be88acb9fc89ecc689e076822886d6a8b4057aadf27db3f6`.
+Merged Compose SHA-256 was
+`a61188607a1af588e9cc2c0b75ab95ddc66f83d201467e3e1b050b970f43b362`.
+The terminal result, ClickHouse probes, and protected-inspect SHA-256 values
+were respectively
+`418dd88897b9e8d3deb067f796519ec889f7822370f68276071d4c4dfb882d83`,
+`0962b7a59839330576e5aefe2c79ef1b69a238271be9d21b0cb4c7604dc71171`,
+and `e006049c405f32e07d0d118eb9040ebfe2cff3ce4e58b7c4ae52320a2ae6f42f`.
+
+Independent postflight found candidate project resources `0/0/0`, both probe
+containers absent, the output directory empty, and the owner lock absent.
+The four exact running protected IDs retained restart count `0`; new
+ClickHouse remained `running`, and old exact ID `a8cc630e...` remained
+`exited(0)`, restart `0`, disconnected. The Mac checkout remained at
+`ae9fb69...` with exactly its established three untracked paths.
+
+This is a successful read-only preflight, not a rehearsal, soak, rollback, or
+production result. Preserve the r9 snapshot and evidence. Starting a
+controller, stopping co-tenants, creating traffic, or using the reserved
+project/output for a rehearsal requires fresh explicit authorization. Grok
+was not used; no fetch or push occurred.

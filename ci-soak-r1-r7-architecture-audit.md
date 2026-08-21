@@ -371,3 +371,20 @@ new exact-HEAD archive and identities as described above. Before relying on
 the gate for such a preflight, execute it once from a clean current checkout
 and require its terminal line to name that exact HEAD. The recorded local
 `ARCHITECTURE_READY=PASS` does not itself authorize any external action.
+
+### 2026-08-21 external preflight evidence
+
+The authorized `f88ff4f-r8` preflight first obtained an exact-HEAD local gate
+PASS, then verified source/output daemon visibility, Docker API compatibility,
+merged Compose, exact co-tenant identity, ClickHouse container health, and the
+Kind/workload ClickHouse route. The separately classified macOS-host route ran
+once and timed out with curl `28` after `5002` milliseconds. The terminal
+record is `PREFLIGHT_RESULT=FAIL` with
+`REASON=clickhouse_host_route_failed`. The preflight failed closed with
+`STOP_COMMAND=NOT_INVOKED` and `CONTROLLER=NOT_INVOKED`; the owner lock
+released and project resources remained `0/0/0`.
+
+This new evidence does not reopen the closed local findings or establish a
+rehearsal result. It confirms that the three ClickHouse viewpoints are not
+interchangeable and leaves the macOS-host route as the first external boundary.
+The `f88ff4f-r8` identity is immutable; do not raw-retry or adopt it.

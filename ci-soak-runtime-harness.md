@@ -1024,3 +1024,86 @@ external action. All corrected runtime paths remain `EXTERNAL-UNVERIFIED`.
 
 Grok was optional and was not used for L6 or this handoff. All corrected
 external paths remain `EXTERNAL-UNVERIFIED`.
+
+## Authoritative next-session resume checkpoint — r8 preflight failed at host route
+
+This section supersedes every earlier checkpoint above. It records only the
+explicitly authorized external preflight; no rehearsal or controller ran.
+
+### Exact identity and local gate
+
+- Source and exact gate HEAD:
+  `f88ff4f6cf68c3af859ff1a5a2bd329e5cb4fa12`.
+- Local terminal evidence:
+  `ARCHITECTURE_READY=PASS blockers=0 head=f88ff4f6cf68c3af859ff1a5a2bd329e5cb4fa12`.
+- Fresh snapshot:
+  `/Users/julia/agentflow-fc5-7113966/ci-soak-rehearsal-f88ff4f-r8`.
+- Reserved project and output: `agentflow-ci-soak-f88ff4f-r8` and
+  `.artifacts/soak-rehearsal-2000-f88ff4f-r8` under that snapshot.
+- Exact-HEAD archive SHA-256:
+  `e039969cc336baa8c50bd708cb14668483e353a2e5187a7c35e004a0df010c28`.
+- Preflight-wrapper SHA-256:
+  `41fe8d09b9a0018d9048edabeb7532c6dbebb22094e5541fad3823a13e010919`.
+
+The local and transferred archive hashes matched. WSL and native macOS Bash
+syntax checks passed for the wrapper. The wrapper was preflight-only: it had no
+stop or controller path and held one exclusive owner lock through its checks.
+
+### Terminal preflight evidence
+
+The exact durable result is:
+
+```text
+PREFLIGHT_RESULT=FAIL
+REASON=clickhouse_host_route_failed
+SOURCE_HEAD=f88ff4f6cf68c3af859ff1a5a2bd329e5cb4fa12
+DOCKER_API=1.53
+DOCKER_MIN_API=1.44
+PROJECT_RESOURCES=0/0/0
+OWNER_LOCK_RELEASE=PASS
+STOP_COMMAND=NOT_INVOKED
+CONTROLLER=NOT_INVOKED
+```
+
+The source daemon-visibility probe returned the exact `init_iceberg.py` hash
+`226dc8301870ff837028c444c2f690c07c9181d233a8c6fa57635de24eaabada`.
+The distinct output-path probe returned
+`2b86e90acec6967a4be47aae72888e2d5c9bf70cce2f5bd6d0faac5389bee7a3`,
+and both disposable probe identities were absent afterward. Merged Compose
+validation passed; the captured configuration hash is
+`2e03cbc07262f8ebb1e047b6f6faddf527db1b20016db657f6bef20633c36ea1`.
+
+All three ClickHouse viewpoints ran exactly once:
+
+```text
+container_health_rc=0 output=healthy
+host_route_rc=28 output=
+workload_route_rc=0 output=1
+```
+
+| Viewpoint | RC / output | Result |
+| --- | --- | --- |
+| Exact container health | `0 / healthy` | PASS |
+| macOS host route | `28 / empty`; timeout after `5002` ms | FAIL |
+| Kind/workload route | `0 / 1` | PASS |
+
+This is a host-route transport failure, not a ClickHouse service failure or a
+workload-route failure. The preflight failed closed before any co-tenant stop.
+
+### Independent postflight and boundary
+
+- Owner lock, candidate writer, two probe containers, and project-labeled
+  containers/networks/volumes were absent.
+- The four exact protected container IDs were still `running` with restart
+  count `0`. MinIO and ClickHouse health had passed before the host-route gate.
+- The original Mac checkout remained at `ae9fb69` with exactly its three
+  established untracked paths.
+- Grok was not used. No rehearsal, controller, traffic, soak, rollback,
+  production action, fetch, push, or existing-checkout mutation occurred.
+
+Treat every `f88ff4f-r8` path and identity as immutable failure evidence. Do
+not raw-retry the host probe, launch the controller, or adopt this identity for
+a rehearsal. A later external diagnostic requires fresh explicit authorization
+and a distinct named slice with a narrowed host-route hypothesis. The local
+`.codex-runtime/` transfer staging remains untracked because cleanup was
+rejected before execution; never bulk-stage it.

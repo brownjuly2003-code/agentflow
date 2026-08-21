@@ -85,7 +85,9 @@ def test_contract_workflow_gates_suite_inside_job():
     gated_text = yaml.safe_dump(
         [step for step in steps if step.get("if") == "steps.changes.outputs.relevant == 'true'"]
     )
-    assert "pip install" in gated_text, "dependency install is wasted work on irrelevant PRs"
+    assert "ci_sync.sh contract" in gated_text, (
+        "dependency install is wasted work on irrelevant PRs"
+    )
     assert "generate_contracts.py --check" in gated_text
     assert "export_openapi.py --check" in gated_text
     assert "pytest tests/contract" in gated_text, "the contract suite itself must be gated"

@@ -157,7 +157,7 @@ def test_ci_smokes_fresh_checkout_local_only_duckdb() -> None:
     )
 
     commands = "\n".join(step.get("run", "") for step in steps)
-    assert "python -m pip install -e ." in commands
+    assert "bash scripts/ci_sync.sh runtime" in commands
     assert "test ! -e .env" in commands
     assert (
         'python scripts/demo_local.py --db-path "${RUNNER_TEMP}/local-duckdb-smoke.duckdb" '

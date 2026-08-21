@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: bash scripts/ci_sync.sh dev-tools
       - name: Prepare backup fixture
         run: |
           python - <<'PY'

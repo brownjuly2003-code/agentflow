@@ -27,11 +27,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-          python -m pip install -e ./sdk
-          python -m pip install -r requirements.txt
-          python -m pip install click rich pyyaml pytest-timeout
+          bash scripts/ci_sync.sh e2e
 
       - name: Prepare pytest temp directory
         run: mkdir -p .tmp

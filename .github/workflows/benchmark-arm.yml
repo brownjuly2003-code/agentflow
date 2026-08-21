@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev,load,cloud]"
+        run: bash scripts/ci_sync.sh perf
       - name: Record host metadata
         run: |
           mkdir -p .artifacts/benchmark

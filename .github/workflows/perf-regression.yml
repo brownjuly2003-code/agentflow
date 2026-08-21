@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev,load,cloud]"
+        run: bash scripts/ci_sync.sh perf
 
       - name: Run entity perf smoke gate
         shell: bash

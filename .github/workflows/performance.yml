@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev,load,cloud]"
+        run: bash scripts/ci_sync.sh perf
       - name: Run canonical benchmark
         # DuckDB-profile benchmark: no ClickHouse service on the runner host,
         # and the baseline predates the ClickHouse serving flip.

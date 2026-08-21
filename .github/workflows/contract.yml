@@ -67,11 +67,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: python -m pip install --upgrade pip
-        if: steps.changes.outputs.relevant == 'true'
-      - run: pip install -e ".[dev,cloud,contract]"
-        if: steps.changes.outputs.relevant == 'true'
-      - run: pip install -e "./sdk"
+      - run: bash scripts/ci_sync.sh contract
         if: steps.changes.outputs.relevant == 'true'
       - run: python scripts/generate_contracts.py --check
         if: steps.changes.outputs.relevant == 'true'

@@ -19,9 +19,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install -e ".[dev,cloud]"
-          pip install bcrypt PyYAML mutmut
+          bash scripts/ci_sync.sh test
       - name: Run mutation testing
         run: python scripts/mutation_report.py
       - name: Upload mutation results

@@ -27,7 +27,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev,cloud]" pytest-json-report
+        run: bash scripts/ci_sync.sh test
 
       - name: Start chaos stack
         run: |
@@ -87,7 +87,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev,cloud]" pytest-json-report
+        run: bash scripts/ci_sync.sh test
 
       - name: Start chaos stack
         run: |

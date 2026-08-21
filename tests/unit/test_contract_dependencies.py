@@ -6,6 +6,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EDITABLE_INSTALL_PATTERN = re.compile(r"""pip install -e\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))""")
+CI_SYNC_PATTERN = re.compile(r"bash scripts/ci_sync\.sh\s+([a-z][a-z0-9-]*)")
 
 
 def _load_pyproject() -> dict:
@@ -32,30 +33,79 @@ def _dedupe(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
-def _workflow_job_editable_installs(workflow_path: Path, job_name: str) -> list[str]:
+def _workflow_job_sync_profiles(workflow_path: Path, job_name: str) -> list[str]:
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     job = workflow["jobs"][job_name]
-    installs = []
+    profiles = []
 
     for step in job.get("steps", []):
         run = step.get("run")
         if isinstance(run, str):
-            installs.extend(_extract_editable_installs(run))
+            profiles.extend(CI_SYNC_PATTERN.findall(run))
 
-    return _dedupe(installs)
+    return _dedupe(profiles)
 
 
-def _workflow_targets_with_editable_installs() -> list[tuple[str, str]]:
+def _workflow_targets_with_sync_calls() -> list[tuple[str, str]]:
     targets = []
 
     for workflow_path in sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.yml")):
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
 
         for job_name in workflow.get("jobs", {}):
-            if _workflow_job_editable_installs(workflow_path, job_name):
+            if _workflow_job_sync_profiles(workflow_path, job_name):
                 targets.append((workflow_path.relative_to(PROJECT_ROOT).as_posix(), job_name))
 
     return sorted(targets)
+
+
+def _expected_sync_environment(editable_installs: list[str]) -> tuple[list[str], list[str]]:
+    """Map a contract profile's editable-installs to ci_sync.sh extras/editables.
+
+    Audit F-05: CI installs run through scripts/ci_sync.sh (uv sync --frozen)
+    instead of raw `pip install -e` range resolution. The contract keeps its
+    editable-installs vocabulary; this derives the frozen equivalent:
+    "./integrations[mcp]" becomes the root `integrations` extra (which mirrors
+    the mcp pin into uv.lock) plus a --no-deps editable install.
+    """
+    extras: list[str] = []
+    editables: list[str] = []
+
+    for install_target in editable_installs:
+        if install_target == ".":
+            continue
+        if install_target.startswith(".[") and install_target.endswith("]"):
+            extras.extend(install_target[2:-1].split(","))
+            continue
+        if install_target == "./sdk":
+            editables.append("sdk")
+            continue
+        if install_target == "./integrations[mcp]":
+            extras.append("integrations")
+            editables.append("integrations")
+            continue
+        raise AssertionError(f"unsupported editable install target {install_target!r}")
+
+    return extras, editables
+
+
+def _ci_sync_profiles() -> dict[str, tuple[list[str], list[str]]]:
+    script = (PROJECT_ROOT / "scripts" / "ci_sync.sh").read_text(encoding="utf-8")
+    arm_pattern = re.compile(
+        r"^\s{2}([a-z][a-z0-9-]*)\)\s*"
+        r"(?:extras=\(([^)]*)\))?;?\s*"
+        r"(?:editables=\(([^)]*)\))?\s*;;",
+        re.MULTILINE,
+    )
+    profiles = {}
+
+    for name, extras, editables in arm_pattern.findall(script):
+        profiles[name] = (
+            extras.split() if extras else [],
+            editables.split() if editables else [],
+        )
+
+    return profiles
 
 
 def test_contract_extra_installs_schemathesis():
@@ -118,7 +168,7 @@ def test_mcp_integration_rejects_breaking_major_versions():
 def test_contract_workflow_uses_contract_extra():
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "contract.yml").read_text(encoding="utf-8")
 
-    assert 'pip install -e ".[dev,cloud,contract]"' in workflow
+    assert "bash scripts/ci_sync.sh contract" in workflow
     assert "pip install schemathesis" not in workflow
 
 
@@ -286,29 +336,56 @@ def test_publication_checklist_uses_reproducible_npm_release_install():
 
 
 def test_dependency_profile_targets_match_workflow_jobs():
-    profiles, targets = _load_dependency_contract()
+    _, targets = _load_dependency_contract()
 
     workflow_targets = [target for target in targets if target["kind"] == "workflow"]
     assert workflow_targets
 
     for target in workflow_targets:
-        editable_installs = _workflow_job_editable_installs(
-            PROJECT_ROOT / target["path"], target["job"]
+        sync_profiles = _workflow_job_sync_profiles(PROJECT_ROOT / target["path"], target["job"])
+
+        assert sync_profiles == [target["profile"]], (
+            f"{target['name']} drifted from profile {target['profile']!r}: {sync_profiles!r}"
         )
 
-        assert editable_installs == profiles[target["profile"]]["editable-installs"], (
-            f"{target['name']} drifted from profile {target['profile']!r}: {editable_installs!r}"
-        )
 
-
-def test_dependency_profile_matrix_covers_all_workflow_editable_installs():
+def test_dependency_profile_matrix_covers_all_workflow_sync_calls():
     _, targets = _load_dependency_contract()
 
     declared_targets = sorted(
         (target["path"], target["job"]) for target in targets if target["kind"] == "workflow"
     )
 
-    assert declared_targets == _workflow_targets_with_editable_installs()
+    assert declared_targets == _workflow_targets_with_sync_calls()
+
+
+def test_workflows_never_use_raw_editable_installs():
+    # Audit F-05: a raw `pip install -e ".[...]"` resolves fresh ranges on
+    # every run; every CI job must install through scripts/ci_sync.sh so the
+    # frozen uv.lock resolution is the only dependency source.
+    for workflow_path in sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.yml")):
+        text = workflow_path.read_text(encoding="utf-8")
+
+        assert not _extract_editable_installs(text), (
+            f"{workflow_path.name} bypasses scripts/ci_sync.sh with a raw editable install"
+        )
+
+
+def test_ci_sync_profiles_match_dependency_contract():
+    profiles, _ = _load_dependency_contract()
+    sync_profiles = _ci_sync_profiles()
+
+    assert set(sync_profiles) == set(profiles), (
+        "scripts/ci_sync.sh profile arms must mirror the dependency contract"
+    )
+
+    for profile_name, profile in profiles.items():
+        expected = _expected_sync_environment(profile["editable-installs"])
+
+        assert sync_profiles[profile_name] == expected, (
+            f"ci_sync.sh profile {profile_name!r} drifted from the contract: "
+            f"{sync_profiles[profile_name]!r} != {expected!r}"
+        )
 
 
 def test_make_setup_uses_test_integrations_profile():

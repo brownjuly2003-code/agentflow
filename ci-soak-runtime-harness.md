@@ -1341,3 +1341,29 @@ This is `CLOSED-LOCAL`, not new runtime acceptance. The consumed r9 evidence
 remains immutable and failed. Any external validation of this correction needs
 a new exact-HEAD architecture gate, fresh snapshot/project/output identities,
 fresh preflight, and fresh authorization.
+
+## r10 orchestration stop before mutation — 2026-08-21
+
+The newly authorized post-fix r10 slice passed the complete local architecture
+gate at exact HEAD `1fc959efcc1c871fd3057f27a8aef60db44fc878` and created a
+local exact source archive only. A bounded `local_grok_cli` run with pinned
+requested model `grok-4.6` remained active through all six permitted polls but
+emitted no stdout or stderr. It was cancelled once at the monitoring limit;
+no duplicate or QA run followed.
+
+Independent byte-exact read-only Mac postflight proved the remote r10
+snapshot, control directory, output, preflight evidence, owner lock,
+controller, project resources, and probe containers were all absent. The four
+protected exact IDs remained running with restart count zero; health/API,
+dual-route ClickHouse, Kind `/livez`, and one-kube-apiserver checks passed. The
+rollback ClickHouse and original Mac checkout remained unchanged. Therefore
+the classification is `ORCHESTRATION_STOP_BEFORE_MUTATION`, with both
+`STOP_COMMAND` and `CONTROLLER` `NOT_INVOKED`; there is no r10 rehearsal
+verdict.
+
+Canonical evidence is
+`ci-soak-r10-orchestration-stop-20260821-01.md`. Treat the r10 prompt, local
+control identity, attempt name, and authorization as consumed. A later
+external attempt must use fresh r11-or-later identities, a new exact-HEAD gate
+and preflight, and fresh authorization. Full soak, rollback, retained-evidence
+cleanup, production action, fetch, and push remain unauthorized.

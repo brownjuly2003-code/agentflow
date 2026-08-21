@@ -15,10 +15,11 @@ not authorize an external action.
 | --- | --- |
 | Closing implementation commit | `726d171322dc8933d8788e7388f1bcd5d0d8e32e` — `fix(ops): reconcile ci soak verifier contract` |
 | Required ancestry | The current `HEAD` must contain the closing implementation commit before any post-fix validation |
-| Local architecture gate | `ARCHITECTURE_READY=PASS blockers=0 head=726d171322dc8933d8788e7388f1bcd5d0d8e32e` |
+| Latest local architecture gate | `ARCHITECTURE_READY=PASS blockers=0 head=1fc959efcc1c871fd3057f27a8aef60db44fc878` before the stopped r10 delegation |
 | Local verification | Focused gate: `129 passed`; Ruff check/format, `py_compile`, `git diff --check`, strict UTF-8/LF/no-BOM/no-NUL, and the clean-HEAD architecture gate passed |
-| Post-fix external rehearsal | **Not run** |
+| Post-fix external rehearsal | **Not run**; r10 orchestration stopped before external mutation |
 | Last external evidence | Retained r9 attempt: **FAIL** against older source `7e8ec87c25bbdc8f8aa58c116ded9914470789cb` |
+| Latest orchestration evidence | [r10 stopped before mutation](../../ci-soak-r10-orchestration-stop-20260821-01.md); no rehearsal verdict exists |
 | Push/fetch | Neither was performed for the closing slice; push remains unauthorized |
 
 The local correction is closed. Counts below `1_440_000` use
@@ -72,7 +73,8 @@ The ancestry command must exit `0`. Then:
    new relevant change, a fresh failure, or a newly authorized exact-HEAD
    attempt.
 5. The next actionable runtime slice is at most one fresh post-fix
-   `--count 2000` rehearsal, and only after fresh explicit authorization.
+   `--count 2000` rehearsal using r11-or-later identities, and only after fresh
+   explicit authorization. The stopped r10 orchestration must not be resumed.
 
 If a new local change legitimately requires the architecture gate, run it from
 a clean tracked checkout:
@@ -99,6 +101,22 @@ The snapshot, project, output, wrapper, and attempt names are immutable failure
 evidence. Do not rerun the controller from them, overwrite them, or remove
 them. Do not weaken the `90 eps` full-soak floor to make a short rehearsal
 pass.
+
+## Consumed r10 orchestration — no rehearsal ran
+
+The authorized r10 slice used exact local HEAD
+`1fc959efcc1c871fd3057f27a8aef60db44fc878` and passed its fresh local
+architecture gate. The bounded Grok executor reached the six-poll monitoring
+limit without terminal output and was cancelled once. Independent read-only
+postflight proved that no r10 remote snapshot/control/output/preflight path,
+owner lock, controller, project resource, or probe existed. All protected
+co-tenants remained healthy under their exact IDs with restart count zero.
+
+Treat the r10 attempt name, prompt, local control directory, and authorization
+as consumed evidence. The exact record is the
+[r10 orchestration-stop report](../../ci-soak-r10-orchestration-stop-20260821-01.md).
+Do not resume r10 or launch a duplicate. A future attempt starts at r11 or
+later with fresh identities, gate, preflight, and explicit authorization.
 
 ## Historical runtime safety snapshot
 
@@ -166,5 +184,6 @@ or push gates.
 - [Golden-soak source-pack README](../../scripts/golden_soak/README.md)
 - [Runtime harness history](../../ci-soak-runtime-harness.md)
 - [Immutable r9 failure report](../../ci-soak-r9-rehearsal-20260821-01.md)
+- [r10 orchestration-stop report](../../ci-soak-r10-orchestration-stop-20260821-01.md)
 - [Architecture audit and readiness contract](../../ci-soak-r1-r7-architecture-audit.md)
 - [Compose foundation context](ci-soak-compose-foundation.md)

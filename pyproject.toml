@@ -159,9 +159,11 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.format]
-# These two legacy files are predominantly CRLF with small LF-only blocks.
-# Keep lint coverage while avoiding a whole-file EOL rewrite in the formatter gate.
+# The golden-soak source pack is byte-pinned by MANIFEST.json; formatting it
+# would invalidate the immutable runtime identity. The two legacy source files
+# below are predominantly CRLF with small LF-only blocks.
 exclude = [
+    "scripts/golden_soak/pack/*.py",
     "src/quality/validators/semantic_validator.py",
     "src/serving/control_plane/embedded.py",
 ]
@@ -178,6 +180,16 @@ ignore = ["S101", "S311"]
     "E402",
     "S603",
     "S607",
+]
+# Keep meaningful lint coverage on the immutable pack while waiving only its
+# recorded formatting and controlled operational-input findings.
+"scripts/golden_soak/pack/*.py" = [
+    "E501",
+    "I001",
+    "S110",
+    "S112",
+    "S310",
+    "S608",
 ]
 # Benchmark harness builds ClickHouse SQL from internal literals only
 # (band cut points, table names from the checked-in DDL list) and opens a

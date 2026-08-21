@@ -170,8 +170,7 @@ def test_merged_soak_compose_overrides_api_healthcheck_for_background_consumers(
     services = _merged_compose()["services"]
 
     assert {
-        name: services[name].get("healthcheck")
-        for name in ("lake-materializer", "serving-bridge")
+        name: services[name].get("healthcheck") for name in ("lake-materializer", "serving-bridge")
     } == {
         "lake-materializer": {"disable": True},
         "serving-bridge": {

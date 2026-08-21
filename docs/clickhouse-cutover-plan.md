@@ -244,7 +244,10 @@ two-real-pods topology layer on top.
       expected optional skips) with ClickHouse and PostgreSQL configured.
       Mutation retargeting is not required: the removed app-side PII modules
       remain absent from both declared and executed mutation targets, and the
-      mutation-policy test passed in the full unit lane.
+      mutation-policy test passed in the full unit lane. The canonical commit
+      mapping, disclosed failed attempts, postflight identities, and exact
+      next-session boundary are recorded in
+      [`clickhouse-aggregate-verification-closure.md`](../clickhouse-aggregate-verification-closure.md).
 
 ## Rollback
 

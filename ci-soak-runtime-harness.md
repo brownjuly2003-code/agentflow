@@ -1,5 +1,11 @@
 # CI Soak Runtime Harness
 
+> **Next-session entry point:** use the tracked
+> [CI-soak next-session runbook](docs/operations/ci-soak-next-session-runbook.md)
+> for current status, consumed identities, authorization boundaries, and the
+> exact cold-start sequence. The chronological material below is supporting
+> history.
+
 ## Goal
 
 Add a fail-closed local Compose runtime contract and Kubernetes-pods compatibility shim without changing any byte in the tracked source pack or claiming a soak result.

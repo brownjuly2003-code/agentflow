@@ -7,8 +7,9 @@ manifests are not a Docker Compose runtime contract.
 
 The current architecture verdict and finding register are documented in
 [`ci-soak-r1-r7-architecture-audit.md`](../../ci-soak-r1-r7-architecture-audit.md).
-The exact local verification evidence and authoritative next-session resume
-checkpoint are in
+The authoritative next-session entry point is the tracked
+[`ci-soak-next-session-runbook.md`](../../docs/operations/ci-soak-next-session-runbook.md);
+the detailed local verification history is in
 [`ci-soak-runtime-harness.md`](../../ci-soak-runtime-harness.md). The older
 [`ci-soak-compose-foundation.md`](../../docs/operations/ci-soak-compose-foundation.md)
 is historical topology context, not current resume state.

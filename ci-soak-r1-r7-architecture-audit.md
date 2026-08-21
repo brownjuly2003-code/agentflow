@@ -388,3 +388,26 @@ This new evidence does not reopen the closed local findings or establish a
 rehearsal result. It confirms that the three ClickHouse viewpoints are not
 interchangeable and leaves the macOS-host route as the first external boundary.
 The `f88ff4f-r8` identity is immutable; do not raw-retry or adopt it.
+
+### 2026-08-21 read-only host-route diagnosis
+
+Authorized diagnostic `mac-host-route-diag-20260821-01` confirmed the first
+external boundary without changing runtime state. Exact ClickHouse container
+`a8cc630e...` remained healthy with restart count `0`, but Docker binds
+`8123/tcp` to `172.18.0.1:8123` inside the active Colima VM. macOS sends that
+address through its default physical gateway, has no listener on port `8123`,
+and cannot reach the service through loopback.
+
+The working Kind API comparison binds `127.0.0.1:50145` and has an exact
+Colima SSH-forwarded macOS listener. The profile uses
+`network.address=false`, `network.hostAddresses=false`, and
+`portForwarder=ssh`. Both tracked Compose files already use
+`127.0.0.1:8123:8123`; the protected ClickHouse container instead names a
+deleted temporary Compose source under
+`/tmp/agentflow-chk-restore-rv-20260802-01/`.
+
+The gate therefore behaved correctly: this is external runtime binding drift,
+not a local architecture defect. Do not remove the host-route viewpoint or
+substitute container/workload health for it. Rebinding or recreating the
+protected runtime is a separate mutating action requiring explicit
+authorization, rollback, and fresh identities. r8 remains immutable.

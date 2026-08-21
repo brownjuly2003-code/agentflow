@@ -1107,3 +1107,34 @@ a rehearsal. A later external diagnostic requires fresh explicit authorization
 and a distinct named slice with a narrowed host-route hypothesis. The local
 `.codex-runtime/` transfer staging remains untracked because cleanup was
 rejected before execution; never bulk-stage it.
+
+## Read-only macOS host-route diagnosis - 2026-08-21
+
+Freshly authorized diagnostic identity `mac-host-route-diag-20260821-01`
+narrowed the r8 host-route failure without repeating its HTTP probe. The exact
+protected ClickHouse container remained `running`, `healthy`, restart count
+`0`. Its Docker metadata reports
+`8123/tcp -> 172.18.0.1:8123`; the address is a bind inside the active Colima
+VM, not a forwarded macOS endpoint.
+
+The macOS route to `172.18.0.1` uses the default gateway `192.168.1.1` on
+`en1`. No host TCP listener exists on `8123`, and a distinct bounded loopback
+probe to `127.0.0.1:8123` failed immediately with curl `7`. In the working
+comparison, the exact Kind API binding is `127.0.0.1:50145` and the Colima SSH
+forwarder owns that macOS listener. Effective Colima settings are
+`network.address=false`, `network.hostAddresses=false`, and
+`portForwarder=ssh`.
+
+The container labels identify its source as deleted temporary file
+`/tmp/agentflow-chk-restore-rv-20260802-01/clickhouse-compose.yml`. By
+contrast, both tracked Compose definitions in unchanged Mac checkout
+`ae9fb69...` use `127.0.0.1:8123:8123`. The default `colima-nsa` Docker
+context currently points to an absent socket, but the r8 wrapper pinned the
+live `agentflow-fc5-7113966` socket, so that separate shell drift did not cause
+r8.
+
+This confirms external runtime binding drift. It does not justify a local code
+change or weakening the three-viewpoint gate. No external state changed. A
+future remedy must be separately authorized, preserve the protected evidence,
+define rollback, and use new runtime and preflight identities; r8 remains
+immutable.

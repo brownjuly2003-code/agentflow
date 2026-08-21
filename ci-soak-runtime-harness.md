@@ -1276,6 +1276,14 @@ prove a `90 eps` applied mean. The observed first query was additionally only
 gap exposed by the external run, not evidence that the rehearsal passed and
 not a reason to weaken the rate floor.
 
+The failure class is not new. The 2026-08-07 FIX2 diagnostic already proved
+that creating the verifier after a 2,000-event producer misses the same
+count-dependent deadline, and the later FIX4 product contract assigned short
+Kind validation to `kind_residual_20` while keeping `dual_mean_90` as the
+full-soak acceptance SLA. The CI-soak harness omitted both the historical
+verify-before-producer orchestration rule and an explicit phase-specific rate
+contract; its mocked success path does not exercise real verifier launch time.
+
 The wrapper terminal record reports `stop_rc=0`, controller invoked with rc
 `1`, `restore_rc=0`, `restore_result=PASS`, and `lock_result=RELEASED`.
 Independent postflight found candidate project resources `0/0/0`, no writer
@@ -1292,6 +1300,9 @@ for `result-final.txt`, and
 for `runtime-state.json`.
 
 The r9 runtime identity is consumed immutable failure evidence. Do not rerun
-it. A later attempt requires a separate local TDD correction, a new exact-HEAD
-gate, fresh identities and preflight, and fresh external authorization. No
-full soak, rollback, cleanup, production action, fetch, or push occurred.
+it. A later attempt requires a separate local TDD contract-reconciliation
+slice, a new exact-HEAD gate, fresh identities and preflight, and fresh
+external authorization. That slice must preserve the historical short-run
+versus full-soak claim boundary or explicitly co-schedule a deliberately
+dual-mean rehearsal; it must not lower the full-soak floor. No full soak,
+rollback, cleanup, production action, fetch, or push occurred.

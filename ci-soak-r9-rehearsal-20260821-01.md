@@ -59,6 +59,14 @@ or prove the required applied mean with the current sequential orchestration;
 the first query also showed that only `291/2000` rows had reached both
 ClickHouse surfaces.
 
+This repeats the already documented 2026-08-07 FIX2 failure class: that run's
+verifier was also created after the count-dependent deadline. The subsequent
+FIX4 product contract assigned short Kind validation to
+`kind_residual_20` while retaining `dual_mean_90` for full-soak acceptance.
+The CI-soak runtime currently forces `dual_mean_90` for every count and starts
+verification after producer completion; its mocked success test covers neither
+real one-off-container launch latency nor this phase-specific contract choice.
+
 Wrapper SHA-256 evidence:
 
 - `wrapper-result.json`:
@@ -80,8 +88,11 @@ ClickHouse exited cleanly and disconnected. The Mac checkout was unchanged.
 
 The r9 snapshot/project/output identity is consumed failure evidence and must
 not be reused. Do not rerun this controller. A correction needs a separate
-local TDD slice that makes the short-run rate observation compatible with the
-strict dual-mean deadline without weakening the `90 eps` contract. Any later
-external attempt requires a new exact-HEAD gate, fresh snapshot/project/output
+local TDD contract-reconciliation slice: preserve the historical short-run
+`kind_residual_20` versus full-soak `dual_mean_90` claim boundary, or prove that
+this distinct rehearsal intentionally requires dual mean and co-schedule its
+verifier before traffic. Do not hide the orchestration gap by merely extending
+the deadline or lowering the `90 eps` full-soak floor. Any later external
+attempt requires a new exact-HEAD gate, fresh snapshot/project/output
 identities, a fresh preflight, and new authorization. Full soak, rollback,
 cleanup, production work, and push remain unauthorized.

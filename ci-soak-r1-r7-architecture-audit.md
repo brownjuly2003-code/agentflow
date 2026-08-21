@@ -465,14 +465,21 @@ run terminated `RESULT=FAIL reason=verify_failed`. The verifier reported
 `catchup_rate_floor` with `291/2000` physical and unique rows on both
 ClickHouse surfaces.
 
-This run exposes one new local coverage gap beyond A-01 through A-11. For a
-2,000-event rehearsal, `dual_mean_90` sets the deadline at producer start plus
-`22.222s`; the producer end left `1.040s`. The sequential controller then
-starts a new Compose verifier container, and the verifier log appeared about
-`4.2s` after the deadline. The mocked runtime success test does not exercise
-that count-dependent launch latency, and no tracked unit contract currently
-covers `compute_catchup_deadline` or `evaluate_rate_gate`. The strict rate
-floor behaved fail-closed; it must not be relaxed to manufacture a pass.
+This run re-exposes a known local gap that A-01 through A-11 did not carry
+forward. For a 2,000-event rehearsal, `dual_mean_90` sets the deadline at
+producer start plus `22.222s`; the producer end left `1.040s`. The sequential
+controller then starts a new Compose verifier container, and the verifier log
+appeared about `4.2s` after the deadline. The 2026-08-07 FIX2 diagnostic proved
+the same post-deadline verifier creation, and its remediation rule was to
+co-schedule verify before producer. The later FIX4 product contract assigned
+short Kind validation to `kind_residual_20` while retaining `dual_mean_90` for
+full-soak acceptance. The current mocked runtime success test covers neither
+real launch latency nor this phase-specific contract selection.
+
+The strict configured rate floor behaved fail-closed; it must not be relaxed
+to manufacture a pass. The local correction must instead reconcile the
+historical short-run/full-soak claim boundary or explicitly co-schedule a
+rehearsal that intentionally retains dual mean.
 
 Cleanup and restoration remained correct. The wrapper recorded `stop_rc=0`,
 controller rc `1`, `restore_rc=0`, `restore_result=PASS`, and released the
@@ -481,6 +488,6 @@ writer, all four protected exact IDs running at restart count `0`, and the old
 ClickHouse rollback ID still exited cleanly and disconnected.
 
 The r9 snapshot/project/output is consumed failure evidence. A fix and its
-failing test are a new local slice; any external validation after that fix
-needs a new exact-HEAD gate, fresh runtime identities and preflight, and fresh
-authorization.
+failing test are a new local contract-reconciliation slice; any external
+validation after that fix needs a new exact-HEAD gate, fresh runtime identities
+and preflight, and fresh authorization.

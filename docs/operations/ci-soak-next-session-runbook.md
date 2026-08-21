@@ -204,6 +204,18 @@ evidence; preserve it and stop. A passing short rehearsal closes only the
 capacity-independent rehearsal gate, not the full soak, rollback, production,
 or push gates.
 
+## Attempt identity generation (audit F-10)
+
+Every future attempt (r13+) must derive its manifest, marker text, expected
+marker hash, identities, and paths from one typed schema via
+`scripts/golden_soak/gen_attempt_bundle.py generate`, and re-verify the bundle
+with `... verify --bundle <dir>` immediately before transfer. Hand-typing or
+copying an expected marker hash between attempts is forbidden — that exact
+manual step produced the r12 `output_marker_hash_mismatch`. Wrapper templates
+must source identities and hashes only from the generated
+`wrapper-inputs.env` / `attempt-manifest.json`; the generator rejects consumed
+rounds and refuses to reuse an existing bundle directory.
+
 ## Detailed references
 
 - [Golden-soak source-pack README](../../scripts/golden_soak/README.md)

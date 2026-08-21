@@ -1367,3 +1367,38 @@ control identity, attempt name, and authorization as consumed. A later
 external attempt must use fresh r11-or-later identities, a new exact-HEAD gate
 and preflight, and fresh authorization. Full soak, rollback, retained-evidence
 cleanup, production action, fetch, and push remain unauthorized.
+
+## r11 read-only stop and r12 preflight failure before stop — 2026-08-21
+
+The r11 authorization was consumed without creating a remote identity. Its
+strict read-only probe first exposed an unsupported Docker Go-template field;
+the one corrected probe then stopped when the expected no-match exit from
+`pgrep` propagated through `set -e` / `pipefail`. No lock, probe, project
+resource, co-tenant stop, or controller existed.
+
+A separately authorized r12 attempt used exact source/gate HEAD
+`bfb82ecb6c66e5490db2d99bbdaf8b9da55f2082`. The fresh architecture gate
+passed, and the corrected strict read-only probe proved fresh r12 identities,
+Docker API/capacity, protected identities, restart-zero state, checkout state,
+and all health/routes before any remote path creation. The exact archive
+SHA-256 was
+`1654503d7a1cae3a95baf5f87e43a0411c93fb18db14250dd58a44a35a5252b7`.
+
+The r12 preflight wrapper ran exactly once and failed closed at
+`output_marker_hash_mismatch`. It contained r12 marker text but the r11 marker
+hash. The correct r12 marker SHA-256 is
+`9853a9344b1378f968eb4f5c808c6541275746d6f5682a507b6d3294d4bfb6f2`.
+The terminal result hash is
+`9a47518e73a724f7f105beaa79e7c7ad794da3d633694d2e2cb69e6fb7c59bb1`.
+It records owner-lock release PASS, project resources `0/0/0`, and both stop
+and controller `NOT_INVOKED`.
+
+Independent postflight found no lock, controller, project resource, or probe;
+all four protected exact IDs remained running with restart count zero and all
+readiness/routes passed. The rollback ClickHouse and Mac checkout were
+unchanged. The r12 snapshot/control/output/preflight paths remain retained
+evidence. Canonical detail is
+`ci-soak-r12-preflight-fail-20260821-01.md`. Do not reuse or clean r11/r12.
+A later external attempt starts at r13 or later with fresh authorization,
+identities, gate, archive, and preflight. No rehearsal, traffic, full soak,
+rollback, production action, fetch, or push occurred.

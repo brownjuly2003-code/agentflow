@@ -15,11 +15,11 @@ not authorize an external action.
 | --- | --- |
 | Closing implementation commit | `726d171322dc8933d8788e7388f1bcd5d0d8e32e` — `fix(ops): reconcile ci soak verifier contract` |
 | Required ancestry | The current `HEAD` must contain the closing implementation commit before any post-fix validation |
-| Latest local architecture gate | `ARCHITECTURE_READY=PASS blockers=0 head=1fc959efcc1c871fd3057f27a8aef60db44fc878` before the stopped r10 delegation |
+| Latest local architecture gate | `ARCHITECTURE_READY=PASS blockers=0 head=bfb82ecb6c66e5490db2d99bbdaf8b9da55f2082` before the r12 preflight |
 | Local verification | Focused gate: `129 passed`; Ruff check/format, `py_compile`, `git diff --check`, strict UTF-8/LF/no-BOM/no-NUL, and the clean-HEAD architecture gate passed |
-| Post-fix external rehearsal | **Not run**; r10 orchestration stopped before external mutation |
+| Post-fix external rehearsal | **Not run**; r12 preflight failed before stop/controller mutation |
 | Last external evidence | Retained r9 attempt: **FAIL** against older source `7e8ec87c25bbdc8f8aa58c116ded9914470789cb` |
-| Latest orchestration evidence | [r10 stopped before mutation](../../ci-soak-r10-orchestration-stop-20260821-01.md); no rehearsal verdict exists |
+| Latest orchestration evidence | [r12 preflight failed before stop](../../ci-soak-r12-preflight-fail-20260821-01.md); no rehearsal verdict exists |
 | Push/fetch | Neither was performed for the closing slice; push remains unauthorized |
 
 The local correction is closed. Counts below `1_440_000` use
@@ -30,8 +30,9 @@ and then delegates to the byte-pinned verifier. The same exact verifier ID,
 labels, name, restart count, terminal state, exit code, logs, phase-specific
 JSON, and cleanup/no-replacement state are checked fail-closed.
 
-This is local contract evidence only. It does not prove current
-Docker/Colima, Kind, Flink, ClickHouse, Iceberg, or MinIO behavior.
+The r12 read-only gate proved the current protected Docker/Colima identities
+and basic readiness only. It did not run the corrected Compose controller or
+prove current Flink/exactness behavior.
 
 ## Source-of-truth order
 
@@ -41,9 +42,12 @@ Use this order when sources disagree:
 2. The first handoff block in local `AGENT_STATE.md`, when that ignored file is
    present.
 3. This tracked runbook for the resume sequence and authorization boundary.
-4. [`ci-soak-runtime-harness.md`](../../ci-soak-runtime-harness.md) for the
+4. The retained
+   [r12 preflight-failure report](../../ci-soak-r12-preflight-fail-20260821-01.md)
+   for the latest external facts and consumed identities.
+5. [`ci-soak-runtime-harness.md`](../../ci-soak-runtime-harness.md) for the
    accumulated harness history and detailed contracts.
-5. The immutable
+6. The immutable
    [r9 rehearsal report](../../ci-soak-r9-rehearsal-20260821-01.md) and
    [r1-r7 architecture audit](../../ci-soak-r1-r7-architecture-audit.md) for
    historical evidence.
@@ -73,8 +77,9 @@ The ancestry command must exit `0`. Then:
    new relevant change, a fresh failure, or a newly authorized exact-HEAD
    attempt.
 5. The next actionable runtime slice is at most one fresh post-fix
-   `--count 2000` rehearsal using r11-or-later identities, and only after fresh
-   explicit authorization. The stopped r10 orchestration must not be resumed.
+   `--count 2000` rehearsal using r13-or-later identities, and only after fresh
+   explicit authorization. The consumed r10/r11/r12 orchestration must not be
+   resumed.
 
 If a new local change legitimately requires the architecture gate, run it from
 a clean tracked checkout:
@@ -115,8 +120,28 @@ co-tenants remained healthy under their exact IDs with restart count zero.
 Treat the r10 attempt name, prompt, local control directory, and authorization
 as consumed evidence. The exact record is the
 [r10 orchestration-stop report](../../ci-soak-r10-orchestration-stop-20260821-01.md).
-Do not resume r10 or launch a duplicate. A future attempt starts at r11 or
-later with fresh identities, gate, preflight, and explicit authorization.
+Do not resume r10 or launch a duplicate; the later r11/r12 outcomes below now
+supersede that historical continuation boundary.
+
+## Consumed r11 and r12 orchestration — no rehearsal ran
+
+The r11 authorization was consumed by read-only probe diagnostics only. Its
+corrected probe stopped because an expected no-match `pgrep` exit propagated
+through `pipefail`; no r11 remote identity or mutation was created.
+
+The fresh r12 exact-HEAD architecture gate and strict read-only runtime gate
+passed. The r12 preflight wrapper was then invoked exactly once and failed at
+`output_marker_hash_mismatch` before output-probe creation, Compose validation,
+co-tenant stop, or controller invocation. It released the owner lock and left
+project resources `0/0/0`. Independent postflight proved all four protected
+exact IDs still running with restart count zero and every readiness route
+green. The exact record is the
+[r12 preflight-failure report](../../ci-soak-r12-preflight-fail-20260821-01.md).
+
+Treat all r11/r12 local identities and retained r12 remote paths as consumed.
+Do not rerun, overwrite, adopt, or clean them. A future attempt starts at r13
+or later with a corrected marker hash, fresh identities, gate, preflight, and
+explicit authorization.
 
 ## Historical runtime safety snapshot
 
@@ -145,14 +170,14 @@ gate; do not silently substitute a new container.
 | Run local checks after a relevant local change | Allowed within that scoped change; avoid evidence-refresh repeats |
 | SSH, Docker/Colima inspection, or creation of a fresh Mac snapshot | Requires explicit authorization for the new external slice |
 | Stop or restore protected co-tenants; run `--count 2000` traffic | Requires the same fresh, bounded rehearsal authorization and a green preflight |
-| Reuse, rerun, overwrite, or clean r9 evidence | Forbidden |
+| Reuse, rerun, overwrite, or clean r9/r11/r12 evidence | Forbidden |
 | Full soak, rollback exercise, retained-evidence cleanup, production action | Separate future authorization required |
 | Fetch or push | Not authorized |
 
 Authorization for one item does not imply authorization for the next row.
 Project-scoped fail-closed cleanup and exact protected-co-tenant restoration are
-mandatory parts of any newly authorized rehearsal; cleanup of retained r9 or
-unrelated resources is outside that scope.
+mandatory parts of any newly authorized rehearsal; cleanup of retained
+evidence or unrelated resources is outside that scope.
 
 ## Requirements for one future post-fix rehearsal
 
@@ -185,5 +210,6 @@ or push gates.
 - [Runtime harness history](../../ci-soak-runtime-harness.md)
 - [Immutable r9 failure report](../../ci-soak-r9-rehearsal-20260821-01.md)
 - [r10 orchestration-stop report](../../ci-soak-r10-orchestration-stop-20260821-01.md)
+- [r12 preflight-failure report](../../ci-soak-r12-preflight-fail-20260821-01.md)
 - [Architecture audit and readiness contract](../../ci-soak-r1-r7-architecture-audit.md)
 - [Compose foundation context](ci-soak-compose-foundation.md)

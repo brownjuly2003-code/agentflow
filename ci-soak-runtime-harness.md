@@ -1306,3 +1306,32 @@ external authorization. That slice must preserve the historical short-run
 versus full-soak claim boundary or explicitly co-schedule a deliberately
 dual-mean rehearsal; it must not lower the full-soak floor. No full soak,
 rollback, cleanup, production action, fetch, or push occurred.
+
+## Local r9 contract reconciliation — 2026-08-21
+
+The separate local slice after the retained r9 failure restores the published
+FIX4 phase boundary without weakening the full-soak floor. Counts below
+`1_440_000` now run `VERIFY_PHASE=canary` with
+`AGENTFLOW_RATE_CONTRACT=kind_residual_20`; the exact full count retains
+`VERIFY_PHASE=soak` and `dual_mean_90`. The selected phase and contract are
+also recorded in `runtime-state.json` and revalidated against the phase-specific
+atomic verifier file.
+
+The controller now starts a named detached verifier before producer traffic.
+`verify_coschedule.py` emits a readiness marker, waits fail-closed for stable
+producer-final evidence or `ABORT`, and then replaces itself with the
+byte-pinned `pack/verify.py`. The controller binds the initial verifier by
+full container ID, Compose project/service/one-off labels, name, running state,
+and zero restarts; after producer completion it waits and logs the same ID,
+requires its exact terminal exit state, and removes that exact identity with a
+no-replacement proof during cleanup.
+
+TDD RED was two failures: the phase resolver was absent and the ordered path
+had no pre-producer verifier start. The focused runtime gate is GREEN at `95
+passed`. No Docker, Mac, traffic, rehearsal, soak, rollback, production action,
+fetch, or push ran in this local correction.
+
+This is `CLOSED-LOCAL`, not new runtime acceptance. The consumed r9 evidence
+remains immutable and failed. Any external validation of this correction needs
+a new exact-HEAD architecture gate, fresh snapshot/project/output identities,
+fresh preflight, and fresh authorization.

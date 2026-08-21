@@ -96,3 +96,17 @@ the deadline or lowering the `90 eps` full-soak floor. Any later external
 attempt requires a new exact-HEAD gate, fresh snapshot/project/output
 identities, a fresh preflight, and new authorization. Full soak, rollback,
 cleanup, production work, and push remain unauthorized.
+
+## Local follow-up
+
+The subsequent local TDD slice closes the code gap while preserving this
+attempt as immutable FAIL evidence. Short counts now select
+`canary` / `kind_residual_20`; only the exact full-soak count selects
+`soak` / `dual_mean_90`. A named verifier is started and identity-checked
+before producer traffic, waits for stable producer-final evidence, then runs
+the byte-pinned verifier. Its exact exit state, logs, phase-specific JSON, and
+cleanup identity are all checked fail-closed.
+
+Focused runtime verification passed `95` tests. No external retry occurred,
+so this is a local correction rather than rehearsal acceptance. The fresh
+identity, preflight, authorization, and claim boundaries above remain in force.

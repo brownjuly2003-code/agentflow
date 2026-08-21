@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FOUNDATION_ROOT = PROJECT_ROOT / "scripts" / "golden_soak"
 RUNTIME_PATH = FOUNDATION_ROOT / "runtime.py"
 SHIM_PATH = FOUNDATION_ROOT / "pods_shim.py"
+VERIFY_COSCHEDULE_PATH = FOUNDATION_ROOT / "verify_coschedule.py"
 
 PROJECT_NAME = "agentflow-ci-soak-test"
 RUN_LABEL = "golden-4h-soak-rv-20260819-07"
@@ -22,6 +23,7 @@ JM_ID = "a" * 64
 TM_ID = "b" * 64
 OBSERVER_ID = "c" * 64
 SHIM_ID = "d" * 64
+VERIFIER_ID = "e" * 64
 INIT_SERVICE_IDS = {
     "kafka-init": "1" * 64,
     "minio-init": "2" * 64,
@@ -48,6 +50,10 @@ def _runtime():
 
 def _shim():
     return _load(SHIM_PATH, "ci_soak_pods_shim_under_test")
+
+
+def _verify_coschedule():
+    return _load(VERIFY_COSCHEDULE_PATH, "ci_soak_verify_coschedule_under_test")
 
 
 def _inspect_payload(
@@ -132,8 +138,22 @@ def _transient_inspect_payload(
 
 
 def _transient_name(role: str) -> str:
-    suffix = "pods-shim" if role == "shim" else "observer"
+    suffix = {
+        "observer": "observer",
+        "shim": "pods-shim",
+        "verifier": "verifier",
+    }[role]
     return f"{PROJECT_NAME}-{suffix}"
+
+
+def _argv_env(argv: tuple[str, ...] | list[str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for index, argument in enumerate(argv[:-1]):
+        if argument != "-e":
+            continue
+        key, value = argv[index + 1].split("=", 1)
+        values[key] = value
+    return values
 
 
 def _transient_inspect_result(role: str, fault: str) -> tuple[int, str]:
@@ -141,13 +161,17 @@ def _transient_inspect_result(role: str, fault: str) -> tuple[int, str]:
         return 1, "inspect failed\n"
     if fault == "json":
         return 0, "{not-json\n"
-    container_id = SHIM_ID if role == "shim" else OBSERVER_ID
+    container_id = {
+        "observer": OBSERVER_ID,
+        "shim": SHIM_ID,
+        "verifier": VERIFIER_ID,
+    }[role]
     payload = _transient_inspect_payload(
         container_id,
         name=f"/{_transient_name(role)}",
     )
     if fault == "identity":
-        payload["Id"] = "e" * 64
+        payload["Id"] = "f" * 64
     elif fault == "project":
         payload["Config"]["Labels"]["com.docker.compose.project"] = "wrong"
     elif fault == "service":
@@ -264,42 +288,84 @@ class FakeRunner:
             )
         elif step == "observer-ready":
             return runtime.CommandResult(0, "observer_start run=test\n")
+        elif step == "verifier-start":
+            return runtime.CommandResult(0, f"{VERIFIER_ID}\n")
+        elif step == "inspect-verifier":
+            return runtime.CommandResult(
+                0,
+                json.dumps(
+                    _transient_inspect_payload(
+                        VERIFIER_ID,
+                        name=f"/{_transient_name('verifier')}",
+                    )
+                ),
+            )
+        elif step == "verifier-ready":
+            return runtime.CommandResult(0, "verifier_wait_start final=test-final.json\n")
         elif step == "producer":
+            values = _argv_env(argv)
+            run_label = values["RUN_LABEL"]
+            count = int(values["COUNT"])
+            rate_eps = float(values["RATE_EPS"])
             evidence = self.output_dir / "evidence"
             evidence.mkdir(parents=True, exist_ok=True)
-            (evidence / f"{RUN_LABEL}-final.json").write_text(
+            (evidence / f"{run_label}-final.json").write_text(
                 json.dumps(
                     {
                         "result": "PASS",
-                        "run_label": RUN_LABEL,
-                        "attempted": 2000,
-                        "delivered": 2000,
+                        "run_label": run_label,
+                        "attempted": count,
+                        "delivered": count,
                         "failures": 0,
-                        "rate_eps": 100.0,
-                        "elapsed_s": 20.0,
+                        "rate_eps": rate_eps,
+                        "elapsed_s": count / rate_eps,
                     }
                 ),
                 encoding="utf-8",
                 newline="\n",
             )
-            return runtime.CommandResult(0, "result=PASS delivered=2000 failures=0\n")
-        elif step == "verify":
+            return runtime.CommandResult(
+                0,
+                f"result=PASS delivered={count} failures=0\n",
+            )
+        elif step == "verifier-wait":
+            start_call = next(call for call in self.calls if call["step"] == "verifier-start")
+            values = _argv_env(start_call["argv"])
+            run_label = values["RUN_LABEL"]
+            phase = values["VERIFY_PHASE"]
+            rate_contract = values["AGENTFLOW_RATE_CONTRACT"]
+            expected = int(values["EXPECTED"])
             evidence = self.output_dir / "evidence"
-            (evidence / f"{RUN_LABEL}-soak-verify.json").write_text(
+            (evidence / f"{run_label}-{phase}-verify.json").write_text(
                 json.dumps(
                     {
                         "result": "PASS",
-                        "run_label": RUN_LABEL,
-                        "verify_phase": "soak",
-                        "expected": 2000,
-                        "rate_contract": "dual_mean_90",
+                        "run_label": run_label,
+                        "verify_phase": phase,
+                        "expected": expected,
+                        "rate_contract": rate_contract,
                         "flink": {"job_id": JOB_ID},
                     }
                 ),
                 encoding="utf-8",
                 newline="\n",
             )
-            return runtime.CommandResult(0, "result=PASS phase=soak expected=2000\n")
+            return runtime.CommandResult(0, "0\n")
+        elif step == "verifier-logs":
+            start_call = next(call for call in self.calls if call["step"] == "verifier-start")
+            values = _argv_env(start_call["argv"])
+            return runtime.CommandResult(
+                0,
+                f"result=PASS phase={values['VERIFY_PHASE']} expected={values['EXPECTED']}\n",
+            )
+        elif step == "inspect-verifier-final":
+            payload = _transient_inspect_payload(
+                VERIFIER_ID,
+                name=f"/{_transient_name('verifier')}",
+                running=False,
+            )
+            payload["State"]["ExitCode"] = 0
+            return runtime.CommandResult(0, json.dumps(payload))
 
         return runtime.CommandResult(returncode=0, stdout="")
 
@@ -441,6 +507,50 @@ def _config(runtime, output_dir: Path, *, source_root: Path = FOUNDATION_ROOT):
         count=2000,
         rate_eps=100.0,
     )
+
+
+def test_verification_contract_matches_short_and_full_claim_boundaries() -> None:
+    runtime = _runtime()
+
+    assert runtime._verification_contract(2000) == ("canary", "kind_residual_20")
+    assert runtime._verification_contract(runtime.FULL_SOAK_COUNT) == (
+        "soak",
+        "dual_mean_90",
+    )
+
+
+def test_coscheduled_verifier_waits_for_stable_final_and_honors_abort(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    coschedule = _verify_coschedule()
+    run_label = "golden-4h-soak-rv-20260819-07"
+    final_path = tmp_path / f"{run_label}-final.json"
+    final_path.write_text('{"result":"PASS"}\n', encoding="utf-8", newline="\n")
+
+    observed = coschedule.wait_for_producer_final(
+        tmp_path,
+        run_label,
+        10.0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert observed == final_path
+    assert capsys.readouterr().out.splitlines() == [
+        f"verifier_wait_start final={final_path.name} timeout_s=10.0",
+        f"verifier_wait_done final={final_path.name} bytes={final_path.stat().st_size}",
+    ]
+
+    (tmp_path / "ABORT").write_text("observer_failure\n", encoding="utf-8", newline="\n")
+    with pytest.raises(SystemExit, match="ABORT detail=observer_failure"):
+        coschedule.wait_for_producer_final(
+            tmp_path,
+            run_label,
+            10.0,
+            monotonic=lambda: 0.0,
+            sleep=lambda _seconds: None,
+        )
 
 
 def test_subprocess_runner_keeps_machine_stdout_separate_from_stderr(
@@ -656,8 +766,13 @@ def test_ordered_rehearsal_path_is_fail_closed_and_cleans_up(tmp_path: Path) -> 
         "baseline",
         "observer-start",
         "observer-ready",
+        "verifier-start",
+        "inspect-verifier",
+        "verifier-ready",
         "producer",
-        "verify",
+        "verifier-wait",
+        "verifier-logs",
+        "inspect-verifier-final",
         "ps-jm-final",
         "ps-tm-final",
         "inspect-jm-final",
@@ -665,12 +780,13 @@ def test_ordered_rehearsal_path_is_fail_closed_and_cleans_up(tmp_path: Path) -> 
         "collect-ps",
         "collect-logs",
         "observer-remove",
+        "verifier-remove",
         "shim-remove",
         "compose-down",
     ]
     assert [steps.index(step) for step in ordered] == sorted(steps.index(step) for step in ordered)
 
-    pack_jobs = {"baseline", "observer-start", "producer", "verify"}
+    pack_jobs = {"baseline", "observer-start", "verifier-start", "producer"}
     for call in runner.calls:
         if call["step"] in pack_jobs:
             joined = " ".join(call["argv"])
@@ -679,13 +795,56 @@ def test_ordered_rehearsal_path_is_fail_closed_and_cleans_up(tmp_path: Path) -> 
             assert "--project-name" in joined
             assert PROJECT_NAME in joined
 
+    verifier_start = next(call for call in runner.calls if call["step"] == "verifier-start")
+    verifier_argv = verifier_start["argv"]
+    assert "VERIFY_PHASE=canary" in verifier_argv
+    assert "AGENTFLOW_RATE_CONTRACT=kind_residual_20" in verifier_argv
+    assert "/golden-pack/verify_coschedule.py" in verifier_argv
+
     terminal = (output_dir / "result-final.txt").read_text(encoding="utf-8").strip()
     assert terminal.startswith("RESULT=REHEARSAL_PASS")
     assert "SOAK_PASS" not in terminal
     state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
     assert state["claim_boundary"] == "capacity-independent-compose-rehearsal"
+    assert state["verification"] == {
+        "phase": "canary",
+        "rate_contract": "kind_residual_20",
+    }
     assert state["container_ids"] == {"jobmanager": JM_ID, "taskmanager": TM_ID}
     assert state["flink"]["job_id"] == JOB_ID
+
+
+def test_full_count_keeps_soak_dual_mean_contract(tmp_path: Path) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    runner = FakeRunner(output_dir)
+    config = runtime.RuntimeConfig(
+        project_root=PROJECT_ROOT,
+        source_root=FOUNDATION_ROOT,
+        output_dir=output_dir,
+        project_name=PROJECT_NAME,
+        count=runtime.FULL_SOAK_COUNT,
+        rate_eps=100.0,
+    )
+
+    outcome = runtime.RuntimeHarness(
+        config,
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is True
+    verifier_start = next(call for call in runner.calls if call["step"] == "verifier-start")
+    assert "VERIFY_PHASE=soak" in verifier_start["argv"]
+    assert "AGENTFLOW_RATE_CONTRACT=dual_mean_90" in verifier_start["argv"]
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    assert state["verification"] == {
+        "phase": "soak",
+        "rate_contract": "dual_mean_90",
+    }
+    terminal = (output_dir / "result-final.txt").read_text(encoding="utf-8")
+    assert terminal.startswith("RESULT=SOAK_PASS_DUAL_MEAN_90")
 
 
 def test_one_shot_waits_bind_stopped_containers_by_exact_identity(tmp_path: Path) -> None:
@@ -901,7 +1060,7 @@ def test_existing_compose_project_resources_block_mutation_and_cleanup(tmp_path:
     assert "compose-down" not in steps
 
 
-@pytest.mark.parametrize("fail_step", ["baseline", "verify", "compose-down"])
+@pytest.mark.parametrize("fail_step", ["baseline", "verifier-wait", "compose-down"])
 def test_failure_or_cleanup_error_never_publishes_pass(
     tmp_path: Path,
     fail_step: str,
@@ -922,6 +1081,41 @@ def test_failure_or_cleanup_error_never_publishes_pass(
     terminal = (output_dir / "result-final.txt").read_text(encoding="utf-8")
     assert terminal.startswith("RESULT=FAIL")
     assert "PASS" not in terminal
+
+
+def test_nonzero_verifier_exit_is_inspected_logged_and_fails_closed(tmp_path: Path) -> None:
+    runtime = _runtime()
+    output_dir = tmp_path / "out"
+    payload = _transient_inspect_payload(
+        VERIFIER_ID,
+        name=f"/{_transient_name('verifier')}",
+        running=False,
+    )
+    payload["State"]["ExitCode"] = 7
+    runner = ScriptedStepRunner(
+        output_dir,
+        step_results={
+            "verifier-wait": (0, "7\n"),
+            "inspect-verifier-final": (0, json.dumps(payload)),
+        },
+    )
+
+    outcome = runtime.RuntimeHarness(
+        _config(runtime, output_dir),
+        runner=runner,
+        http_json=_flink_json,
+        sleep=lambda _seconds: None,
+    ).execute()
+
+    assert outcome.passed is False
+    assert outcome.reason == "verify_failed"
+    steps = [call["step"] for call in runner.calls]
+    assert steps.index("verifier-wait") < steps.index("verifier-logs")
+    assert steps.index("verifier-logs") < steps.index("inspect-verifier-final")
+    assert "verifier-remove" in steps
+    state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
+    assert state["transient_identities"]["verifier"]["exit_code"] == 7
+    assert state["transient_identities"]["verifier"]["completion_inspected"] is True
 
 
 def test_shim_runtime_material_is_output_child_mounted_and_removed_after_pass(
@@ -948,8 +1142,8 @@ def test_shim_runtime_material_is_output_child_mounted_and_removed_after_pass(
         "shim-probe",
         "baseline",
         "observer-start",
+        "verifier-start",
         "producer",
-        "verify",
     )
     seen_steps: set[str] = set()
     for call in runner.calls:
@@ -1042,7 +1236,7 @@ def test_remove_runtime_dir_rejects_matching_prefix_outside_output_parent(
 
 _L3_INSPECT_CASES = [
     (role, fault, reason)
-    for role in ("shim", "observer")
+    for role in ("shim", "observer", "verifier")
     for fault, reason in (
         ("identity", "container_inspect_invalid"),
         ("project", "container_project_mismatch"),
@@ -1118,7 +1312,11 @@ def test_l3_transient_inspect_fails_closed(
         output_dir,
         step_results={inspect_step: _transient_inspect_result(role, fault)},
     )
-    container_id = SHIM_ID if role == "shim" else OBSERVER_ID
+    container_id = {
+        "observer": OBSERVER_ID,
+        "shim": SHIM_ID,
+        "verifier": VERIFIER_ID,
+    }[role]
 
     outcome = runtime.RuntimeHarness(
         _config(runtime, output_dir),
@@ -1136,10 +1334,14 @@ def test_l3_transient_inspect_fails_closed(
         assert steps.index("shim-start") < steps.index("inspect-shim")
         assert "shim-probe" not in steps
         assert "observer-start" not in steps
-    else:
+    elif role == "observer":
         assert steps.index("observer-start") < steps.index("inspect-observer")
         assert "observer-ready" not in steps
         assert "inspect-shim" in steps
+    else:
+        assert steps.index("verifier-start") < steps.index("inspect-verifier")
+        assert "verifier-ready" not in steps
+        assert "inspect-observer" in steps
     remove_call = next(call for call in runner.calls if call["step"] == f"{role}-remove")
     assert remove_call["argv"] == ("C:/fake/docker.exe", "rm", "-f", container_id)
     assert "compose-down" in steps
@@ -1159,8 +1361,10 @@ def test_l3_transient_inspect_fails_closed(
     [
         ("shim-no-replacement", 0, f"{'e' * 64}\n"),
         ("observer-no-replacement", 0, f"{'e' * 64}\n"),
+        ("verifier-no-replacement", 0, f"{'f' * 64}\n"),
         ("shim-no-replacement", 1, ""),
         ("observer-no-replacement", 1, ""),
+        ("verifier-no-replacement", 1, ""),
     ],
 )
 def test_l3_replacement_or_missing_proof_fails_cleanup(
@@ -1191,14 +1395,22 @@ def test_l3_replacement_or_missing_proof_fails_cleanup(
     assert "post-down-networks" in steps
     assert "post-down-volumes" in steps
     if step.startswith("observer-"):
-        assert steps.index("observer-no-replacement") < steps.index("shim-remove")
+        assert steps.index("observer-no-replacement") < steps.index("verifier-remove")
+        assert "verifier-no-replacement" in steps
+    if step.startswith("verifier-"):
+        assert steps.index("verifier-no-replacement") < steps.index("shim-remove")
         assert "shim-no-replacement" in steps
     expected_error = f"{step}_failed" if returncode != 0 else f"{step}_present"
     state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
     assert expected_error in state["cleanup_errors"]
-    role = "shim" if step.startswith("shim-") else "observer"
+    role = step.split("-", 1)[0]
     record = state["transient_identities"][role]
-    assert record["id"] == (SHIM_ID if role == "shim" else OBSERVER_ID)
+    expected_id = {
+        "observer": OBSERVER_ID,
+        "shim": SHIM_ID,
+        "verifier": VERIFIER_ID,
+    }[role]
+    assert record["id"] == expected_id
     assert record["inspected"] is True
     assert record["removed"] is True
     assert record["no_replacement"] is not True
@@ -1227,6 +1439,8 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
     assert (
         steps.index("observer-remove")
         < steps.index("observer-no-replacement")
+        < steps.index("verifier-remove")
+        < steps.index("verifier-no-replacement")
         < steps.index("shim-remove")
         < steps.index("shim-no-replacement")
         < steps.index("compose-down")
@@ -1237,11 +1451,15 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
 
     inspect_shim = next(call for call in runner.calls if call["step"] == "inspect-shim")
     inspect_observer = next(call for call in runner.calls if call["step"] == "inspect-observer")
+    inspect_verifier = next(call for call in runner.calls if call["step"] == "inspect-verifier")
     assert inspect_shim["argv"] == ("C:/fake/docker.exe", "inspect", SHIM_ID)
     assert inspect_observer["argv"] == ("C:/fake/docker.exe", "inspect", OBSERVER_ID)
+    assert inspect_verifier["argv"] == ("C:/fake/docker.exe", "inspect", VERIFIER_ID)
     observer_rm = next(call for call in runner.calls if call["step"] == "observer-remove")
+    verifier_rm = next(call for call in runner.calls if call["step"] == "verifier-remove")
     shim_rm = next(call for call in runner.calls if call["step"] == "shim-remove")
     assert observer_rm["argv"] == ("C:/fake/docker.exe", "rm", "-f", OBSERVER_ID)
+    assert verifier_rm["argv"] == ("C:/fake/docker.exe", "rm", "-f", VERIFIER_ID)
     assert shim_rm["argv"] == ("C:/fake/docker.exe", "rm", "-f", SHIM_ID)
 
     project_label = f"label=com.docker.compose.project={PROJECT_NAME}"
@@ -1277,6 +1495,9 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
     observer_proof = next(
         call for call in runner.calls if call["step"] == "observer-no-replacement"
     )
+    verifier_proof = next(
+        call for call in runner.calls if call["step"] == "verifier-no-replacement"
+    )
     shim_proof = next(call for call in runner.calls if call["step"] == "shim-no-replacement")
     assert observer_proof["argv"] == (
         "C:/fake/docker.exe",
@@ -1286,6 +1507,15 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
         "--no-trunc",
         "--filter",
         f"name={_transient_name('observer')}",
+    )
+    assert verifier_proof["argv"] == (
+        "C:/fake/docker.exe",
+        "ps",
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "--filter",
+        f"name={_transient_name('verifier')}",
     )
     assert shim_proof["argv"] == (
         "C:/fake/docker.exe",
@@ -1299,7 +1529,11 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
 
     state = json.loads((output_dir / "runtime-state.json").read_text(encoding="utf-8"))
     assert "cleanup_errors" not in state
-    for role, container_id in (("shim", SHIM_ID), ("observer", OBSERVER_ID)):
+    for role, container_id in (
+        ("shim", SHIM_ID),
+        ("observer", OBSERVER_ID),
+        ("verifier", VERIFIER_ID),
+    ):
         record = state["transient_identities"][role]
         assert record["id"] == container_id
         assert record["name"] == f"/{_transient_name(role)}"
@@ -1309,6 +1543,8 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
         assert record["inspected"] is True
         assert record["removed"] is True
         assert record["no_replacement"] is True
+        assert record["completion_inspected"] is (role == "verifier")
+        assert record["exit_code"] == (0 if role == "verifier" else None)
     for kind in ("containers", "networks", "volumes"):
         assert state["cleanup_accounting"][kind] == {
             "count": 0,
@@ -1319,6 +1555,7 @@ def test_l3_happy_path_binds_and_cleans_transient_identities(tmp_path: Path) -> 
     assert terminal.startswith("RESULT=REHEARSAL_PASS")
     assert SHIM_ID in (output_dir / "runtime-state.json").read_text(encoding="utf-8")
     assert OBSERVER_ID in (output_dir / "runtime-state.json").read_text(encoding="utf-8")
+    assert VERIFIER_ID in (output_dir / "runtime-state.json").read_text(encoding="utf-8")
 
 
 class _ScriptedDockerResponse:

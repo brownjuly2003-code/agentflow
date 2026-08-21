@@ -41,6 +41,7 @@ _BLOCKER_ORDER = (
 _PYTHON_PATHS = (
     "scripts/golden_soak/runtime.py",
     "scripts/golden_soak/pods_shim.py",
+    "scripts/golden_soak/verify_coschedule.py",
     "scripts/golden_soak/wrapper.py",
     "scripts/golden_soak/architecture_gate.py",
     "tests/unit/test_ci_soak_runtime.py",

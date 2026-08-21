@@ -22,12 +22,16 @@ an identity-bound Kubernetes-pods compatibility shim (`pods_shim.py`). The
 controller validates every manifest size and SHA-256 before its first Docker
 command, uses the eight pack files through read-only mounts, requires one
 stable JobManager and one stable TaskManager, and writes fail-closed evidence
-before project-scoped cleanup.
+before project-scoped cleanup. `verify_coschedule.py` is controller support
+code outside the immutable eight-file pack: it lets the exact verifier
+container become ready before producer traffic, then delegates to the
+byte-pinned `pack/verify.py` only after stable producer-final evidence exists.
 
 The immutable source pack and Compose configuration by themselves **cannot emit a soak PASS**.
 Unit tests and configuration validation are not runtime evidence. There is
-still no CI workflow, and this implementation has not been rehearsed against
-live containers in the repository handoff that introduced it.
+still no CI workflow. The pre-correction runtime has one retained live r9
+failure; the co-scheduled, phase-specific correction has not yet received a
+new external rehearsal.
 
 Validate only the merged Compose model with:
 
@@ -163,8 +167,13 @@ cleanup path. Before build/up it refuses any existing container, volume, or
 network carrying that Compose project label, so cleanup cannot adopt an older
 project. Reuse of a non-empty output directory is also rejected.
 
-Counts below `1440000` can emit only `RESULT=REHEARSAL_PASS`; they cannot emit
-the full-soak token. The default `1440000 @ 100 eps` path may emit
+Counts below `1440000` use `VERIFY_PHASE=canary` with
+`AGENTFLOW_RATE_CONTRACT=kind_residual_20` and can emit only
+`RESULT=REHEARSAL_PASS`; they cannot emit the full-soak token. The verifier is
+started, identity-checked, and observed waiting before producer traffic, then
+its exact exit and final identity are checked before its evidence is accepted.
+The default `1440000 @ 100 eps` path retains `VERIFY_PHASE=soak` with
+`AGENTFLOW_RATE_CONTRACT=dual_mean_90` and may emit
 `RESULT=SOAK_PASS_DUAL_MEAN_90` only after producer, observer, exactness,
 Flink-identity, zero-restart, and cleanup checks all pass. Even that result is
 the **separate capacity-independent** gate and **does not close** the Mac

@@ -132,6 +132,12 @@ def _sanitize_reason(reason: str) -> str:
     return sanitized[:80] or "runtime_failure"
 
 
+def _verification_contract(count: int) -> tuple[str, str]:
+    if count == FULL_SOAK_COUNT:
+        return "soak", "dual_mean_90"
+    return "canary", "kind_residual_20"
+
+
 def _bounded_text(value: str, limit: int = MAX_COMMAND_OUTPUT_BYTES) -> str:
     encoded = value.encode("utf-8", errors="replace")
     if len(encoded) <= limit:
@@ -462,6 +468,7 @@ class RuntimeHarness:
         self.evidence_dir = config.output_dir / "evidence"
         self.logs_dir = config.output_dir / "logs"
         self.observer_id: str | None = None
+        self.verifier_id: str | None = None
         self.shim_id: str | None = None
         self.compose_touched = False
         self.output_owned = False
@@ -580,6 +587,7 @@ class RuntimeHarness:
             if self.config.count == FULL_SOAK_COUNT
             else "capacity-independent-compose-rehearsal"
         )
+        verify_phase, rate_contract = _verification_contract(self.config.count)
         self.state.update(
             {
                 "claim_boundary": claim_boundary,
@@ -587,6 +595,10 @@ class RuntimeHarness:
                 "project_name": self.config.project_name,
                 "count": self.config.count,
                 "rate_eps": self.config.rate_eps,
+                "verification": {
+                    "phase": verify_phase,
+                    "rate_contract": rate_contract,
+                },
                 "source_identity": self.identity.manifest_source_identity,
                 "source": self.identity.source,
                 "event_prefix": self.identity.event_prefix,
@@ -758,10 +770,17 @@ class RuntimeHarness:
             expected_name=self._observer_name(),
         )
         self._wait_observer_ready(self.observer_id)
+        self.verifier_id = self._start_verifier(gate)
+        self._inspect_transient_container(
+            self.verifier_id,
+            role="verifier",
+            expected_name=self._verifier_name(),
+        )
+        self._wait_verifier_ready(self.verifier_id)
         self._run_producer()
         self._assert_no_abort()
         self._validate_producer_final()
-        self._run_verifier(gate)
+        self._finish_verifier(self.verifier_id)
         self._assert_no_abort()
         self._validate_verify_final(gate)
 
@@ -1048,23 +1067,34 @@ class RuntimeHarness:
         *,
         role: str,
         expected_name: str,
+        terminal: bool = False,
+        expected_exit_code: int = 0,
     ) -> None:
         identities = self.state.setdefault("transient_identities", {})
-        if not isinstance(identities, dict) or role in identities:
+        if not isinstance(identities, dict):
             raise RuntimeFailure("runtime_state_invalid", "transient_identities")
-        record: dict[str, Any] = {
-            "id": container_id,
-            "name": f"/{expected_name}",
-            "project": self.config.project_name,
-            "service": "agentflow-api",
-            "oneoff": "",
-            "inspected": False,
-            "removed": False,
-            "no_replacement": False,
-        }
-        identities[role] = record
+        if terminal:
+            record = identities.get(role)
+            if not isinstance(record, dict) or record.get("id") != container_id:
+                raise RuntimeFailure("runtime_state_invalid", f"{role}_identity")
+        else:
+            if role in identities:
+                raise RuntimeFailure("runtime_state_invalid", "transient_identities")
+            record = {
+                "id": container_id,
+                "name": f"/{expected_name}",
+                "project": self.config.project_name,
+                "service": "agentflow-api",
+                "oneoff": "",
+                "inspected": False,
+                "completion_inspected": False,
+                "exit_code": None,
+                "removed": False,
+                "no_replacement": False,
+            }
+            identities[role] = record
 
-        step = f"inspect-{role}"
+        step = f"inspect-{role}-final" if terminal else f"inspect-{role}"
         result = self.runner.run(
             step,
             [self.docker_executable, "inspect", container_id],
@@ -1112,10 +1142,23 @@ class RuntimeHarness:
             raise RuntimeFailure("container_oneoff_mismatch", role)
         if restart_count != 0:
             raise RuntimeFailure("container_restarted", role)
-        if state.get("Running") is not True or state.get("Status") != "running":
-            raise RuntimeFailure("container_not_running", role)
-        record["oneoff"] = oneoff
-        record["inspected"] = True
+        if terminal:
+            exit_code = state.get("ExitCode")
+            if state.get("Running") is not False or state.get("Status") != "exited":
+                raise RuntimeFailure("container_not_exited", role)
+            if (
+                isinstance(exit_code, bool)
+                or not isinstance(exit_code, int)
+                or exit_code != expected_exit_code
+            ):
+                raise RuntimeFailure("container_exit_code_mismatch", role)
+            record["completion_inspected"] = True
+            record["exit_code"] = exit_code
+        else:
+            if state.get("Running") is not True or state.get("Status") != "running":
+                raise RuntimeFailure("container_not_running", role)
+            record["oneoff"] = oneoff
+            record["inspected"] = True
 
     def _wait_flink_gate(
         self,
@@ -1177,6 +1220,9 @@ class RuntimeHarness:
     def _observer_name(self) -> str:
         return f"{self.config.project_name}-observer"
 
+    def _verifier_name(self) -> str:
+        return f"{self.config.project_name}-verifier"
+
     def _host_mount(self, source: Path, target: str, *, read_only: bool = False) -> str:
         suffix = ":ro" if read_only else ""
         return f"{source.resolve()}:{target}{suffix}"
@@ -1194,6 +1240,7 @@ class RuntimeHarness:
         *,
         detached: bool = False,
         name: str | None = None,
+        script_path: str | None = None,
     ) -> list[str]:
         if self.runtime_dir is None:
             raise RuntimeFailure("runtime_directory_missing")
@@ -1219,7 +1266,7 @@ class RuntimeHarness:
                 *self._env_flags(values),
                 "agentflow-api",
                 "python",
-                f"/golden-pack/pack/{script_name}",
+                script_path or f"/golden-pack/pack/{script_name}",
             ]
         )
         return [*self._compose_prefix(), *run_flags]
@@ -1458,9 +1505,10 @@ class RuntimeHarness:
         ):
             raise RuntimeFailure("producer_final_contract_failed")
 
-    def _run_verifier(self, gate: FlinkGate) -> None:
+    def _start_verifier(self, gate: FlinkGate) -> str:
         if self.identity is None:
             raise RuntimeFailure("pack_identity_missing")
+        phase, rate_contract = _verification_contract(self.config.count)
         values = {
             **self._common_data_env(),
             **self._shim_env(),
@@ -1469,10 +1517,13 @@ class RuntimeHarness:
             "EVENT_PREFIX": self.identity.event_prefix,
             "ORDER_PREFIX": self.identity.order_prefix,
             "EXPECTED": str(self.config.count),
-            "VERIFY_PHASE": "soak",
-            "AGENTFLOW_RATE_CONTRACT": "dual_mean_90",
+            "VERIFY_PHASE": phase,
+            "AGENTFLOW_RATE_CONTRACT": rate_contract,
             "KAFKA_VERIFY_GROUP": f"{self.config.project_name}-verify",
             "EVIDENCE_DIR": "/evidence",
+            "PRODUCER_FINAL_WAIT_SECONDS": str(
+                int(max(600.0, (self.config.count / self.config.rate_eps) + 600.0))
+            ),
             "STOP_OBSERVER": "false",
             "FLINK_FAILED_CHECKPOINT_BASELINE": str(gate.checkpoints_failed),
             "FLINK_REST_BASE": "http://flink-jobmanager:8081",
@@ -1480,32 +1531,87 @@ class RuntimeHarness:
             "LAKE_GROUP": "agentflow-ci-soak-lake",
             "SERVING_GROUP": "agentflow-ci-soak-serving",
         }
+        output = self._run_required(
+            "verifier-start",
+            self._pack_command(
+                "verify.py",
+                values,
+                detached=True,
+                name=self._verifier_name(),
+                script_path="/golden-pack/verify_coschedule.py",
+            ),
+            60,
+        )
+        return _extract_single_container_id(
+            output,
+            reason="verifier_container_id_invalid",
+        )
+
+    def _wait_verifier_ready(self, verifier_id: str) -> None:
+        deadline = self.monotonic() + 90
+        attempt = 0
+        while self.monotonic() <= deadline:
+            attempt += 1
+            output = self._run_required(
+                "verifier-ready",
+                [self.docker_executable, "logs", "--tail", "100", verifier_id],
+                30,
+                attempt=attempt,
+            )
+            if "verifier_wait_start" in output:
+                return
+            self.sleep(2)
+        raise RuntimeFailure("verifier_start_timeout")
+
+    def _finish_verifier(self, verifier_id: str) -> None:
         catchup_budget = (self.config.count / 90.0) - (self.config.count / 100.0)
         timeout_s = max(1800.0, catchup_budget + 900.0)
-        output = self._run_required(
-            "verify",
-            self._pack_command("verify.py", values),
+        wait_output = self._run_required(
+            "verifier-wait",
+            [self.docker_executable, "wait", verifier_id],
             timeout_s,
         )
-        if "result=PASS phase=soak" not in output:
+        exit_code_text = _extract_single_full_line(
+            wait_output,
+            _EXIT_CODE_RE,
+            reason="verifier_wait_result_invalid",
+        )
+        exit_code = int(exit_code_text, 10)
+        logs = self._run_required(
+            "verifier-logs",
+            [self.docker_executable, "logs", verifier_id],
+            60,
+        )
+        self._inspect_transient_container(
+            verifier_id,
+            role="verifier",
+            expected_name=self._verifier_name(),
+            terminal=True,
+            expected_exit_code=exit_code,
+        )
+        if exit_code != 0:
+            raise RuntimeFailure("verify_failed", f"exit_code={exit_code}")
+        phase, _rate_contract = _verification_contract(self.config.count)
+        if f"result=PASS phase={phase}" not in logs:
             raise RuntimeFailure("verify_result_invalid")
 
     def _validate_verify_final(self, gate: FlinkGate) -> None:
         if self.identity is None:
             raise RuntimeFailure("pack_identity_missing")
-        path = self.evidence_dir / f"{self.identity.run_label}-soak-verify.json"
-        result = _load_bounded_json(path, "soak_verify")
+        phase, rate_contract = _verification_contract(self.config.count)
+        path = self.evidence_dir / f"{self.identity.run_label}-{phase}-verify.json"
+        result = _load_bounded_json(path, f"{phase}_verify")
         flink = result.get("flink")
         if (
             result.get("result") != "PASS"
             or result.get("run_label") != self.identity.run_label
-            or result.get("verify_phase") != "soak"
+            or result.get("verify_phase") != phase
             or result.get("expected") != self.config.count
-            or result.get("rate_contract") != "dual_mean_90"
+            or result.get("rate_contract") != rate_contract
             or not isinstance(flink, dict)
             or flink.get("job_id") != gate.job_id
         ):
-            raise RuntimeFailure("soak_verify_contract_failed")
+            raise RuntimeFailure("verify_contract_failed")
 
     def _assert_no_abort(self) -> None:
         path = self.evidence_dir / "ABORT"
@@ -1660,6 +1766,13 @@ class RuntimeHarness:
                 "observer",
                 self.observer_id,
                 self._observer_name(),
+                errors,
+            )
+        if self.verifier_id:
+            self._cleanup_transient(
+                "verifier",
+                self.verifier_id,
+                self._verifier_name(),
                 errors,
             )
         if self.shim_id:

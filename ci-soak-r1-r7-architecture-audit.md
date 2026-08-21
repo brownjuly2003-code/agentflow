@@ -491,3 +491,25 @@ The r9 snapshot/project/output is consumed failure evidence. A fix and its
 failing test are a new local contract-reconciliation slice; any external
 validation after that fix needs a new exact-HEAD gate, fresh runtime identities
 and preflight, and fresh authorization.
+
+### 2026-08-21 r9 timing finding closed locally
+
+The follow-up TDD slice closes the local orchestration/coverage gap without
+changing the `90 eps` full-soak floor. The controller now maps every short
+count to the published `canary` / `kind_residual_20` contract and reserves
+`soak` / `dual_mean_90` for the exact `1_440_000` full-soak count. It records
+that choice in runtime evidence and requires the corresponding phase-specific
+verifier JSON.
+
+Verifier creation latency is removed from both contracts: a named detached
+verifier becomes ready and waits for stable producer-final evidence before the
+producer starts. Initial and terminal checks bind the same full container ID,
+name, project/service/one-off labels, running/exited state, zero restart count,
+and exit code. Cleanup removes that exact ID and proves no same-name
+replacement remains.
+
+TDD RED reproduced the missing resolver and missing pre-producer verifier;
+the focused runtime suite then passed `95` tests. This disposition is
+`CLOSED-LOCAL` only. It does not rewrite the r9 FAIL, prove live Compose timing,
+or authorize another rehearsal, full soak, rollback, production action, or
+push.

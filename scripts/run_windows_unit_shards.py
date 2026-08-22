@@ -34,7 +34,12 @@ from collections import Counter
 from pathlib import Path
 
 DEFAULT_SHARD_SIZE = 300
-DEFAULT_MEMORY_BUDGET_MIB = 900
+# Measured on the supported Windows host (2026-08-21): per-shard peaks are
+# dominated by individual heavy test modules, not shard size — a 14-file
+# shard peaked at 830 MiB while its 147-test neighbour peaked at 94 MiB, and
+# the hottest shard reached 944 MiB. Splitting shards further cannot reduce a
+# single module's peak, so the budget sits just under the 1024 MiB guard.
+DEFAULT_MEMORY_BUDGET_MIB = 1000
 
 # "== 12 passed, 3 skipped, 1 xfailed in 4.56s ==" -> {"passed": 12, ...}
 _SUMMARY_RE = re.compile(r"(\d+) (passed|failed|error(?:s)?|skipped|xfailed|xpassed|warnings?)")

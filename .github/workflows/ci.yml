@@ -522,17 +522,19 @@ jobs:
       - name: Verify package is publishable
         run: npm pack --dry-run
 
-  # Audit F-11: package.json declares engines.node >=18 but CI exercised only
-  # Node 20. This lane backs the declared floor (18) and the next LTS (22)
-  # without touching the required "sdk-ts" context above — a matrix inside
-  # that job would rename its check context and break branch protection.
+  # Audit F-11: CI must exercise every Node version the package claims. The
+  # first run of this lane proved the old ">=18" engines floor untestable
+  # (Vitest 4 needs util.styleText, absent on Node 18), so the floor was
+  # honestly raised to ">=20": the required "sdk-ts" job covers 20, this lane
+  # covers the next LTS. A matrix inside the required job would rename its
+  # check context and break branch protection.
   sdk-ts-compat:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["18", "22"]
+        node-version: ["22"]
     defaults:
       run:
         working-directory: sdk-ts

@@ -13,6 +13,12 @@ Deprecation policy:
 
 ## [Unreleased]
 
+### Changed
+- `engines.node` floor raised from `>=18` to `>=20` (audit F-11). Node 18 is
+  end-of-life and the SDK toolchain (Vitest 4) needs `util.styleText`, which
+  Node 18 lacks — CI proved the declared 18 floor was untestable. CI now
+  exercises Node 20 (required lane) and 22 (compat lane).
+
 ### Added
 - `RetryPolicy` with exponential backoff, jitter, and `Retry-After` support for transient SDK failures
 - `CircuitBreaker`, `CircuitState`, and `CircuitOpenError` exports for repeated backend failure protection

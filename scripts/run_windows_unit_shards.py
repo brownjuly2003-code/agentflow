@@ -106,44 +106,74 @@ def parse_executed_count(output: str) -> int:
     return executed
 
 
-def _peak_private_mib(process: subprocess.Popen) -> float | None:
-    """Peak private memory of a finished child, best effort (None if unknown)."""
-    if sys.platform == "win32":
-        import ctypes
-        import ctypes.wintypes
+class _WindowsJob:
+    """Peak per-process commit within a child's process tree, via a Job Object.
 
-        class ProcessMemoryCounters(ctypes.Structure):
+    A venv's ``python.exe`` is a launcher that re-execs the real interpreter
+    as a child, so querying the Popen handle alone measures the shim (a few
+    MiB), not pytest. Children are auto-assigned to their parent's job;
+    ``PeakProcessMemoryUsed`` is the largest single-process peak commit in
+    the job — the exact quantity the host's 1 GiB per-process guard kills on.
+    """
+
+    def __init__(self) -> None:
+        import ctypes
+
+        self._ctypes = ctypes
+        self._kernel32 = ctypes.windll.kernel32
+        self._handle = self._kernel32.CreateJobObjectW(None, None)
+
+    def assign(self, process: subprocess.Popen) -> bool:
+        if not self._handle:
+            return False
+        return bool(
+            self._kernel32.AssignProcessToJobObject(
+                self._handle,
+                int(process._handle),  # noqa: SLF001 - open until Popen is GC'd
+            )
+        )
+
+    def peak_mib(self) -> float | None:
+        ctypes = self._ctypes
+        if not self._handle:
+            return None
+
+        class JobObjectExtendedLimitInformation(ctypes.Structure):
             _fields_ = [
-                ("cb", ctypes.wintypes.DWORD),
-                ("PageFaultCount", ctypes.wintypes.DWORD),
-                ("PeakWorkingSetSize", ctypes.c_size_t),
-                ("WorkingSetSize", ctypes.c_size_t),
-                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-                ("PagefileUsage", ctypes.c_size_t),
-                ("PeakPagefileUsage", ctypes.c_size_t),
+                ("BasicLimitInformation", ctypes.c_byte * 64),
+                ("IoInfo", ctypes.c_byte * 48),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
             ]
 
-        counters = ProcessMemoryCounters()
-        counters.cb = ctypes.sizeof(counters)
-        handle = int(process._handle)  # noqa: SLF001 - still open until Popen is GC'd
-        if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
-            return counters.PeakPagefileUsage / (1024 * 1024)
-        return None
-    return None
+        info = JobObjectExtendedLimitInformation()
+        job_object_extended_limit_information = 9
+        ok = self._kernel32.QueryInformationJobObject(
+            self._handle,
+            job_object_extended_limit_information,
+            ctypes.byref(info),
+            ctypes.sizeof(info),
+            None,
+        )
+        peak = info.PeakProcessMemoryUsed / (1024 * 1024) if ok else None
+        self._kernel32.CloseHandle(self._handle)
+        self._handle = None
+        return peak
 
 
 def run_shard(files: list[str]) -> tuple[int, str, float | None]:
+    job = _WindowsJob() if sys.platform == "win32" else None
     process = subprocess.Popen(  # noqa: S603
         [sys.executable, "-m", "pytest", "-q", *files],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    assigned = job.assign(process) if job is not None else False
     output, _ = process.communicate()
-    peak_mib = _peak_private_mib(process)
+    peak_mib = job.peak_mib() if job is not None and assigned else None
     return process.returncode, output, peak_mib
 
 

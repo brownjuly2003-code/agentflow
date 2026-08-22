@@ -625,7 +625,15 @@ lock.release()
     assert boundary_path.exists(), first.communicate(timeout=1)
     owner = json.loads((lock_path / "owner.json").read_text(encoding="utf-8"))
     assert owner["attempt_id"] == "owner-a"
-    assert owner["pid"] == first.pid
+    if sys.platform == "win32":
+        # The venv's python.exe is a launcher that re-execs the real
+        # interpreter as a child process, so the pid the worker records is
+        # not Popen.pid. The single-owner property is asserted below either
+        # way; only the exact-pid identity is POSIX-specific (audit F-07).
+        assert isinstance(owner["pid"], int)
+        assert owner["pid"] > 0
+    else:
+        assert owner["pid"] == first.pid
     assert owner["token"]
 
     second = subprocess.run(  # noqa: S603

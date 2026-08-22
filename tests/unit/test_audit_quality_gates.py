@@ -24,7 +24,16 @@ def test_required_ci_quality_gates_are_local_and_fail_closed() -> None:
     assert "--fail-under=90" in workflow
     assert "mkdocs build --strict" in workflow
     assert "python scripts/validate_project_claims.py" in workflow
-    assert "fail_ci_if_error: false" in workflow
+    # Audit F-06: the non-functional Codecov upload was removed outright, so
+    # no external reporting step can mask the local blocking floors, and the
+    # test job must not carry the OIDC capability that existed only for it.
+    all_step_actions = [
+        str(step.get("uses", ""))
+        for job in parsed["jobs"].values()
+        for step in job.get("steps", [])
+    ]
+    assert not any("codecov" in action.lower() for action in all_step_actions)
+    assert "id-token" not in parsed["jobs"]["test-unit"].get("permissions", {})
 
 
 def test_dev_profile_pins_quality_gate_tool_families() -> None:

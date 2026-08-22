@@ -216,6 +216,13 @@ must source identities and hashes only from the generated
 `wrapper-inputs.env` / `attempt-manifest.json`; the generator rejects consumed
 rounds and refuses to reuse an existing bundle directory.
 
+Shared roots must live under `/Users/julia/agentflow-fc5-7113966` — the only
+rw virtiofs mount the Colima VM has. The r14 attempt (2026-08-22) proved a
+root anywhere else (including `/tmp`) bind-mounts as an empty directory
+inside containers; the source-visibility probe (SHA-256 of a real tracked
+file through the daemon) is what catches this, so never replace it with a
+self-written marker.
+
 ## Detailed references
 
 - [Golden-soak source-pack README](../../scripts/golden_soak/README.md)

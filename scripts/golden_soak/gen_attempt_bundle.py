@@ -98,10 +98,12 @@ def derive_fields(spec: AttemptSpec) -> dict[str, str]:
         "control_id": f"{attempt_id}-control-{stamp}",
         "output_id": f"{attempt_id}-output-{stamp}",
         "local_control_dir": f".codex-grok-tasks/{attempt_id}-{stamp}",
-        # The Mac harness convention places attempt roots under /tmp (see
-        # e.g. /tmp/agentflow-soak-runtime-* in the soak evidence); this is
-        # an identity string for the remote host, not a local tempfile.
-        "remote_root": f"/tmp/{attempt_id}-{stamp}",  # noqa: S108
+        # r14 (2026-08-22) proved the Colima VM mounts ONLY
+        # /Users/julia/agentflow-fc5-7113966 (rw virtiofs) — a shared root
+        # anywhere else (including /tmp) bind-mounts as an empty directory
+        # inside containers and fails the source-visibility preflight.
+        # Attempt roots therefore live under that mount.
+        "remote_root": f"/Users/julia/agentflow-fc5-7113966/{attempt_id}-{stamp}",
         "output_marker_text": marker_text,
         "output_marker_sha256": hashlib.sha256(marker_text.encode("utf-8")).hexdigest(),
     }

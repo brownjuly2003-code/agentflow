@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 mcp = [
     # MCP 2 removes the low-level Server decorators used by this integration.
-    "mcp>=1.0,<2",
+    "mcp>=1.0,<3",
 ]
 
 [project.scripts]

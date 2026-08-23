@@ -1530,6 +1530,81 @@ eligibility, capture, recovery, or production readiness. No target Pod/volume,
 traffic, production action, or push occurred. The authorization and evidence
 identity are consumed; no automatic successor gate is created.
 
+## Upstream root-cause classification and local repro attempts — 2026-08-23
+
+Local/read-only documentation slice on the Windows workstation. No SSH, no
+target access, no runtime mutation, no push of live state. Executor: Claude
+(session-delegated decisions, owner instruction 2026-08-23).
+
+### Version identity (Repository contract)
+
+`uv.lock` pins `duckdb == 1.5.4` both at the current HEAD and at the failing
+image commit `ed03fc47` (`agentflow/api:ed03fc47-iceberg-live-20260801-01`).
+The WAL was therefore written and replayed by the same DuckDB version — the
+failure is **not** a version-skew replay.
+
+### Upstream match (Observed, external)
+
+The exact assertion string matches open upstream reports:
+
+- [duckdb/duckdb#19712](https://github.com/duckdb/duckdb/issues/19712) —
+  same error on WAL replay after a process crash; state `open`, label
+  `needs reproducible example` (checked 2026-08-23).
+- [duckdb/duckdb#20543](https://github.com/duckdb/duckdb/issues/20543) —
+  same assertion, has a reproducer; `open`.
+- [duckdb/duckdb#18259](https://github.com/duckdb/duckdb/issues/18259) —
+  same replay failure for `ADD COLUMN ... DEFAULT <expr>` WAL records;
+  `open`.
+
+A 2026-05-27 forensic comment on #19712 reports ~80 % reproduction on
+Windows with DuckDB v1.5.3 from **plain bulk DML followed by brutal process
+termination** — no `ATTACH` involved — and three recovery properties
+observed there: deleting the `.wal` alone did **not** restore read-write
+open; `access_mode=READ_ONLY` opened successfully by skipping WAL replay
+and allowed `EXPORT DATABASE`; export + import into a fresh database
+recovered the data fully.
+
+This upstream trigger class is consistent with the E6 abrupt-Colima-restart
+**Inference**; it does not prove the origin for our bytes.
+
+### Local reproduction attempts (non-target scratch, duckdb 1.5.4)
+
+- 10 × brutal-exit cycles (`CREATE TABLE` with a default-expression
+  column, 100 DML statements, `os._exit(0)` with no close/checkpoint,
+  reopen): 10/10 clean replays.
+- Torn-tail sweep: one 16,021-byte WAL truncated at 164 offsets, each
+  reopened against a pristine base file: 161 clean opens, 3 parse-level
+  failures at sub-header offsets, **0** internal errors, **0**
+  `GetDefaultDatabase` failures.
+
+Conclusion: a fully flushed or cleanly torn WAL replays correctly on
+1.5.4; the failure requires a rarer interleaving (upstream evidence points
+at termination while a checkpoint or multi-frame write is in flight).
+This matches the upstream `needs reproducible example` status.
+
+### Implications for the recovery options
+
+1. The root cause is an **upstream DuckDB storage bug class**, not
+   application misuse; no application code change can retroactively repair
+   the failing file.
+2. A DuckDB version bump cannot be claimed as remediation while the
+   upstream issues remain open.
+3. The upstream-validated `READ_ONLY` open + `EXPORT DATABASE` path is the
+   preferred **capture** branch for a future owner-authorized runtime
+   slice: it needs read access only and performs no WAL replay. It must be
+   rehearsed against a copy first; it is not hereby authorized.
+4. Prevention hardening candidates (separate change-controlled work, not
+   this slice): a periodic `CHECKPOINT` to bound the WAL window, and a
+   startup error path that names this design doc instead of a bare
+   crash-loop exit.
+
+### Claim boundary for this classification slice
+
+No target Pod/volume, `/data` path, DuckDB/WAL byte, pod `exec`, restart,
+traffic, capture, recovery, production transition, or consumed-gate re-run
+occurred. All prior gate outcomes and consumed authorizations are
+unchanged.
+
 ## Open questions and data-owner decisions
 
 1. **RPO/RTO for this stand.** Repository disaster-recovery docs refuse
@@ -1560,6 +1635,30 @@ identity are consumed; no automatic successor gate is created.
    ACL/xattr capture-and-restore preservation or target-volume feasibility.
    Status remains `CAPABILITY_REHEARSAL_REQUIRED`; no capture operator runbook
    is approved.
+
+### Session-delegated dispositions — 2026-08-23
+
+Recorded under the owner's 2026-08-23 delegation ("continue autonomously,
+decisions delegated"). These are **decision records only**; they authorize
+no runtime action by themselves, and the owner may override them before any
+future runtime slice.
+
+1. **RPO (question 1):** total loss of the embedded control-plane state of
+   this candidate stand is acceptable. The stand is a checkpoint-restore
+   rehearsal deployment; its embedded records are synthetic rehearsal
+   traffic; serving data lives in ClickHouse; production remains
+   `candidate`.
+2. **Discardable classes (question 2):** all embedded record classes are
+   discardable **after** one best-effort read-only capture attempt
+   (`READ_ONLY` open + `EXPORT DATABASE`, per the 2026-08-23
+   classification above) has been made and its outcome recorded — whether
+   it succeeds or fails.
+3. **External backup (question 3):** none is known; treat as nonexistent.
+4. **Recommended recovery branch:** read-only export capture, then fresh
+   store files (new `DUCKDB_PATH`/usage-path basenames), leaving the
+   failing file set in place untouched as forensic material. Execution
+   requires its own explicitly authorized runtime slice under the
+   fail-closed protocol of this design.
 
 ## Claim boundary for this documentation slice
 

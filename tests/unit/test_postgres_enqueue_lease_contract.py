@@ -10,7 +10,11 @@ from pathlib import Path
 # Audit F-08: enqueue_webhook_delivery lives in the webhook capability
 # module since the adapter split.
 POSTGRES = (
-    Path(__file__).resolve().parents[2] / "src" / "serving" / "control_plane" / "postgres_webhook.py"
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "serving"
+    / "control_plane"
+    / "postgres_webhook.py"
 )
 
 

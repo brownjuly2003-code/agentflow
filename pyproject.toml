@@ -164,6 +164,11 @@ environments = [
     "python_version == '3.12'",
     "python_version == '3.13'",
 ]
+# schemathesis 4.24.x declares jsonschema-rs>=0.49.0 but calls
+# CanonicalSchema.is_satisfiable, which jsonschema-rs 0.50.0 removed —
+# tests/contract fails with AttributeError on 0.50.x. Constrain the
+# transitive resolution until schemathesis fixes its range upstream.
+constraint-dependencies = ["jsonschema-rs<0.50"]
 
 [tool.ruff]
 target-version = "py311"

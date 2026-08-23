@@ -231,9 +231,10 @@ ignore = ["S101", "S311"]
 "src/serving/api/routers/lineage.py" = [
     "S608",
 ]
-# Interpolations are internal literals only (a lease-expiry SQL fragment,
-# optional filter clauses, table-name constants); all values bind via %s.
-"src/serving/control_plane/postgres.py" = [
+# Interpolations are internal literals only (the _replace_record_set
+# table-name constant — audit F-08 moved it here from postgres.py); all
+# values bind via %s.
+"src/serving/control_plane/postgres_base.py" = [
     "S608",
 ]
 "src/serving/api/routers/slo.py" = [

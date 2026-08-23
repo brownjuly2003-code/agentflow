@@ -135,7 +135,9 @@ _ALLOWED_B608_SITES = {
     # (save_webhook_registrations / save_alert_rules); every value binds via
     # %s. All other adapter SQL is literal (the lease fragment is inlined and
     # the tenant/reason filters branch into full literal statements).
-    "src/serving/control_plane/postgres.py": 3,
+    # Audit F-08: the helper lives in postgres_base.py since the capability
+    # split; the counted sites are unchanged.
+    "src/serving/control_plane/postgres_base.py": 3,
     # D2 (reviewed 2026-07-04): the new orders.status stage-trail seed INSERT
     # in initialize_demo_data follows the same pattern as the file's other six
     # seed-block sites — a static f-string of hardcoded demo ids and

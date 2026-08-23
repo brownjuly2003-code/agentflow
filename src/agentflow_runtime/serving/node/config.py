@@ -113,7 +113,7 @@ def resolve_node_config(env: Mapping[str, str] | None = None) -> NodeConfig:
     if demo_key and token == demo_key:
         raise NodeConfigError(
             "AGENTFLOW_NODE_TOKEN must not equal the public demo API key "
-            f"(DEMO_API_KEY={demo_key!r}) — that key is published in the demo "
+            "(DEMO_API_KEY) — that key is published in the demo "
             "docs, so reusing it as the node token would let any public demo "
             "caller authenticate as node-to-node federation."
         )

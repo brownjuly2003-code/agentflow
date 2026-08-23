@@ -518,6 +518,9 @@ class AuthManager:
     def revoke_key(self, api_key: str) -> bool:
         return self._key_rotator.revoke_key(api_key)
 
+    def revoke_key_by_id(self, key_id: str) -> bool:
+        return self._key_rotator.revoke_key_by_id(key_id)
+
     def rotate_key(self, key_id: str) -> tuple[TenantKey, datetime]:
         return self._key_rotator.rotate_key(key_id)
 

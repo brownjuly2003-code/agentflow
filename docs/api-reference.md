@@ -127,7 +127,7 @@ All admin endpoints require `X-Admin-Key`.
 | `POST` | `/v1/admin/keys/{key_id}/rotate` | Rotate a key with a grace period | Path param only |
 | `GET` | `/v1/admin/keys/{key_id}/rotation-status` | Check grace-period status and old-key traffic | Path param only |
 | `POST` | `/v1/admin/keys/{key_id}/revoke-old` | Revoke the old key after migration | Path param only |
-| `DELETE` | `/v1/admin/keys/{api_key}` | Revoke a key immediately | Path param only |
+| `DELETE` | `/v1/admin/keys/{key_id}` | Revoke a key immediately | Path param only |
 | `GET` | `/v1/admin/usage` | Request volume by tenant | None |
 | `GET` | `/v1/admin/analytics/usage` | Usage analytics | `window`, `tenant` |
 | `GET` | `/v1/admin/analytics/top-queries` | Most frequent queries | `limit`, `window` |
@@ -727,7 +727,7 @@ All admin routes require `X-Admin-Key` and are intended for platform owners, not
 - `POST /v1/admin/keys/{key_id}/rotate`
 - `GET /v1/admin/keys/{key_id}/rotation-status`
 - `POST /v1/admin/keys/{key_id}/revoke-old`
-- `DELETE /v1/admin/keys/{api_key}`
+- `DELETE /v1/admin/keys/{key_id}`
 
 **Usage and analytics**
 - `GET /v1/admin/usage`

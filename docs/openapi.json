@@ -587,21 +587,21 @@
         }
       }
     },
-    "/v1/admin/keys/{api_key}": {
+    "/v1/admin/keys/{key_id}": {
       "delete": {
         "tags": [
           "admin"
         ],
         "summary": "Revoke Api Key",
-        "operationId": "revoke_api_key_v1_admin_keys__api_key__delete",
+        "operationId": "revoke_api_key_v1_admin_keys__key_id__delete",
         "parameters": [
           {
-            "name": "api_key",
+            "name": "key_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Api Key"
+              "title": "Key Id"
             }
           },
           {

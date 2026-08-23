@@ -4,6 +4,15 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### BREAKING — admin key revoke is by `key_id`, not plaintext (audit F-02 A)
+
+`DELETE /v1/admin/keys/{api_key}` is now `DELETE /v1/admin/keys/{key_id}`: a
+credential must never appear in a request path. Callers must pass `key_id`,
+obtainable from `GET /v1/admin/keys` or the `key_id` field returned by
+`POST /v1/admin/keys`. A 404 no longer echoes the supplied path value.
+`AGENTFLOW_NODE_TOKEN` collision errors name the `DEMO_API_KEY` environment
+variable without embedding its value.
+
 ### Changed — runtime import namespace: `src.*` → `agentflow_runtime.*` (audit F-09 / P2-6 Phase 1-2)
 
 The runtime package now installs and imports as `agentflow_runtime`; the

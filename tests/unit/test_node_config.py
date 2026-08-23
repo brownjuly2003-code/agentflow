@@ -220,7 +220,7 @@ def test_token_equal_to_custom_demo_api_key_env_fails_fast() -> None:
     # DEMO_API_KEY overrides the default "demo-key" (src/agentflow_runtime/serving/api/main.py) —
     # the guard must compare against whatever value is actually configured,
     # not just the hardcoded default.
-    with pytest.raises(NodeConfigError, match="demo API key"):
+    with pytest.raises(NodeConfigError, match="demo API key") as exc_info:
         resolve_node_config(
             {
                 "AGENTFLOW_NODE_ROLE": "center",
@@ -228,6 +228,7 @@ def test_token_equal_to_custom_demo_api_key_env_fails_fast() -> None:
                 "DEMO_API_KEY": "custom-demo-value",
             }
         )
+    assert "custom-demo-value" not in str(exc_info.value)
 
 
 def test_token_distinct_from_demo_key_is_fine() -> None:

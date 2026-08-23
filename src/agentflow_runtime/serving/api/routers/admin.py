@@ -76,14 +76,14 @@ async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]
 
 
 @router.delete(
-    "/keys/{api_key}",
+    "/keys/{key_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
 )
-async def revoke_api_key(api_key: str, request: Request) -> Response:
+async def revoke_api_key(key_id: str, request: Request) -> Response:
     manager = get_auth_manager(request)
-    if not manager.revoke_key(api_key):
-        raise HTTPException(status_code=404, detail=f"API key '{api_key}' not found.")
+    if not manager.revoke_key_by_id(key_id):
+        raise HTTPException(status_code=404, detail="API key not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -110,6 +110,29 @@ class KeyRotator:
         self._manager.load()
         return True
 
+    def revoke_key_by_id(self, key_id: str) -> bool:
+        with self._manager._config_lock:
+            config = self._manager._load_config()
+            self.ensure_key_ids(config)
+            index = self.find_key_index(config, key_id)
+            if index is None:
+                return False
+            item = config.keys.pop(index)
+            self.write_config(config)
+            if item.key_id is not None:
+                self.cancel_rotation_cleanup_timers(item.key_id)
+            dropped_hashes = {
+                value for value in (item.key_hash, item.previous_key_hash) if value is not None
+            }
+            dropped_values = {item.key} if item.key is not None else set()
+            self._manager._runtime_plaintext_by_hash = {
+                key_hash: key_value
+                for key_hash, key_value in self._manager._runtime_plaintext_by_hash.items()
+                if key_hash not in dropped_hashes and key_value not in dropped_values
+            }
+        self._manager.load()
+        return True
+
     def rotate_key(self, key_id: str) -> tuple[TenantKey, datetime]:
         with self._manager._config_lock:
             config = self._manager._load_config()

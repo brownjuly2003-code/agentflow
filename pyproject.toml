@@ -42,7 +42,7 @@ cloud = [
     "pyiceberg>=0.7,<1",
     # PyIceberg 0.11 write paths require native transforms. Core 0.8 excludes
     # Python 3.13, while 0.7 provides a stable-ABI wheel across Python 3.11-3.13.
-    "pyiceberg-core>=0.7,<0.8",
+    "pyiceberg-core>=0.7,<0.11",
 ]
 postgres = [
     # ADR 0010 slice 5: PostgresControlPlaneStore (scale profile). Optional

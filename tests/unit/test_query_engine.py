@@ -6,8 +6,8 @@ import pytest
 import sqlglot
 from sqlglot import exp
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 
 @pytest.fixture
@@ -129,7 +129,7 @@ def test_scope_sql_rescopes_foreign_schema_qualified_table(engine: QueryEngine) 
 
 
 def test_query_package_exports_query_engine() -> None:
-    from src.serving.semantic_layer.query import QueryEngine as PackageQueryEngine
+    from agentflow_runtime.serving.semantic_layer.query import QueryEngine as PackageQueryEngine
 
     assert PackageQueryEngine is QueryEngine
 
@@ -138,6 +138,7 @@ def test_nl_query_plan_normalizer_source_has_no_mojibake() -> None:
     source = (
         Path(__file__).resolve().parents[2]
         / "src"
+        / "agentflow_runtime"
         / "serving"
         / "semantic_layer"
         / "query"

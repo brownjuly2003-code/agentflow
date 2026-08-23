@@ -1,6 +1,6 @@
 """Unit tests for the ClickHouse serving backend.
 
-Closes the 0% line-coverage gap on `src/serving/backends/clickhouse_backend.py`
+Closes the 0% line-coverage gap on `src/agentflow_runtime/serving/backends/clickhouse_backend.py`
 flagged in audit p5. We mock `urllib.request.urlopen` so we never need
 a real ClickHouse server — the goal is to verify SQL translation, HTTP error
 mapping, and the health/missing-table paths.
@@ -18,8 +18,8 @@ import pytest
 import sqlglot
 from sqlglot import exp
 
-from src.serving.backends import BackendExecutionError, BackendMissingTableError
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.backends import BackendExecutionError, BackendMissingTableError
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
 
 # Injection payloads shared with the DuckDB-path coverage in
 # tests/unit/test_query_engine_injection.py. Includes the backslash vectors
@@ -139,7 +139,9 @@ def test_request_sends_post_with_basic_auth_and_database(backend):
         captured["auth"] = req.get_header("Authorization")
         return _http_response(b'{"data":[{"value":1}]}')
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         rows = backend.execute("SELECT 1 AS value")
 
     assert rows == [{"value": 1}]
@@ -160,7 +162,7 @@ def test_unknown_table_http_error_maps_to_missing_table_exception(backend):
         fp=BytesIO(body),
     )
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=err):
+    with patch("agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=err):
         with pytest.raises(BackendMissingTableError):
             backend.execute("SELECT * FROM agentflow.missing")
 
@@ -175,7 +177,7 @@ def test_other_http_error_maps_to_execution_error(backend):
         fp=BytesIO(body),
     )
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=err):
+    with patch("agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=err):
         with pytest.raises(BackendExecutionError) as info:
             backend.execute("SELECT bogus")
 
@@ -184,7 +186,7 @@ def test_other_http_error_maps_to_execution_error(backend):
 
 def test_url_error_maps_to_execution_error(backend):
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         side_effect=URLError("connection refused"),
     ):
         with pytest.raises(BackendExecutionError) as info:
@@ -203,7 +205,7 @@ def test_table_columns_returns_empty_on_missing_table(backend):
         fp=BytesIO(body),
     )
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=err):
+    with patch("agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=err):
         cols = backend.table_columns("absent")
 
     assert cols == set()
@@ -219,7 +221,7 @@ def test_table_columns_returns_empty_on_unknown_database(backend):
         fp=BytesIO(body),
     )
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=err):
+    with patch("agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=err):
         cols = backend.table_columns("anything")
 
     assert cols == set()
@@ -231,7 +233,7 @@ def test_table_columns_parses_describe_output(backend):
     ).encode()
 
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(payload),
     ):
         cols = backend.table_columns("orders_v2")
@@ -243,7 +245,7 @@ def test_explain_returns_one_tuple_per_plan_line(backend):
     payload = b"Expression\n  ReadFromMergeTree\n"
 
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(payload),
     ):
         plan = backend.explain("SELECT 1")
@@ -255,7 +257,7 @@ def test_health_reports_ok_on_select_one(backend):
     payload = b'{"data":[{"value":1}]}'
 
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(payload),
     ):
         report = backend.health()
@@ -268,7 +270,7 @@ def test_health_reports_ok_on_select_one(backend):
 
 def test_health_reports_error_on_url_error(backend):
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         side_effect=URLError("transport down"),
     ):
         report = backend.health()
@@ -411,7 +413,9 @@ def test_initialize_demo_data_sends_native_clickhouse_ddl_untranslated(backend):
         # Non-empty count() so the seed INSERTs are skipped after the DDL.
         return _http_response(b'{"data":[{"value":1}]}')
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         backend.initialize_demo_data()
 
     create_statements = [sql for sql in sent if "CREATE TABLE" in sql]
@@ -434,7 +438,9 @@ def test_table_columns_sends_describe_untranslated(backend):
         captured["data"] = req.data
         return _http_response(b'{"data":[{"name":"order_id","type":"String"}]}')
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         cols = backend.table_columns("orders_v2")
 
     assert cols == {"order_id"}
@@ -450,7 +456,9 @@ def test_explain_translates_inner_sql_before_wrapping(backend):
         captured["data"] = req.data.decode("utf-8")
         return _http_response(b"Expression\n")
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         backend.explain("SELECT COUNT(*) FILTER (WHERE ok) AS n FROM t")
 
     assert captured["data"].startswith("EXPLAIN ")
@@ -461,14 +469,14 @@ def test_explain_translates_inner_sql_before_wrapping(backend):
 def test_scalar_returns_first_value_or_none(backend):
     payload = b'{"data":[{"only":42}]}'
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(payload),
     ):
         assert backend.scalar("SELECT 42 AS only") == 42
 
     empty = b'{"data":[]}'
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(empty),
     ):
         assert backend.scalar("SELECT 1 WHERE FALSE") is None
@@ -487,7 +495,9 @@ def test_execute_reads_with_final_setting(backend):
         captured["url"] = req.full_url
         return _http_response(b'{"data":[]}')
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         backend.execute("SELECT COUNT(*) AS value FROM orders_v2")
 
     assert "final=1" in captured["url"]
@@ -500,7 +510,9 @@ def test_ddl_and_inserts_do_not_carry_final(backend):
         urls.append(req.full_url)
         return _http_response(b'{"data":[{"value":1}]}')
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         backend.ensure_schema()
         backend.insert_rows("pipeline_events", [{"event_id": "e1", "topic": "t"}])
 
@@ -519,7 +531,7 @@ def test_table_columns_hides_materialized_version_column(backend):
         b'{"name":"alias_col","default_type":"ALIAS"}]}'
     )
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(payload),
     ):
         assert backend.table_columns("orders_v2") == {"order_id", "status"}
@@ -542,7 +554,9 @@ def test_insert_rows_formats_jsoneachrow(backend):
         "created_at": datetime(2026, 7, 2, 10, 30, 0),
         "entity_id": None,
     }
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         backend.insert_rows("orders_v2", [row])
 
     header, payload = captured["data"].split("\n", 1)
@@ -562,7 +576,7 @@ def test_insert_rows_formats_jsoneachrow(backend):
 
 def test_insert_rows_rejects_hostile_identifiers(backend):
     with patch(
-        "src.serving.backends.clickhouse_backend.urlopen",
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen",
         return_value=_http_response(b""),
     ):
         with pytest.raises(BackendExecutionError, match="invalid table name"):
@@ -574,7 +588,7 @@ def test_insert_rows_rejects_hostile_identifiers(backend):
 
 
 def test_insert_rows_noop_on_empty(backend):
-    with patch("src.serving.backends.clickhouse_backend.urlopen") as mocked:
+    with patch("agentflow_runtime.serving.backends.clickhouse_backend.urlopen") as mocked:
         backend.insert_rows("orders_v2", [])
     mocked.assert_not_called()
 
@@ -684,7 +698,9 @@ def test_create_database_bootstrap_does_not_set_session_database(backend):
         urls.append(req.full_url)
         return _http_response(b'{"data":[{"value":1}]}')
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         backend.ensure_schema()
 
     assert "database=agentflow" not in urls[0], "bootstrap must not set the session database"

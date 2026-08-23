@@ -35,7 +35,7 @@ mkdocs serve -a 127.0.0.1:8010
 Run the API on another port when needed:
 
 ```bash
-uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8001
+uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8001
 ```
 
 ## Kafka or Flink startup is slow

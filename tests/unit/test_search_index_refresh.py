@@ -15,9 +15,9 @@ from __future__ import annotations
 import tracemalloc
 from datetime import datetime, timedelta
 
-from src.serving.backends import BackendExecutionError
-from src.serving.semantic_layer.catalog import EntityDefinition
-from src.serving.semantic_layer.search_index import SearchDocument, SearchIndex
+from agentflow_runtime.serving.backends import BackendExecutionError
+from agentflow_runtime.serving.semantic_layer.catalog import EntityDefinition
+from agentflow_runtime.serving.semantic_layer.search_index import SearchDocument, SearchIndex
 
 T0 = datetime(2026, 7, 12, 12, 0, 0)
 

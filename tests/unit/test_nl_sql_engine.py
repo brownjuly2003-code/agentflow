@@ -17,8 +17,8 @@ import json
 
 import pytest
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.nl_sql_engine import (
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.nl_sql_engine import (
     GenerateRequest,
     GenerateResponse,
     GenerationErrorKind,
@@ -27,8 +27,11 @@ from src.serving.semantic_layer.nl_sql_engine import (
     generate_sql_text,
     validate_sql,
 )
-from src.serving.semantic_layer.nl_sql_engine._sql_envelope import strip_ansi, unwrap_sql_json
-from src.serving.semantic_layer.nl_sql_engine.parsing import parse_generate_sql_output
+from agentflow_runtime.serving.semantic_layer.nl_sql_engine._sql_envelope import (
+    strip_ansi,
+    unwrap_sql_json,
+)
+from agentflow_runtime.serving.semantic_layer.nl_sql_engine.parsing import parse_generate_sql_output
 
 
 class _SeqProvider:

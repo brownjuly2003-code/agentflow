@@ -2,7 +2,7 @@
 
 ## Overview
 
-**ClickHouse is the shipped serving engine** ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md), executed 2026-07-02): `config/serving.yaml` defaults to `backend: clickhouse`, `make demo` and `docker-compose.prod.yml` bring the service up by default, and the local pipeline writes the serving tables + `pipeline_events` journal to it (`src/processing/clickhouse_sink.py`). `DuckDB` remains the local-dev / test and compatibility store — `pytest` pins it (`tests/conftest.py`) and the control-plane state (webhooks, alerts, outbox, usage) stays on it per [ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md).
+**ClickHouse is the shipped serving engine** ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md), executed 2026-07-02): `config/serving.yaml` defaults to `backend: clickhouse`, `make demo` and `docker-compose.prod.yml` bring the service up by default, and the local pipeline writes the serving tables + `pipeline_events` journal to it (`src/agentflow_runtime/processing/clickhouse_sink.py`). `DuckDB` remains the local-dev / test and compatibility store — `pytest` pins it (`tests/conftest.py`) and the control-plane state (webhooks, alerts, outbox, usage) stays on it per [ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md).
 
 Upsert model on ClickHouse: mutable serving tables are `ReplacingMergeTree` versioned by a `MATERIALIZED af_updated_at` column; an upsert is an appended row version and every backend read runs with the `final=1` setting, so queries always see the latest version. The journal stays append-only `MergeTree`. Live verification: [clickhouse-serving-verify-2026-07-02](perf/clickhouse-serving-verify-2026-07-02.md).
 
@@ -70,8 +70,8 @@ The backend initializes the demo tables on first start so entity lookups and met
 4. Validate health at the backend layer:
 
 ```python
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 engine = QueryEngine(catalog=DataCatalog())
 print(engine.health())

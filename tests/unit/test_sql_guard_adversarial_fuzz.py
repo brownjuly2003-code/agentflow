@@ -13,7 +13,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
+from agentflow_runtime.serving.semantic_layer.sql_guard import UnsafeSQLError, validate_nl_sql
 
 ALLOWED = {"orders_v2", "users_enriched", "products_current", "sessions_aggregated"}
 

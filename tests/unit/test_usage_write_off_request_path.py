@@ -31,8 +31,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager, build_auth_middleware
-from src.serving.api.metrics import USAGE_RECORD_FAILURES, USAGE_ROWS_DROPPED
+from agentflow_runtime.serving.api.auth import AuthManager, build_auth_middleware
+from agentflow_runtime.serving.api.metrics import USAGE_RECORD_FAILURES, USAGE_ROWS_DROPPED
 
 API_KEY = "tenant-order-key"
 SLOW_WRITE_SECONDS = 0.4
@@ -270,8 +270,8 @@ def test_batching_coalesces_rows_into_one_commit(tmp_path: Path) -> None:
 @pytest.mark.parametrize("rows", [0, 1, 7])
 def test_batch_write_is_atomic_and_complete(tmp_path: Path, rows: int) -> None:
     """The DuckDB override wraps the batch in one transaction; every row lands."""
-    from src.serving.control_plane.embedded import EmbeddedControlPlaneStore
-    from src.serving.control_plane.store import UsageRow
+    from agentflow_runtime.serving.control_plane.embedded import EmbeddedControlPlaneStore
+    from agentflow_runtime.serving.control_plane.store import UsageRow
 
     usage_db = tmp_path / f"usage-{rows}.duckdb"
     store = EmbeddedControlPlaneStore(usage_db_path_provider=lambda: usage_db)

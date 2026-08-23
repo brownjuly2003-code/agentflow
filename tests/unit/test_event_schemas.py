@@ -5,7 +5,12 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from src.ingestion.schemas.events import Currency, OrderEvent, PaymentEvent, ProductEvent
+from agentflow_runtime.ingestion.schemas.events import (
+    Currency,
+    OrderEvent,
+    PaymentEvent,
+    ProductEvent,
+)
 
 
 def test_order_valid_minimal(sample_order_event) -> None:

@@ -1,5 +1,5 @@
 """Narrow, duckdb-free mutation test for the NL query execution path
-(src/serving/semantic_layer/query/nl_queries.py).
+(src/agentflow_runtime/serving/semantic_layer/query/nl_queries.py).
 
 This is the test the mutation gate runs against
 ``serving/semantic_layer/query/nl_queries.py`` (see scripts/mutation_report.py
@@ -23,14 +23,14 @@ test_sql_builder_mutation.py (see fable_handoff.md cont.16-19):
    inline and the methods are called directly. (The one pytest fixture below only
    toggles the telemetry flag; it constructs nothing under test.)
 
-3. **Import shims.** The mutation harness copies ``src/serving`` to a top-level
+3. **Import shims.** The mutation harness copies ``src/agentflow_runtime/serving`` to a top-level
    ``serving`` package *without* ``src``. Several things on nl_queries' import
-   path would otherwise fail or drag duckdb in: ``from src.processing.tracing
-   import telemetry_disabled`` and ``from src.serving.backends import
+   path would otherwise fail or drag duckdb in: ``from agentflow_runtime.processing.tracing
+   import telemetry_disabled`` and ``from agentflow_runtime.serving.backends import
    BackendExecutionError`` (no ``src``), the ``serving.semantic_layer.query``
    package ``__init__`` (``from .engine import QueryEngine`` -> duckdb) and
    ``.contracts`` (imports the duckdb backend for type hints). The ``.sql_guard``
-   import is a shim that does ``from src.serving.semantic_layer.sql_guard import
+   import is a shim that does ``from agentflow_runtime.serving.semantic_layer.sql_guard import
    ...``; we point that src-name at the REAL top-level sql_guard (sqlglot-only,
    duckdb-free) so the validate boundary runs against the genuine guard. Under
    ordinary pytest the real ``src`` package is importable, so no shim is installed
@@ -50,9 +50,9 @@ import types
 
 
 def _in_mutation_workspace() -> bool:
-    # mutmut's mutants/ workspace copies src/serving to a TOP-LEVEL `serving`
+    # mutmut's mutants/ workspace copies src/agentflow_runtime/serving to a TOP-LEVEL `serving`
     # package (scripts/mutation_report.py prepare_workspace); ordinary pytest has
-    # no top-level `serving` (only src.serving), so its presence cleanly marks the
+    # no top-level `serving` (only agentflow_runtime.serving), so its presence cleanly marks the
     # harness. The old `import src` probe did not: the editable-installed repo keeps
     # the real `src` importable even inside the workspace, so the stubs were skipped
     # there and the real duckdb-backed engine import crashed mutmut's
@@ -75,9 +75,9 @@ def _ensure_module(name: str) -> types.ModuleType:
 
 
 def _install_harness_stubs() -> None:
-    _ensure_module("src")
-    processing_pkg = _ensure_module("src.processing")
-    tracing_mod = _ensure_module("src.processing.tracing")
+    _ensure_module("agentflow_runtime")
+    processing_pkg = _ensure_module("agentflow_runtime.processing")
+    tracing_mod = _ensure_module("agentflow_runtime.processing.tracing")
 
     def telemetry_disabled() -> bool:
         return True
@@ -85,29 +85,29 @@ def _install_harness_stubs() -> None:
     tracing_mod.telemetry_disabled = telemetry_disabled
     processing_pkg.tracing = tracing_mod
 
-    serving_pkg = _ensure_module("src.serving")
-    backends_mod = _ensure_module("src.serving.backends")
+    serving_pkg = _ensure_module("agentflow_runtime.serving")
+    backends_mod = _ensure_module("agentflow_runtime.serving.backends")
 
     class BackendExecutionError(RuntimeError):
-        """Mirror of src.serving.backends.BackendExecutionError."""
+        """Mirror of agentflow_runtime.serving.backends.BackendExecutionError."""
 
     backends_mod.BackendExecutionError = BackendExecutionError
     serving_pkg.backends = backends_mod
 
     # nl_engine is imported lazily inside explain(); supply a rule-based default.
-    semantic_pkg = _ensure_module("src.serving.semantic_layer")
-    nl_engine_mod = _ensure_module("src.serving.semantic_layer.nl_engine")
+    semantic_pkg = _ensure_module("agentflow_runtime.serving.semantic_layer")
+    nl_engine_mod = _ensure_module("agentflow_runtime.serving.semantic_layer.nl_engine")
     nl_engine_mod._GRACEKELLY_URL = ""
     semantic_pkg.nl_engine = nl_engine_mod
 
     # nl_queries imports `.sql_guard`, a shim that does
-    # `from src.serving.semantic_layer.sql_guard import ...`. Point that src-name
+    # `from agentflow_runtime.serving.semantic_layer.sql_guard import ...`. Point that src-name
     # at the REAL top-level sql_guard (sqlglot-only, duckdb-free, importable in
     # the harness) so the validate_nl_sql boundary is exercised against the
     # genuine guard rather than a stub.
     import serving.semantic_layer.sql_guard as _real_sql_guard
 
-    sys.modules["src.serving.semantic_layer.sql_guard"] = _real_sql_guard
+    sys.modules["agentflow_runtime.serving.semantic_layer.sql_guard"] = _real_sql_guard
     semantic_pkg.sql_guard = _real_sql_guard
 
     # Neuter the query package __init__ (`from .engine import QueryEngine`) and
@@ -127,7 +127,7 @@ if _in_mutation_workspace():
 try:  # mutation-harness workspace exposes it as a top-level package
     from serving.semantic_layer.query import nl_queries as nlq_module
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.semantic_layer.query import nl_queries as nlq_module
+    from agentflow_runtime.serving.semantic_layer.query import nl_queries as nlq_module
 
 import pytest
 
@@ -823,7 +823,7 @@ def test_explain_reports_llm_engine_when_gracekelly_configured(monkeypatch):
     # When GraceKelly is configured and `import httpx` succeeds, the engine label
     # is "llm". Pins the getattr(nl_engine, "_GRACEKELLY_URL", "") read: a mutant
     # that reads the wrong attribute/object collapses to "rule_based".
-    nl_engine_mod = sys.modules["src.serving.semantic_layer.nl_engine"]
+    nl_engine_mod = sys.modules["agentflow_runtime.serving.semantic_layer.nl_engine"]
     monkeypatch.setattr(nl_engine_mod, "_GRACEKELLY_URL", "http://gracekelly.test", raising=False)
     monkeypatch.setitem(sys.modules, "httpx", types.ModuleType("httpx"))
     backend = _FakeBackend(explain_rows=[(0, "x")])

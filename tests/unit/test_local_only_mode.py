@@ -11,12 +11,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from agentflow_runtime.quality.monitors.metrics_collector import HealthCollector
+from agentflow_runtime.serving import cache as cache_module
+from agentflow_runtime.serving import provision
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.cache import QueryCache
 from scripts import demo_local
-from src.quality.monitors.metrics_collector import HealthCollector
-from src.serving import cache as cache_module
-from src.serving import provision
-from src.serving.api.main import app
-from src.serving.cache import QueryCache
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,7 +41,7 @@ import sys
 sys.modules["pyiceberg"] = None
 sys.modules["pyiceberg.exceptions"] = None
 
-from src.quality.monitors.metrics_collector import (
+from agentflow_runtime.quality.monitors.metrics_collector import (
     CheckSource,
     HealthCollector,
     HealthStatus,

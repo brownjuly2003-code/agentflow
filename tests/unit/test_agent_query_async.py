@@ -5,8 +5,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
 
 
 class SlowEngine:

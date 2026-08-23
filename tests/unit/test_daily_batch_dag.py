@@ -1,4 +1,4 @@
-"""Unit tests for the daily batch DAG assets (src/orchestration/dags/daily_batch).
+"""Unit tests for the daily batch DAG assets (src/agentflow_runtime/orchestration/dags/daily_batch).
 
 These exercise the DuckDB-backed aggregation/quality assets in local mode and
 pin the None-safety of the `fetchone()` row lookups that strict mypy surfaced.
@@ -8,7 +8,7 @@ import duckdb
 import pytest
 from dagster import build_asset_context
 
-from src.orchestration.dags import daily_batch
+from agentflow_runtime.orchestration.dags import daily_batch
 
 
 @pytest.fixture

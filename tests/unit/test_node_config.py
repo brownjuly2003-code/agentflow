@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.serving.node import (
+from agentflow_runtime.serving.node import (
     CENTER_BRANCH,
     EDGE_BRANCHES,
     NodeConfig,
@@ -217,7 +217,7 @@ def test_edge_token_equal_to_default_demo_key_fails_fast() -> None:
 
 
 def test_token_equal_to_custom_demo_api_key_env_fails_fast() -> None:
-    # DEMO_API_KEY overrides the default "demo-key" (src/serving/api/main.py) —
+    # DEMO_API_KEY overrides the default "demo-key" (src/agentflow_runtime/serving/api/main.py) —
     # the guard must compare against whatever value is actually configured,
     # not just the hardcoded default.
     with pytest.raises(NodeConfigError, match="demo API key"):

@@ -26,8 +26,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from src.serving.control_plane import embedded
-from src.serving.control_plane.embedded import (
+from agentflow_runtime.serving.control_plane import embedded
+from agentflow_runtime.serving.control_plane.embedded import (
     EmbeddedControlPlaneStore,
     close_usage_connections,
 )

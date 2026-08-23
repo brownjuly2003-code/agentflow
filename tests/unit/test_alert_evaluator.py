@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-import src.serving.api.alerts.evaluator as evaluator
-from src.serving.api.alerts.dispatcher import AlertRule
+import agentflow_runtime.serving.api.alerts.evaluator as evaluator
+from agentflow_runtime.serving.api.alerts.dispatcher import AlertRule
 
 _NOW = datetime(2026, 6, 28, 12, 0, tzinfo=UTC)
 

@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.serving.api.routers.lineage`` — provenance-chain
+"""Unit coverage for ``agentflow_runtime.serving.api.routers.lineage`` — provenance-chain
 reconstruction for an entity.
 
 The live HTTP path is covered by the integration suite; these tests pin the
@@ -19,7 +19,7 @@ import duckdb
 import pytest
 from fastapi import HTTPException
 
-from src.serving.api.routers.lineage import (
+from agentflow_runtime.serving.api.routers.lineage import (
     _coerce_datetime,
     _fetch_matching_events,
     _quality_score,
@@ -27,8 +27,8 @@ from src.serving.api.routers.lineage import (
     _source_topic_for_entity,
     get_lineage,
 )
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.semantic_layer.journal import JournalReader
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.semantic_layer.journal import JournalReader
 
 # ── pure helpers ─────────────────────────────────────────────────
 

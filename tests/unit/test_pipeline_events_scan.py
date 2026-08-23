@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.serving.semantic_layer.query import QueryEngine
+from agentflow_runtime.serving.semantic_layer.query import QueryEngine
 
 _ALL_COLUMNS = {
     "event_id",

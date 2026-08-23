@@ -28,8 +28,8 @@ handed demo rows for being empty (audit P0-2). `make demo` therefore runs the
 provisioning step explicitly:
 
 ```bash
-python -m src.serving.provision --schema --seed   # demo bring-up
-python -m src.serving.provision --schema          # what a real deployment runs
+python -m agentflow_runtime.serving.provision --schema --seed   # demo bring-up
+python -m agentflow_runtime.serving.provision --schema          # what a real deployment runs
 ```
 
 Both are idempotent and re-runnable, and they provision every store the API
@@ -80,7 +80,7 @@ Use this path for E2E checks and incidents that depend on Redis, Jaeger, Prometh
 make flink-local
 ```
 
-This builds the local Python 3.11 Flink image, starts the required Kafka, MinIO, and Flink services, and submits `src/processing/flink_jobs/stream_processor.py` to the local cluster.
+This builds the local Python 3.11 Flink image, starts the required Kafka, MinIO, and Flink services, and submits `src/agentflow_runtime/processing/flink_jobs/stream_processor.py` to the local cluster.
 
 Verify the run here:
 - Flink Web UI: http://localhost:8081
@@ -137,7 +137,7 @@ curl http://localhost:8081/jobs
 curl -X PATCH http://localhost:8081/jobs/<job-id>?mode=cancel
 
 # Resubmit
-flink run -py src/processing/flink_jobs/stream_processor.py
+flink run -py src/agentflow_runtime/processing/flink_jobs/stream_processor.py
 ```
 
 ### Check Kafka consumer lag

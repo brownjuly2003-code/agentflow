@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore[assignment]
+
+
+# The tenant a row belongs to when nothing names one (ADR-004). It is a real
+# tenant, not a null object: it is the value the serving tables are keyed by
+# (ClickHouse sorting key, DuckDB PRIMARY KEY), the one the demo seed writes
+# under, and the one the journal has defaulted to since it grew the column. Both
+# the write path (`src/agentflow_runtime/processing/event_tenant.py`) and the read path
+# (`SQLBuilderMixin`) resolve to it, so it lives here — the module they can both
+# reach without either importing the other.
+DEFAULT_TENANT = "default"
+
+
+def default_tenants_config_path() -> Path:
+    return Path(os.getenv("AGENTFLOW_TENANTS_FILE", "config/tenants.yaml"))
+
+
+class TenantDefinition(BaseModel):
+    # `duckdb_schema` used to live here and is deliberately absent (ADR-004). It
+    # named the isolation mechanism — the schema a tenant's tables supposedly
+    # lived in — and nothing in `src/` ever created that schema, so the boundary
+    # it named did not exist. The boundary is now the `tenant_id` column, in the
+    # write key of every serving table. Configs written for the old model still
+    # load: pydantic ignores unknown keys, so the field is accepted and has no
+    # effect, which is the truth about it.
+    id: str
+    display_name: str
+    kafka_topic_prefix: str
+    max_events_per_day: int
+    max_api_keys: int
+    allowed_entity_types: list[str] | None = None
+
+
+class TenantsConfig(BaseModel):
+    tenants: list[TenantDefinition] = Field(default_factory=list)
+
+
+class TenantRouter:
+    def __init__(self, config_path: Path | str | None = None) -> None:
+        self.config_path = (
+            Path(config_path) if config_path is not None else default_tenants_config_path()
+        )
+        self._has_config: bool | None = None
+        self._config: TenantsConfig | None = None
+
+    def has_config(self) -> bool:
+        if self._has_config is None:
+            self._has_config = self.config_path.exists()
+        return self._has_config
+
+    def load(self) -> TenantsConfig:
+        if self._config is not None:
+            return self._config
+
+        if not self.has_config():
+            self._config = TenantsConfig()
+            return self._config
+
+        raw = self.config_path.read_text(encoding="utf-8")
+        if yaml is not None:
+            data = yaml.safe_load(raw) or {}
+        else:  # pragma: no cover
+            data = json.loads(raw)
+        self._config = TenantsConfig.model_validate(data)
+        return self._config
+
+    def get_tenant(self, tenant_id: str | None) -> TenantDefinition | None:
+        if tenant_id is None:
+            return None
+        for tenant in self.load().tenants:
+            if tenant.id == tenant_id:
+                return tenant
+        return None
+
+    def route_topic(self, topic: str, tenant_id: str | None) -> str:
+        tenant = self.get_tenant(tenant_id)
+        if tenant is None:
+            return topic
+        return f"{tenant.kafka_topic_prefix}.{topic}"

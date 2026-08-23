@@ -14,10 +14,14 @@ from collections.abc import Callable, Iterator
 
 from fastapi.params import Depends
 
-from src.serving.api.auth.middleware import _is_admin_path, _is_exempt_path, require_admin_key
-from src.serving.api.routers.admin import router as admin_router
-from src.serving.api.routers.admin_ui import router as admin_ui_router
-from src.serving.node import ingest as ingest_module
+from agentflow_runtime.serving.api.auth.middleware import (
+    _is_admin_path,
+    _is_exempt_path,
+    require_admin_key,
+)
+from agentflow_runtime.serving.api.routers.admin import router as admin_router
+from agentflow_runtime.serving.api.routers.admin_ui import router as admin_ui_router
+from agentflow_runtime.serving.node import ingest as ingest_module
 
 
 def _dependency_calls(dependencies: list) -> set[Callable]:
@@ -112,7 +116,7 @@ def _admin_routes_missing_admin_key(app: object) -> list[str]:
 
 
 def test_every_assembled_admin_route_requires_admin_key() -> None:
-    from src.serving.api.main import app
+    from agentflow_runtime.serving.api.main import app
 
     admin_paths = [
         path

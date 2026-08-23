@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.versioning import ApiVersionRegistry, ResponseTransformer
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.cache import QueryCache
+from agentflow_runtime.serving.api.versioning import ApiVersionRegistry, ResponseTransformer
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.cache import QueryCache
 
 
 def _write_api_keys(path: Path) -> None:
@@ -116,7 +116,7 @@ def _build_client(
     monkeypatch.setenv("AGENTFLOW_TENANTS_FILE", str(tenants_path))
     monkeypatch.setenv("AGENTFLOW_API_VERSIONS_FILE", str(versions_path))
 
-    main_module = importlib.import_module("src.serving.api.main")
+    main_module = importlib.import_module("agentflow_runtime.serving.api.main")
     main_module = importlib.reload(main_module)
     return TestClient(
         main_module.app,

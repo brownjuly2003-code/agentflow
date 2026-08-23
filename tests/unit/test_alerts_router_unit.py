@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.serving.api.routers.alerts`` — the alert-config CRUD
+"""Unit coverage for ``agentflow_runtime.serving.api.routers.alerts`` — the alert-config CRUD
 endpoints and their validation / response-shaping logic.
 
 The dispatcher internals (``alert_dispatcher.create_alert`` etc.) and the live
@@ -18,9 +18,9 @@ from typing import Any
 import pytest
 from fastapi import HTTPException, Response
 
-from src.serving.api.alerts.dispatcher import AlertRule
-from src.serving.api.routers import alerts as alerts_module
-from src.serving.api.routers.alerts import (
+from agentflow_runtime.serving.api.alerts.dispatcher import AlertRule
+from agentflow_runtime.serving.api.routers import alerts as alerts_module
+from agentflow_runtime.serving.api.routers.alerts import (
     AlertCreateRequest,
     AlertUpdateRequest,
     _tenant,
@@ -31,7 +31,7 @@ from src.serving.api.routers.alerts import (
     register_alert,
     remove_alert,
 )
-from src.serving.api.routers.alerts import (
+from agentflow_runtime.serving.api.routers.alerts import (
     test_alert as _test_alert_endpoint,
 )
 

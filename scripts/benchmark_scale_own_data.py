@@ -176,7 +176,7 @@ STATUS_SQL = (
 
 class ClickHouseHTTP:
     """Minimal ClickHouse HTTP client (stdlib only, same transport as
-    src/serving/backends/clickhouse_backend.py)."""
+    src/agentflow_runtime/serving/backends/clickhouse_backend.py)."""
 
     def __init__(self, host: str, port: int, user: str, password: str) -> None:
         self.base = f"http://{host}:{port}/"

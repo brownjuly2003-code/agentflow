@@ -14,7 +14,7 @@ Generated: `2026-04-17T12:55:58+03:00`
 ## Test Parameters
 
 - Host: `http://127.0.0.1:8001`
-- Seed step: `python -m src.processing.local_pipeline --burst 500`
+- Seed step: `python -m agentflow_runtime.processing.local_pipeline --burst 500`
 - Load profile: `20` users, spawn rate `10/s`, duration `30s`
 - Locust file: `tests/load/locustfile.py`
 

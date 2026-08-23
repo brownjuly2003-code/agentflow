@@ -12,8 +12,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-import src.serving.api.alerts.escalation as escalation
-from src.serving.api.alerts.dispatcher import (
+import agentflow_runtime.serving.api.alerts.escalation as escalation
+from agentflow_runtime.serving.api.alerts.dispatcher import (
     AlertEscalationStep,
     AlertRule,
     next_escalation_step,

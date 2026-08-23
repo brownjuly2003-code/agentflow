@@ -29,7 +29,7 @@ def test_readme_local_auth_onboarding_documents_open_demo_and_own_key() -> None:
     assert "AGENTFLOW_API_KEYS_FILE=config/api_keys.local.yaml" in text
     assert "$env:AGENTFLOW_API_KEYS_FILE = " in text
     assert "tracked `config/api_keys.yaml` remains a sample" in text
-    assert "python -m uvicorn src.serving.api.main:app" in text
+    assert "python -m uvicorn agentflow_runtime.serving.api.main:app" in text
     assert "without `AGENTFLOW_AUTH_DISABLED`" in plain_text
     assert "X-API-Key" in text
     assert "demo-key" in text

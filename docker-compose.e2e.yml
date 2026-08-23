@@ -119,7 +119,7 @@ services:
       CLICKHOUSE_DATABASE: agentflow
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ""
-    command: ["python", "-m", "src.serving.provision", "--schema", "--seed"]
+    command: ["python", "-m", "agentflow_runtime.serving.provision", "--schema", "--seed"]
     restart: "no"
     volumes:
       - agentflow-api-data:/app/data

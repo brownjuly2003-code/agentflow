@@ -1,6 +1,6 @@
 """Tests for event enrichment functions."""
 
-from src.processing.transformations.enrichment import (
+from agentflow_runtime.processing.transformations.enrichment import (
     compute_payment_risk_score,
     enrich_clickstream,
     enrich_order,

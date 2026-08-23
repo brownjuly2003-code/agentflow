@@ -211,7 +211,7 @@ services:
       CLICKHOUSE_DATABASE: agentflow
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
-    command: ["python", "-m", "src.serving.provision", "--schema", "--seed"]
+    command: ["python", "-m", "agentflow_runtime.serving.provision", "--schema", "--seed"]
     restart: "no"
     volumes:
       - agentflow-api-data:/app/data
@@ -245,7 +245,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_SERVICE_NAME: agentflow-api
       REDIS_URL: redis://redis:6379/0
-    command: ["uvicorn", "src.serving.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "agentflow_runtime.serving.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     volumes:
       - agentflow-api-data:/app/data
       - ./config:/app/config:ro

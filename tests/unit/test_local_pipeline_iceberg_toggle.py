@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.processing import local_pipeline
+from agentflow_runtime.processing import local_pipeline
 
 
 def test_local_pipeline_imports_without_pyiceberg(
@@ -35,8 +35,8 @@ def test_local_pipeline_imports_without_pyiceberg(
 
     for key in list(sys.modules):
         if (
-            key == "src.processing.local_pipeline"
-            or key == "src.processing.iceberg_sink"
+            key == "agentflow_runtime.processing.local_pipeline"
+            or key == "agentflow_runtime.processing.iceberg_sink"
             or key == "pyiceberg"
             or key.startswith("pyiceberg.")
         ):
@@ -44,7 +44,7 @@ def test_local_pipeline_imports_without_pyiceberg(
 
     monkeypatch.setattr(builtins, "__import__", block_pyiceberg)
 
-    module = importlib.import_module("src.processing.local_pipeline")
+    module = importlib.import_module("agentflow_runtime.processing.local_pipeline")
     assert module.run is not None
 
 

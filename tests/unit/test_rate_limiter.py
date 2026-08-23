@@ -7,8 +7,8 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager, build_auth_middleware
-from src.serving.api.rate_limiter import RateLimiter
+from agentflow_runtime.serving.api.auth import AuthManager, build_auth_middleware
+from agentflow_runtime.serving.api.rate_limiter import RateLimiter
 
 
 class FrozenClock:
@@ -245,7 +245,7 @@ async def test_rate_limiter_fails_closed_to_local_cap_when_redis_unavailable(
     redis_client.raise_on_execute = RuntimeError("redis down")
     limiter = RateLimiter(redis_client=redis_client, time_source=FrozenClock(1_000.0))
 
-    monkeypatch.setattr("src.serving.api.rate_limiter.logger", logger)
+    monkeypatch.setattr("agentflow_runtime.serving.api.rate_limiter.logger", logger)
 
     # A Redis outage must NOT disable limiting fleet-wide (the old fail-open
     # behaviour returned remaining==limit). It falls back to a per-process cap:
@@ -269,7 +269,7 @@ async def test_rate_limiter_fails_closed_to_local_cap_when_redis_unavailable(
 async def test_rate_limiter_in_memory_fallback_allows_then_blocks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.serving.api.rate_limiter.redis", None)
+    monkeypatch.setattr("agentflow_runtime.serving.api.rate_limiter.redis", None)
     limiter = RateLimiter(redis_client=None, time_source=FrozenClock(1_000.0))
 
     first_allowed, first_remaining, first_reset = await limiter.check("tenant:key", 2)
@@ -285,7 +285,7 @@ async def test_rate_limiter_in_memory_fallback_allows_then_blocks(
 async def test_rate_limiter_in_memory_fallback_expires_old_requests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.serving.api.rate_limiter.redis", None)
+    monkeypatch.setattr("agentflow_runtime.serving.api.rate_limiter.redis", None)
     clock = FrozenClock(1_000.0)
     limiter = RateLimiter(redis_client=None, time_source=clock)
 
@@ -303,7 +303,7 @@ async def test_rate_limiter_in_memory_fallback_expires_old_requests(
 async def test_rate_limiter_in_memory_fallback_blocks_with_zero_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.serving.api.rate_limiter.redis", None)
+    monkeypatch.setattr("agentflow_runtime.serving.api.rate_limiter.redis", None)
     limiter = RateLimiter(redis_client=None, time_source=FrozenClock(1_000.0))
 
     allowed, remaining, reset_at = await limiter.check("tenant:key", 0, window_seconds=60)

@@ -15,7 +15,10 @@ input collapses to a single harmless SELECT.
 
 import pytest
 
-from src.serving.semantic_layer.nl_engine import _rule_based_translate, _sql_str_literal
+from agentflow_runtime.serving.semantic_layer.nl_engine import (
+    _rule_based_translate,
+    _sql_str_literal,
+)
 
 
 @pytest.mark.parametrize(

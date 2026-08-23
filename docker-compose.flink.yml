@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
     build:
       context: ./src
-      dockerfile: processing/flink_jobs/Dockerfile
+      dockerfile: agentflow_runtime/processing/flink_jobs/Dockerfile
     image: agentflow-flink-local:latest
     command:
       - /bin/bash
@@ -39,14 +39,14 @@ services:
         printf '%s\n' 'jobmanager.memory.process.size: 1600m' >> /opt/flink/conf/config.yaml
         exec /opt/flink/bin/jobmanager.sh start-foreground
     environment:
-      PYTHONPATH: /opt/agentflow
+      PYTHONPATH: /opt/agentflow/src
 
   flink-taskmanager:
     logging: *default-logging
     restart: unless-stopped
     build:
       context: ./src
-      dockerfile: processing/flink_jobs/Dockerfile
+      dockerfile: agentflow_runtime/processing/flink_jobs/Dockerfile
     image: agentflow-flink-local:latest
     command:
       - /bin/bash
@@ -56,13 +56,13 @@ services:
         printf '%s\n' 'taskmanager.memory.process.size: 1728m' >> /opt/flink/conf/config.yaml
         exec /opt/flink/bin/taskmanager.sh start-foreground
     environment:
-      PYTHONPATH: /opt/agentflow
+      PYTHONPATH: /opt/agentflow/src
 
   flink-job-runner:
     logging: *default-logging
     build:
       context: ./src
-      dockerfile: processing/flink_jobs/Dockerfile
+      dockerfile: agentflow_runtime/processing/flink_jobs/Dockerfile
     image: agentflow-flink-local:latest
     depends_on:
       kafka-init:
@@ -77,7 +77,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLINK_PARALLELISM: "2"
-      PYTHONPATH: /opt/agentflow
+      PYTHONPATH: /opt/agentflow/src
     command:
       - /bin/bash
       - -lc
@@ -86,6 +86,6 @@ services:
         until curl -fsS http://flink-jobmanager:8081/overview >/dev/null; do
           sleep 2
         done
-        /opt/flink/bin/flink run -d -m flink-jobmanager:8081 -py /opt/agentflow/src/processing/flink_jobs/stream_processor.py
-        echo "Submitted src/processing/flink_jobs/stream_processor.py to the local Flink cluster."
+        /opt/flink/bin/flink run -d -m flink-jobmanager:8081 -py /opt/agentflow/src/agentflow_runtime/processing/flink_jobs/stream_processor.py
+        echo "Submitted src/agentflow_runtime/processing/flink_jobs/stream_processor.py to the local Flink cluster."
         tail -f /dev/null

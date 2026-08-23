@@ -15,11 +15,11 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from src.serving import provision
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
-from src.serving.duckdb_connection import connect_duckdb
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query.engine import QueryEngine
+from agentflow_runtime.serving import provision
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.duckdb_connection import connect_duckdb
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query.engine import QueryEngine
 
 
 def _order_count(conn: duckdb.DuckDBPyConnection) -> int:

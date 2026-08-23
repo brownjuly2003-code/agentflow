@@ -5,8 +5,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager, build_auth_middleware
-from src.serving.api.routers.admin import router as admin_router
+from agentflow_runtime.serving.api.auth import AuthManager, build_auth_middleware
+from agentflow_runtime.serving.api.routers.admin import router as admin_router
 
 
 def _write_api_keys(path: Path, content: str) -> None:
@@ -135,7 +135,9 @@ def test_hashed_key_authentication_caches_successful_plaintext(
         verify_calls.append((value, key_hash))
         return value == "tenant-hashed-key" and key_hash == "hashed-secret"
 
-    monkeypatch.setattr("src.serving.api.auth.manager.verify_api_key", fake_verify_api_key)
+    monkeypatch.setattr(
+        "agentflow_runtime.serving.api.auth.manager.verify_api_key", fake_verify_api_key
+    )
 
     first = manager.authenticate("tenant-hashed-key")
     second = manager.authenticate("tenant-hashed-key")

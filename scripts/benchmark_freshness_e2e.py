@@ -29,12 +29,13 @@ Prerequisites (Mac stand, see ``_NEXT_SESSION.md`` / ``docs/serving-bridge.md``)
 
   SERVING_BACKEND=clickhouse CLICKHOUSE_HOST=127.0.0.1 \\
     KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:19092 \\
-    .venv/bin/python -m src.processing.bridge_consumer &
+    .venv/bin/python -m agentflow_runtime.processing.bridge_consumer &
 
   SERVING_BACKEND=clickhouse CLICKHOUSE_HOST=127.0.0.1 \\
     AGENTFLOW_DEMO_MODE=true AGENTFLOW_SEED_ON_BOOT=true \\
     REDIS_URL=redis://127.0.0.1:6379 AGENTFLOW_NODE_EMITTER_ENABLED=false \\
-    .venv/bin/python -m uvicorn src.serving.api.main:app --host 127.0.0.1 --port 8000 &
+    .venv/bin/python -m uvicorn agentflow_runtime.serving.api.main:app \\
+        --host 127.0.0.1 --port 8000 &
 
 Usage (from repo root, Mac):
 
@@ -71,7 +72,7 @@ DEFAULT_API_KEY = "demo-key"  # noqa: S105 — demo mode default
 
 def build_order_event(amount: Decimal, sequence: int) -> dict:
     """Schema- and semantics-valid order.created (canonical model)."""
-    from src.ingestion.schemas.events import (
+    from agentflow_runtime.ingestion.schemas.events import (
         Currency,
         EventType,
         OrderEvent,

@@ -15,8 +15,8 @@ from collections.abc import Iterator
 import duckdb
 import pytest
 
-from src.ingestion.producers.event_producer import generate_click, generate_order
-from src.processing.local_pipeline import _ensure_tables, _process_event
+from agentflow_runtime.ingestion.producers.event_producer import generate_click, generate_order
+from agentflow_runtime.processing.local_pipeline import _ensure_tables, _process_event
 
 
 class FakeSink:

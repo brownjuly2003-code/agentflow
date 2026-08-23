@@ -52,7 +52,7 @@ try {
         Copy-Item ".env.example" ".env"
     }
 
-    python -c "from src.serving.api.main import app; print('OK')"
+    python -c "from agentflow_runtime.serving.api.main import app; print('OK')"
 
     if ($MyInvocation.InvocationName -eq ".") {
         Write-Host "=== Setup complete. Run: python scripts/demo_local.py ==="

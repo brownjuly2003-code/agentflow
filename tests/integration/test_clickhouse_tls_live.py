@@ -25,7 +25,10 @@ import os
 
 import pytest
 
-from src.serving.backends.clickhouse_backend import BackendExecutionError, ClickHouseBackend
+from agentflow_runtime.serving.backends.clickhouse_backend import (
+    BackendExecutionError,
+    ClickHouseBackend,
+)
 
 LIVE_HOST = os.getenv("CLICKHOUSE_TLS_LIVE_HOST")
 LIVE_PORT = int(os.getenv("CLICKHOUSE_TLS_LIVE_PORT", "18443"))

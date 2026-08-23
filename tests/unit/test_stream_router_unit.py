@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.serving.api.routers.stream`` — the SSE event stream.
+"""Unit coverage for ``agentflow_runtime.serving.api.routers.stream`` — the SSE event stream.
 
 The live HTTP path is covered by the integration suite; these tests pin the
 router's own logic at the unit layer: the schema-adaptive
@@ -19,10 +19,10 @@ import duckdb
 import pytest
 from fastapi import HTTPException
 
-from src.serving.api.routers import stream as stream_module
-from src.serving.api.routers.stream import fetch_recent_events, stream_events
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.semantic_layer.query import QueryEngine
+from agentflow_runtime.serving.api.routers import stream as stream_module
+from agentflow_runtime.serving.api.routers.stream import fetch_recent_events, stream_events
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.semantic_layer.query import QueryEngine
 
 # ── fetch_recent_events ──────────────────────────────────────────
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.serving.api.routers.agent_query import (
+from agentflow_runtime.serving.api.routers.agent_query import (
     _call_in_threadpool_with_kwarg_fallback,
     _call_with_kwarg_fallback,
     _kwarg_fallback_attempts,

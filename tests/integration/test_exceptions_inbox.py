@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager
-from src.serving.api.main import app
+from agentflow_runtime.serving.api.auth import AuthManager
+from agentflow_runtime.serving.api.main import app
 
 pytestmark = pytest.mark.integration
 
@@ -336,8 +336,8 @@ def test_truncated_webhook_scan_never_auto_resolves_out_of_window_items(
     # `updated_at` never advances, the later upsert could not reopen it.
     from datetime import UTC, datetime, timedelta
 
-    from src.serving.control_plane import get_control_plane_store
-    from src.serving.control_plane.embedded import ensure_webhook_delivery_queue_table
+    from agentflow_runtime.serving.control_plane import get_control_plane_store
+    from agentflow_runtime.serving.control_plane.embedded import ensure_webhook_delivery_queue_table
 
     store = get_control_plane_store(client.app)
     conn = store._conn

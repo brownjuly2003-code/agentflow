@@ -4,8 +4,8 @@ import runpy
 import sys
 from pathlib import Path
 
-from src.quality.validators.schema_validator import validate_batch, validate_event
-from src.quality.validators.semantic_validator import validate_semantics
+from agentflow_runtime.quality.validators.schema_validator import validate_batch, validate_event
+from agentflow_runtime.quality.validators.semantic_validator import validate_semantics
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -184,7 +184,14 @@ class TestSemanticValidator:
         monkeypatch.setattr(sys, "argv", ["semantic_validator.py", "--check-all"])
 
         runpy.run_path(
-            str(PROJECT_ROOT / "src" / "quality" / "validators" / "semantic_validator.py"),
+            str(
+                PROJECT_ROOT
+                / "src"
+                / "agentflow_runtime"
+                / "quality"
+                / "validators"
+                / "semantic_validator.py"
+            ),
             run_name="__main__",
         )
 

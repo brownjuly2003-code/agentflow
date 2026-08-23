@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from src.processing.iceberg_sink import (
+from agentflow_runtime.processing.iceberg_sink import (
     VALIDATED_EVENTS_SCHEMA,
     IcebergSink,
     _expand_env,
@@ -50,7 +50,7 @@ def test_rest_catalog_uses_warehouse_identifier_without_local_mkdir(
     def fake_mkdir(self: Path, parents: bool = False, exist_ok: bool = False) -> None:
         mkdir_calls.append(self)
 
-    monkeypatch.setattr("src.processing.iceberg_sink.load_catalog", fake_load_catalog)
+    monkeypatch.setattr("agentflow_runtime.processing.iceberg_sink.load_catalog", fake_load_catalog)
     monkeypatch.setattr(Path, "mkdir", fake_mkdir)
 
     IcebergSink(config_path=config_path)
@@ -99,7 +99,7 @@ def test_sql_catalog_resolves_relative_warehouse_against_config_path(
         captured["kwargs"] = kwargs
         return FakeCatalog()
 
-    monkeypatch.setattr("src.processing.iceberg_sink.load_catalog", fake_load_catalog)
+    monkeypatch.setattr("agentflow_runtime.processing.iceberg_sink.load_catalog", fake_load_catalog)
 
     IcebergSink(config_path=config_path)
 
@@ -184,7 +184,7 @@ def test_s3_rest_catalog_expands_env_credentials_without_local_mkdir(
     def fake_mkdir(self: Path, parents: bool = False, exist_ok: bool = False) -> None:
         mkdir_calls.append(self)
 
-    monkeypatch.setattr("src.processing.iceberg_sink.load_catalog", fake_load_catalog)
+    monkeypatch.setattr("agentflow_runtime.processing.iceberg_sink.load_catalog", fake_load_catalog)
     monkeypatch.setattr(Path, "mkdir", fake_mkdir)
 
     IcebergSink(config_path=config_path)

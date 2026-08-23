@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import TenantKey
-from src.serving.api.main import app
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.api.auth import TenantKey
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 pytestmark = pytest.mark.integration
 
@@ -107,7 +107,7 @@ def test_query_explain_reports_llm_engine_when_llm_translation_is_used(client, m
 
     monkeypatch.setitem(sys.modules, "httpx", types.ModuleType("httpx"))
 
-    from src.serving.semantic_layer import nl_engine
+    from agentflow_runtime.serving.semantic_layer import nl_engine
 
     monkeypatch.setattr(nl_engine, "_GRACEKELLY_URL", "http://gracekelly.test")
     monkeypatch.setattr(

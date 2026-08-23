@@ -6,11 +6,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query.entity_queries import EntityQueryMixin
-from src.serving.semantic_layer.query.metric_queries import MetricQueryMixin
-from src.serving.semantic_layer.query.nl_queries import NLQueryMixin
-from src.serving.semantic_layer.query.sql_builder import SQLBuilderMixin
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query.entity_queries import EntityQueryMixin
+from agentflow_runtime.serving.semantic_layer.query.metric_queries import MetricQueryMixin
+from agentflow_runtime.serving.semantic_layer.query.nl_queries import NLQueryMixin
+from agentflow_runtime.serving.semantic_layer.query.sql_builder import SQLBuilderMixin
 
 
 class _MinimalQueryHost(
@@ -56,7 +56,7 @@ def test_query_package_has_no_broad_attr_defined_override() -> None:
     overrides = pyproject["tool"]["mypy"].get("overrides", [])
 
     assert not any(
-        override.get("module") == "src.serving.semantic_layer.query.*"
+        override.get("module") == "agentflow_runtime.serving.semantic_layer.query.*"
         and "attr-defined" in override.get("disable_error_code", [])
         for override in overrides
     )

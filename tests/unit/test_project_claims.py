@@ -13,8 +13,8 @@ VALIDATOR_INPUTS = (
     "pyproject.toml",
     ".github/workflows/ci.yml",
     "codecov.yml",
-    "src/processing/flink_jobs/requirements.txt",
-    "src/processing/flink_jobs/Dockerfile",
+    "src/agentflow_runtime/processing/flink_jobs/requirements.txt",
+    "src/agentflow_runtime/processing/flink_jobs/Dockerfile",
     "helm/agentflow/values.yaml",
     "helm/agentflow/templates/flinkdeployment.yaml",
     "sdk/agentflow/client.py",
@@ -269,7 +269,7 @@ def test_flink_submission_smoke_evidence_documents_live_compose_commands() -> No
     for fragment in required_fragments:
         assert fragment in text, f"missing live command fragment: {fragment}"
 
-    assert "-f src/processing/flink_jobs/Dockerfile" not in text
+    assert "-f src/agentflow_runtime/processing/flink_jobs/Dockerfile" not in text
 
 
 def test_validator_detects_document_drift(tmp_path: Path) -> None:
@@ -339,7 +339,9 @@ def test_validator_rejects_non_flink_runtime_base_image(tmp_path: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
 
-    dockerfile = fixture_root / "src" / "processing" / "flink_jobs" / "Dockerfile"
+    dockerfile = (
+        fixture_root / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "Dockerfile"
+    )
     original = dockerfile.read_text(encoding="utf-8")
     dockerfile.write_text(
         original.replace(original.splitlines()[0], "FROM python:3.11-slim", 1),
@@ -349,7 +351,8 @@ def test_validator_rejects_non_flink_runtime_base_image(tmp_path: Path) -> None:
     errors = validate_repository(fixture_root)
 
     assert any(
-        "src/processing/flink_jobs/Dockerfile" in error and "official Flink base image" in error
+        "src/agentflow_runtime/processing/flink_jobs/Dockerfile" in error
+        and "official Flink base image" in error
         for error in errors
     )
 

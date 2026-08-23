@@ -42,7 +42,7 @@ jobs:
           mkdir -p .artifacts/perf-smoke docs/perf
           docker compose up -d --wait redis
           python tests/load/run_load_test.py --duckdb-path "$DUCKDB_PATH" --seed-data --seed-only
-          python -m uvicorn src.serving.api.main:app --host 127.0.0.1 --port 8012 > .artifacts/perf-smoke/api.log 2>&1 &
+          python -m uvicorn agentflow_runtime.serving.api.main:app --host 127.0.0.1 --port 8012 > .artifacts/perf-smoke/api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true; docker compose stop redis >/dev/null 2>&1 || true' EXIT
           python scripts/wait_for_services.py --url http://127.0.0.1:8012 --timeout 120

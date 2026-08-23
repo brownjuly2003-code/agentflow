@@ -170,7 +170,7 @@ services:
       CLICKHOUSE_DATABASE: agentflow
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ""
-    command: ["python", "-m", "src.serving.provision", "--schema"]
+    command: ["python", "-m", "agentflow_runtime.serving.provision", "--schema"]
     restart: "no"
     volumes:
       - ./config:/app/config:ro
@@ -222,7 +222,7 @@ services:
         condition: service_completed_successfully
       iceberg-init:
         condition: service_completed_successfully
-    command: ["python", "-m", "src.processing.lake_consumer"]
+    command: ["python", "-m", "agentflow_runtime.processing.lake_consumer"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       AGENTFLOW_LAKE_GROUP_ID: agentflow-ci-soak-lake
@@ -252,7 +252,7 @@ services:
         condition: service_healthy
       serving-init:
         condition: service_completed_successfully
-    command: ["python", "-m", "src.processing.bridge_consumer"]
+    command: ["python", "-m", "agentflow_runtime.processing.bridge_consumer"]
     environment:
       SERVING_BACKEND: clickhouse
       AGENTFLOW_SERVING_CONFIG: /app/config/serving.yaml

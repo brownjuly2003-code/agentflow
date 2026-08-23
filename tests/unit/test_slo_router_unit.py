@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.serving.api.routers.slo`` — SLO reporting.
+"""Unit coverage for ``agentflow_runtime.serving.api.routers.slo`` — SLO reporting.
 
 The live HTTP path is covered by the integration suite; these tests pin the
 router's own logic at the unit layer: the SLI computation (``_sli`` — the
@@ -25,7 +25,7 @@ import duckdb
 import pytest
 from fastapi import HTTPException
 
-from src.serving.api.routers.slo import (
+from agentflow_runtime.serving.api.routers.slo import (
     SLODefinition,
     _burn_rate,
     _diagnostic,
@@ -36,8 +36,8 @@ from src.serving.api.routers.slo import (
     get_slos,
     load_slos,
 )
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.semantic_layer.journal import JournalReader
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.semantic_layer.journal import JournalReader
 
 
 def _definition(**overrides: Any) -> SLODefinition:

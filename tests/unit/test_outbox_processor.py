@@ -1,5 +1,5 @@
 """Unit coverage for the at-least-once delivery loop in
-``src.processing.outbox`` (a mutmut target): pending/entry dispatch, the
+``agentflow_runtime.processing.outbox`` (a mutmut target): pending/entry dispatch, the
 success/retry/poison state machine, exponential + Kafka-floor backoff, the
 mark-sent and schedule-retry transactions, payload decoding, and the Kafka
 producer adapter with a fake ``confluent_kafka.Producer``. The full streaming
@@ -17,9 +17,9 @@ from pathlib import Path
 import duckdb
 import pytest
 
-import src.processing.outbox as outbox_module
-from src.processing.outbox import OutboxProcessor
-from src.serving.control_plane import ensure_dead_letter_table
+import agentflow_runtime.processing.outbox as outbox_module
+from agentflow_runtime.processing.outbox import OutboxProcessor
+from agentflow_runtime.serving.control_plane import ensure_dead_letter_table
 
 TOPIC = "agentflow.orders"
 

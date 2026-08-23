@@ -12,9 +12,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.serving.api import main as main_module
-from src.serving.api.main import app
-from src.serving.semantic_layer import search_index as search_index_module
+from agentflow_runtime.serving.api import main as main_module
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.semantic_layer import search_index as search_index_module
 
 
 def test_lifespan_survives_search_rebuild_failure(

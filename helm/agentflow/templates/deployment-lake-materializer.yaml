@@ -53,7 +53,7 @@ spec:
           command:
             - python
             - -m
-            - src.processing.lake_consumer
+            - agentflow_runtime.processing.lake_consumer
           env:
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: {{ $bootstrapServers | quote }}

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from src.serving.api.auth.middleware import _is_admin_path, _is_exempt_path
+from agentflow_runtime.serving.api.auth.middleware import _is_admin_path, _is_exempt_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OPENAPI_PATH = PROJECT_ROOT / "docs" / "openapi.json"

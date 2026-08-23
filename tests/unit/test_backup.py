@@ -16,11 +16,11 @@ import tarfile
 import duckdb
 import pytest
 
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
 from scripts.backup import backup
 from scripts.check_release_artifacts import find_forbidden_members
 from scripts.restore import restore
 from scripts.verify_backup import verify_backup
-from src.serving.backends.duckdb_backend import DuckDBBackend
 
 SECRET_CONFIG_FILES = ("api_keys.yaml", "webhooks.yaml", "tenants.yaml")
 NON_SECRET_CONFIG_FILES = ("alerts.yaml", "serving.yaml")

@@ -75,7 +75,7 @@ updates:
   # apache-flink majors/minors stay individual PRs by default (no group),
   # matching the deliberate-bump policy for the Flink line.
   - package-ecosystem: pip
-    directory: "/src/processing/flink_jobs"
+    directory: "/src/agentflow_runtime/processing/flink_jobs"
     schedule:
       interval: weekly
       day: monday
@@ -149,7 +149,7 @@ updates:
   - package-ecosystem: docker
     directories:
       - "/"
-      - "/src/processing/flink_jobs"
+      - "/src/agentflow_runtime/processing/flink_jobs"
       - "/docker/kafka-connect"
       - "/.devcontainer"
     schedule:

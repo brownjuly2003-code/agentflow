@@ -1,5 +1,5 @@
-from src.serving.api import alert_dispatcher
-from src.serving.api.alerts import (
+from agentflow_runtime.serving.api import alert_dispatcher
+from agentflow_runtime.serving.api.alerts import (
     AlertDispatcher,
     create_alert,
     ensure_alert_dispatcher,

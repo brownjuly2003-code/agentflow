@@ -12,10 +12,10 @@ import duckdb
 import pytest
 import yaml
 
-from src.processing.iceberg_sink import IcebergSink
-from src.processing.local_pipeline import _ensure_tables, _process_event
-from src.processing.transformations.enrichment import enrich_order
-from src.quality.monitors.metrics_collector import HealthCollector
+from agentflow_runtime.processing.iceberg_sink import IcebergSink
+from agentflow_runtime.processing.local_pipeline import _ensure_tables, _process_event
+from agentflow_runtime.processing.transformations.enrichment import enrich_order
+from agentflow_runtime.quality.monitors.metrics_collector import HealthCollector
 
 pytestmark = pytest.mark.integration
 

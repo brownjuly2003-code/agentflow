@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from src.processing.lake_consumer import ValidatedLakeConsumer
+from agentflow_runtime.processing.lake_consumer import ValidatedLakeConsumer
 
 
 class _Message:

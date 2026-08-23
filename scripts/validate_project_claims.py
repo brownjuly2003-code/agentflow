@@ -47,13 +47,13 @@ def _validate_runtime(root: Path, manifest: dict[str, Any]) -> list[str]:
     production = manifest["production"]
     version = str(production["flink_version"])
 
-    requirements = (root / "src" / "processing" / "flink_jobs" / "requirements.txt").read_text(
-        encoding="utf-8"
-    )
+    requirements = (
+        root / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "requirements.txt"
+    ).read_text(encoding="utf-8")
     expected_requirement = f"apache-flink=={version}"
     if expected_requirement not in requirements:
         errors.append(
-            "src/processing/flink_jobs/requirements.txt: "
+            "src/agentflow_runtime/processing/flink_jobs/requirements.txt: "
             f"missing runtime pin {expected_requirement!r}"
         )
 

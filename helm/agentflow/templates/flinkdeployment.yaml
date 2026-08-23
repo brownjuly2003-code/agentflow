@@ -108,7 +108,7 @@ spec:
       - -pyclientexec
       - /opt/pyflink-venv/bin/python
       - -py
-      - /opt/agentflow/src/processing/flink_jobs/stream_processor.py
+      - /opt/agentflow/src/agentflow_runtime/processing/flink_jobs/stream_processor.py
     parallelism: {{ .Values.flinkJob.parallelism }}
     upgradeMode: {{ .Values.flinkJob.upgradeMode }}
     state: running

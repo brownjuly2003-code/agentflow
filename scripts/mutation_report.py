@@ -31,13 +31,14 @@ class ModuleTarget:
 # NARROW test that does not pull the duckdb-backed engine import chain. So
 # retry.py mutates as agentflow.retry (from sdk/agentflow), and sql_guard,
 # rate_limiter, sql_builder, nl_queries, auth/manager and
-# auth/key_rotation mutate as serving.* (from src/serving) against duckdb-free
+# auth/key_rotation mutate as serving.* (from src/agentflow_runtime/serving) against duckdb-free
 # tests. Each duckdb-free test
 # also avoids fixtures and calls the module's methods directly: under
 # mutate_only_covered_lines a fixture-built object left every method line
 # uncovered, so only __init__ got mutated. rate_limiter additionally imports
-# `from src.constants import ...`; its test registers a tiny src.constants stub
-# before importing the module, because the serving workspace copies src/serving
+# `from agentflow_runtime.constants import ...`; its test registers a tiny
+# agentflow_runtime.constants stub
+# before importing the module, because the serving workspace copies src/agentflow_runtime/serving
 # -> top-level `serving` without `src`. sql_builder and nl_queries live under the
 # query package whose __init__ imports the duckdb-backed QueryEngine, so their
 # tests also stub serving.semantic_layer.query.{engine,contracts} (and the src.*
@@ -242,14 +243,15 @@ def prepare_workspace(workspace: Path, module_path: Path, target: ModuleTarget) 
         if is_agentflow_target and name == "sdk":
             continue
         # The serving target imports as a top-level `serving` package copied from
-        # src/serving below; copying `src` too would shadow it with src.serving.
+        # src/agentflow_runtime/serving below; copying `src` too would shadow it
+        # with agentflow_runtime.serving.
         if is_serving_target and name == "src":
             continue
         copy_or_link(ROOT / name, workspace / name)
     if is_agentflow_target:
         copy_or_link(ROOT / "sdk" / "agentflow", workspace / "agentflow")
     if is_serving_target:
-        copy_or_link(ROOT / "src" / "serving", workspace / "serving")
+        copy_or_link(ROOT / "src" / "agentflow_runtime" / "serving", workspace / "serving")
     (workspace / "pyproject.toml").write_text(
         build_workspace_pyproject(module_path, target),
         encoding="utf-8",

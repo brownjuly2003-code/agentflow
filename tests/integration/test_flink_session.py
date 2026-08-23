@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from src.processing.flink_jobs.checkpointing import configure_checkpointing
-from src.processing.flink_jobs.session_window import (
+from agentflow_runtime.processing.flink_jobs.checkpointing import configure_checkpointing
+from agentflow_runtime.processing.flink_jobs.session_window import (
     accumulate_session,
     new_session,
     session_key,

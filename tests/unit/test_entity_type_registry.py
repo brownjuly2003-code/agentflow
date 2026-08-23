@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.entity_type_registry import (
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.entity_type_registry import (
     ContractValidationError,
     load_entity_contracts,
 )

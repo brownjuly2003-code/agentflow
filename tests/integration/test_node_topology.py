@@ -15,9 +15,9 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from src.ingestion.producers.event_producer import generate_order
-from src.serving.api.main import app
-from src.serving.node.seed import BASELINE_ROWS_BY_BRANCH, NODE_BASELINE_TOPIC
+from agentflow_runtime.ingestion.producers.event_producer import generate_order
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.node.seed import BASELINE_ROWS_BY_BRANCH, NODE_BASELINE_TOPIC
 
 pytestmark = pytest.mark.integration
 

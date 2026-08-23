@@ -1,5 +1,5 @@
 """Narrow, duckdb-free mutation test for the tenant SQL builder
-(src/serving/semantic_layer/query/sql_builder.py).
+(src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py).
 
 This is the test the mutation gate runs against
 ``serving/semantic_layer/query/sql_builder.py`` (see scripts/mutation_report.py
@@ -23,10 +23,10 @@ test_sql_guard_mutation.py (see fable_handoff.md cont.16-19):
    mutated (score 0%). Building the host inline and calling ``_scope_sql`` /
    ``_qualify_table`` / ``_quote_literal`` directly attributes every method line.
 
-3. **Import shims.** The mutation harness copies ``src/serving`` to a top-level
+3. **Import shims.** The mutation harness copies ``src/agentflow_runtime/serving`` to a top-level
    ``serving`` package *without* ``src`` (copying ``src`` would shadow it). Three
    things on sql_builder's import path would otherwise fail or drag duckdb in:
-   ``from src.serving.api.auth import get_current_tenant_id`` (no ``src``), the
+   ``from agentflow_runtime.serving.api.auth import get_current_tenant_id`` (no ``src``), the
    ``serving.semantic_layer.query`` package ``__init__`` (``from .engine import
    QueryEngine`` -> duckdb) and ``.contracts`` (imports the duckdb backend for
    type hints). We register stand-ins for all three before importing the module.
@@ -52,9 +52,9 @@ from datetime import datetime
 
 
 def _in_mutation_workspace() -> bool:
-    # mutmut's mutants/ workspace copies src/serving to a TOP-LEVEL `serving`
+    # mutmut's mutants/ workspace copies src/agentflow_runtime/serving to a TOP-LEVEL `serving`
     # package (scripts/mutation_report.py prepare_workspace); ordinary pytest has
-    # no top-level `serving` (only src.serving), so its presence cleanly marks the
+    # no top-level `serving` (only agentflow_runtime.serving), so its presence cleanly marks the
     # harness. The old `import src` probe did not: the editable-installed repo keeps
     # the real `src` importable even inside the workspace, so the stubs were skipped
     # there and the real duckdb-backed engine import crashed mutmut's
@@ -77,12 +77,12 @@ def _ensure_module(name: str) -> types.ModuleType:
 
 
 def _install_harness_stubs() -> None:
-    # src.serving.api.auth.get_current_tenant_id: a contextvar reader in
+    # agentflow_runtime.serving.api.auth.get_current_tenant_id: a contextvar reader in
     # production; here a default-arg passthrough (the host controls the tenant).
-    _ensure_module("src")
-    serving_pkg = _ensure_module("src.serving")
-    api_pkg = _ensure_module("src.serving.api")
-    auth_pkg = _ensure_module("src.serving.api.auth")
+    _ensure_module("agentflow_runtime")
+    serving_pkg = _ensure_module("agentflow_runtime.serving")
+    api_pkg = _ensure_module("agentflow_runtime.serving.api")
+    auth_pkg = _ensure_module("agentflow_runtime.serving.api.auth")
 
     def get_current_tenant_id(default: str | None = None) -> str | None:
         return default
@@ -108,7 +108,7 @@ if _in_mutation_workspace():
 try:  # mutation-harness workspace exposes it as a top-level package
     from serving.semantic_layer.query import sql_builder as sql_builder_module
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.semantic_layer.query import sql_builder as sql_builder_module
+    from agentflow_runtime.serving.semantic_layer.query import sql_builder as sql_builder_module
 
 import pytest
 

@@ -1,6 +1,6 @@
 from collections import Counter
 
-from src.serving.semantic_layer.search_index import SearchDocument, SearchIndex
+from agentflow_runtime.serving.semantic_layer.search_index import SearchDocument, SearchIndex
 
 
 def _install(index: SearchIndex, documents: list[SearchDocument]) -> None:

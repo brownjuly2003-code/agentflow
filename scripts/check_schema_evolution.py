@@ -12,8 +12,14 @@ import yaml  # type: ignore[import-untyped]
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+# F-09: the runtime package lives under the src/ container dir
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from src.serving.semantic_layer.schema_evolution import EvolutionChecker, has_version_bump
+from agentflow_runtime.serving.semantic_layer.schema_evolution import (
+    EvolutionChecker,
+    has_version_bump,
+)
 
 
 def _normalize_version(version: Any) -> str:

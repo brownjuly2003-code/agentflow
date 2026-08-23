@@ -12,6 +12,7 @@ from pathlib import Path
 POSTGRES = (
     Path(__file__).resolve().parents[2]
     / "src"
+    / "agentflow_runtime"
     / "serving"
     / "control_plane"
     / "postgres_webhook.py"

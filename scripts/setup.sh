@@ -59,7 +59,7 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-python -c "from src.serving.api.main import app; print('OK')"
+python -c "from agentflow_runtime.serving.api.main import app; print('OK')"
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo "=== Setup complete. Run 'source .venv/bin/activate' before 'python scripts/demo_local.py'. ==="

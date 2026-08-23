@@ -6,7 +6,7 @@ import yaml
 from agentflow.client import AgentFlowClient
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
+from agentflow_runtime.serving.api.main import app
 
 pytestmark = pytest.mark.integration
 

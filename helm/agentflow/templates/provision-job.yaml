@@ -43,7 +43,7 @@ spec:
           command:
             - python
             - -m
-            - src.serving.provision
+            - agentflow_runtime.serving.provision
             - --schema
           env:
             - name: SERVING_BACKEND

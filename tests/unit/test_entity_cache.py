@@ -9,14 +9,14 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.cache import (
+from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
+from agentflow_runtime.serving.cache import (
     ENTITY_TTL_SECONDS,
     QueryCache,
     cache_entity_key,
     invalidate_entity,
 )
-from src.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
 
 
 class FakeRedis:

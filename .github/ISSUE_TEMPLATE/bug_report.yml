@@ -38,7 +38,7 @@ body:
       label: Affected surface
       multiple: true
       options:
-        - API (`src/serving/api/`)
+        - API (`src/agentflow_runtime/serving/api/`)
         - Python SDK (`sdk/agentflow/`)
         - TypeScript SDK (`sdk-ts/`)
         - Helm chart (`helm/agentflow/`)

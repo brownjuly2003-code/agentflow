@@ -1,5 +1,5 @@
 """Narrow, duckdb-free mutation test for the API-key rotation lifecycle
-(src/serving/api/auth/key_rotation.py).
+(src/agentflow_runtime/serving/api/auth/key_rotation.py).
 
 This is the test the mutation gate runs against ``serving/api/auth/key_rotation.py``
 (see scripts/mutation_report.py MODULE_TARGETS). key_rotation.py is the
@@ -52,8 +52,8 @@ fable_handoff.md cont.16-23):
    are called directly so coverage attributes every line.
 
 4. **Workspace discrimination by top-level ``serving``.** mutmut's mutants/
-   workspace copies src/serving to a TOP-LEVEL ``serving`` package; ordinary
-   pytest has no top-level ``serving`` (only src.serving). Gate the harness stubs
+   workspace copies src/agentflow_runtime/serving to a TOP-LEVEL ``serving`` package; ordinary
+   pytest has no top-level ``serving`` (only agentflow_runtime.serving). Gate the harness stubs
    on ``find_spec("serving")`` -- NOT ``import src``, which stays importable via
    the editable install even inside the workspace.
 
@@ -83,9 +83,9 @@ from datetime import UTC, date, datetime, timedelta
 
 
 def _in_mutation_workspace() -> bool:
-    # mutmut's mutants/ workspace copies src/serving to a TOP-LEVEL `serving`
+    # mutmut's mutants/ workspace copies src/agentflow_runtime/serving to a TOP-LEVEL `serving`
     # package (scripts/mutation_report.py prepare_workspace); ordinary pytest has
-    # no top-level `serving` (only src.serving), so its presence cleanly marks the
+    # no top-level `serving` (only agentflow_runtime.serving), so its presence cleanly marks the
     # harness. `import src` does NOT discriminate: the editable install keeps the
     # real `src` importable even inside the workspace.
     import importlib.util
@@ -129,8 +129,13 @@ try:  # mutation-harness workspace exposes these as a top-level package
     from serving.api.auth import key_rotation as kr
     from serving.api.auth.manager import ApiKeysConfig, AuthManager, KeyCreateRequest, TenantKey
 except ImportError:  # ordinary pytest sees them under the src package
-    from src.serving.api.auth import key_rotation as kr
-    from src.serving.api.auth.manager import ApiKeysConfig, AuthManager, KeyCreateRequest, TenantKey
+    from agentflow_runtime.serving.api.auth import key_rotation as kr
+    from agentflow_runtime.serving.api.auth.manager import (
+        ApiKeysConfig,
+        AuthManager,
+        KeyCreateRequest,
+        TenantKey,
+    )
 
 import pytest
 
@@ -978,7 +983,7 @@ class TestExpirePreviousKey:
             raise RuntimeError("disk gone")
 
         monkeypatch.setattr(rotator, "revoke_old_key", _boom)
-        import src.serving.api.auth as auth_pkg
+        import agentflow_runtime.serving.api.auth as auth_pkg
 
         warnings: list[tuple[str, dict]] = []
         monkeypatch.setattr(

@@ -4,12 +4,12 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-from src.processing.local_pipeline import _ensure_tables, _process_event
-from src.quality.monitors.metrics_collector import HealthCollector, HealthStatus
-from src.serving.api.auth import AuthManager
-from src.serving.api.main import app
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.semantic_layer.journal import JournalReader
+from agentflow_runtime.processing.local_pipeline import _ensure_tables, _process_event
+from agentflow_runtime.quality.monitors.metrics_collector import HealthCollector, HealthStatus
+from agentflow_runtime.serving.api.auth import AuthManager
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.semantic_layer.journal import JournalReader
 
 pytestmark = pytest.mark.integration
 

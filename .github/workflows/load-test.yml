@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           mkdir -p .artifacts/load
           python tests/load/run_load_test.py --duckdb-path "$DUCKDB_PATH" --seed-data --seed-only
-          python -m uvicorn src.serving.api.main:app --host 127.0.0.1 --port 8011 > .artifacts/load/api.log 2>&1 &
+          python -m uvicorn agentflow_runtime.serving.api.main:app --host 127.0.0.1 --port 8011 > .artifacts/load/api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid"' EXIT
           python scripts/wait_for_services.py --url http://127.0.0.1:8011 --timeout 120

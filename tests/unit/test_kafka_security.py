@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.processing.kafka_security import (
+from agentflow_runtime.processing.kafka_security import (
     confluent_kafka_consumer_config,
     confluent_kafka_security_config,
     flink_kafka_security_properties,

@@ -1,7 +1,7 @@
 """Narrow, duckdb-free mutation test for the sql_guard NL->SQL denylist.
 
 This is the test the mutation gate runs against
-src/serving/semantic_layer/sql_guard.py (see scripts/mutation_report.py
+src/agentflow_runtime/serving/semantic_layer/sql_guard.py (see scripts/mutation_report.py
 MODULE_TARGETS). sql_guard imports only sqlglot, so keeping this test free of the
 QueryEngine/duckdb import chain lets mutmut mutate the module without dragging
 duckdb's compiled subpackage into its mutants/ workspace.
@@ -22,7 +22,7 @@ try:  # mutation-harness workspace exposes it as a top-level package
         validate_nl_sql,
     )
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.semantic_layer.sql_guard import (
+    from agentflow_runtime.serving.semantic_layer.sql_guard import (
         UnsafeSQLError,
         validate_nl_sql,
     )

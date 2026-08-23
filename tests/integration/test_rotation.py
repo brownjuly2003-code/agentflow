@@ -5,9 +5,9 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-import src.serving.control_plane.embedded as embedded_module
-from src.serving.api.auth import AuthManager
-from src.serving.api.main import app
+import agentflow_runtime.serving.control_plane.embedded as embedded_module
+from agentflow_runtime.serving.api.auth import AuthManager
+from agentflow_runtime.serving.api.main import app
 
 pytestmark = pytest.mark.integration
 

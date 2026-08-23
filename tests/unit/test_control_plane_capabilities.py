@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.serving.control_plane import ControlPlaneStore
-from src.serving.control_plane.capabilities import (
+from agentflow_runtime.serving.control_plane import ControlPlaneStore
+from agentflow_runtime.serving.control_plane.capabilities import (
     AlertRepository,
     OutboxReplayRepository,
     UsageAuditRepository,
@@ -15,8 +15,8 @@ from src.serving.control_plane.capabilities import (
     get_usage_audit_repository,
     get_webhook_repository,
 )
-from src.serving.control_plane.embedded import EmbeddedControlPlaneStore
-from src.serving.control_plane.postgres import PostgresControlPlaneStore
+from agentflow_runtime.serving.control_plane.embedded import EmbeddedControlPlaneStore
+from agentflow_runtime.serving.control_plane.postgres import PostgresControlPlaneStore
 
 CAPABILITIES = (
     WebhookRepository,

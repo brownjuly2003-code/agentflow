@@ -7,13 +7,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from prometheus_client import make_asgi_app
 
-from src.serving.api.auth import AuthManager, build_auth_middleware
-from src.serving.api.metrics import AUTH_FAILURES, HTTP_REQUESTS
-from src.serving.api.middleware.metrics import (
+from agentflow_runtime.serving.api.auth import AuthManager, build_auth_middleware
+from agentflow_runtime.serving.api.metrics import AUTH_FAILURES, HTTP_REQUESTS
+from agentflow_runtime.serving.api.middleware.metrics import (
     UNMATCHED_ROUTE_LABEL,
     build_metrics_middleware,
 )
-from src.serving.api.routers.admin import router as admin_router
+from agentflow_runtime.serving.api.routers.admin import router as admin_router
 
 
 def _write_api_keys(path: Path, content: str) -> None:

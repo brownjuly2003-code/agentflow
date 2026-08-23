@@ -50,7 +50,7 @@ command:
   - /bin/sh
   - -lc
 args:
-  - python /app/host_loopback_proxy.py >/tmp/host-loopback-proxy.log 2>&1 & exec uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+  - python /app/host_loopback_proxy.py >/tmp/host-loopback-proxy.log 2>&1 & exec uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000
 
 extraEnv:
   - name: AGENTFLOW_WEBHOOKS_FILE

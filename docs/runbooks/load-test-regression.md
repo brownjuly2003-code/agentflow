@@ -31,7 +31,7 @@ the CI gate, it is `api-5xx-spike.md` territory.
 
 ## Owner
 
-Author of the most recent change to `src/serving/`, `src/processing/`, or
+Author of the most recent change to `src/agentflow_runtime/serving/`, `src/agentflow_runtime/processing/`, or
 `tests/load/`. If unclear, Platform on-call holds it until ownership is
 assigned.
 
@@ -69,9 +69,9 @@ assigned.
    ```
    git log --oneline <last-green>..<failing> -- src/ tests/
    ```
-   Focus on changes to: backends (`src/serving/backends/`), the query engine
-   (`src/serving/semantic_layer/query/`), auth middleware (regression in fast
-   path), tenant scoping caches (`src/serving/tenant/`), DuckDB pool config.
+   Focus on changes to: backends (`src/agentflow_runtime/serving/backends/`), the query engine
+   (`src/agentflow_runtime/serving/semantic_layer/query/`), auth middleware (regression in fast
+   path), tenant scoping caches (`src/agentflow_runtime/serving/tenant/`), DuckDB pool config.
 4. **Memory cache regression?** PII masker `Path(...)` rebuild (commit
    `220f94c`) and tenant qualification cache (`aae27bf`) were both -hundreds
    of ms wins. A regression that undoes one of these will visibly retrace

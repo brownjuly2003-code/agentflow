@@ -237,7 +237,7 @@ def _start_local_api(tmp_path: Path) -> dict[str, object]:
             sys.executable,
             "-m",
             "uvicorn",
-            "src.serving.api.main:app",
+            "agentflow_runtime.serving.api.main:app",
             "--host",
             "127.0.0.1",
             "--port",

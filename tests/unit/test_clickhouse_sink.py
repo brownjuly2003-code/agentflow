@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.processing.clickhouse_sink`` — the serving-store
+"""Unit coverage for ``agentflow_runtime.processing.clickhouse_sink`` — the serving-store
 mirror the local pipeline writes when the configured serving backend is
 ClickHouse (ADR 0006).
 
@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.processing.clickhouse_sink import ClickHouseSink
+from agentflow_runtime.processing.clickhouse_sink import ClickHouseSink
 
 
 class FakeBackend:
@@ -57,7 +57,7 @@ def test_sink_provisions_the_schema_but_never_seeds_demo_rows() -> None:
     # matter. It used to seed the canonical demo rows as well, whenever the
     # store looked empty — which put demo orders into whichever ClickHouse a
     # bridge first connected to, a fresh production one included (audit P0-2).
-    # Demo rows now come from `python -m src.serving.provision --schema --seed`.
+    # Demo rows now come from `python -m agentflow_runtime.serving.provision --schema --seed`.
     sink, backend = _sink()
     del sink
     assert backend.schema_ensured

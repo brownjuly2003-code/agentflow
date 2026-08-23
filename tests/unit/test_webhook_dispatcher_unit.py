@@ -1,4 +1,4 @@
-"""Unit coverage for the pure helpers in ``src.serving.api.webhook_dispatcher``:
+"""Unit coverage for the pure helpers in ``agentflow_runtime.serving.api.webhook_dispatcher``:
 config CRUD (create/load/list/get/deactivate), event-filter matching, the HMAC
 signature, deterministic body serialization, and the JSON default encoder.
 
@@ -24,7 +24,7 @@ import httpx
 import pytest
 from prometheus_client import REGISTRY
 
-from src.serving.api.webhook_dispatcher import (
+from agentflow_runtime.serving.api.webhook_dispatcher import (
     WebhookDispatcher,
     WebhookFilters,
     _event_body,
@@ -39,9 +39,9 @@ from src.serving.api.webhook_dispatcher import (
     list_webhooks,
     load_webhooks,
 )
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.control_plane import EmbeddedControlPlaneStore
-from src.serving.semantic_layer.query import QueryEngine
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.control_plane import EmbeddedControlPlaneStore
+from agentflow_runtime.serving.semantic_layer.query import QueryEngine
 
 
 def _engine_stub(conn: duckdb.DuckDBPyConnection) -> QueryEngine:

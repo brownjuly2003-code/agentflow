@@ -7,8 +7,8 @@ the two sources of the event->metric graph cannot drift apart.
 
 from __future__ import annotations
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.contract_registry import ContractRegistry
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.contract_registry import ContractRegistry
 
 METRIC_NAMES = (
     "revenue",

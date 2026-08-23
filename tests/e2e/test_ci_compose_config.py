@@ -83,7 +83,13 @@ def test_lite_compose_provisions_before_the_api_starts():
     compose = yaml.safe_load((PROJECT_ROOT / "docker-compose.e2e.yml").read_text(encoding="utf-8"))
 
     init = compose["services"]["serving-init"]
-    assert init["command"] == ["python", "-m", "src.serving.provision", "--schema", "--seed"]
+    assert init["command"] == [
+        "python",
+        "-m",
+        "agentflow_runtime.serving.provision",
+        "--schema",
+        "--seed",
+    ]
     assert init["depends_on"]["clickhouse"] == {"condition": "service_healthy"}
 
     api = compose["services"]["agentflow-api"]

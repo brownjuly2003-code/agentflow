@@ -26,8 +26,8 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 # The shape a tenant id may actually have (`SQLBuilderMixin._TENANT_ID_RE`).
 # Tenant ids reach ClickHouse SQL as inlined literals — its `execute(params=...)`

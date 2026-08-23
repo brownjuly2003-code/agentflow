@@ -1,7 +1,7 @@
 """NL->SQL evaluation harness for AgentFlow's semantic layer.
 
 Measures the *execution accuracy* (EA) of AgentFlow's NL->SQL translator
-(`src.serving.semantic_layer.nl_engine.translate_nl_to_sql`) against a small
+(`agentflow_runtime.serving.semantic_layer.nl_engine.translate_nl_to_sql`) against a small
 labelled gold set over the demo warehouse schema. Ported from the D:\\NL_SQL
 LangGraph engine's eval harness (see ADR 0008) so AgentFlow has a real,
 reproducible accuracy number instead of an unbacked "NL->SQL works" claim.

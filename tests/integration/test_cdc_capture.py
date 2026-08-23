@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.ingestion.connectors.mysql_cdc import AGENTFLOW_MYSQL_CDC
-from src.ingestion.connectors.postgres_cdc import AGENTFLOW_POSTGRES_CDC
+from agentflow_runtime.ingestion.connectors.mysql_cdc import AGENTFLOW_MYSQL_CDC
+from agentflow_runtime.ingestion.connectors.postgres_cdc import AGENTFLOW_POSTGRES_CDC
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILES = ("-f", "docker-compose.yml", "-f", "docker-compose.cdc.yml")

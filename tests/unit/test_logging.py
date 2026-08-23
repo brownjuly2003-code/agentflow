@@ -4,8 +4,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src import logger as logger_module
-from src.serving.api.middleware.logging import build_correlation_middleware
+from agentflow_runtime import logger as logger_module
+from agentflow_runtime.serving.api.middleware.logging import build_correlation_middleware
 
 
 def test_add_otel_context_adds_trace_and_span_ids(monkeypatch):

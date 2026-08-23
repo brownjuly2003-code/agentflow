@@ -10,10 +10,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api import webhook_dispatcher
-from src.serving.api.auth import TenantKey
-from src.serving.api.main import app
-from src.serving.control_plane import ensure_webhook_delivery_queue_table
+from agentflow_runtime.serving.api import webhook_dispatcher
+from agentflow_runtime.serving.api.auth import TenantKey
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.control_plane import ensure_webhook_delivery_queue_table
 
 
 class _HTTPXMock:

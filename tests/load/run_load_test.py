@@ -161,7 +161,7 @@ def find_missing_thresholds(rows: dict[str, dict[str, float | int]]) -> list[str
 def seed_benchmark_data(duckdb_path: Path) -> None:
     import duckdb
 
-    from src.serving.backends.duckdb_backend import DuckDBBackend
+    from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
 
     duckdb_path.parent.mkdir(parents=True, exist_ok=True)
 

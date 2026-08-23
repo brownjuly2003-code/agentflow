@@ -5,9 +5,9 @@ import pytest
 import sqlglot
 from sqlglot import exp
 
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 ATTACK_VECTORS = [
     "'; DROP TABLE orders_v2; --",
@@ -136,7 +136,9 @@ def test_get_entity_clickhouse_path_keeps_payload_inert(payload: str) -> None:
         sent.append(req.data.decode("utf-8"))
         return _EmptyClickHouseResponse()
 
-    with patch("src.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen):
+    with patch(
+        "agentflow_runtime.serving.backends.clickhouse_backend.urlopen", side_effect=fake_urlopen
+    ):
         result = engine.get_entity("order", payload)
 
     assert result is None

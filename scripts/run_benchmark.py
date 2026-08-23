@@ -333,7 +333,7 @@ def start_api(env: dict[str, str], port: int) -> subprocess.Popen[str]:
             sys.executable,
             "-m",
             "uvicorn",
-            "src.serving.api.main:app",
+            "agentflow_runtime.serving.api.main:app",
             "--host",
             "127.0.0.1",
             "--port",
@@ -546,7 +546,7 @@ def build_report(
         "## Test Parameters",
         "",
         f"- Host: `{base_url}`",
-        f"- Seed step: `python -m src.processing.local_pipeline --burst {burst}`",
+        f"- Seed step: `python -m agentflow_runtime.processing.local_pipeline --burst {burst}`",
         f"- Load profile: `{users}` users, spawn rate `{spawn_rate}/s`, duration `{run_time}`",
         (
             f"- Warmup: `{WARMUP_SECONDS}s` discarded pre-run with the same Locust traffic mix "
@@ -654,7 +654,7 @@ def main() -> int:
                 [
                     sys.executable,
                     "-m",
-                    "src.processing.local_pipeline",
+                    "agentflow_runtime.processing.local_pipeline",
                     "--burst",
                     str(args.burst),
                 ],

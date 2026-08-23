@@ -36,8 +36,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 LIVE_HOST = os.getenv("CLICKHOUSE_LIVE_HOST")
 
@@ -313,7 +313,7 @@ def client(
     live_clickhouse: ClickHouseBackend,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[TestClient]:
-    from src.serving.api.main import app
+    from agentflow_runtime.serving.api.main import app
 
     api_keys, tenants = _write_config(tmp_path_factory.mktemp("tenant-live"))
     patch = pytest.MonkeyPatch()
@@ -666,7 +666,10 @@ def test_sli_arithmetic_survives_the_clickhouse_transpile(
     phantom threshold-sized credit (found live on 25.3, pinned here)."""
     from datetime import datetime as _datetime
 
-    from src.serving.semantic_layer.journal import JournalReader, coerce_journal_datetime
+    from agentflow_runtime.serving.semantic_layer.journal import (
+        JournalReader,
+        coerce_journal_datetime,
+    )
 
     store_now = coerce_journal_datetime(live_clickhouse.execute("SELECT NOW() AS n")[0]["n"])
     assert isinstance(store_now, _datetime)

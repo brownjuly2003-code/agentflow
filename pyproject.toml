@@ -1,6 +1,6 @@
 [project]
 name = "agentflow-runtime"
-version = "2.0.0"
+version = "2.1.0"
 description = "Real-time data platform serving context to AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,7 +36,7 @@ dependencies = [
 # extra could never resolve in one environment (a fresh
 # `pip install .[flink]` fails outright). The Flink job runs in its own
 # interpreter inside the cluster image and imports nothing from agentflow;
-# its manifest is src/processing/flink_jobs/requirements.txt.
+# its manifest is src/agentflow_runtime/processing/flink_jobs/requirements.txt.
 cloud = [
     "boto3>=1.35,<2",
     "pyiceberg>=0.7,<1",
@@ -68,7 +68,7 @@ integrations = [
     "langchain-core>=1.2.22,<2",
     "langchain-text-splitters>=1.1.2,<2",
     # langgraph powers the vendored NL->SQL generation pipeline
-    # (src/serving/semantic_layer/nl_sql_engine, ADR 0008). It is an *optional*
+    # (src/agentflow_runtime/serving/semantic_layer/nl_sql_engine, ADR 0008). It is an *optional*
     # dependency, not core: the shipped demo default is the rule-based
     # translator (GRACEKELLY_URL unset), and nl_engine lazy-imports the engine
     # only on the opt-in LLM path — so a core install needs no langgraph.
@@ -118,12 +118,24 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The runtime ships as `agentflow_runtime` (audit F-09 / P2-6 Phase 1-2);
+# the repository `src/` directory is a plain container, not a package. The
+# deprecated one-file `src` shim (packaging/src_shim) aliases `src.*` onto
+# `agentflow_runtime.*` with a DeprecationWarning and is removed in the next
+# major release. Explicit only-include + sources maps (not the `packages`
+# shorthand) because the shorthand's implied `src/` strip would also rewrite
+# the shim's target path.
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+only-include = ["src/agentflow_runtime", "packaging/src_shim/src"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/agentflow_runtime" = "agentflow_runtime"
+"packaging/src_shim/src" = "src"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
+    "/packaging",
     "/README.md",
     "/LICENSE",
     "/CHANGELOG.md",
@@ -182,7 +194,7 @@ line-length = 100
 # rewritten facade and capability modules are ordinary LF files.)
 exclude = [
     "scripts/golden_soak/pack/*.py",
-    "src/quality/validators/semantic_validator.py",
+    "src/agentflow_runtime/quality/validators/semantic_validator.py",
 ]
 
 [tool.ruff.lint]
@@ -230,55 +242,55 @@ ignore = ["S101", "S311"]
     "A002",
     "E501",
 ]
-"src/orchestration/dags/daily_batch.py" = [
+"src/agentflow_runtime/orchestration/dags/daily_batch.py" = [
     "S608",
 ]
-"src/serving/api/routers/lineage.py" = [
+"src/agentflow_runtime/serving/api/routers/lineage.py" = [
     "S608",
 ]
 # Interpolations are internal literals only (the _replace_record_set
 # table-name constant — audit F-08 moved it here from postgres.py); all
 # values bind via %s.
-"src/serving/control_plane/postgres_base.py" = [
+"src/agentflow_runtime/serving/control_plane/postgres_base.py" = [
     "S608",
 ]
-"src/serving/api/routers/slo.py" = [
+"src/agentflow_runtime/serving/api/routers/slo.py" = [
     "S608",
 ]
-"src/serving/api/routers/stream.py" = [
+"src/agentflow_runtime/serving/api/routers/stream.py" = [
     "S608",
 ]
-"src/serving/backends/clickhouse_backend.py" = [
+"src/agentflow_runtime/serving/backends/clickhouse_backend.py" = [
     "S310",
     "S608",
     "E501",
 ]
-"src/serving/backends/duckdb_backend.py" = [
+"src/agentflow_runtime/serving/backends/duckdb_backend.py" = [
     "S608",
     "E501",
 ]
 # Serving-store mirror for the local pipeline: table/column identifiers are
 # module constants, values are single-quote-escaped literals that the backend's
 # sqlglot round-trip re-escapes structurally (see ClickHouseBackend docstring).
-"src/processing/clickhouse_sink.py" = [
+"src/agentflow_runtime/processing/clickhouse_sink.py" = [
     "S608",
 ]
 # fetch_pipeline_events: selected columns come from the backend schema probe
 # (fixed allowlist), values are `?`-bound on DuckDB and _quote_literal-escaped
 # on external backends — same convention as entity_queries.py.
-"src/serving/semantic_layer/query/engine.py" = [
+"src/agentflow_runtime/serving/semantic_layer/query/engine.py" = [
     "S608",
 ]
-"src/serving/semantic_layer/nl_engine.py" = [
+"src/agentflow_runtime/serving/semantic_layer/nl_engine.py" = [
     "S608",
 ]
-"src/serving/semantic_layer/query/entity_queries.py" = [
+"src/agentflow_runtime/serving/semantic_layer/query/entity_queries.py" = [
     "S608",
 ]
-"src/serving/semantic_layer/query/nl_queries.py" = [
+"src/agentflow_runtime/serving/semantic_layer/query/nl_queries.py" = [
     "S608",
 ]
-"src/serving/semantic_layer/search_index.py" = [
+"src/agentflow_runtime/serving/semantic_layer/search_index.py" = [
     "S608",
 ]
 # Raw-vault INSERT builder: table/column names are internal constants (vault
@@ -305,10 +317,10 @@ asyncio_mode = "auto"
 # security-critical surfaces). It is a superset of what the CI gate actually
 # mutates: scripts/mutation_report.py drives the gate from its own
 # MODULE_TARGETS, which now mutates sdk/agentflow/retry.py,
-# src/serving/semantic_layer/sql_guard.py,
-# src/serving/api/rate_limiter.py, src/serving/semantic_layer/query/sql_builder.py,
-# src/serving/semantic_layer/query/nl_queries.py, src/serving/api/auth/manager.py
-# AND src/serving/api/auth/key_rotation.py live -- every declared serving surface
+# src/agentflow_runtime/serving/semantic_layer/sql_guard.py,
+# src/agentflow_runtime/serving/api/rate_limiter.py, src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py,
+# src/agentflow_runtime/serving/semantic_layer/query/nl_queries.py, src/agentflow_runtime/serving/api/auth/manager.py
+# AND src/agentflow_runtime/serving/api/auth/key_rotation.py live -- every declared serving surface
 # is now mutated. The serving modules are mutated as a top-level `serving` package
 # against duckdb-free narrow tests: mutmut's trampoline rejects a module name
 # starting with `src.`, which (not duckdb) was the real blocker. (The gate runner
@@ -322,16 +334,16 @@ asyncio_mode = "auto"
 # every behaviour-reachable mutant, including every auth-bypass and throttle
 # off-by-one, is killed. See scripts/mutation_report.py.
 paths_to_mutate = [
-    "src/serving/api/auth/manager.py",
-    "src/serving/api/auth/key_rotation.py",
-    "src/serving/semantic_layer/query/engine.py",
-    "src/serving/semantic_layer/query/entity_queries.py",
-    "src/serving/semantic_layer/query/metric_queries.py",
-    "src/serving/semantic_layer/query/nl_queries.py",
-    "src/serving/semantic_layer/query/sql_builder.py",
-    "src/serving/semantic_layer/sql_guard.py",
-    "src/processing/outbox.py",
-    "src/serving/api/rate_limiter.py",
+    "src/agentflow_runtime/serving/api/auth/manager.py",
+    "src/agentflow_runtime/serving/api/auth/key_rotation.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/engine.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/entity_queries.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/metric_queries.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/nl_queries.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py",
+    "src/agentflow_runtime/serving/semantic_layer/sql_guard.py",
+    "src/agentflow_runtime/processing/outbox.py",
+    "src/agentflow_runtime/serving/api/rate_limiter.py",
 ]
 also_copy = [
     "src",

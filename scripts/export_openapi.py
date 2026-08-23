@@ -17,6 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+# F-09: the runtime package lives under the src/ container dir
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
 
 
 def _resolve_refs(node: object, components: dict[str, object]) -> object:
@@ -187,7 +190,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from src.serving.api.main import app
+    from agentflow_runtime.serving.api.main import app
 
     schema = _normalize_fastapi_validation_error_schema(app.openapi())
     docs_dir = ROOT / "docs"

@@ -9,9 +9,9 @@ import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import TenantKey, build_auth_middleware
-from src.serving.api.main import app
-from src.serving.api.routers import stream as stream_router
+from agentflow_runtime.serving.api.auth import TenantKey, build_auth_middleware
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.api.routers import stream as stream_router
 
 
 @pytest.fixture

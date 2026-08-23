@@ -5,8 +5,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 _QUERY_HASH_STRATEGY = st.binary(min_size=1, max_size=32).map(
     lambda value: hashlib.sha256(value).hexdigest()

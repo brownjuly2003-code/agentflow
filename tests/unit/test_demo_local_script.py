@@ -71,14 +71,14 @@ def test_prepare_demo_uses_python_modules_without_docker(
         [
             sys.executable,
             "-m",
-            "src.serving.provision",
+            "agentflow_runtime.serving.provision",
             "--schema",
             "--seed",
         ],
         [
             sys.executable,
             "-m",
-            "src.processing.local_pipeline",
+            "agentflow_runtime.processing.local_pipeline",
             "--burst",
             "25",
             "--no-iceberg",

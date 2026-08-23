@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from src.serving.backends import BackendExecutionError, BackendMissingTableError
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.duckdb_connection import connect_duckdb
+from agentflow_runtime.serving.backends import BackendExecutionError, BackendMissingTableError
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.duckdb_connection import connect_duckdb
 
 
 @pytest.fixture

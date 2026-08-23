@@ -1,6 +1,6 @@
 """Deterministic in-memory demo warehouse for the NL->SQL eval.
 
-Reuses the production DDL (`src.processing.local_pipeline._ensure_tables`) so
+Reuses the production DDL (`agentflow_runtime.processing.local_pipeline._ensure_tables`) so
 the eval schema can never drift from what the demo actually ships, then seeds a
 small fixed dataset.
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import duckdb
 
-from src.processing.local_pipeline import _ensure_tables
+from agentflow_runtime.processing.local_pipeline import _ensure_tables
 
 # (order_id, user_id, status, total_amount ₽)
 _ORDERS = [

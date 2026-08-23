@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
+from agentflow_runtime.serving.api.main import app
 
 
 def test_invalid_role_fails_the_boot(monkeypatch: pytest.MonkeyPatch) -> None:

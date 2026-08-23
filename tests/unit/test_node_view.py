@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 
 import duckdb
 
-from src.processing.local_pipeline import _ensure_tables
-from src.serving.node.config import NodeConfig
-from src.serving.node.seed import BASELINE_ROWS_BY_BRANCH, seed_node_baseline
-from src.serving.node.view import CROSS_BRANCH_ORDER, cross_branch_summary
+from agentflow_runtime.processing.local_pipeline import _ensure_tables
+from agentflow_runtime.serving.node.config import NodeConfig
+from agentflow_runtime.serving.node.seed import BASELINE_ROWS_BY_BRANCH, seed_node_baseline
+from agentflow_runtime.serving.node.view import CROSS_BRANCH_ORDER, cross_branch_summary
 
 _TOKEN = "view-node-token"  # noqa: S105 — test fixture, not a real secret
 

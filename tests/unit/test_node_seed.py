@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import duckdb
 
-from src.processing.local_pipeline import _ensure_tables
-from src.serving.node.config import NodeConfig
-from src.serving.node.seed import (
+from agentflow_runtime.processing.local_pipeline import _ensure_tables
+from agentflow_runtime.serving.node.config import NodeConfig
+from agentflow_runtime.serving.node.seed import (
     BASELINE_ROWS_BY_BRANCH,
     NODE_BASELINE_TOPIC,
     seed_node_baseline,

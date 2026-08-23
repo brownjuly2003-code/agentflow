@@ -3,8 +3,8 @@ import importlib
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager
-from src.serving.transport_policy import InsecureTransportError
+from agentflow_runtime.serving.api.auth import AuthManager
+from agentflow_runtime.serving.transport_policy import InsecureTransportError
 
 
 def test_default_origin_is_allowed_and_exposes_headers(monkeypatch):
@@ -13,7 +13,7 @@ def test_default_origin_is_allowed_and_exposes_headers(monkeypatch):
     # opt into open mode so the CORS layer behavior on a 404 path is testable
     # without provisioning keys.
     monkeypatch.setenv("AGENTFLOW_AUTH_DISABLED", "true")
-    main_module = importlib.import_module("src.serving.api.main")
+    main_module = importlib.import_module("agentflow_runtime.serving.api.main")
     main_module = importlib.reload(main_module)
     main_module.app.state.auth_manager = AuthManager()
     main_module.app.state.auth_manager.load()
@@ -31,7 +31,7 @@ def test_default_origin_is_allowed_and_exposes_headers(monkeypatch):
 def test_blocked_origin_does_not_receive_cors_headers(monkeypatch):
     monkeypatch.delenv("AGENTFLOW_CORS_ORIGINS", raising=False)
     monkeypatch.setenv("AGENTFLOW_AUTH_DISABLED", "true")
-    main_module = importlib.import_module("src.serving.api.main")
+    main_module = importlib.import_module("agentflow_runtime.serving.api.main")
     main_module = importlib.reload(main_module)
     main_module.app.state.auth_manager = AuthManager()
     main_module.app.state.auth_manager.load()
@@ -48,7 +48,7 @@ def test_preflight_allows_any_origin_in_demo_mode(monkeypatch):
     # surface is demo-only since audit P2-3 — hence the explicit demo flag.
     monkeypatch.setenv("AGENTFLOW_CORS_ORIGINS", "*")
     monkeypatch.setenv("AGENTFLOW_DEMO_MODE", "true")
-    main_module = importlib.import_module("src.serving.api.main")
+    main_module = importlib.import_module("agentflow_runtime.serving.api.main")
     main_module = importlib.reload(main_module)
     main_module.app.state.auth_manager = AuthManager()
     main_module.app.state.auth_manager.load()
@@ -73,7 +73,7 @@ def test_wildcard_cors_refuses_to_load_outside_demo(monkeypatch):
     # before a single request can be answered (audit P2-3).
     monkeypatch.setenv("AGENTFLOW_CORS_ORIGINS", "*")
     monkeypatch.delenv("AGENTFLOW_DEMO_MODE", raising=False)
-    main_module = importlib.import_module("src.serving.api.main")
+    main_module = importlib.import_module("agentflow_runtime.serving.api.main")
 
     with pytest.raises(InsecureTransportError, match="CORS"):
         importlib.reload(main_module)

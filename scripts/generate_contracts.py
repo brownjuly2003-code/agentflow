@@ -15,12 +15,15 @@ from pydantic import BaseModel
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+# F-09: the runtime package lives under the src/ container dir
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 if str(REPO_ROOT / "sdk") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "sdk"))
 
 from agentflow.models import MetricResult, OrderEntity
 
-from src.ingestion.schemas.events import Currency, OrderStatus
+from agentflow_runtime.ingestion.schemas.events import Currency, OrderStatus
 
 CONTRACTS_DIR = REPO_ROOT / "config" / "contracts"
 

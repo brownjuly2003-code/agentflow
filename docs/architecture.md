@@ -65,11 +65,11 @@ Same pipeline logic, no infrastructure dependencies:
 1. **Generate**: `local_pipeline.py` creates realistic e-commerce events
 2. **Validate**: Schema validation (Pydantic) + semantic validation (business rules)
 3. **Enrich**: Domain enrichment per event type (order sizing, click classification, payment risk)
-4. **Store**: Validated events written to DuckDB, mirrored to the ClickHouse serving tables when that profile is up (`src/processing/clickhouse_sink.py`), and written to Iceberg via PyIceberg
+4. **Store**: Validated events written to DuckDB, mirrored to the ClickHouse serving tables when that profile is up (`src/agentflow_runtime/processing/clickhouse_sink.py`), and written to Iceberg via PyIceberg
 5. **Serve**: Agent API reads from the configured serving backend (ClickHouse on the demo profile, DuckDB under `SERVING_BACKEND=duckdb`) while `/v1/health` reports Iceberg row counts
 6. **Catalog**: Development uses a MinIO-backed REST catalog from `docker-compose.iceberg.yml` (writing to the same `agentflow-lake` S3 object store as the Flink stack); production uses AWS Glue
 
-Both paths use the **same validator and enrichment code** (`src/quality/`, `src/processing/transformations/`).
+Both paths use the **same validator and enrichment code** (`src/agentflow_runtime/quality/`, `src/agentflow_runtime/processing/transformations/`).
 
 ### Batch Path (daily)
 
@@ -150,7 +150,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 
 | Environment | Primary components | Purpose |
 |-------------|--------------------|---------|
-| Local demo | `make demo`: Redis + ClickHouse (Docker) + `src.processing.local_pipeline` + FastAPI | Fastest path for developers and SDK examples |
+| Local demo | `make demo`: Redis + ClickHouse (Docker) + `agentflow_runtime.processing.local_pipeline` + FastAPI | Fastest path for developers and SDK examples |
 | Prod-like Docker | `docker-compose.prod.yml` with Kafka, Redis, Jaeger, Prometheus, Grafana, API, and optional ClickHouse | Observability and production-shaped debugging against a realistic local stack |
 | Lite E2E Docker | `docker-compose.e2e.yml` with the narrowed CI service set | Faster E2E and smoke coverage without the full observability stack |
 | Chaos harness | `docker-compose.chaos.yml` + Toxiproxy + pytest chaos suite | Validate graceful degradation under Kafka/Redis failures |
@@ -167,7 +167,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > **Phase 1 is executed (2026-07-02).** `config/serving.yaml` defaults to
 > `backend: clickhouse`; `make demo` and `docker-compose.prod.yml` bring up the
 > ClickHouse service by default. The local pipeline mirrors serving-table writes
-> to ClickHouse (`src/processing/clickhouse_sink.py`), and the freshness-critical
+> to ClickHouse (`src/agentflow_runtime/processing/clickhouse_sink.py`), and the freshness-critical
 > event scan (webhooks, metric-cache invalidation, SSE) goes through the serving
 > backend (`QueryEngine.fetch_pipeline_events`) — so the event→metric axis works
 > on the shipped engine, across process boundaries. Upserts are modeled as

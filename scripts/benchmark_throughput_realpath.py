@@ -52,7 +52,7 @@ DEFAULT_REPORT = PROJECT_ROOT / "docs" / "perf" / "throughput-realpath.md"
 
 
 def build_order_event(amount: Decimal, sequence: int) -> dict:
-    from src.ingestion.schemas.events import (
+    from agentflow_runtime.ingestion.schemas.events import (
         Currency,
         EventType,
         OrderEvent,

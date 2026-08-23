@@ -28,11 +28,11 @@ import pytest
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
-from src.processing.bridge_consumer import VALIDATED_TOPIC, ServingBridge
-from src.processing.clickhouse_sink import ClickHouseSink
-from src.processing.local_pipeline import _ensure_tables
-from src.processing.transformations.enrichment import enrich_order
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.processing.bridge_consumer import VALIDATED_TOPIC, ServingBridge
+from agentflow_runtime.processing.clickhouse_sink import ClickHouseSink
+from agentflow_runtime.processing.local_pipeline import _ensure_tables
+from agentflow_runtime.processing.transformations.enrichment import enrich_order
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
 
 LIVE_HOST = os.getenv("CLICKHOUSE_LIVE_HOST")
 
@@ -96,7 +96,7 @@ def _flink_shaped_order() -> dict:
 
 def _flink_shaped_page_view(session_id: str, page_url: str) -> dict:
     """The payload Flink writes to `events.validated` for a page_view."""
-    from src.processing.transformations.enrichment import enrich_clickstream
+    from agentflow_runtime.processing.transformations.enrichment import enrich_clickstream
 
     event = {
         "event_id": str(uuid.uuid4()),

@@ -26,14 +26,14 @@ from types import SimpleNamespace
 import duckdb
 import pytest
 
-from src.serving.api.webhook_dispatcher import (
+from agentflow_runtime.serving.api.webhook_dispatcher import (
     WebhookDispatcher,
     WebhookFilters,
     create_webhook,
 )
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.semantic_layer.query import QueryEngine
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.semantic_layer.query import QueryEngine
 
 LIVE_HOST = os.getenv("CLICKHOUSE_LIVE_HOST")
 

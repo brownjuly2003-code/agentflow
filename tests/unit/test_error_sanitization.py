@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.serving.api.routers.agent_query import _client_safe_error
-from src.serving.api.routers.batch import _safe_item_error
-from src.serving.backends import BackendExecutionError, BackendMissingTableError
+from agentflow_runtime.serving.api.routers.agent_query import _client_safe_error
+from agentflow_runtime.serving.api.routers.batch import _safe_item_error
+from agentflow_runtime.serving.backends import BackendExecutionError, BackendMissingTableError
 
 _RAW = "Code: 60. DB::Exception: Table agentflow.orders_v2 doesn't exist on clickhouse-0"
 

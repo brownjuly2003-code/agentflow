@@ -8,7 +8,7 @@ RuntimeError instead of an AttributeError on `None`.
 
 import pytest
 
-from src.processing.outbox import OutboxProcessor
+from agentflow_runtime.processing.outbox import OutboxProcessor
 
 
 def test_process_pending_empty_returns_zero():

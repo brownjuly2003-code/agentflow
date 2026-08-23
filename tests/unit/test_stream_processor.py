@@ -202,7 +202,7 @@ def _install_processor_dependencies(
     enrich_clickstream=None,
     compute_payment_risk_score=None,
 ):
-    enrichment = types.ModuleType("src.processing.transformations.enrichment")
+    enrichment = types.ModuleType("agentflow_runtime.processing.transformations.enrichment")
     enrichment.enrich_order = enrich_order or (lambda event: {**event, "enriched_by": "order"})
     enrichment.enrich_clickstream = enrich_clickstream or (
         lambda event: {**event, "enriched_by": "clickstream"}
@@ -211,32 +211,32 @@ def _install_processor_dependencies(
         lambda event: {**event, "enriched_by": "payment"}
     )
 
-    schema_validator = types.ModuleType("src.quality.validators.schema_validator")
+    schema_validator = types.ModuleType("agentflow_runtime.quality.validators.schema_validator")
     schema_validator.validate_event = validate_event or (lambda event: _ValidationResult())
 
-    semantic_validator = types.ModuleType("src.quality.validators.semantic_validator")
+    semantic_validator = types.ModuleType("agentflow_runtime.quality.validators.semantic_validator")
     semantic_validator.validate_semantics = validate_semantics or (lambda event: _SemanticResult())
 
     monkeypatch.setitem(
         sys.modules,
-        "src.processing.transformations.enrichment",
+        "agentflow_runtime.processing.transformations.enrichment",
         enrichment,
     )
     monkeypatch.setitem(
         sys.modules,
-        "src.quality.validators.schema_validator",
+        "agentflow_runtime.quality.validators.schema_validator",
         schema_validator,
     )
     monkeypatch.setitem(
         sys.modules,
-        "src.quality.validators.semantic_validator",
+        "agentflow_runtime.quality.validators.semantic_validator",
         semantic_validator,
     )
 
 
 @pytest.fixture
 def stream_processor(monkeypatch):
-    target = "src.processing.flink_jobs.stream_processor"
+    target = "agentflow_runtime.processing.flink_jobs.stream_processor"
     for name in list(sys.modules):
         if name == target or name.startswith("pyflink"):
             sys.modules.pop(name, None)

@@ -3,8 +3,8 @@ from unittest.mock import Mock
 import pytest
 from fastapi import HTTPException
 
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 
 def test_paginated_query_rejects_unsafe_sql(monkeypatch: pytest.MonkeyPatch) -> None:

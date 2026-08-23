@@ -176,7 +176,7 @@ jobs:
                           f"- Extra `[{extra_name}]` (root `pyproject.toml`): resolved install ({extra_count} packages)\n"
                       )
                   handle.write(
-                      f"- Flink runtime (`src/processing/flink_jobs/requirements.txt`): resolved install ({flink_count} packages)\n"
+                      f"- Flink runtime (`src/agentflow_runtime/processing/flink_jobs/requirements.txt`): resolved install ({flink_count} packages)\n"
                   )
                   handle.write("- Exclusions: dev/CI/test extras, local tooling, and unrelated Docker image packages\n")
           PY
@@ -219,7 +219,7 @@ jobs:
           # newest PyPI release (checked 2026-07-20) and itself caps
           # pyarrow<21; beam accepts pyarrow<24 only from 2.75.0, which no
           # released apache-flink allows. Dependabot watches the Flink
-          # manifest (src/processing/flink_jobs), so the next apache-flink
+          # manifest (src/agentflow_runtime/processing/flink_jobs), so the next apache-flink
           # release opens a PR — re-check this ignore there. Remove when the
           # resolved flink-runtime bucket installs pyarrow>=23.0.1.
           # Do NOT retry "uninstall unused pyarrow from the image" — probed

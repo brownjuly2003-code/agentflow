@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
-from src.serving.transport_policy import InsecureTransportError
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.transport_policy import InsecureTransportError
 
 
 def test_production_refuses_insecure_external_clickhouse_boot(

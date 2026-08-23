@@ -14,9 +14,9 @@ from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 
-import src.serving.api.main as main_module
-from src.processing.event_replayer import EventReplayer
-from src.serving.control_plane import ensure_dead_letter_table
+import agentflow_runtime.serving.api.main as main_module
+from agentflow_runtime.processing.event_replayer import EventReplayer
+from agentflow_runtime.serving.control_plane import ensure_dead_letter_table
 
 pytestmark = pytest.mark.integration
 
@@ -198,7 +198,7 @@ def test_replay_rolls_back_deadletter_update_when_outbox_insert_fails(tmp_path: 
 
 
 def test_outbox_processor_marks_entry_sent_and_deadletter_replayed(tmp_path: Path) -> None:
-    outbox_module = import_module("src.processing.outbox")
+    outbox_module = import_module("agentflow_runtime.processing.outbox")
     db_path = tmp_path / "outbox_process.duckdb"
     conn = duckdb.connect(str(db_path))
     payload = _payload()
@@ -237,7 +237,7 @@ def test_outbox_processor_marks_entry_sent_and_deadletter_replayed(tmp_path: Pat
 
 
 def test_outbox_processor_leaves_entry_pending_on_kafka_failure(tmp_path: Path) -> None:
-    outbox_module = import_module("src.processing.outbox")
+    outbox_module = import_module("agentflow_runtime.processing.outbox")
     db_path = tmp_path / "outbox_retry.duckdb"
     conn = duckdb.connect(str(db_path))
     payload = _payload()
@@ -279,7 +279,7 @@ def test_outbox_processor_leaves_entry_pending_on_kafka_failure(tmp_path: Path) 
 
 
 def test_outbox_processor_propagates_unexpected_producer_errors(tmp_path: Path) -> None:
-    outbox_module = import_module("src.processing.outbox")
+    outbox_module = import_module("agentflow_runtime.processing.outbox")
     db_path = tmp_path / "outbox_unexpected.duckdb"
     conn = duckdb.connect(str(db_path))
     payload = _payload()
@@ -320,7 +320,7 @@ def test_outbox_processor_propagates_unexpected_producer_errors(tmp_path: Path) 
 async def test_outbox_run_forever_propagates_unexpected_processing_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    outbox_module = import_module("src.processing.outbox")
+    outbox_module = import_module("agentflow_runtime.processing.outbox")
     sleep_calls = 0
 
     async def fake_sleep(_: float) -> None:
@@ -349,7 +349,7 @@ async def test_outbox_run_forever_propagates_unexpected_processing_errors(
 
 
 def test_outbox_processor_recovers_pending_entries_after_restart(tmp_path: Path) -> None:
-    outbox_module = import_module("src.processing.outbox")
+    outbox_module = import_module("agentflow_runtime.processing.outbox")
     db_path = tmp_path / "outbox_restart.duckdb"
     conn = duckdb.connect(str(db_path))
     payload = _payload()
@@ -391,7 +391,7 @@ def test_outbox_processor_injects_trace_context_headers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    outbox_module = import_module("src.processing.outbox")
+    outbox_module = import_module("agentflow_runtime.processing.outbox")
     captured: dict[str, object] = {}
 
     class FakeProducer:

@@ -32,7 +32,7 @@ jobs:
 
           import duckdb
 
-          from src.serving.backends.duckdb_backend import DuckDBBackend
+          from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
 
           pipeline_db = Path("agentflow_demo.duckdb")
           usage_db = Path("agentflow_api.duckdb")

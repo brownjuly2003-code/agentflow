@@ -54,7 +54,7 @@ spec:
           command:
             - python
             - -m
-            - src.processing.bridge_consumer
+            - agentflow_runtime.processing.bridge_consumer
           ports:
             - name: metrics
               containerPort: {{ .Values.servingBridge.metricsPort }}

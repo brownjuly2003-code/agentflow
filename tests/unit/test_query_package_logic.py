@@ -16,12 +16,15 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.serving.backends import BackendExecutionError, BackendMissingTableError
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query.entity_queries import EntityQueryMixin
-from src.serving.semantic_layer.query.metric_queries import MetricQueryMixin
-from src.serving.semantic_layer.query.nl_queries import NLQueryMixin, UnsafeNLQueryError
-from src.serving.semantic_layer.query.sql_builder import SQLBuilderMixin
+from agentflow_runtime.serving.backends import BackendExecutionError, BackendMissingTableError
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query.entity_queries import EntityQueryMixin
+from agentflow_runtime.serving.semantic_layer.query.metric_queries import MetricQueryMixin
+from agentflow_runtime.serving.semantic_layer.query.nl_queries import (
+    NLQueryMixin,
+    UnsafeNLQueryError,
+)
+from agentflow_runtime.serving.semantic_layer.query.sql_builder import SQLBuilderMixin
 
 AWARE_TS = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
 
@@ -74,7 +77,7 @@ def literal_host() -> _Host:
 
 
 def test_engine_health_read_connection_and_idempotent_close() -> None:
-    from src.serving.semantic_layer.query.engine import QueryEngine
+    from agentflow_runtime.serving.semantic_layer.query.engine import QueryEngine
 
     engine = QueryEngine(catalog=DataCatalog(), db_path=":memory:")
     try:
@@ -98,7 +101,7 @@ def test_engine_never_provisions_the_external_backend(
     # raced each other on the seed, and a production ClickHouse got demo orders
     # because it happened to be empty (audit P0-2). Even with the embedded demo
     # seed switched on, the external backend must stay untouched.
-    import src.serving.semantic_layer.query.engine as engine_module
+    import agentflow_runtime.serving.semantic_layer.query.engine as engine_module
 
     promoted = Mock()
     promoted.name = "clickhouse"
@@ -121,7 +124,7 @@ def test_provision_external_demo_store_is_the_explicit_way_in(
 ) -> None:
     # The demo profile still needs a provisioned external store — it just has to
     # ask for it now.
-    import src.serving.semantic_layer.query.engine as engine_module
+    import agentflow_runtime.serving.semantic_layer.query.engine as engine_module
 
     promoted = Mock()
     promoted.name = "clickhouse"
@@ -495,7 +498,7 @@ class _TranslatingHost(_Host):
 
 
 def test_translate_question_returns_rule_based_sql(monkeypatch: pytest.MonkeyPatch) -> None:
-    import src.serving.semantic_layer.nl_engine as nl_engine
+    import agentflow_runtime.serving.semantic_layer.nl_engine as nl_engine
 
     host = _TranslatingHost()
     monkeypatch.setattr(
@@ -508,7 +511,7 @@ def test_translate_question_returns_rule_based_sql(monkeypatch: pytest.MonkeyPat
 def test_translate_question_untranslatable_raises_with_catalog_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import src.serving.semantic_layer.nl_engine as nl_engine
+    import agentflow_runtime.serving.semantic_layer.nl_engine as nl_engine
 
     host = _TranslatingHost()
     monkeypatch.setattr(nl_engine, "translate_nl_to_sql", lambda question, catalog: "")
@@ -615,7 +618,7 @@ def test_execute_nl_query_rejects_unsafe_translation(host: _Host) -> None:
 def test_explain_reports_llm_engine_when_gracekelly_configured(
     host: _Host, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import src.serving.semantic_layer.nl_engine as nl_engine
+    import agentflow_runtime.serving.semantic_layer.nl_engine as nl_engine
 
     monkeypatch.setattr(nl_engine, "_GRACEKELLY_URL", "http://gracekelly.test")
     monkeypatch.setitem(sys.modules, "httpx", types.ModuleType("httpx"))
@@ -639,7 +642,7 @@ def test_explain_execution_error_maps_to_value_error(host: _Host) -> None:
 def test_explain_stays_rule_based_when_httpx_import_fails(
     host: _Host, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import src.serving.semantic_layer.nl_engine as nl_engine
+    import agentflow_runtime.serving.semantic_layer.nl_engine as nl_engine
 
     monkeypatch.setattr(nl_engine, "_GRACEKELLY_URL", "http://gracekelly.test")
     # A None entry in sys.modules makes `import httpx` raise ImportError.

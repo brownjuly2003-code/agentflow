@@ -7,8 +7,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+# F-09: the runtime package lives under the src/ container dir
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from src.serving.api.auth import AuthManager, KeyCreateRequest
+from agentflow_runtime.serving.api.auth import AuthManager, KeyCreateRequest
 
 
 def build_parser() -> argparse.ArgumentParser:

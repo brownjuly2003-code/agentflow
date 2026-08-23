@@ -32,7 +32,7 @@ What it starts (see the `demo` target in the `Makefile`):
 
 - Redis and ClickHouse through Docker Compose (ClickHouse is the default
   serving store — ADR 0006)
-- an explicit provisioning step, `python -m src.serving.provision --schema
+- an explicit provisioning step, `python -m agentflow_runtime.serving.provision --schema
   --seed` — the API itself never creates or seeds a store on boot (audit P0-2)
 - synthetic event seeding through the local pipeline (500 events); the embedded
   DuckDB file keeps carrying the control-plane state

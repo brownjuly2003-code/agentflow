@@ -1,5 +1,5 @@
 """Unit coverage for the security-critical key-rotation lifecycle in
-``src.serving.api.auth.key_rotation`` (a mutmut target): create / rotate /
+``agentflow_runtime.serving.api.auth.key_rotation`` (a mutmut target): create / rotate /
 revoke / revoke-old, grace-period scheduling and expiry, rotation status, and
 the usage-stat queries. The full HTTP flow is exercised by
 ``tests/integration/test_rotation.py``; these tests pin the rotator logic
@@ -13,10 +13,10 @@ from pathlib import Path
 import duckdb
 import pytest
 
-import src.serving.api.auth.key_rotation as key_rotation_module
-import src.serving.control_plane.embedded as embedded_module
-from src.serving.api.auth.key_rotation import rotate_all_keys
-from src.serving.api.auth.manager import AuthManager, KeyCreateRequest, TenantKey
+import agentflow_runtime.serving.api.auth.key_rotation as key_rotation_module
+import agentflow_runtime.serving.control_plane.embedded as embedded_module
+from agentflow_runtime.serving.api.auth.key_rotation import rotate_all_keys
+from agentflow_runtime.serving.api.auth.manager import AuthManager, KeyCreateRequest, TenantKey
 
 SEED_KEY_YAML = (
     "keys:\n"

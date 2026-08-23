@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.cdc.normalizer import (
+from agentflow_runtime.ingestion.cdc.normalizer import (
     TenantResolutionError,
     is_debezium_event,
     normalize_debezium_event,

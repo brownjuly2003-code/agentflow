@@ -7,10 +7,10 @@ Run with: pytest tests/integration/ -v
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.nl_engine import translate_nl_to_sql
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.nl_engine import translate_nl_to_sql
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 
 @pytest.fixture

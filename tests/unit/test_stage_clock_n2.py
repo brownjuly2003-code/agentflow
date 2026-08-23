@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from src.serving.semantic_layer.stage_clock import coerce_dt, naive_store_tz
+from agentflow_runtime.serving.semantic_layer.stage_clock import coerce_dt, naive_store_tz
 
 
 def test_naive_store_tz_clickhouse_is_utc():
@@ -29,7 +29,9 @@ def test_naive_store_tz_duckdb_is_host_local(monkeypatch):
                 return fixed.replace(tzinfo=None)
             return fixed.astimezone(tz)
 
-    monkeypatch.setattr("src.serving.semantic_layer.stage_clock.datetime", _FrozenDateTime)
+    monkeypatch.setattr(
+        "agentflow_runtime.serving.semantic_layer.stage_clock.datetime", _FrozenDateTime
+    )
     # Host "local" is MSK (+03:00)
     monkeypatch.setattr(
         _FrozenDateTime,
@@ -75,7 +77,7 @@ def test_entity_get_entity_uses_backend_convention():
     """ClickHouse-shaped naive created_at must produce UTC _last_updated."""
     from types import SimpleNamespace
 
-    from src.serving.semantic_layer.query.entity_queries import EntityQueryMixin
+    from agentflow_runtime.serving.semantic_layer.query.entity_queries import EntityQueryMixin
 
     class Engine(EntityQueryMixin):
         def __init__(self) -> None:

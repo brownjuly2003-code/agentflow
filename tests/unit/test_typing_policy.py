@@ -19,7 +19,7 @@ def test_strict_untyped_defs_is_the_global_default() -> None:
 
 
 def test_no_module_relaxes_untyped_defs() -> None:
-    # 2026-06-05: the last relaxation (src.processing.flink_jobs.*, formerly
+    # 2026-06-05: the last relaxation (agentflow_runtime.processing.flink_jobs.*, formerly
     # PyFlink-stub-gated) was removed after the package was annotated by hand
     # (PyFlink symbols resolve to Any under ignore_missing_imports, which is
     # exactly what stubless annotations need). Any override that relaxes

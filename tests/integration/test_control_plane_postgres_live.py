@@ -28,12 +28,12 @@ import pytest
 
 psycopg = pytest.importorskip("psycopg")
 
-from src.serving.control_plane.postgres import (  # noqa: E402
+from agentflow_runtime.serving.control_plane.postgres import (  # noqa: E402
     _MIGRATIONS,
     _SCHEMA_STATEMENTS,
     PostgresControlPlaneStore,
 )
-from src.serving.control_plane.store import UsageRow  # noqa: E402
+from agentflow_runtime.serving.control_plane.store import UsageRow  # noqa: E402
 
 PG_DSN = os.getenv("AGENTFLOW_TEST_PG_DSN", "")
 
@@ -871,8 +871,8 @@ def test_app_on_postgres_profile_shares_state_across_boots(
 
     from fastapi.testclient import TestClient
 
-    from src.serving.api.auth import TenantKey
-    from src.serving.api.main import app
+    from agentflow_runtime.serving.api.auth import TenantKey
+    from agentflow_runtime.serving.api.main import app
 
     monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_STORE", "postgres")
     monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_PG_DSN", PG_DSN)
@@ -1079,7 +1079,7 @@ def test_process_roles_split_serving_from_delivery_loops(
     serving-side cache machinery."""
     from fastapi.testclient import TestClient
 
-    from src.serving.api.main import app
+    from agentflow_runtime.serving.api.main import app
 
     monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_STORE", "postgres")
     monkeypatch.setenv("AGENTFLOW_CONTROLPLANE_PG_DSN", PG_DSN)

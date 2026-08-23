@@ -6,13 +6,13 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.backends.duckdb_backend import DuckDBBackend
-from src.serving.cache import QueryCache
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
-from src.tenancy import TenantRouter
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
+from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+from agentflow_runtime.serving.cache import QueryCache
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.tenancy import TenantRouter
 
 pytestmark = pytest.mark.integration
 

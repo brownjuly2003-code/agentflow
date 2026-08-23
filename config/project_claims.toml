@@ -3,8 +3,8 @@ schema_version = 1
 required_evidence = [
     "docs/perf/freshness-e2e-realpath.md",
     "docs/decisions/0013-golden-production-topology.md",
-    "src/processing/flink_jobs/Dockerfile",
-    "src/processing/flink_jobs/requirements.txt",
+    "src/agentflow_runtime/processing/flink_jobs/Dockerfile",
+    "src/agentflow_runtime/processing/flink_jobs/requirements.txt",
     "helm/agentflow/templates/flinkdeployment.yaml",
     "helm/agentflow/values.yaml",
     "docs/perf/golden-flink-submission-2026-07-30.md",
@@ -26,7 +26,7 @@ golden_topology = "containerized-pyflink-kubernetes"
 runtime = "PyFlink"
 flink_version = "2.3.0"
 artifact_type = "OCI image"
-artifact_definition = "src/processing/flink_jobs/Dockerfile"
+artifact_definition = "src/agentflow_runtime/processing/flink_jobs/Dockerfile"
 base_image = "flink:2.3.0-scala_2.12-java17@sha256:12a034b71a4d6d55227d14fe0ba69b0612c065a1dfaa756de4858fc56148c99c"
 deployment_definition = "helm/agentflow/templates/flinkdeployment.yaml"
 topology_decision = "docs/decisions/0013-golden-production-topology.md"

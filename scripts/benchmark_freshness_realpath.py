@@ -51,7 +51,7 @@ def build_order_event(amount: Decimal, sequence: int) -> dict:
     the same validation the Flink job applies, so a valid event lands on
     ``events.validated`` rather than the dead-letter topic.
     """
-    from src.ingestion.schemas.events import (
+    from agentflow_runtime.ingestion.schemas.events import (
         Currency,
         EventType,
         OrderEvent,

@@ -152,7 +152,7 @@ class _FakeExecutionEnvironment:
 
 @pytest.fixture
 def session_aggregator(monkeypatch):
-    target = "src.processing.flink_jobs.session_aggregator"
+    target = "agentflow_runtime.processing.flink_jobs.session_aggregator"
     for name in list(sys.modules):
         if name == target or name.startswith("pyflink"):
             sys.modules.pop(name, None)

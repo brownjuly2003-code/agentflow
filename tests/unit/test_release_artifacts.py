@@ -9,7 +9,7 @@ def test_release_artifact_checker_rejects_secret_paths(tmp_path):
     _write_targz(
         artifact,
         [
-            "agentflow_runtime-1.1.0/src/serving/__init__.py",
+            "agentflow_runtime-1.1.0/src/agentflow_runtime/serving/__init__.py",
             "agentflow_runtime-1.1.0/config/webhooks.yaml",
             "agentflow_runtime-1.1.0/docker/kafka-connect/secrets/mysql.properties",
         ],
@@ -26,7 +26,7 @@ def test_release_artifact_checker_accepts_runtime_sdist_allowlist(tmp_path):
     _write_targz(
         artifact,
         [
-            "agentflow_runtime-1.1.0/src/serving/__init__.py",
+            "agentflow_runtime-1.1.0/src/agentflow_runtime/serving/__init__.py",
             "agentflow_runtime-1.1.0/README.md",
             "agentflow_runtime-1.1.0/LICENSE",
             "agentflow_runtime-1.1.0/CHANGELOG.md",

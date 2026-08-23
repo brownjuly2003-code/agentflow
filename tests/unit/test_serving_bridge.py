@@ -25,9 +25,9 @@ from datetime import UTC, datetime
 import duckdb
 import pytest
 
-from src.processing.bridge_consumer import ServingBridge, is_canonical_event_type
-from src.processing.local_pipeline import _ensure_tables
-from src.processing.transformations.enrichment import enrich_order
+from agentflow_runtime.processing.bridge_consumer import ServingBridge, is_canonical_event_type
+from agentflow_runtime.processing.local_pipeline import _ensure_tables
+from agentflow_runtime.processing.transformations.enrichment import enrich_order
 
 VALIDATED_TOPIC = "events.validated"
 
@@ -177,7 +177,7 @@ def _flink_shaped_order(event_id: str | None = None, order_id: str | None = None
 
 def _flink_shaped_page_view(session_id: str, page_url: str) -> dict:
     """A clickstream event as Flink sinks it to `events.validated`."""
-    from src.processing.transformations.enrichment import enrich_clickstream
+    from agentflow_runtime.processing.transformations.enrichment import enrich_clickstream
 
     event = {
         "event_id": str(uuid.uuid4()),
@@ -397,7 +397,7 @@ def test_clickhouse_batch_folds_sessions_in_one_call(lake):
 def test_apply_batch_size_histogram_observes_applied_count(lake):
     """Q1.3 DoD leftover: the amortization only pays off if batches are >1 —
     the histogram is what the S10 rerun reads to prove that."""
-    from src.processing.bridge_metrics import APPLY_BATCH_SIZE
+    from agentflow_runtime.processing.bridge_metrics import APPLY_BATCH_SIZE
 
     def totals() -> tuple[float, float]:
         samples = APPLY_BATCH_SIZE.collect()[0].samples
@@ -502,7 +502,7 @@ def test_non_canonical_event_type_dead_letters(lake):
 
 
 def test_two_cdc_sources_keep_same_order_id_isolated_by_tenant(lake, tmp_path):
-    from src.ingestion.cdc.normalizer import normalize_debezium_event
+    from agentflow_runtime.ingestion.cdc.normalizer import normalize_debezium_event
 
     registry = tmp_path / "cdc_sources.json"
     registry.write_text(
@@ -599,8 +599,8 @@ def test_hostile_event_id_cannot_escape_the_guard_literal(hostile_event_id: str)
     import sqlglot
     from sqlglot import exp
 
-    from src.processing.clickhouse_sink import _quote_literal
-    from src.serving.backends.clickhouse_backend import ClickHouseBackend
+    from agentflow_runtime.processing.clickhouse_sink import _quote_literal
+    from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
 
     backend = ClickHouseBackend.__new__(ClickHouseBackend)
     backend._database = "agentflow"

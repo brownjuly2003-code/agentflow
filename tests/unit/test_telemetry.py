@@ -4,12 +4,12 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
-import src.serving.api.telemetry as telemetry_module
-from src.serving.api.middleware.logging import build_correlation_middleware
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.api.telemetry import setup_telemetry
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+import agentflow_runtime.serving.api.telemetry as telemetry_module
+from agentflow_runtime.serving.api.middleware.logging import build_correlation_middleware
+from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
+from agentflow_runtime.serving.api.telemetry import setup_telemetry
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 
 class EngineStub:

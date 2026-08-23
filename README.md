@@ -133,7 +133,7 @@ macOS/Linux:
 ```bash
 SERVING_BACKEND=duckdb AGENTFLOW_LOCAL_ONLY=true \
   AGENTFLOW_API_KEYS_FILE=config/api_keys.local.yaml DUCKDB_PATH=agentflow_demo.duckdb \
-  python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+  python -m uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 PowerShell 5.1+:
@@ -143,7 +143,7 @@ $env:SERVING_BACKEND = "duckdb"
 $env:AGENTFLOW_LOCAL_ONLY = "true"
 $env:AGENTFLOW_API_KEYS_FILE = "config/api_keys.local.yaml"
 $env:DUCKDB_PATH = "agentflow_demo.duckdb"
-python -m uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 Then send the plaintext key shown by `rotate_keys.py`:
@@ -187,12 +187,12 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 
 | Area | Files |
 |------|-------|
-| API core | `src/serving/api/` |
-| Semantic layer | `src/serving/semantic_layer/` |
+| API core | `src/agentflow_runtime/serving/api/` |
+| Semantic layer | `src/agentflow_runtime/serving/semantic_layer/` |
 | Python SDK | `sdk/agentflow/` |
 | TypeScript SDK | `sdk-ts/src/` |
 | Agent integrations | `integrations/agentflow_integrations/` (LangChain, LlamaIndex, CrewAI, MCP) |
-| Flink jobs | `src/processing/flink_jobs/` |
+| Flink jobs | `src/agentflow_runtime/processing/flink_jobs/` |
 | Test suites | `tests/` |
 | Design decisions | `docs/decisions/` (ADRs) |
 | Public site | `site/` |

@@ -59,7 +59,7 @@ spec:
           {{- end }}
           command:
             - uvicorn
-            - src.serving.api.main:app
+            - agentflow_runtime.serving.api.main:app
             - --host
             - 0.0.0.0
             - --port

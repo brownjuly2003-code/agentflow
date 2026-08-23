@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.processing.event_replayer``: the dead-letter
+"""Unit coverage for ``agentflow_runtime.processing.event_replayer``: the dead-letter
 replay / dismiss paths, payload decoding, the schema+semantic validation gate,
 and the not-found / invalid-payload error branches.
 
@@ -17,12 +17,12 @@ from datetime import UTC, datetime
 import duckdb
 import pytest
 
-from src.processing.event_replayer import (
+from agentflow_runtime.processing.event_replayer import (
     DeadLetterEventNotFoundError,
     EventReplayer,
     ReplayValidationError,
 )
-from src.serving.control_plane import ensure_dead_letter_table
+from agentflow_runtime.serving.control_plane import ensure_dead_letter_table
 
 # Event schema pins event_id to a 36-char uuid pattern (^[a-f0-9\-]{36}$).
 EVENT_ID_1 = "11111111-1111-4111-8111-111111111111"

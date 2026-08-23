@@ -1,6 +1,6 @@
 # AgentFlow Release Readiness
 
-**Release line**: `v2.0.0`
+**Release line**: `v2.1.0`
 
 **Package status**: published to PyPI (`agentflow-runtime`, `agentflow-client`) and npm
 (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA

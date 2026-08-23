@@ -1,4 +1,4 @@
-"""Unit coverage for ``src.serving.api.routers.batch`` — the per-item batch
+"""Unit coverage for ``agentflow_runtime.serving.api.routers.batch`` — the per-item batch
 executors and the concurrent ``batch_query`` handler.
 
 The full HTTP path (auth middleware, a real ``QueryEngine``, the PII config) is
@@ -16,8 +16,8 @@ from typing import Any
 
 import pytest
 
-from src.serving.api.routers import batch as batch_module
-from src.serving.api.routers.batch import (
+from agentflow_runtime.serving.api.routers import batch as batch_module
+from agentflow_runtime.serving.api.routers.batch import (
     BatchItem,
     BatchRequest,
     BatchResult,

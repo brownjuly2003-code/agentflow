@@ -9,10 +9,10 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from src.serving.api.alerts import dispatcher as alerts_dispatcher
-from src.serving.api.alerts import escalation as alerts_escalation
-from src.serving.api.main import app
-from src.serving.control_plane import embedded_alert as control_plane_embedded_alert
+from agentflow_runtime.serving.api.alerts import dispatcher as alerts_dispatcher
+from agentflow_runtime.serving.api.alerts import escalation as alerts_escalation
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.control_plane import embedded_alert as control_plane_embedded_alert
 
 
 class _FrozenDateTime:

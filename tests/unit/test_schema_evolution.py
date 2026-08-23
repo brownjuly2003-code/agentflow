@@ -11,9 +11,9 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.serving.api.routers.contracts import router as contracts_router
-from src.serving.semantic_layer.contract_registry import ContractRegistry
-from src.serving.semantic_layer.schema_evolution import EvolutionChecker
+from agentflow_runtime.serving.api.routers.contracts import router as contracts_router
+from agentflow_runtime.serving.semantic_layer.contract_registry import ContractRegistry
+from agentflow_runtime.serving.semantic_layer.schema_evolution import EvolutionChecker
 
 
 def _field(

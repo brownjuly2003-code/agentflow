@@ -11,8 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS, FAILED_AUTH_WINDOW_SECONDS
-from src.serving.api.auth.manager import AuthManager
+from agentflow_runtime.constants import (
+    DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+    FAILED_AUTH_WINDOW_SECONDS,
+)
+from agentflow_runtime.serving.api.auth.manager import AuthManager
 
 
 def _write_keys(path: Path, body: str) -> None:

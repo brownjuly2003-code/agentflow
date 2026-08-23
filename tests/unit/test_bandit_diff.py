@@ -95,7 +95,7 @@ def test_bandit_diff_normalizes_mixed_path_separators(tmp_path, monkeypatch, cap
         [
             {
                 "test_id": "B310",
-                "filename": "src\\serving\\backends\\clickhouse_backend.py",
+                "filename": "src\\agentflow_runtime\\serving\\backends\\clickhouse_backend.py",
                 "line_number": 49,
                 "issue_text": "example",
             }
@@ -106,7 +106,7 @@ def test_bandit_diff_normalizes_mixed_path_separators(tmp_path, monkeypatch, cap
         [
             {
                 "test_id": "B310",
-                "filename": "src/serving\\backends\\clickhouse_backend.py",
+                "filename": "src/agentflow_runtime/serving\\backends\\clickhouse_backend.py",
                 "line_number": 49,
                 "issue_text": "example",
             }

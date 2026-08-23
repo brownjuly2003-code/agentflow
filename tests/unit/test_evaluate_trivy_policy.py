@@ -136,7 +136,7 @@ def test_repo_flink_policy_pins_only_the_two_proven_findings() -> None:
 
     flink_job_sources = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (ROOT / "src" / "processing" / "flink_jobs").glob("*.py")
+        for path in (ROOT / "src" / "agentflow_runtime" / "processing" / "flink_jobs").glob("*.py")
     )
     assert "httplib2" not in flink_job_sources
     assert "pyarrow" not in flink_job_sources

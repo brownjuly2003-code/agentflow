@@ -8,7 +8,7 @@ no Docker, no network.
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DOCKERFILE = PROJECT_ROOT / "src" / "processing" / "flink_jobs" / "Dockerfile"
+DOCKERFILE = PROJECT_ROOT / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "Dockerfile"
 
 CONNECTOR_VERSION = "5.0.0-2.2"
 # Shell-form RUN is /bin/sh: runtime locals use normal POSIX ${var}/$1/$(...).

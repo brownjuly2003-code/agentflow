@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.processing.flink_jobs.kafka_ingress import (
+from agentflow_runtime.processing.flink_jobs.kafka_ingress import (
     build_kafka_source_ddl,
     configured_input_topics,
     row_to_envelope,

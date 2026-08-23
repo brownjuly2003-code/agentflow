@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.serving.seen_events import BoundedSeenSet
+from agentflow_runtime.serving.seen_events import BoundedSeenSet
 
 
 def test_acts_like_a_set() -> None:

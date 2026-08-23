@@ -16,6 +16,9 @@ from typing import Any, cast
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+# F-09: the runtime package lives under the src/ container dir
+if str(PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from scripts import mutation_report as mutation_report_module  # noqa: E402
 from scripts.security_check import (  # noqa: E402

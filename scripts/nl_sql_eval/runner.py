@@ -1,7 +1,7 @@
 """Eval runner: translate each gold question, execute, score EA.
 
 For every gold item the runner calls the injected `translate_fn` (defaults to
-`src.serving.semantic_layer.nl_engine.translate_nl_to_sql`), executes the
+`agentflow_runtime.serving.semantic_layer.nl_engine.translate_nl_to_sql`), executes the
 predicted SQL and the gold SQL against the same seeded DuckDB, and compares the
 result sets with `metrics.compare_results`. A `None` prediction (the rule-based
 translator's "untranslatable" signal) or a pred that raises both count as a
@@ -63,8 +63,8 @@ class EvalReport:
 
 def _default_translate_fn() -> TranslateFn:
     """Build the default translator: AgentFlow's shipped NL->SQL entrypoint."""
-    from src.serving.semantic_layer.catalog import DataCatalog
-    from src.serving.semantic_layer.nl_engine import translate_nl_to_sql
+    from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+    from agentflow_runtime.serving.semantic_layer.nl_engine import translate_nl_to_sql
 
     catalog = DataCatalog()
     return lambda question: translate_nl_to_sql(question, catalog)

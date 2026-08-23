@@ -1,5 +1,5 @@
 """Narrow, duckdb-free mutation test for the API rate limiter
-(src/serving/api/rate_limiter.py).
+(src/agentflow_runtime/serving/api/rate_limiter.py).
 
 This is the test the mutation gate runs against ``serving/api/rate_limiter.py``
 (see scripts/mutation_report.py MODULE_TARGETS). The rate limiter is the API
@@ -23,13 +23,13 @@ the sql_guard entries in fable_handoff.md cont.16-17):
    ``check()`` / ``_check_local()`` directly attributes every method line so the
    whole module is mutated.
 
-3. **src.constants shim.** rate_limiter does
-   ``from src.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS``, but the
-   mutation harness copies ``src/serving`` to a top-level ``serving`` package
+3. **agentflow_runtime.constants shim.** rate_limiter does
+   ``from agentflow_runtime.constants import DEFAULT_RATE_LIMIT_WINDOW_SECONDS``, but the
+   mutation harness copies ``src/agentflow_runtime/serving`` to a top-level ``serving`` package
    *without* ``src`` (copying ``src`` would shadow that ``serving`` with
-   ``src.serving``). We register a stub ``src.constants`` (the real default, 60)
+   ``agentflow_runtime.serving``). We register a stub ``agentflow_runtime.constants`` (the real default, 60)
    before importing the module so the import resolves. The value is not an
-   unbacked claim: the dual-context import below pulls the REAL ``src.constants``
+   unbacked claim: the dual-context import below pulls the REAL ``agentflow_runtime.constants``
    under ordinary pytest, where ``test_real_default_window_is_sixty_seconds``
    asserts the 60 s default -- so a production change to the constant fails the
    ordinary suite instead of silently passing here.
@@ -45,19 +45,19 @@ import asyncio
 import sys
 import types
 
-try:  # ordinary pytest: the real src package is importable
-    import src.constants  # noqa: F401
+try:  # ordinary pytest: the real agentflow_runtime package is importable
+    import agentflow_runtime.constants  # noqa: F401
 except ModuleNotFoundError:  # mutation harness: synthesize the one constant
-    _src = sys.modules.setdefault("src", types.ModuleType("src"))
-    _constants = types.ModuleType("src.constants")
+    _pkg = sys.modules.setdefault("agentflow_runtime", types.ModuleType("agentflow_runtime"))
+    _constants = types.ModuleType("agentflow_runtime.constants")
     _constants.DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
-    _src.constants = _constants
-    sys.modules["src.constants"] = _constants
+    _pkg.constants = _constants
+    sys.modules["agentflow_runtime.constants"] = _constants
 
 try:  # mutation-harness workspace exposes it as a top-level package
     from serving.api import rate_limiter as rate_limiter_module
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.api import rate_limiter as rate_limiter_module
+    from agentflow_runtime.serving.api import rate_limiter as rate_limiter_module
 
 RateLimiter = rate_limiter_module.RateLimiter
 
@@ -154,7 +154,7 @@ def _run(coro):
 
 
 # --------------------------------------------------------------------------- #
-# src.constants: pin the real default so the harness stub can't drift unnoticed.
+# agentflow_runtime.constants: pin the real default so the harness stub can't drift unnoticed.
 # --------------------------------------------------------------------------- #
 
 

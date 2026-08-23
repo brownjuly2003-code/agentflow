@@ -24,13 +24,17 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.quality.monitors.metrics_collector import CheckSource, HealthCollector, HealthStatus
-from src.serving.api.routers.lineage import router as lineage_router
-from src.serving.api.routers.slo import router as slo_router
-from src.serving.backends import ServingBackend
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.journal import JournalReader
-from src.serving.semantic_layer.search_index import SearchIndex
+from agentflow_runtime.quality.monitors.metrics_collector import (
+    CheckSource,
+    HealthCollector,
+    HealthStatus,
+)
+from agentflow_runtime.serving.api.routers.lineage import router as lineage_router
+from agentflow_runtime.serving.api.routers.slo import router as slo_router
+from agentflow_runtime.serving.backends import ServingBackend
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.journal import JournalReader
+from agentflow_runtime.serving.semantic_layer.search_index import SearchIndex
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,17 +66,17 @@ def _reaches_into_the_engine(source: str) -> bool:
 _COMPOSITION_ROOTS = {
     # Builds the engine, and hands the embedded connection to the control-plane
     # store and the demo/node seeders.
-    "src/serving/api/main.py",
+    "src/agentflow_runtime/serving/api/main.py",
     # Owns them.
-    "src/serving/semantic_layer/query/engine.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/engine.py",
     # Resolves the embedded connection per call through a provider lambda.
-    "src/serving/control_plane/store.py",
+    "src/agentflow_runtime/serving/control_plane/store.py",
     # Write paths on the embedded store, deliberately out of P0-3's scope (which
     # is about *reads* answering from the wrong store): the batch worker clones
     # the engine and needs its own DuckDB cursor, and node-federation ingest
     # appends to the embedded journal.
-    "src/serving/api/routers/batch.py",
-    "src/serving/node/ingest.py",
+    "src/agentflow_runtime/serving/api/routers/batch.py",
+    "src/agentflow_runtime/serving/node/ingest.py",
 }
 
 

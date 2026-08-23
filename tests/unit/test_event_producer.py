@@ -1,6 +1,6 @@
 """Unit tests for the synthetic event producer.
 
-Closes the coverage gap on `src/ingestion/producers/event_producer.py`
+Closes the coverage gap on `src/agentflow_runtime/ingestion/producers/event_producer.py`
 flagged in audit p5. We exercise the four generators, the Decimal
 JSON encoder, and the producer loop control path without a live Kafka
 broker (Producer is mocked via patch).
@@ -14,15 +14,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ingestion.producers import event_producer as producer_module
-from src.ingestion.producers.event_producer import (
+from agentflow_runtime.ingestion.producers import event_producer as producer_module
+from agentflow_runtime.ingestion.producers.event_producer import (
     DecimalEncoder,
     generate_click,
     generate_order,
     generate_payment,
     generate_product,
 )
-from src.ingestion.schemas.events import (
+from agentflow_runtime.ingestion.schemas.events import (
     ClickstreamEvent,
     OrderEvent,
     PaymentEvent,

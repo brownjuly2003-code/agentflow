@@ -21,13 +21,13 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.serving.api.routers import alerts as alerts_module
-from src.serving.api.routers import webhooks as webhooks_module
-from src.serving.api.routers.deadletter import router as deadletter_router
-from src.serving.api.routers.lineage import router as lineage_router
-from src.serving.backends import ServingBackend
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.journal import JournalReader
+from agentflow_runtime.serving.api.routers import alerts as alerts_module
+from agentflow_runtime.serving.api.routers import webhooks as webhooks_module
+from agentflow_runtime.serving.api.routers.deadletter import router as deadletter_router
+from agentflow_runtime.serving.api.routers.lineage import router as lineage_router
+from agentflow_runtime.serving.backends import ServingBackend
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.journal import JournalReader
 
 
 class _SlowBackend(ServingBackend):

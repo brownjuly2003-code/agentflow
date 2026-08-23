@@ -112,7 +112,7 @@ spec:
       - -pyclientexec
       - /opt/pyflink-venv/bin/python
       - -py
-      - /opt/agentflow/src/processing/flink_jobs/session_aggregator.py
+      - /opt/agentflow/src/agentflow_runtime/processing/flink_jobs/session_aggregator.py
     parallelism: {{ .Values.flinkJob.sessions.parallelism }}
     upgradeMode: {{ .Values.flinkJob.upgradeMode }}
     state: running

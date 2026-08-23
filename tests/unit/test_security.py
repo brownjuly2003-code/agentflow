@@ -11,7 +11,7 @@ import yaml
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager, KeyCreateRequest, build_auth_middleware
+from agentflow_runtime.serving.api.auth import AuthManager, KeyCreateRequest, build_auth_middleware
 
 
 class FrozenClock:
@@ -80,7 +80,7 @@ def _write_security_config(
 
 
 def _build_app(api_keys_path: Path, security_config_path: Path, db_path: Path) -> FastAPI:
-    from src.serving.api.security import build_security_headers_middleware
+    from agentflow_runtime.serving.api.security import build_security_headers_middleware
 
     app = FastAPI()
     app.state.auth_manager = AuthManager(
@@ -171,7 +171,7 @@ def test_authenticate_legacy_plaintext_keys_uses_constant_time_compare(
         newline="\n",
     )
 
-    from src.serving.api import auth as auth_module
+    from agentflow_runtime.serving.api import auth as auth_module
 
     calls: list[tuple[str, str]] = []
     original_compare_digest = auth_module.secrets.compare_digest
@@ -238,7 +238,7 @@ def test_legacy_plaintext_keys_use_constant_time_compare(
     db_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.serving.api import auth as auth_module
+    from agentflow_runtime.serving.api import auth as auth_module
 
     api_keys_path = tmp_path / "config" / "api_keys.yaml"
     api_keys_path.parent.mkdir(parents=True, exist_ok=True)
@@ -319,7 +319,7 @@ def test_security_headers_are_added_to_successful_responses(
     security_config_path: Path,
     db_path: Path,
 ) -> None:
-    from src.serving.api.security import SECURITY_HEADERS
+    from agentflow_runtime.serving.api.security import SECURITY_HEADERS
 
     client = TestClient(_build_app(api_keys_path, security_config_path, db_path))
 
@@ -335,7 +335,7 @@ def test_security_headers_are_added_to_unauthorized_responses(
     security_config_path: Path,
     db_path: Path,
 ) -> None:
-    from src.serving.api.security import SECURITY_HEADERS
+    from agentflow_runtime.serving.api.security import SECURITY_HEADERS
 
     client = TestClient(_build_app(api_keys_path, security_config_path, db_path))
 
@@ -410,7 +410,7 @@ async def _call_asgi_without_content_length(app: FastAPI, body: bytes) -> tuple[
 async def test_request_size_limit_blocks_streamed_body_without_content_length(
     tmp_path: Path,
 ) -> None:
-    from src.serving.api.security import build_security_headers_middleware
+    from agentflow_runtime.serving.api.security import build_security_headers_middleware
 
     security_config_path = tmp_path / "config" / "security.yaml"
     _write_security_config(security_config_path, request_size_limit_bytes=8)
@@ -432,7 +432,7 @@ async def test_request_size_limit_blocks_streamed_body_without_content_length(
 async def test_request_size_limit_replays_streamed_body_without_content_length(
     tmp_path: Path,
 ) -> None:
-    from src.serving.api.security import build_security_headers_middleware
+    from agentflow_runtime.serving.api.security import build_security_headers_middleware
 
     security_config_path = tmp_path / "config" / "security.yaml"
     _write_security_config(security_config_path, request_size_limit_bytes=16)
@@ -482,7 +482,7 @@ def test_failed_auth_limit_resets_after_one_hour(
     )
     manager.load()
     manager.ensure_usage_table()
-    from src.serving.api.security import build_security_headers_middleware
+    from agentflow_runtime.serving.api.security import build_security_headers_middleware
 
     app = FastAPI()
     app.state.auth_manager = manager
@@ -534,7 +534,7 @@ def test_ensure_usage_table_retries_transient_duckdb_locks(
     db_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.serving.api import auth as auth_module
+    from agentflow_runtime.serving.api import auth as auth_module
 
     manager = AuthManager(
         api_keys_path=api_keys_path,
@@ -558,7 +558,7 @@ def test_ensure_usage_table_retries_transient_duckdb_locks(
 
 
 def test_redact_sensitive_headers_masks_secrets() -> None:
-    from src.serving.api.security import redact_sensitive_headers
+    from agentflow_runtime.serving.api.security import redact_sensitive_headers
 
     headers = redact_sensitive_headers(
         {
@@ -579,7 +579,7 @@ def test_failed_auth_logs_redacted_headers(
     db_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.serving.api import auth as auth_module
+    from agentflow_runtime.serving.api import auth as auth_module
 
     events: list[tuple[str, dict]] = []
 
@@ -609,7 +609,7 @@ def test_failed_auth_logs_redacted_headers(
 
 
 def test_load_security_policy_reads_yaml(security_config_path: Path) -> None:
-    from src.serving.api.security import load_security_policy
+    from agentflow_runtime.serving.api.security import load_security_policy
 
     policy = load_security_policy(security_config_path)
 

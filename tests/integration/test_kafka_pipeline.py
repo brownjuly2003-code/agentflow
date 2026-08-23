@@ -11,8 +11,8 @@ from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 from fastapi.testclient import TestClient
 
-from src.processing.local_pipeline import _ensure_tables, _process_event
-from src.serving.api.main import app
+from agentflow_runtime.processing.local_pipeline import _ensure_tables, _process_event
+from agentflow_runtime.serving.api.main import app
 
 RAW_TOPIC = "events.raw"
 VALIDATED_TOPIC = "events.validated"

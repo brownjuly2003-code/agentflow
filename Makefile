@@ -33,11 +33,11 @@ wait-healthy:
 	@echo "Service UIs: http://localhost:8081 (Flink), http://localhost:9001 (MinIO console)"
 
 produce:
-	python -m src.ingestion.producers.event_producer
+	python -m agentflow_runtime.ingestion.producers.event_producer
 
 api:
 	docker compose up -d redis
-	DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000 --reload
+	DUCKDB_PATH=agentflow_demo.duckdb uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 tools:
 	python scripts/export_openapi.py
@@ -56,10 +56,10 @@ demo:
 	@echo "Step 0.5: Provisioning the serving store (schema + demo rows)..."
 	@echo "  The API does not create or seed a store on boot any more (audit P0-2)."
 	@echo "  A real deployment runs this same command WITHOUT --seed, from a job."
-	DUCKDB_PATH=agentflow_demo.duckdb python -m src.serving.provision --schema --seed
+	DUCKDB_PATH=agentflow_demo.duckdb python -m agentflow_runtime.serving.provision --schema --seed
 	@echo ""
 	@echo "Step 1: Seeding 500 events through the full pipeline..."
-	python -m src.processing.local_pipeline --burst 500
+	python -m agentflow_runtime.processing.local_pipeline --burst 500
 	@echo ""
 	@echo "Step 1.5: Seeding benchmark fixture rows into agentflow_demo.duckdb..."
 	python -c "from pathlib import Path; from scripts.run_benchmark import seed_benchmark_fixtures; seed_benchmark_fixtures(Path('agentflow_demo.duckdb'))"
@@ -69,10 +69,10 @@ demo:
 	@echo "  Try:  curl http://localhost:8000/v1/metrics/revenue?window=24h"
 	@echo "  Try:  curl http://localhost:8000/v1/entity/user/USR-10001"
 	@echo "  Try:  curl http://localhost:8000/v1/health"
-	AGENTFLOW_AUTH_DISABLED=true DUCKDB_PATH=agentflow_demo.duckdb uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000
+	AGENTFLOW_AUTH_DISABLED=true DUCKDB_PATH=agentflow_demo.duckdb uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000
 
 pipeline:
-	python -m src.processing.local_pipeline --eps 10
+	python -m agentflow_runtime.processing.local_pipeline --eps 10
 
 flink-local:
 ifeq ($(OS),Windows_NT)
@@ -93,7 +93,7 @@ test-integration:
 	pytest tests/integration/ -v --tb=short -m integration
 
 quality:
-	python -m src.quality.validators.semantic_validator --check-all
+	python -m agentflow_runtime.quality.validators.semantic_validator --check-all
 
 # ── Load Testing ──────────────────────────────────────────────────
 

@@ -24,7 +24,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
-from src.serving.api.security import hash_api_key, verify_api_key
+from agentflow_runtime.serving.api.security import hash_api_key, verify_api_key
 
 BCRYPT_ROUNDS_PROD = 12
 BCRYPT_ROUNDS_TEST = 4

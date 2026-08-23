@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.serving.transport_policy import (
+from agentflow_runtime.serving.transport_policy import (
     InsecureTransportError,
     assert_secure_transport,
     resolve_cors_origins,

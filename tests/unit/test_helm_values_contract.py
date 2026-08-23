@@ -545,7 +545,10 @@ def test_staging_values_render_host_loopback_relay_command():
     assert len(container.get("args") or []) == 1
     relay_arg = container["args"][0]
     assert "host_loopback_proxy.py" in relay_arg
-    assert "exec uvicorn src.serving.api.main:app --host 0.0.0.0 --port 8000" in relay_arg
+    assert (
+        "exec uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000"
+        in relay_arg
+    )
 
 
 def test_default_chart_render_keeps_uvicorn_command_without_staging_relay():
@@ -557,7 +560,7 @@ def test_default_chart_render_keeps_uvicorn_command_without_staging_relay():
     container = _api_container(result.stdout)
     assert container["command"] == [
         "uvicorn",
-        "src.serving.api.main:app",
+        "agentflow_runtime.serving.api.main:app",
         "--host",
         "0.0.0.0",
         "--port",
@@ -632,7 +635,7 @@ def test_lake_materializer_renders_as_separate_kafka_consumer():
 
     assert result.returncode == 0, output
     assert "app.kubernetes.io/component: lake-materializer" in output
-    assert "src.processing.lake_consumer" in output
+    assert "agentflow_runtime.processing.lake_consumer" in output
     assert 'value: "kafka.data.svc:9092"' in output
     assert 'value: "http://iceberg-rest.data.svc:8181"' in output
     assert 'value: "s3://agentflow-lake/warehouse"' in output
@@ -677,7 +680,7 @@ def test_serving_bridge_renders_as_separate_clickhouse_consumer():
 
     assert result.returncode == 0, output
     assert "app.kubernetes.io/component: serving-bridge" in output
-    assert "src.processing.bridge_consumer" in output
+    assert "agentflow_runtime.processing.bridge_consumer" in output
     assert 'value: "kafka.data.svc:9092"' in output
     assert 'name: "agentflow-clickhouse"' in output
     deployments = [
@@ -844,9 +847,16 @@ def test_flink_operator_workload_renders_golden_runtime():
     assert "flinkVersion: v2_3" in output
     assert "flink-python-2.3.0.jar" in output
     assert output.count("/opt/pyflink-venv/bin/python") == 2
-    assert "/opt/agentflow/src/processing/flink_jobs/stream_processor.py" in output
-    assert "/opt/agentflow/src/processing/flink_jobs/session_aggregator.py" in output
-    assert "/opt/agentflow/src/processing/flink_jobs/session_aggregation.py" not in output
+    assert (
+        "/opt/agentflow/src/agentflow_runtime/processing/flink_jobs/stream_processor.py" in output
+    )
+    assert (
+        "/opt/agentflow/src/agentflow_runtime/processing/flink_jobs/session_aggregator.py" in output
+    )
+    assert (
+        "/opt/agentflow/src/agentflow_runtime/processing/flink_jobs/session_aggregation.py"
+        not in output
+    )
     assert output.count("kind: FlinkDeployment") == 2
     assert 'value: "events.validated"' in output
     assert 'value: "sessions.aggregated"' in output

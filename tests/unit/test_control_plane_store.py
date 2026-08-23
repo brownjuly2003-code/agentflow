@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import duckdb
 import pytest
 
-from src.serving.control_plane import (
+from agentflow_runtime.serving.control_plane import (
     CONTROL_PLANE_PG_DSN_ENV,
     CONTROL_PLANE_STORE_ENV,
     EmbeddedControlPlaneStore,
@@ -482,9 +482,9 @@ async def test_dispatch_alerts_single_flights_rules_through_the_claim() -> None:
     """ADR 0010 §2 wiring pin: the dispatcher evaluates only the rules whose
     tick it claimed, and completes every claim it took — with the advanced
     record when the rule changed, with ``None`` when it did not."""
-    from src.serving.api.alerts import dispatcher as dispatcher_module
-    from src.serving.api.alerts import escalation as escalation_module
-    from src.serving.api.alerts.dispatcher import AlertDispatcher, AlertRule
+    from agentflow_runtime.serving.api.alerts import dispatcher as dispatcher_module
+    from agentflow_runtime.serving.api.alerts import escalation as escalation_module
+    from agentflow_runtime.serving.api.alerts.dispatcher import AlertDispatcher, AlertRule
 
     now = datetime.now(UTC)
     rules = [
@@ -836,8 +836,8 @@ def test_get_store_postgres_requires_a_dsn(
 def test_get_store_postgres_resolves_the_adapter_and_caches_it(
     conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from src.serving.control_plane import postgres as postgres_module
-    from src.serving.control_plane.postgres import PostgresControlPlaneStore
+    from agentflow_runtime.serving.control_plane import postgres as postgres_module
+    from agentflow_runtime.serving.control_plane.postgres import PostgresControlPlaneStore
 
     # The selection seam is under test, not psycopg: stub the module objects so
     # this resolves identically whether or not the optional dependencies are
@@ -866,7 +866,7 @@ def test_get_store_postgres_resolves_the_adapter_and_caches_it(
 def test_get_store_postgres_fails_loudly_without_psycopg(
     conn: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from src.serving.control_plane import postgres as postgres_module
+    from agentflow_runtime.serving.control_plane import postgres as postgres_module
 
     monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
     monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
@@ -882,7 +882,7 @@ def test_get_store_postgres_fails_loudly_without_psycopg_pool(
     # connections come from a bounded psycopg_pool.ConnectionPool (audit
     # P1-1), and a missing pool package must fail the boot with the same
     # loudness as missing psycopg — never degrade to connection-per-call.
-    from src.serving.control_plane import postgres as postgres_module
+    from agentflow_runtime.serving.control_plane import postgres as postgres_module
 
     monkeypatch.setenv(CONTROL_PLANE_STORE_ENV, "postgres")
     monkeypatch.setenv(CONTROL_PLANE_PG_DSN_ENV, "postgresql://cp@localhost:5432/agentflow")
@@ -942,7 +942,7 @@ def _seed_webhook_dead(
     last_error: str = "connection refused",
     updated_at: datetime | None = None,
 ) -> None:
-    from src.serving.control_plane.embedded import ensure_webhook_delivery_queue_table
+    from agentflow_runtime.serving.control_plane.embedded import ensure_webhook_delivery_queue_table
 
     ensure_webhook_delivery_queue_table(conn)
     now = updated_at or datetime.now(UTC)
@@ -1247,14 +1247,14 @@ def test_webhook_path_does_not_reach_into_the_engine_connection() -> None:
     direct ``query_engine._conn`` reaches must not re-grow there. The single
     sanctioned reach is the composition seam in ``control_plane/store.py``."""
     for relative in (
-        "src/serving/api/webhook_dispatcher.py",
-        "src/serving/api/routers/webhooks.py",
-        "src/serving/api/alerts/dispatcher.py",
-        "src/serving/api/alerts/escalation.py",
-        "src/serving/api/routers/alerts.py",
-        "src/processing/outbox.py",
-        "src/processing/event_replayer.py",
-        "src/serving/api/routers/deadletter.py",
+        "src/agentflow_runtime/serving/api/webhook_dispatcher.py",
+        "src/agentflow_runtime/serving/api/routers/webhooks.py",
+        "src/agentflow_runtime/serving/api/alerts/dispatcher.py",
+        "src/agentflow_runtime/serving/api/alerts/escalation.py",
+        "src/agentflow_runtime/serving/api/routers/alerts.py",
+        "src/agentflow_runtime/processing/outbox.py",
+        "src/agentflow_runtime/processing/event_replayer.py",
+        "src/agentflow_runtime/serving/api/routers/deadletter.py",
     ):
         source = (PROJECT_ROOT / relative).read_text(encoding="utf-8")
         assert "query_engine._conn" not in source, relative
@@ -1266,8 +1266,8 @@ def test_ops_timeline_path_does_not_reach_into_the_engine_connection_or_vault() 
     and ControlPlaneStore ports — no raw ``query_engine._conn`` reach, no
     vault DSN, ever. Covers every module under ``routers/ops*`` per spec §5."""
     for relative in (
-        "src/serving/api/routers/agent_query.py",
-        "src/serving/api/routers/ops.py",
+        "src/agentflow_runtime/serving/api/routers/agent_query.py",
+        "src/agentflow_runtime/serving/api/routers/ops.py",
     ):
         source = (PROJECT_ROOT / relative).read_text(encoding="utf-8")
         assert "query_engine._conn" not in source, relative

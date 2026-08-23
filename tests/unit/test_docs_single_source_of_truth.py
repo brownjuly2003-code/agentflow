@@ -38,8 +38,8 @@ AUTHORITATIVE_DOCS = (
 # Modules the runtime deleted; a current-state doc citing one as evidence
 # is describing a control that no longer exists (audit P2-1).
 REMOVED_PATHS = (
-    "src/serving/masking.py",
-    "src/serving/pii_policy.py",
+    "src/agentflow_runtime/serving/masking.py",
+    "src/agentflow_runtime/serving/pii_policy.py",
     "config/pii_fields.yaml",
     "tests/unit/test_masking.py",
 )
@@ -72,13 +72,13 @@ def test_runtime_version_helper_reports_the_package_version() -> None:
     # The source checkout outranks installed distribution metadata: an
     # editable install records the version at install time and goes stale
     # the moment pyproject.toml is bumped.
-    from src.version import runtime_version
+    from agentflow_runtime.version import runtime_version
 
     assert runtime_version() == _package_version()
 
 
 def test_fastapi_app_reports_the_package_version() -> None:
-    from src.serving.api.main import app
+    from agentflow_runtime.serving.api.main import app
 
     assert app.version == _package_version()
 

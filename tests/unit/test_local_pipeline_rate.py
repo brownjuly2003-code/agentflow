@@ -7,7 +7,7 @@ ZeroDivisionError in the inline ``total / elapsed`` rate string.
 
 from __future__ import annotations
 
-from src.processing.local_pipeline import _format_rate
+from agentflow_runtime.processing.local_pipeline import _format_rate
 
 
 def test_format_rate_handles_zero_elapsed_without_zerodivision() -> None:

@@ -42,8 +42,8 @@ def test_parse_args_defaults(monkeypatch):
 
 
 def test_build_order_event_passes_the_pipeline_validators():
-    from src.quality.validators.schema_validator import validate_event
-    from src.quality.validators.semantic_validator import validate_semantics
+    from agentflow_runtime.quality.validators.schema_validator import validate_event
+    from agentflow_runtime.quality.validators.semantic_validator import validate_semantics
 
     event = benchmark_freshness.build_order_event(Decimal("701.37"), 7)
 

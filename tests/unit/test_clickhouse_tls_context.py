@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from src.serving.backends import load_serving_backend_config
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.backends import load_serving_backend_config
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
 
 TEST_CA = Path(__file__).resolve().parents[1] / "fixtures" / "tls" / "test-ca.pem"
 

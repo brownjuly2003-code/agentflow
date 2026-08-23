@@ -11,9 +11,9 @@ from __future__ import annotations
 import duckdb
 import httpx
 
-from src.processing.local_pipeline import _ensure_tables
-from src.serving.node.config import NodeConfig
-from src.serving.node.emitter import NodeEmitter
+from agentflow_runtime.processing.local_pipeline import _ensure_tables
+from agentflow_runtime.serving.node.config import NodeConfig
+from agentflow_runtime.serving.node.emitter import NodeEmitter
 
 _TOKEN = "edge-node-token"  # noqa: S105 — test fixture, not a real secret
 

@@ -20,10 +20,10 @@ import pytest
 import structlog
 import yaml
 
-from src.serving.api import security as security_module
-from src.serving.api.auth import AuthManager
-from src.serving.api.auth import manager as manager_module
-from src.serving.api.security import (
+from agentflow_runtime.serving.api import security as security_module
+from agentflow_runtime.serving.api.auth import AuthManager
+from agentflow_runtime.serving.api.auth import manager as manager_module
+from agentflow_runtime.serving.api.security import (
     compute_key_lookup,
     hash_api_key,
     verify_api_key,
@@ -36,7 +36,7 @@ BCRYPT_TEST_ROUNDS = 4
 def _uncached_auth_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     # Same order-independence guard as test_auth_hashed_key_guidance.py:
     # earlier suites may freeze production processors onto the package logger.
-    from src.serving.api import auth as auth_package
+    from agentflow_runtime.serving.api import auth as auth_package
 
     monkeypatch.setattr(auth_package, "logger", structlog.get_logger())
 
@@ -230,7 +230,7 @@ def test_authenticate_previous_slot_uses_lookup(tmp_path: Path, monkeypatch: pyt
 
 
 def test_create_key_persists_lookup(tmp_path: Path):
-    from src.serving.api.auth.manager import KeyCreateRequest
+    from agentflow_runtime.serving.api.auth.manager import KeyCreateRequest
 
     api_keys_path = tmp_path / "config" / "api_keys.yaml"
     _write_keys(api_keys_path, [])
@@ -273,7 +273,7 @@ def test_rotate_key_moves_lookup_to_previous_slot(tmp_path: Path):
 
 
 def test_soft_limit_warning_counts_only_unindexed_keys(tmp_path: Path):
-    from src.constants import HASHED_KEY_SOFT_LIMIT
+    from agentflow_runtime.constants import HASHED_KEY_SOFT_LIMIT
 
     over = HASHED_KEY_SOFT_LIMIT + 1
     entries = [_entry(i, f"af-prod-acme-agent-{i}-0123456789abcdef") for i in range(over)]
@@ -293,7 +293,7 @@ def test_soft_limit_warning_counts_only_unindexed_keys(tmp_path: Path):
 
 
 def test_soft_limit_warning_still_fires_for_unindexed_keys(tmp_path: Path):
-    from src.constants import HASHED_KEY_SOFT_LIMIT
+    from agentflow_runtime.constants import HASHED_KEY_SOFT_LIMIT
 
     over = HASHED_KEY_SOFT_LIMIT + 1
     entries = [

@@ -1,7 +1,7 @@
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from src.serving.api.security import hash_api_key, verify_api_key
+from agentflow_runtime.serving.api.security import hash_api_key, verify_api_key
 
 _KEY_STRATEGY = st.text(
     alphabet=st.characters(min_codepoint=33, max_codepoint=126),

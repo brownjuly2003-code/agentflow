@@ -1,6 +1,6 @@
 """Unit tests for the FreshnessMonitor.
 
-Closes the 0% coverage gap on `src/quality/monitors/freshness_monitor.py`
+Closes the 0% coverage gap on `src/agentflow_runtime/quality/monitors/freshness_monitor.py`
 flagged in audit p5. We mock confluent_kafka.Consumer and the message
 shape so we can exercise `_process_message` paths without a live broker.
 """
@@ -14,8 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.quality.monitors import freshness_monitor as fm_module
-from src.quality.monitors.freshness_monitor import FreshnessMonitor
+from agentflow_runtime.quality.monitors import freshness_monitor as fm_module
+from agentflow_runtime.quality.monitors.freshness_monitor import FreshnessMonitor
 
 
 def _make_msg(value: bytes, topic: str = "events.validated", partition: int = 0, offset: int = 0):

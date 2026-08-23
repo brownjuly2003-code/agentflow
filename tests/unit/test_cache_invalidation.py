@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-import src.serving.cache_invalidation as cache_invalidation_module
-from src.serving.cache import QueryCache
-from src.serving.cache_invalidation import (
+import agentflow_runtime.serving.cache_invalidation as cache_invalidation_module
+from agentflow_runtime.serving.cache import QueryCache
+from agentflow_runtime.serving.cache_invalidation import (
     METRICS_INVALIDATE_CHANNEL,
     MetricCacheController,
     journal_scan_fetch,
@@ -195,9 +195,9 @@ async def test_webhook_listener_hook_fires_on_new_events():
 
     import duckdb
 
-    from src.serving.api.webhook_dispatcher import WebhookDispatcher
-    from src.serving.backends.duckdb_backend import DuckDBBackend
-    from src.serving.semantic_layer.query import QueryEngine
+    from agentflow_runtime.serving.api.webhook_dispatcher import WebhookDispatcher
+    from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+    from agentflow_runtime.serving.semantic_layer.query import QueryEngine
 
     conn = duckdb.connect(":memory:")
     conn.execute(
@@ -241,8 +241,8 @@ async def test_webhook_listener_hook_fires_on_new_events():
 def _duckdb_engine_with_journal(row_count: int):
     import duckdb
 
-    from src.serving.backends.duckdb_backend import DuckDBBackend
-    from src.serving.semantic_layer.query import QueryEngine
+    from agentflow_runtime.serving.backends.duckdb_backend import DuckDBBackend
+    from agentflow_runtime.serving.semantic_layer.query import QueryEngine
 
     conn = duckdb.connect(":memory:")
     conn.execute(

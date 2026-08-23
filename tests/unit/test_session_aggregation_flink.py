@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from src.processing.flink_jobs import session_aggregation
+from agentflow_runtime.processing.flink_jobs import session_aggregation
 
 BASE_TIME = datetime(2026, 4, 12, 12, 0, tzinfo=UTC)
 
@@ -265,7 +265,7 @@ def test_legacy_build_delegates_to_canonical_job(monkeypatch):
 
     monkeypatch.setitem(
         sys.modules,
-        "src.processing.flink_jobs.session_aggregator",
+        "agentflow_runtime.processing.flink_jobs.session_aggregator",
         types.SimpleNamespace(build_pipeline=build_pipeline),
     )
     env = object()
@@ -293,7 +293,7 @@ def test_legacy_main_executes_canonical_pipeline(monkeypatch):
     pipeline = types.SimpleNamespace(execute=executed.append)
     monkeypatch.setitem(
         sys.modules,
-        "src.processing.flink_jobs.session_aggregator",
+        "agentflow_runtime.processing.flink_jobs.session_aggregator",
         types.SimpleNamespace(build_pipeline=lambda: pipeline),
     )
 

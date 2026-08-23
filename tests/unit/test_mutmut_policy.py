@@ -23,12 +23,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # package so mutmut's trampoline accepts them). These assertions guard the
 # declared policy, not live coverage.
 REQUIRED_MUTATION_TARGETS = {
-    "src/serving/semantic_layer/sql_guard.py",
-    "src/serving/api/auth/manager.py",
-    "src/serving/api/auth/key_rotation.py",
-    "src/serving/api/rate_limiter.py",
-    "src/serving/semantic_layer/query/nl_queries.py",
-    "src/serving/semantic_layer/query/sql_builder.py",
+    "src/agentflow_runtime/serving/semantic_layer/sql_guard.py",
+    "src/agentflow_runtime/serving/api/auth/manager.py",
+    "src/agentflow_runtime/serving/api/auth/key_rotation.py",
+    "src/agentflow_runtime/serving/api/rate_limiter.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/nl_queries.py",
+    "src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py",
 }
 
 
@@ -40,7 +40,7 @@ def _mutmut_paths() -> list[str]:
 def test_mutmut_paths_all_exist() -> None:
     # A path that rots to a missing file makes mutmut silently mutate nothing
     # for that surface — the H-2 bug, where paths_to_mutate pointed at the
-    # deleted src/serving/api/auth.py and the auth mutation gate became a no-op.
+    # deleted src/agentflow_runtime/serving/api/auth.py and the auth mutation gate became a no-op.
     # Fail loud if any configured target no longer exists on disk.
     missing = [p for p in _mutmut_paths() if not (PROJECT_ROOT / p).is_file()]
     assert missing == []
@@ -57,7 +57,7 @@ def test_mutmut_covers_security_critical_modules() -> None:
 def test_mutmut_targets_define_real_logic() -> None:
     # The semantic flavor of the H-2 path-rot bug: after the query-engine
     # package split, paths_to_mutate kept pointing at
-    # src/serving/semantic_layer/query_engine.py — a 5-line re-export shim —
+    # src/agentflow_runtime/serving/semantic_layer/query_engine.py — a 5-line re-export shim —
     # so mutmut "covered" the query surface while mutating nothing real.
     # The existence check above cannot catch this (the shim is a real file),
     # so also require every target to define at least one function or class

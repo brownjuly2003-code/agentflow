@@ -51,7 +51,7 @@ def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
         entry
         for entry in dependabot["updates"]
         if entry.get("package-ecosystem") == "pip"
-        and entry.get("directory") == "/src/processing/flink_jobs"
+        and entry.get("directory") == "/src/agentflow_runtime/processing/flink_jobs"
     ]
 
     assert len(flink_updates) == 1
@@ -93,7 +93,7 @@ def test_external_pen_test_handoff_exists_without_claiming_attestation() -> None
 # per-line justification comment is enforced by
 # test_bandit_diff.test_nosec_comments_carry_reason.
 _ALLOWED_B608_SITES = {
-    "src/orchestration/dags/daily_batch.py": 1,
+    "src/agentflow_runtime/orchestration/dags/daily_batch.py": 1,
     # ADR 0006 Phase 1a (reviewed 2026-07-02): the ClickHouse pipeline sink
     # interpolates _quote_literal-escaped ids into its aggregate-recompute
     # reads (the backend transpile re-escapes them structurally), and
@@ -112,7 +112,7 @@ _ALLOWED_B608_SITES = {
     # quote/backslash/newline/UNION payloads stay one statement, one literal, and
     # round-trip to the original value. ClickHouse's `execute(params=...)` is a
     # documented no-op, so binding is not an option on this backend.
-    "src/processing/clickhouse_sink.py": 3,
+    "src/agentflow_runtime/processing/clickhouse_sink.py": 3,
     # audit P0-3 (reviewed 2026-07-11): the five journal sites moved OUT of
     # routers/lineage.py (1) and routers/slo.py (4) and into
     # semantic_layer/journal.py, which reads pipeline_events through the active
@@ -129,7 +129,7 @@ _ALLOWED_B608_SITES = {
     # the neighbours: identifiers from the schema probe's allowlist,
     # thresholds are floats from config/slo.yaml formatted with :g, tenant
     # values go through _value().
-    "src/serving/semantic_layer/journal.py": 7,
+    "src/agentflow_runtime/serving/semantic_layer/journal.py": 7,
     # ADR 0010 slice 5 (reviewed 2026-07-03): _replace_record_set interpolates
     # only its `table` argument, a module literal at exactly two call sites
     # (save_webhook_registrations / save_alert_rules); every value binds via
@@ -137,7 +137,7 @@ _ALLOWED_B608_SITES = {
     # the tenant/reason filters branch into full literal statements).
     # Audit F-08: the helper lives in postgres_base.py since the capability
     # split; the counted sites are unchanged.
-    "src/serving/control_plane/postgres_base.py": 3,
+    "src/agentflow_runtime/serving/control_plane/postgres_base.py": 3,
     # D2 (reviewed 2026-07-04): the new orders.status stage-trail seed INSERT
     # in initialize_demo_data follows the same pattern as the file's other six
     # seed-block sites — a static f-string of hardcoded demo ids and
@@ -151,10 +151,10 @@ _ALLOWED_B608_SITES = {
     # (2) `sorting_keys()`, which reads system.tables to detect a table that
     # predates the tenant key; it interpolates only the database name from
     # trusted backend config, quoted as a literal.
-    "src/serving/backends/clickhouse_backend.py": 10,
-    "src/serving/backends/duckdb_backend.py": 2,
-    "src/serving/semantic_layer/nl_engine.py": 6,
-    "src/serving/semantic_layer/query/engine.py": 1,
+    "src/agentflow_runtime/serving/backends/clickhouse_backend.py": 10,
+    "src/agentflow_runtime/serving/backends/duckdb_backend.py": 2,
+    "src/agentflow_runtime/serving/semantic_layer/nl_engine.py": 6,
+    "src/agentflow_runtime/serving/semantic_layer/query/engine.py": 1,
     # D3 (reviewed 2026-07-04): fetch_orders_by_status's new stuck-orders
     # bulk read follows get_entity's existing pattern in this same file — the
     # table name comes from the catalog allowlist (_qualify_table), and every
@@ -168,8 +168,8 @@ _ALLOWED_B608_SITES = {
     # incremental search refresh's targeted read. Table and primary key are
     # catalog identifiers; every id value goes through _quote_literal (and the
     # ClickHouse transpile re-escapes structurally).
-    "src/serving/semantic_layer/query/entity_queries.py": 6,
-    "src/serving/semantic_layer/query/nl_queries.py": 3,
+    "src/agentflow_runtime/serving/semantic_layer/query/entity_queries.py": 6,
+    "src/agentflow_runtime/serving/semantic_layer/query/nl_queries.py": 3,
     # audit P0-1 (reviewed 2026-07-11): the tenant boundary itself, 2 sites.
     # (1) _qualify_table builds the scoped relation every entity read goes through
     # — `(SELECT * EXCLUDE (tenant_id) FROM <table> WHERE tenant_id = '<tenant>')`.
@@ -181,7 +181,7 @@ _ALLOWED_B608_SITES = {
     # re-escaped structurally by the ClickHouse transpile, whose
     # execute(params=...) is a documented no-op, so binding is not available
     # here). Any further site would be a second boundary — there must not be one.
-    "src/serving/semantic_layer/query/sql_builder.py": 2,
+    "src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py": 2,
 }
 
 

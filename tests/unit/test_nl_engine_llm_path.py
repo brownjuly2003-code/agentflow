@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import pytest
 
-import src.serving.semantic_layer.nl_engine as nl_engine
-import src.serving.semantic_layer.nl_sql_engine as engine_pkg
-from src.serving.semantic_layer.catalog import DataCatalog
+import agentflow_runtime.serving.semantic_layer.nl_engine as nl_engine
+import agentflow_runtime.serving.semantic_layer.nl_sql_engine as engine_pkg
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
 
 
 @pytest.fixture

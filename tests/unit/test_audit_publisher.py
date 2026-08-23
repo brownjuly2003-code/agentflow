@@ -4,9 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from src.serving.api.auth.manager import AuthManager, TenantKey
-from src.serving.api.auth.usage_table import ensure_usage_table, record_usage
-from src.serving.audit_publisher import HashChainedFileAuditPublisher, verify_hash_chain
+from agentflow_runtime.serving.api.auth.manager import AuthManager, TenantKey
+from agentflow_runtime.serving.api.auth.usage_table import ensure_usage_table, record_usage
+from agentflow_runtime.serving.audit_publisher import (
+    HashChainedFileAuditPublisher,
+    verify_hash_chain,
+)
 
 
 def test_hash_chained_file_audit_publisher_appends_tamper_evident_records(tmp_path: Path):
@@ -91,7 +94,7 @@ def test_record_usage_no_duplicate_insert_when_publish_raises(tmp_path: Path) ->
     # INSERT into api_usage via the DB retry loop.
     record_usage(manager, tenant_key, "/v1/entity/order")
 
-    from src.serving.duckdb_connection import connect_duckdb
+    from agentflow_runtime.serving.duckdb_connection import connect_duckdb
 
     conn = connect_duckdb(manager.db_path)
     try:
@@ -112,7 +115,7 @@ def test_record_usage_skips_publish_when_all_inserts_fail(
 
     import duckdb
 
-    from src.serving.control_plane import embedded as embedded_module
+    from agentflow_runtime.serving.control_plane import embedded as embedded_module
 
     real_connect = embedded_module.connect_duckdb
     insert_attempts = {"n": 0}

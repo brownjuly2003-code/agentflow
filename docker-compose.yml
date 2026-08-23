@@ -60,7 +60,7 @@ services:
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.validated --partitions 6 --replication-factor 1
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.deadletter --partitions 3 --replication-factor 1
         # The stream processor's KafkaSource subscribes to the CDC topics too
-        # (src/processing/flink_jobs/stream_processor.py). Kafka refuses to hand
+        # (src/agentflow_runtime/processing/flink_jobs/stream_processor.py). Kafka refuses to hand
         # out metadata for a topic that does not exist, so the job dies in a
         # restart loop -- "Failed to get metadata for topics [...]" -- before it
         # ever reads orders.raw. Debezium creates these in a full deployment;

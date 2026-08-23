@@ -6,9 +6,9 @@ from collections.abc import Callable
 import duckdb
 import pytest
 
-import src.serving.control_plane.embedded as control_plane_embedded_module
-from src.db_concurrency import catalog_ddl_lock
-from src.serving.control_plane import (
+import agentflow_runtime.serving.control_plane.embedded as control_plane_embedded_module
+from agentflow_runtime.db_concurrency import catalog_ddl_lock
+from agentflow_runtime.serving.control_plane import (
     ensure_alert_history_table,
     ensure_dead_letter_table,
     ensure_webhook_deliveries_table,

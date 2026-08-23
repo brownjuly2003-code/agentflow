@@ -21,9 +21,9 @@ from pathlib import Path
 
 import yaml
 
-from src.serving.api.auth import AuthManager
-from src.serving.api.auth.manager import TenantKey
-from src.serving.api.security import compute_key_lookup, hash_api_key
+from agentflow_runtime.serving.api.auth import AuthManager
+from agentflow_runtime.serving.api.auth.manager import TenantKey
+from agentflow_runtime.serving.api.security import compute_key_lookup, hash_api_key
 
 BCRYPT_TEST_ROUNDS = 4
 

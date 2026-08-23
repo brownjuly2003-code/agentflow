@@ -14,8 +14,8 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import AuthManager, build_auth_middleware, require_admin_key
-from src.serving.api.auth.middleware import _is_admin_path, _is_exempt_path
+from agentflow_runtime.serving.api.auth import AuthManager, build_auth_middleware, require_admin_key
+from agentflow_runtime.serving.api.auth.middleware import _is_admin_path, _is_exempt_path
 
 
 def _app(tmp_path: Path, *, auth_disabled: bool = False, with_keys: bool = False) -> FastAPI:

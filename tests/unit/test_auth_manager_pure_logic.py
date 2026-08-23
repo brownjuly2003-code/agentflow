@@ -1,5 +1,5 @@
 """Unit coverage for the pure, infra-free security logic in
-``src.serving.api.auth.manager`` that the integration / e2e auth suites
+``agentflow_runtime.serving.api.auth.manager`` that the integration / e2e auth suites
 exercise only indirectly: tenant table-allowlist resolution (tenant
 isolation), ``TenantKey`` key-material validation, legacy ``AGENTFLOW_API_KEYS``
 env parsing, and the ``_matches_key_material`` revoke-path matcher. These
@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.constants import DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
-from src.serving.api.auth.manager import (
+from agentflow_runtime.constants import DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
+from agentflow_runtime.serving.api.auth.manager import (
     _CURRENT_TENANT_ID,
     DEFAULT_RATE_LIMIT_RPM,
     AuthManager,

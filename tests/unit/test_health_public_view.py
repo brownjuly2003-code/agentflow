@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from agentflow.models import HealthStatus
 
-from src.serving.api.main import _public_health_view
+from agentflow_runtime.serving.api.main import _public_health_view
 
 _RAW_PAYLOAD = {
     "status": "unhealthy",

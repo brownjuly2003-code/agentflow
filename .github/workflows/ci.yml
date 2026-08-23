@@ -87,6 +87,11 @@ jobs:
         run: |
           uv run python -m build --wheel --no-isolation
           uv run python -m build --wheel --no-isolation --outdir dist sdk
+      - name: Wheel top-level namespace policy (audit F-09)
+        # The runtime wheel must ship exactly agentflow_runtime + the one-file
+        # deprecated src shim; any other top-level entry is an undeclared
+        # package leaking into the distribution.
+        run: uv run python scripts/wheel_smoke.py 'dist/agentflow_runtime-*.whl'
       - name: Install production dependencies and wheel in a clean environment
         run: |
           python -m venv /tmp/agentflow-clean
@@ -94,12 +99,32 @@ jobs:
           /tmp/agentflow-clean/bin/pip install --quiet --no-deps dist/agentflow_runtime-*.whl
           /tmp/agentflow-clean/bin/pip install --quiet --no-deps dist/agentflow_client-*.whl
           /tmp/agentflow-clean/bin/pip check
-      - name: Smoke quickstart and materializer imports
-        # Run outside the checkout so `src.*` must come from the installed
-        # runtime wheel rather than the repository working tree on sys.path.
+      - name: Smoke quickstart, materializer and deprecated-shim imports
+        # Run outside the checkout so the runtime must come from the installed
+        # wheel rather than the repository working tree on sys.path. The src.*
+        # surface must keep working through the wheel's deprecated shim for
+        # one deprecation window (removed in the next major release).
         working-directory: /tmp
         run: |
-          /tmp/agentflow-clean/bin/python -c "from agentflow.client import AgentFlowClient; from src.serving.api.main import app; from src.processing.local_pipeline import main; from src.processing.lake_consumer import ValidatedLakeConsumer; assert AgentFlowClient and app and main and ValidatedLakeConsumer"
+          /tmp/agentflow-clean/bin/python - <<'PY'
+          import warnings
+
+          from agentflow.client import AgentFlowClient
+          from agentflow_runtime.processing.lake_consumer import ValidatedLakeConsumer
+          from agentflow_runtime.processing.local_pipeline import main
+          from agentflow_runtime.serving.api.main import app
+
+          assert AgentFlowClient and app and main and ValidatedLakeConsumer
+
+          with warnings.catch_warnings(record=True) as caught:
+              warnings.simplefilter("always")
+              import src.serving.api.main as shim_main
+
+          assert any(
+              issubclass(w.category, DeprecationWarning) for w in caught
+          ), "src shim import did not raise DeprecationWarning"
+          assert shim_main.app is app, "src shim aliased a different module object"
+          PY
 
   local-duckdb-smoke:
     runs-on: ubuntu-latest
@@ -231,25 +256,25 @@ jobs:
           # --cov-branch turns the floor into a combined line+branch metric — local baseline
           # 2026-05-25 is 62% (7716 lines / 2010 branches measured on HEAD `22b1be9`), so the
           # 60% gate stays passing with a 2pp cushion. Raise the gate once that cushion grows.
-          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src --cov=sdk --cov-branch --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-branch --cov-report=xml --cov-report=term-missing --cov-fail-under=60
       - name: Enforce changed-code coverage
         run: diff-cover coverage.xml --compare-branch=origin/main --fail-under=80
       - name: Run quality validators coverage gate
         run: |
-          python -m pytest tests/unit/test_validators.py -v --tb=short --cov=src.quality.validators --cov-report=term-missing --cov-fail-under=90
+          python -m pytest tests/unit/test_validators.py -v --tb=short --cov=agentflow_runtime.quality.validators --cov-report=term-missing --cov-fail-under=90
       - name: Run freshness monitor coverage gate
         run: |
-          python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=src.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90
+          python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=agentflow_runtime.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90
       - name: Run event producer coverage gate
         run: |
-          python -m pytest tests/unit/test_event_producer.py -v --tb=short --cov=src.ingestion.producers.event_producer --cov-report=term-missing --cov-fail-under=90
+          python -m pytest tests/unit/test_event_producer.py -v --tb=short --cov=agentflow_runtime.ingestion.producers.event_producer --cov-report=term-missing --cov-fail-under=90
       - name: Run SQL guard coverage gate
         run: |
           # Security-critical NL->SQL guard: validate_nl_sql (SELECT-only, no DML,
           # tenant table allow-list, recursive-CTE shadow reject). test_sql_guard
           # plus test_sql_guard_mutation give full module coverage (100% local);
           # the 90% gate keeps a 10pp regression cushion.
-          python -m pytest tests/unit/test_sql_guard.py tests/unit/test_sql_guard_mutation.py -v --tb=short --cov=src.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
+          python -m pytest tests/unit/test_sql_guard.py tests/unit/test_sql_guard_mutation.py -v --tb=short --cov=agentflow_runtime.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
       - name: Run rate limiter coverage gate
         run: |
           # Security-critical sliding-window rate limiter (Redis + in-memory

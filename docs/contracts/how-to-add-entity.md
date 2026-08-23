@@ -69,7 +69,7 @@ that extends the query planner.
 ## Versioning
 
 Schema-level contract versions live in a separate registry
-(`src/serving/semantic_layer/contract_registry.py`) and are keyed by
+(`src/agentflow_runtime/serving/semantic_layer/contract_registry.py`) and are keyed by
 entity name. To bump a contract version for an entity:
 
 1. Register the new version in the schema contract registry.

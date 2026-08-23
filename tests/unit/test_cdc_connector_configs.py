@@ -8,11 +8,11 @@ both files. These cheap pure-Python tests close that gap.
 
 from __future__ import annotations
 
-from src.ingestion.connectors.mysql_cdc import (
+from agentflow_runtime.ingestion.connectors.mysql_cdc import (
     AGENTFLOW_MYSQL_CDC,
     MySqlDebeziumConnectorConfig,
 )
-from src.ingestion.connectors.postgres_cdc import (
+from agentflow_runtime.ingestion.connectors.postgres_cdc import (
     AGENTFLOW_POSTGRES_CDC,
     DebeziumConnectorConfig,
 )
@@ -102,7 +102,7 @@ def test_mysql_server_id_overridable_via_env(monkeypatch):
     parallel Debezium instances cannot collide on the replication stream
     (each instance MUST advertise a unique server.id to MySQL)."""
 
-    from src.ingestion.connectors import mysql_cdc
+    from agentflow_runtime.ingestion.connectors import mysql_cdc
 
     monkeypatch.setenv("AGENTFLOW_MYSQL_SERVER_ID", "987654")
     assert mysql_cdc._resolve_mysql_server_id() == 987654

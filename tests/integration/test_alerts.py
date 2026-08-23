@@ -10,9 +10,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.alerts import escalation as alerts_escalation
-from src.serving.api.auth import TenantKey
-from src.serving.api.main import app
+from agentflow_runtime.serving.api.alerts import escalation as alerts_escalation
+from agentflow_runtime.serving.api.auth import TenantKey
+from agentflow_runtime.serving.api.main import app
 
 
 class _HTTPXMock:

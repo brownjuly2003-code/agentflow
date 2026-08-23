@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.main import app
+from agentflow_runtime.serving.api.main import app
 
 pytestmark = pytest.mark.integration
 

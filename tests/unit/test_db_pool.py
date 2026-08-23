@@ -5,16 +5,16 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.quality.monitors.metrics_collector import (
+from agentflow_runtime.quality.monitors.metrics_collector import (
     CheckSource,
     ComponentHealth,
     HealthStatus,
     PipelineHealth,
 )
-from src.serving.api.main import app
-from src.serving.db_pool import DuckDBPool
-from src.serving.semantic_layer.catalog import DataCatalog
-from src.serving.semantic_layer.query_engine import QueryEngine
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.db_pool import DuckDBPool
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.semantic_layer.query_engine import QueryEngine
 
 
 def _build_pool(db_path: Path, pool_size: int = 2) -> DuckDBPool:
@@ -206,7 +206,7 @@ def test_default_duckdb_pool_size_scales_with_cpu_count(tmp_path, monkeypatch):
     monkeypatch.setenv("DUCKDB_PATH", str(tmp_path / "auto-pool.duckdb"))
     monkeypatch.setenv("AGENTFLOW_USAGE_DB_PATH", str(tmp_path / "usage.duckdb"))
     monkeypatch.delenv("DUCKDB_POOL_SIZE", raising=False)
-    monkeypatch.setattr("src.serving.api.main.os.cpu_count", lambda: 8)
+    monkeypatch.setattr("agentflow_runtime.serving.api.main.os.cpu_count", lambda: 8)
     previous_webhook_autostart = getattr(app.state, "webhook_dispatcher_autostart", True)
     previous_alert_autostart = getattr(app.state, "alert_dispatcher_autostart", True)
     app.state.webhook_dispatcher_autostart = False

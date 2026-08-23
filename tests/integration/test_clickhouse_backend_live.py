@@ -19,8 +19,8 @@ import os
 
 import pytest
 
-from src.serving.backends.clickhouse_backend import ClickHouseBackend
-from src.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.serving.backends.clickhouse_backend import ClickHouseBackend
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
 
 LIVE_HOST = os.getenv("CLICKHOUSE_LIVE_HOST")
 

@@ -1,5 +1,5 @@
 """Narrow, duckdb-free mutation test for the API-key auth manager
-(src/serving/api/auth/manager.py).
+(src/agentflow_runtime/serving/api/auth/manager.py).
 
 This is the test the mutation gate runs against
 ``serving/api/auth/manager.py`` (see scripts/mutation_report.py MODULE_TARGETS).
@@ -31,8 +31,8 @@ cont.16-21):
    directly so coverage attributes every line.
 
 3. **Workspace discrimination by top-level ``serving``.** mutmut's mutants/
-   workspace copies src/serving to a TOP-LEVEL ``serving`` package; ordinary
-   pytest has no top-level ``serving`` (only src.serving). Gate the harness stubs
+   workspace copies src/agentflow_runtime/serving to a TOP-LEVEL ``serving`` package; ordinary
+   pytest has no top-level ``serving`` (only agentflow_runtime.serving). Gate the harness stubs
    on ``find_spec("serving")`` -- NOT ``import src``, which stays importable via
    the editable install even inside the workspace (cont.21 duckdb-crash root
    cause). Under ordinary pytest no stub is installed and the real modules load.
@@ -46,9 +46,9 @@ from datetime import date
 
 
 def _in_mutation_workspace() -> bool:
-    # mutmut's mutants/ workspace copies src/serving to a TOP-LEVEL `serving`
+    # mutmut's mutants/ workspace copies src/agentflow_runtime/serving to a TOP-LEVEL `serving`
     # package (scripts/mutation_report.py prepare_workspace); ordinary pytest has
-    # no top-level `serving` (only src.serving), so its presence cleanly marks the
+    # no top-level `serving` (only agentflow_runtime.serving), so its presence cleanly marks the
     # harness. `import src` does NOT discriminate: the editable install keeps the
     # real `src` importable even inside the workspace.
     import importlib.util
@@ -98,7 +98,7 @@ if _in_mutation_workspace():
 try:  # mutation-harness workspace exposes it as a top-level package
     from serving.api.auth import manager as manager_module
 except ImportError:  # ordinary pytest sees it under the src package
-    from src.serving.api.auth import manager as manager_module
+    from agentflow_runtime.serving.api.auth import manager as manager_module
 
 import pytest
 

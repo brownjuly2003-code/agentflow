@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 import structlog
 
-from src.constants import HASHED_KEY_SOFT_LIMIT
-from src.serving.api.auth import AuthManager
+from agentflow_runtime.constants import HASHED_KEY_SOFT_LIMIT
+from agentflow_runtime.serving.api.auth import AuthManager
 
 _WARNING_EVENT = "hashed_key_count_exceeds_guidance"
 
@@ -26,7 +26,7 @@ _WARNING_EVENT = "hashed_key_count_exceeds_guidance"
 def _uncached_auth_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-point the auth package logger at a fresh, uncached proxy.
 
-    Any earlier test that imports ``src.serving.api.main`` runs
+    Any earlier test that imports ``agentflow_runtime.serving.api.main`` runs
     ``configure_logging()`` (``cache_logger_on_first_use=True``); the first
     emit through the module-level auth logger then freezes the production
     processor chain onto the proxy, and ``structlog.testing.capture_logs()``
@@ -35,7 +35,7 @@ def _uncached_auth_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     ``tests/unit`` alone). A fresh proxy binds inside ``capture_logs`` instead,
     making these tests order-independent.
     """
-    from src.serving.api import auth as auth_package
+    from agentflow_runtime.serving.api import auth as auth_package
 
     monkeypatch.setattr(auth_package, "logger", structlog.get_logger())
 

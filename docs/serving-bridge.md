@@ -4,7 +4,7 @@ The bridge is the link that makes *event-driven freshness* true on the real
 streaming path rather than only on the in-process demo shortcut.
 
 Flink validates, enriches and dedupes events and sinks them to the Kafka topic
-`events.validated` (`src/processing/flink_jobs/stream_processor.py`). Until the
+`events.validated` (`src/agentflow_runtime/processing/flink_jobs/stream_processor.py`). Until the
 bridge existed, nothing carried that topic into the store the API reads: the
 serving store only moved when the in-process `local_pipeline` wrote it directly.
 Freshness on the real path was therefore measurable no further than the
@@ -78,7 +78,7 @@ instead mark it done forever.
 
 | Serving backend | Bridge form | Why |
 |---|---|---|
-| `clickhouse` (production) | standalone process — `python -m src.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live drain: ~11.4 → 22.9 → **87.4 eps** (400-burst, Q1.4) → **107.3 eps** (2000-event drain) — see [`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md), [`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md). Multi-hour *sustained* ≥100 eps is **not** claimed. |
+| `clickhouse` (production) | standalone process — `python -m agentflow_runtime.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live drain: ~11.4 → 22.9 → **87.4 eps** (400-burst, Q1.4) → **107.3 eps** (2000-event drain) — see [`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md), [`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md). Multi-hour *sustained* ≥100 eps is **not** claimed. |
 | `duckdb` (local demo / unit tests only) | in-process thread, `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | **Not production.** Demo and unit tests. Never the S8/S10 real-path store the API reads. |
 
 The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-three-node-demo-topology.md)); its edges push events to the center over HTTPS. The bridge is absent there by design.
@@ -166,7 +166,7 @@ Metric-cache drops are **push-driven**, not hostage to the webhook loop.
 
 The historical monkey-patch that wrapped `WebhookDispatcher.dispatch_new_events`
 in `main.py` is gone. Webhooks keep their own scan for delivery; cache
-invalidation is a first-class controller in `src/serving/cache_invalidation.py`.
+invalidation is a first-class controller in `src/agentflow_runtime/serving/cache_invalidation.py`.
 
 ### Journal scans are bounded (issue #183)
 
@@ -223,7 +223,7 @@ now bounded:
   bumping `attempts` a second time. This closes attempts+2 → premature
   dead-letter, where the PostgreSQL adapter's transient-error retry re-applied a
   failure whose UPDATE had committed but whose commit-ack was lost.
-- **Seen-sets** — `BoundedSeenSet` (`src/serving/seen_events.py`): capped,
+- **Seen-sets** — `BoundedSeenSet` (`src/agentflow_runtime/serving/seen_events.py`): capped,
   FIFO-with-refresh eviction. Eviction is safe because webhook enqueue is
   idempotent on its primary key (inline delivery fires only for freshly
   inserted rows) and a redundant metric-cache invalidate just repopulates on

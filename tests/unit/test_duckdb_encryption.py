@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from src.serving.db_pool import DuckDBPool
-from src.serving.duckdb_connection import connect_duckdb
+from agentflow_runtime.serving.db_pool import DuckDBPool
+from agentflow_runtime.serving.duckdb_connection import connect_duckdb
 
 
 def _attached_db_encryption_state(conn) -> tuple[bool, str | None]:

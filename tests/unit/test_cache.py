@@ -5,11 +5,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import src.serving.api.routers.agent_query as agent_query_module
-import src.serving.cache as cache_module
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.cache import QueryCache
-from src.serving.semantic_layer.catalog import DataCatalog
+import agentflow_runtime.serving.api.routers.agent_query as agent_query_module
+import agentflow_runtime.serving.cache as cache_module
+from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
+from agentflow_runtime.serving.cache import QueryCache
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
 
 
 class FakeRedis:

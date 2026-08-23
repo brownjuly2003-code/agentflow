@@ -11,10 +11,10 @@ import structlog
 from fastapi.testclient import TestClient
 from pyiceberg.exceptions import ServiceUnavailableError
 
-from src.processing import local_pipeline as local_pipeline_module
-from src.processing.event_replayer import EventReplayer
-from src.serving.api.main import app
-from src.serving.control_plane import ensure_dead_letter_table
+from agentflow_runtime.processing import local_pipeline as local_pipeline_module
+from agentflow_runtime.processing.event_replayer import EventReplayer
+from agentflow_runtime.serving.api.main import app
+from agentflow_runtime.serving.control_plane import ensure_dead_letter_table
 
 pytestmark = pytest.mark.integration
 

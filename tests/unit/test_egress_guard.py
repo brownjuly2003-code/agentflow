@@ -13,7 +13,7 @@ import socket
 import httpx
 import pytest
 
-from src.serving.api.egress_guard import (
+from agentflow_runtime.serving.api.egress_guard import (
     UnsafeEgressURLError,
     _PinnedIPTransport,
     pinned_transport,

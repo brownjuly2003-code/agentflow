@@ -8,8 +8,11 @@ from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
 
-from src.serving.api import analytics as analytics_module
-from src.serving.api.analytics import build_analytics_middleware, ensure_analytics_table
+from agentflow_runtime.serving.api import analytics as analytics_module
+from agentflow_runtime.serving.api.analytics import (
+    build_analytics_middleware,
+    ensure_analytics_table,
+)
 
 
 @pytest.mark.anyio

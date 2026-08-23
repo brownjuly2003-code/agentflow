@@ -1,7 +1,7 @@
 """Event->metric lineage: the catalog must declare which events move each metric.
 
 The mapping is pinned against the actual write path in
-src/processing/local_pipeline._process_event:
+src/agentflow_runtime/processing/local_pipeline._process_event:
   - order.*                    -> orders_v2 (and users_enriched)
   - click/page_view/add_to_cart -> sessions_aggregated
   - every event                -> pipeline_events (validated or deadletter)
@@ -12,9 +12,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.ingestion.schemas.events import EventType
-from src.serving.api.routers.agent_query import router as agent_router
-from src.serving.semantic_layer.catalog import DataCatalog
+from agentflow_runtime.ingestion.schemas.events import EventType
+from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
+from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
 
 ORDER_EVENTS = {"order.created", "order.updated", "order.cancelled"}
 SESSION_EVENTS = {"click", "page_view", "add_to_cart"}
@@ -84,7 +84,7 @@ def test_serialize_metrics_exposes_lineage_fields():
 def test_catalog_endpoint_returns_lineage():
     # The production /v1/catalog handler lives in main.py — the single
     # catalog handler since BACKLOG #26 removed the agent-router duplicate.
-    from src.serving.api.main import catalog as production_catalog
+    from agentflow_runtime.serving.api.main import catalog as production_catalog
 
     app = FastAPI()
     app.state.catalog = DataCatalog()
@@ -111,7 +111,7 @@ def test_agent_router_does_not_redefine_catalog():
     )
 
     # And the production app still serves the richer handler on /v1/catalog.
-    from src.serving.api.main import app as production_app
+    from agentflow_runtime.serving.api.main import app as production_app
 
     catalog_routes = [
         route
@@ -120,4 +120,4 @@ def test_agent_router_does_not_redefine_catalog():
         and "GET" in getattr(route, "methods", set())
     ]
     assert len(catalog_routes) == 1
-    assert catalog_routes[0].endpoint.__module__ == "src.serving.api.main"
+    assert catalog_routes[0].endpoint.__module__ == "agentflow_runtime.serving.api.main"

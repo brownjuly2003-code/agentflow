@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from src.serving.api.auth import TenantKey
-from src.serving.api.main import app
+from agentflow_runtime.serving.api.auth import TenantKey
+from agentflow_runtime.serving.api.main import app
 
 
 @pytest.fixture

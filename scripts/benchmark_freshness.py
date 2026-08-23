@@ -8,7 +8,7 @@ its value.
 
 The API process serves metrics through a Redis-backed query cache whose
 metric keys are invalidated when the webhook dispatcher's poll loop sees new
-pipeline events (`src/serving/api/main.py`). That event-driven invalidation —
+pipeline events (`src/agentflow_runtime/serving/api/main.py`). That event-driven invalidation —
 not the cache TTL — is what bounds staleness, and this benchmark measures it
 against the alternatives:
 
@@ -162,7 +162,7 @@ def read_metric(port: int, metric: str, window: str) -> float:
 
 def build_order_event(amount: Decimal, sequence: int) -> dict:
     """A schema- and semantics-valid order.created event with a controlled total."""
-    from src.ingestion.schemas.events import (
+    from agentflow_runtime.ingestion.schemas.events import (
         Currency,
         EventType,
         OrderEvent,
@@ -201,7 +201,7 @@ def measure_iteration(
     timeout_seconds: float,
 ) -> float | None:
     """One event -> reflected-in-metric measurement. Returns ms, or None on timeout."""
-    from src.processing.local_pipeline import _process_event
+    from agentflow_runtime.processing.local_pipeline import _process_event
 
     baseline = read_metric(port, metric, window)
     event = build_order_event(amount, sequence)
@@ -307,7 +307,7 @@ def build_report(
         "`fakeredis`; localhost RTT to a real Redis is sub-millisecond and",
         "excluded). Cache invalidation is driven by the webhook dispatcher poll",
         "loop seeing new pipeline events — the same wiring as",
-        "`src/serving/api/main.py` production defaults.",
+        "`src/agentflow_runtime/serving/api/main.py` production defaults.",
         "",
         "## System Under Test",
         "",
@@ -486,9 +486,9 @@ def main() -> int:
         import fakeredis.aioredis
         import uvicorn
 
-        from src.processing import local_pipeline
-        from src.serving.api.main import app
-        from src.serving.cache import QueryCache
+        from agentflow_runtime.processing import local_pipeline
+        from agentflow_runtime.serving.api.main import app
+        from agentflow_runtime.serving.cache import QueryCache
 
         print(f"[seed] local pipeline burst {args.burst} -> {db_path}", flush=True)
         local_pipeline.run(burst=args.burst)

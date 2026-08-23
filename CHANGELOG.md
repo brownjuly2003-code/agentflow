@@ -2,7 +2,36 @@
 
 All notable changes to AgentFlow are documented in this file.
 
-## [Unreleased]
+## [2.1.0] - 2026-08-23
+
+### Changed — runtime import namespace: `src.*` → `agentflow_runtime.*` (audit F-09 / P2-6 Phase 1-2)
+
+The runtime package now installs and imports as `agentflow_runtime`; the
+repository tree moved to the src-layout `src/agentflow_runtime/` (`git mv`,
+history preserved). The wheel ships exactly two top-level members: the
+`agentflow_runtime` package and a one-file deprecated `src` shim that
+aliases every `src.X` import onto the *same module object* as
+`agentflow_runtime.X` and emits a `DeprecationWarning` on first import
+(`AGENTFLOW_SRC_SHIM_SILENT=1` silences it). Existing consumers keep
+working unchanged through this deprecation window; the shim and the `src`
+top-level are removed in the next **major** release — migrate imports now
+(see `docs/migration/v2.1.md`).
+
+- All first-party surfaces now use `agentflow_runtime.*`: source, tests,
+  scripts, CI workflows, Makefile, Docker/compose files, helm templates
+  (uvicorn/`python -m` command lines), the Flink image layout
+  (`PYTHONPATH=/opt/agentflow/src`), devcontainer, HF-Space image, demo
+  notebook and the living docs.
+- New guards: `tests/unit/test_namespace_policy.py` pins the src-container
+  layout, the packaging maps and the absence of first-party `src.*`
+  imports; `scripts/wheel_smoke.py` — wired into the python-compat CI job —
+  fails the build on any undeclared top-level package in the wheel and
+  install-smokes the wheel *outside the checkout*, asserting the shim's
+  DeprecationWarning, its silencing env var and cross-namespace module
+  identity.
+- The byte-pinned golden-soak pack (`scripts/golden_soak/pack/`, immutable
+  by MANIFEST hash) is the single recorded exception and keeps its
+  historical `src.*` imports; it executes only inside frozen soak packets.
 
 ### Refactor — control-plane adapters split into capability repositories (audit F-08)
 

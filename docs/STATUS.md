@@ -268,8 +268,11 @@ program.
    onboarding/credentials, public production-grade benchmark work, and Codecov
    repository activation remain outside those two gates. The pen-test is
    already counted in item 1; the npm approval gate is closed.
-3. **P2-6 packaging** (breaking) — Phase 0 inventory + defaults done; Phase 1
-   (tree/`agentflow_runtime` + shim) waits for a release branch:
+3. **P2-6 packaging** — Phases 1-2 landed in 2.1.0 (2026-08-23): the runtime
+   imports as `agentflow_runtime`, first-party code is fully cut over, and
+   wheels ship a one-file deprecated `src` shim
+   ([migration/v2.1.md](migration/v2.1.md)). Remaining Phase 3 (drop the
+   shim + `src` top-level) is scheduled for the next **major** release:
    [plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md).
 4. **Flink-runtime dependency bump** — the pinned `apache-flink==2.3.0` job
    environment holds a `safety` ignore for a non-fixable transitive `pyarrow`

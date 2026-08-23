@@ -1,8 +1,18 @@
 # P2-6 — Runtime namespace: `src` → `agentflow_runtime`
 
-> Plan + **Phase 0 inventory (done 2026-07-17)**. Do **not** start Phase 1
-> (tree move / dual import) until a breaking release window is scheduled.
-> Source of the finding: `audit_gpt_11_07_26.md` §P2-6.
+> **Phases 1-2 executed 2026-08-23** in the dedicated F-09 session
+> (audit_sol.md F-09), shipped as **2.1.0**: src-layout
+> `src/agentflow_runtime/`, full first-party cutover, one-file deprecated
+> `src` shim in the wheel (`packaging/src_shim/`), wheel smoke outside the
+> checkout + top-level policy (`scripts/wheel_smoke.py`, python-compat CI
+> job), drift guard `tests/unit/test_namespace_policy.py`. See
+> `docs/migration/v2.1.md` and the CHANGELOG 2.1.0 entry.
+> **Phase 3 (drop the shim) = next MAJOR release** — a deliberate semver
+> tightening of the "one minor line" default recorded below: removing a
+> public import surface in a minor would break semver honesty.
+>
+> Plan + **Phase 0 inventory (done 2026-07-17)** below is historical
+> context. Source of the finding: `audit_gpt_11_07_26.md` §P2-6.
 
 ## Problem
 

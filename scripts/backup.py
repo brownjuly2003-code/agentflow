@@ -6,12 +6,19 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tarfile
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
+
+# F-09: invoked as `python scripts/<name>.py`, so the repository root must
+# be on sys.path for the `scripts.*` package import below.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import duckdb
 

@@ -9,6 +9,12 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+# F-09: run as a script in CI (`python tests/load/run_load_test.py`), so the
+# repository root must be on sys.path for the `tests.load` import below.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from tests.load.thresholds import LOAD_PROFILE, THRESHOLDS
 
 

@@ -12,7 +12,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
+
+# F-09: invoked as `python scripts/<name>.py`, so the repository root must
+# be on sys.path for the `scripts.*` package import below.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.nl_sql_eval import EvalReport, run_eval
 

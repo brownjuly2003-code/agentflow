@@ -119,6 +119,7 @@ If `ingress.enabled=true`, verify the configured host instead of using port-forw
 - `secrets.apiKeys.keys[*].key_id` is required for deterministic admin rotation and staging checks.
 - Default `secrets.apiKeys.keys` is empty. Supply API-key config through `secrets.existingSecret` or through an environment-specific values file; do not reuse repository defaults as runtime credentials.
 - If `secrets.create=false`, `secrets.existingSecret` must name a Kubernetes Secret with `admin-key` and `api_keys.yaml`.
+- The default chart mounts that Secret at `config.apiKeysPath` (`/etc/agentflow/secret/api_keys.yaml`) read-only. Mutable key lifecycle (`POST /v1/admin/keys`, rotate, revoke-old, `DELETE /v1/admin/keys/{key_id}`) needs a writable durable store. Calling those endpoints against the default mount returns `409 Conflict` with a secret-free detail. Multi-replica key mutation also needs a shared store; a per-pod file would diverge even if the volume were writable.
 - `config.tenants` is the source of truth for tenant routing and API version pinning.
 - `autoscaling.enabled=true` creates an HPA from `minReplicas` to `maxReplicas`, but persistent DuckDB storage is guarded to one writer replica. Rendering fails when `persistence.enabled=true` and the chart is configured for more than one API writer replica. Multi-replica also requires the external control-plane store — see [Horizontal scaling](#horizontal-scaling-postgres-control-plane-profile).
 - `ingress.tls` accepts the standard Helm ingress TLS structure.

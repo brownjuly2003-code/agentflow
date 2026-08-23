@@ -13,7 +13,14 @@ except ImportError:  # pragma: no cover
 
 from agentflow_runtime.serving.api.security import compute_key_lookup, hash_api_key
 
-from .manager import ApiKeysConfig, AuthManager, KeyCreateRequest, TenantKey
+from .manager import (
+    ApiKeysConfig,
+    AuthManager,
+    KeyCreateRequest,
+    KeyStoreReadOnlyError,
+    TenantKey,
+    is_permission_denied,
+)
 
 
 class KeyRotator:
@@ -236,13 +243,19 @@ class KeyRotator:
     def write_config(self, config: ApiKeysConfig) -> None:
         if self._manager.api_keys_path is None:
             raise RuntimeError("AGENTFLOW_API_KEYS_FILE must be configured for key management.")
-        self._manager.api_keys_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"keys": [self._storage_payload(item) for item in config.keys]}
-        if yaml is not None:
-            content = yaml.safe_dump(payload, sort_keys=False)
-        else:  # pragma: no cover
-            content = json.dumps(payload, indent=2)
-        self._manager.api_keys_path.write_text(content, encoding="utf-8", newline="\n")
+        try:
+            self._manager.api_keys_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {"keys": [self._storage_payload(item) for item in config.keys]}
+            if yaml is not None:
+                content = yaml.safe_dump(payload, sort_keys=False)
+            else:  # pragma: no cover
+                content = json.dumps(payload, indent=2)
+            self._manager.api_keys_path.write_text(content, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            if is_permission_denied(exc):
+                self._manager._key_store_writable = False
+                raise KeyStoreReadOnlyError(self._manager.api_keys_path) from exc
+            raise
 
     def generate_key(self, tenant: str, name: str) -> str:
         tenant_slug = re.sub(r"[^a-z0-9]+", "-", tenant.lower()).strip("-") or "tenant"

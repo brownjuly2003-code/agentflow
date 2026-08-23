@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -86,6 +87,81 @@ class KeyCreateRequest(BaseModel):
     allowed_entity_types: list[str] | None = None
 
 
+KEY_STORE_READONLY_DETAIL = "API key store is read-only; key lifecycle mutations are disabled."
+
+_PERMISSION_ERRNOS = {errno.EACCES, errno.EPERM}
+if hasattr(errno, "EROFS"):
+    _PERMISSION_ERRNOS.add(errno.EROFS)
+# Windows: ERROR_ACCESS_DENIED, ERROR_WRITE_PROTECT
+_WINDOWS_ACCESS_DENIED = {5, 19}
+
+
+class KeyStoreReadOnlyError(RuntimeError):
+    """Raised when a key-lifecycle mutation cannot persist to the store."""
+
+    def __init__(self, path: Path | str | None = None) -> None:
+        self.path = path
+        super().__init__(KEY_STORE_READONLY_DETAIL)
+
+
+def is_permission_denied(exc: BaseException) -> bool:
+    if isinstance(exc, PermissionError):
+        return True
+    if not isinstance(exc, OSError):
+        return False
+    if exc.errno in _PERMISSION_ERRNOS:
+        return True
+    winerror = getattr(exc, "winerror", None)
+    return winerror in _WINDOWS_ACCESS_DENIED
+
+
+def probe_key_store_writable(path: Path | str | None) -> bool:
+    # Probe the real mount; an operator flag would drift from it.
+    if path is None:
+        return False
+    candidate = Path(path)
+    try:
+        if candidate.exists():
+            return _file_is_writable(candidate)
+        return _parent_is_writable(candidate)
+    except OSError as exc:
+        if is_permission_denied(exc):
+            return False
+        raise
+
+
+def _file_is_writable(path: Path) -> bool:
+    try:
+        with path.open("a", encoding="utf-8"):
+            return True
+    except OSError as exc:
+        if is_permission_denied(exc):
+            return False
+        raise
+
+
+def _parent_is_writable(path: Path) -> bool:
+    parent = path.parent
+    while not parent.exists() and parent.parent != parent:
+        parent = parent.parent
+    if not parent.exists():
+        return False
+    probe = parent / f".agentflow-key-store-write-probe-{os.getpid()}-{secrets.token_hex(4)}"
+    try:
+        with probe.open("x", encoding="utf-8"):
+            pass
+        return True
+    except OSError as exc:
+        if is_permission_denied(exc):
+            return False
+        raise
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def get_current_tenant_id(default: str | None = None) -> str | None:
     tenant_id = _CURRENT_TENANT_ID.get()
     return tenant_id if tenant_id is not None else default
@@ -163,6 +239,8 @@ class AuthManager:
         self._failed_auth_windows: dict[str, list[float]] = defaultdict(list)
         self._config_lock = threading.RLock()
         self._rotation_cleanup_timers: dict[str, threading.Timer] = {}
+        self._key_store_writable: bool | None = None
+        self._key_store_readonly_skip_logged = False
         try:
             self.rotation_grace_period_seconds = max(
                 1,
@@ -200,12 +278,26 @@ class AuthManager:
         self._usage_writer = UsageWriter(self.store, self.audit_publisher)
 
     def load(self) -> None:
+        skipped_readonly_write = False
         with self._config_lock:
+            self._key_store_writable = probe_key_store_writable(self.api_keys_path)
             config = self._load_config()
             config_changed = self._key_rotator.ensure_key_ids(config)
             config_changed = self._key_rotator.cleanup_expired_rotations(config) or config_changed
             if config_changed and self.api_keys_path is not None:
-                self._key_rotator.write_config(config)
+                if self._key_store_writable:
+                    try:
+                        self._key_rotator.write_config(config)
+                    except KeyStoreReadOnlyError:
+                        skipped_readonly_write = True
+                    except OSError as exc:
+                        if is_permission_denied(exc):
+                            self._key_store_writable = False
+                            skipped_readonly_write = True
+                        else:
+                            raise
+                else:
+                    skipped_readonly_write = True
             self.security_policy = load_security_policy(self.security_config_path)
             self._loaded_keys = config.keys
             self.keys_by_value = {}
@@ -252,6 +344,8 @@ class AuthManager:
             self._sweep_expired_windows()
         from agentflow_runtime.serving.api import auth as auth_package
 
+        if skipped_readonly_write:
+            self._warn_key_store_write_skipped()
         auth_package.logger.info(
             "api_keys_loaded",
             path=str(self.api_keys_path) if self.api_keys_path else "env_only",
@@ -382,6 +476,23 @@ class AuthManager:
     @property
     def configured_key_count(self) -> int:
         return len(self._loaded_keys) if self._loaded_keys else len(self.keys_by_value)
+
+    @property
+    def key_store_writable(self) -> bool:
+        if self._key_store_writable is None:
+            self._key_store_writable = probe_key_store_writable(self.api_keys_path)
+        return self._key_store_writable
+
+    def _warn_key_store_write_skipped(self) -> None:
+        if self._key_store_readonly_skip_logged:
+            return
+        self._key_store_readonly_skip_logged = True
+        from agentflow_runtime.serving.api import auth as auth_package
+
+        auth_package.logger.warning(
+            "api_key_store_write_skipped_readonly",
+            path=str(self.api_keys_path) if self.api_keys_path else "env_only",
+        )
 
     def has_configured_keys(self) -> bool:
         return bool(self.keys_by_value or self._hashed_keys)

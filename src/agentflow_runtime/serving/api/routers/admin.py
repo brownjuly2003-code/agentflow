@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import TypeVar
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
@@ -9,6 +12,12 @@ from agentflow_runtime.serving.api.analytics import (
     get_usage_analytics,
 )
 from agentflow_runtime.serving.api.auth import KeyCreateRequest, get_auth_manager, require_admin_key
+from agentflow_runtime.serving.api.auth.manager import (
+    KEY_STORE_READONLY_DETAIL,
+    AuthManager,
+    KeyStoreReadOnlyError,
+    is_permission_denied,
+)
 
 router = APIRouter(
     prefix="/admin",
@@ -16,11 +25,34 @@ router = APIRouter(
     dependencies=[Depends(require_admin_key)],
 )
 
+_T = TypeVar("_T")
+
+
+def _key_store_conflict() -> HTTPException:
+    # 409 not 501: the server implements the operation; the current store state conflicts.
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=KEY_STORE_READONLY_DETAIL,
+    )
+
+
+def _run_key_mutation(manager: AuthManager, op: Callable[[], _T]) -> _T:
+    if not manager.key_store_writable:
+        raise _key_store_conflict()
+    try:
+        return op()
+    except KeyStoreReadOnlyError as exc:
+        raise _key_store_conflict() from exc
+    except OSError as exc:
+        if is_permission_denied(exc):
+            raise _key_store_conflict() from exc
+        raise
+
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED, response_model=None)
 async def create_api_key(payload: KeyCreateRequest, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
-    item = manager.create_key(payload)
+    item = _run_key_mutation(manager, lambda: manager.create_key(payload))
     return {
         "key_id": item.key_id,
         "key": item.key,
@@ -43,7 +75,7 @@ async def list_api_keys(request: Request) -> dict[str, object]:
 async def rotate_api_key(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        item, expires_at = manager.rotate_key(key_id)
+        item, expires_at = _run_key_mutation(manager, lambda: manager.rotate_key(key_id))
     except KeyError:
         raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
     except ValueError as exc:
@@ -67,7 +99,7 @@ async def get_rotation_status(key_id: str, request: Request) -> dict[str, object
 async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        revoked = manager.revoke_old_key(key_id)
+        revoked = _run_key_mutation(manager, lambda: manager.revoke_old_key(key_id))
     except KeyError:
         raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
     if not revoked:
@@ -82,7 +114,7 @@ async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]
 )
 async def revoke_api_key(key_id: str, request: Request) -> Response:
     manager = get_auth_manager(request)
-    if not manager.revoke_key_by_id(key_id):
+    if not _run_key_mutation(manager, lambda: manager.revoke_key_by_id(key_id)):
         raise HTTPException(status_code=404, detail="API key not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

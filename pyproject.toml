@@ -171,12 +171,13 @@ line-length = 100
 
 [tool.ruff.format]
 # The golden-soak source pack is byte-pinned by MANIFEST.json; formatting it
-# would invalidate the immutable runtime identity. The two legacy source files
-# below are predominantly CRLF with small LF-only blocks.
+# would invalidate the immutable runtime identity. The legacy source file
+# below is predominantly CRLF with small LF-only blocks. (The former
+# control_plane/embedded.py entry left with the audit F-08 split — the
+# rewritten facade and capability modules are ordinary LF files.)
 exclude = [
     "scripts/golden_soak/pack/*.py",
     "src/quality/validators/semantic_validator.py",
-    "src/serving/control_plane/embedded.py",
 ]
 
 [tool.ruff.lint]

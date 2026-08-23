@@ -4,6 +4,23 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Refactor — control-plane adapters split into capability repositories (audit F-08)
+
+The two control-plane monoliths (`embedded.py` 1,977 lines, `postgres.py`
+1,914 lines) are now bounded capability repositories — webhook, alert,
+outbox/replay, usage/audit over a shared base — with method bodies moved
+verbatim. `embedded.py` / `postgres.py` stay the assembly points and the
+only public import surfaces, so no consumer import changes; the tests'
+monkeypatch seams (`embedded.connect_duckdb`, `postgres.psycopg`, …) keep
+their pre-split homes. A new capabilities test pins the structure both
+ways: every port method must resolve inside a capability repository (never
+the facade), and the embedded and PostgreSQL implementations of one method
+must live in same-named modules, so the two adapters cannot silently
+drift apart. Path-pinned tooling (ruff S608 ignore, security-tooling S608
+count, the enqueue-lease static contract) moved with the code. Verified:
+full mypy over `src` clean, ruff check/format clean, the bounded Windows
+shard runner green across the unit suite.
+
 ### Docs — project closure contract
 
 - `docs/PROJECT_CLOSURE.md` freezes the engineering scope, maps the July

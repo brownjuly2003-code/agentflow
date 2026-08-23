@@ -1598,12 +1598,32 @@ This matches the upstream `needs reproducible example` status.
    startup error path that names this design doc instead of a bare
    crash-loop exit.
 
+### Second organic occurrence and live re-diagnosis — 2026-08-23
+
+A later read-only pass the same day found that the 08-10 pod (`-kk8tf`)
+and its emptyDir no longer exist: the ReplicaSet replaced the pod on
+2026-08-18T18:49:45Z (new pod `-t2784`, UID
+`da0b8feb-00cb-48f4-9833-fb529b17007d`). The new pod created fresh DuckDB
+files at the same env paths and hit the **same** WAL-replay assertion
+after a brutal stop (last WAL write Aug 19 16:48; 967 restarts by
+2026-08-23). The `_fresh_20260807` basenames come from `DUCKDB_PATH`, not
+from the data's age. Both 12,288-byte main files are byte-identical
+pristine empty databases — no checkpoint ever ran; the whole record
+history (~8.6 KB) sits in the two WALs. In-place SHA-256 values and the
+operator recovery commands (capture via `docker cp` from the kind node,
+then pod delete for a fresh emptyDir) are recorded in
+`api-flink-recovery-runbook-20260823-01.md`. The forensic file set named
+by the earlier sections of this design is gone with the old pod; the
+current file set replaces it as forensic material. Two independent
+occurrences on one stand strengthen the upstream classification above.
+
 ### Claim boundary for this classification slice
 
 No target Pod/volume, `/data` path, DuckDB/WAL byte, pod `exec`, restart,
 traffic, capture, recovery, production transition, or consumed-gate re-run
-occurred. All prior gate outcomes and consumed authorizations are
-unchanged.
+occurred (in-place `sha256sum` inside the kind node container is the one
+read-only observation added on 2026-08-23). All prior gate outcomes and
+consumed authorizations are unchanged.
 
 ## Open questions and data-owner decisions
 

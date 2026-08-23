@@ -79,7 +79,7 @@ integrations = [
     # install the editable integrations package with --no-deps from the
     # frozen root resolution (audit F-05). MCP 2 removes the low-level
     # Server decorators the integration uses.
-    "mcp>=1.0,<2",
+    "mcp>=1.0,<3",
 ]
 contract = [
     "schemathesis==4.24.3",

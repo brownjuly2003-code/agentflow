@@ -5,9 +5,12 @@
 read-only on 2026-08-23. Every command below carries an explicit
 `--context` / `--profile`; the global docker context on the iMac points at
 another project (`colima-nsa`) and must not be switched.
-**Execution status:** NOT executed. The diagnosing session's tooling blocks
-byte-copy and mutating commands on the remote stand; the operator runs the
-steps below (or a later session with those permissions granted).
+**Execution status:** EXECUTED and VERIFIED on 2026-08-23 ~13:45-14:00Z,
+same session, after the owner granted the Bash permission rule
+(`Bash(ssh julia@192.168.1.133:*)`) in settings. See the execution record
+at the end of this file — including one correction to the Blocker-2
+procedure discovered during execution (the stale pointer lives in the
+**cluster** ConfigMap, not only the per-job one).
 
 ## Blocker 1 — API pod CrashLoopBackOff (DuckDB WAL replay)
 
@@ -118,12 +121,52 @@ log shows the job switching to `RUNNING`, and no
 `pod-template-...`, `autoscaler-...` ConfigMaps — only the per-job
 `...-80e6e2be...-config-map` holds the stale pointer.
 
+## Execution record — 2026-08-23 (~13:45-14:00Z)
+
+Owner authorization: explicit ("сделай все сам, у тебя права админа");
+the owner added the Bash allow rule herself via a `!`-prefixed command.
+
+1. **Capture — PASS, exact.** `docker cp` of the `/data` volume directory
+   to `~/agentflow-api-data-capture-20260823-01/data/` on the iMac. All
+   four SHA-256 values matched the diagnosis table above byte-for-byte;
+   the copy is the sealed forensic set for the second occurrence.
+2. **API pod delete — PASS.** Replacement pod
+   `agentflow-chk-restore-rv-api-20260802-01-59489dd45c-zxnm4` reached
+   `1/1 Running` with `RESTARTS 0`; Service endpoint now
+   `10.244.0.15:8000` (non-empty for the first time since 08-19);
+   `/health/live` and `/health/ready` return 200 in the pod log.
+3. **Blocker-2 correction.** Deleting the per-job HA ConfigMap
+   (`...-80e6e2be...-config-map`) alone did NOT clear the fault — the
+   replacement pod crashed on the identical `FileNotFoundException`.
+   Inspection showed the serialized `executionPlan-80e6e2be...` state
+   handle (a `FileStateHandle` pointing at the dead `/tmp/...` path) and
+   a stale job-leader entry live in
+   `agentflow-soak-rv-stream-processor-cluster-config-map`. In this Flink
+   version's Kubernetes HA layout the execution-plan pointers sit in the
+   **cluster** ConfigMap; the per-job map holds checkpoint/leader data
+   for the job. Both were stale; both needed deletion.
+4. **Cluster ConfigMap + pod delete — PASS.** Replacement pod
+   `agentflow-soak-rv-stream-processor-6c77bc9574-5fmd2` reached
+   `1/1 Running` with `RESTARTS 0`, started
+   `...-taskmanager-1-1` (`1/1 Running`), and the log shows both operator
+   chains `switched from INITIALIZING to RUNNING` at 14:00:36Z with no
+   `Could not recover job` line. The HA ConfigMaps regenerate fresh.
+5. **Post-state.** All seven pods in the namespace `1/1 Running`;
+   co-tenants (ClickHouse, MinIO, Iceberg REST, kind node) untouched and
+   healthy throughout.
+
+Consumed: the pre-recovery pod identities (`-t2784`, `-xppzh`,
+`-9x77q`) and both stale HA ConfigMaps. The capture directory on the
+iMac is the only remaining copy of the failing WAL file set — do not
+delete it without a separate decision.
+
 ## Claim boundary
 
-Read-only diagnosis only: in-place hashes, pod/deployment specs, logs, and
-ConfigMap listings. No byte was copied off the stand, no pod, ConfigMap,
-volume, or file was mutated, no traffic ran, and the co-tenants
-(ClickHouse, MinIO, Iceberg REST, kind node — all Up ~30 h and healthy)
-were not touched. Production stays `candidate`. Executing this runbook
-closes only the two CrashLoop blockers; the corrected-rollback rehearsal
-itself remains a separate gate.
+The original diagnosis was read-only; the execution above mutated exactly:
+two API/stream-processor pod deletions (plus one intermediate
+stream-processor pod), two stale Flink HA ConfigMaps, and created the
+capture directory on the iMac host. No co-tenant, volume content, Helm
+release, FlinkDeployment spec, or tracked file on the stand was touched;
+no traffic ran. Production stays `candidate`. This closes the two
+CrashLoop blockers of the corrected-rollback front; the
+corrected-rollback rehearsal itself remains a separate gate.

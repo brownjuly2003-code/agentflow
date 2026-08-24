@@ -13,30 +13,57 @@ def _load_workflow() -> dict:
 def test_container_attestation_workflow_signs_images_by_digest_only():
     workflow = _load_workflow()
     job = workflow["jobs"]["attest-and-sign"]
+    validation = next(step for step in job["steps"] if step.get("name") == "Validate digest inputs")
+    validation_script = validation["run"]
     steps_text = yaml.safe_dump(job["steps"])
 
     assert job["permissions"]["id-token"] == "write"
-    assert job["permissions"]["attestations"] == "write"
+    assert "attestations" not in job["permissions"]
+    assert job["env"] == {
+        "IMAGE_REF": "${{ inputs.image_ref }}",
+        "IMAGE_DIGEST": "${{ inputs.image_digest }}",
+        "ALLOWED_IMAGE_REF": "ghcr.io/${{ github.repository_owner }}/agentflow-api",
+    }
     assert workflow["on"]["workflow_dispatch"]["inputs"]["mode"]["required"] is True
     assert workflow["on"]["workflow_dispatch"]["inputs"]["image_digest"]["required"] is False
-    assert "sha256:" in steps_text
+    assert "^sha256:[0-9a-f]{64}$" in validation_script
     assert "image_ref is required" in steps_text
-    assert "cosign sign --yes ${IMAGE_REF}@${IMAGE_DIGEST}" in steps_text
+    assert 'case "$IMAGE_REF"' in validation_script
+    assert "*@*)" in validation_script
+    assert "*:latest)" in validation_script
+    assert '[[ "$IMAGE_REF" != "$ALLOWED_IMAGE_REF" ]]' in validation_script
+    assert 'cosign sign --yes "${IMAGE_REF}@${IMAGE_DIGEST}"' in steps_text
     assert "${IMAGE_REF}:${" not in steps_text
 
 
-def test_container_attestation_workflow_emits_github_attestation_for_digest():
+def test_existing_digest_job_does_not_claim_build_provenance():
     workflow = _load_workflow()
     steps = workflow["jobs"]["attest-and-sign"]["steps"]
-    attest = next(
-        step
-        for step in steps
-        if str(step.get("uses", "")).startswith("actions/attest-build-provenance@")
-    )
+    workflow_text = (
+        PROJECT_ROOT / ".github" / "workflows" / "container-attestation.yml"
+    ).read_text(encoding="utf-8")
 
-    assert attest["with"]["subject-name"] == "${{ inputs.image_ref }}"
-    assert attest["with"]["subject-digest"] == "${{ inputs.image_digest }}"
-    assert attest["with"]["push-to-registry"] is False
+    assert not any(
+        str(step.get("uses", "")).startswith("actions/attest-build-provenance@") for step in steps
+    )
+    assert "did not build" in workflow_text
+    assert "must not create build provenance" in workflow_text
+
+
+def test_workflow_dispatch_inputs_never_enter_shell_source():
+    workflow = _load_workflow()
+
+    for job in workflow["jobs"].values():
+        for step in job.get("steps", []):
+            if isinstance(step, dict) and "run" in step:
+                assert "${{ inputs." not in step["run"]
+
+
+def test_operator_signing_jobs_require_protected_production_environment():
+    workflow = _load_workflow()
+
+    for job_name in ("build-push-sign-attest", "attest-and-sign"):
+        assert workflow["jobs"][job_name]["environment"] == "production"
 
 
 def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
@@ -72,19 +99,21 @@ def test_container_attestation_workflow_builds_and_pushes_ghcr_image():
 
 
 def test_container_attestation_top_level_token_is_read_only():
-    # The write scopes (packages/id-token/attestations) live on the two
-    # operator-dispatched signing jobs only; the every-PR build-smoke job —
-    # and anything added later by default — runs with a read-only token
-    # (Scorecard Token-Permissions posture).
+    # Write scopes live only on operator-dispatched jobs. Build provenance is
+    # additionally limited to the job that actually builds the image.
     workflow = _load_workflow()
     assert workflow["permissions"] == {"contents": "read"}
-    for job_name in ("build-push-sign-attest", "attest-and-sign"):
-        assert workflow["jobs"][job_name]["permissions"] == {
-            "contents": "read",
-            "packages": "write",
-            "id-token": "write",
-            "attestations": "write",
-        }
+    assert workflow["jobs"]["build-push-sign-attest"]["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    assert workflow["jobs"]["attest-and-sign"]["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+    }
     assert "permissions" not in workflow["jobs"]["build-smoke"]
 
 

@@ -13,7 +13,7 @@ spec:
   image: "{{ .Values.flinkJob.image.repository }}:{{ .Values.flinkJob.image.tag }}"
   imagePullPolicy: {{ .Values.flinkJob.image.pullPolicy }}
   flinkVersion: {{ .Values.flinkJob.flinkVersion }}
-  serviceAccount: {{ .Values.flinkJob.serviceAccount | default (include "agentflow.serviceAccountName" .) }}
+  serviceAccount: {{ include "agentflow.flinkServiceAccountName" . }}
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: {{ .Values.flinkJob.taskSlots | quote }}
     execution.checkpointing.interval: {{ printf "%d ms" (int .Values.flinkJob.checkpointIntervalMs) | quote }}

@@ -13,7 +13,14 @@ imagePullSecrets: []
 serviceAccount:
   create: true
   annotations: {}
+  # Legacy shared-account escape hatch. When set, this name takes precedence
+  # over every role-specific name (including flinkJob.serviceAccount), restores
+  # the former single-account topology, and therefore disables RBAC isolation.
   name: ""
+  apiName: ""
+  # serving-bridge and lake-materializer also use the non-privileged worker SA.
+  workerName: ""
+  provisionName: ""
 
 podAnnotations: {}
 podLabels: {}
@@ -271,6 +278,7 @@ flinkJob:
     tag: "2.3.0"
     pullPolicy: IfNotPresent
   flinkVersion: v2_3
+  # Optional Flink-only override; ignored when legacy serviceAccount.name is set.
   serviceAccount: ""
   createRbac: true
   kafkaBootstrapServers: ""

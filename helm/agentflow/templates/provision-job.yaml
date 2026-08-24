@@ -23,7 +23,8 @@ spec:
         {{- include "agentflow.selectorLabels" . | nindent 8 }}
     spec:
       restartPolicy: Never
-      serviceAccountName: {{ include "agentflow.serviceAccountName" . }}
+      serviceAccountName: {{ include "agentflow.provisionServiceAccountName" . }}
+      automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

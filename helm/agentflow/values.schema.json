@@ -137,7 +137,10 @@
       "required": [
         "create",
         "annotations",
-        "name"
+        "name",
+        "apiName",
+        "workerName",
+        "provisionName"
       ],
       "properties": {
         "create": {
@@ -150,6 +153,15 @@
           }
         },
         "name": {
+          "type": "string"
+        },
+        "apiName": {
+          "type": "string"
+        },
+        "workerName": {
+          "type": "string"
+        },
+        "provisionName": {
           "type": "string"
         }
       }

@@ -402,6 +402,94 @@ def test_postgres_store_still_gated_without_clickhouse_backend():
     assert "Multi-replica requires BOTH" in output
 
 
+def test_rendered_workloads_use_distinct_service_accounts_and_flink_binding():
+    rendered = _run_helm_template(
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "controlPlane.postgres.existingSecret=agentflow-controlplane-pg",
+        "--set",
+        "worker.enabled=true",
+        "--set",
+        "provision.enabled=true",
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "flinkJob.checkpointStorage=s3://agentflow-state/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=s3://agentflow-state/savepoints",
+    )
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+
+    documents = [document for document in yaml.safe_load_all(rendered.stdout) if document]
+    service_accounts = {
+        document["metadata"]["name"]: document
+        for document in documents
+        if document.get("kind") == "ServiceAccount"
+    }
+    deployments = {
+        document["metadata"]["labels"].get("app.kubernetes.io/component"): document
+        for document in documents
+        if document.get("kind") == "Deployment"
+    }
+    provision_job = next(
+        document
+        for document in documents
+        if document.get("kind") == "Job"
+        and str(document.get("metadata", {}).get("name", "")).endswith("-provision")
+    )
+    flink_deployment = next(
+        document for document in documents if document.get("kind") == "FlinkDeployment"
+    )
+    flink_binding = next(
+        document
+        for document in documents
+        if document.get("kind") == "RoleBinding"
+        and str(document.get("metadata", {}).get("name", "")).endswith("-flink")
+    )
+
+    names = {
+        "api": deployments["api"]["spec"]["template"]["spec"]["serviceAccountName"],
+        "worker": deployments["worker"]["spec"]["template"]["spec"]["serviceAccountName"],
+        "provision": provision_job["spec"]["template"]["spec"]["serviceAccountName"],
+        "flink": flink_deployment["spec"]["serviceAccount"],
+    }
+    assert len(set(names.values())) == 4, names
+    assert set(names.values()) <= set(service_accounts)
+    assert flink_binding["subjects"][0]["name"] == names["flink"]
+    assert flink_binding["subjects"][0]["name"] != names["api"]
+    for role in ("api", "worker", "flink"):
+        annotations = service_accounts[names[role]]["metadata"].get("annotations", {})
+        assert "helm.sh/hook" not in annotations
+        assert "helm.sh/hook-delete-policy" not in annotations
+
+
+def test_rendered_api_disables_service_account_token_automount():
+    rendered = _run_helm_template()
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+
+    api_deployment = next(
+        document
+        for document in yaml.safe_load_all(rendered.stdout)
+        if document
+        and document.get("kind") == "Deployment"
+        and document["metadata"]["labels"].get("app.kubernetes.io/component") == "api"
+    )
+    assert api_deployment["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
+
+
 def test_serviceaccount_is_pre_hook_before_provision_job():
     """Live E4 stand (2026-07-16): first helm install hung in pending-install
     because the provision Job (hook weight -5) referenced SA `agentflow` while
@@ -436,10 +524,16 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
         and d.get("kind") == "Job"
         and str(d.get("metadata", {}).get("name", "")).endswith("-provision")
     ]
-    assert len(sa_docs) == 1, "expected exactly one ServiceAccount"
+    assert len(sa_docs) >= 1, "expected chart-managed ServiceAccounts"
     assert len(job_docs) == 1, "expected provision Job when clickhouse backend"
 
-    sa_ann = sa_docs[0]["metadata"]["annotations"]
+    provision_sa_name = job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"]
+    provision_sa = next(
+        service_account
+        for service_account in sa_docs
+        if service_account["metadata"]["name"] == provision_sa_name
+    )
+    sa_ann = provision_sa["metadata"]["annotations"]
     job_ann = job_docs[0]["metadata"]["annotations"]
     # SA: pre-install only — must survive upgrade without hook replacement.
     assert sa_ann["helm.sh/hook"] == "pre-install"
@@ -449,11 +543,8 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
     assert int(sa_ann["helm.sh/hook-weight"]) < int(job_ann["helm.sh/hook-weight"])
     # before-hook-creation keeps pre-install retry safe without orphaning SA.
     assert sa_ann["helm.sh/hook-delete-policy"] == "before-hook-creation"
-    # Job must still bind the chart SA (not default).
-    assert (
-        job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"]
-        == sa_docs[0]["metadata"]["name"]
-    )
+    # Job must still bind its chart-managed SA (not default).
+    assert provision_sa_name == provision_sa["metadata"]["name"]
 
 
 def test_serving_clickhouse_tls_render_is_first_class():
@@ -580,8 +671,14 @@ def test_worker_defaults_off_and_omits_process_role():
     output = _combined_output(result)
     assert result.returncode == 0, output
     assert "AGENTFLOW_PROCESS_ROLE" not in output
-    assert "agentflow-worker" not in output
-    assert "app.kubernetes.io/component: worker" not in output
+    worker_deployments = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document
+        and document.get("kind") == "Deployment"
+        and document["metadata"]["labels"].get("app.kubernetes.io/component") == "worker"
+    ]
+    assert worker_deployments == []
 
 
 def test_worker_enabled_requires_postgres_control_plane():

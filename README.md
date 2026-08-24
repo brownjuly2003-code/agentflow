@@ -301,8 +301,9 @@ audit-closure sprint:
   rest) — plus the G2 audit closure (spec/seed
   consistency, journal-scan hardening, live evidence re-captures).
 
-The tagged line and `main` are in sync as of `v2.0.0`. See the
-[changelog](CHANGELOG.md) for full detail.
+The registries remain on published line `v2.0.0`; `main` is prepared for the
+unpublished lockstep `v2.1.0` release and is intentionally ahead of that tag.
+See the [changelog](CHANGELOG.md) for full detail.
 
 ### Scope
 

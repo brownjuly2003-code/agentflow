@@ -46,14 +46,11 @@ jobs:
             throw new Error("npm publication must run from a release tag");
           }
 
-          let expectedVersion;
-          if (tag?.startsWith("sdk-v")) {
-            expectedVersion = tag.slice("sdk-v".length);
-          } else if (tag?.startsWith("v")) {
-            expectedVersion = tag.slice("v".length);
-          } else {
+          const tagMatch = tag?.match(/^(?:sdk-v|v)(\d+\.\d+\.\d+(?:-rc\d+)?)$/);
+          if (!tagMatch) {
             throw new Error(`Unexpected tag format: ${tag ?? "<missing>"}`);
           }
+          const expectedVersion = tagMatch[1];
           if (!expectedVersion) {
             throw new Error("Missing release version");
           }
@@ -67,22 +64,33 @@ jobs:
           }
 
           const expectedPythonVersion = expectedVersion.replace("-rc", "rc");
-          const pyproject = fs.readFileSync("sdk/pyproject.toml", "utf8");
+          const rootPyproject = fs.readFileSync("pyproject.toml", "utf8");
+          const sdkPyproject = fs.readFileSync("sdk/pyproject.toml", "utf8");
+          const sdkInit = fs.readFileSync("sdk/agentflow/__init__.py", "utf8");
           const packageJson = JSON.parse(fs.readFileSync("sdk-ts/package.json", "utf8"));
-          const pythonMatch = pyproject.match(/^version = "([^"]+)"$/m);
-
-          if (!pythonMatch) {
-            throw new Error("Could not read sdk/pyproject.toml version");
-          }
-          if (pythonMatch[1] !== expectedPythonVersion) {
-            throw new Error(
-              `sdk/pyproject.toml version ${pythonMatch[1]} does not match tag ${expectedPythonVersion}`,
-            );
-          }
-          if (packageJson.version !== expectedVersion) {
-            throw new Error(
-              `sdk-ts/package.json version ${packageJson.version} does not match tag ${expectedVersion}`,
-            );
+          const packageLock = JSON.parse(
+            fs.readFileSync("sdk-ts/package-lock.json", "utf8"),
+          );
+          const rootMatch = rootPyproject.match(/^version = "([^"]+)"$/m);
+          const sdkMatch = sdkPyproject.match(/^version = "([^"]+)"$/m);
+          const sdkInitMatch = sdkInit.match(/^__version__ = "([^"]+)"$/m);
+          const versionSurfaces = [
+            ["pyproject.toml", rootMatch?.[1], expectedPythonVersion],
+            ["sdk/pyproject.toml", sdkMatch?.[1], expectedPythonVersion],
+            ["sdk/agentflow/__init__.py", sdkInitMatch?.[1], expectedPythonVersion],
+            ["sdk-ts/package.json", packageJson.version, expectedVersion],
+            ["sdk-ts/package-lock.json", packageLock.version, expectedVersion],
+            [
+              'sdk-ts/package-lock.json#packages[""]',
+              packageLock.packages?.[""]?.version,
+              expectedVersion,
+            ],
+          ];
+          const mismatches = versionSurfaces
+            .filter(([, actual, expected]) => actual !== expected)
+            .map(([path, actual, expected]) => `${path} version ${actual ?? "<missing>"} does not match tag ${expected}`);
+          if (mismatches.length) {
+            throw new Error(mismatches.join("; "));
           }
 
           fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_VERSION=${expectedVersion}\n`);

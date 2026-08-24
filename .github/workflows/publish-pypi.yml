@@ -30,33 +30,48 @@ jobs:
       - name: Verify release tag matches package metadata
         run: |
           python - <<'PY'
+          import json
           import os
+          import re
           import tomllib
           from pathlib import Path
 
           tag = os.environ["GITHUB_REF_NAME"]
-          if tag.startswith("sdk-v"):
-              release_version = tag.removeprefix("sdk-v")
-          elif tag.startswith("v"):
-              release_version = tag.removeprefix("v")
-          else:
+          match = re.fullmatch(r"(?:sdk-v|v)(\d+\.\d+\.\d+(?:-rc\d+)?)", tag)
+          if match is None:
               raise SystemExit(f"Unexpected tag format: {tag}")
 
+          release_version = match.group(1)
           python_version = release_version.replace("-rc", "rc", 1)
           root_pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
           sdk_pyproject = tomllib.loads(Path("sdk/pyproject.toml").read_text(encoding="utf-8"))
+          sdk_init = Path("sdk/agentflow/__init__.py").read_text(encoding="utf-8")
+          sdk_init_match = re.search(r'^__version__ = "([^"]+)"$', sdk_init, re.MULTILINE)
+          package_json = json.loads(Path("sdk-ts/package.json").read_text(encoding="utf-8"))
+          package_lock = json.loads(
+              Path("sdk-ts/package-lock.json").read_text(encoding="utf-8")
+          )
+          if sdk_init_match is None:
+              raise SystemExit("Could not read sdk/agentflow/__init__.py version")
 
-          root_version = root_pyproject["project"]["version"]
-          sdk_version = sdk_pyproject["project"]["version"]
-
-          if root_version != python_version:
-              raise SystemExit(
-                  f"pyproject.toml version {root_version} does not match tag {python_version}"
-              )
-          if sdk_version != python_version:
-              raise SystemExit(
-                  f"sdk/pyproject.toml version {sdk_version} does not match tag {python_version}"
-              )
+          version_surfaces = {
+              "pyproject.toml": (root_pyproject["project"]["version"], python_version),
+              "sdk/pyproject.toml": (sdk_pyproject["project"]["version"], python_version),
+              "sdk/agentflow/__init__.py": (sdk_init_match.group(1), python_version),
+              "sdk-ts/package.json": (package_json["version"], release_version),
+              "sdk-ts/package-lock.json": (package_lock["version"], release_version),
+              'sdk-ts/package-lock.json#packages[""]': (
+                  package_lock["packages"][""]["version"],
+                  release_version,
+              ),
+          }
+          mismatches = [
+              f"{path} version {actual} does not match tag {expected}"
+              for path, (actual, expected) in version_surfaces.items()
+              if actual != expected
+          ]
+          if mismatches:
+              raise SystemExit("; ".join(mismatches))
 
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
               env.write(f"RELEASE_VERSION={release_version}\n")
@@ -65,7 +80,7 @@ jobs:
           PY
 
       - name: Install build tooling
-        run: python -m pip install --upgrade build twine
+        run: python -m pip install --upgrade build==1.5.1 twine==6.2.0
 
       - name: Clean previous distributions
         run: rm -rf dist sdk/dist
@@ -74,6 +89,9 @@ jobs:
         run: |
           python -m build .
           python -m build sdk/
+
+      - name: Reject unsafe release artifacts
+        run: python scripts/check_release_artifacts.py dist/* sdk/dist/*
 
       - name: Dry-run build and twine check
         run: python -m twine check dist/* sdk/dist/*

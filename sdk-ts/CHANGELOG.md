@@ -28,6 +28,11 @@ Deprecation policy:
 - Idempotent SDK requests now retry on `429`, `502`, `503`, `504`, and transport failures before surfacing the final error
 - Added resilience-focused Vitest coverage for retry/backoff and circuit-breaker behavior
 
+## [2.1.0] - 2026-08-23
+
+### Changed
+- Prepared the TypeScript SDK in version lockstep with AgentFlow runtime `2.1.0` and the Python SDK; this line is not published until its release tag is authorized.
+
 ## [1.0.0] - 2026-04-11
 
 ### Added

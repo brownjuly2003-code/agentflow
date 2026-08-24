@@ -39,6 +39,8 @@ VALIDATOR_INPUTS = (
     "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md",
     "docs/perf/golden-4h-soak-start-2026-08-07.md",
     "docs/perf/golden-4h-soak-05-failure-2026-08-08.md",
+    "corrected-rollback-pair-runtime-20260823-01.md",
+    "ci-soak-f02-capacity-decision-20260823-01.md",
 )
 
 

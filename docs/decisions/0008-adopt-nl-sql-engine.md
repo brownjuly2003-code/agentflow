@@ -3,7 +3,7 @@
 ## Status
 
 Accepted - 2026-07-01. **Implemented (cont.37, 2026-07-01):** the generation half
-is vendored at `src/serving/semantic_layer/nl_sql_engine/` (Sonnet 5 via
+is vendored at `src/agentflow_runtime/serving/semantic_layer/nl_sql_engine/` (Sonnet 5 via
 GraceKelly), `nl_engine._llm_translate` routes through it, and the eval harness
 measured **100% EA (18/18)** on the demo set live (rule-based baseline recomputed
 to 27.8% after the gold set was normalised to a consistent minimal projection).
@@ -14,7 +14,7 @@ rule-based (`GRACEKELLY_URL` unset).
 bounded PII" work below (§Decision, "Schema-grounding becomes the bounded-PII
 mechanism") assumed the serving warehouse holds PII. It does not: `users_enriched`
 / `orders_v2` carry only analytics columns, and none of the fields the former
-`config/pii_fields.yaml` declared exist in the catalog or the physical DDL. So the
+`pii_fields.yaml` allowlist declared exist in the catalog or the physical DDL. So the
 whole serving-layer PII apparatus (the `assert_no_pii_access` deny-gate and the
 entity-path `redact_entity`) guarded an empty surface and has been **removed**
 (see CHANGELOG). Real contact PII lives only in the DV2 business vault; its
@@ -25,7 +25,7 @@ capability but has no PII caller.
 
 ## Context
 
-AgentFlow's natural-language-to-SQL path (`src/serving/semantic_layer/nl_engine.py`)
+AgentFlow's natural-language-to-SQL path (`src/agentflow_runtime/serving/semantic_layer/nl_engine.py`)
 is the weakest component in the serving tier. It has two modes:
 
 1. **Rule-based (the shipped default).** `_rule_based_translate` is seven regex
@@ -55,7 +55,7 @@ Two structural gaps follow from this:
   engine, not in a dialect-pinned string parse after the fact.
 
 Meanwhile a mature NL→SQL engine already exists in this author's portfolio,
-`D:\NL_SQL` (`src/nl_sql/`):
+`D:\NL_SQL` (the `nl_sql` package in that repository):
 
 - A **LangGraph** `StateGraph`: `context_builder → generate_sql → validate →
   (repair_once) → execute → deterministic_format → explain_trace`, with a
@@ -70,7 +70,7 @@ Meanwhile a mature NL→SQL engine already exists in this author's portfolio,
   (`generate(GenerateRequest) -> GenerateResponse`) chosen by
   `build_provider(name, settings)`; six providers implement it (mistral,
   github_models, groq, ollama, openrouter, perplexity).
-- An **eval harness** (`src/nl_sql/eval/`, `eval/`) that runs the same graph the
+- An **eval harness** (`nl_sql.eval` in that repository, plus `eval/`) that runs the same graph the
   API serves against BIRD Mini-Dev and reports execution accuracy (EA).
   Measured **~94% EA on BIRD Mini-Dev** (n=200) and 100% on Chinook.
 
@@ -142,8 +142,8 @@ Concretely:
   measured AgentFlow accuracy number early and cheaply. It is the highest
   value-per-effort step and closes the R5 gap on its own.
 - **Schema-grounding becomes the bounded-PII mechanism.** `context_builder`
-  filters the retrieved/exposed schema to a non-PII column allowlist (from
-  `config/pii_fields.yaml`), so the model is never shown PII columns to select.
+  filters the retrieved/exposed schema to a non-PII column allowlist (the former
+  `pii_fields.yaml`, removed from the tree), so the model is never shown PII columns to select.
   This is the "allowlist at generation" ADR 0006 identified as the bounded path;
   the sqlglot deny-gate remains behind it as defense-in-depth, not the sole
   boundary. This lands with ClickHouse Phase 2.
@@ -228,7 +228,7 @@ already present; ChromaDB is deliberately avoided for the demo.
 ### Vendoring steps (each verified before the next)
 
 1. Install `langgraph`; vendor the generation subtree into
-   `src/serving/semantic_layer/nl_sql_engine/`, import-clean.
+   `src/agentflow_runtime/serving/semantic_layer/nl_sql_engine/`, import-clean.
 2. Build a demo `ContextBundle` from `DataCatalog`; run `generate_sql` →
    GraceKelly Sonnet 5 → SQL for a demo question (live).
 3. Wire the pipeline as the `translate_nl_to_sql` LLM path; execute via

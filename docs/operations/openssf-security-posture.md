@@ -95,7 +95,7 @@ Passing-level criteria, grouped:
   CONFIRM on submission.
 - **Good cryptographic practices:** API-key hashing argon2id (default) with
   bcrypt legacy fallback; TLS for CDC/transport — MET
-  (`src/serving/api/auth/`, `docs/security-audit.md` §2).
+  (`src/agentflow_runtime/serving/api/auth/`, `docs/security-audit.md` §2).
 - **Secured delivery against MITM:** HTTPS everywhere (GitHub, PyPI, npm);
   PyPI Trusted Publishing + npm Trusted Publishing (OIDC); CycloneDX SBOM +
   build provenance attestation (`security.yml`, `container-attestation.yml`) —

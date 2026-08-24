@@ -59,7 +59,7 @@
    `agentflow_runtime.…` while **source tree stays reviewable** (prefer
    `src/agentflow_runtime/` layout *or* hatch `packages` map — pick one in
    implementation PR, not both ad hoc).
-2. Provide `src/__init__.py` shim:
+2. Provide a `src` shim (shipped as `packaging/src_shim/src/__init__.py`):
    - re-export / path-hook / `import agentflow_runtime as …` pattern that
      keeps `import src.serving…` working for one minor line.
    - optional `DeprecationWarning` on first import of `src` (env-gated so
@@ -169,4 +169,4 @@ CI mypy: `mypy src/ --ignore-missing-imports` (`.github/workflows/ci.yml`).
 - [x] Hatch pin confirmed
 - [x] Baseline wheel tree recorded (`src/` top-level only)
 - [x] Default decisions written (layout / shim / warnings)
-- [ ] Phase 1 on a release branch (not started)
+- [x] Phase 1-2 landed in local commit `1096e2e` for the prepared, unpublished 2.1.0 line; Phase 3 (drop the `src` shim) is the next MAJOR

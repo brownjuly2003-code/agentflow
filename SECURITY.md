@@ -44,7 +44,7 @@ initial triage decision within **7 business days**.
 
 ## What is in scope
 
-- The AgentFlow API (`src/serving/api/`) — auth, tenant isolation, SQL
+- The AgentFlow API (`src/agentflow_runtime/serving/api/`) — auth, tenant isolation, SQL
   guard, rate limiting, input validation, secrets handling.
 - The Python SDK (`sdk/agentflow/`) and the TypeScript SDK
   (`sdk-ts/`) — both as installed from PyPI / npm.

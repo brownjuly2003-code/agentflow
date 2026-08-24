@@ -199,7 +199,7 @@ gate relaxes automatically; with `controlPlane.store=embedded` any
 
 - `helm/agentflow/values.schema.json` is the chart contract for runtime values consumed from Helm.
 - If you add, rename, or make required a field under `config.tenants` or `secrets.apiKeys`, update the schema, chart defaults, and environment-specific values together.
-- Keep the mounted file shape in `templates/configmap.yaml` and `templates/secret.yaml` aligned with the runtime Pydantic models in `src/tenancy.py` and `src/serving/api/auth/manager.py`.
+- Keep the mounted file shape in `templates/configmap.yaml` and `templates/secret.yaml` aligned with the runtime Pydantic models in `src/agentflow_runtime/tenancy.py` and `src/agentflow_runtime/serving/api/auth/manager.py`.
 - Validate contract changes with `helm lint helm/agentflow -f k8s/staging/values-staging.yaml` before staging rehearsal.
 
 ## Upgrade

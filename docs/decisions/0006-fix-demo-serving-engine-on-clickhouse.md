@@ -7,7 +7,7 @@ Accepted - 2026-07-01
 ## Context
 
 The serving layer is pluggable behind the `ServingBackend` ABC
-(`src/serving/backends/__init__.py`), with two real implementations: DuckDB
+(`src/agentflow_runtime/serving/backends/__init__.py`), with two real implementations: DuckDB
 (`duckdb_backend.py`) and ClickHouse (`clickhouse_backend.py`). The engine is
 selected at runtime by `SERVING_BACKEND` env → `config/serving.yaml: backend` →
 default `"duckdb"`.

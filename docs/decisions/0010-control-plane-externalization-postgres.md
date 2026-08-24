@@ -131,7 +131,7 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
 
 ## Decision
 
-1. **A `ControlPlaneStore` port** (`src/serving/control_plane/`) owns all six
+1. **A `ControlPlaneStore` port** (`src/agentflow_runtime/serving/control_plane/`) owns all six
    state classes. Two adapters:
    - `EmbeddedControlPlaneStore` — extracts today's behavior (DuckDB tables
      via the serving connection, YAML files for registrations/rules),

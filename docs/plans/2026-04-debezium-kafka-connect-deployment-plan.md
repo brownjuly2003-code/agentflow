@@ -78,7 +78,7 @@ For kind staging, T25b should deploy ephemeral Postgres/MySQL source instances i
 
 ### Tables and schemas
 
-The demo schema mirrors `src/processing/local_pipeline.py` and the current seeded DuckDB files.
+The demo schema mirrors `src/agentflow_runtime/processing/local_pipeline.py` and the current seeded DuckDB files.
 
 PostgreSQL `agentflow_demo.public`:
 
@@ -104,7 +104,7 @@ Use Debezium default table topic naming by setting stable `topic.prefix` values:
 - PostgreSQL `topic.prefix=cdc.postgres`, producing topics such as `cdc.postgres.public.orders_v2`.
 - MySQL `topic.prefix=cdc.mysql`, producing topics such as `cdc.mysql.agentflow_demo.products_current`.
 
-Do not keep the current placeholder `RegexRouter` behavior from `src/ingestion/connectors/postgres_cdc.py` that rewrites topics to `$1.cdc`; it conflicts with ADR 0005 and the T25 naming convention.
+Do not keep the current placeholder `RegexRouter` behavior from `src/agentflow_runtime/ingestion/connectors/postgres_cdc.py` that rewrites topics to `$1.cdc`; it conflicts with ADR 0005 and the T25 naming convention.
 
 ### Topic inventory
 

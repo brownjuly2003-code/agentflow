@@ -113,7 +113,7 @@ SDK - это внешний интерфейс проекта. Даже если
 Контракт - это формальное описание того, какие поля, типы и версии данных разрешены. Versioning нужен, чтобы схема могла меняться без тихой поломки клиентов.
 
 ### Как в AgentFlow
-Контракты лежат в [config/contracts](../config/contracts), загружаются через [src/serving/semantic_layer/contract_registry.py](../src/serving/semantic_layer/contract_registry.py) и генерируются из моделей скриптом [scripts/generate_contracts.py](../scripts/generate_contracts.py). Registry умеет отдавать latest stable, конкретную версию и diff с классификацией на breaking/additive changes. SDK может пиновать нужную версию контракта перед валидацией ответа.
+Контракты лежат в [config/contracts](../config/contracts), загружаются через [src/agentflow_runtime/serving/semantic_layer/contract_registry.py](../src/agentflow_runtime/serving/semantic_layer/contract_registry.py) и генерируются из моделей скриптом [scripts/generate_contracts.py](../scripts/generate_contracts.py). Registry умеет отдавать latest stable, конкретную версию и diff с классификацией на breaking/additive changes. SDK может пиновать нужную версию контракта перед валидацией ответа.
 
 ### Почему это важно
 Для агентов schema drift особенно болезнен. Если поле исчезло или поменяло тип, LLM-обвязка и downstream code часто падают не сразу и не очевидно. Контракт делает изменение явным: либо версия не совпала, либо diff показал, что изменение breaking.
@@ -128,7 +128,7 @@ SDK - это внешний интерфейс проекта. Даже если
 Параметризованный запрос отделяет структуру SQL от пользовательского значения. В текст запроса ставится placeholder, а реальное значение передаётся отдельно.
 
 ### Как в AgentFlow
-Backend интерфейс принимает `sql` и `params` в [src/serving/backends/duckdb_backend.py](../src/serving/backends/duckdb_backend.py). В entity lookup путь использует `?` placeholders в [src/serving/semantic_layer/query/entity_queries.py](../src/serving/semantic_layer/query/entity_queries.py). Отдельные инъекционные кейсы покрыты в [tests/unit/test_query_engine_injection.py](../tests/unit/test_query_engine_injection.py).
+Backend интерфейс принимает `sql` и `params` в [src/agentflow_runtime/serving/backends/duckdb_backend.py](../src/agentflow_runtime/serving/backends/duckdb_backend.py). В entity lookup путь использует `?` placeholders в [src/agentflow_runtime/serving/semantic_layer/query/entity_queries.py](../src/agentflow_runtime/serving/semantic_layer/query/entity_queries.py). Отдельные инъекционные кейсы покрыты в [tests/unit/test_query_engine_injection.py](../tests/unit/test_query_engine_injection.py).
 
 ### Почему это важно
 Если подставлять строку пользователя прямо внутрь SQL, атакующий может подменить смысл запроса. Параметризация передаёт значение как данные, а не как часть SQL-команды, и этим закрывает классический путь к SQL injection.
@@ -143,7 +143,7 @@ Backend интерфейс принимает `sql` и `params` в [src/serving/
 AST validator сначала парсит SQL в дерево, а потом проверяет это дерево по правилам: какие типы команд разрешены, к каким таблицам можно обращаться, нет ли опасных конструкций. Это намного надёжнее, чем проверять SQL регулярками.
 
 ### Как в AgentFlow
-В [src/serving/semantic_layer/sql_guard.py](../src/serving/semantic_layer/sql_guard.py) функция `validate_nl_sql()` разрешает только один `SELECT`, запрещает DDL/DML-узлы (`DROP`, `DELETE`, `UPDATE` и т.д.), учитывает CTE aliases и проверяет, что реальные таблицы входят в allowlist. Это и есть защитный фильтр для NL-to-SQL пути.
+В [src/agentflow_runtime/serving/semantic_layer/sql_guard.py](../src/agentflow_runtime/serving/semantic_layer/sql_guard.py) функция `validate_nl_sql()` разрешает только один `SELECT`, запрещает DDL/DML-узлы (`DROP`, `DELETE`, `UPDATE` и т.д.), учитывает CTE aliases и проверяет, что реальные таблицы входят в allowlist. Это и есть защитный фильтр для NL-to-SQL пути.
 
 ### Почему это важно
 Regex не понимает структуру SQL. Он легко ломается на CTE, подзапросах, комментариях и экранировании. Парсер, наоборот, видит именно синтаксическое дерево и позволяет проверять не "есть ли подозрительная подстрока", а "что этот запрос реально пытается сделать".
@@ -218,7 +218,7 @@ Terraform описывает инфраструктуру как код. `plan` 
 DuckDB - лёгкая columnar база для локальной аналитики и быстрых single-node чтений. Iceberg - это table format для больших аналитических данных с time travel, snapshot-ами и schema evolution.
 
 ### Как в AgentFlow
-Архитектурный контекст описан в [architecture.md](architecture.md). Локальный serving path использует [../src/serving/backends/duckdb_backend.py](../src/serving/backends/duckdb_backend.py), а local pipeline пишет demo-данные через [../src/processing/local_pipeline.py](../src/processing/local_pipeline.py). Production-shaped путь ориентируется на Iceberg и его каталоги/таблицы.
+Архитектурный контекст описан в [architecture.md](architecture.md). Локальный serving path использует [../src/agentflow_runtime/serving/backends/duckdb_backend.py](../src/agentflow_runtime/serving/backends/duckdb_backend.py), а local pipeline пишет demo-данные через [../src/agentflow_runtime/processing/local_pipeline.py](../src/agentflow_runtime/processing/local_pipeline.py). Production-shaped путь ориентируется на Iceberg и его каталоги/таблицы.
 
 ### Почему это важно
 Эта связка позволяет не выбирать между "удобно локально" и "похоже на прод". DuckDB даёт быстрый dev/demo loop, а Iceberg оставляет дверь в production-friendly lakehouse path с time travel и управляемой эволюцией схемы.
@@ -233,7 +233,7 @@ DuckDB - лёгкая columnar база для локальной аналити
 Это минимальный операционный интерфейс, который показывает состояние системы, usage и health без отдельного тяжёлого frontend stack. По сути, это read-only dashboard для администратора.
 
 ### Как в AgentFlow
-Роуты лежат в [../src/serving/api/routers/admin_ui.py](../src/serving/api/routers/admin_ui.py), шаблон - в [../src/serving/api/templates/admin.html](../src/serving/api/templates/admin.html), поведение проверяется тестами из [../tests/integration/test_admin_ui.py](../tests/integration/test_admin_ui.py). Страница собирает health, cache stats, db pool stats и usage, а summary обновляется периодическим partial-refresh.
+Роуты лежат в [../src/agentflow_runtime/serving/api/routers/admin_ui.py](../src/agentflow_runtime/serving/api/routers/admin_ui.py), шаблон - в [../src/agentflow_runtime/serving/api/templates/admin.html](../src/agentflow_runtime/serving/api/templates/admin.html), поведение проверяется тестами из [../tests/integration/test_admin_ui.py](../tests/integration/test_admin_ui.py). Страница собирает health, cache stats, db pool stats и usage, а summary обновляется периодическим partial-refresh.
 
 ### Почему это важно
 Для такой поверхности React не обязателен. Если интерфейс в основном читает данные и не требует сложного client-side state, server-rendered страница быстрее появляется, проще поддерживается и не требует второй крупной системы внутри проекта.

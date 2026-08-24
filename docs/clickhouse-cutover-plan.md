@@ -8,9 +8,9 @@ local-dev / test store.
 
 ## What already exists (no work)
 
-- `src/serving/backends/clickhouse_backend.py` — real HTTP backend, MergeTree
+- `src/agentflow_runtime/serving/backends/clickhouse_backend.py` — real HTTP backend, MergeTree
   demo tables, `duckdb→clickhouse` sqlglot transpile, injection-safe literals.
-- `src/serving/backends/__init__.py` — `create_backend` factory, `SERVING_BACKEND`
+- `src/agentflow_runtime/serving/backends/__init__.py` — `create_backend` factory, `SERVING_BACKEND`
   env override.
 - `docker-compose.prod.yml` — `--profile clickhouse` service.
 - `docs/clickhouse-migration.md` — operator switch guide.
@@ -46,7 +46,7 @@ writer fed ClickHouse and the webhook/invalidate/SSE scans polled the embedded
 connection — the core freshness property would have silently died on the
 shipped engine.
 
-- [x] `src/processing/clickhouse_sink.py` — the local pipeline mirrors serving
+- [x] `src/agentflow_runtime/processing/clickhouse_sink.py` — the local pipeline mirrors serving
       tables + the `pipeline_events` journal to ClickHouse when it is the
       configured backend (DuckDB stays the local lake/test store).
 - [x] Upsert model: mutable serving tables are `ReplacingMergeTree` versioned

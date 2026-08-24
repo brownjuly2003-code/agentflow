@@ -11,8 +11,9 @@ One of:
 - A wave of 403 `PermissionDeniedError` from clients that worked an hour ago.
 - `/v1/health` returns 200 but every other `/v1/*` route returns 503 with the
   body `"API key configuration is missing or empty"`.
-- Synthetic auth probe (`tests/e2e/test_auth_smoke`) starts failing in
-  scheduled CI.
+- Synthetic auth probe
+  (`tests/e2e/test_smoke.py::test_auth_rejects_request_without_api_key`) starts
+  failing in scheduled CI.
 
 ## Severity
 
@@ -96,8 +97,9 @@ kubectl -n <staging-ns> set env deployment/agentflow-api AGENTFLOW_AUTH_DISABLED
 ```
 
 Set a 1-hour reminder to remove it. Production environments must reject this
-flag at deploy time — `helm/agentflow/values-prod.yaml` should not contain
-`AGENTFLOW_AUTH_DISABLED` at all.
+flag at deploy time — the production values file (no prod values file is
+tracked in this repo; `k8s/staging/values-staging.yaml` is the staging
+equivalent) should not contain `AGENTFLOW_AUTH_DISABLED` at all.
 
 ### Admin key revoked or rotated incorrectly
 

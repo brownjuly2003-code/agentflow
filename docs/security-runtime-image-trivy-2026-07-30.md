@@ -43,7 +43,10 @@ image-affecting files:
 
 - `Dockerfile.api` blob `9cc33d81a88802991f632225a45f9422ab8e4358`;
 - `src/quality/monitors/metrics_collector.py` blob
-  `475c656b0c7de9418e2447bd6b5cca36b9026146`.
+  `475c656b0c7de9418e2447bd6b5cca36b9026146` — the path as it existed at
+  `72b9609`; the module moved to
+  `src/agentflow_runtime/quality/monitors/metrics_collector.py` in the P2-6
+  namespace migration (`1096e2e`, 2026-08-23), after this record was taken.
 
 The image was built from the pinned `python:3.11-slim` digest already declared
 in `Dockerfile.api`:

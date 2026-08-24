@@ -65,7 +65,7 @@ Every backup archive contains:
 
 **The three excluded files are credential/routing material, not
 disaster-recovery data.** `scripts/backup.py` filters them out using the same
-`scripts/check_release_artifacts.FORBIDDEN_MEMBER_PATTERNS` the Python
+`FORBIDDEN_MEMBER_PATTERNS` list from `scripts/check_release_artifacts.py` that the Python
 release-artifact check already enforces on the sdist and wheel, so they never
 leave the host inside a tar archive, a 7-day GitHub Actions artifact, or (if
 you pass `--output s3://...`) an S3 object. `tests/unit/test_backup.py`

@@ -144,5 +144,6 @@ version when republishing.
 - `.github/workflows/publish-pypi.yml`, `.github/workflows/publish-npm.yml` —
   the workflows you may need to fix before republishing.
 - `scripts/release.py` — local helper for bumping versions and tagging.
-- `docs/lessons/ci-repair-sprint-2026-04.md` § "PyPI namespace pre-claim" —
-  why the SDK is called `agentflow-client`, not `agentflow`.
+- SDK distribution name: the Python SDK ships as `agentflow-client`, not
+  `agentflow`, because the shorter name was already taken on PyPI
+  (CHANGELOG, 2026-04).

@@ -18,6 +18,8 @@ required_evidence = [
     "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md",
     "docs/perf/golden-4h-soak-start-2026-08-07.md",
     "docs/perf/golden-4h-soak-05-failure-2026-08-08.md",
+    "corrected-rollback-pair-runtime-20260823-01.md",
+    "ci-soak-f02-capacity-decision-20260823-01.md",
 ]
 
 [production]
@@ -47,6 +49,13 @@ latest_soak_recovery_state = "ready-baselined-hold-pass"
 latest_soak_recovery_source = "78742d0a80206b31219c6d06b84952236235cd74"
 latest_soak_recovery_image = "agentflow-flink-local:78742d0-minpause0-groupoffsets-20260803-01"
 latest_soak_recovery_startup_mode = "group-offsets"
+# F-10: split the conflated soak+rollback pending item into two gates.
+# `pending_acceptance` keeps the historical consumer string (tests pin it);
+# the last *executed* soak identity remains soak-05. Honest split:
+rollback_mechanics = "PASS"
+rollback_mechanics_evidence = "corrected-rollback-pair-runtime-20260823-01.md"
+full_soak_plus_rollback_after_traffic = "BLOCKED_HOST_CAPACITY"
+full_soak_plus_rollback_after_traffic_evidence = "ci-soak-f02-capacity-decision-20260823-01.md"
 pending_acceptance = [
     "4h soak and rollback rehearsal on the golden topology",
 ]

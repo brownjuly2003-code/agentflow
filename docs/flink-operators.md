@@ -2,7 +2,7 @@
 
 ## Session Aggregation
 
-`src/processing/flink_jobs/session_aggregator.py` is the single canonical
+`src/agentflow_runtime/processing/flink_jobs/session_aggregator.py` is the single canonical
 session job. It consumes validated events and closes tenant-scoped sessions
 after a 30-minute inactivity gap.
 
@@ -32,7 +32,7 @@ startup modes instead of silently choosing a different offset boundary.
 
 ## Checkpointing
 
-`src/processing/flink_jobs/checkpointing.py` provides reusable checkpoint defaults:
+`src/agentflow_runtime/processing/flink_jobs/checkpointing.py` provides reusable checkpoint defaults:
 - interval: 60 seconds
 - mode: exactly-once
 - min pause between checkpoints: 30 seconds
@@ -85,14 +85,14 @@ flinkJob:
 ## Local Run
 
 1. Install the Flink runtime manifest **in its own venv**:
-   `pip install -r src/processing/flink_jobs/requirements.txt`.
+   `pip install -r src/agentflow_runtime/processing/flink_jobs/requirements.txt`.
    There is no `[flink]` extra: apache-flink's beam chain caps `pyarrow<17`
    while the core package pins `pyarrow>=17`, so the two can never share one
    environment. The job imports nothing from agentflow, so it does not need
    the package.
 2. Export `KAFKA_BOOTSTRAP_SERVERS` and optionally `FLINK_CHECKPOINT_DIR`
 3. Submit the job:
-   `flink run -py src/processing/flink_jobs/session_aggregator.py`
+   `flink run -py src/agentflow_runtime/processing/flink_jobs/session_aggregator.py`
 
 Default topics:
 - source: `events.validated`

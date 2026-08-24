@@ -13,7 +13,7 @@ The public demo today is a **single** Hugging Face Docker Space
 `deploy/hf-space/`): one read-only container that seeds DuckDB on boot, runs in
 demo mode (admin routes `404`, mutating routes `403` except `POST /v1/query`),
 and tracks `main`. It demonstrates the event-native metrics story **within one
-node** - the in-process pipeline (`src/processing/local_pipeline.py`) generates
+node** - the in-process pipeline (`src/agentflow_runtime/processing/local_pipeline.py`) generates
 events, and serving reads reflect them.
 
 The production topology is multi-service and multi-branch, and none of it fits a
@@ -149,7 +149,7 @@ choreography below. No second account, no paid tier, no organization required.
   with **no new serving logic** - it reuses the event->metric axis that already
   exists (ADR 0006 Phase 1).
 - The endpoint is **allow-listed in the demo-mode guard** exactly like
-  `/v1/query` (`src/serving/api/main.py:286-299`), so public callers with the
+  `/v1/query` (`src/agentflow_runtime/serving/api/main.py`), so public callers with the
   `demo-key` are still rejected on it by the endpoint's own bearer ladder
   (`401` with no bearer, `403` with a wrong one); only the node token
   authorizes it. It is mounted **only** in center role; in edge/standalone

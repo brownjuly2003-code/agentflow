@@ -45,7 +45,7 @@ Rules:
 
 ## 3. Role dispatch (where the code hangs)
 
-- Resolve role/branch once at startup in the `lifespan` (`src/serving/api/main.py`,
+- Resolve role/branch once at startup in the `lifespan` (`src/agentflow_runtime/serving/api/main.py`,
   alongside `app.state.demo_mode` at line 86). Store `app.state.node_role`,
   `app.state.node_branch`.
 - **Center:** mount the ingest router (§4) only when role=`center`. Add its path to
@@ -53,7 +53,7 @@ Rules:
 - **Edge:** start the emitter task (§6) in the `lifespan` only when role=`edge`.
 - **Seed scoping (§5):** the boot seed (`initialize_demo_data`, main.py:123) takes
   the branch into account.
-- Keep a single `src/serving/node/` module for role config + emitter + ingest
+- Keep a single `src/agentflow_runtime/serving/node/` module for role config + emitter + ingest
   handler so the node concern is one seam, not sprinkled through serving.
 
 ## 4. Ingest endpoint contract (center only)
@@ -76,7 +76,7 @@ Content-Type: application/json
 ```
 
 - Auth: constant-time compare of the bearer against `AGENTFLOW_NODE_TOKEN`
-  (reuse the pattern in `src/serving/api/auth/`); **not** the `demo-key` path.
+  (reuse the pattern in `src/agentflow_runtime/serving/api/auth/`); **not** the `demo-key` path.
 - The demo-guard (`main.py:286-299`) blocks `POST` for the public key on every
   path except the allow-list; adding `/v1/node/events` to that set lets the
   **token-authenticated** node call through, and the endpoint's own bearer
@@ -96,7 +96,7 @@ Content-Type: application/json
 
 The `events[]` items are exactly what the producers already emit - do not invent a
 new schema. Produced by `generate_order|generate_payment|generate_click|generate_product`
-(`src/ingestion/producers/event_producer.py`) via `json.loads(model.model_dump_json())`; see
+(`src/agentflow_runtime/ingestion/producers/event_producer.py`) via `json.loads(model.model_dump_json())`; see
 `local_pipeline._generate_random_event`. Shape (illustrative order event):
 
 ```json
@@ -239,7 +239,7 @@ Machine-checkable; each is a unit/integration test F2 must add (mirrors
 
 ## 14. F2 implementation order (small PRs, full suite green each)
 
-1. `src/serving/node/` config resolution (role/branch/center-url/token) + fail-fast
+1. `src/agentflow_runtime/serving/node/` config resolution (role/branch/center-url/token) + fail-fast
    boot validation + N1/N2 tests. No behavior change for standalone.
 2. Center ingest endpoint (`POST /v1/node/events`) + demo-guard allow-list + auth +
    `_process_event` wiring + branch tag + N3/N4/N5/N12 tests.

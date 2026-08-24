@@ -71,7 +71,8 @@ assigned.
    ```
    Focus on changes to: backends (`src/agentflow_runtime/serving/backends/`), the query engine
    (`src/agentflow_runtime/serving/semantic_layer/query/`), auth middleware (regression in fast
-   path), tenant scoping caches (`src/agentflow_runtime/serving/tenant/`), DuckDB pool config.
+   path), tenant scoping caches (`src/agentflow_runtime/serving/semantic_layer/query/engine.py`), DuckDB
+   pool config.
 4. **Memory cache regression?** PII masker `Path(...)` rebuild (commit
    `220f94c`) and tenant qualification cache (`aae27bf`) were both -hundreds
    of ms wins. A regression that undoes one of these will visibly retrace
@@ -134,6 +135,5 @@ Flamegraphs land in `prof/` (gitignored). Compare against the artifacts in
   caught a real customer-impacting drift and the postmortem should explain
   why staging did not catch it first.
 - Recommended any time the gate had to be raised. Gate-raising under pressure
-  is a known anti-pattern (see lessons-learned doc
-  `docs/lessons/ci-repair-sprint-2026-04.md` § "Single-run baseline
-  anti-pattern") — the postmortem should keep that lesson visible.
+  is a known anti-pattern — a single run is not a baseline — and the
+  postmortem should keep that lesson visible.

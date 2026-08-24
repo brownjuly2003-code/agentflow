@@ -4,6 +4,24 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Docs — living claims, rollback/soak gate split, docs-link checker (audit F-10)
+
+Living STATUS/CLOSURE and `config/project_claims.toml` now match the 2026-08-23
+evidence: corrected rollback mechanics **PASS**
+(`corrected-rollback-pair-runtime-20260823-01.md`); the full 4h soak plus
+rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
+(`ci-soak-f02-capacity-decision-20260823-01.md`). The consumer string in
+`pending_acceptance` is unchanged. Namespace-migration dead `src/...` paths
+and broken glossary links are repaired. `scripts/check_docs_links.py` fails
+closed on missing local Markdown targets and backticked repo paths in living
+docs (historical evidence excluded).
+
+Stage A of `audit_sol_23_08_2026.md` §7 is closed in local `main` (not
+pushed): F-02 A `1629452` + `372957e`; F-02 B `a363984`; F-05 `6222cba`;
+F-06 `87ead56`; F-03 `42814f1`; F-17 `eec8c27`; F-10 this slice. Still open:
+audit Stages B/C/D, external pentest, full F-02 soak
+(`BLOCKED_HOST_CAPACITY`). `production.status` stays `candidate`.
+
 ### BREAKING — admin key revoke is by `key_id`, not plaintext (audit F-02 A)
 
 `DELETE /v1/admin/keys/{api_key}` is now `DELETE /v1/admin/keys/{key_id}`: a

@@ -56,8 +56,12 @@ checkpoints `7675→8614` and failed `1→1` — see
 [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md);
 kind residual canary later **PASS**; latest soak identity `-05` producer
 **PASS** but overall **`SOAK_FAIL`** on terminal Flink health before dual-mean
-verify could PASS; corrected rollback **not started** — see
-[perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)),
+verify could PASS — see
+[perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md);
+corrected rollback mechanics **PASS**
+([corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md));
+full soak plus rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
+([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md))),
 and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
@@ -131,21 +135,21 @@ Push, PR mutations and release actions require explicit owner authorization.
   currently returns `Repository not found`; its upload is non-blocking
   reporting until the one-time external activation in
   [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
-- Production status remains `candidate`; exactly two production gates remain
-  open: fresh soak/rollback (historical canary1
-  **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; subsequent readiness-baselined hold
-  **`RUNTIME_HOLD_PASS`**; kind residual canary **PASS**; latest soak `-05`
-  **`SOAK_FAIL`** after producer PASS; corrected rollback **not started** —
-  [perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)),
+- Production status remains `candidate`; remaining production gates are:
+  full soak plus rollback after traffic (**`BLOCKED_HOST_CAPACITY`** —
+  [ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md);
+  historical canary1 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; readiness-baselined
+  hold **`RUNTIME_HOLD_PASS`**
+  ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md));
+  kind residual canary **PASS**; latest soak `-05` **`SOAK_FAIL`**;
+  corrected rollback mechanics **PASS**
+  ([corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md))),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
   The npm approval gate is **PASS**
   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-  Current tracked evidence leaves the two remaining gates dependent on a
-  newly identified soak/rollback run with retained Flink exception evidence,
-  or third-party pentest engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты

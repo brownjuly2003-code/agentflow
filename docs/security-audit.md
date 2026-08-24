@@ -42,7 +42,7 @@ Authorization is layered on top of authentication:
 - request context binds `tenant_id` to the authenticated tenant
 - serving paths use that tenant context when querying tenant-scoped data
 
-Evidence: `config/security.yaml`, `src/serving/api/security.py`, `src/serving/api/auth/manager.py`, `src/serving/api/auth/middleware.py`, `src/serving/api/auth/key_rotation.py`, `tests/unit/test_auth_argon2_lookup.py`, `tests/integration/test_rotation.py`
+Evidence: `config/security.yaml`, `src/agentflow_runtime/serving/api/security.py`, `src/agentflow_runtime/serving/api/auth/manager.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `src/agentflow_runtime/serving/api/auth/key_rotation.py`, `tests/unit/test_auth_argon2_lookup.py`, `tests/integration/test_rotation.py`
 
 ## 3. Tenant Isolation
 
@@ -59,7 +59,7 @@ What the evidence supports today:
 
 It does not support broader claims such as end-to-end isolation across every external dependency.
 
-Evidence: `docs/decisions/004-tenant-id-column-over-schema-per-tenant.md`, `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/backends/clickhouse_backend.py`, `tests/integration/test_tenant_isolation.py`, `tests/property/test_tenant_isolation_properties.py`, `tests/integration/test_clickhouse_tenant_isolation_live.py`
+Evidence: `docs/decisions/004-tenant-id-column-over-schema-per-tenant.md`, `src/agentflow_runtime/tenancy.py`, `src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py`, `src/agentflow_runtime/serving/backends/clickhouse_backend.py`, `tests/integration/test_tenant_isolation.py`, `tests/property/test_tenant_isolation_properties.py`, `tests/integration/test_clickhouse_tenant_isolation_live.py`
 
 ## 4. Input Validation and Contract Safety
 
@@ -69,7 +69,7 @@ The ingestion schemas add cross-field semantics beyond shape validation. `OrderE
 
 Schema contract evolution is implemented through a contract registry plus version-aware validation and diff endpoints. The API versioning layer also exposes deprecation metadata through headers and supports tenant-level version pins, which reduces the blast radius of backward-incompatible changes.
 
-Evidence: `src/ingestion/schemas/events.py`, `tests/unit/test_event_schemas.py`, `src/serving/semantic_layer/contract_registry.py`, `src/serving/api/routers/contracts.py`, `src/serving/api/versioning.py`
+Evidence: `src/agentflow_runtime/ingestion/schemas/events.py`, `tests/unit/test_event_schemas.py`, `src/agentflow_runtime/serving/semantic_layer/contract_registry.py`, `src/agentflow_runtime/serving/api/routers/contracts.py`, `src/agentflow_runtime/serving/api/versioning.py`
 
 ## 5. SQL Injection Protection and Query Safety
 
@@ -111,7 +111,7 @@ The number of suppressions per file is pinned by `test_interpolated_sql_nosec_su
 | `semantic_layer/search_index.py:152` | `entity.table` (identifier) | table name from the semantic catalog `EntityDefinition`, not request data |
 | `orchestration/dags/daily_batch.py:148` | `table` (identifier) | iterates a fixed in-code health-check list |
 
-Evidence: `src/serving/semantic_layer/sql_guard.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/nl_engine.py`, `tests/unit/test_query_engine_injection.py`, `tests/unit/test_sql_guard.py`, `tests/unit/test_nl_engine_injection.py`, `tests/unit/test_security_tooling_policy.py`
+Evidence: `src/agentflow_runtime/serving/semantic_layer/sql_guard.py`, `src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py`, `src/agentflow_runtime/serving/semantic_layer/nl_engine.py`, `tests/unit/test_query_engine_injection.py`, `tests/unit/test_sql_guard.py`, `tests/unit/test_nl_engine_injection.py`, `tests/unit/test_security_tooling_policy.py`
 
 ## 6. Rate Limiting and Abuse Protection
 
@@ -123,7 +123,7 @@ Rate limiting exists at two levels:
 
 The SDKs also include resilience primitives, specifically retry policy handling and a circuit breaker. This is not a server-side abuse control by itself, but it does reduce retry storms and repeated hammering of degraded endpoints by well-behaved clients.
 
-Evidence: `src/serving/api/rate_limiter.py`, `src/serving/api/auth/middleware.py`, `sdk/agentflow/client.py`, `sdk-ts/src/client.ts`, `tests/unit/test_sdk_circuit_breaker.py`
+Evidence: `src/agentflow_runtime/serving/api/rate_limiter.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `sdk/agentflow/client.py`, `sdk-ts/src/client.ts`, `tests/unit/test_sdk_circuit_breaker.py`
 
 ## 7. Data Protection and Privacy Controls
 
@@ -145,7 +145,7 @@ Security headers are applied centrally and include:
 
 These controls improve baseline browser-facing hardening for docs/admin surfaces. TLS termination is intentionally delegated to an upstream edge or ingress layer; the FastAPI application applies HTTP-layer security controls behind that boundary.
 
-Evidence: `src/serving/api/security.py` (security headers, still current); the removed masker's history lives in the CHANGELOG (2026-07-01) and `docs/decisions/0006-fix-demo-serving-engine-on-clickhouse.md` Phase 2.
+Evidence: `src/agentflow_runtime/serving/api/security.py` (security headers, still current); the removed masker's history lives in the CHANGELOG (2026-07-01) and `docs/decisions/0006-fix-demo-serving-engine-on-clickhouse.md` Phase 2.
 
 ## 8. Supply Chain and CI Controls
 
@@ -169,7 +169,7 @@ Python 3.11–3.13-compatible 0.7 line. The regenerated hash lock, clean Mac
 environment, rebuilt image, OSV queries, and Trivy result are recorded in
 [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
 
-The Bandit baseline currently records a historical `B310` finding in `src/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
+The Bandit baseline currently records a historical `B310` finding in `src/agentflow_runtime/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
 
 Helm defaults no longer embed production-shaped API-key verifier hashes. Operators can render a chart-managed Secret for local use or mount an existing Kubernetes Secret, which is friendlier to External Secrets Operator, Sealed Secrets, or equivalent workflows.
 
@@ -191,11 +191,11 @@ What is not evidenced in this repository snapshot:
 - automated rotation for non-API-key secrets
 - externally immutable audit retention or SIEM export
 
-The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository. Use `docs/operations/immutable-retention-evidence-handoff.md` before making any external immutable-retention claim.
+The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository. Collect that operator evidence outside this repository before making any external immutable-retention claim.
 
 Because the external controls are not provable from the checked-in code, they should not be claimed in customer-facing security questionnaires without additional infrastructure evidence.
 
-Evidence: `src/serving/api/auth/middleware.py`, `src/serving/api/analytics.py`, `docs/runbook.md`
+Evidence: `src/agentflow_runtime/serving/api/auth/middleware.py`, `src/agentflow_runtime/serving/api/analytics.py`, `docs/runbook.md`
 
 ## 10. Known Limitations
 

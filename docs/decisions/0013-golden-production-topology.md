@@ -21,7 +21,7 @@ The only golden runtime is **containerized PyFlink 2.3** on Kubernetes:
 
 1. Kafka delivers an envelope that retains topic, partition, offset, timestamp,
    and value until tenant attribution is complete.
-2. The OCI image built by `src/processing/flink_jobs/Dockerfile` extends the
+2. The OCI image built by `src/agentflow_runtime/processing/flink_jobs/Dockerfile` extends the
    digest-pinned official Flink 2.3 Java 17 image, retains its Kubernetes
    `/docker-entrypoint.sh`, and runs `stream_processor.py` to emit
    `events.validated` or `events.deadletter`.

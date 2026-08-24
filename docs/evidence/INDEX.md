@@ -39,3 +39,15 @@ under `docs/evidence/`.
 | [external-dependency-recovery-preparation-20260817.md](../../external-dependency-recovery-preparation-20260817.md) | External dependency recovery preparation |
 | [flink-failure-evidence-retention.md](../../flink-failure-evidence-retention.md) | Flink failure evidence retention policy |
 | [mac-clickhouse-loopback-rebind-20260821-01.md](../../mac-clickhouse-loopback-rebind-20260821-01.md) | Mac ClickHouse loopback rebind record |
+
+## F-10 rollback and soak-capacity records (2026-08-23)
+
+These two records stay at the repository root because `docs/STATUS.md`,
+`docs/PROJECT_CLOSURE.md`, and `config/project_claims.toml` cite those exact
+paths — the same root-path stability as the CI-soak series above. They are
+not new evidence under `docs/evidence/`.
+
+| Record | What it fixes in time |
+| --- | --- |
+| [corrected-rollback-pair-runtime-20260823-01.md](../../corrected-rollback-pair-runtime-20260823-01.md) | Corrected rollback mechanics PASS (rev5 probe → rev6 = byte-identical rev3; no traffic) |
+| [ci-soak-f02-capacity-decision-20260823-01.md](../../ci-soak-f02-capacity-decision-20260823-01.md) | Full 4h soak plus rollback after traffic remains `BLOCKED_HOST_CAPACITY` |

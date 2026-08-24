@@ -174,7 +174,7 @@
   </div>
 
   <div class="foot">
-    <span>Сверено с кодом: каждый блок ссылается на реальные модули репозитория (src/…, infrastructure/…, warehouse/…).</span>
+    <span>Сверено с кодом: каждый блок ссылается на реальные модули репозитория (src/agentflow_runtime/…, infrastructure/…, warehouse/…).</span>
     <span class="mono">AgentFlow · docs/dataflow.html</span>
   </div>
 </div></div></div>
@@ -204,7 +204,7 @@ const NODES=[
   "продюсер <b>confluent-kafka</b> <span class='chip'>2.5</span> — идемпотентная отправка батчами",
   "схемы событий <b>Pydantic v2</b> <span class='chip'>2.9</span>",
   "маршрутизация тенантов — <code>tenant_router.py</code>"],
- paths:"src/ingestion/producers/event_producer.py · src/ingestion/schemas/"},
+ paths:"src/agentflow_runtime/ingestion/producers/event_producer.py · src/agentflow_runtime/ingestion/schemas/"},
 
 {id:"cdc",x:40,y:402,w:300,cls:"hot",title:"OLTP-источники → CDC",
  sub:"захват изменений из боевых БД",
@@ -212,14 +212,14 @@ const NODES=[
   "<b>PostgreSQL</b> <span class='chip'>16</span> · <b>MySQL</b> <span class='chip'>8.4</span>",
   "<b>Debezium</b> на <b>Kafka Connect</b> — source-capture <span class='mut'>(Helm-чарт: NetworkPolicy, PDB)</span>",
   "нормализатор → единый CDC-контракт <span class='chip'>ADR-0005</span>"],
- paths:"src/ingestion/cdc/normalizer.py · connectors/{postgres,mysql}_cdc.py · docker-compose.cdc.yml"},
+ paths:"src/agentflow_runtime/ingestion/cdc/normalizer.py · src/agentflow_runtime/ingestion/connectors/{postgres,mysql}_cdc.py · docker-compose.cdc.yml"},
 
 {id:"gen",x:40,y:648,w:300,cls:"loc",title:"Синтетический генератор",
  sub:"локальный демо-путь без инфраструктуры",
  items:[
   "<code>local_pipeline.py</code> — реалистичные e-commerce события",
   "тот же код валидации и обогащения, что и в проде"],
- paths:"src/processing/local_pipeline.py"},
+ paths:"src/agentflow_runtime/processing/local_pipeline.py"},
 
 {id:"kafka",x:404,y:240,w:280,cls:"hot",title:"Apache Kafka",chip:"CP 7.7",
  sub:"шина событий",
@@ -237,7 +237,7 @@ const NODES=[
   "<b>exactly-once</b> чекпоинты — <code>checkpointing.py</code>",
   "operator-compatible образ <code>flink:2.3.0-scala_2.12-java17</code>"],
  kpi:"verified Kafka → PyFlink → bridge: <b>3.02 s p50 / 5.70 s p95</b>",
- paths:"src/processing/flink_jobs/ · docker-compose.flink.yml"},
+ paths:"src/agentflow_runtime/processing/flink_jobs/ · docker-compose.flink.yml"},
 
 {id:"quality",x:748,y:452,w:320,cls:"hot",title:"Контроль качества",
  sub:"общий код обоих путей — прод и демо",
@@ -247,14 +247,14 @@ const NODES=[
   "обогащение per-type — <code>enrichment.py</code> <span class='mut'>(order sizing, click class, payment risk)</span>",
   "невалидные события → DLQ <code>events.deadletter</code>",
   "<code>freshness_monitor.py</code> · <code>metrics_collector.py</code> → Prometheus"],
- paths:"src/quality/{validators,monitors}/ · src/processing/transformations/"},
+ paths:"src/agentflow_runtime/quality/{validators,monitors}/ · src/agentflow_runtime/processing/transformations/"},
 
 {id:"outbox",x:748,y:772,w:320,cls:"",title:"Outbox + Replay",
  sub:"гарантированная доставка и переигрывание",
  items:[
   "<code>outbox.py</code> — ретраи доставки из DuckDB-outbox в Kafka",
   "<code>event_replayer.py</code> — replay из DLQ через <code>/v1/deadletter</code>"],
- paths:"src/processing/{outbox,event_replayer}.py"},
+ paths:"src/agentflow_runtime/processing/{outbox,event_replayer}.py"},
 
 {id:"iceberg",x:1132,y:178,w:300,cls:"hot",title:"Apache Iceberg",chip:"pyiceberg 0.7",
  sub:"lakehouse materializer — live acceptance pending",
@@ -263,7 +263,7 @@ const NODES=[
   "каталог: <b>REST</b> <span class='chip'>tabulario 0.6.0</span> dev · <b>AWS Glue</b> prod",
   "объектное хранилище <b>MinIO</b> (S3 API)",
   "снапшоты · time-travel · компакция"],
- paths:"src/processing/iceberg_sink.py · docker-compose.iceberg.yml"},
+ paths:"src/agentflow_runtime/processing/iceberg_sink.py · docker-compose.iceberg.yml"},
 
 {id:"duckdb",x:1132,y:452,w:300,cls:"loc",title:"DuckDB",chip:"≥ 1.1",
  sub:"local-dev / test compatibility store",
@@ -271,21 +271,21 @@ const NODES=[
   "<b>DuckDBPool</b> — общие read-курсоры, сериализованные записи",
   "таблицы <code>orders_v2</code>, <code>users_enriched</code>, outbox",
   "backend-абстракция — <code>duckdb_backend.py</code>"],
- paths:"src/serving/{db_pool,duckdb_connection}.py · backends/"},
+ paths:"src/agentflow_runtime/serving/{db_pool,duckdb_connection}.py · src/agentflow_runtime/serving/backends/"},
 
 {id:"ch",x:1132,y:676,w:300,cls:"hot",title:"ClickHouse",chip:"25.3",
  sub:"production/demo serving store",
  items:[
   "высокая конкурентность чтения <span class='mut'>(prod-compose)</span>",
   "транспиляция диалекта — <b>sqlglot</b> <span class='chip'>30</span>"],
- paths:"src/serving/backends/clickhouse_backend.py"},
+ paths:"src/agentflow_runtime/serving/backends/clickhouse_backend.py"},
 
 {id:"redis",x:1132,y:854,w:300,cls:"",title:"Redis",chip:"7.4",
  sub:"кэш горячего пути",
  items:[
   "<b>QueryCache</b> метрик — инвалидация по новым событиям",
   "TTL-фоллбек при недоступности — graceful degradation"],
- paths:"src/serving/cache.py"},
+ paths:"src/agentflow_runtime/serving/cache.py"},
 
 {id:"sem",x:1496,y:178,w:360,cls:"hot",title:"Семантический слой",
  sub:"сущности · метрики · контракты",
@@ -294,7 +294,7 @@ const NODES=[
   "типизированные контракты — <code>contract_registry.py</code> · реестр типов сущностей",
   "<b>NL → SQL</b>: <code>nl_engine.py</code> + <b>sql_guard</b> — AST-валидация sqlglot, fail-closed",
   "поисковый индекс — <code>search_index.py</code> · эволюция схем"],
- paths:"src/serving/semantic_layer/"},
+ paths:"src/agentflow_runtime/serving/semantic_layer/"},
 
 {id:"api",x:1496,y:560,w:360,cls:"hot",title:"FastAPI + Uvicorn",chip:"0.111 / 0.30",
  sub:"одна serving-граница для агентов",
@@ -306,7 +306,7 @@ const NODES=[
   "фон: <b>WebhookDispatcher</b> (HMAC <code>X-AgentFlow-Signature</code>) · <b>AlertDispatcher</b> · <b>OutboxProcessor</b>",
   "<code>audit_publisher.py</code> → топик <code>events.served</code>"],
  kpi:"entity p50 <b>38–55 ms</b> · p99 <b>167 ms</b> (локальный бенч)",
- paths:"src/serving/api/{main.py,middleware/,routers/,auth/}"},
+ paths:"src/agentflow_runtime/serving/api/{main.py,middleware/,routers/,auth/}"},
 
 {id:"pysdk",x:1920,y:178,w:400,cls:"",title:"Python SDK",chip:"PyPI · agentflow-client",
  sub:"sync + async клиенты (httpx)",
@@ -332,7 +332,7 @@ const NODES=[
  items:[
   "подписанные webhook-коллбеки (HMAC-SHA256)",
   "алерты по порогам метрик · SSE-поток <code>/v1/stream/events</code>"],
- paths:"src/serving/api/{webhook_dispatcher,alert_dispatcher}.py"},
+ paths:"src/agentflow_runtime/serving/api/{webhook_dispatcher,alert_dispatcher}.py"},
 ];
 
 /* ── нижние полосы ─────────────────────────────────────── */
@@ -355,7 +355,7 @@ const BANDS=[
   "<b>prometheus-client</b> → <b>Prometheus</b> 2.54 → <b>Grafana</b> 11.2",
   "<b>OpenTelemetry</b> 1.41 (FastAPI + httpx) → OTLP gRPC → <b>Jaeger</b> 1.55",
   "структурные JSON-логи — <b>structlog</b>",
-  "freshness- и pipeline-метрики из src/quality/monitors/",
+  "freshness- и pipeline-метрики из src/agentflow_runtime/quality/monitors/",
   "SLO-отчёт — <code>/v1/slo</code> · скраббинг секретов в логах"]},
 ];
 

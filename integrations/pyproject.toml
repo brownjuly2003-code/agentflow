@@ -1,12 +1,12 @@
 [project]
 name = "agentflow-integrations"
-version = "1.0.1"
+version = "2.0.0"
 description = "LangChain, LlamaIndex, CrewAI, and MCP integrations for AgentFlow"
 requires-python = ">=3.11"
 dependencies = [
-    # Audit F-11: cap at the current major — a future breaking client
-    # release must not satisfy this range and produce an incompatible pair.
-    "agentflow-client>=1.0.1,<2",
+    # Integrations 2.x tracks the supported client major. A future breaking
+    # client release must not satisfy this range and produce an incompatible pair.
+    "agentflow-client>=2,<3",
     # See agentflow-runtime pyproject.toml for vulnerability rationale on
     # langchain-core / langchain-text-splitters / langsmith floors.
     "langchain>=0.3.30,<2",

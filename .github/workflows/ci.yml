@@ -248,6 +248,8 @@ jobs:
       - name: Install dependencies
         run: |
           bash scripts/ci_sync.sh test-integrations
+      - name: Verify SDK/integrations joint installability
+        run: python scripts/check_cross_package_install.py
       - name: Prepare pytest temp directory
         run: mkdir -p .tmp
       - name: Run unit and property tests with coverage

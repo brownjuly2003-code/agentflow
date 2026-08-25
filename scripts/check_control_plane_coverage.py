@@ -16,17 +16,10 @@ Two things make the numbers here different from the repository floor:
   the absence of a database, not the absence of tests. The measurement command
   in the module docstring below runs both into one coverage data file.
 
-Measure and check locally (a live PostgreSQL is required -- see
-`docs/testing-control-plane.md` for the throwaway-cluster recipe):
-
-    coverage run --append -m pytest tests/unit/test_control_plane_store.py \
-        tests/unit/test_control_plane_capabilities.py \
-        tests/unit/test_postgres_enqueue_lease_contract.py \
-        tests/unit/test_query_analytics_retention.py \
-        tests/unit/test_analytics_middleware.py -p no:cov
-    AGENTFLOW_TEST_PG_DSN=... coverage run --append -m pytest \
-        tests/integration/test_control_plane_postgres_live.py -p no:cov
-    python scripts/check_control_plane_coverage.py
+Measure and check locally -- `docs/testing-control-plane.md` carries the exact
+commands and the throwaway-PostgreSQL recipe the live half needs. In short:
+run the control-plane unit files and the control-plane/ops integration files
+under one `coverage run --append`, then this script.
 
 Floors sit a few points under the measured value: they are a ratchet against
 regression, not a target to code to. Raise one when the real number moves up
@@ -45,16 +38,25 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _PACKAGE_ROOT = REPO_ROOT / "src" / "agentflow_runtime"
 
 # Module (repo-relative, POSIX) -> minimum line coverage percent.
-# Measured 2026-08-25 with the command above against PostgreSQL 14.24:
-# postgres_outbox_replay 99, postgres_alert 95, postgres_base 93,
-# postgres_usage_audit 87, postgres 82, postgres_webhook 80.
+# Measured 2026-08-25 with the documented commands against PostgreSQL 14.24:
+# postgres_outbox_replay 99, ops 98, postgres_alert 95, postgres_base 93,
+# embedded_usage_audit 91, postgres_usage_audit 87, reconciliation 87,
+# postgres 82, postgres_webhook 80.
+#
+# These are eight of the nine modules F-12 named. The ninth,
+# `serving/node/ingest.py`, is still at 30% and deliberately absent: a floor
+# it cannot meet would either fail every build or be set so low it asserts
+# nothing.
 CRITICAL_SET: dict[str, int] = {
+    "src/agentflow_runtime/serving/api/routers/ops.py": 90,
+    "src/agentflow_runtime/serving/control_plane/embedded_usage_audit.py": 85,
     "src/agentflow_runtime/serving/control_plane/postgres.py": 78,
     "src/agentflow_runtime/serving/control_plane/postgres_alert.py": 90,
     "src/agentflow_runtime/serving/control_plane/postgres_base.py": 88,
     "src/agentflow_runtime/serving/control_plane/postgres_outbox_replay.py": 95,
     "src/agentflow_runtime/serving/control_plane/postgres_usage_audit.py": 82,
     "src/agentflow_runtime/serving/control_plane/postgres_webhook.py": 75,
+    "src/agentflow_runtime/serving/semantic_layer/reconciliation.py": 80,
 }
 
 

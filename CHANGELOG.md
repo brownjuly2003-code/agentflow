@@ -4,6 +4,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Fixed — telemetry can no longer disable itself silently (audit F-13)
+
+`serving/api/main.py` wrapped the `setup_telemetry` import in a blanket
+`except ModuleNotFoundError` and substituted a no-op. OpenTelemetry is a
+mandatory runtime dependency, so nothing that catch could reach was a
+legitimate "telemetry is optional here" case — only a packaging defect or a
+broken transitive import inside the telemetry module, traded silently for an
+API that boots with no tracing and says nothing. The import is now
+unconditional. Running without tracing keeps its own switch,
+`OTEL_SDK_DISABLED=true`, which `setup_telemetry` honours at call time.
+
 ### Deployment — the prod-shaped compose stack now says what it is (audit F-09)
 
 `docker-compose.prod.yml` models a realistic topology and has no production

@@ -51,7 +51,14 @@ Useful environment variables:
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
 OTEL_SERVICE_NAME=agentflow-api
+OTEL_SDK_DISABLED=true   # the supported way to run without tracing
 ```
+
+OpenTelemetry is a mandatory runtime dependency and the API imports its
+telemetry setup outright. Running without tracing is a configuration choice --
+`OTEL_SDK_DISABLED=true`, which `setup_telemetry` honours -- not something the
+process decides for you: an unimportable telemetry module fails the boot
+instead of silently degrading to no tracing (audit F-13).
 
 ## Logs
 

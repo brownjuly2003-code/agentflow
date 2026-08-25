@@ -6,7 +6,10 @@ consumers written against ``src.serving...`` / ``src.processing...`` keep
 working for one deprecation window. Every ``src.X`` import is aliased onto
 the *same module object* as ``agentflow_runtime.X`` (no double import), and
 the first ``import src`` emits a :class:`DeprecationWarning` unless
-``AGENTFLOW_SRC_SHIM_SILENT=1`` is set.
+``AGENTFLOW_SRC_SHIM_SILENT`` is set to a true value (``1``, ``true``,
+``yes`` or ``on``, case-insensitive). It used to test the variable for mere
+presence, so ``AGENTFLOW_SRC_SHIM_SILENT=0`` silenced the warning it reads as
+asking for (audit F-15).
 
 This shim ships only inside built distributions (hatch ``force-include``);
 the repository's ``src/`` directory is a plain container without an
@@ -25,8 +28,21 @@ import sys
 from types import ModuleType
 
 _TARGET = "agentflow_runtime"
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 
-if not os.environ.get("AGENTFLOW_SRC_SHIM_SILENT"):
+
+def _silenced() -> bool:
+    """Whether AGENTFLOW_SRC_SHIM_SILENT asks for silence.
+
+    Presence alone used to be enough, which made ``=0`` and ``=false`` silence
+    the warning their author was trying to keep (audit F-15). Parsed as a
+    boolean, an unrecognised value warns: a deprecation notice is the safe
+    default when the operator's intent is unclear.
+    """
+    return os.environ.get("AGENTFLOW_SRC_SHIM_SILENT", "").strip().lower() in _TRUE_VALUES
+
+
+if not _silenced():
     import warnings
 
     warnings.warn(

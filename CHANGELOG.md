@@ -4,6 +4,16 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Fixed — `AGENTFLOW_SRC_SHIM_SILENT` is parsed as a boolean (audit F-15)
+
+The deprecated `src` shim documented `AGENTFLOW_SRC_SHIM_SILENT=1` and tested
+the variable for mere presence, so `AGENTFLOW_SRC_SHIM_SILENT=0` silenced the
+deprecation warning it reads as asking to keep. It now accepts `1`, `true`,
+`yes` or `on` (case-insensitive, whitespace trimmed); anything else — including
+`0`, `false` and an unrecognised value — keeps the warning, because a
+deprecation notice is the safe default when the intent is unclear. The removal
+gate is unchanged: the shim goes in the next major release.
+
 ### Fixed — telemetry can no longer disable itself silently (audit F-13)
 
 `serving/api/main.py` wrapped the `setup_telemetry` import in a blanket

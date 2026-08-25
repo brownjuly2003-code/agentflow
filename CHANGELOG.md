@@ -39,6 +39,25 @@ adapters.
 Schema: `api_sessions.query_fingerprint` is added by embedded-store column
 migration and PostgreSQL control-plane migration 3.
 
+### Fixed — node ingest always stamps the origin branch (audit F-12 follow-up)
+
+The center's `POST /v1/node/events` tagged `source_metadata.branch` only when
+`source_metadata` was already a mapping. The canonical event schemas
+(`BaseEvent`) do not declare that field, so an event carrying something else
+there still applied — but its `pipeline_events` row had no branch and the
+cross-branch view never counted it. The stamp (`serving/node/stamp.py`, now
+shared by the center's ingest and the edge's local apply) replaces a
+non-mapping value and overwrites any sender-supplied `branch`; it is the
+node's attribution, not the sender's claim. The one exception is a CDC-shaped
+event, whose `source_metadata` is provenance owned by `CdcEvent`: a non-mapping
+there is left for the validator to dead-letter rather than healed. Found while
+giving
+`serving/node/ingest.py` its coverage floor (95 — the ninth and last of the
+modules F-12 named): its 30% was the same accounting artifact as the others —
+the node-topology integration file already exercised 98% of it and nothing
+counted that file — plus `tests/unit/test_node_ingest.py` for the bearer
+ladder, dead-letter accounting and the idempotency filter's scope.
+
 ### Fixed — `AGENTFLOW_SRC_SHIM_SILENT` is parsed as a boolean (audit F-15)
 
 The deprecated `src` shim documented `AGENTFLOW_SRC_SHIM_SILENT=1` and tested

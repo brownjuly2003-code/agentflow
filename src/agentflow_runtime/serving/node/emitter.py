@@ -21,6 +21,7 @@ import structlog
 
 from agentflow_runtime.processing.local_pipeline import _generate_random_event, _process_event
 from agentflow_runtime.serving.node.config import NodeConfig
+from agentflow_runtime.serving.node.stamp import stamp_origin_branch
 
 logger = structlog.get_logger()
 
@@ -73,9 +74,7 @@ class NodeEmitter:
         edge's own read surface, and return the **same** dict that will be
         forwarded (N7). Blocking DuckDB work — call via a worker thread."""
         _topic, event = _generate_random_event()
-        metadata = event.setdefault("source_metadata", {})
-        if isinstance(metadata, dict):
-            metadata["branch"] = self._config.branch
+        stamp_origin_branch(event, self._config.branch or "")
         _process_event(self._conn, event, clickhouse_sink=None)
         return event
 

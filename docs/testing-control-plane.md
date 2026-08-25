@@ -32,7 +32,7 @@ and the fix was writing the tests.
 | `reconciliation.py` | 22% | 87% | 80 | counted the ops integration suites |
 | `postgres.py` (assembly) | — | 82% | 78 | counted the live suite |
 | `postgres_webhook.py` | 24% | 80% | 75 | counted the live suite |
-| `node/ingest.py` | 24% | 30% | — | **still open** — see below |
+| `node/ingest.py` | 24% | 100% | 95 | counted the node-topology integration file + **new tests** — bearer ladder, dead-letter accounting, filter scope |
 
 Measured 2026-08-25 against PostgreSQL 14.24 with the commands below. Floors
 sit a few points under the measured value: they are a ratchet against
@@ -40,12 +40,24 @@ regression, not a target to code to. Raise one when the real number moves up
 and stays there; never lower one to turn a build green without saying why in
 the commit that does it.
 
-`node/ingest.py` — the center's `POST /v1/node/events` federation endpoint — is
-the one module with no floor. It is genuinely thin on tests (its bearer auth,
-the off-center 404, the 500-event batch bound and the check-then-act
-idempotency filter are all unexercised), and a floor it cannot meet would
-either fail every build or be set so low it asserts nothing. Write the tests,
-then add it.
+`node/ingest.py` — the center's `POST /v1/node/events` federation endpoint — was
+the last one in, and turned out to be mostly the artifact again: the handoff
+that called its bearer auth, off-center 404, batch bound and idempotency filter
+"unexercised" was reading a number that did not count
+`tests/integration/test_node_topology.py`, which drives all four through the
+booted app and reaches 98% of the module on its own. The remaining two lines
+(a non-bearer `Authorization` scheme, the dead-letter branch of the apply loop)
+and the contracts the topology file pins only implicitly — the 401-vs-403
+ladder, a center whose token is unset, dead-lettered ids as duplicates on
+retry, duplicates *within* one batch, events without an id, the two-topic scope
+of the check-then-act filter — are `tests/unit/test_node_ingest.py`, against a
+minimal app so a 401 there comes from the router's own ladder and nothing else.
+Writing them found one defect: a `source_metadata` that was not a mapping
+skipped the branch tag while the event still applied, so the journal row
+carried no branch and the cross-branch view never saw it. The stamp
+(`serving/node/stamp.py`, shared with the edge emitter) now replaces the
+unusable value — except on a CDC-shaped event, whose `source_metadata` is
+schema-owned provenance and is left for the validator to reject.
 
 `scripts/check_control_plane_coverage.py` holds the table and is the gate. A
 module with **no** coverage data fails it as 0% on purpose: the usual reason a
@@ -107,16 +119,18 @@ coverage run --append -m pytest -q -p no:cov \
   tests/unit/test_embedded_usage_analytics.py \
   tests/unit/test_audit_publisher.py \
   tests/unit/test_usage_db_connection_reuse.py \
-  tests/unit/test_usage_write_off_request_path.py
+  tests/unit/test_usage_write_off_request_path.py \
+  tests/unit/test_node_ingest.py
 coverage run --append -m pytest -q -p no:cov \
   tests/integration/test_control_plane_postgres_live.py \
   tests/integration/test_exceptions_inbox.py \
   tests/integration/test_stuck_orders.py \
-  tests/integration/test_tenant_isolation.py
+  tests/integration/test_tenant_isolation.py \
+  tests/integration/test_node_topology.py
 python scripts/check_control_plane_coverage.py
 ```
 
-Only the first integration file needs the server; the other three drive the API
+Only the first integration file needs the server; the other four drive the API
 over DuckDB and run anywhere. `-p no:cov` keeps pytest-cov from
 double-instrumenting the `coverage run` — the same pattern the auth and outbox
 gates use.
@@ -144,4 +158,9 @@ anything new, which is the arithmetic F-12 objected to.
   those lines ran, not that the triage semantics behind them are right. What
   pins those is the parity sweep in the live suite, which mirrors the embedded
   adapter's unit expectations one for one so the two cannot drift.
-- **`node/ingest.py` has no floor yet**, for the reason given above.
+- **`node/ingest.py` at 100% is line coverage of a thin router.** Its hard
+  part — the check-then-act idempotency filter — is safe only because
+  `SERVING_WRITE_LOCK` serialises every ingest write within the single center
+  process. The tests pin the filter's scope and its accounting, not a
+  concurrent multi-center writer, which the module's own n4 note says does not
+  exist yet.

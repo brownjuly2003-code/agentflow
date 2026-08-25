@@ -18,8 +18,9 @@ Two things make the numbers here different from the repository floor:
 
 Measure and check locally -- `docs/testing-control-plane.md` carries the exact
 commands and the throwaway-PostgreSQL recipe the live half needs. In short:
-run the control-plane unit files and the control-plane/ops integration files
-under one `coverage run --append`, then this script.
+run the control-plane and node-ingest unit files and the control-plane/ops/
+node-topology integration files under one `coverage run --append`, then this
+script.
 
 Floors sit a few points under the measured value: they are a ratchet against
 regression, not a target to code to. Raise one when the real number moves up
@@ -39,14 +40,16 @@ _PACKAGE_ROOT = REPO_ROOT / "src" / "agentflow_runtime"
 
 # Module (repo-relative, POSIX) -> minimum line coverage percent.
 # Measured 2026-08-25 with the documented commands against PostgreSQL 14.24:
-# postgres_outbox_replay 99, ops 98, postgres_alert 95, postgres_base 93,
-# embedded_usage_audit 91, postgres_usage_audit 87, reconciliation 87,
-# postgres 82, postgres_webhook 80.
+# node/ingest 100, postgres_outbox_replay 99, ops 98, postgres_alert 95,
+# postgres_base 93, embedded_usage_audit 91, postgres_usage_audit 87,
+# reconciliation 87, postgres 82, postgres_webhook 80.
 #
-# These are eight of the nine modules F-12 named. The ninth,
-# `serving/node/ingest.py`, is still at 30% and deliberately absent: a floor
-# it cannot meet would either fail every build or be set so low it asserts
-# nothing.
+# All nine modules F-12 named. `serving/node/ingest.py` -- the center's
+# node-federation ingest, whose bearer ladder and idempotency filter are its
+# own and not the control plane's -- was the last in: the 24-30% it read at
+# was the same accounting artifact as the others (the node-topology
+# integration file exercised 98% of it and nothing counted that file), plus a
+# unit file for the two lines it could not reach.
 CRITICAL_SET: dict[str, int] = {
     "src/agentflow_runtime/serving/api/routers/ops.py": 90,
     "src/agentflow_runtime/serving/control_plane/embedded_usage_audit.py": 85,
@@ -56,6 +59,7 @@ CRITICAL_SET: dict[str, int] = {
     "src/agentflow_runtime/serving/control_plane/postgres_outbox_replay.py": 95,
     "src/agentflow_runtime/serving/control_plane/postgres_usage_audit.py": 82,
     "src/agentflow_runtime/serving/control_plane/postgres_webhook.py": 75,
+    "src/agentflow_runtime/serving/node/ingest.py": 95,
     "src/agentflow_runtime/serving/semantic_layer/reconciliation.py": 80,
 }
 

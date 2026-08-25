@@ -1,0 +1,92 @@
+# Production values contract for the agentflow chart (audit F-11).
+#
+# The chart defaults are dev-shaped on purpose: they install on a laptop
+# cluster with no NetworkPolicy controller, no ingress TLS and an inline
+# Secret. This file is the counterpart -- the posture a production release is
+# expected to hold -- and it is versioned with the chart so a change to the
+# contract is a reviewable diff rather than a paragraph in a runbook.
+#
+# Layer it under your environment values:
+#
+#   helm upgrade --install agentflow ./helm/agentflow \
+#     -f helm/agentflow/values-production.yaml \
+#     -f my-environment.yaml
+#
+# Every value left empty here is one only the environment can supply. The
+# render is fail-closed: templates/production-contract.yaml refuses any
+# `config.profile=production` render that still violates the contract, and
+# lists every violation at once. So this file on its own does not render -- it
+# tells you exactly what my-environment.yaml owes it.
+#
+# Enforced elsewhere, not repeated here:
+#   - Kafka SASL/TLS for every Kafka workload (templates/_kafka.tpl);
+#   - plaintext ClickHouse/Redis/PostgreSQL at boot
+#     (agentflow_runtime.serving.transport_policy);
+#   - multi-replica gating on an external serving engine plus an external
+#     control plane (templates/deployment.yaml, ADR 0010).
+
+config:
+  profile: production
+
+  # REQUIRED. Explicit origins, comma separated. A wildcard is refused: CORS
+  # runs with credentials, so "*" would let any site read authenticated
+  # responses.
+  corsOrigins: ""
+
+  # REQUIRED when ingress.enabled=true. Comma-separated peers allowed to set
+  # X-Forwarded-For. Behind an ingress controller every caller otherwise shares
+  # one source address, which is what the failed-auth limiter keys on.
+  trustedProxies: ""
+
+  # Mirrors canonical config/security.yaml. Spelled out rather than inherited
+  # so a drift in the chart defaults cannot quietly weaken a production
+  # install; the contract check compares against these same five headers.
+  security: |
+    security:
+      key_hashing: argon2id
+      bcrypt_rounds: 12
+      min_key_length: 32
+      max_failed_auth_per_ip_per_hour: 10
+      sensitive_headers_to_redact:
+        - Authorization
+        - X-API-Key
+        - X-Admin-Key
+        - Cookie
+        - Set-Cookie
+      request_size_limit_bytes: 1048576
+
+# Default-deny baseline with explicit ingress/egress. The cluster needs a
+# NetworkPolicy controller for this to mean anything -- verify, do not assume.
+networkPolicy:
+  enabled: true
+
+# Key material stays outside Helm: values land in release metadata and shell
+# history. Point existingSecret at the Secret your secrets operator or CSI
+# driver projects, holding `admin-key` and `api_keys.yaml`.
+secrets:
+  create: false
+  existingSecret: ""  # REQUIRED
+  adminKey: ""
+  apiKeys:
+    keys: []
+
+# TLS terminates here by default. If your platform terminates it in a gateway
+# ahead of the chart, set ingress.enabled=false and record that decision --
+# the contract then stops asking for `tls` and for trustedProxies.
+ingress:
+  enabled: true
+  className: ""  # empty selects the cluster's default IngressClass -- name it
+  hosts: []      # REQUIRED
+  tls: []        # REQUIRED
+
+# One identity per workload (audit F-05). `name` is the legacy shared-account
+# escape hatch; setting it collapses the split and disables RBAC isolation.
+serviceAccount:
+  create: true
+  name: ""
+
+serving:
+  clickhouse:
+    # Applies when serving.backend=clickhouse: HTTPS with certificate AND
+    # hostname verification. For a private CA also set tls.caSecret.
+    secure: true

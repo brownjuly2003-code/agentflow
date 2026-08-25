@@ -50,8 +50,18 @@ class SecurityPolicy(BaseModel):
     bcrypt_rounds: int = Field(default=12, ge=4)
     min_key_length: int = Field(default=32, ge=1)
     max_failed_auth_per_ip_per_hour: int = Field(default=10, ge=1)
+    # Canonical config/security.yaml redacts five headers; this default used to
+    # name two, so a policy file that omitted the key -- or any caller that let
+    # `redact_sensitive_headers` fall back -- logged session cookies and the
+    # admin key in the header map recorded on failed auth (audit F-11).
     sensitive_headers_to_redact: list[str] = Field(
-        default_factory=lambda: ["Authorization", "X-API-Key"]
+        default_factory=lambda: [
+            "Authorization",
+            "X-API-Key",
+            "X-Admin-Key",
+            "Cookie",
+            "Set-Cookie",
+        ]
     )
     request_size_limit_bytes: int = Field(default=1_048_576, ge=1)
 

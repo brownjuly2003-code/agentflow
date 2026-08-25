@@ -890,6 +890,7 @@
         "rateLimitRpm",
         "cacheTtlSeconds",
         "corsOrigins",
+        "trustedProxies",
         "redisUrl",
         "otlpEndpoint",
         "otlpServiceName",
@@ -945,6 +946,10 @@
         },
         "corsOrigins": {
           "type": "string"
+        },
+        "trustedProxies": {
+          "type": "string",
+          "description": "Comma-separated peer addresses permitted to set X-Forwarded-For (AGENTFLOW_TRUSTED_PROXIES). Required behind an ingress on profile=production."
         },
         "redisUrl": {
           "type": "string"

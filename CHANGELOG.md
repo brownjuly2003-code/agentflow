@@ -4,6 +4,33 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Security — Helm production values contract (audit F-11)
+
+The chart's defaults are dev posture (no NetworkPolicy, no ingress TLS,
+plaintext ClickHouse, an inline Secret) and stay that way, but
+`config.profile=production` is now a contract rather than a label.
+`templates/production-contract.yaml` fails any production render that keeps dev
+posture and reports every violation at once: NetworkPolicy off, inline key
+material, an enabled ingress missing hosts, TLS or `config.trustedProxies`,
+wildcard or still-default CORS origins, plaintext external ClickHouse/Redis,
+the shared `serviceAccount.name` escape hatch, or a mounted `config.security` weaker than
+`config/security.yaml`. Deliberate exceptions stay possible and greppable: a
+named store in `AGENTFLOW_INSECURE_TRANSPORT_OK` (the same opt-out the runtime
+honours at boot), or `ingress.enabled=false` when TLS terminates in a gateway
+ahead of the chart.
+
+New versioned `helm/agentflow/values-production.yaml` carries that posture and
+leaves empty only what an environment must supply; layer environment values on
+top of it.
+
+Chart defaults realigned with canonical `config/security.yaml`: `key_hashing`
+`bcrypt` → `argon2id`, and the redaction denylist regains `X-Admin-Key`,
+`Cookie` and `Set-Cookie`. The same three were missing from
+`SecurityPolicy.sensitive_headers_to_redact`'s in-code default, so a policy file
+omitting the key logged session cookies and the admin key in the header map
+recorded on failed authentication. New `config.trustedProxies` value wires
+`AGENTFLOW_TRUSTED_PROXIES` from the chart instead of `extraEnv`.
+
 ### Docs — living claims, rollback/soak gate split, docs-link checker (audit F-10)
 
 Living STATUS/CLOSURE and `config/project_claims.toml` now match the 2026-08-23

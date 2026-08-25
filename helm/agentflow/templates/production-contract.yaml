@@ -1,0 +1,110 @@
+{{/*
+Production values contract (audit F-11).
+
+The chart defaults are deliberately dev-shaped: no NetworkPolicy, no ingress
+TLS, plaintext ClickHouse, an inline Secret. That is a reasonable local
+install, but `config.profile=production` is the operator declaring this is a
+production release, and until now nothing checked that the values matched the
+declaration -- a formally successful render could ship dev posture.
+
+This file renders no object. It only evaluates, and on `profile=production`
+fails the render with every violation listed at once, so an operator fixes the
+whole set in one pass instead of one message per `helm template` round trip.
+
+Deliberately NOT checked here:
+
+- the control-plane PostgreSQL DSN, which the chart only ever sees as a Secret
+  reference -- `agentflow_runtime.serving.transport_policy` refuses a plaintext
+  DSN at boot instead;
+- Kafka SASL/TLS, already fail-closed for every Kafka workload in _kafka.tpl;
+- `controlPlane.store`, since single-replica production on the embedded store
+  is a supported (if limited) shape, not a misconfiguration.
+*/}}
+{{- if eq .Values.config.profile "production" -}}
+{{- $problems := list -}}
+
+{{- /* Operator-declared plaintext exemptions, mirroring the app-side gate. */ -}}
+{{- $insecureOk := "" -}}
+{{- range .Values.extraEnv -}}
+{{- if eq (.name | default "") "AGENTFLOW_INSECURE_TRANSPORT_OK" -}}
+{{- $insecureOk = (.value | default "" | toString) -}}
+{{- end -}}
+{{- end -}}
+
+{{- if not .Values.networkPolicy.enabled -}}
+{{- $problems = append $problems "networkPolicy.enabled=false: production requires the default-deny baseline (set networkPolicy.enabled=true; the cluster needs a NetworkPolicy controller)" -}}
+{{- end -}}
+
+{{- if .Values.serviceAccount.name -}}
+{{- $problems = append $problems (printf "serviceAccount.name=%q: that legacy escape hatch collapses the API/worker/provision/Flink identities back onto one privileged account (audit F-05). Leave it empty and use serviceAccount.apiName/workerName/provisionName" .Values.serviceAccount.name) -}}
+{{- end -}}
+
+{{- if .Values.secrets.create -}}
+{{- $problems = append $problems "secrets.create=true: production key material must come from an operator- or CSI-managed Secret, not from Helm values (they persist in release metadata and shell history). Set secrets.create=false and secrets.existingSecret" -}}
+{{- else if not .Values.secrets.existingSecret -}}
+{{- $problems = append $problems "secrets.existingSecret is empty: production must name the externally managed Secret holding admin-key and api_keys.yaml" -}}
+{{- end -}}
+{{- if .Values.secrets.adminKey -}}
+{{- $problems = append $problems "secrets.adminKey is set: inline admin keys are dev-only" -}}
+{{- end -}}
+{{- if .Values.secrets.apiKeys.keys -}}
+{{- $problems = append $problems "secrets.apiKeys.keys is non-empty: inline API key material is dev-only" -}}
+{{- end -}}
+
+{{- if .Values.ingress.enabled -}}
+{{- if not .Values.ingress.hosts -}}
+{{- $problems = append $problems "ingress.enabled=true with no ingress.hosts: the rendered Ingress would carry no rules and route nothing" -}}
+{{- end -}}
+{{- if not .Values.ingress.tls -}}
+{{- $problems = append $problems "ingress.enabled=true with an empty ingress.tls: production must terminate TLS (or expose the API through a gateway outside this chart and set ingress.enabled=false)" -}}
+{{- end -}}
+{{- if not .Values.config.trustedProxies -}}
+{{- $problems = append $problems "config.trustedProxies is empty while ingress is enabled: behind a proxy every caller shares the controller's address, so the failed-auth limiter keys on it. Name the proxy peers allowed to set X-Forwarded-For" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $cors := .Values.config.corsOrigins | toString -}}
+{{- if not $cors -}}
+{{- $problems = append $problems "config.corsOrigins is empty: list the origins allowed to call the API" -}}
+{{- else if contains "*" $cors -}}
+{{- $problems = append $problems (printf "config.corsOrigins=%q: CORS runs with credentials, so a wildcard lets any site read authenticated responses. It is demo-only and the app refuses it at boot" $cors) -}}
+{{- else if or (contains "localhost" $cors) (contains "127.0.0.1" $cors) -}}
+{{- $problems = append $problems (printf "config.corsOrigins=%q is still the chart's dev default: set the real production origins" $cors) -}}
+{{- end -}}
+
+{{- if eq .Values.serving.backend "clickhouse" -}}
+{{- if and (not .Values.serving.clickhouse.secure) (not (contains "clickhouse" $insecureOk)) -}}
+{{- $problems = append $problems "serving.clickhouse.secure=false: production refuses a plaintext hop to an external ClickHouse. Set serving.clickhouse.secure=true (plus tls.caSecret for a private CA), or name the deliberate exemption in AGENTFLOW_INSECURE_TRANSPORT_OK via extraEnv" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $redis := .Values.config.redisUrl | toString -}}
+{{- if and $redis (not (contains "redis" $insecureOk)) -}}
+{{- if and (not (hasPrefix "rediss://" $redis)) (not (or (contains "localhost" $redis) (contains "127.0.0.1" $redis) (contains "::1" $redis))) -}}
+{{- $problems = append $problems (printf "config.redisUrl=%q is plaintext: use rediss:// or name the deliberate exemption in AGENTFLOW_INSECURE_TRANSPORT_OK via extraEnv" $redis) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* The mounted security policy must not be weaker than canonical config/security.yaml. */ -}}
+{{- $security := (.Values.config.security | toString | fromYaml) -}}
+{{- $policy := (get $security "security") | default dict -}}
+{{- $hashing := (get $policy "key_hashing") | default "" -}}
+{{- if ne $hashing "argon2id" -}}
+{{- $problems = append $problems (printf "config.security key_hashing=%q: production must hash new key material with argon2id, matching config/security.yaml" $hashing) -}}
+{{- end -}}
+{{- $redact := (get $policy "sensitive_headers_to_redact") | default list -}}
+{{- /* The runtime matches header names case-insensitively; so does this. */ -}}
+{{- $redactLower := list -}}
+{{- range $redact -}}
+{{- $redactLower = append $redactLower (. | toString | lower) -}}
+{{- end -}}
+{{- range (list "Authorization" "X-API-Key" "X-Admin-Key" "Cookie" "Set-Cookie") -}}
+{{- if not (has (lower .) $redactLower) -}}
+{{- $problems = append $problems (printf "config.security sensitive_headers_to_redact is missing %q: failed-auth logging records the whole header map after this denylist" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- if $problems -}}
+{{- fail (printf "profile=production values contract failed (audit F-11):\n- %s\n\nhelm/agentflow/values-production.yaml carries the compliant posture; layer your environment values on top of it. Drop config.profile=production only if this really is not a production release." (join "\n- " $problems)) -}}
+{{- end -}}
+{{- end -}}

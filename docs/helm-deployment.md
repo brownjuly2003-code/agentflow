@@ -96,6 +96,57 @@ keys empty until you mount or render `api_keys.yaml`:
 helm install agentflow ./helm/agentflow --set secrets.adminKey=local-admin-key
 ```
 
+## Production values contract
+
+The chart defaults are dev posture on purpose: no NetworkPolicy, no ingress
+TLS, plaintext ClickHouse, an inline Secret. That is what makes the demo
+install a single command, and it is the wrong shape for a production release.
+`config.profile=production` is where the two part ways -- it is the operator
+declaring this *is* a production release, and from that point the values are
+held to a contract.
+
+[`helm/agentflow/values-production.yaml`](../helm/agentflow/values-production.yaml)
+carries the compliant posture and is versioned with the chart. Layer your
+environment values on top of it:
+
+```bash
+helm upgrade --install agentflow ./helm/agentflow   -f helm/agentflow/values-production.yaml   -f values-prod.yaml
+```
+
+The overlay leaves empty exactly the values only your environment can supply
+(the Secret name, the origins, the ingress class/hosts/TLS, the trusted
+proxies). Render is fail-closed: `templates/production-contract.yaml` refuses a
+`profile=production` render that still violates the contract and reports every
+violation in one message, so you fix the whole set in one pass. It checks:
+
+| Clause | Why |
+| --- | --- |
+| `networkPolicy.enabled=true` | Default-deny baseline; needs a NetworkPolicy controller in the cluster |
+| `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
+| Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
+| `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
+| `ingress.tls` non-empty when ingress is enabled | TLS terminates somewhere you can point at |
+| `config.trustedProxies` set when ingress is enabled | Behind a proxy every caller otherwise shares the controller's address, which is what the failed-auth limiter keys on |
+| Explicit `config.corsOrigins` | CORS runs with credentials; a wildcard lets any site read authenticated responses, and the chart's `localhost` default is not an answer |
+| `serving.clickhouse.secure=true` | No plaintext hop to an external ClickHouse |
+| `config.redisUrl` on `rediss://` | Same, for Redis |
+| Empty `serviceAccount.name` | The shared-identity escape hatch disables RBAC isolation |
+| `config.security` on argon2id with all five redacted headers | The mounted policy must not be weaker than `config/security.yaml` |
+
+Two escapes are deliberate rather than accidental. A plaintext hop that is a
+considered decision -- in-cluster traffic behind a NetworkPolicy, say -- is
+named per store in `AGENTFLOW_INSECURE_TRANSPORT_OK` through `extraEnv`, the
+same greppable opt-out the runtime honours at boot. And terminating TLS in a
+gateway ahead of the chart is a legitimate topology: set `ingress.enabled=false`
+and the TLS and trusted-proxy clauses stop applying.
+
+Enforced elsewhere, so the contract does not repeat it: Kafka SASL/TLS for
+every Kafka workload (`templates/_kafka.tpl`), plaintext external stores at boot
+(`agentflow_runtime.serving.transport_policy` -- including the control-plane
+DSN, which the chart only ever sees as a Secret reference), and multi-replica
+gating on an external serving engine plus an external control plane
+([ADR-0010](decisions/0010-control-plane-externalization-postgres.md)).
+
 ## Verify rollout
 
 Check the release status:

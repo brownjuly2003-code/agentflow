@@ -351,6 +351,11 @@ config:
   rateLimitRpm: 120
   cacheTtlSeconds: 30
   corsOrigins: http://localhost:3000
+  # Comma-separated peers allowed to set X-Forwarded-For
+  # (AGENTFLOW_TRUSTED_PROXIES). Empty means the failed-auth limiter keys on the
+  # immediate peer only. Required behind an ingress on profile=production, where
+  # the immediate peer is the ingress controller for every caller.
+  trustedProxies: ""
   redisUrl: ""
   otlpEndpoint: ""
   otlpServiceName: agentflow-api
@@ -392,15 +397,22 @@ config:
         measurement: error_rate_percent
         threshold: 0.1
         window_days: 30
+  # Mirrors canonical config/security.yaml (audit F-11). The chart used to ship
+  # bcrypt and a two-entry redaction list while the runtime and the canonical
+  # file were already on argon2id with five headers, so a chart install silently
+  # downgraded the posture the rest of the repo documents.
   security: |
     security:
-      key_hashing: bcrypt
+      key_hashing: argon2id
       bcrypt_rounds: 12
       min_key_length: 32
       max_failed_auth_per_ip_per_hour: 10
       sensitive_headers_to_redact:
         - Authorization
         - X-API-Key
+        - X-Admin-Key
+        - Cookie
+        - Set-Cookie
       request_size_limit_bytes: 1048576
   apiVersions: |
     versions:

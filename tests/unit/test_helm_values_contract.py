@@ -36,6 +36,24 @@ def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
 
 
+# The chart's defaults are dev posture, and `config.profile=production` now
+# refuses to render on them (audit F-11, templates/production-contract.yaml).
+# Tests that need the production *profile* for something else -- the Kafka
+# fail-closed gate, ClickHouse TLS wiring, the Flink runtime -- borrow the rest
+# of the contract from here instead of restating it four times. Ingress stays
+# off, so the TLS and trusted-proxy clauses do not apply.
+_PRODUCTION_POSTURE: tuple[str, ...] = (
+    "--set",
+    "networkPolicy.enabled=true",
+    "--set",
+    "secrets.create=false",
+    "--set",
+    "secrets.existingSecret=agentflow-prod-secret",
+    "--set",
+    "config.corsOrigins=https://app.example.com",
+)
+
+
 def test_chart_declares_values_schema_for_runtime_contracts():
     schema_path = PROJECT_ROOT / "helm" / "agentflow" / "values.schema.json"
 
@@ -564,6 +582,7 @@ def test_serving_clickhouse_tls_render_is_first_class():
         "serving.clickhouse.tls.caSecret=agentflow-clickhouse-ca",
         "--set",
         "config.profile=production",
+        *_PRODUCTION_POSTURE,
     )
     output = _combined_output(rendered)
     assert rendered.returncode == 0, output
@@ -816,6 +835,7 @@ def test_serving_bridge_rejects_duckdb_backend():
 
 def test_production_materializer_requires_kafka_auth():
     result = _run_helm_template(
+        *_PRODUCTION_POSTURE,
         "--set",
         "config.profile=production",
         "--set",
@@ -835,6 +855,7 @@ def test_production_materializer_requires_kafka_auth():
 
 def test_kafka_auth_credentials_are_secret_references():
     result = _run_helm_template(
+        *_PRODUCTION_POSTURE,
         "--set",
         "config.profile=production",
         "--set",
@@ -863,6 +884,7 @@ def test_kafka_auth_credentials_are_secret_references():
 
 def test_flink_operator_workload_renders_golden_runtime():
     result = _run_helm_template(
+        *_PRODUCTION_POSTURE,
         "--set",
         "config.profile=production",
         "--set",

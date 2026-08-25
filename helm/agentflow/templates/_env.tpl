@@ -71,6 +71,10 @@ processRole may be "" (omit AGENTFLOW_PROCESS_ROLE — app default 'all').
 {{- end }}
 - name: AGENTFLOW_CORS_ORIGINS
   value: {{ $root.Values.config.corsOrigins | quote }}
+{{- if $root.Values.config.trustedProxies }}
+- name: AGENTFLOW_TRUSTED_PROXIES
+  value: {{ $root.Values.config.trustedProxies | quote }}
+{{- end }}
 - name: AGENTFLOW_ADMIN_KEY
   valueFrom:
     secretKeyRef:

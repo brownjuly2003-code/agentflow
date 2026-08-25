@@ -413,6 +413,37 @@ jobs:
           CLICKHOUSE_LIVE_DATABASE: agentflow
           AGENTFLOW_TEST_PG_DSN: postgresql://agentflow:agentflow@localhost:5432/agentflow
         run: pytest tests/integration/ -v --tb=short
+      - name: Control-plane critical-set coverage gate (audit F-12)
+        # The repository floor is one number over hundreds of files, so a
+        # surface can sit at 21% while the aggregate reads 78%. These adapters
+        # carry the lease / SKIP LOCKED / one-transaction semantics whose
+        # regressions are silent in production, so they get their own floors
+        # (scripts/check_control_plane_coverage.py holds the table).
+        #
+        # Unit and live coverage go into ONE data file on purpose: most
+        # branches in these modules only execute against a real server, so a
+        # unit-only number measures the absence of a database rather than the
+        # absence of tests. -p no:cov keeps pytest-cov from double-instrumenting
+        # the `coverage run` (the auth/outbox gate pattern).
+        env:
+          AGENTFLOW_TEST_PG_DSN: postgresql://agentflow:agentflow@localhost:5432/agentflow
+        run: |
+          coverage erase
+          coverage run --append -m pytest -q -p no:cov tests/unit/test_control_plane_store.py tests/unit/test_control_plane_capabilities.py tests/unit/test_postgres_enqueue_lease_contract.py tests/unit/test_query_analytics_retention.py tests/unit/test_analytics_middleware.py
+          coverage run --append -m pytest -q -p no:cov tests/integration/test_control_plane_postgres_live.py
+          coverage xml -o coverage-control-plane.xml --include="*/serving/control_plane/*"
+          python scripts/check_control_plane_coverage.py
+      - name: Publish control-plane coverage
+        # Separate from the repository-wide report on purpose (audit F-12 asks
+        # for integration coverage to be published without folding it into the
+        # general floor, which would raise the aggregate without covering
+        # anything new).
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-control-plane
+          path: coverage-control-plane.xml
+          if-no-files-found: warn
 
   helm-schema-live:
     runs-on: ubuntu-latest

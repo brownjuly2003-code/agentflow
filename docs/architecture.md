@@ -151,7 +151,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | Environment | Primary components | Purpose |
 |-------------|--------------------|---------|
 | Local demo | `make demo`: Redis + ClickHouse (Docker) + `agentflow_runtime.processing.local_pipeline` + FastAPI | Fastest path for developers and SDK examples |
-| Prod-like Docker | `docker-compose.prod.yml` with Kafka, Redis, Jaeger, Prometheus, Grafana, API, and optional ClickHouse | Observability and production-shaped debugging against a realistic local stack |
+| Production-shaped local Docker | `docker-compose.prod.yml` with Kafka, Redis, Jaeger, Prometheus, Alertmanager, Grafana, API, and optional ClickHouse | Observability and production-shaped debugging against a realistic local stack. A demo: no TLS, dev credentials, demo-mode auth |
 | Lite E2E Docker | `docker-compose.e2e.yml` with the narrowed CI service set | Faster E2E and smoke coverage without the full observability stack |
 | Chaos harness | `docker-compose.chaos.yml` + Toxiproxy + pytest chaos suite | Validate graceful degradation under Kafka/Redis failures |
 | kind staging | `helm/agentflow`, `k8s/`, `scripts/k8s_staging_up.sh` | Production-shaped staging on a local Kubernetes cluster |

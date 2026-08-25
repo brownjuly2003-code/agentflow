@@ -1,3 +1,22 @@
+# PRODUCTION-SHAPED LOCAL DEMO -- not a production recipe (audit F-09).
+#
+# The filename says "prod" and the topology looks like one: three Kafka
+# brokers, a schema registry, ClickHouse, Jaeger, Prometheus, Grafana. What it
+# does NOT have is a production security posture -- plaintext Kafka, Redis and
+# ClickHouse on loopback, dev credentials, no TLS anywhere -- and the API runs
+# in demo mode, which the runtime refuses to combine with
+# AGENTFLOW_PROFILE=production. That refusal is deliberate: this stack cannot
+# be relabelled into a production one by flipping an environment variable.
+#
+# The production path is Helm: helm/agentflow with
+# helm/agentflow/values-production.yaml layered under your environment values.
+# See docs/deployment.md.
+#
+# The project name below keeps this stack's containers and volumes apart from
+# the dev docker-compose.yml stack, which used to share them through the
+# directory-derived default name.
+name: agentflow-prod-shaped-local
+
 # Bounded container logs: the 2026-07-18 soak filled the stand's disk with
 # unrotated json-file logs (TM alone grew to 3.8G) and took the pipeline down.
 x-logging: &default-logging
@@ -245,6 +264,17 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_SERVICE_NAME: agentflow-api
       REDIS_URL: redis://redis:6379/0
+      # Explicit local auth contract (audit F-09). This stack used to pass no
+      # auth settings at all: the middleware then fail-closed every /v1 route
+      # with 503, and the only thing anyone ever smoked was /health/ready. The
+      # keys file is the real loader path; demo mode adds the published demo
+      # key so an authenticated request is actually possible. Demo mode is also
+      # what makes this stack structurally unable to claim production -- the
+      # runtime refuses AGENTFLOW_DEMO_MODE=true together with
+      # AGENTFLOW_PROFILE=production.
+      AGENTFLOW_API_KEYS_FILE: /app/config/api_keys.yaml
+      AGENTFLOW_DEMO_MODE: "true"
+      DEMO_API_KEY: ${DEMO_API_KEY:-demo-key}
     command: ["uvicorn", "agentflow_runtime.serving.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     volumes:
       - agentflow-api-data:/app/data
@@ -268,26 +298,38 @@ services:
     depends_on:
       agentflow-api:
         condition: service_healthy
+      alertmanager:
+        condition: service_started
     ports:
       - "127.0.0.1:9090:9090"
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        cat <<'EOF' >/etc/prometheus/prometheus.yml
-        global:
-          scrape_interval: 15s
-          evaluation_interval: 15s
-
-        scrape_configs:
-          - job_name: "agentflow-api"
-            metrics_path: /metrics
-            static_configs:
-              - targets: ["agentflow-api:8000"]
-        EOF
-        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.enable-lifecycle
+    # The config used to be a heredoc written by the entrypoint: untracked,
+    # unreviewable and scrape-only, so the alert rules this repository
+    # maintains never loaded here (audit F-09). Both files are tracked and
+    # mounted read-only now.
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
     volumes:
+      - ./monitoring/prometheus/prometheus.prod-shaped-local.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerting/rules.yml:/etc/prometheus/rules.yml:ro
       - prometheus-data:/prometheus
+
+  # Alerting had a notification path on paper only: rules existed, nothing
+  # evaluated them and nothing received them. This Alertmanager closes the loop
+  # locally -- it groups and holds alerts so an operator can see them at :9093.
+  # It notifies nobody, and its config says so.
+  alertmanager:
+    logging: *default-logging
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "127.0.0.1:9093:9093"
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alerting/alertmanager.prod-shaped-local.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
 
   grafana:
     logging: *default-logging
@@ -315,4 +357,5 @@ volumes:
   clickhouse-data:
   agentflow-api-data:
   prometheus-data:
+  alertmanager-data:
   grafana-data:

@@ -3,7 +3,7 @@
 ## Recommended Environments
 
 - Local demo: `make demo` for the fastest feedback loop on DuckDB + FastAPI.
-- Prod-like stack: `docker compose -f docker-compose.prod.yml up -d` when you need Redis, Jaeger, Prometheus, or Grafana.
+- Production-shaped local stack: `make stack-prod-shaped-local` when you need Redis, Jaeger, Prometheus, Alertmanager, or Grafana. `make stack-prod-shaped-local-smoke` proves an authenticated request works.
 - DevContainer: use `.devcontainer/` when you need one workspace for SDK work, chaos tests, and kind staging.
 
 ## Setup

@@ -51,13 +51,14 @@ The default compose file includes Kafka, Flink, MinIO, Redis, Prometheus, and
 Grafana. It is useful for pipeline and observability development, but it is not
 a cloud production deployment.
 
-## Production-shaped compose
+## Production-shaped local stack
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+make stack-prod-shaped-local        # docker compose -f docker-compose.prod.yml up -d
+make stack-prod-shaped-local-smoke  # prove a real authenticated request works
 ```
 
-The production-shaped compose stack models a more realistic topology:
+The stack models a more realistic topology:
 
 - three Kafka brokers
 - schema registry and Kafka UI
@@ -65,11 +66,38 @@ The production-shaped compose stack models a more realistic topology:
 - Jaeger
 - optional ClickHouse profile
 - FastAPI service container
-- Prometheus and Grafana
+- Prometheus, Alertmanager and Grafana
 
-Use it for local debugging of service boundaries and observability wiring. Do
-not treat a compose stack as proof that a managed production environment has
-been provisioned.
+Use it for local debugging of service boundaries and observability wiring. It
+is a demo, and the name says so: the Make target and the compose project name
+are both `prod-shaped-local`, and `make stack-prod` now refuses with a pointer
+here (audit F-09). What the topology does not model is a production security
+posture -- plaintext Kafka, Redis and ClickHouse on loopback, dev credentials,
+no TLS. The API runs with `AGENTFLOW_DEMO_MODE=true`, which the runtime refuses
+to combine with `AGENTFLOW_PROFILE=production`, so this stack cannot be
+relabelled into a production one by flipping a variable.
+
+The local auth contract is explicit: the API loads `config/api_keys.yaml` and
+demo mode adds the published `demo-key`, so `/v1` routes answer 401 without a
+key and 200 with one. Before, no auth settings were passed at all, every `/v1`
+route fail-closed with 503, and the only thing ever checked was
+`/health/ready` -- which is why the smoke target asserts all three: readiness,
+a 401 for an anonymous read (a 503 there means the keys never loaded), and a
+200 for an authenticated one.
+
+Alerting is wired end to end, and honestly scoped. Prometheus loads the tracked
+`monitoring/alerting/rules.yml` through
+`monitoring/prometheus/prometheus.prod-shaped-local.yml` and delivers to a
+local Alertmanager at <http://127.0.0.1:9093> that notifies nobody -- no email,
+Slack, PagerDuty or webhook receiver. Rules written for the full pipeline
+(freshness SLA, pipeline latency, Flink and Kafka health) stay loaded and stay
+at "no data" here, because nothing in this stack produces those series.
+
+Do not treat a compose stack as proof that a managed production environment has
+been provisioned. The production path is Helm: `helm/agentflow` with
+[`values-production.yaml`](../helm/agentflow/values-production.yaml) layered
+under your environment values, which fails the render when the values still
+carry dev posture. See [Helm deployment](helm-deployment.md).
 
 ## Helm and Kubernetes
 

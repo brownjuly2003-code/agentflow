@@ -4,6 +4,37 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Deployment — the prod-shaped compose stack now says what it is (audit F-09)
+
+`docker-compose.prod.yml` models a realistic topology and has no production
+security posture; the file said so in a comment while everything around it said
+otherwise. The Make target `stack-prod` is now `stack-prod-shaped-local`, the
+old target refuses with a pointer instead of silently starting the stack, and
+the compose project is named `agentflow-prod-shaped-local` — which also stops
+this stack sharing containers and volumes with the dev `docker-compose.yml`
+stack, as both used to inherit the directory-derived default name. **Existing
+local volumes from the old project name are orphaned; run
+`docker compose -f docker-compose.prod.yml down -v` under the old name first if
+you want them cleaned up.**
+
+The API container had no auth settings at all, so every `/v1` route fail-closed
+with 503 and the only thing ever smoked was `/health/ready`. It now loads
+`config/api_keys.yaml` and runs `AGENTFLOW_DEMO_MODE=true` with the published
+`demo-key` — which is also what makes the stack structurally unable to claim
+production, since the runtime refuses demo mode together with
+`AGENTFLOW_PROFILE=production`. New `scripts/compose_prod_shaped_smoke.py`
+(`make stack-prod-shaped-local-smoke`) asserts readiness, a **401** for an
+anonymous read — a 503 there is a failure, not a passing fail-closed check —
+and a 200 for an authenticated one.
+
+Alerting is wired end to end instead of on paper. Prometheus no longer writes
+its own scrape-only config from a start-up heredoc: it mounts tracked
+`monitoring/prometheus/prometheus.prod-shaped-local.yml` plus the repository's
+`monitoring/alerting/rules.yml`, and delivers to a new local Alertmanager on
+`127.0.0.1:9093` whose config notifies nobody and says so. Rules written for the
+full pipeline stay loaded and stay at "no data" in this stack, because nothing
+here produces those series.
+
 ### Security — Helm production values contract (audit F-11)
 
 The chart's defaults are dev posture (no NetworkPolicy, no ingress TLS,

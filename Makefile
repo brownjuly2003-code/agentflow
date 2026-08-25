@@ -1,4 +1,4 @@
-.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot
+.PHONY: up down stack-dev stack-prod stack-prod-shaped-local stack-prod-shaped-local-smoke produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -22,9 +22,26 @@ stack-dev:
 	docker compose up -d
 	@echo "Dev stack is starting from docker-compose.yml"
 
-stack-prod:
+# Renamed from `stack-prod` (audit F-09): the old name read as "the production
+# stack" for a topology that has no production security posture. The stack is
+# unchanged; what it calls itself is not.
+stack-prod-shaped-local:
 	docker compose -f docker-compose.prod.yml up -d
-	@echo "Prod-like stack is starting from docker-compose.prod.yml"
+	@echo "Production-SHAPED LOCAL stack is starting from docker-compose.prod.yml."
+	@echo "It is a demo, not a production recipe - the production path is Helm"
+	@echo "with helm/agentflow/values-production.yaml (docs/deployment.md)."
+	@echo "Prove it works: make stack-prod-shaped-local-smoke"
+
+stack-prod-shaped-local-smoke:
+	python scripts/wait_for_http.py --url http://localhost:8000/health/ready --timeout 180 --interval 3 --label agentflow-api
+	python scripts/compose_prod_shaped_smoke.py
+
+stack-prod:
+	@echo "stack-prod was renamed to stack-prod-shaped-local: that stack is a"
+	@echo "production-shaped LOCAL demo, and the old name invited operators to"
+	@echo "read it as a production recipe (audit F-09). The production path is"
+	@echo "Helm with helm/agentflow/values-production.yaml - see docs/deployment.md."
+	@exit 1
 
 wait-healthy:
 	@echo "Waiting for services..."

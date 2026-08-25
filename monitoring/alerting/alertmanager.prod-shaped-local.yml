@@ -1,0 +1,23 @@
+# Alertmanager for the production-SHAPED LOCAL stack (docker-compose.prod.yml).
+#
+# This closes the alerting loop locally: rules are evaluated by Prometheus,
+# firing alerts are delivered here, grouped, and visible at
+# http://127.0.0.1:9093. It notifies NOBODY -- there is no email, Slack,
+# PagerDuty or webhook receiver, on purpose. A local demo that appeared to page
+# an on-call rotation would be worse than one that admits it does not
+# (audit F-09).
+#
+# A real deployment supplies its own Alertmanager configuration with real
+# receivers and routes, and treats this file as a shape, not a default.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: local-sink
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: local-sink

@@ -135,6 +135,11 @@ All admin endpoints require `X-Admin-Key`.
 | `GET` | `/v1/admin/analytics/latency` | Latency analytics | `window` |
 | `GET` | `/v1/admin/analytics/anomalies` | Usage anomalies | `window` |
 
+`top-queries` items carry `{"query": ..., "fingerprint": ..., "count": ...}`.
+`query` is `null` unless the deployment opted into storing question text; the
+peppered `fingerprint` is what groups repeats either way, and the counts are the
+same. See [what query analytics keeps](../SECURITY.md#what-query-analytics-keeps).
+
 ## Examples
 
 ### Historical entity lookup

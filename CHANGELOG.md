@@ -4,6 +4,41 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### BREAKING — query analytics keeps a fingerprint, not the question (audit F-18)
+
+The analytics middleware persisted the first 1000 characters of every
+`/v1/query` question verbatim, with no expiry, and the admin top-queries
+surface read it back. Truncation bounds size; it says nothing about
+sensitivity or lifetime, and callers type PII, commercial figures and the
+occasional pasted credential.
+
+Default behaviour changes: a session record now carries
+`query_fingerprint` — a peppered HMAC of the normalised question — and
+`query_text` is `NULL`. Set `AGENTFLOW_QUERY_ANALYTICS_STORE_TEXT=true` to keep
+the text, and it is stored **redacted** (emails, credential-shaped tokens, JWTs
+and long digit runs replaced) and truncated. There is deliberately no setting
+that stores a raw prompt.
+
+`GET /v1/admin/analytics/top-queries` items gain a `fingerprint` field and
+`query` is null unless text storage is on; frequency counts are unchanged,
+because the fingerprint groups the same questions the text used to.
+
+Retention is finite and enforceable: `AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS`
+(default 30) plus `scripts/prune_query_analytics.py`, which deletes expired
+`api_sessions` rows from whichever store the API writes to. Nothing prunes
+automatically — schedule the job. `api_usage` counters are deliberately out of
+scope: no user content, different lifetime.
+
+Erasure is separate from retention:
+`scripts/prune_query_analytics.py --erase-tenant <tenant>` deletes every
+`api_sessions` row for one tenant regardless of age (`api_usage` counters stay,
+same reasoning). The control-plane port gains `prune_api_sessions` and
+`delete_tenant_api_sessions`, implemented by both the embedded and PostgreSQL
+adapters.
+
+Schema: `api_sessions.query_fingerprint` is added by embedded-store column
+migration and PostgreSQL control-plane migration 3.
+
 ### Fixed — `AGENTFLOW_SRC_SHIM_SILENT` is parsed as a boolean (audit F-15)
 
 The deprecated `src` shim documented `AGENTFLOW_SRC_SHIM_SILENT=1` and tested

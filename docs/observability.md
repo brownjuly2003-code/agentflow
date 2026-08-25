@@ -99,6 +99,11 @@ Representative baseline shape:
 
 ## Caveats
 
+- Query analytics keeps a peppered fingerprint of each `/v1/query` question,
+  not the question, unless an operator opts in — and then only a redacted copy.
+  Retention defaults to 30 days and is enforced by
+  `scripts/prune_query_analytics.py`, which nothing runs for you. See
+  [SECURITY.md](../SECURITY.md).
 - Local metrics are not a substitute for production monitoring ownership.
 - Jaeger/Grafana compose wiring helps debugging, but it is not evidence of a
   managed production telemetry stack.

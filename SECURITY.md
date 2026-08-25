@@ -84,6 +84,51 @@ findings or longer timelines for harder-to-fix ones.
 When a fix ships, the advisory is published with credit to the reporter
 unless they prefer to remain anonymous.
 
+## What query analytics keeps
+
+`/v1/query` takes a free-text question, so an analytics record can end up
+holding whatever a caller typed — personal data, commercial figures, or a
+credential pasted from somewhere else. The policy is deliberately narrow
+(audit F-18):
+
+- **By default no question text is stored.** The record keeps a peppered
+  HMAC fingerprint of the normalised question, which answers what analytics is
+  for — which questions repeat, and how often — without keeping the question.
+  `GET /v1/admin/analytics/top-queries` returns that fingerprint with a null
+  `query`.
+- **Storing text is opt-in and still redacted.** With
+  `AGENTFLOW_QUERY_ANALYTICS_STORE_TEXT=true` the question is kept with
+  emails, credential-shaped tokens, JWTs and long digit runs replaced by
+  placeholders, and truncated to 1000 characters. There is deliberately no
+  setting that stores the raw prompt: an operator's decision to read questions
+  is not the user's consent to have a pasted secret retained.
+- **Retention is finite.** `AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS`
+  (default 30) is the window, and `scripts/prune_query_analytics.py` is what
+  enforces it — run it on a schedule against the store the API writes to.
+  Nothing prunes automatically; a deployment that never runs the job keeps
+  analytics indefinitely, which is the state this policy exists to end.
+- **Fingerprints are peppered** (`AGENTFLOW_QUERY_FINGERPRINT_PEPPER`) so a
+  leaked analytics table cannot be joined against fingerprints of the same
+  questions computed elsewhere. Changing the pepper re-partitions history:
+  older rows stop grouping with newer ones.
+
+`api_usage` — per-tenant, per-key, per-endpoint counters with no user content —
+is out of this window on purpose: it is the record of how much a tenant used,
+which is a billing and abuse-investigation surface with its own lifetime.
+
+A tenant asking for their analytics to be deleted does not wait out the
+window: `scripts/prune_query_analytics.py --erase-tenant <tenant>` removes
+every `api_sessions` row for that tenant whatever its age. It leaves
+`api_usage` counters in place for the reason above.
+
+Two things this policy does **not** claim. Analytics rows are stored by
+whichever control-plane store is configured — encryption at rest is the
+deployment's property (an encrypted volume, a managed PostgreSQL with
+encryption enabled), not something the application does to the column. And
+reads of `GET /v1/admin/analytics/top-queries` are authenticated and
+rate-limited but not written to a separate access-audit trail; if you opt into
+storing question text, treat who may hold an admin key as the access control.
+
 ## Hardening references
 
 If you are deploying AgentFlow yourself, the following docs describe the

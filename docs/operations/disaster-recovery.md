@@ -6,6 +6,9 @@
 pipeline DuckDB, the API usage/auth DuckDB, and the non-secret parts of
 `config/`. It is the DR story for the embedded, single-host demo profile.
 
+For API DuckDB persistence ownership and repair analysis, see the
+[API DuckDB persistence recovery design](api-duckdb-persistence-recovery-design.md).
+
 It does **not** cover, and nothing in this repository currently implements:
 
 - **ClickHouse** (the external serving backend, ADR 0006/0007): no backup,

@@ -854,7 +854,7 @@ first boot (Compose and Helm now do it for you — see below).
 DuckDB fixtures on an ephemeral GitHub runner, tarred them, and uploaded a
 7-day Actions artifact — a real check that the backup/restore code path
 still works, but no evidence a live environment can be recovered. Calling it
-"Nightly Backup" and citing an RPO/RTO in `docs/disaster-recovery.md` on the
+"Nightly Backup" and citing an RPO/RTO in `docs/operations/disaster-recovery.md` on the
 strength of it was a false claim.
 
 - The workflow is renamed **`Backup/Restore Regression Test`**
@@ -865,7 +865,7 @@ strength of it was a false claim.
   unchanged — `pyproject.toml`'s
   `[[tool.agentflow.dependency-profiles.targets]]` registry references it by
   `path` + `job`.
-- `docs/disaster-recovery.md` no longer states a flat RPO/RTO. It says
+- `docs/operations/disaster-recovery.md` no longer states a flat RPO/RTO. It says
   plainly what exists today — a DuckDB file/config backup+restore code path,
   exercised nightly against synthetic fixtures — and what does not:
   no ClickHouse backup, no PostgreSQL control-plane backup, and no restore

@@ -4,7 +4,7 @@ name: Backup/Restore Regression Test
 # fixtures on an ephemeral runner, backs *those* up, verifies the manifest,
 # and restores into a scratch directory — a regression test for
 # scripts/backup.py, scripts/verify_backup.py and scripts/restore.py, not a
-# disaster-recovery control (audit P1-2). See docs/disaster-recovery.md for
+# disaster-recovery control (audit P1-2). See docs/operations/disaster-recovery.md for
 # what backup coverage actually exists today.
 on:
   schedule:

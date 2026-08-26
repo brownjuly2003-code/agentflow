@@ -197,7 +197,7 @@ or load an API image.
 3. Read the latest API logs: `docker compose -f docker-compose.prod.yml logs agentflow-api --tail 50`.
 4. Open Jaeger at `http://localhost:16686` and look for hanging `http.request`, `nl_to_sql`, or `duckdb.query` spans.
 5. Restart only the API first: `docker compose -f docker-compose.prod.yml restart agentflow-api`.
-6. If the API still cannot become healthy, switch to the recovery steps in `docs/disaster-recovery.md`.
+6. If the API still cannot become healthy, switch to the recovery steps in `docs/operations/disaster-recovery.md`.
 
 ### Pipeline lag > 60s
 
@@ -256,7 +256,8 @@ or load an API image.
 
 ## Disaster Recovery
 
-For restore drills, backup verification, or host loss scenarios, use [docs/disaster-recovery.md](disaster-recovery.md).
+For restore drills, backup verification, or host loss scenarios, use
+[docs/operations/disaster-recovery.md](operations/disaster-recovery.md).
 
 ## Maintenance
 

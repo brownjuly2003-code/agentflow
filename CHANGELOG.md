@@ -4,6 +4,18 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Deployment — production Helm renders require an immutable image (audit F-19 slice)
+
+The chart now accepts `image.digest` and renders every API-derived Deployment
+and provision Job as `repository@sha256:...`; the developer default remains
+tag-based. `config.profile=production` fails closed when the digest is empty,
+and the values schema rejects anything except an empty dev value or a lowercase
+SHA-256 digest. Flink image values use the same digest-aware renderer.
+
+This is the Helm consumption contract only. Building, scanning, attesting and
+promoting that one digest between staging and release remains the rest of
+F-19; this change does not claim that pipeline is complete.
+
 ### BREAKING — query analytics keeps a fingerprint, not the question (audit F-18)
 
 The analytics middleware persisted the first 1000 characters of every

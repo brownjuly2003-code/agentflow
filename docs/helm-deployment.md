@@ -27,15 +27,17 @@ The chart deploys the API only. Redis, Kafka, Prometheus, Grafana, Jaeger, and o
 
 ## Prepare an image
 
-The default chart values expect an image named `agentflow/api:1.3.0`.
+The default chart values expect an image named `agentflow/api:2.0.0`.
 
 If you are using Minikube, build or load an image before the install:
 
 ```bash
-minikube image load agentflow/api:1.3.0
+minikube image load agentflow/api:2.0.0
 ```
 
-If your CI publishes a different image, override `image.repository` and `image.tag`.
+For a dev install, override `image.repository` and `image.tag`. Production
+renders require `image.digest`; when present, every API-derived Deployment and
+provision Job uses `repository@digest` and ignores the tag.
 
 ## Install
 
@@ -45,7 +47,8 @@ Use a dedicated values file for production secrets and tenant configuration:
 # values-prod.yaml
 image:
   repository: registry.example.com/agentflow/api
-  tag: "1.3.0"
+  tag: "2.1.0"  # required fallback shape, ignored when digest is set
+  digest: "sha256:REPLACE_WITH_64_LOWERCASE_HEX"
 
 secrets:
   create: false
@@ -114,13 +117,15 @@ helm upgrade --install agentflow ./helm/agentflow   -f helm/agentflow/values-pro
 ```
 
 The overlay leaves empty exactly the values only your environment can supply
-(the Secret name, the origins, the ingress class/hosts/TLS, the trusted
-proxies). Render is fail-closed: `templates/production-contract.yaml` refuses a
+(the verified API image digest, the Secret name, the origins, the ingress
+class/hosts/TLS, the trusted proxies). Render is fail-closed:
+`templates/production-contract.yaml` refuses a
 `profile=production` render that still violates the contract and reports every
 violation in one message, so you fix the whole set in one pass. It checks:
 
 | Clause | Why |
 | --- | --- |
+| `image.digest=sha256:...` | Every API-derived workload consumes one immutable artifact; a tag cannot prove staging/release identity |
 | `networkPolicy.enabled=true` | Default-deny baseline; needs a NetworkPolicy controller in the cluster |
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
@@ -280,7 +285,7 @@ kubectl delete pvc agentflow
 
 ## Troubleshooting
 
-- `ImagePullBackOff`: set `image.repository` and `image.tag` to a reachable image or load the image into Minikube.
+- `ImagePullBackOff`: for dev, set `image.repository` and `image.tag` or load the image into Minikube; for production, verify that `image.digest` exists in that repository.
 - `Pending` pod with PVC errors: choose a valid `persistence.storageClassName` or disable persistence for ephemeral environments.
 - `503` on admin endpoints: set `secrets.adminKey`.
 - Missing auth or tenant config: check the rendered `api_keys.yaml` and `tenants.yaml` values inside the mounted Secret and ConfigMap.

@@ -115,6 +115,11 @@
           "type": "string",
           "minLength": 1
         },
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:[0-9a-f]{64})?$",
+          "description": "Optional immutable image digest. When set, templates render repository@digest and ignore tag."
+        },
         "pullPolicy": {
           "type": "string",
           "enum": [

@@ -25,11 +25,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
 PRODUCTION_VALUES = CHART_PATH / "values-production.yaml"
 CANONICAL_SECURITY = PROJECT_ROOT / "config" / "security.yaml"
+_API_IMAGE_DIGEST = "sha256:" + "b" * 64
 
 # What an environment file owes the production overlay. The overlay itself
 # leaves these empty on purpose -- they are the values only the environment
 # knows -- so every render here supplies them and then breaks one clause.
 _ENVIRONMENT_VALUES = {
+    "image": {"digest": _API_IMAGE_DIGEST},
     "config": {
         "corsOrigins": "https://app.example.com",
         "trustedProxies": "10.0.0.0/8",
@@ -130,6 +132,7 @@ def test_dev_defaults_stay_installable_without_the_production_contract():
 def test_production_overlay_ships_no_inline_key_material():
     values = _load_yaml(PRODUCTION_VALUES)
 
+    assert values["image"]["digest"] == ""
     assert values["config"]["profile"] == "production"
     assert values["networkPolicy"]["enabled"] is True
     assert values["secrets"]["create"] is False
@@ -176,6 +179,15 @@ def test_compliant_production_render_carries_the_declared_posture(tmp_path: Path
     assert "name: AGENTFLOW_TRUSTED_PROXIES" in output
     assert 'value: "10.0.0.0/8"' in output
     assert "secretName: agentflow-tls" in output
+    assert f'image: "agentflow/api@{_API_IMAGE_DIGEST}"' in output
+
+
+def test_production_render_requires_an_immutable_api_image_digest(tmp_path: Path):
+    result = _render(tmp_path, {"image": {"digest": ""}})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert "image.digest is empty" in output
 
 
 def test_production_render_reports_every_violation_at_once(tmp_path: Path):

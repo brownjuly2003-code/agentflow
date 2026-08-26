@@ -25,6 +25,12 @@
 #   - multi-replica gating on an external serving engine plus an external
 #     control plane (templates/deployment.yaml, ADR 0010).
 
+image:
+  # REQUIRED. Supply the sha256 digest produced and verified by the release
+  # pipeline. The repository remains in values.yaml; tag is ignored when this
+  # is set, so every API-derived workload consumes the identical artifact.
+  digest: ""
+
 config:
   profile: production
 

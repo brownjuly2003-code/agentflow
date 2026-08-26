@@ -10,7 +10,7 @@ metadata:
     {{- include "agentflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: stream-processor
 spec:
-  image: "{{ .Values.flinkJob.image.repository }}:{{ .Values.flinkJob.image.tag }}"
+  image: {{ include "agentflow.imageReference" .Values.flinkJob.image | quote }}
   imagePullPolicy: {{ .Values.flinkJob.image.pullPolicy }}
   flinkVersion: {{ .Values.flinkJob.flinkVersion }}
   serviceAccount: {{ include "agentflow.flinkServiceAccountName" . }}

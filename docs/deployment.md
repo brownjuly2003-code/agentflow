@@ -107,7 +107,7 @@ defaults, and prepare cluster rollout work.
 
 Before using them for a real environment, operators still need to provide:
 
-- image registry and tag policy
+- image registry plus build-once/promote-by-digest policy
 - secrets and key ownership
 - ingress/TLS strategy
 - resource requests and limits

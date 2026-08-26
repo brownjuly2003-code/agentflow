@@ -52,7 +52,7 @@ spec:
       {{- end }}
       containers:
         - name: agentflow-worker
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "agentflow.imageReference" .Values.image | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.containerSecurityContext }}
           securityContext:

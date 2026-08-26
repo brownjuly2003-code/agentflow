@@ -13,6 +13,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
+_API_IMAGE_DIGEST = "sha256:" + "a" * 64
 
 
 def _load_yaml(path: Path) -> dict:
@@ -43,6 +44,8 @@ def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
 # of the contract from here instead of restating it four times. Ingress stays
 # off, so the TLS and trusted-proxy clauses do not apply.
 _PRODUCTION_POSTURE: tuple[str, ...] = (
+    "--set",
+    f"image.digest={_API_IMAGE_DIGEST}",
     "--set",
     "networkPolicy.enabled=true",
     "--set",
@@ -118,6 +121,61 @@ def test_chart_defaults_use_structured_api_keys_and_tenants():
         assert tenant["max_api_keys"] >= 1
         # The chart must not ship an example of a field the runtime ignores.
         assert "duckdb_schema" not in tenant
+
+
+def test_api_image_digest_overrides_the_dev_tag_for_every_runtime_workload():
+    result = _run_helm_template(
+        "--set",
+        f"image.digest={_API_IMAGE_DIGEST}",
+        "--set",
+        "worker.enabled=true",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "controlPlane.postgres.existingSecret=agentflow-controlplane-pg",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "lakeMaterializer.enabled=true",
+        "--set",
+        "lakeMaterializer.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
+        "--set",
+        "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "servingBridge.enabled=true",
+        "--set",
+        "servingBridge.kafkaBootstrapServers=kafka.data.svc:9092",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    expected = f"agentflow/api@{_API_IMAGE_DIGEST}"
+    runtime_images: list[str] = []
+    for document in yaml.safe_load_all(result.stdout):
+        if not document or document.get("kind") not in {"Deployment", "Job"}:
+            continue
+        runtime_images.extend(
+            container["image"]
+            for container in document["spec"]["template"]["spec"]["containers"]
+            if container["image"].startswith("agentflow/api")
+        )
+
+    assert len(runtime_images) == 5
+    assert set(runtime_images) == {expected}
+    assert "agentflow/api:2.0.0" not in result.stdout
+
+
+def test_api_image_digest_schema_rejects_non_sha256_values():
+    result = _run_helm_template("--set", "image.digest=latest")
+    output = _combined_output(result)
+
+    assert result.returncode != 0
+    assert "image.digest" in output
+    assert "sha256" in output
 
 
 def test_chart_defaults_do_not_embed_production_shaped_api_key_hashes():

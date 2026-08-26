@@ -6,6 +6,9 @@ replicaCount: 1
 image:
   repository: agentflow/api
   tag: "2.0.0"
+  # When set, the digest is authoritative and tag is ignored. Keep the empty
+  # default for the laptop/dev install; profile=production requires a digest.
+  digest: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -276,6 +279,7 @@ flinkJob:
   image:
     repository: agentflow/flink
     tag: "2.3.0"
+    digest: ""
     pullPolicy: IfNotPresent
   flinkVersion: v2_3
   # Optional Flink-only override; ignored when legacy serviceAccount.name is set.

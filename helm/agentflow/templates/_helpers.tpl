@@ -31,6 +31,14 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
+{{- define "agentflow.imageReference" -}}
+{{- if .digest -}}
+{{- printf "%s@%s" .repository .digest -}}
+{{- else -}}
+{{- printf "%s:%s" .repository .tag -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "agentflow.apiServiceAccountName" -}}
 {{- coalesce .Values.serviceAccount.name .Values.serviceAccount.apiName (printf "%s-api" (include "agentflow.fullname" . | trunc 59 | trimSuffix "-")) -}}
 {{- end -}}

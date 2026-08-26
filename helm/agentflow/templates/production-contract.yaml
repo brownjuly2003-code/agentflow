@@ -23,6 +23,10 @@ Deliberately NOT checked here:
 {{- if eq .Values.config.profile "production" -}}
 {{- $problems := list -}}
 
+{{- if not .Values.image.digest -}}
+{{- $problems = append $problems "image.digest is empty: production must deploy the immutable API artifact as repository@sha256:...; tags do not prove that staging and release use the same image (audit F-19)" -}}
+{{- end -}}
+
 {{- /* Operator-declared plaintext exemptions, mirroring the app-side gate. */ -}}
 {{- $insecureOk := "" -}}
 {{- range .Values.extraEnv -}}

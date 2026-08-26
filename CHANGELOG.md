@@ -2257,7 +2257,7 @@ wave 2 dependency bumps that landed in sessions 11–19.
 - `helm/agentflow` chart aligned to current release line:
   `Chart.yaml` `appVersion` bumped `1.0.0` → `1.3.0`, default
   `values.yaml` `image.tag` bumped `1.1.0` → `1.3.0`, and
-  `docs/helm-deployment.md` examples follow. Helm contract tests +
+  `docs/operations/helm-deployment.md` examples follow. Helm contract tests +
   helm lint pass; operators who pin their own registry/tag via
   `image.repository` / `image.tag` overrides are unaffected.
 

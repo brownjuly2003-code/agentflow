@@ -14,7 +14,7 @@ sides of the contract:
 
 Needs a server whose certificate chains to CLICKHOUSE_TLS_LIVE_CA and lists
 `localhost` as its only SAN (the bring-up recipe lives in
-`_NEXT_SESSION.md` / docs/helm-deployment.md). CI's plain ClickHouse service
+`_NEXT_SESSION.md` / docs/operations/helm-deployment.md). CI's plain ClickHouse service
 does not speak TLS, so the suite skips there — this is a stand probe, like
 the Mac perf recipes.
 """

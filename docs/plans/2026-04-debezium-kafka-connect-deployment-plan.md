@@ -130,7 +130,7 @@ T25b should create the following files.
 | Path | Description |
 | --- | --- |
 | `docker/kafka-connect/Dockerfile` | Builds the AgentFlow Kafka Connect image from `confluentinc/cp-kafka-connect-base:7.7.0` and installs Debezium PostgreSQL/MySQL `3.5.0.Final` plugin archives into the configured plugin path. |
-| `helm/kafka-connect/Chart.yaml` | Separate Helm chart for Kafka Connect rather than embedding Connect in `helm/agentflow`, because `docs/helm-deployment.md` states the AgentFlow chart deploys the API only and external services stay outside it. |
+| `helm/kafka-connect/Chart.yaml` | Separate Helm chart for Kafka Connect rather than embedding Connect in `helm/agentflow`, because `docs/operations/helm-deployment.md` states the AgentFlow chart deploys the API only and external services stay outside it. |
 | `helm/kafka-connect/values.yaml` | Defaults for worker replicas, image, Kafka bootstrap servers, internal topic names, converters, JMX, resources, and connector enable flags. Local/kind values set `replicaCount=1`; staging/prod-like values set `replicaCount=2`. |
 | `helm/kafka-connect/values.schema.json` | Helm values contract mirroring the strict schema pattern already used by `helm/agentflow/values.schema.json`. |
 | `helm/kafka-connect/templates/configmap.yaml` | Worker config: `group.id=agentflow-connect`, internal topics, JSON converters, plugin path, REST advertised host/port, offset flush settings, and JMX exporter config path. |

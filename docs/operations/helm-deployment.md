@@ -2,6 +2,10 @@
 
 ## Overview
 
+For the shorter curated path, start with the
+[deployment walkthrough](../deployment.md). This page is the operator
+reference for the complete Helm contract.
+
 The AgentFlow Helm chart deploys the FastAPI API to Kubernetes with:
 
 - a rolling-update `Deployment`
@@ -66,7 +70,7 @@ config:
 ```
 
 A tenant is isolated by the `tenant_id` column in each serving table's write key
-([ADR-004](decisions/004-tenant-id-column-over-schema-per-tenant.md)), so there
+([ADR-004](../decisions/004-tenant-id-column-over-schema-per-tenant.md)), so there
 is nothing to provision per tenant and nothing further to declare here. The
 `duckdb_schema` field this block used to carry named the old schema-per-tenant
 mechanism; the chart still accepts it so existing values keep validating, but
@@ -108,7 +112,7 @@ install a single command, and it is the wrong shape for a production release.
 declaring this *is* a production release, and from that point the values are
 held to a contract.
 
-[`helm/agentflow/values-production.yaml`](../helm/agentflow/values-production.yaml)
+[`helm/agentflow/values-production.yaml`](../../helm/agentflow/values-production.yaml)
 carries the compliant posture and is versioned with the chart. Layer your
 environment values on top of it:
 
@@ -150,7 +154,7 @@ every Kafka workload (`templates/_kafka.tpl`), plaintext external stores at boot
 (`agentflow_runtime.serving.transport_policy` -- including the control-plane
 DSN, which the chart only ever sees as a Secret reference), and multi-replica
 gating on an external serving engine plus an external control plane
-([ADR-0010](decisions/0010-control-plane-externalization-postgres.md)).
+([ADR-0010](../decisions/0010-control-plane-externalization-postgres.md)).
 
 ### Image promotion packet
 

@@ -174,7 +174,7 @@ The Bandit baseline currently records a historical `B310` finding in `src/agentf
 Helm defaults no longer embed production-shaped API-key verifier hashes. Operators can render a chart-managed Secret for local use or mount an existing Kubernetes Secret, which is friendlier to External Secrets Operator, Sealed Secrets, or equivalent workflows.
 
 Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
-`docs/helm-deployment.md`,
+`docs/operations/helm-deployment.md`,
 `docs/evidence/security-runtime-image-trivy-2026-07-30.md`
 
 ## 9. Operational Security and Auditability

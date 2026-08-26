@@ -98,7 +98,7 @@ been provisioned. The production path is Helm: `helm/agentflow` with
 `helm/agentflow/values-production.yaml` layered
 under your environment values, which fails the render when the values still
 carry dev posture. See the full
-[Helm deployment reference](https://github.com/brownjuly2003-code/agentflow/blob/main/docs/helm-deployment.md).
+[Helm deployment reference](https://github.com/brownjuly2003-code/agentflow/blob/main/docs/operations/helm-deployment.md).
 
 ## Helm and Kubernetes
 

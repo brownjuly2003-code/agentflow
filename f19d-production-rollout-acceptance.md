@@ -23,7 +23,8 @@ production-acceptance claim.
   fresh four-hour soak plus rollback-after-traffic gate and independent
   penetration-test remediation/retest evidence.
 
-Current implementation state: **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**.
+Current implementation state: local evidence verifier complete; target-dependent
+workflow/deploy remains **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**.
 
 ## Tasks
 
@@ -33,18 +34,20 @@ Current implementation state: **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**.
   smoke URL, maintenance window, monitoring owner, and exact previous
   release/digest rollback target. → Verify: a read-only preflight resolves each
   identity without printing or committing credentials, kubeconfig, or values.
-- [ ] Add a production promotion verifier that accepts only one successful
-  `staging-deploy` run and its exact source SHA, downloads its exact artifact,
-  validates the staging JSON and referenced hashes, binds it back to the
-  successful build run and subject, and re-verifies cosign plus GitHub build
-  provenance. → Verify: focused tests reject workflow/run/SHA/artifact/digest,
-  hash, signer, scope, and expiry substitution.
+- [x] Add an offline production promotion verifier for one already downloaded
+  staging artifact plus its GitHub API metadata. Strictly validate the three
+  files, staging JSON and hashes, expected run/source/artifact/image identity,
+  build linkage, cosign and GitHub verification-result semantics, scope, and
+  expiry. → Verify: `32/32` focused tests and the retained real artifact
+  `9620326516` pass; tampering and substitution cases fail closed.
 - [ ] Add `.github/workflows/production-deploy.yml` with inputs
   `staging_run_id`, `source_sha`, and exact confirmation `RELEASE`; use only the
   protected `production` Environment and the owner-approved target/values
-  delivery contract. → Verify: static workflow tests prove validation precedes
-  cluster access and no `docker build`, image push, signing, or `kind load`
-  path exists.
+  delivery contract. Validate the successful staging run, select and download
+  exactly one artifact, call the offline verifier, then freshly run cosign and
+  GitHub provenance verification before cluster access. → Verify: static
+  workflow tests prove this ordering and that no `docker build`, image push,
+  signing, or `kind load` path exists.
 - [ ] Render `helm/agentflow/values-production.yaml` plus the owner-supplied
   environment values and the verified digest before mutation, then capture the
   live pre-deploy Helm revision and exact deployed digest. → Verify: Helm

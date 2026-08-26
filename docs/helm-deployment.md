@@ -152,6 +152,25 @@ DSN, which the chart only ever sees as a Secret reference), and multi-replica
 gating on an external serving engine plus an external control plane
 ([ADR-0010](decisions/0010-control-plane-externalization-postgres.md)).
 
+### Image promotion packet
+
+The protected `build-and-sign` job in
+`.github/workflows/container-attestation.yml` owns the image build. After it
+pushes, signs, and emits build provenance for that digest, it uploads
+`agentflow-image-promotion-<git-sha>`. The artifact contains:
+
+- `image-values.yaml` with the exact repository and digest;
+- `helm-deployment.yaml`, rendered from that values file with pinned Helm;
+- `promotion.json` with the Git SHA, workflow run ID, immutable image subject,
+  tool versions, and SHA-256 of the rendered Deployment.
+
+The packet proves that Helm can consume the image built by that workflow
+without rebuilding it. It does **not** prove that staging deployed the packet,
+that signature/provenance verification ran at deploy time, or that production
+was accepted. Until `staging-deploy.yml` downloads and verifies this artifact,
+its separate inline staging build remains rehearsal evidence, not promotion of
+the release image.
+
 ## Verify rollout
 
 Check the release status:

@@ -189,3 +189,46 @@ def test_container_attestation_workflow_signs_and_attests_pushed_digest():
     assert attest["with"]["subject-name"] == "${{ env.IMAGE_REF }}"
     assert attest["with"]["subject-digest"] == "${{ steps.build.outputs.digest }}"
     assert attest["with"]["push-to-registry"] is True
+
+
+def test_built_digest_becomes_checksumed_helm_promotion_evidence():
+    workflow = _load_workflow()
+    build_job = workflow["jobs"]["build-push-sign-attest"]
+    external_job = workflow["jobs"]["attest-and-sign"]
+    steps = build_job["steps"]
+
+    setup_helm = next(
+        step for step in steps if str(step.get("uses", "")).startswith("azure/setup-helm@")
+    )
+    generate = next(
+        step for step in steps if step.get("name") == "Create immutable Helm promotion evidence"
+    )
+    upload = next(
+        step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")
+    )
+    attest = next(
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/attest-build-provenance@")
+    )
+
+    assert setup_helm["with"]["version"] == "v3.16.3"
+    assert generate["env"] == {
+        "IMAGE_REF": "${{ env.IMAGE_REF }}",
+        "IMAGE_DIGEST": "${{ steps.build.outputs.digest }}",
+        "SOURCE_SHA": "${{ github.sha }}",
+        "BUILD_RUN_ID": "${{ github.run_id }}",
+    }
+    assert "scripts/write_image_promotion_evidence.py" in generate["run"]
+    assert "${{ inputs." not in generate["run"]
+    assert upload["with"] == {
+        "name": "agentflow-image-promotion-${{ github.sha }}",
+        "path": ".artifacts/image-promotion/",
+        "if-no-files-found": "error",
+        "retention-days": 14,
+    }
+    assert steps.index(attest) < steps.index(generate) < steps.index(upload)
+    assert not any(
+        str(step.get("uses", "")).startswith("actions/upload-artifact@")
+        for step in external_job["steps"]
+    )

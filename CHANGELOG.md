@@ -4,6 +4,20 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Deployment — the workflow-built digest now has Helm promotion evidence (audit F-19b)
+
+The protected container build job now turns its own
+`steps.build.outputs.digest` into a machine-readable artifact after cosign and
+build provenance succeed. The packet contains digest-only Helm values, the
+rendered API Deployment, Git SHA/run identity, tool versions, and a SHA-256 of
+that manifest. Invalid image references, digests, Git object IDs, or run IDs
+fail before any evidence file is written.
+
+The external-digest signing job cannot emit this build/promotion artifact. A
+packet proves that Helm rendered the workflow-built image; it does not prove a
+staging rollout or production acceptance. Wiring `staging-deploy.yml` to
+download, verify, and deploy the packet remains the next F-19 slice.
+
 ### Deployment — production Helm renders require an immutable image (audit F-19 slice)
 
 The chart now accepts `image.digest` and renders every API-derived Deployment

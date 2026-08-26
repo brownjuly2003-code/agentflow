@@ -134,6 +134,35 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.3
+
+      - name: Create immutable Helm promotion evidence
+        env:
+          IMAGE_REF: ${{ env.IMAGE_REF }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/write_image_promotion_evidence.py \
+            --image-ref "$IMAGE_REF" \
+            --image-digest "$IMAGE_DIGEST" \
+            --source-sha "$SOURCE_SHA" \
+            --run-id "$BUILD_RUN_ID" \
+            --chart helm/agentflow \
+            --output-dir .artifacts/image-promotion
+
+      - name: Upload immutable Helm promotion evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentflow-image-promotion-${{ github.sha }}
+          path: .artifacts/image-promotion/
+          if-no-files-found: error
+          retention-days: 14
+
   attest-and-sign:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'SIGN' && inputs.mode == 'sign-existing-digest' }}
     runs-on: ubuntu-latest

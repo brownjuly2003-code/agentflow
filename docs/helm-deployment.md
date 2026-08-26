@@ -165,11 +165,24 @@ pushes, signs, and emits build provenance for that digest, it uploads
   tool versions, and SHA-256 of the rendered Deployment.
 
 The packet proves that Helm can consume the image built by that workflow
-without rebuilding it. It does **not** prove that staging deployed the packet,
-that signature/provenance verification ran at deploy time, or that production
-was accepted. Until `staging-deploy.yml` downloads and verifies this artifact,
-its separate inline staging build remains rehearsal evidence, not promotion of
-the release image.
+without rebuilding it. `staging-deploy.yml` is its manual, fail-closed
+consumer. An operator supplies the successful build run ID, its exact
+main-branch source SHA, and `PROMOTE`. Before kind starts, the workflow:
+
+1. checks the selected workflow run and `build-push-sign-attest` job through
+   the Actions API;
+2. downloads the source-SHA-named artifact from that run and validates the
+   packet schema, filenames, identities, values, manifest, and checksums;
+3. verifies the exact OCI subject with cosign and GitHub SLSA provenance;
+4. passes only the verified digest values to Helm, without `docker build` or
+   `kind load`.
+
+The existing smoke and E2E suites remain the rollout gate. After they and
+staging teardown pass, the workflow uploads
+`agentflow-staging-promotion-<source-sha>-<staging-run-id>` with checksummed
+signature/provenance results and staging evidence. This proves only that the
+selected digest passed staging. It does **not** prove a production rollout,
+production acceptance, or complete F-19 closure.
 
 ## Verify rollout
 

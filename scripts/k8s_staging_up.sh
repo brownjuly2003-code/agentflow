@@ -5,8 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-agentflow-staging}"
 NAMESPACE="${NAMESPACE:-agentflow}"
 RELEASE_NAME="${RELEASE_NAME:-agentflow}"
-IMAGE_TAG="${IMAGE_TAG:-staging}"
-API_IMAGE="${API_IMAGE:-agentflow/api:${IMAGE_TAG}}"
+PROMOTION_VALUES_FILE="${PROMOTION_VALUES_FILE:-}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
 HOST_GATEWAY_HELPER_IMAGE="${HOST_GATEWAY_HELPER_IMAGE:-alpine:3.20}"
 HOST_LOOPBACK_PROXY_TARGET="${HOST_LOOPBACK_PROXY_TARGET:-}"
@@ -21,6 +20,16 @@ for cmd in bash curl docker helm kind kubectl; do
 done
 
 cd "$ROOT_DIR"
+
+if [[ -z "$PROMOTION_VALUES_FILE" ]]; then
+  echo "A verified promotion values file is required via PROMOTION_VALUES_FILE." >&2
+  exit 1
+fi
+if [[ -L "$PROMOTION_VALUES_FILE" || ! -f "$PROMOTION_VALUES_FILE" ]]; then
+  echo "Promotion values file must be a regular file: $PROMOTION_VALUES_FILE" >&2
+  exit 1
+fi
+PROMOTION_VALUES_FILE="$(cd "$(dirname "$PROMOTION_VALUES_FILE")" && pwd)/$(basename "$PROMOTION_VALUES_FILE")"
 
 on_failure() {
   local exit_code=$?
@@ -68,96 +77,6 @@ else
   echo "==> Reusing kind cluster $CLUSTER_NAME"
 fi
 
-echo "==> Building API image $API_IMAGE..."
-docker build -t "$API_IMAGE" -f - "$ROOT_DIR" <<'EOF'
-FROM python:3.11-slim
-WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-COPY pyproject.toml /app/pyproject.toml
-COPY README.md /app/README.md
-COPY requirements.txt /app/requirements.txt
-COPY src /app/src
-COPY config /app/config
-COPY contracts /app/contracts
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir bcrypt \
- && pip install --no-cache-dir -e ".[postgres]" \
- && pip install --no-cache-dir pyiceberg
-RUN cat > /app/host_loopback_proxy.py <<'PY'
-import asyncio
-import os
-import signal
-
-
-LISTEN_HOST = "127.0.0.1"
-TARGET_HOST = os.environ["HOST_LOOPBACK_PROXY_TARGET"]
-PORT_START = int(os.getenv("HOST_LOOPBACK_PROXY_RANGE_START", "32768"))
-PORT_END = int(os.getenv("HOST_LOOPBACK_PROXY_RANGE_END", "65535"))
-
-
-async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    try:
-        while True:
-            data = await reader.read(65536)
-            if not data:
-                break
-            writer.write(data)
-            await writer.drain()
-    finally:
-        writer.close()
-        try:
-            await writer.wait_closed()
-        except Exception:
-            pass
-
-
-async def _handle(
-    client_reader: asyncio.StreamReader,
-    client_writer: asyncio.StreamWriter,
-) -> None:
-    port = client_writer.get_extra_info("sockname")[1]
-    target_reader, target_writer = await asyncio.open_connection(TARGET_HOST, port)
-    await asyncio.gather(
-        _pipe(client_reader, target_writer),
-        _pipe(target_reader, client_writer),
-    )
-
-
-async def _main() -> None:
-    servers = []
-    loop = asyncio.get_running_loop()
-    stop = asyncio.Event()
-
-    for signum in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(signum, stop.set)
-
-    for port in range(PORT_START, PORT_END + 1):
-        servers.append(await asyncio.start_server(_handle, LISTEN_HOST, port))
-
-    print(
-        f"Host loopback relay listening on {LISTEN_HOST}:{PORT_START}-{PORT_END} -> {TARGET_HOST}",
-        flush=True,
-    )
-
-    await stop.wait()
-
-    for server in servers:
-        server.close()
-        await server.wait_closed()
-
-
-asyncio.run(_main())
-PY
-EOF
-
-echo "==> Loading image into kind..."
-if ! kind load docker-image "$API_IMAGE" --name "$CLUSTER_NAME"; then
-  echo "==> kind load timed out, falling back to ctr import..."
-  docker save "$API_IMAGE" | docker exec -i "${CLUSTER_NAME}-control-plane" ctr --namespace=k8s.io images import -
-fi
-
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE" >/dev/null
 
 echo "==> Ensuring Redis is available for rate limiting..."
@@ -197,9 +116,10 @@ EOF
 
 kubectl rollout status deployment/agentflow-redis --namespace "$NAMESPACE" --timeout=180s
 
-echo "==> Installing Helm chart..."
+echo "==> Installing verified promoted digest with Helm..."
 helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/helm/agentflow" \
   -f "$ROOT_DIR/k8s/staging/values-staging.yaml" \
+  -f "$PROMOTION_VALUES_FILE" \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --atomic \

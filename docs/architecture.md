@@ -235,5 +235,5 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 | Typed SDK surface | `sdk/` and `sdk-ts/` | Python and TypeScript agents consume one HTTP contract instead of bespoke adapters |
 | Distributed observability | OTel tracing, structlog correlation, `/metrics`, Grafana, Jaeger | API, background jobs, and streaming workflows share the same debugging context |
 | Chaos engineering | `tests/chaos/`, `docker-compose.chaos.yml`, `config/toxiproxy.json` | Failure handling is exercised continuously rather than assumed from code review |
-| Kubernetes staging | `helm/agentflow`, `k8s/kind-config.yaml`, staging scripts | Helm releases, image loading, and smoke validation can be rehearsed before production |
+| Kubernetes staging | `helm/agentflow`, `k8s/kind-config.yaml`, staging scripts | One signed/attested workflow digest is pulled through Helm and held to smoke/E2E validation before production |
 | DevContainer DX | `.devcontainer/` with Docker-in-Docker, Helm/kubectl, `kind`, `toxiproxy-cli` | Contributors get one workspace that can run local demo, chaos, and staging workflows |

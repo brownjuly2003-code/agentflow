@@ -4,6 +4,21 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [2.1.0] - 2026-08-23
 
+### Deployment — staging promotes the verified workflow digest (audit F-19c)
+
+`staging-deploy.yml` now accepts one explicit successful
+`container-attestation` run ID and its exact main-branch source SHA. Before it
+creates a kind cluster, it verifies the run and build job through the Actions
+API, validates the three-file promotion packet and manifest checksum, and
+checks both the keyless cosign signature and GitHub SLSA build provenance for
+the same `repository@digest` subject.
+
+The staging script no longer builds or loads a separate API image. Helm pulls
+the packet's digest, while the existing smoke and E2E suites remain required.
+After successful teardown, the workflow uploads checksummed staging evidence.
+That evidence proves only this staging gate; it does not claim a production
+rollout, production acceptance, or complete F-19 closure.
+
 ### Deployment — the workflow-built digest now has Helm promotion evidence (audit F-19b)
 
 The protected container build job now turns its own
@@ -14,9 +29,9 @@ that manifest. Invalid image references, digests, Git object IDs, or run IDs
 fail before any evidence file is written.
 
 The external-digest signing job cannot emit this build/promotion artifact. A
-packet proves that Helm rendered the workflow-built image; it does not prove a
-staging rollout or production acceptance. Wiring `staging-deploy.yml` to
-download, verify, and deploy the packet remains the next F-19 slice.
+packet by itself proves that Helm rendered the workflow-built image; it does
+not prove a staging rollout or production acceptance. The separate F-19c
+consumer verifies and deploys the packet to staging.
 
 ### Deployment — production Helm renders require an immutable image (audit F-19 slice)
 

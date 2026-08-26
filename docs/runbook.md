@@ -168,12 +168,25 @@ kafka-console-consumer --bootstrap-server localhost:9092 \
 
 ### Launch kind staging
 
+The supported promotion path is the manual `Staging Deploy` workflow. Supply
+the successful `Container Attestation` build run ID, its exact 40-character
+main-branch source SHA, and confirmation `PROMOTE`. The workflow validates the
+run, packet, cosign signature, and GitHub build provenance before it creates a
+kind cluster.
+
+For an isolated rehearsal on a Docker/kind host, first complete those same
+verification checks and download the selected packet. Then pass its verified
+digest-only values file explicitly:
+
 ```bash
-bash scripts/k8s_staging_up.sh
+PROMOTION_VALUES_FILE=/absolute/path/to/image-values.yaml bash scripts/k8s_staging_up.sh
 bash scripts/k8s_staging_down.sh
 ```
 
-`scripts/k8s_staging_up.sh` expects `docker`, `kubectl`, `helm`, and `kind` on the path. It builds the API image, loads it into kind, installs the Helm chart, and runs a smoke test.
+`scripts/k8s_staging_up.sh` expects `docker`, `kubectl`, `helm`, and `kind` on
+the path. It refuses a missing or non-regular promotion values file, pulls the
+immutable API subject through Helm, and runs the smoke test. It does not build
+or load an API image.
 
 ## Incident Response
 

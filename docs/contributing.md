@@ -79,14 +79,19 @@ Notes:
 
 ## Staging Rehearsal
 
-For Helm, kind, or deployment changes, validate the staging flow before merging:
+For Helm, kind, or deployment changes, use an isolated Docker/kind host and a
+promotion packet from one explicit successful `Container Attestation` build.
+After validating the run, packet, cosign signature, and GitHub provenance, run:
 
 ```bash
-bash scripts/k8s_staging_up.sh
+PROMOTION_VALUES_FILE=/absolute/path/to/image-values.yaml bash scripts/k8s_staging_up.sh
 bash scripts/k8s_staging_down.sh
 ```
 
-This path exercises the Docker image build, kind image loading, Helm install, and smoke validation in one run.
+This path exercises registry pull by immutable digest, Helm install, and smoke
+validation. It deliberately does not rebuild or `kind load` the API image. The
+manual `Staging Deploy` workflow is the complete gate because it performs the
+pre-cluster checks and retains the existing E2E suite plus staging evidence.
 
 ## Docs and API Changes
 

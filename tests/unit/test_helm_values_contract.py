@@ -712,7 +712,7 @@ def test_staging_values_render_host_loopback_relay_command():
     assert container["command"] == ["/bin/sh", "-lc"]
     assert len(container.get("args") or []) == 1
     relay_arg = container["args"][0]
-    assert "host_loopback_proxy.py" in relay_arg
+    assert "python -m agentflow_runtime.serving.api.host_loopback_proxy" in relay_arg
     assert (
         "exec uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000"
         in relay_arg
@@ -735,7 +735,7 @@ def test_default_chart_render_keeps_uvicorn_command_without_staging_relay():
         "8000",
     ]
     assert not container.get("args")
-    assert "host_loopback_proxy.py" not in result.stdout
+    assert "agentflow_runtime.serving.api.host_loopback_proxy" not in result.stdout
 
 
 def test_worker_defaults_off_and_omits_process_role():

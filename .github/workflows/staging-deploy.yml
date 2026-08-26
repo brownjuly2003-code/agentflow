@@ -1,24 +1,90 @@
 name: Staging Deploy
 
-on:
-  push:
-    branches: [main]
+"on":
   workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Container Attestation build-and-sign run ID
+        required: true
+        type: string
+      source_sha:
+        description: Exact 40-character Git SHA built by that run
+        required: true
+        type: string
+      confirm:
+        description: Type PROMOTE to deploy the selected digest to staging
+        required: true
+        type: string
 
 permissions:
+  actions: read
+  attestations: read
   contents: read
+  packages: read
 
 jobs:
   staging:
+    if: ${{ inputs.confirm == 'PROMOTE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: staging
     env:
       AGENTFLOW_E2E_BASE_URL: http://127.0.0.1:8080
       AGENTFLOW_E2E_CALLBACK_PORT: "18080"
       HOST_LOOPBACK_PROXY_RANGE_START: "18080"
       HOST_LOOPBACK_PROXY_RANGE_END: "18080"
     steps:
+      - name: Validate selected build run
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        with:
+          script: |
+            const runIdText = process.env.BUILD_RUN_ID || "";
+            const sourceSha = process.env.SOURCE_SHA || "";
+            if (!/^[1-9][0-9]*$/.test(runIdText)) {
+              throw new Error("build_run_id must be a positive decimal Actions run id");
+            }
+            if (!/^[0-9a-f]{40}$/.test(sourceSha)) {
+              throw new Error("source_sha must be a 40-character lowercase Git object id");
+            }
+            const runId = Number(runIdText);
+            if (!Number.isSafeInteger(runId)) {
+              throw new Error("build_run_id exceeds the JavaScript safe integer range");
+            }
+
+            const {data: run} = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            const failures = [];
+            if (run.path !== ".github/workflows/container-attestation.yml") failures.push("workflow path");
+            if (run.event !== "workflow_dispatch") failures.push("workflow event");
+            if (run.status !== "completed") failures.push("run status");
+            if (run.conclusion !== "success") failures.push("run conclusion");
+            if (run.head_sha !== sourceSha) failures.push("head_sha");
+            if (run.head_branch !== "main") failures.push("head_branch main");
+
+            const {data: jobs} = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+              filter: "latest",
+              per_page: 100,
+            });
+            const buildJobs = jobs.jobs.filter((job) => job.name === "build-push-sign-attest");
+            if (buildJobs.length !== 1 || buildJobs[0].status !== "completed" || buildJobs[0].conclusion !== "success") {
+              failures.push("build-push-sign-attest job");
+            }
+            if (failures.length) {
+              throw new Error(`Selected run is not an approved successful container build: ${failures.join(", ")}`);
+            }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -28,20 +94,80 @@ jobs:
         run: |
           bash scripts/ci_sync.sh e2e
 
-      - name: Prepare pytest temp directory
-        run: mkdir -p .tmp
+      - name: Prepare verification directories
+        run: mkdir -p .tmp .artifacts/staging-promotion
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agentflow-image-promotion-${{ inputs.source_sha }}
+          path: .artifacts/image-promotion
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+
+      - name: Validate promotion packet
+        id: promotion
+        env:
+          ALLOWED_IMAGE_REF: ghcr.io/${{ github.repository_owner }}/agentflow-api
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          python scripts/verify_image_promotion.py \
+            --packet-dir .artifacts/image-promotion \
+            --expected-run-id "$BUILD_RUN_ID" \
+            --expected-source-sha "$SOURCE_SHA" \
+            --allowed-image-ref "$ALLOWED_IMAGE_REF" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Verify image signature and build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_SUBJECT: ${{ steps.promotion.outputs.image_subject }}
+          SIGNER_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/container-attestation.yml@refs/heads/main
+          SIGNER_WORKFLOW: github.com/${{ github.repository }}/.github/workflows/container-attestation.yml
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity "$SIGNER_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --output json \
+            "$IMAGE_SUBJECT" \
+            > .artifacts/staging-promotion/cosign-verify.json
+          gh attestation verify "oci://${IMAGE_SUBJECT}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$SIGNER_WORKFLOW" \
+            --source-digest "$SOURCE_SHA" \
+            --source-ref "refs/heads/main" \
+            --deny-self-hosted-runners \
+            --format json \
+            > .artifacts/staging-promotion/github-attestation.json
 
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.3
 
       - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           cluster_name: agentflow-staging
           config: k8s/kind-config.yaml
 
-      - name: Lint Helm chart
-        run: helm lint helm/agentflow -f k8s/staging/values-staging.yaml
+      - name: Lint Helm chart with promoted digest
+        env:
+          PROMOTION_VALUES_FILE: ${{ steps.promotion.outputs.promotion_values_file }}
+        run: helm lint helm/agentflow -f k8s/staging/values-staging.yaml -f "$PROMOTION_VALUES_FILE"
 
-      - name: Deploy staging
+      - name: Deploy promoted digest to staging
+        env:
+          PROMOTION_VALUES_FILE: ${{ steps.promotion.outputs.promotion_values_file }}
         run: bash scripts/k8s_staging_up.sh
 
       - name: Run rate-limit E2E against staging
@@ -66,3 +192,31 @@ jobs:
       - name: Tear down staging
         if: always()
         run: bash scripts/k8s_staging_down.sh
+
+      - name: Record staging promotion evidence
+        if: ${{ success() }}
+        env:
+          ALLOWED_IMAGE_REF: ghcr.io/${{ github.repository_owner }}/agentflow-api
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          STAGING_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python scripts/verify_image_promotion.py \
+            --packet-dir .artifacts/image-promotion \
+            --expected-run-id "$BUILD_RUN_ID" \
+            --expected-source-sha "$SOURCE_SHA" \
+            --allowed-image-ref "$ALLOWED_IMAGE_REF" \
+            --staging-run-id "$STAGING_RUN_ID" \
+            --cosign-result .artifacts/staging-promotion/cosign-verify.json \
+            --provenance-result .artifacts/staging-promotion/github-attestation.json \
+            --evidence-output .artifacts/staging-promotion/staging-promotion.json
+
+      - name: Upload staging promotion evidence
+        if: ${{ success() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentflow-staging-promotion-${{ inputs.source_sha }}-${{ github.run_id }}
+          path: .artifacts/staging-promotion/
+          if-no-files-found: error
+          retention-days: 14

@@ -61,6 +61,8 @@ validation:
 
 nav:
   - Overview: index.md
+  - Documentation map: https://github.com/brownjuly2003-code/agentflow/blob/main/docs/README.md
+  - Engineering status: https://github.com/brownjuly2003-code/agentflow/blob/main/docs/STATUS.md
   - Quickstart: quickstart.md
   - Architecture: architecture/index.md
   - Concepts: concepts.md

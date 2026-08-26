@@ -1,6 +1,6 @@
 # Engineering Status
 
-> Updated: **2026-08-23**. The golden topology remains a production candidate, not
+> Updated: **2026-08-26**. The golden topology remains a production candidate, not
 > production accepted. Published release line **`v2.0.0`**; unpublished lockstep
 > **2.1.0** is prepared locally. Numbers below come only from measured, in-repo
 > evidence.
@@ -12,6 +12,13 @@ with Redis push invalidation) — is implemented, measured, and documented.
 **Project lifecycle:** closure candidate. Scope, remaining acceptance program,
 and release gates: [PROJECT_CLOSURE.md](PROJECT_CLOSURE.md). Machine-readable
 claims: [`config/project_claims.toml`](../config/project_claims.toml).
+
+**Latest delivery boundary:** digest-only staging promotion passed for exact
+image identity and the offline production-promotion evidence verifier is
+complete. No production workflow or deploy has been implemented or authorized;
+target-dependent work is `BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT` pending
+the owner packet described in
+[`f19d-production-rollout-acceptance.md`](../f19d-production-rollout-acceptance.md).
 
 ## Current gates
 
@@ -28,6 +35,9 @@ claims: [`config/project_claims.toml`](../config/project_claims.toml).
 | Corrected rollback mechanics | **PASS** (rev5 probe → rev6 = byte-identical rev3; no traffic) | [corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md) |
 | Full 4h soak + rollback after traffic | **`BLOCKED_HOST_CAPACITY`** | [ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md) |
 | GitHub Environment `npm` approval | PASS (one required reviewer; not a four-eyes claim) | [operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md) |
+| Digest-only staging promotion | **PASS**; authorized run `33005146264`, exact staging-accepted digest, smoke/E2E and bounded artifact | [f19c-staging-digest-promotion.md](../f19c-staging-digest-promotion.md) |
+| Offline production-promotion verifier | **PASS**; focused `32/32`, retained staging artifact validates, tampering fails closed | [f19d-production-rollout-acceptance.md](../f19d-production-rollout-acceptance.md) |
+| Production rollout target | **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**; no production workflow/deploy or acceptance claim | [f19d-production-rollout-acceptance.md](../f19d-production-rollout-acceptance.md) |
 | External pentest | **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** | [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md) |
 
 Historical soak chronology (canary1 catch-up fail, resource blockers, kind residual) lives in those evidence files — it is not retold here. None of the rows above is production acceptance.
@@ -90,19 +100,26 @@ gate, which remains `BLOCKED_HOST_CAPACITY`. Semantics of the batched path:
 Not active engineering backlog for the closing release. Each item needs a
 separately authorized acceptance, deployment, or breaking-release program.
 
-1. **Full 4h soak + rollback after traffic** —
+1. **Production rollout owner packet** —
+   **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**. Cluster, namespace,
+   release, credential-delivery, values, externally managed Secrets,
+   ingress/TLS/proxy, smoke, monitoring, maintenance-window, and exact rollback
+   identities are not supplied. Do not create or dispatch a production workflow
+   until the packet passes the read-only preflight in
+   [f19d-production-rollout-acceptance.md](../f19d-production-rollout-acceptance.md).
+2. **Full 4h soak + rollback after traffic** —
    **`BLOCKED_HOST_CAPACITY`** on the current host
    ([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md)).
    Rollback *mechanics* are a separate **PASS**
    ([corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md))
    and do not close this gate. Historical Helm revisions 1, 2, 4, and 5 are not
    rollback targets.
-2. **External pentest** — **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**. Do not
+3. **External pentest** — **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**. Do not
    procure, simulate, or perform a pen-test from docs work.
-3. **P2-6 Phase 3** — drop the deprecated `src` shim in the next **major**
+4. **P2-6 Phase 3** — drop the deprecated `src` shim in the next **major**
    release ([plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md);
    consumer notes: [migration/v2.1.md](migration/v2.1.md)).
-4. **Flink-runtime dependency bump** — pinned `apache-flink==2.3.0` holds a
+5. **Flink-runtime dependency bump** — pinned `apache-flink==2.3.0` holds a
    `safety` ignore for a non-fixable transitive `pyarrow` advisory (isolated to
    the Flink image). Retire the ignore when the upstream flink/beam chain allows
    it.

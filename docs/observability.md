@@ -103,7 +103,7 @@ Representative baseline shape:
   not the question, unless an operator opts in — and then only a redacted copy.
   Retention defaults to 30 days and is enforced by
   `scripts/prune_query_analytics.py`, which nothing runs for you. See
-  [SECURITY.md](../SECURITY.md).
+  [SECURITY.md](https://github.com/brownjuly2003-code/agentflow/blob/main/SECURITY.md).
 - Local metrics are not a substitute for production monitoring ownership.
 - Jaeger/Grafana compose wiring helps debugging, but it is not evidence of a
   managed production telemetry stack.

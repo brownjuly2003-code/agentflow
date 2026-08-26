@@ -166,9 +166,12 @@ Local demo   -> local_pipeline -------------------------------> ClickHouse ----+
 ```
 
 The containerized PyFlink 2.3 topology is a production candidate, not a
-production-acceptance claim. The currently verified streaming path ends at
-Kafka → PyFlink → `events.validated` → bridge → ClickHouse → API; live Iceberg,
-clean-cluster deployment, recovery, and soak evidence remain pending.
+production-acceptance claim. The verified boundaries now include the streaming
+path Kafka → PyFlink → `events.validated` → bridge → ClickHouse → API, a clean
+Operator/Helm acceptance scaffold, direct live Iceberg materialization,
+checkpoint restore/replay, and digest-only staging promotion. Production
+rollout is not implemented or authorized; current gates and exact evidence live
+in [docs/STATUS.md](docs/STATUS.md).
 
 Stack:
 
@@ -201,20 +204,17 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 
 ## Documentation
 
-**Core**
-- [Architecture](docs/architecture.md) — system context, data flow, failure modes
-- [API Reference](docs/api-reference.md) — endpoint-by-endpoint curl / Python / TypeScript examples
-- [Operational Runbook](docs/runbook.md) + [On-Call Runbooks](docs/runbooks/README.md) — local stack, CDC capture, and production-incident playbooks
-- [Security Audit](docs/security-audit.md) — threat model, controls, and evidence
-- [Glossary](docs/glossary.md) — interview-ready explanations of the core technical terms
-- [Interactive Technical Walkthrough](docs/index.md) — MkDocs Material guide (Mermaid architecture, SDK, deployment, observability)
+Use the [documentation hub](docs/README.md) as the map for the complete corpus.
+The shortest paths are:
 
-**Deep dives**
-- [DV2.0 Multi-Branch Extension](docs/dv2-multi-branch/architecture.md) — Data Vault 2.0 model for mid-market e-com (5 locations / 3 jurisdictions): [schema](docs/dv2-multi-branch/schema_dv2.md), [end-to-end flow](docs/dv2-multi-branch/architecture.md), [demo evidence](docs/dv2-multi-branch/demo_evidence.md)
-- [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) — Debezium/Kafka Connect rollout
-- [Competitive Analysis](docs/competitive-analysis.md) · [Release Readiness](docs/release-readiness.md) · [Cost Analysis](docs/cost-analysis.md)
-- [Fly.io Demo Deploy](deploy/fly/README.md) — minimal hosted demo
-- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+- learn: [Quickstart](docs/quickstart.md) → [Architecture walkthrough](docs/architecture/index.md) → [API](docs/api/index.md) or [SDKs](docs/sdk.md);
+- verify current truth: [Engineering status](docs/STATUS.md), [machine-readable claims](config/project_claims.toml), and [project closure](docs/PROJECT_CLOSURE.md);
+- operate: [Operational runbook](docs/runbook.md), [on-call runbooks](docs/runbooks/README.md), and [troubleshooting](docs/troubleshooting.md);
+- review design/evidence: [architecture reference](docs/architecture.md), [ADRs](docs/decisions/), [performance evidence](docs/perf/), and [immutable evidence index](docs/evidence/INDEX.md).
+
+The [interactive walkthrough](docs/index.md) is the curated MkDocs site.
+Historical or superseded narrative is preserved under
+[`docs/archive/`](docs/archive/) rather than deleted.
 
 ## Development
 
@@ -251,59 +251,16 @@ at [the checks page](https://github.com/brownjuly2003-code/agentflow/actions)
 engineering status — what is proven, what is in progress, what is next —
 is tracked in [docs/STATUS.md](docs/STATUS.md).
 
-The `v1.1.0` → `v2.0.0` arc landed in seven increments on top of a security
-audit-closure sprint:
-
-- **`v1.1.0`** — audit closure: tenant isolation across every read
-  surface, SQL guard centralized on `sqlglot`, entity allowlist
-  enforcement, fail-closed auth, secret rotation, Helm hardening,
-  OpenAPI drift gate, and the required status checks.
-- **`v1.2.0`** — DV2 multi-branch warehouse: 55 Data Vault 2.0 tables
-  (8 hubs / 8 links / 39 satellites; 64 tables / 48 satellites today), an Argo Workflows `dv2-refresh`
-  template, a dbt project (3 mart models + 12 tests), and per-branch CDC
-  fan-out via ClickHouse `MaterializedPostgreSQL`.
-- **`v1.3.0`** — `helm/kafka-connect` hardening matched to `helm/agentflow`
-  (NetworkPolicy + PDB + securityContext), live Helm validation across both
-  charts, and the narrated DV2 demo (terminal + web-UI + dbt docs).
-- **`v1.4.0`** — maintenance: on-call runbooks, `SECURITY.md`, issue/PR
-  templates, contract/DORA CI hardening, repo hygiene, and a dependency
-  wave (`mypy`, Terraform AWS provider, TypeScript, GitHub Actions,
-  Vitest). No runtime API changes from `v1.3.0`.
-- **`v1.5.0`** — security & correctness hardening: argon2id key hashing
-  with an O(1) peppered lookup index (M-C4), an NL→SQL guard bypass fix
-  (typed `read_csv` / `read_parquet` scan functions now denied in
-  projection position), `sqlglot` control-byte and mutation-target
-  repairs, and a strict-`mypy` expansion across the orchestration and
-  freshness slices. No public API changes.
-- **`v1.6.0`** — the architecture-fixing release: ClickHouse becomes the
-  shipped serving engine (pipeline sink, `ReplacingMergeTree` row versions,
-  backend-routed event scan, a dedicated CI E2E lane against a real
-  ClickHouse), PII protection moves from the removed app-level string-parse
-  gate to engine-enforced vault governance (fail-closed column grants,
-  per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
-  views — every live adversarial probe green), plus the vendored NL→SQL
-  generation engine (LangGraph, routed through GraceKelly), the DV2 raw
-  vault on PostgreSQL with `LISTEN`/`NOTIFY` freshness, the MinIO-backed
-  PyIceberg catalog, and the OpenSSF Scorecard channel (5.8 → 7.0).
-- **`v2.0.0`** — the demo universe re-founded and the scale path shipped:
-  the business legend re-pinned end-to-end to an own-brand
-  kitchen-appliance importer in ₽ (breaking for the retired
-  fashion-retail/USD surfaces), the external real-retailer dataset removed
-  outright (breaking: loader deleted, its at-scale benchmark retired as
-  historical), the control plane externalized to PostgreSQL behind the
-  `ControlPlaneStore` port (ADR 0010, six slices incl. the Helm scale
-  profile), three operational read surfaces split out of the agent catalog
-  (ADR 0011: Order 360, stuck-orders worklist, exception inbox), and the
-  three-node demo topology (ADR 0012) implemented and deployed to Hugging
-  Face Spaces (the `center` hub and the `spb` edge answer live; `ekb` and
-  the standalone demo Space are paused — the free tier caps how many
-  `cpu-basic` Spaces one account runs at once, and other projects hold the
-  rest) — plus the G2 audit closure (spec/seed
-  consistency, journal-scan hardening, live evidence re-captures).
-
 The registries remain on published line `v2.0.0`; `main` is prepared for the
 unpublished lockstep `v2.1.0` release and is intentionally ahead of that tag.
-See the [changelog](CHANGELOG.md) for full detail.
+The former long-form README narrative for `v1.1.0` through `v2.0.0` is
+[preserved in the documentation archive](docs/archive/release-history-v1-v2.md);
+the [changelog](CHANGELOG.md) remains the complete release source.
+
+The latest bounded delivery evidence is F-19 staging digest promotion plus its
+offline production-promotion verifier. Production deployment remains
+`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`, and `production.status` remains
+`candidate`; see [engineering status](docs/STATUS.md).
 
 ### Scope
 
@@ -335,6 +292,7 @@ MIT. See [LICENSE](LICENSE).
 ## Credits
 
 Built as a data-engineering reference project. Initial release cycle
-`2026-04-10` → `2026-04-20`, with post-audit hardening and the DV2
-extension landing through `v1.4.0`. Architecture decisions are recorded as
-ADRs in [docs/decisions/](docs/decisions/).
+`2026-04-10` → `2026-04-20`, followed by post-audit hardening, the DV2
+extension, and the published `v2.0.0` line. Architecture decisions are
+recorded as ADRs in [docs/decisions/](docs/decisions/); the complete release
+timeline is in the [changelog](CHANGELOG.md).

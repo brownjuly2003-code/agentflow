@@ -1,0 +1,114 @@
+# Archived first draft: OpsLab transfer plan
+
+- Original location: `plan_26_08_2026.md`
+- Archived: 2026-08-26
+- Reason: the first interpretation treated OpsLab as the main roadmap instead
+  of optimizing the real AgentFlow Runtime documentation corpus
+- Replacement: [`plan_26_08_2026.md`](../../../plan_26_08_2026.md)
+- Content type: superseded planning narrative
+
+The text below is preserved as committed in `fff2dd3`.
+
+---
+
+# План переноса идей из DE_project_new
+
+## Цель
+
+Сохранить в `DE_project` полезные решения из архивируемого
+`DE_project_new@250623a`, развивая их как изолированный OpsLab bounded context,
+не смешивая benchmark-доказательства с production-acceptance текущего runtime.
+
+## Проверенная исходная точка
+
+- `DE_project_new` содержит один foundation commit поверх legacy SHA
+  `1a113d4`: архитектуру, ADR, baseline и план contract kernel; реализации там
+  нет.
+- Текущий `DE_project` уже ушёл вперёд: 1 215 tracked-файлов, 156 Python-файлов
+  в `src`, 287 в `tests`, 57 HTTP routes, 14 ADR и 12 YAML-контрактов.
+- Размер `src` отличается от снимка OpsLab более чем на 10% (156 против 141),
+  поэтому старые size/count targets справочные. Поиск по tracked-коду не нашёл
+  `agentflow_opslab`, `oversell-1`, шесть OpsLab DTO, `semantic_digest` или
+  verifier-truth boundary.
+- Из нового проекта переносится дизайн, а не его устаревший runtime snapshot:
+  текущие `src/agentflow_runtime`, event schemas, generators, read models,
+  outbox/replay и telemetry подключаются только через adapters.
+
+## Порядок работ
+
+- [x] **1. Изолировать package boundary.** Добавить отдельную distribution
+  `opslab/src/agentflow_opslab` с `domain`, `contracts` и `ports`; structural
+  test запрещает core импортировать `agentflow_runtime`, deprecated `src`,
+  storage и transport SDK. → Проверка: focused pytest, Ruff, mypy и wheel
+  import вне checkout. **Завершено 2026-08-26:** TDD `3 failed → 3 passed`;
+  lint, format, mypy и wheel smoke прошли.
+- [ ] **2. Построить нормативный contract kernel.** Зафиксировать Draft 2020-12
+  schemas `ScenarioManifest`, `ContextEnvelope`, `ActionContract`,
+  `DecisionReceipt`, `Scorecard`, `ArtifactManifest`, immutable versioned `$id`,
+  positive/negative fixtures, Pydantic parity и explicit registry; подключить
+  nested gates к root CI, не включая OpsLab в runtime wheel. → Проверка:
+  metaschema + fixture parity и `contracts check` CLI.
+- [ ] **3. Зафиксировать alpha-сценарий `oversell-1`.** Один scenario, пять
+  agent tools, три action contracts (`allocation.propose`,
+  `marketplace.offer.hold`, `exception.escalate`), два profiles; public assets
+  отделены от private seeds/fault schedule. → Проверка: manifest проходит
+  schema, path-traversal/hidden-truth negative tests и не содержит
+  model/framework/transport fields.
+- [ ] **4. Реализовать deterministic Lite и replay.** Virtual clock для
+  semantics, отдельный wall clock для latency/cost, именованные PRNG streams,
+  стабильные event ids/order, decimal strings и RFC 8785 JCS-based
+  `run_key`/`semantic_digest`; replay не вызывает model. → Проверка: 20 повторов
+  seed дают один digest, recorded trajectory пересчитывается offline.
+- [ ] **5. Изолировать observation от verifier truth.** `ContextEnvelope`
+  несёт state version, watermarks, freshness и provenance; `stale|unknown`
+  fail closed для risky actions; `TruthReader` недоступен agent/observation
+  composition roots и private assets имеют отдельный namespace. → Проверка:
+  structural и adversarial leak tests.
+- [ ] **6. Построить default-deny action gateway.** Порядок строго
+  `validate → bind identity/tenant/branch → freshness/state preconditions →
+  policy → one-time approval → intent ledger → execute → reconcile → verify`;
+  effective idempotency key связывает normalized intent, а `uncertain` запрещает
+  blind retry. → Проверка: state-machine/property tests доказывают
+  intent-before-effect, approval anti-replay, conflict и unknown outcome.
+- [ ] **7. Сделать доказательства воспроизводимыми и безопасными.** Append-only
+  hash-chained ledger; receipts/scorecards — immutable projections; private и
+  redacted public bundles с allow-list полями, checksums и atomic seal;
+  prompts/tool payloads/PII/secrets не пишутся по умолчанию. → Проверка:
+  tamper/redaction/path tests и независимая сборка projection из ledger.
+- [ ] **8. Добавить deterministic verifier и scoring.** Hard gates проверяют
+  ATP, duplicate/cross-tenant effects, approvals, stale context, reservation,
+  outcome evidence и bundle completeness до composite score; oracle/no-op/bad
+  agents, property/mutation tests и заранее фиксированный `SOR^k` без best-of-N.
+  → Проверка: bad agents гарантированно проваливают свой named gate, scorecard
+  пересчитывается из sealed bundle.
+- [ ] **9. Подключить Full profile через narrow adapters.** Lite и Full проходят
+  один conformance suite; Full переиспользует текущие Kafka/Flink/ClickHouse/
+  Iceberg, `ServingBackend`/`QueryEngine`, generator и outbox invariants без
+  обратных imports в core. → Проверка: parity terminal state, verifier results,
+  receipt state machine и semantic projection; runtime production status не
+  повышается от benchmark green.
+- [ ] **10. Довести CLI-first продукт до внешней проверки.** Команды
+  `bench run/replay/verify`, один run root на environment, затем MCP как
+  replaceable adapter; A2A, hosted control plane, generic SQL writes, второй
+  scenario и production write gateway отложены до реального signal. → Проверка:
+  два external evaluator прогона и подтверждение hard invariants domain owner;
+  private split ownership/disclosure policy фиксируются отдельно.
+
+## Непереговорные ограничения
+
+- Не добавлять OpsLab semantics в FastAPI routers, private `local_pipeline` или
+  широкий `ControlPlaneStore`; core не зависит от transport/storage engines.
+- Hard safety решает deterministic code, не LLM-as-judge; `accepted` не равно
+  `succeeded`, verifier error означает `evaluation_error`, не safe pass.
+- Не переносить caches, databases, local evidence или credentials из
+  `DE_project_new`; не переименовывать legacy namespace до adapter parity.
+- Benchmark Lite/Full/external-evaluation evidence и production soak/rollback/
+  pentest остаются разными namespaces и gates.
+
+## Готово, когда
+
+- Все десять пунктов имеют собственную focused verification и закрываются по
+  порядку зависимостей; aggregate suites запускаются только пропорционально
+  затронутому слою.
+- `oversell-1` воспроизводимо проходит Lite и parity-gate Full, hard safety
+  пересчитывается из sealed artifacts, а legacy runtime остаётся совместимым.

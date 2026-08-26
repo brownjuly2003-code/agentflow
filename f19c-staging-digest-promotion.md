@@ -28,6 +28,28 @@ Deploy one explicitly selected, successful `container-attestation` image digest 
 - [ ] The real `staging-deploy` workflow and its staging evidence remain open;
   the local rehearsal is not a staging rollout or production acceptance.
 
+## Next-session resume contract
+
+This is the only remaining F-19c continuation. Do not repeat the packet,
+provenance, cosign, Helm, kind, smoke, or E2E rehearsal merely to refresh
+evidence.
+
+| Boundary | Exact resume state |
+| --- | --- |
+| Git and artifact | Verified source and current `origin/main` are `51be8f2197d9148e6d57cc8340c303afc7189ad8`. Local evidence commit `75a1c9e51b1fa8baf090dd013b90df77326f2057` is not pushed. Genuine build run `32989412486` supplied artifact `9614258460`. |
+| Accepted image | `ghcr.io/brownjuly2003-code/agentflow-api@sha256:58dfd77af54502e94b5dc931ecf6b31c9b9872df7c3066057a5b57905e563f5c`. |
+| Mac evidence | `/Users/julia/agentflow-fc5-7113966/f19-kind-51be8f2-20260826-codex01/evidence`; corrected attempt `2/5` passed rate-limit E2E `1/1` and remaining E2E `26/26`. |
+| Mac runtime | Cluster `agentflow-f19-51be8f2-codex01` is deleted, ports `8080` and `3300` are free, the prior node is restored, and Colima profile `agentflow-fc5-7113966` is stopped with its disks retained. Do not alter `/Users/julia/agentflow-docker-check`. |
+| Windows boundary | Do not start or install WSL, Docker, Colima, kind, or an equivalent container runtime on Windows. Any further container/cluster verification belongs on the dedicated Mac. |
+| Next external gate | Only after fresh explicit owner authorization, dispatch the real `staging-deploy` workflow with `build_run_id=32989412486`, `source_sha=51be8f2197d9148e6d57cc8340c303afc7189ad8`, and `confirm=PROMOTE`. Push and workflow dispatch remain separate authorization boundaries. |
+| Claim boundary | A successful run may create staging-scoped evidence only. It does not establish production rollout, production acceptance, or complete F-19 closure. `production.status` remains `candidate` until the later production boundary passes. |
+
+Before any authorized dispatch, refresh read-only GitHub run/artifact metadata
+and confirm that the selected run, source SHA, artifact identity, and workflow
+input contract are still exact. If any identity has changed or the artifact is
+unavailable, fail closed and report the new blocker; do not substitute a newer
+run, rebuild the image, or synthesize a packet.
+
 ## Done When
 
 - [ ] A manual staging run can consume only the selected signed/attested digest, pass smoke/E2E, and upload evidence that explicitly does not claim production rollout, production acceptance, or complete F-19 closure.

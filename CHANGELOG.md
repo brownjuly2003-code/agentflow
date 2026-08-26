@@ -960,7 +960,7 @@ strength of it was a false claim.
   re-captured at seed scale with an explicit host-contention caveat; the
   live 2-pod ClickHouse cutover stage is documented as blocked by stand
   contention, with the re-run recipe pinned
-  (`docs/clickhouse-cutover-plan.md` Phase 3, ADR 0010).
+  (`docs/plans/clickhouse-cutover-plan.md` Phase 3, ADR 0010).
 - **Delta re-audit followups (S8)**: stale factual claims corrected (probe
   counts, node-label narration, done-status notes), residual USD tails
   re-pinned to ₽, the retired dataset's name dropped from provenance
@@ -1426,7 +1426,7 @@ strength of it was a false claim.
   serving default moves DuckDB → ClickHouse, with DuckDB demoted to the
   local-dev / test and compatibility store. This unblocks engine-native bounded
   PII (ClickHouse row/column policies) and real Kubernetes horizontal API
-  scaling. Recorded as a decision and staged in `docs/clickhouse-cutover-plan.md`;
+  scaling. Recorded as a decision and staged in `docs/plans/clickhouse-cutover-plan.md`;
   the config/compose/Helm cutover itself is **not yet executed**.
 
 ### Added

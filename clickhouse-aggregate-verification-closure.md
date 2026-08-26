@@ -28,7 +28,7 @@ untracked artifacts.
   and likely local blockers.
 - [x] Run the unit/property and live ClickHouse integration lanes in an isolated
   verification environment, then run Ruff and mypy once.
-- [x] Record exact evidence in `docs/clickhouse-cutover-plan.md` only if every
+- [x] Record exact evidence in `docs/plans/clickhouse-cutover-plan.md` only if every
   required lane is green.
 - [x] Verify scoped diff/encoding and prepare an explicit-pathspec local commit.
 

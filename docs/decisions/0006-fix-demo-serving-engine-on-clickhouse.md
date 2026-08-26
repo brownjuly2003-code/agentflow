@@ -141,7 +141,7 @@ Concretely:
 
 ## Follow-up
 
-- Execute `docs/clickhouse-cutover-plan.md` (config/compose/helm cutover, PII
+- Execute `docs/plans/clickhouse-cutover-plan.md` (config/compose/helm cutover, PII
   redesign, verification). *Status 2026-07-02: Phases 1, 1a and 2 executed;
   Phase 3 (K8s scaling, gated on ADR 0009) and Phase 5 doc sweep remain.*
 - See ADR 0007 for how this unblocks Kubernetes horizontal scaling.

@@ -241,6 +241,6 @@ already present; ChromaDB is deliberately avoided for the demo.
 - Execute the sequence above (eval port → schema-grounding PII → full port).
 - Track the accuracy number in the R5/E-workstream once the eval port lands.
 - Revisit the schema-index build/ship story alongside the ClickHouse cutover
-  (`docs/clickhouse-cutover-plan.md`), since both add demo-time setup weight.
+  (`docs/plans/clickhouse-cutover-plan.md`), since both add demo-time setup weight.
 - See ADR 0006 for the serving-engine decision this builds on and the bounded-PII
   motivation.

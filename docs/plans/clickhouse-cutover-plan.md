@@ -178,13 +178,13 @@ their secrets), install the chart with the scale overlay, then:
    registers one webhook through the Service, and confirms it is visible on
    every round-robin read (on the embedded YAML store a read served by the pod
    that did not register would miss it — the sharpest split-brain, class 5).
-   Live evidence: [perf/e4-replica-topology-2026-07-11.md](perf/e4-replica-topology-2026-07-11.md).
+   Live evidence: [perf/e4-replica-topology-2026-07-11.md](../perf/e4-replica-topology-2026-07-11.md).
 2. **Exactly-one delivery per (webhook, event)** — automated by the same script
    as **Check 3**: inserts one `pipeline_events` row into the shared ClickHouse
    journal (both pods scan it), then asserts `GET /v1/webhooks/{id}/logs` has
    exactly one distinct `delivery_id` for that `event_id` (idempotent enqueue
    insert-win — only the winner POSTs). Live evidence:
-   [perf/e4-check3-exactly-one-delivery-2026-07-16.md](perf/e4-check3-exactly-one-delivery-2026-07-16.md).
+   [perf/e4-check3-exactly-one-delivery-2026-07-16.md](../perf/e4-check3-exactly-one-delivery-2026-07-16.md).
 3. **One alert page per incident** — automated as **Check 4** in the same
    script: creates an `error_rate` rule that fires on the shared journal
    (condition `below` / threshold `1.0` after the Check 3 insert), waits for
@@ -192,7 +192,7 @@ their secrets), install the chart with the scale overlay, then:
    `GET /v1/alerts/{id}/history` has exactly one successful `alert.triggered`
    delivery (not one per pod). Default wait is `ALERT_WAIT_SECONDS=150` (the
    dispatcher polls every 60s). Live evidence:
-   [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md)
+   [perf/e4-check4-alert-single-page-2026-07-17.md](../perf/e4-check4-alert-single-page-2026-07-17.md)
    (Checks 1–4 together on the scale stand).
 
 The **store-level guarantee** behind Checks 2–3 (idempotent enqueue,
@@ -247,7 +247,7 @@ two-real-pods topology layer on top.
       mutation-policy test passed in the full unit lane. The canonical commit
       mapping, disclosed failed attempts, postflight identities, and exact
       next-session boundary are recorded in
-      [`clickhouse-aggregate-verification-closure.md`](../clickhouse-aggregate-verification-closure.md).
+      [`clickhouse-aggregate-verification-closure.md`](../../clickhouse-aggregate-verification-closure.md).
 
 ## Rollback
 

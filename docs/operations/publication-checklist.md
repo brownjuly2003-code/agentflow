@@ -1,6 +1,9 @@
 # GitHub Publication and Release Checklist
 
-Before publishing AgentFlow changes or pushing a release tag:
+Use this release-operator checklist before publishing AgentFlow changes or
+pushing a release tag. Confirm the current release line in
+[release readiness](../release-readiness.md); if an already published artifact
+must be withdrawn, follow the [release rollback runbook](../runbooks/release-rollback.md).
 
 ## Content
 

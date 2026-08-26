@@ -283,7 +283,8 @@ attestation.
 |--------------|---------------|
 | <img src="docs/screenshots/landing-page.png" alt="AgentFlow landing page" width="420"> | <img src="docs/screenshots/benchmark-terminal.png" alt="AgentFlow benchmark terminal" width="420"> |
 
-Capture notes and publish-time checks are listed in [docs/publication-checklist.md](docs/publication-checklist.md).
+Capture notes and publish-time checks are listed in
+[docs/operations/publication-checklist.md](docs/operations/publication-checklist.md).
 
 ## License
 

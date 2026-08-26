@@ -311,7 +311,9 @@ def test_sdk_install_docs_match_split_package_identities():
 
 
 def test_publication_checklist_uses_reproducible_npm_release_install():
-    checklist = (PROJECT_ROOT / "docs" / "publication-checklist.md").read_text(encoding="utf-8")
+    checklist = (PROJECT_ROOT / "docs" / "operations" / "publication-checklist.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "npm ci" in checklist
     assert "python scripts/check_release_artifacts.py dist/* sdk/dist/*" in checklist

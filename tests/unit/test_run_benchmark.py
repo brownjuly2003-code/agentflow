@@ -48,6 +48,16 @@ def test_parse_args_accepts_output_alias(monkeypatch):
     assert args.results_json == "alias.json"
 
 
+def test_parse_args_defaults_report_to_performance_directory(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run_benchmark.py"])
+
+    args = run_benchmark.parse_args()
+
+    assert args.report_path == str(
+        run_benchmark.PROJECT_ROOT / "docs" / "perf" / "load-benchmark-latest.md"
+    )
+
+
 def test_resolve_host_seed_db_path_defaults_to_demo_db(monkeypatch):
     monkeypatch.delenv("DUCKDB_PATH", raising=False)
 

@@ -53,9 +53,9 @@ Result (run 2, same conditions, 5 min later):
 
 | Source | p99 entity | Conditions |
 |--------|------------|------------|
-| `docs/benchmark.md` (2026-04-17) | 460 ms | 20 users, 30 s, mixed surface |
-| `docs/benchmark_pool16.md` | 320 ms | 50 users, 20 s, mixed surface |
-| `docs/benchmark_pool16_60s.md` | 160 ms | 50 users, 60 s, mixed surface |
+| [`docs/benchmark.md` (original path)](load-benchmark-latest.md), 2026-04-17 | 460 ms | 20 users, 30 s, mixed surface |
+| [`docs/benchmark_pool16.md` (original path)](../archive/performance/benchmark_pool16.md) | 320 ms | 50 users, 20 s, mixed surface |
+| [`docs/benchmark_pool16_60s.md` (original path)](../archive/performance/benchmark_pool16_60s.md) | 160 ms | 50 users, 60 s, mixed surface |
 | **This baseline** | **936 ms** | 16 conc, 2000 req, entity-only |
 
 The old files are **not comparable** because:

@@ -1,4 +1,4 @@
-"""Run the AgentFlow load benchmark and generate docs/benchmark.md."""
+"""Run the AgentFlow load benchmark and generate the current performance report."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 README_PATH = PROJECT_ROOT / "README.md"
-REPORT_PATH = PROJECT_ROOT / "docs" / "benchmark.md"
+REPORT_PATH = PROJECT_ROOT / "docs" / "perf" / "load-benchmark-latest.md"
 RESULTS_PATH = PROJECT_ROOT / ".artifacts" / "benchmark" / "current.json"
 CANONICAL_USERS = 50
 CANONICAL_SPAWN_RATE = 10
@@ -35,7 +35,9 @@ BenchmarkRow = dict[str, float | int | str]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the AgentFlow Locust benchmark and write docs/benchmark.md.",
+        description=(
+            "Run the AgentFlow Locust benchmark and write docs/perf/load-benchmark-latest.md."
+        ),
     )
     parser.add_argument("--host")
     parser.add_argument("--port", type=int, default=8001)

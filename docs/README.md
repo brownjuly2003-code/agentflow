@@ -33,7 +33,7 @@ is needed.
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
-| Generated/reference artifacts | `openapi.json`, `sdk-capabilities.md`, `quality.md`, benchmark JSON/HTML | Regenerate from the owning source; do not hand-edit generated output |
+| Generated/reference artifacts | `openapi.json`, `sdk-capabilities.md`, `quality.md`, and the [latest load benchmark](perf/load-benchmark-latest.md) | Regenerate from the owning source; do not hand-edit generated output |
 | Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |
 
 ## Sources of truth

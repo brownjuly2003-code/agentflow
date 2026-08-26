@@ -3,11 +3,17 @@
 **Version:** 1.0
 **Date:** 2026-04-24
 **Applies to:** `/v1/entity/{type}/{id}` hot path on current HEAD (`97a1902`)
-**Replaces:** ad-hoc benchmark files (`docs/benchmark*.md`) as canonical reference.
+**Replaces:** ad-hoc benchmark files formerly stored as `docs/benchmark*.md`;
+the non-canonical runs now live under `docs/archive/performance/`.
 
 ## 1. Purpose
 
-This document defines the **single repeatable way** to measure entity-endpoint latency before/after any perf change. Until this contract exists, conflicting benchmark artifacts (`benchmark_pool16.md`, `benchmark_pool16_60s.md`, etc.) produce non-comparable numbers and mislead optimization planning.
+This document defines the **single repeatable way** to measure entity-endpoint
+latency before/after any perf change. Before this contract, conflicting
+benchmark artifacts such as
+[`benchmark_pool16.md`](../archive/performance/benchmark_pool16.md) and
+[`benchmark_pool16_60s.md`](../archive/performance/benchmark_pool16_60s.md)
+produced non-comparable numbers and misled optimization planning.
 
 ## 2. Required Stack & Services
 
@@ -89,7 +95,7 @@ python scripts/run_benchmark.py \
 
 This auto-starts the API on port 8001, seeds data, runs Locust warmup + measured window, and produces:
 
-- `docs/benchmark.md` -- human-readable report
+- `docs/perf/load-benchmark-latest.md` -- human-readable report
 - `.artifacts/benchmark/current.json` -- machine-readable results
 
 ### Full-benchmark load profile (locked)
@@ -132,7 +138,7 @@ Every baseline artifact must include:
 | Full benchmark JSON | `benchmark-<label>.json` | `.artifacts/benchmark/` |
 | Flamegraph | `flamegraph-<label>.svg` | `docs/perf/` |
 | Profile write-up | `entity-profile-<label>.md` | `docs/perf/` |
-| Release report | `benchmark.md` | `docs/` |
+| Latest generated report | `load-benchmark-latest.md` | `docs/perf/` |
 
 `<label>` conventions:
 

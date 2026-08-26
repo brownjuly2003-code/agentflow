@@ -492,11 +492,14 @@ jobs:
           import re
           from pathlib import Path
 
-          report_path = Path("docs/benchmark.md")
+          report_path = Path("docs/perf/load-benchmark-latest.md")
           report = report_path.read_text(encoding="utf-8")
           lines = [line.strip() for line in report.splitlines() if line.startswith("|")]
           if len(lines) < 3:
-              raise SystemExit("Benchmark results table not found in docs/benchmark.md")
+              raise SystemExit(
+                  "Benchmark results table not found in "
+                  "docs/perf/load-benchmark-latest.md"
+              )
 
           generated_at_match = re.search(r"Generated: `([^`]+)`", report)
           endpoints = {}

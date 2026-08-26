@@ -1,5 +1,18 @@
 # AgentFlow Benchmark Report
 
+> **Archive metadata**
+>
+> - Original path: *docs/benchmark_pool24_60s.md*
+> - Archived: 2026-08-26
+> - Reason: non-canonical mixed-load run superseded by the entity benchmark
+>   contract
+> - Current replacement:
+>   [latest load report](../../perf/load-benchmark-latest.md) and
+>   [entity benchmark contract](../../perf/entity-benchmark-contract.md)
+> - Content type: immutable historical performance evidence
+>
+> The benchmark body below is unchanged; only this provenance block was added.
+
 > **ARCHIVED -- Historical input only.**
 > This report was produced with non-canonical parameters and is **not comparable** to the 2026-04-24 entity baseline. See `docs/perf/entity-benchmark-contract.md` for the current reference benchmark.
 

@@ -1,9 +1,11 @@
-# Performance profiling notes
+# Performance evidence
 
-This directory holds before/after snapshots for the entity latency
-optimization track (T05). Do not file general benchmark runs here —
-those go to `docs/benchmark.md`. This directory is for targeted work
-that moves the p99 needle on `/v1/entity/{type}/{id}`.
+This directory holds current and historical performance evidence. The latest
+committed full-API report is
+[`load-benchmark-latest.md`](load-benchmark-latest.md); targeted entity-latency
+snapshots and flamegraphs remain alongside it. Non-canonical mixed-load reports
+from the former `docs/benchmark_pool*.md` series are preserved in the
+[documentation archive](../archive/performance/README.md).
 
 ## Tooling
 

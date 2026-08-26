@@ -1,5 +1,19 @@
 # Entity p99 Regression Follow-up
 
+> **Archive metadata**
+>
+> - Original path: *docs/regression-report.md*
+> - Archived: 2026-08-26
+> - Reason: this v14 point-in-time follow-up was superseded by the canonical
+>   entity-latency measurement contract and the 2026-04-24 entity profile
+> - Current replacement:
+>   [entity benchmark contract](../../perf/entity-benchmark-contract.md),
+>   [entity profile](../../perf/entity-profile-2026-04-24.md), and
+>   [latest load report](../../perf/load-benchmark-latest.md)
+> - Content type: historical performance narrative
+>
+> The report body below is unchanged; only this provenance block was added.
+
 **Date:** 2026-04-17  
 **Scope:** v14 SDK resilience post-release follow-up
 

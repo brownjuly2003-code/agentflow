@@ -5,10 +5,11 @@ evidence next to the entry documents, which makes the authoritative state
 hard to find. This index is the authoritative catalogue of that evidence.
 
 The files below are **immutable records** — do not edit, rerun, or clean the
-identities they describe. They stay at their recorded root paths because the
-resume runbooks, `AGENT_STATE.md`, and prior handoffs link to those exact
-paths; new evidence documents belong under `docs/evidence/` (or `docs/perf/`,
-`docs/operations/` for their existing series) rather than the root.
+identities they describe. Legacy records stay at their recorded root paths
+when resume runbooks, `AGENT_STATE.md`, and prior handoffs depend on those
+locations. New or deliberately migrated evidence belongs under
+`docs/evidence/` (or `docs/perf/`, `docs/operations/` for their existing
+series) rather than the documentation root.
 
 Entry documents (start here, not below): `README.md`, `docs/STATUS.md`,
 `docs/SESSION_HANDOFF.md`, `docs/operations/ci-soak-next-session-runbook.md`.
@@ -39,6 +40,14 @@ under `docs/evidence/`.
 | [external-dependency-recovery-preparation-20260817.md](../../external-dependency-recovery-preparation-20260817.md) | External dependency recovery preparation |
 | [flink-failure-evidence-retention.md](../../flink-failure-evidence-retention.md) | Flink failure evidence retention policy |
 | [mac-clickhouse-loopback-rebind-20260821-01.md](../../mac-clickhouse-loopback-rebind-20260821-01.md) | Mac ClickHouse loopback rebind record |
+
+## Security and dependency records
+
+| Record | What it fixes in time |
+| --- | --- |
+| [security-s12-2026-07-09.md](security-s12-2026-07-09.md) | Offline/unit remainder of the S12 security pass; no third-party penetration-test claim |
+| [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | Local and isolated-Mac runtime-image remediation with Trivy 0.70.0 evidence |
+| [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | Python cloud/Iceberg and optional MCP dependency remediation evidence |
 
 ## F-10 rollback and soak-capacity records (2026-08-23)
 

@@ -116,10 +116,10 @@ Push, PR mutations and release actions require explicit owner authorization.
   candidate now resolves `pyiceberg-core==0.7.0` across Python 3.11–3.13 and
   constrains MCP to `<2`; `2170` local unit/property tests and all `39`
   selected clean-Mac dependency tests pass. See
-  [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+  [dependency-compatibility-2026-07-30.md](evidence/dependency-compatibility-2026-07-30.md).
 - Independent Mac image validation reports zero HIGH/CRITICAL findings with
   Trivy 0.70.0; see
-  [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+  [security-runtime-image-trivy-2026-07-30.md](evidence/security-runtime-image-trivy-2026-07-30.md).
 - On 2026-08-01 the owner explicitly re-enabled Grok as implementation
   executor; Codex orchestrates and verifies. Live Iceberg materialization from
   direct `events.validated` is **PASS** at the narrow boundary — see

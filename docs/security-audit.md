@@ -160,14 +160,14 @@ final stage now removes `pip`, `setuptools`, and `wheel` after the hash-locked
 install and `pip check`. An independent Mac rebuild and Trivy `0.70.0` scan
 reported zero HIGH/CRITICAL findings while the API import remained healthy.
 See
-[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+[security-runtime-image-trivy-2026-07-30.md](evidence/security-runtime-image-trivy-2026-07-30.md).
 
 The same closeout also converted two implicit dependency assumptions into
 tested supply-chain boundaries: MCP is constrained to its supported 1.x major
 API, and PyIceberg's write-time native core is explicitly locked to the
 Python 3.11–3.13-compatible 0.7 line. The regenerated hash lock, clean Mac
 environment, rebuilt image, OSV queries, and Trivy result are recorded in
-[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+[dependency-compatibility-2026-07-30.md](evidence/dependency-compatibility-2026-07-30.md).
 
 The Bandit baseline currently records a historical `B310` finding in `src/agentflow_runtime/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
 
@@ -175,7 +175,7 @@ Helm defaults no longer embed production-shaped API-key verifier hashes. Operato
 
 Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
 `docs/helm-deployment.md`,
-`docs/security-runtime-image-trivy-2026-07-30.md`
+`docs/evidence/security-runtime-image-trivy-2026-07-30.md`
 
 ## 9. Operational Security and Auditability
 

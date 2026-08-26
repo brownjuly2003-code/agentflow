@@ -13,9 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Directories holding immutable run evidence: a dated record states what was
 # true at its own commit and must not be rewritten when code moves.
-# docs/evidence is NOT here — it holds only INDEX.md, the living catalogue.
+# docs/evidence/INDEX.md is the living catalogue and remains checked below.
 HISTORICAL_DIRECTORIES = (
     "docs/perf",
+    "docs/evidence",
     "docs/migration",
     "docs/codex-tasks",
 )
@@ -23,13 +24,7 @@ HISTORICAL_DIRECTORIES = (
 # Named immutable documents outside those directories.
 # - docs/SESSION_HANDOFF.md: gitignored (.gitignore:174), reachable via rglob
 #   on a workstation that still has it.
-# - docs/security-runtime-image-trivy-2026-07-30.md: dated validation record
-#   that pins file paths to blob hashes at commit 72b9609; its `src/...` paths
-#   are historical facts, not claims about the current tree.
-HISTORICAL_FILES = (
-    "docs/SESSION_HANDOFF.md",
-    "docs/security-runtime-image-trivy-2026-07-30.md",
-)
+HISTORICAL_FILES = ("docs/SESSION_HANDOFF.md",)
 
 # Paths a living doc may legitimately name although they are never committed:
 # - environment tfvars are generated from *.tfvars.example (docs/operations/aws-oidc-setup.md)
@@ -90,6 +85,8 @@ def is_historical_evidence(relative: str) -> bool:
     """Return True when *relative* is immutable historical evidence."""
 
     posix = relative.replace("\\", "/")
+    if posix == "docs/evidence/INDEX.md":
+        return False
     if posix in HISTORICAL_FILES:
         return True
     return any(
@@ -105,9 +102,8 @@ def iter_living_docs(root: Path, tracked_paths: set[str] | None = None) -> list[
     documents checked is the same here and on a clean CI checkout. Without git
     it falls back to walking the filesystem.
 
-    Deliberate scope: 205 tracked ``.md`` files exist; 94 are covered
-    (README.md, SECURITY.md, and living docs/**/*.md after subtracting the
-    immutable evidence directories and the named immutable documents).
+    Deliberate scope: README.md, SECURITY.md, and living docs/**/*.md are
+    checked after subtracting immutable evidence directories and named files.
     """
 
     tracked = load_tracked_paths(root) if tracked_paths is None else tracked_paths

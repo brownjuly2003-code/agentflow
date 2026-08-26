@@ -177,9 +177,9 @@ write transforms; the optional MCP integration is capped below the breaking
 selected contract/MCP/Iceberg tests.
 Independent Mac validation with Trivy 0.70.0 reported zero HIGH/CRITICAL
 findings; details and evidence limits are in
-[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md)
+[security-runtime-image-trivy-2026-07-30.md](evidence/security-runtime-image-trivy-2026-07-30.md)
 and
-[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+[dependency-compatibility-2026-07-30.md](evidence/dependency-compatibility-2026-07-30.md).
 All required GitHub checks must still be green on the exact final pushed SHA.
 
 ## Scope

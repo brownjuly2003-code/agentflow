@@ -37,10 +37,14 @@ def test_exclusion_rules_skip_immutable_evidence_only(tmp_path: Path) -> None:
         "See [missing](gone.md) and `src/gone.py`.\n",
         encoding="utf-8",
     )
-    # docs/evidence holds the living catalogue, so it is checked like any other
-    # living doc — sealing that directory would hide INDEX.md regressions.
+    # The evidence index is a living catalogue, while its sibling records are
+    # immutable and may name source paths fixed at their original commits.
     (tmp_path / "docs" / "evidence" / "INDEX.md").write_text(
         "See [missing](gone.md).\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "evidence" / "security-record-2026-08-01.md").write_text(
+        "See [missing](gone.md) and `src/gone.py`.\n",
         encoding="utf-8",
     )
 
@@ -54,10 +58,12 @@ def test_exclusion_rules_skip_immutable_evidence_only(tmp_path: Path) -> None:
     assert "docs/note-2026-08-01.md:1: missing link target 'gone.md'" in problems
     assert "docs/evidence/INDEX.md:1: missing link target 'gone.md'" in problems
     assert "docs/perf/old.md" not in report
+    assert "docs/evidence/security-record-2026-08-01.md" not in report
 
     assert is_historical_evidence("docs/perf/golden-4h-soak-05-failure-2026-08-08.md")
     # A dated validation record pins paths to blob hashes at its own commit.
-    assert is_historical_evidence("docs/security-runtime-image-trivy-2026-07-30.md")
+    assert is_historical_evidence("docs/evidence/security-runtime-image-trivy-2026-07-30.md")
+    assert not is_historical_evidence("docs/security-runtime-image-trivy-2026-07-30.md")
     assert not is_historical_evidence("docs/STATUS.md")
     assert not is_historical_evidence("SECURITY.md")
     assert not is_historical_evidence("docs/evidence/INDEX.md")
@@ -77,7 +83,7 @@ def test_iter_living_docs_covers_live_directories() -> None:
     assert "docs/evidence/INDEX.md" in living
     assert "docs/operations/ci-soak-next-session-runbook.md" in living
     assert not any(path.startswith("docs/perf/") for path in living)
-    assert "docs/security-runtime-image-trivy-2026-07-30.md" not in living
+    assert "docs/evidence/security-runtime-image-trivy-2026-07-30.md" not in living
 
 
 def test_enumeration_follows_the_tracked_set(tmp_path: Path) -> None:

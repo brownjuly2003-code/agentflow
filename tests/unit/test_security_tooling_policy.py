@@ -69,7 +69,9 @@ def test_external_pen_test_handoff_exists_without_claiming_attestation() -> None
     posture = (ROOT / "docs" / "operations" / "openssf-security-posture.md").read_text(
         encoding="utf-8"
     )
-    s12_report = (ROOT / "docs" / "security-s12-2026-07-09.md").read_text(encoding="utf-8")
+    s12_report = (ROOT / "docs" / "evidence" / "security-s12-2026-07-09.md").read_text(
+        encoding="utf-8"
+    )
 
     assert handoff_path.name in security_audit
     assert handoff_path.name in posture

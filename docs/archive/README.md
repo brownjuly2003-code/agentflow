@@ -27,5 +27,6 @@ directories are historical by design and do not need a second archive move.
 | [`release-history-v1-v2.md`](release-history-v1-v2.md) | README release narrative for v1.1.0 through v2.0.0 | [`CHANGELOG.md`](../../CHANGELOG.md) and [`STATUS.md`](../STATUS.md) |
 | [`plans/`](plans/) | Superseded planning interpretations | Active root plan or current status document named in each archived file |
 | [`performance/`](performance/README.md) | Non-canonical benchmark reports and superseded performance follow-ups moved from the `docs/` root | [`perf/load-benchmark-latest.md`](../perf/load-benchmark-latest.md) and [`perf/entity-benchmark-contract.md`](../perf/entity-benchmark-contract.md) |
+| [`product/`](product/README.md) | Point-in-time market and cost analyses moved from the `docs/` root | [`product.md`](../product.md) and [`STATUS.md`](../STATUS.md) |
 
 Return to the [documentation hub](../README.md).

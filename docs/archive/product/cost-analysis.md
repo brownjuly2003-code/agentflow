@@ -1,5 +1,18 @@
 # Cost Analysis
 
+> **Archive metadata**
+>
+> - Original path: *docs/cost-analysis.md*
+> - Archived: 2026-08-26
+> - Reason: this initial hypothetical cloud-cost estimate has no price
+>   timestamp, calculator output, source citations, or validated workload model
+> - Current replacement: no current cost model is claimed; use the
+>   [product framework](../../product.md) for scope and
+>   [engineering status](../../STATUS.md) for proven project state
+> - Content type: unverified historical planning estimate
+>
+> The estimate body below is unchanged; only this provenance block was added.
+
 ## Scenario
 - 10 TB/day ingestion volume
 - ~115k events/sec average (peaks at 200k)

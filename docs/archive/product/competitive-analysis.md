@@ -1,5 +1,18 @@
 # Competitive Analysis
 
+> **Archive metadata**
+>
+> - Original path: *docs/competitive-analysis.md*
+> - Archived: 2026-08-26
+> - Reason: market and pricing claims were fact-checked only through
+>   2026-04-18 and are not current buyer guidance
+> - Current replacement:
+>   [product framework](../../product.md) for current positioning and
+>   [engineering status](../../STATUS.md) for proven project state
+> - Content type: immutable historical market analysis
+>
+> The analysis body below is unchanged; only this provenance block was added.
+
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Fact-check date for market/pricing claims:** 2026-04-18

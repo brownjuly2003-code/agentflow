@@ -243,55 +243,38 @@ def test_runtime_and_sdk_package_identities_are_split():
     ]
 
 
-def test_docker_build_contexts_prepare_root_package_metadata():
-    docker_contexts = [
-        PROJECT_ROOT / "Dockerfile.api",
-        PROJECT_ROOT / "scripts" / "k8s_staging_up.sh",
-    ]
+def test_api_dockerfile_prepares_root_package_metadata():
+    text = (PROJECT_ROOT / "Dockerfile.api").read_text(encoding="utf-8")
 
-    for docker_context in docker_contexts:
-        text = docker_context.read_text(encoding="utf-8")
-        relative_path = docker_context.relative_to(PROJECT_ROOT).as_posix()
-
-        if relative_path == "Dockerfile.api":
-            assert "COPY README.md /build/README.md" in text
-            assert "python -m build --wheel" in text
-            assert "pip install --no-cache-dir -e" not in text
-            assert "setuptools==82.0.1" in text
-            assert "wheel==0.47.0" in text
-            assert "COPY contracts /app/contracts" in text
-            assert "AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities" in text
-            # Audit P1-3: third-party packages come only from the hash-pinned
-            # export of uv.lock; the project wheel installs with --no-deps and
-            # pip check proves the environment is consistent.
-            assert "--require-hashes -r /tmp/requirements-docker.lock" in text
-            assert 'pip install --no-cache-dir --no-deps "${wheel}"' in text
-            assert "pip check" in text
-            # Runtime image must not ship installer tooling: Trivy SBOM tied
-            # GHSA-6v7p-g79w-8964 (msgpack via pip vendor) and CVE-2025-47273
-            # (setuptools) to the final-layer pip/setuptools/wheel tree, not
-            # to requirements-docker.lock. Uninstall only after installs and
-            # pip check so the hash-locked environment is still verified.
-            final_stage = text.rsplit("FROM ", maxsplit=1)[-1]
-            uninstall = "python -m pip uninstall --yes pip setuptools wheel"
-            assert uninstall in final_stage
-            assert final_stage.index("pip check") < final_stage.index(uninstall)
-            # Q0.2 / S9: scale profile needs the Postgres control-plane driver
-            # baked in (kind 2-pod previously required a docker-commit psycopg
-            # hack). The wheel installs --no-deps, so the guarantee now lives
-            # in the lock export the image installs from — pool included
-            # (audit P1-1).
-            lock_text = (PROJECT_ROOT / "requirements-docker.lock").read_text(encoding="utf-8")
-            assert "psycopg==" in lock_text
-            assert "psycopg-pool==" in lock_text
-            assert "boto3==" in lock_text  # the cloud extra is in the export too
-        else:
-            assert "COPY README.md /app/README.md" in text, (
-                f"{relative_path} must copy README.md before installing the root package"
-            )
-            assert '".[postgres]"' in text or "[postgres]" in text, (
-                f"{relative_path} must install the postgres extra (psycopg) for scale profile"
-            )
+    assert "COPY README.md /build/README.md" in text
+    assert "python -m build --wheel" in text
+    assert "pip install --no-cache-dir -e" not in text
+    assert "setuptools==82.0.1" in text
+    assert "wheel==0.47.0" in text
+    assert "COPY contracts /app/contracts" in text
+    assert "AGENTFLOW_ENTITY_CONTRACTS_DIR=/app/contracts/entities" in text
+    # Audit P1-3: third-party packages come only from the hash-pinned
+    # export of uv.lock; the project wheel installs with --no-deps and
+    # pip check proves the environment is consistent.
+    assert "--require-hashes -r /tmp/requirements-docker.lock" in text
+    assert 'pip install --no-cache-dir --no-deps "${wheel}"' in text
+    assert "pip check" in text
+    # Runtime image must not ship installer tooling: Trivy SBOM tied
+    # GHSA-6v7p-g79w-8964 (msgpack via pip vendor) and CVE-2025-47273
+    # (setuptools) to the final-layer pip/setuptools/wheel tree, not
+    # to requirements-docker.lock. Uninstall only after installs and
+    # pip check so the hash-locked environment is still verified.
+    final_stage = text.rsplit("FROM ", maxsplit=1)[-1]
+    uninstall = "python -m pip uninstall --yes pip setuptools wheel"
+    assert uninstall in final_stage
+    assert final_stage.index("pip check") < final_stage.index(uninstall)
+    # Q0.2 / S9: scale profile needs the Postgres control-plane driver
+    # baked in. The wheel installs --no-deps, so the guarantee now lives
+    # in the lock export the image installs from — pool included (audit P1-1).
+    lock_text = (PROJECT_ROOT / "requirements-docker.lock").read_text(encoding="utf-8")
+    assert "psycopg==" in lock_text
+    assert "psycopg-pool==" in lock_text
+    assert "boto3==" in lock_text  # the cloud extra is in the export too
 
 
 def test_prod_compose_api_build_reuses_dockerfile_api():

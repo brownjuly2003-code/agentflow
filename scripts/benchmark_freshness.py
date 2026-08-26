@@ -1,4 +1,4 @@
-"""Measure event-to-metric freshness and generate docs/freshness-benchmark.md.
+"""Measure event-to-metric freshness and generate docs/perf/freshness-benchmark.md.
 
 Freshness here is the end-to-end delay between an event entering the pipeline
 (`local_pipeline._process_event`: schema validation -> semantic validation ->
@@ -59,7 +59,7 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-REPORT_PATH = PROJECT_ROOT / "docs" / "freshness-benchmark.md"
+REPORT_PATH = PROJECT_ROOT / "docs" / "perf" / "freshness-benchmark.md"
 RESULTS_PATH = PROJECT_ROOT / ".artifacts" / "freshness" / "current.json"
 
 PRODUCTION_TTL_SECONDS = 30
@@ -77,7 +77,7 @@ ArmResult = dict[str, Any]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Measure event-to-metric freshness and write docs/freshness-benchmark.md.",
+        description="Measure event-to-metric freshness and write docs/perf/freshness-benchmark.md.",
     )
     parser.add_argument("--iterations", type=int, default=30, help="event_driven/fast_poll arms")
     parser.add_argument("--ttl-only-iterations", type=int, default=12)

@@ -12,7 +12,7 @@ to the validated event landing on ``events.validated``, matched by ``event_id``.
 This is the honest "real Kafka->Flink path" number for the freshness headline:
 the serving DuckDB metric store is deliberately fed by the in-process shortcut
 (production target is a ClickHouse sink), so end-to-end event->metric on the
-demo remains the shortcut figure documented in ``docs/freshness-benchmark.md``.
+demo remains the shortcut figure documented in ``docs/perf/freshness-benchmark.md``.
 This script measures the streaming hop the shortcut skips, on the real broker
 and the real Flink operators.
 

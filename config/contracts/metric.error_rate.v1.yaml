@@ -32,4 +32,4 @@ source_table: pipeline_events
 freshness:
   p95_staleness_budget_seconds: 8.0
   basis: docs/perf/freshness-e2e-realpath.md (S8 real path p95 5.70s + headroom; demo
-    arm still in docs/freshness-benchmark.md)
+    arm still in docs/perf/freshness-benchmark.md)

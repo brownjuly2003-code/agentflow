@@ -16,7 +16,7 @@ Measured: `2026-06-30`
 
 ## Why this exists
 
-`docs/freshness-benchmark.md` measures freshness through the **in-process
+`docs/perf/freshness-benchmark.md` measures freshness through the **in-process
 DuckDB shortcut** — `src/processing/local_pipeline._process_event` writes the
 serving store directly, skipping Kafka and Flink entirely. That number
 (1.06 s p50 / 1.99 s p95) is honest about *what it measures*, but it does **not**
@@ -63,7 +63,7 @@ produced.
 | max    | 16.09 s               | 2.02 s |
 | mean   | 3.33 s                | — |
 
-\* `docs/freshness-benchmark.md`, `event_driven` arm. **Not the same segment** —
+\* `docs/perf/freshness-benchmark.md`, `event_driven` arm. **Not the same segment** —
 see "Reading the numbers".
 
 **Distribution:** 24 of 30 samples fall in a tight **2.14–2.74 s** steady-state

@@ -3,8 +3,10 @@
 This directory holds current and historical performance evidence. The latest
 committed full-API report is
 [`load-benchmark-latest.md`](load-benchmark-latest.md); targeted entity-latency
-snapshots and flamegraphs remain alongside it. Non-canonical mixed-load reports
-from the former `docs/benchmark_pool*.md` series are preserved in the
+snapshots and flamegraphs remain alongside it. The latest generated in-process
+demo freshness report is
+[`freshness-benchmark.md`](freshness-benchmark.md). Non-canonical mixed-load
+reports from the former `docs/benchmark_pool*.md` series are preserved in the
 [documentation archive](../archive/performance/README.md).
 
 ## Tooling
@@ -16,6 +18,8 @@ from the former `docs/benchmark_pool*.md` series are preserved in the
   without spinning up the full Locust matrix.
 - `scripts/run_benchmark.py` — full Locust matrix across the whole API
   surface. Slower to start, canonical source of the release baseline.
+- `scripts/benchmark_freshness.py` — in-process demo event-to-metric freshness
+  harness and owner of `docs/perf/freshness-benchmark.md`.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn
   process (no restart required) and record a flamegraph.
 - `.github/perf-history.json` + `make perf-plot` — rolling trend of

@@ -44,7 +44,7 @@ and not the streaming-hop-only figure.
 | mean   | 3.76 s | — | 3.33 s | — |
 | n / misses | 20 / 1 | 30 / 0 | 30 / 0 | — |
 
-\* `docs/freshness-benchmark.md` — `local_pipeline` → DuckDB → metric (pre-S7 poll-era).
+\* `docs/perf/freshness-benchmark.md` — `local_pipeline` → DuckDB → metric (pre-S7 poll-era).
 
 \*\* `docs/perf/freshness-realpath-2026-06-30.md` — produce → `events.validated` only.
 

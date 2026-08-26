@@ -34,11 +34,16 @@ def test_parse_args_defaults(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["benchmark_freshness.py"])
 
     args = benchmark_freshness.parse_args()
+    expected_report_path = (
+        benchmark_freshness.PROJECT_ROOT / "docs" / "perf" / "freshness-benchmark.md"
+    )
 
     assert args.iterations == 30
     assert args.metric == "revenue"
     assert args.window == "24h"
     assert args.ttl_only_ttl_seconds == 5
+    assert benchmark_freshness.REPORT_PATH == expected_report_path
+    assert args.report_path == str(expected_report_path)
 
 
 def test_build_order_event_passes_the_pipeline_validators():

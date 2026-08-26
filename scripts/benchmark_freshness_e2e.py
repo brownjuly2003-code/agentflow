@@ -223,7 +223,8 @@ def build_markdown(report: dict) -> str:
         f"| mean   | {format_duration(s['mean_ms'])} | — | 3.33 s | — |",
         f"| n / misses | {samples} / {misses} | 30 / 0 | 30 / 0 | — |",
         "",
-        "\\* `docs/freshness-benchmark.md` — `local_pipeline` → DuckDB → metric (pre-S7 poll-era).",
+        "\\* `docs/perf/freshness-benchmark.md` — `local_pipeline` → DuckDB → "
+        "metric (pre-S7 poll-era).",
         "",
         "\\*\\* `docs/perf/freshness-realpath-2026-06-30.md` — produce → `events.validated` only.",
         "",

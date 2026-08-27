@@ -19,7 +19,7 @@ is needed.
 | Understand the system | [Architecture walkthrough](architecture/index.md) |
 | Integrate through HTTP | [API guide](api/index.md) |
 | Use a client library | [SDK guide](sdk.md) |
-| Operate or troubleshoot it | [Operational runbook](runbook.md) and [on-call runbooks](runbooks/README.md) |
+| Operate or troubleshoot it | [Operations index](operations/README.md), [operational runbook](runbook.md), and [on-call runbooks](runbooks/README.md) |
 | Review closure boundaries | [Project closure](PROJECT_CLOSURE.md) |
 
 ## Documentation sets
@@ -29,7 +29,7 @@ is needed.
 | [MkDocs walkthrough](index.md) | Curated learning path: quickstart, architecture, API, SDK, deployment, observability, troubleshooting | Keep concise and runnable; `mkdocs build --strict` must pass |
 | Current-state references | `STATUS.md`, `architecture.md`, `release-readiness.md`, `security-audit.md`, `runbook.md` | Update with code or operational truth; links and current versions are gated |
 | Product and domain specs | `product.md`, `domain.md`, `generator-spec.md`, `ops-surfaces-spec.md` | Explain stable behavior and invariants; do not carry live status |
-| Operations | [`operations/`](operations/), [`runbooks/`](runbooks/), and [control-plane testing](operations/testing-control-plane.md) | Current procedures stay actionable; superseded execution narratives move to the archive |
+| Operations | [Operations index](operations/README.md) and [on-call runbooks](runbooks/README.md) | Current procedures stay actionable; superseded execution narratives move to the archive |
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |

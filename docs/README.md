@@ -53,6 +53,9 @@ is needed.
 
 - Keep `docs/` root for stable entrypoints and current references. Do not add a
   new dated report there.
+- The exact tracked root allowlist is enforced by
+  `scripts/check_docs_root_placement.py`; update it only for an intentional
+  stable entrypoint or current reference.
 - Put immutable measurements in `perf/` or `evidence/`, operational procedures
   in `operations/` or `runbooks/`, and decisions in `decisions/`.
 - Do not delete documentation. Move superseded or duplicate narrative to
@@ -68,8 +71,9 @@ Run the proportional documentation gate after edits:
 
 ```powershell
 python scripts/check_docs_links.py
+python scripts/check_docs_root_placement.py
 python scripts/validate_project_claims.py
-python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
+python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
 python -m mkdocs build --strict
 ```
 

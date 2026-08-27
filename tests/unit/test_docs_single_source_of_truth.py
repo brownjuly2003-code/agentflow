@@ -337,3 +337,60 @@ def test_components_walkthrough_defers_runtime_inventory_to_architecture_referen
         assert reference_owned_claim not in walkthrough
 
     assert len(walkthrough.split()) * 6 < len(reference.split())
+
+
+def test_curated_landing_defers_runtime_and_status_claims_to_owners() -> None:
+    landing = (ROOT / "docs" / "index.md").read_text(encoding="utf-8")
+    project_overview = (ROOT / "README.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    status = (ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8")
+
+    assert (
+        "[project overview](https://github.com/brownjuly2003-code/agentflow/blob/main/README.md)"
+        in landing
+    )
+    assert "[detailed architecture reference](architecture.md)" in landing
+    assert "[engineering status](STATUS.md)" in landing
+    assert (
+        "[documentation hub](https://github.com/brownjuly2003-code/agentflow/blob/main/docs/README.md)"
+        in landing
+    )
+    assert "[interactive walkthrough](docs/index.md)" in project_overview
+
+    for destination in (
+        "quickstart.md",
+        "architecture/index.md",
+        "concepts.md",
+        "components.md",
+        "api/index.md",
+        "sdk.md",
+        "deployment.md",
+        "observability.md",
+        "troubleshooting.md",
+    ):
+        assert f"]({destination})" in landing
+
+    for reference_owned_claim in (
+        "FastAPI",
+        "Kafka",
+        "Debezium",
+        "PyFlink",
+        "DuckDB",
+        "Iceberg",
+        "ClickHouse",
+        "Prometheus",
+        "OpenTelemetry",
+        "Grafana",
+    ):
+        assert reference_owned_claim in architecture
+        assert reference_owned_claim not in landing
+
+    for status_owned_claim in (
+        "production candidate",
+        "digest-only staging promotion",
+        "BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE",
+    ):
+        assert status_owned_claim in status
+        assert status_owned_claim not in landing
+
+    assert len(landing.split()) * 5 < len(project_overview.split())

@@ -1,50 +1,62 @@
 # Components
 
-This page is a compact reference for the major components named in the
-architecture.
-
-| Component | Role in AgentFlow | Local usage | Production-shaped usage |
-| --- | --- | --- | --- |
-| FastAPI | Serves the v1 agent API, OpenAPI docs, health, and metrics | Uvicorn process from `make demo` | Containerized API service |
-| DuckDB | Default local serving store | `agentflow_demo.duckdb` | Useful for local/test; not the only possible serving backend |
-| Kafka | Event transport | Single-broker compose stack | Multi-broker production-shaped compose or managed Kafka |
-| Debezium | CDC capture from source databases | Local Postgres/MySQL CDC compose path | Requires approved source ownership, secrets, and network path |
-| Kafka Connect | Runs Debezium connectors | Local connector registration scripts | Kubernetes-shaped connector chart is present |
-| Flink | Stream processing, validation, enrichment | Compose or local Flink workflow | Production-shaped stream jobs with checkpoints |
-| Iceberg | Lakehouse table format | Local REST catalog / object-store-compatible path | Cloud object storage and catalog decided by operators |
-| Dagster | Batch/orchestration layer | Development orchestration patterns | Production schedules require operator configuration |
-| OpenTelemetry | Distributed tracing | Optional OTLP export to Jaeger | Exporter wiring to collector/trace backend |
-| Prometheus | Metrics scraping | Scrapes `/metrics` in compose | Cluster or managed Prometheus scraping |
-| Docker Compose | Local service orchestration | Demo, dev, prod-like, CDC, chaos stacks | Not a production orchestrator by itself |
-| Helm | Kubernetes packaging | kind/staging rehearsals | Chart rendering and release inputs for clusters |
-| Kubernetes | Runtime target | kind staging path | Operator-owned cluster environment |
-| Terraform | Infrastructure reference modules | `init -backend=false` / validation evidence | Real cloud apply requires external owner setup |
-| Python SDK | Typed Python client for core API surface | Editable install from `./sdk` | Published package `agentflow-client` |
-| TypeScript SDK | Typed TS client for core API surface | `sdk-ts` local build/test | Published package `@yuliaedomskikh/agentflow-client` |
+This walkthrough shows how stable responsibilities connect without pinning
+them to a particular runtime stack. Use the
+[detailed architecture reference](architecture.md) for current technologies,
+versions, backends, and deployment topologies. Use
+[engineering status](STATUS.md) for the evidence and acceptance state behind
+those choices.
 
 ## Component relationships
 
 ```mermaid
 flowchart TB
-    sdk["Python / TypeScript SDKs"] --> api["FastAPI"]
-    api --> auth["Auth, rate limit, versioning"]
-    api --> semantic["Semantic layer"]
-    api --> ops["Alerts, webhooks, dead letters, SLO"]
-    semantic --> duckdb["DuckDB"]
-    semantic -.-> clickhouse["Optional ClickHouse"]
-    kafka["Kafka"] --> flink["Flink"]
-    debezium["Debezium / Kafka Connect"] --> kafka
-    flink --> iceberg["Iceberg"]
-    flink --> duckdb
-    api --> otel["OpenTelemetry"]
-    api --> prom["Prometheus /metrics"]
+    clients["SDKs and direct clients"] --> api["Agent API"]
+    api --> policy["Authentication, rate limiting, and versioning"]
+    api --> semantic["Semantic query layer"]
+    api --> control_plane["Operational control plane"]
+    semantic --> serving_store["Configured serving store"]
+    sources["Source systems"] --> capture["Source capture"]
+    capture --> transport["Event transport"]
+    transport --> processor["Stream processor"]
+    processor --> validated["Validated event stream"]
+    processor --> rejected["Dead-letter stream"]
+    validated --> lake_materializer["Lake materializer"]
+    validated --> serving_materializer["Serving materializer"]
+    lake_materializer --> lake_store["Configured lake store"]
+    serving_materializer --> serving_store
+    api --> telemetry["Metrics, traces, and logs"]
+    processor --> telemetry
+    control_plane --> telemetry
 ```
 
-## What is deliberately not added in Day 1
+## Follow a request
 
-- No D2 or Structurizr build dependency.
-- No Slidev deck.
-- No mkdocstrings or TypeDoc generation.
-- No Terraform, Helm, Kubernetes, workflow, backend, or SDK source edits.
+1. An SDK or direct client calls the Agent API.
+2. The API applies request policy and sends analytical reads through the
+   semantic query layer.
+3. The query layer reads the configured serving store.
+4. Operational actions enter the control plane and remain separate from
+   analytical storage.
 
-Those are useful follow-ups once the Markdown walkthrough is stable.
+The [API walkthrough](api/index.md) shows the core request flow; the
+[full API reference](api-reference.md) owns exact routes, headers, limits, and
+response contracts.
+
+## Follow an event
+
+1. Source capture feeds an event transport.
+2. The stream processor validates, enriches, and routes each event.
+3. Separate materializers update the configured lake and serving stores from
+   the shared validated-event boundary.
+4. The request and event paths emit shared metrics, traces, and logs.
+
+## Choose the detailed owner
+
+| Need | Canonical owner |
+| --- | --- |
+| Runtime choices, versions, stores, and topology | [Detailed architecture reference](architecture.md) |
+| Current acceptance evidence and external gates | [Engineering status](STATUS.md) |
+| Client methods and examples | [SDK walkthrough](sdk.md) |
+| Deployment-path selection | [Deployment walkthrough](deployment.md) |
+| Exact operator commands | [Operational runbook](runbook.md) |

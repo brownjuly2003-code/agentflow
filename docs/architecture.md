@@ -2,9 +2,10 @@
 
 This page is the detailed source for runtime choices, topology boundaries, and
 current architecture claims. Start with the
-[architecture walkthrough](architecture/index.md) for guided diagrams, and use
-[engineering status](STATUS.md) for the evidence and acceptance state behind
-those claims.
+[architecture walkthrough](architecture/index.md) for guided topology diagrams
+or the [components walkthrough](components.md) for the responsibility map, and
+use [engineering status](STATUS.md) for the evidence and acceptance state
+behind those claims.
 
 ## Context
 

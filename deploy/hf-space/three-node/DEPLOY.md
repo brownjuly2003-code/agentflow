@@ -1,6 +1,7 @@
 # Three-node demo — deploy runbook (owner-gated)
 
-Publishes the three-node topology (ADR 0012 / `docs/three-node-demo-topology.md`)
+Publishes the three-node topology (ADR 0012 /
+`docs/architecture/three-node-demo-topology.md`)
 as **three** Hugging Face Docker Spaces under the `liovina` account:
 
 | Node   | Space                        | Role env       | Branch |

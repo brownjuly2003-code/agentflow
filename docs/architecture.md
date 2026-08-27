@@ -223,7 +223,7 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 > and the federated live layer is ephemeral on a deterministic re-seeded
 > baseline. Node roles, the ingest contract, sleep choreography, and the N1–N12
 > test invariants are pinned in
-> [`docs/three-node-demo-topology.md`](three-node-demo-topology.md);
+> [`docs/architecture/three-node-demo-topology.md`](architecture/three-node-demo-topology.md);
 > implementation is F2 and the Space deploy is an owner gate.
 
 ## v1-v6 Capability Map

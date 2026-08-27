@@ -4,7 +4,7 @@
 
 Accepted - 2026-07-04 (design; F2 implements per `plan_endgame_02_07_26.md`,
 deploy of the Spaces is an owner gate). Concrete build contract:
-[`docs/three-node-demo-topology.md`](../three-node-demo-topology.md).
+[`docs/architecture/three-node-demo-topology.md`](../architecture/three-node-demo-topology.md).
 
 ## Context
 
@@ -237,7 +237,8 @@ required** (proven above). An HF org (free) would only buy a prettier
 
 ## Follow-up (F2 - `plan_endgame_02_07_26.md` Phase F)
 
-- Implement per the build contract in `docs/three-node-demo-topology.md`
+- Implement per the build contract in
+  `docs/architecture/three-node-demo-topology.md`
   (Space matrix, env matrix, endpoint contract, event payload, boot/emit/sleep
   sequences, node invariants N1-Nx as the test spec, deploy runbook,
   verify-live checklist).

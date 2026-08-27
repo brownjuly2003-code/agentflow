@@ -1,6 +1,7 @@
 # Three-node demo topology - build contract (F2)
 
-Concrete spec implementing [ADR 0012](decisions/0012-three-node-demo-topology.md).
+Concrete spec implementing
+[ADR 0012](../decisions/0012-three-node-demo-topology.md).
 This is the F2 target: what to build, how the nodes talk, and the machine-checkable
 invariants (N1-N12) that are the test spec. Deploy of the Spaces is an owner gate.
 

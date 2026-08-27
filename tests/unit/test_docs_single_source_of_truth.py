@@ -200,3 +200,32 @@ def test_api_walkthrough_defers_mutable_contract_to_reference() -> None:
     ):
         assert reference_owned_claim in reference
         assert reference_owned_claim not in walkthrough
+
+
+def test_deployment_walkthrough_defers_helm_contract_to_operator_reference() -> None:
+    walkthrough = (ROOT / "docs" / "deployment.md").read_text(encoding="utf-8")
+    reference = (ROOT / "docs" / "operations" / "helm-deployment.md").read_text(encoding="utf-8")
+
+    assert "[complete Helm operator reference](operations/helm-deployment.md)" in walkthrough
+    assert "[deployment walkthrough](../deployment.md)" in reference
+    assert "[engineering status](STATUS.md)" in walkthrough
+    assert "[engineering status](../STATUS.md)" in reference
+
+    for local_entrypoint in (
+        "python scripts/demo_local.py",
+        "make demo",
+        "make stack-prod-shaped-local",
+    ):
+        assert local_entrypoint in walkthrough
+
+    for reference_owned_claim in (
+        "helm/agentflow/values-production.yaml",
+        "networkPolicy.enabled=true",
+        "image.digest",
+        "secrets.create=false",
+        "ingress.tls",
+    ):
+        assert reference_owned_claim in reference
+        assert reference_owned_claim not in walkthrough
+
+    assert len(walkthrough.split()) * 2 < len(reference.split())

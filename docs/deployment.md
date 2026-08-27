@@ -1,7 +1,10 @@
 # Deployment
 
-AgentFlow has three useful local-to-production-shaped views. This page explains
-what each view is for and where the external evidence boundary starts.
+This developer walkthrough helps choose a local or production-shaped path and
+keeps the local entry commands. Exact Helm prerequisites, values, security and
+scaling clauses, and rollout procedures belong to the
+[complete Helm operator reference](operations/helm-deployment.md); the
+[engineering status](STATUS.md) owns current evidence and external gates.
 
 ## Local demo with No Docker
 
@@ -94,30 +97,18 @@ Slack, PagerDuty or webhook receiver. Rules written for the full pipeline
 at "no data" here, because nothing in this stack produces those series.
 
 Do not treat a compose stack as proof that a managed production environment has
-been provisioned. The production path is Helm: `helm/agentflow` with
-`helm/agentflow/values-production.yaml` layered
-under your environment values, which fails the render when the values still
-carry dev posture. See the full
-[Helm deployment reference](https://github.com/brownjuly2003-code/agentflow/blob/main/docs/operations/helm-deployment.md).
+been provisioned. A managed Kubernetes rollout follows the operator reference,
+which owns chart and values paths, immutable image promotion, the fail-closed
+production contract, and rollout verification.
 
-## Helm and Kubernetes
+## Managed Kubernetes boundary
 
 The repository includes Helm and Kubernetes assets for staging-shaped workflow
 rehearsal. They are intended to help operators render manifests, test chart
-defaults, and prepare cluster rollout work.
-
-Before using them for a real environment, operators still need to provide:
-
-- image registry plus build-once/promote-by-digest policy
-- secrets and key ownership
-- ingress/TLS strategy
-- resource requests and limits
-- monitoring ownership
-- rollback process
-- network isolation: set `networkPolicy.enabled=true` before any
-  multi-replica production rollout (the chart default is `false` so
-  kind/dev clusters without a NetworkPolicy controller keep working) and
-  confirm the target cluster actually enforces NetworkPolicy
+defaults, and prepare rollout work. A real environment still needs
+operator-owned image promotion, secrets, ingress and TLS, capacity, monitoring,
+rollback, and network isolation. Exact values and fail-closed checks stay in
+the operator reference.
 
 ## Terraform overview
 

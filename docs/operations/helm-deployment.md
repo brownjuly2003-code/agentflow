@@ -4,7 +4,10 @@
 
 For the shorter curated path, start with the
 [deployment walkthrough](../deployment.md). This page is the operator
-reference for the complete Helm contract.
+reference for the complete Helm contract: chart prerequisites, values,
+production render clauses, scaling and transport requirements, rollout,
+upgrade, and troubleshooting. Current deployment evidence and external gates
+belong to [engineering status](../STATUS.md).
 
 The AgentFlow Helm chart deploys the FastAPI API to Kubernetes with:
 

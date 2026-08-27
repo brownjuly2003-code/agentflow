@@ -1,10 +1,11 @@
 # Domain Model — the Business Behind the Demo Data
 
-AgentFlow is the platform. This document describes the **company whose data
-flows through it** in every seed, demo, metric, and warehouse table — the
-single source of truth for the business legend. Docs, demo values, the data
-generator, and the operational layer are aligned to this document, not the
-other way around.
+AgentFlow is the platform; the [concepts walkthrough](concepts.md) introduces
+its stable abstractions. This document describes the **company whose data flows
+through it** in every seed, demo, metric, and warehouse table — the single
+source of truth for the business legend. Docs, demo values, the data generator,
+and the operational layer are aligned to this document, not the other way
+around.
 
 Downstream consumers:
 

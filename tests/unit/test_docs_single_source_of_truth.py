@@ -229,3 +229,44 @@ def test_deployment_walkthrough_defers_helm_contract_to_operator_reference() -> 
         assert reference_owned_claim not in walkthrough
 
     assert len(walkthrough.split()) * 2 < len(reference.split())
+
+
+def test_concepts_walkthrough_defers_domain_runtime_and_route_claims() -> None:
+    walkthrough = (ROOT / "docs" / "concepts.md").read_text(encoding="utf-8")
+    domain = (ROOT / "docs" / "domain.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    api_reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
+
+    assert "[detailed domain model](domain.md)" in walkthrough
+    assert "[detailed architecture reference](architecture.md)" in walkthrough
+    assert "[full API reference](api-reference.md)" in walkthrough
+    assert "[engineering status](STATUS.md)" in walkthrough
+    assert "[concepts walkthrough](concepts.md)" in domain
+
+    for stable_concept in (
+        "## Streaming-first",
+        "## Semantic layer",
+        "## Contracts",
+        "## Query safety",
+    ):
+        assert stable_concept in walkthrough
+
+    for domain_claim in (
+        "`order`",
+        "`user`",
+        "`product`",
+        "`session`",
+        "`revenue`",
+        "`error_rate`",
+    ):
+        assert domain_claim in domain
+        assert domain_claim not in walkthrough
+
+    for runtime_claim in ("DuckDB", "Iceberg", "Kafka", "Flink", "Redis", "Jaeger", "Grafana"):
+        assert runtime_claim in architecture
+        assert runtime_claim not in walkthrough
+
+    assert "/v1/contracts" in api_reference
+    assert "/v1/contracts" not in walkthrough
+
+    assert len(walkthrough.split()) * 7 < len(domain.split())

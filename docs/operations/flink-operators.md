@@ -1,5 +1,9 @@
 # Flink Operators
 
+This page is the detailed reference for the operator-managed Flink jobs. For
+service startup, health checks, and incident response, start with the
+[operational runbook](../runbook.md).
+
 ## Session Aggregation
 
 `src/agentflow_runtime/processing/flink_jobs/session_aggregator.py` is the single canonical

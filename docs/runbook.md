@@ -82,6 +82,10 @@ make flink-local
 
 This builds the local Python 3.11 Flink image, starts the required Kafka, MinIO, and Flink services, and submits `src/agentflow_runtime/processing/flink_jobs/stream_processor.py` to the local cluster.
 
+For session aggregation behavior, checkpoint tuning, Kubernetes Operator
+compatibility, and the isolated PyFlink environment, use the
+[Flink operator reference](operations/flink-operators.md).
+
 Verify the run here:
 - Flink Web UI: http://localhost:8081
 - Valid events: `events.validated`

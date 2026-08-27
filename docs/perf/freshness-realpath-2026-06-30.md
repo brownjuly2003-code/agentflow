@@ -8,7 +8,8 @@ Measured: `2026-06-30`
 
 > **Update 2026-07-09.** The missing link this document reports — "nothing
 > bridges `events.validated` into the serving store" — has since been built:
-> see [`../serving-bridge.md`](../serving-bridge.md). The numbers below remain
+> see
+> [`../architecture/serving-bridge.md`](../architecture/serving-bridge.md). The numbers below remain
 > the streaming-hop measurement (produce → `events.validated`) as taken on
 > 2026-06-30. Full *event → metric* on the real path is **S8**:
 > [`freshness-e2e-realpath.md`](freshness-e2e-realpath.md) — **3.02 s p50 /
@@ -83,7 +84,7 @@ tighten the tail percentiles; the p50 is stable.
   So there was no honest single "event → metric on the real path" number on this
   stand; this is the real **streaming-hop** number. The bridge that closes the
   remaining segment landed on 2026-07-09
-  ([`../serving-bridge.md`](../serving-bridge.md)); measuring the full path
+  ([`../architecture/serving-bridge.md`](../architecture/serving-bridge.md)); measuring the full path
   end-to-end is a separate run.
 - The real path's ~2.5 s p50 is the same order of magnitude as the headline
   freshness claim. The extra ~1.4 s over the shortcut is the real cost of the

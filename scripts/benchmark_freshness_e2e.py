@@ -21,7 +21,8 @@ distinct from:
 - ``scripts/benchmark_freshness_realpath.py`` — streaming hop only
   (produce → events.validated), no serving/metric.
 
-Prerequisites (Mac stand, see ``_NEXT_SESSION.md`` / ``docs/serving-bridge.md``):
+Prerequisites (Mac stand, see ``_NEXT_SESSION.md`` /
+``docs/architecture/serving-bridge.md``):
 
   docker compose -f docker-compose.yml -f docker-compose.flink.yml \\
     up -d --scale flink-taskmanager=1 flink-job-runner clickhouse redis
@@ -245,7 +246,7 @@ def build_markdown(report: dict) -> str:
         "## Reproduce",
         "",
         "```bash",
-        "# stack + bridge + API as in docs/serving-bridge.md / _NEXT_SESSION.md",
+        "# stack + bridge + API as in docs/architecture/serving-bridge.md / _NEXT_SESSION.md",
         "python scripts/benchmark_freshness_e2e.py \\",
         "  --bootstrap 127.0.0.1:19092 --api-base http://127.0.0.1:8000 \\",
         "  --iterations 20 --warmup 2",

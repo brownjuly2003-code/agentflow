@@ -81,7 +81,7 @@ DuckDB shortcut and not HTTP load-test RPS of the API.
 - **Bridge apply rate (~8 events/s)** is the product-relevant sustained number
   for event→serving on this single-node Colima stand: every applied event is
   in ClickHouse (idempotent journal). The S6 design
-  ([`serving-bridge.md`](../serving-bridge.md)) notes a serialized-writer
+  ([`serving-bridge.md`](../architecture/serving-bridge.md)) notes a serialized-writer
   ceiling via `_process_event` + scratch DuckDB — on this hardware the
   observed ceiling is **~8 events/s**, not hundreds.
 - Flink hop rate matches bridge apply rate in these runs: the bridge (and/or
@@ -97,7 +97,7 @@ DuckDB shortcut and not HTTP load-test RPS of the API.
 ## Reproduce
 
 ```bash
-# stack + bridge as in docs/serving-bridge.md / _NEXT_SESSION.md
+# stack + bridge as in docs/architecture/serving-bridge.md / _NEXT_SESSION.md
 python scripts/benchmark_throughput_realpath.py \
   --bootstrap 127.0.0.1:19092 --count 400 \
   --bridge-metrics http://127.0.0.1:9108/metrics \

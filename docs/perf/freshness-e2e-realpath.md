@@ -65,7 +65,7 @@ and not the streaming-hop-only figure.
 ## Reproduce
 
 ```bash
-# stack + bridge + API as in docs/serving-bridge.md / _NEXT_SESSION.md
+# stack + bridge + API as in docs/architecture/serving-bridge.md / _NEXT_SESSION.md
 # Use a high-rpm API key: demo-key (60 rpm) cannot sustain 50 ms metric polls.
 python scripts/benchmark_freshness_e2e.py \
   --bootstrap 127.0.0.1:19092 --api-base http://127.0.0.1:8000 \

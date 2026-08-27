@@ -8,7 +8,8 @@ Flink validates, enriches and dedupes events and sinks them to the Kafka topic
 bridge existed, nothing carried that topic into the store the API reads: the
 serving store only moved when the in-process `local_pipeline` wrote it directly.
 Freshness on the real path was therefore measurable no further than the
-streaming hop — see [`perf/freshness-realpath-2026-06-30.md`](perf/freshness-realpath-2026-06-30.md).
+streaming hop — see
+[`perf/freshness-realpath-2026-06-30.md`](../perf/freshness-realpath-2026-06-30.md).
 
 ```
 orders.raw ──► Flink (validate → enrich → dedup) ──► events.validated
@@ -31,7 +32,7 @@ runtime the repo pins), 2026-07-09:
 - **S8 (same day, full distribution):** the same path through to
   `GET /v1/metrics/revenue` measured **3.02 s p50 / 5.70 s p95** (n=20, 1
   warmup miss) with Redis push invalidation active. Report:
-  [`perf/freshness-e2e-realpath.md`](perf/freshness-e2e-realpath.md);
+  [`perf/freshness-e2e-realpath.md`](../perf/freshness-e2e-realpath.md);
   driver: `scripts/benchmark_freshness_e2e.py`.
 - The in-process (DuckDB) arm served the same shape of event **1.1 s** after it
   was produced to `events.validated` (not the full produce→metric claim).
@@ -78,10 +79,12 @@ instead mark it done forever.
 
 | Serving backend | Bridge form | Why |
 |---|---|---|
-| `clickhouse` (production) | standalone process — `python -m agentflow_runtime.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live drain: ~11.4 → 22.9 → **87.4 eps** (400-burst, Q1.4) → **107.3 eps** (2000-event drain) — see [`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md), [`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md). Multi-hour *sustained* ≥100 eps is **not** claimed. |
+| `clickhouse` (production) | standalone process — `python -m agentflow_runtime.processing.bridge_consumer` | **Serving store = ClickHouse only.** No DuckDB. Q1.2 dropped scratch lake; **Q1.3** `apply_serving_batch` (multi-row order/journal, user aggregate once per user); **Q1.4** batches the remaining read-modify-writes (session fold + grouped user recompute) so a batch costs a *constant* number of ClickHouse round-trips, independent of batch size. Live drain: ~11.4 → 22.9 → **87.4 eps** (400-burst, Q1.4) → **107.3 eps** (2000-event drain) — see [`perf/throughput-realpath-q14-2026-07-10.md`](../perf/throughput-realpath-q14-2026-07-10.md), [`perf/throughput-realpath-100eps-try-2026-07-17.md`](../perf/throughput-realpath-100eps-try-2026-07-17.md). Multi-hour *sustained* ≥100 eps is **not** claimed. |
 | `duckdb` (local demo / unit tests only) | in-process thread, `AGENTFLOW_SERVING_BRIDGE_ENABLED=true` | **Not production.** Demo and unit tests. Never the S8/S10 real-path store the API reads. |
 
-The HuggingFace three-node demo runs no Kafka at all ([ADR 0012](decisions/0012-three-node-demo-topology.md)); its edges push events to the center over HTTPS. The bridge is absent there by design.
+The HuggingFace three-node demo runs no Kafka at all
+([ADR 0012](../decisions/0012-three-node-demo-topology.md)); its edges push
+events to the center over HTTPS. The bridge is absent there by design.
 
 ## Configuration
 
@@ -141,18 +144,18 @@ A healthy bridge has partitions assigned, bounded or falling lag, flat
   400-event burst (peak lag 0); later **107.3 eps** on a 2000-event drain
   (Flink hop = apply, 0 failures) — numeric ≥100 on a *single catch-up window*
   is observed, not a multi-hour produce rate held above 100.
-  History: ~8 → 11.4 (Q1.2) → 22.9 ([`perf/throughput-realpath-q13-2026-07-09.md`](perf/throughput-realpath-q13-2026-07-09.md))
-  → 87.4 ([`perf/throughput-realpath-q14-2026-07-10.md`](perf/throughput-realpath-q14-2026-07-10.md))
-  → 107.3 drain ([`perf/throughput-realpath-100eps-try-2026-07-17.md`](perf/throughput-realpath-100eps-try-2026-07-17.md))
+  History: ~8 → 11.4 (Q1.2) → 22.9 ([`perf/throughput-realpath-q13-2026-07-09.md`](../perf/throughput-realpath-q13-2026-07-09.md))
+  → 87.4 ([`perf/throughput-realpath-q14-2026-07-10.md`](../perf/throughput-realpath-q14-2026-07-10.md))
+  → 107.3 drain ([`perf/throughput-realpath-100eps-try-2026-07-17.md`](../perf/throughput-realpath-100eps-try-2026-07-17.md))
   → paced 10 min @ 100 produce ≈ **96.5 apply / 97.1 flink**
-  ([`perf/throughput-realpath-paced100-2026-07-17.md`](perf/throughput-realpath-paced100-2026-07-17.md))
+  ([`perf/throughput-realpath-paced100-2026-07-17.md`](../perf/throughput-realpath-paced100-2026-07-17.md))
   → paced **1 h** @ 100 produce ≈ **99.5 apply / 99.5 flink** (0 dups)
-  ([`perf/throughput-realpath-paced100-1h-2026-07-17.md`](perf/throughput-realpath-paced100-1h-2026-07-17.md)).
+  ([`perf/throughput-realpath-paced100-1h-2026-07-17.md`](../perf/throughput-realpath-paced100-1h-2026-07-17.md)).
   Multi-hour (4 h+) at ≥100 still open. Endurance: a 4 h soak at ~47 eps
   *delivered* held bounded lag with flat
   RSS/FDs, survived a live broker/Redis fault with an exactly-once batch
   replay, and ended with zero cache drift —
-  [`perf/soak-s11-2026-07-10.md`](perf/soak-s11-2026-07-10.md).
+  [`perf/soak-s11-2026-07-10.md`](../perf/soak-s11-2026-07-10.md).
 
 ## Cache invalidation (S7)
 

@@ -9,7 +9,7 @@ Generated: `2026-06-06T10:10:41+03:00`
 > webhook dispatcher poll. Production wiring is push from the serving bridge
 > (Redis channel `agentflow:cache:metrics_invalidate`) plus an independent
 > journal scan in `MetricCacheController` — see
-> [`serving-bridge.md`](../serving-bridge.md#cache-invalidation-s7). The numbers
+> [`serving-bridge.md`](../architecture/serving-bridge.md#cache-invalidation-s7). The numbers
 > **below** still describe the **in-process DuckDB shortcut** (pre-S7 poll-era
 > measurement of that arm). The full real path was re-measured in **S8**:
 > **3.02 s p50 / 5.70 s p95** event → `GET /v1/metrics/revenue` via

@@ -356,7 +356,7 @@ def build_markdown(report: dict) -> str:
         "## Reproduce",
         "",
         "```bash",
-        "# stack + bridge as in docs/serving-bridge.md / _NEXT_SESSION.md",
+        "# stack + bridge as in docs/architecture/serving-bridge.md / _NEXT_SESSION.md",
         "python scripts/benchmark_throughput_realpath.py \\",
         "  --bootstrap 127.0.0.1:19092 --count 500 \\",
         "  --bridge-metrics http://127.0.0.1:9108/metrics \\",

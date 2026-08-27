@@ -77,7 +77,7 @@ measured steps on the same Mac compose stand (Kafka → Flink → bridge → CH)
 The series target of **≥ 80 eps** is met. Paced 4 h (r4) is valid evidence for
 its measured pre-materializer path only — advisory for the post-Iceberg golden
 gate, which remains `BLOCKED_HOST_CAPACITY`. Semantics of the batched path:
-[serving-bridge.md](serving-bridge.md).
+[serving-bridge.md](architecture/serving-bridge.md).
 
 ## Known issues
 

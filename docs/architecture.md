@@ -53,7 +53,7 @@ it is not a production claim until the clean-checkout acceptance gate passes.
 2. **Processing**: containerized PyFlink 2.3 validates, enriches, deduplicates, and routes events to `events.validated` or `events.deadletter`.
 3. **Lake materialization**: a dedicated consumer writes validated events to Iceberg. Production acceptance requires this consumer and its replay proof; the current verified benchmark did not include this hop.
 4. **Quality**: pre-storage gates check schema and semantic rules. Failures go to the dead-letter topic.
-5. **Serving materialization**: the bridge applies `events.validated` to ClickHouse idempotently by `(tenant_id, event_id)`. After a successful apply it also **pushes** metric-cache invalidation (Redis channel + in-process callback); a journal-scan fallback covers writers that do not push. See [Serving Bridge](serving-bridge.md#cache-invalidation-s7).
+5. **Serving materialization**: the bridge applies `events.validated` to ClickHouse idempotently by `(tenant_id, event_id)`. After a successful apply it also **pushes** metric-cache invalidation (Redis channel + in-process callback); a journal-scan fallback covers writers that do not push. See [Serving Bridge](architecture/serving-bridge.md#cache-invalidation-s7).
 6. **Serving**: Agent API reads ClickHouse in the demo/production profile (`config/serving.yaml`), with DuckDB as the local-dev/test compatibility store.
 
 For CDC sources, Debezium/Kafka Connect handles source capture while a shared normalizer converts Postgres/MySQL envelopes into one canonical AgentFlow CDC contract before validation. See [ADR 0005](decisions/0005-cdc-ingestion-strategy.md).

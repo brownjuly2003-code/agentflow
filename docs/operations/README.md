@@ -18,7 +18,7 @@ a procedure, not an authorization to run it.
 
 | Need | Owning document | Boundary |
 | --- | --- | --- |
-| Rehearse the reserved E26 DuckDB scratch path | [E26 non-target scratch rehearsal](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) | `READY_NOT_AUTHORIZED`; use only in a separately authorized rehearsal |
+| Prepare a fresh non-target DuckDB capability rehearsal | [Current non-target scratch rehearsal](api-duckdb-non-target-scratch-rehearsal-runbook.md) | `READY_NOT_AUTHORIZED`; identity preparation is local, while execution needs separate exact authorization |
 | Configure Terraform's AWS identity | [AWS OIDC setup](aws-oidc-setup.md) | Repository and AWS owner inputs must already exist |
 | Attach a production CDC source | [Production CDC source onboarding](cdc-production-onboarding.md) | Complete the decision record and no-go checks before rollout |
 | Run or triage controlled fault injection | [Chaos runbook](chaos-runbook.md) | Preserve the severity and exit criteria |
@@ -51,8 +51,9 @@ from an old PASS or blocker.
 
 | Record | Preserved result | Current use |
 | --- | --- | --- |
-| [E24 non-target scratch rehearsal](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) | `CONSUMED_SCRATCH_REHEARSAL_BLOCKED` | Historical evidence only; do not execute or reuse |
-| [Original non-target scratch rehearsal](api-duckdb-non-target-scratch-rehearsal-runbook.md) | `CONSUMED_TRANSPORT_BLOCKED` | Historical evidence only; do not execute or reuse |
+| [E22 non-target scratch rehearsal](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e22-2026-08-11.md) | `CONSUMED_TRANSPORT_BLOCKED` | Archived evidence only; do not execute or reuse |
+| [E24 non-target scratch rehearsal](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e24-2026-08-11.md) | `CONSUMED_SCRATCH_REHEARSAL_BLOCKED` | Archived evidence only; do not execute or reuse |
+| [E26 non-target scratch rehearsal](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e26-2026-08-11.md) | Executed once; `SCRATCH_REHEARSAL_BLOCKED` | Archived pre-execution contract; do not execute or reuse |
 | [External pentest evidence blocker, 2026-08-01](external-pentest-evidence-blocker-2026-08-01.md) | `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` at the recorded audit | Use the current intake guide and engineering status for present truth |
 | [npm environment approval verification, 2026-08-03](npm-environment-approval-2026-08-03.md) | Read-only PASS at the recorded identity | Evidence of that check only |
 | [npm environment approval blocker, 2026-08-01](npm-environment-approval-blocker-2026-08-01.md) | `BLOCKED_ENVIRONMENT_ABSENT` before the later verification | Superseded point-in-time evidence |

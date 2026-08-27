@@ -81,11 +81,11 @@ Claims below use these categories: **Observed**, **Repository contract**,
 | E19 | [`second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md`](../../second-opinion-api-duckdb-quiesce-capture-grok-review-20260810.md) | Local, intentionally untracked review record; SHA-256 `9ce977a4f5fc5254f07398404f3b52c96df12ffd6d0fdc8fd1e63d29c52fae22`. One read-only `local_grok_cli` session (`grok-4.5`, `019fe976-40d9-7563-ad22-aea8c9f4d8fc`) returned final verdict `ACCEPT_WITH_CHANGES`. Its first process-only response could not read files; the same session was resumed once with exact verified E18 text. No API fallback, file edit, web, or runtime action occurred |
 | E20 | [capability gate `result.json`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/result.md), and [`evidence.md`](../../.codex-grok-tasks/api-duckdb-quiesce-capability-gate-20260810-codex01/evidence.md) | **Observed** `2026-08-10T02:54:35Z`–`02:59:59Z`; bounded read-only host, Kind node, and Kubernetes metadata. SHA-256: JSON `1e68ae71708dc837c39ae1be4d3751321a5436972dd3bef175728c82a8985423`, summary `bc3dddd8dfe51908cae939752f5dbfcfdf8d5399970812f934fc5520611ee0b6`, ledger `4e46065ded563a763bcca60210b5700e92c208a964b266ecce1416cb61057d0f`. Result: `CAPABILITY_REHEARSAL_REQUIRED`; no database contents read or runtime mutation |
 | E21 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Implemented, not executed** `2026-08-11`; fail-closed non-target scratch setup harness. Default plan returns `REHEARSAL_SETUP_READY_NOT_EXECUTED`, all seven checks `NOT_RUN`, and both branches ineligible. No SSH or live rehearsal ran |
-| E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), [runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md), and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/evidence.md) | **Attempted once; transport blocked** `2026-08-11`. The fixed Windows invocation exited `1` after remote Bash exited `2` on CRLF-translated control lines, before any probe result. The exact scratch root was absent in the one cleanup check. Evidence SHA-256: JSON `916bd1216b3868216085bf9edd6d7f1e0ddd4fb9f3c0ee872584ebf9bcb455ea`, summary `1f82271c394fd0cee6a8429d7d2a5fdd315943ef378917f9118f0e43659c32c4`, ledger `d5a05e236cf5e6cec81a6e69d360f274ec3badcfcacc35b88fb6f2aa681ec6bf` |
+| E22 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py), [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py), [archived E22 runbook](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e22-2026-08-11.md), and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e22-20260811-codex01/evidence.md) | **Attempted once; transport blocked** `2026-08-11`. The fixed Windows invocation exited `1` after remote Bash exited `2` on CRLF-translated control lines, before any probe result. The exact scratch root was absent in the one cleanup check. Evidence SHA-256: JSON `916bd1216b3868216085bf9edd6d7f1e0ddd4fb9f3c0ee872584ebf9bcb455ea`, summary `1f82271c394fd0cee6a8429d7d2a5fdd315943ef378917f9118f0e43659c32c4`, ledger `d5a05e236cf5e6cec81a6e69d360f274ec3badcfcacc35b88fb6f2aa681ec6bf` |
 | E23 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused unit tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local transport fix verified; not executed** `2026-08-11`. Remote stdin is explicit UTF-8 bytes with no CR and stdout/stderr are decoded fail-closed. TDD RED `1 failed`; final focused gate `33 passed`. SHA-256: script `d2a8fd8715d4182cc0def0d5283c045a66eb197d979faaecfab2c1e7781faa7f`, test `74e347553e2416eb5ec5bd8cca107b097dbac06cf318c4b89cc2dcaab2ccc0bc` |
-| E24 | [replacement runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Five probes passed; descriptor visibility and metadata capability were blocked when remote `Path.write_text` rejected `newline`. Exact cleanup passed. SHA-256: JSON `389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`, summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`, ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71` |
+| E24 | [archived E24 runbook](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e24-2026-08-11.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Five probes passed; descriptor visibility and metadata capability were blocked when remote `Path.write_text` rejected `newline`. Exact cleanup passed. SHA-256: JSON `389c779bd0948e41ecdd50208ca913a8dc08e48dad0e8057f3fe84755a4f1068`, summary `b915db6a8240cb7e1484fea3b836efd2eb6648a711a3e597be5eac7c5471acea`, ledger `6f0893ab2f78a132d9ae9d71f1a1d504546a9c83b17c2559e8446fa96e3cfb71` |
 | E25 | [`rehearse_api_duckdb_quiesce_capabilities.py`](../../scripts/rehearse_api_duckdb_quiesce_capabilities.py) and [focused tests](../../tests/unit/test_api_duckdb_quiesce_capability_rehearsal.py) | **Local compatibility fix verified; not executed** `2026-08-11`. Both affected probes now create LF text through explicit `Path.open`; behavioral extraction tests run against a legacy `Path.write_text` signature. RED `2 failed`; final focused gate `35 passed`. SHA-256: script `d7bf34f28369b51565cf8125c62b949532b95e867f2b4c120f8472da0cc5f273`, test `a6b8f66e2e7af42b0ee2107bc57608f495baaaf22d711f7b2515c863cf7e051d` |
-| E26 | [fresh non-target runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Six probes passed; metadata tool/ACL/xattr capability was blocked because ACL tools were absent and remote Python exposed no `os.setxattr`. Exact cleanup passed. SHA-256: JSON `fa73f2f095f094cf0210e18fd78a8940752f0c939e5f44e3efcb3aec4811d783`, summary `26dfa578d261a576b3bb7efa6488de6045a77805f83aac46ea0641fb6ed78811`, ledger `bc0bcaa6671725bbb2c51c2cc37f0a172558d322d8526d334ed058baab7c689c` |
+| E26 | [archived E26 runbook](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e26-2026-08-11.md) and local [`result.json`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/result.json), [`result.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/result.md), [`evidence.md`](../../.codex-grok-tasks/api-duckdb-scratch-rehearsal-e26-20260811-codex01/evidence.md) | **Executed once; `SCRATCH_REHEARSAL_BLOCKED`** `2026-08-11`. Six probes passed; metadata tool/ACL/xattr capability was blocked because ACL tools were absent and remote Python exposed no `os.setxattr`. Exact cleanup passed. SHA-256: JSON `fa73f2f095f094cf0210e18fd78a8940752f0c939e5f44e3efcb3aec4811d783`, summary `26dfa578d261a576b3bb7efa6488de6045a77805f83aac46ea0641fb6ed78811`, ledger `bc0bcaa6671725bbb2c51c2cc37f0a172558d322d8526d334ed058baab7c689c` |
 
 ## Current failure data-flow trace
 
@@ -1031,10 +1031,13 @@ passed. No delegation or background writer ran.
 
 ### Exact next-session execution contract
 
-The tracked
-[non-target scratch rehearsal runbook](api-duckdb-non-target-scratch-rehearsal-runbook.md)
-is the sole operational resume recipe for E22. It fixes one run ID, scratch
-root, evidence directory, acknowledgement, implementation hashes, command
+This historical section records the pre-execution E22 contract. E22 is now
+consumed; the
+[archived E22 runbook](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e22-2026-08-11.md)
+preserves its exact recipe, while the
+[current guide](api-duckdb-non-target-scratch-rehearsal-runbook.md) requires a
+new identity and separate authorization. The E22 contract fixed one run ID,
+scratch root, evidence directory, acknowledgement, implementation hashes, command
 shape, result classifications, cleanup proof, and stop conditions. It also
 forbids PowerShell stdout redirection so the raw JSON is not silently
 re-encoded, and forbids a second identity or retry after any timeout, nonzero,
@@ -1097,9 +1100,10 @@ authorized gate.
 
 ## E24 replacement rehearsal runbook — 2026-08-11
 
-E24 defines a new non-target identity without altering or reusing consumed
-E22 evidence. The tracked
-[replacement runbook](api-duckdb-non-target-scratch-rehearsal-e24-runbook.md)
+This section preserves the pre-execution E24 contract; E24 is now consumed.
+E24 defined a new non-target identity without altering or reusing consumed
+E22 evidence. The
+[archived E24 runbook](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e24-2026-08-11.md)
 fixes run ID `api-duckdb-scratch-e24-20260811-01`, its exact path below the
 existing scratch prefix, evidence directory
 `.codex-grok-tasks/api-duckdb-scratch-rehearsal-e24-20260811-codex01/`, the
@@ -1155,14 +1159,15 @@ Both were test-environment diagnostics; the final fake-`lsof` path models the
 remote POSIX behavior without weakening the product assertion.
 
 No SSH, `--execute`, scratch action, new run ID, target access, Grok, or
-background writer ran during E25. The separate E26 section below now records
-a fresh conservative identity and current protected hashes. E26 remains
-unexecuted; its later live gate requires fresh authorization.
+background writer ran during E25. The separate E26 section below records the
+then-fresh conservative identity and protected hashes. This is historical
+pre-execution truth; ledger E26 above records the later consumed outcome.
 
 ## E26 fresh rehearsal runbook — 2026-08-11
 
-The tracked
-[E26 runbook](api-duckdb-non-target-scratch-rehearsal-e26-runbook.md) reserves
+The
+[archived E26 runbook](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e26-2026-08-11.md)
+preserves the contract that reserved
 run ID `api-duckdb-scratch-e26-20260811-01`, exact root
 `/tmp/agentflow-api-duckdb-capability-rehearsal/api-duckdb-scratch-e26-20260811-01`,
 and local evidence directory

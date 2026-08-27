@@ -66,6 +66,7 @@ REPO_PATH_PREFIXES = (
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
+ARCHIVE_BODY_MARKER = "<!-- ARCHIVE BODY START -->"
 # Glob/template characters (*{}<>|…) are excluded so the match stops before a
 # wildcard; truncated prefixes such as config/contracts/metric. are then
 # rejected by _looks_like_repo_path.
@@ -281,6 +282,8 @@ def check_docs_links(
         relative = document.relative_to(root).as_posix()
         text = document.read_text(encoding="utf-8")
         for line_number, line in enumerate(text.splitlines(), start=1):
+            if relative.startswith("docs/archive/") and line.strip() == ARCHIVE_BODY_MARKER:
+                break
             problems.extend(_link_problems(root, document, relative, line_number, line, tracked))
             problems.extend(_source_path_problems(root, relative, line_number, line, tracked))
     return problems

@@ -74,6 +74,51 @@ def test_exclusion_rules_skip_immutable_evidence_only(tmp_path: Path) -> None:
     assert not is_historical_evidence("docs/decisions/0013-golden-production-topology.md")
 
 
+def test_archive_body_marker_skips_only_the_preserved_body(tmp_path: Path) -> None:
+    (tmp_path / "docs" / "archive").mkdir(parents=True)
+    (tmp_path / "docs" / "archive" / "record.md").write_text(
+        "See [missing header](missing-header.md) and `src/missing_header.py`.\n"
+        "<!-- ARCHIVE BODY START -->\n"
+        "See [missing body](missing-body.md) and `src/missing_body.py`.\n",
+        encoding="utf-8",
+    )
+
+    problems = check_docs_links(tmp_path)
+    report = "\n".join(problems)
+
+    assert "docs/archive/record.md:1: missing link target 'missing-header.md'" in problems
+    assert "docs/archive/record.md:1: missing source path 'src/missing_header.py'" in problems
+    assert "missing-body.md" not in report
+    assert "src/missing_body.py" not in report
+
+
+def test_archive_body_marker_outside_archive_does_not_hide_problems(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "current.md").write_text(
+        "<!-- ARCHIVE BODY START -->\n"
+        "See [missing](missing-current.md) and `src/missing_current.py`.\n",
+        encoding="utf-8",
+    )
+
+    problems = check_docs_links(tmp_path)
+
+    assert "docs/current.md:2: missing link target 'missing-current.md'" in problems
+    assert "docs/current.md:2: missing source path 'src/missing_current.py'" in problems
+
+
+def test_archive_without_body_marker_is_checked_completely(tmp_path: Path) -> None:
+    (tmp_path / "docs" / "archive").mkdir(parents=True)
+    (tmp_path / "docs" / "archive" / "unmarked.md").write_text(
+        "See [missing](missing-archive.md) and `src/missing_archive.py`.\n",
+        encoding="utf-8",
+    )
+
+    problems = check_docs_links(tmp_path)
+
+    assert "docs/archive/unmarked.md:1: missing link target 'missing-archive.md'" in problems
+    assert "docs/archive/unmarked.md:1: missing source path 'src/missing_archive.py'" in problems
+
+
 def test_iter_living_docs_covers_live_directories() -> None:
     living = {path.relative_to(ROOT).as_posix() for path in iter_living_docs(ROOT)}
     assert any(path.startswith("docs/operations/") for path in living)

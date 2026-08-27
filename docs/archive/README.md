@@ -28,5 +28,6 @@ directories are historical by design and do not need a second archive move.
 | [`plans/`](plans/) | Superseded planning interpretations | Active root plan or current status document named in each archived file |
 | [`performance/`](performance/README.md) | Non-canonical benchmark reports and superseded performance follow-ups moved from the `docs/` root | [`perf/load-benchmark-latest.md`](../perf/load-benchmark-latest.md) and [`perf/entity-benchmark-contract.md`](../perf/entity-benchmark-contract.md) |
 | [`product/`](product/README.md) | Point-in-time market and cost analyses moved from the `docs/` root | [`product.md`](../product.md) and [`STATUS.md`](../STATUS.md) |
+| [`operations/`](operations/README.md) | Consumed operational execution contracts whose identities and commands must not be reused | [`operations/README.md`](../operations/README.md) and the current guide named by each archived file |
 
 Return to the [documentation hub](../README.md).

@@ -1,3 +1,19 @@
+# Archived API DuckDB E24 non-target scratch rehearsal
+
+> **Archive metadata**
+>
+> - Original path: *docs/operations/api-duckdb-non-target-scratch-rehearsal-e24-runbook.md*
+> - Archived: 2026-08-27
+> - Reason: E24 is a consumed scratch-blocked identity; the three scratch
+>   variants were consolidated behind one identity-neutral current guide
+> - Current replacement:
+>   [current non-target scratch rehearsal](../../operations/api-duckdb-non-target-scratch-rehearsal-runbook.md)
+> - Content type: immutable operational execution record
+>
+> The runbook body below is unchanged; only this provenance block was added.
+
+<!-- ARCHIVE BODY START -->
+
 # API DuckDB E24 non-target scratch rehearsal runbook
 
 **Date:** 2026-08-11

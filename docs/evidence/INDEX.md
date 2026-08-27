@@ -43,11 +43,17 @@ under `docs/evidence/`.
 
 ## Security and dependency records
 
-| Record | What it fixes in time |
-| --- | --- |
-| [security-s12-2026-07-09.md](security-s12-2026-07-09.md) | Offline/unit remainder of the S12 security pass; no third-party penetration-test claim |
-| [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | Local and isolated-Mac runtime-image remediation with Trivy 0.70.0 evidence |
-| [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | Python cloud/Iceberg and optional MCP dependency remediation evidence |
+This table is the audit catalogue for Markdown records stored directly
+under `docs/evidence/`. Columns are identity, ISO date, result,
+supersedes, superseded by, and claim boundary. `None` means no
+supersession is recorded; a complementary document is not treated as
+superseded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [security-s12-2026-07-09.md](security-s12-2026-07-09.md) | 2026-07-09 | offline/unit remainder closed; third-party pen-test **not** claimed | None | None | Does not claim an external penetration test or production acceptance; live schemathesis remains the CI contract, and the live ClickHouse execution matrix remains a separate gate. |
+| [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
+| [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
 
 ## F-10 rollback and soak-capacity records (2026-08-23)
 

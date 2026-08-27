@@ -89,6 +89,43 @@ LAKE_TO_SERVING_UNCLAIMED_BOUNDARIES = (
     "npm approval",
     "production acceptance",
 )
+CHECKPOINT_READINESS_HEADING = "## Checkpoint and readiness acceptance records"
+CHECKPOINT_RECORD = "docs/perf/checkpoint-restore-replay-2026-08-02.md"
+READINESS_RECORD = "docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md"
+CHECKPOINT_BLOCKER_RECORD = "docs/perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md"
+CANARY_TRAFFIC_RECORD = "docs/perf/golden-4h-soak-canary-failure-2026-08-02.md"
+CHECKPOINT_DATE = "2026-08-02"
+READINESS_DATE = "2026-08-03"
+CHECKPOINT_RUNTIME = "ed03fc47"
+CHECKPOINT_TTL_SECONDS = "565"
+READINESS_HOLD_SECONDS = "930"
+READINESS_COMPLETED_FROM = "7675"
+READINESS_COMPLETED_TO = "8614"
+STARTUP_FAILURE_CAUSE = "NOT_ALL_REQUIRED_TASKS_RUNNING"
+CHECKPOINT_READINESS_DATES = {
+    CHECKPOINT_RECORD: CHECKPOINT_DATE,
+    READINESS_RECORD: READINESS_DATE,
+}
+CHECKPOINT_READINESS_DIGESTS = {
+    CHECKPOINT_RECORD: ("310e71a056393b6f174d2138438b47a69ea7421ee69c41076da23ee64ef65161"),
+    READINESS_RECORD: ("183d001e511a6e333edde00d5d738785d8f35a4d33aa5c602195116275659952"),
+}
+CHECKPOINT_BLOCKER_DIGEST = "b1288e175d29909f2599d1802a24968098e196851168ff9c032cd21697e0a944"
+CHECKPOINT_UNCLAIMED_BOUNDARIES = (
+    "four-hour soak",
+    "helm rollback",
+    "same-sha",
+    "external penetration",
+    "npm",
+    "production acceptance",
+)
+READINESS_UNCLAIMED_BOUNDARIES = (
+    "canary2",
+    "four-hour soak",
+    "rollback",
+    "external penetration",
+    "production acceptance",
+)
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -167,6 +204,14 @@ def _indexed_record_paths() -> list[str]:
 
 def _acceptance_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _acceptance_rows()]
+
+
+def _checkpoint_readiness_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CHECKPOINT_READINESS_HEADING)
+
+
+def _checkpoint_readiness_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _checkpoint_readiness_rows()]
 
 
 def _status_record_links() -> set[str]:
@@ -372,3 +417,142 @@ def test_golden_acceptance_boundaries_remain_conservative() -> None:
         assert phrase in iceberg
     for phrase in LAKE_TO_SERVING_UNCLAIMED_BOUNDARIES:
         assert phrase in lake_to_serving
+
+
+def test_checkpoint_readiness_section_follows_golden_acceptance() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    checkpoint_at = text.index(CHECKPOINT_READINESS_HEADING)
+    following_at = text.index("## F-10 rollback and soak-capacity records")
+
+    assert golden_at < checkpoint_at < following_at
+
+
+def test_checkpoint_readiness_index_lists_the_bounded_pair_once() -> None:
+    indexed = _checkpoint_readiness_record_paths()
+    expected = (CHECKPOINT_RECORD, READINESS_RECORD)
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert len(indexed) == 2
+    for relative in indexed:
+        assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+    assert indexed == [CHECKPOINT_RECORD, READINESS_RECORD]
+    for row in _checkpoint_readiness_rows():
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_checkpoint_readiness_index_exposes_required_nonempty_fields() -> None:
+    rows = _checkpoint_readiness_rows()
+    headers = list(rows[0])
+
+    assert headers == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == CHECKPOINT_READINESS_DATES[identity]
+
+
+def test_checkpoint_readiness_supersession_direction() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _checkpoint_readiness_rows()}
+    checkpoint = rows[CHECKPOINT_RECORD]
+    readiness = rows[READINESS_RECORD]
+    supersedes_targets = LINK_RE.findall(checkpoint["supersedes"])
+
+    assert [_resolve_index_link(target) for target in supersedes_targets] == [
+        CHECKPOINT_BLOCKER_RECORD
+    ]
+    assert supersedes_targets[0].startswith("../perf/")
+    assert checkpoint["superseded by"] == "None"
+    assert readiness["supersedes"] == "None"
+    assert readiness["superseded by"] == "None"
+    _assert_supersession_cell(checkpoint["supersedes"])
+    _assert_supersession_cell(checkpoint["superseded by"])
+    _assert_supersession_cell(readiness["supersedes"])
+    _assert_supersession_cell(readiness["superseded by"])
+    for cell in (readiness["supersedes"], readiness["superseded by"]):
+        resolved = [_resolve_index_link(target) for target in LINK_RE.findall(cell)]
+        assert CHECKPOINT_RECORD not in resolved
+        assert CHECKPOINT_BLOCKER_RECORD not in resolved
+        assert CANARY_TRAFFIC_RECORD not in resolved
+
+
+def test_checkpoint_readiness_records_keep_published_digests() -> None:
+    indexed = set(_checkpoint_readiness_record_paths())
+
+    assert indexed == set(CHECKPOINT_READINESS_DIGESTS)
+    for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    blocker_digest = hashlib.sha256((ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()).hexdigest()
+    assert blocker_digest == CHECKPOINT_BLOCKER_DIGEST
+    for relative, expected in PROTECTED_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_checkpoint_readiness_claim_links_match_indexed_records() -> None:
+    indexed = set(_checkpoint_readiness_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    production = manifest["production"]
+    status_links = _status_record_links()
+
+    assert indexed == {CHECKPOINT_RECORD, READINESS_RECORD}
+    assert production.get("verified_checkpoint_restore_replay") == CHECKPOINT_RECORD
+    assert production.get("verified_ready_baselined_checkpoint_hold") == (READINESS_RECORD)
+    assert production.get("latest_soak_recovery_evidence") == READINESS_RECORD
+    assert production.get("status") == "candidate"
+    assert CHECKPOINT_RECORD in manifest["required_evidence"]
+    assert READINESS_RECORD in manifest["required_evidence"]
+    assert CHECKPOINT_RECORD in status_links
+    assert READINESS_RECORD in status_links
+
+
+def test_checkpoint_readiness_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _checkpoint_readiness_rows()}
+    checkpoint = _row_text(rows[CHECKPOINT_RECORD])
+    readiness = _row_text(rows[READINESS_RECORD])
+
+    assert "pass" in rows[CHECKPOINT_RECORD]["result"].lower()
+    assert "isolated" in checkpoint
+    assert "checkpoint" in checkpoint
+    assert "savepoint" in checkpoint
+    assert "restore" in checkpoint
+    assert CHECKPOINT_RUNTIME in checkpoint
+    assert "byte-identical" in checkpoint
+    assert "e1" in checkpoint
+    assert "e2" in checkpoint
+    assert "kafka validated" in checkpoint
+    assert "iceberg" in checkpoint
+    assert "clickhouse" in checkpoint
+    assert "api" in checkpoint
+    assert "dlq" in checkpoint
+    assert "lag" in checkpoint
+    assert CHECKPOINT_TTL_SECONDS in checkpoint
+    assert "runtime_hold_pass" in rows[READINESS_RECORD]["result"].lower()
+    assert READINESS_HOLD_SECONDS in readiness
+    assert "readiness-baselined" in readiness
+    assert "read-only" in readiness
+    assert "no-traffic" in readiness
+    assert "already-running" in readiness
+    assert READINESS_COMPLETED_FROM in readiness
+    assert READINESS_COMPLETED_TO in readiness
+    assert "failed checkpoints 1 to 1" in readiness
+    assert STARTUP_FAILURE_CAUSE.lower() in readiness
+    assert "does not claim" in checkpoint
+    assert "does not prove" in readiness
+    assert "candidate" in checkpoint
+    assert "candidate" in readiness
+    assert "canary" in readiness
+    assert "latest traffic" in readiness
+    for phrase in CHECKPOINT_UNCLAIMED_BOUNDARIES:
+        assert phrase in checkpoint
+    for phrase in READINESS_UNCLAIMED_BOUNDARIES:
+        assert phrase in readiness

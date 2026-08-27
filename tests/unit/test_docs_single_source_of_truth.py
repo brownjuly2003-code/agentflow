@@ -448,3 +448,73 @@ def test_troubleshooting_walkthrough_defers_exact_procedures_to_owners() -> None
     assert "X-Admin-Key" in api_reference
     assert "X-Admin-Key" not in walkthrough
     assert len(walkthrough.split()) * 5 < len(runbook.split())
+
+
+def test_sdk_walkthrough_defers_exact_language_and_capability_contracts() -> None:
+    walkthrough = (ROOT / "docs" / "sdk.md").read_text(encoding="utf-8")
+    python_reference = (ROOT / "sdk" / "README.md").read_text(encoding="utf-8")
+    typescript_reference = (ROOT / "sdk-ts" / "README.md").read_text(encoding="utf-8")
+    capability_contract = (ROOT / "docs" / "sdk-capabilities.md").read_text(encoding="utf-8")
+    api_reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
+
+    assert "[quickstart](quickstart.md)" in walkthrough
+    assert (
+        "[Python package reference](https://github.com/brownjuly2003-code/agentflow/"
+        "blob/main/sdk/README.md)" in walkthrough
+    )
+    assert (
+        "[TypeScript package reference](https://github.com/brownjuly2003-code/"
+        "agentflow/blob/main/sdk-ts/README.md)" in walkthrough
+    )
+    assert "[generated capability contract](sdk-capabilities.md)" in walkthrough
+    assert "[full API reference](api-reference.md)" in walkthrough
+    assert "[SDK walkthrough](../docs/sdk.md)" in python_reference
+    assert "[SDK walkthrough](../docs/sdk.md)" in typescript_reference
+
+    for stable_step in (
+        "## Choose a client",
+        "## Try the same read flow",
+        "pip install agentflow-client",
+        "npm install @yuliaedomskikh/agentflow-client",
+        "client.get_order",
+        "client.getOrder",
+    ):
+        assert stable_step in walkthrough
+
+    language_references = python_reference + typescript_reference
+    for language_owned_contract in (
+        "AsyncAgentFlowClient",
+        "RetryPolicy",
+        "configure_resilience",
+        "configureResilience",
+    ):
+        assert language_owned_contract in language_references
+        assert language_owned_contract not in walkthrough
+
+    for capability_method in (
+        "list_contracts",
+        "validate_contract",
+        "explain_query",
+        "getLineage",
+        "getChangelog",
+        "isFresh",
+    ):
+        assert capability_method in capability_contract
+        assert capability_method not in walkthrough
+
+    for http_only_route in (
+        "/v1/admin/",
+        "/v1/webhooks",
+        "/v1/alerts",
+        "/v1/deadletter",
+        "/v1/slo",
+        "/v1/stream/events",
+    ):
+        assert http_only_route in api_reference
+        assert http_only_route not in walkthrough
+
+    reference_words = sum(
+        len(reference.split())
+        for reference in (python_reference, typescript_reference, capability_contract)
+    )
+    assert len(walkthrough.split()) * 2 < reference_words

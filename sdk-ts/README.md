@@ -2,6 +2,10 @@
 
 > Published npm package: **`@yuliaedomskikh/agentflow-client`**.
 
+Start with the curated [SDK walkthrough](../docs/sdk.md). This package
+reference owns TypeScript installation, client usage, and resilience
+configuration.
+
 Install:
 
 ```bash

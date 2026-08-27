@@ -160,3 +160,20 @@ def test_authoritative_docs_relative_links_resolve() -> None:
                 offenders.append(f"{name} -> {target}")
 
     assert offenders == []
+
+
+def test_architecture_walkthrough_defers_runtime_claims_to_reference() -> None:
+    walkthrough = (ROOT / "docs" / "architecture" / "index.md").read_text(encoding="utf-8")
+    reference = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+
+    assert "[detailed architecture reference](../architecture.md)" in walkthrough
+    assert "[engineering status](../STATUS.md)" in walkthrough
+    assert "[architecture walkthrough](architecture/index.md)" in reference
+
+    assert 'serving_materializer["Serving materializer"]' in walkthrough
+    assert 'lake_materializer["Lake materializer"]' in walkthrough
+    assert 'serving_store["Configured serving store"]' in walkthrough
+    for backend_claim in ("DuckDB", "ClickHouse", "Iceberg"):
+        assert backend_claim not in walkthrough
+
+    assert len(walkthrough.split()) * 2 < len(reference.split())

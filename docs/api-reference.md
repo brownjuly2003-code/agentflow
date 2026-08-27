@@ -1,6 +1,12 @@
 # API Reference
 
-`docs/openapi.json` currently covers the core public surface. This document is the maintained reference for the full v1 API, including admin, alerting, pagination, dead-letter, and operational endpoints added after the initial export flow.
+This page is the detailed source for authentication headers, endpoint and
+parameter inventory, request limits, response fields, errors, and operational
+or admin surfaces. Start with the [API walkthrough](api/index.md) for a guided
+core request flow. `docs/openapi.json` currently covers the core public surface;
+this document maintains the full v1 reference, including admin, alerting,
+pagination, dead-letter, and operational endpoints added after the initial
+export flow.
 
 ## Base URL and Headers
 

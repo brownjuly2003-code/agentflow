@@ -177,3 +177,26 @@ def test_architecture_walkthrough_defers_runtime_claims_to_reference() -> None:
         assert backend_claim not in walkthrough
 
     assert len(walkthrough.split()) * 2 < len(reference.split())
+
+
+def test_api_walkthrough_defers_mutable_contract_to_reference() -> None:
+    walkthrough = (ROOT / "docs" / "api" / "index.md").read_text(encoding="utf-8")
+    reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
+
+    assert "[full API reference](../api-reference.md)" in walkthrough
+    assert "[API walkthrough](api/index.md)" in reference
+
+    for core_step in ("/v1/health", "/v1/catalog", "/v1/entity/", "/v1/query"):
+        assert core_step in walkthrough
+
+    for reference_owned_claim in (
+        "X-Admin-Key",
+        "X-AgentFlow-Version",
+        "X-Correlation-ID",
+        "/v1/admin/*",
+        "/v1/deadletter",
+        "/v1/webhooks",
+        "up to 20",
+    ):
+        assert reference_owned_claim in reference
+        assert reference_owned_claim not in walkthrough

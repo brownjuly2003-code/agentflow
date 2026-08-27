@@ -270,3 +270,37 @@ def test_concepts_walkthrough_defers_domain_runtime_and_route_claims() -> None:
     assert "/v1/contracts" not in walkthrough
 
     assert len(walkthrough.split()) * 7 < len(domain.split())
+
+
+def test_observability_walkthrough_defers_operational_contracts_to_owners() -> None:
+    walkthrough = (ROOT / "docs" / "observability.md").read_text(encoding="utf-8")
+    runbook = (ROOT / "docs" / "runbook.md").read_text(encoding="utf-8")
+    api_reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
+
+    assert "[operational runbook](runbook.md)" in walkthrough
+    assert "[full API reference](api-reference.md)" in walkthrough
+    assert "[engineering status](STATUS.md)" in walkthrough
+    assert "[observability walkthrough](observability.md)" in runbook
+
+    for stable_signal in (
+        "## Observability flow",
+        "## Metrics",
+        "## Traces",
+        "## Logs",
+    ):
+        assert stable_signal in walkthrough
+
+    for runbook_owned_claim in (
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_SDK_DISABLED",
+        "scripts/prune_query_analytics.py",
+        "30 days",
+    ):
+        assert runbook_owned_claim in runbook
+        assert runbook_owned_claim not in walkthrough
+
+    for api_owned_route in ("/v1/deadletter", "/v1/alerts", "/v1/webhooks"):
+        assert api_owned_route in api_reference
+        assert api_owned_route not in walkthrough
+
+    assert len(walkthrough.split()) * 3 < len(runbook.split())

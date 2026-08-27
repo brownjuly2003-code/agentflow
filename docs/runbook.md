@@ -13,6 +13,48 @@
 | Jaeger | http://localhost:16686 | `curl -I http://localhost:16686` |
 | Toxiproxy API | http://localhost:8474 | `curl http://localhost:8474/proxies` |
 
+The [observability walkthrough](observability.md) explains how to combine
+these signals. This runbook owns their exact local commands, supported runtime
+settings, and recurring maintenance.
+
+## Observability Operations
+
+### Inspect metrics and dashboards
+
+Scrape the API metrics directly:
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+The production-shaped compose stack wires those metrics to Prometheus and
+Grafana at the URLs in the quick-reference table. Use Jaeger from the same
+table to inspect traces for a failing or slow request.
+
+### Configure tracing
+
+The supported OpenTelemetry settings are:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+OTEL_SERVICE_NAME=agentflow-api
+OTEL_SDK_DISABLED=true   # supported way to run without tracing
+```
+
+OpenTelemetry is a mandatory runtime dependency and the API imports its
+telemetry setup outright. Disabling tracing is an explicit configuration
+choice through `OTEL_SDK_DISABLED=true`; an unimportable telemetry module
+fails boot instead of silently degrading to no tracing (audit F-13).
+
+### Maintain query analytics retention
+
+Query analytics keeps a peppered fingerprint of each query question, not the
+question, unless an operator opts in to a redacted copy. Retention defaults to
+30 days and is enforced by `scripts/prune_query_analytics.py`; no scheduler
+runs the script automatically. See the
+[security policy](https://github.com/brownjuly2003-code/agentflow/blob/main/SECURITY.md)
+before scheduling retention or tenant-erasure work.
+
 ## Local Pipeline Operations
 
 ### Start the local demo (Docker Redis + ClickHouse)

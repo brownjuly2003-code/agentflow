@@ -29,7 +29,7 @@ is needed.
 | [MkDocs walkthrough](index.md) | Curated learning path: quickstart, architecture, API, SDK, deployment, observability, troubleshooting | Keep concise and runnable; `mkdocs build --strict` must pass |
 | Current-state references | `STATUS.md`, `architecture.md`, `release-readiness.md`, `security-audit.md`, `runbook.md` | Update with code or operational truth; links and current versions are gated |
 | Product and domain specs | `product.md`, `domain.md`, `generator-spec.md`, `ops-surfaces-spec.md` | Explain stable behavior and invariants; do not carry live status |
-| Operations | [`operations/`](operations/) and [`runbooks/`](runbooks/) | Current procedures stay actionable; superseded execution narratives move to the archive |
+| Operations | [`operations/`](operations/), [`runbooks/`](runbooks/), and [control-plane testing](operations/testing-control-plane.md) | Current procedures stay actionable; superseded execution narratives move to the archive |
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |

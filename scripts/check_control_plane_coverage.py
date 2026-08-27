@@ -16,11 +16,11 @@ Two things make the numbers here different from the repository floor:
   the absence of a database, not the absence of tests. The measurement command
   in the module docstring below runs both into one coverage data file.
 
-Measure and check locally -- `docs/testing-control-plane.md` carries the exact
-commands and the throwaway-PostgreSQL recipe the live half needs. In short:
-run the control-plane and node-ingest unit files and the control-plane/ops/
-node-topology integration files under one `coverage run --append`, then this
-script.
+Measure and check locally -- `docs/operations/testing-control-plane.md`
+carries the exact commands and the throwaway-PostgreSQL recipe the live half
+needs. In short: run the control-plane and node-ingest unit files and the
+control-plane/ops/node-topology integration files under one
+`coverage run --append`, then this script.
 
 Floors sit a few points under the measured value: they are a ratchet against
 regression, not a target to code to. Raise one when the real number moves up

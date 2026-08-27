@@ -11,10 +11,12 @@ required.
 ## Before you start
 
 Complete the [quickstart](../quickstart.md) and start the API. The commands
-below use the local URL `http://localhost:8000` and the quickstart's
-`demo-key`; use deployment-specific values instead. See the reference's
-[base URL and headers](../api-reference.md#base-url-and-headers) section for
-the complete authentication contract.
+below use the local URL `http://localhost:8000` and send `demo-key` so they also
+work in keyed demo profiles; the local-only quickstart accepts them without a
+key. Use values from the [deployment walkthrough](../deployment.md) in other
+environments. See the reference's [base URL and
+headers](../api-reference.md#base-url-and-headers) section for the complete
+authentication contract.
 
 ## 1. Check the service
 

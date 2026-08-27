@@ -5,6 +5,8 @@ keeps the local entry commands. Exact Helm prerequisites, values, security and
 scaling clauses, and rollout procedures belong to the
 [complete Helm operator reference](operations/helm-deployment.md); the
 [engineering status](STATUS.md) owns current evidence and external gates.
+For the first executable local path, start with the
+[quickstart](quickstart.md), then return here to choose another profile.
 
 ## Local demo with No Docker
 
@@ -19,6 +21,9 @@ seeds it, processes 500 events through the local pipeline, skips optional
 Iceberg writes, and starts FastAPI on `http://localhost:8000`. It also disables
 external Kafka, Flink, Iceberg, and Redis health/cache connections so this path
 does not require local infrastructure after package installation.
+The runner sets `AGENTFLOW_AUTH_DISABLED=true` for this local-only process;
+keyed profiles must follow the
+[API authentication contract](api-reference.md#base-url-and-headers).
 
 Use `python scripts/demo_local.py --prepare-only` to stop after provisioning and
 pipeline processing. `make demo-local` is a convenience alias.

@@ -400,7 +400,6 @@ def test_troubleshooting_walkthrough_defers_exact_procedures_to_owners() -> None
     walkthrough = (ROOT / "docs" / "troubleshooting.md").read_text(encoding="utf-8")
     runbook = (ROOT / "docs" / "runbook.md").read_text(encoding="utf-8")
     api_reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
-    quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
     contributor_guide = (ROOT / "docs" / "contributing.md").read_text(encoding="utf-8")
 
     assert "[operational runbook](runbook.md)" in walkthrough
@@ -438,7 +437,7 @@ def test_troubleshooting_walkthrough_defers_exact_procedures_to_owners() -> None
         assert runbook_owned_command in runbook
         assert runbook_owned_command not in walkthrough
 
-    assert "mkdocs serve -a" in quickstart
+    assert "mkdocs serve -a" in contributor_guide
     assert "mkdocs serve -a" not in walkthrough
     assert "make lint" in contributor_guide
     assert "python -m pytest" in contributor_guide
@@ -518,3 +517,66 @@ def test_sdk_walkthrough_defers_exact_language_and_capability_contracts() -> Non
         for reference in (python_reference, typescript_reference, capability_contract)
     )
     assert len(walkthrough.split()) * 2 < reference_words
+
+
+def test_quickstart_keeps_first_run_and_defers_adjacent_procedures_to_owners() -> None:
+    quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
+    deployment = (ROOT / "docs" / "deployment.md").read_text(encoding="utf-8")
+    api_walkthrough = (ROOT / "docs" / "api" / "index.md").read_text(encoding="utf-8")
+    api_reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
+    contributor_guide = (ROOT / "docs" / "contributing.md").read_text(encoding="utf-8")
+
+    assert "[deployment walkthrough](deployment.md)" in quickstart
+    assert "[API walkthrough](api/index.md)" in quickstart
+    assert "[full API reference](api-reference.md)" in quickstart
+    assert "[contributor guide](contributing.md)" in quickstart
+    assert "[quickstart](quickstart.md)" in deployment
+    assert "[quickstart](quickstart.md)" in contributor_guide
+    assert "[quickstart](../quickstart.md)" in api_walkthrough
+    assert "Local demo: `make demo`" not in contributor_guide
+    assert "AGENTFLOW_AUTH_DISABLED=true" in deployment
+    assert "AGENTFLOW_AUTH_DISABLED=true" not in quickstart
+    assert "quickstart's `demo-key`" not in api_walkthrough
+    assert "local-only quickstart accepts them without a" in api_walkthrough
+
+    for first_run_step in (
+        "## Prerequisites",
+        "## Clone and set up",
+        "## Start the demo API with No Docker",
+        "python scripts/demo_local.py",
+        "curl http://localhost:8000/v1/health",
+        ". .\\scripts\\setup.ps1",
+        "source ./scripts/setup.sh",
+    ):
+        assert first_run_step in quickstart
+
+    for deployment_owned_command in (
+        "python scripts/demo_local.py --prepare-only",
+        "make demo",
+    ):
+        assert deployment_owned_command in deployment
+        assert deployment_owned_command not in quickstart
+
+    for contributor_owned_command in (
+        'python -m pip install "mkdocs-material>=9.5,<10"',
+        "mkdocs serve",
+        "mkdocs serve -a 127.0.0.1:8010",
+        "mkdocs build --strict",
+    ):
+        assert contributor_owned_command in contributor_guide
+        assert contributor_owned_command not in quickstart
+
+    api_owners = api_walkthrough + api_reference
+    for api_owned_contract in (
+        '"duckdb_pool"',
+        "X-API-Key",
+        "/v1/entity/order/ORD-20260404-1001",
+        "top products by revenue today",
+    ):
+        assert api_owned_contract in api_owners
+        assert api_owned_contract not in quickstart
+
+    owner_words = sum(
+        len(owner.split()) for owner in (deployment, api_walkthrough, contributor_guide)
+    )
+    assert len(quickstart.split()) * 5 < owner_words

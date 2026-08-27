@@ -1,21 +1,19 @@
 # Quickstart
 
-This path runs AgentFlow locally, seeds demo data, starts the API, and verifies
-the main read/query surface. The recommended first run needs No Docker services
-or provider API keys after package installation.
+This path sets up AgentFlow, starts the local API, and proves that it can answer
+a health request. The recommended first run needs No Docker services or
+provider API keys after package installation.
+
+Stop here once the API answers. Use the [deployment walkthrough](deployment.md)
+for other runtime profiles, the [API walkthrough](api/index.md) for useful
+reads, the [full API reference](api-reference.md) for exact request and response
+contracts, and the [contributor guide](contributing.md) for repository and
+documentation work.
 
 ## Prerequisites
 
 - Python `3.11+`
-- Optional: `make` for command aliases
-- Optional: Docker Compose for the ClickHouse-backed demo
-- Optional docs tooling: `mkdocs-material` for this site
-
-Install the docs tooling if it is not already available:
-
-```bash
-python -m pip install "mkdocs-material>=9.5,<10"
-```
+- Git
 
 ## Clone and set up
 
@@ -37,85 +35,31 @@ python -m pip install "mkdocs-material>=9.5,<10"
 
 ## Start the demo API with No Docker
 
-The cross-platform runner provisions a file-backed DuckDB database, processes
-500 synthetic events without the optional Iceberg sink, and starts FastAPI on
+The cross-platform runner prepares demo data and starts the API on
 `http://localhost:8000`:
 
 ```bash
 python scripts/demo_local.py
 ```
 
-`make demo-local` is an alias. The command runs the API in the foreground;
-leave it open while trying the requests below.
+The command runs in the foreground. Leave it open while checking the service
+from another terminal.
 
-To prepare the database without starting a server, for example in CI:
-
-```bash
-python scripts/demo_local.py --prepare-only
-```
-
-For the Docker-backed profile with Redis and the ClickHouse serving store, use
-`make demo` instead.
-
-## Verify health
+## Verify the first run
 
 ```bash
 curl http://localhost:8000/v1/health
 ```
 
-Expected shape:
+Expect HTTP `200` with an overall healthy status. The exact payload and error
+contract belong to the
+[health reference](api-reference.md#get-v1health).
 
-```json
-{
-  "status": "healthy",
-  "components": [
-    {
-      "name": "duckdb_pool",
-      "status": "healthy"
-    }
-  ]
-}
-```
+## Continue by task
 
-The exact component list can vary by configuration. The important signal is an
-HTTP `200` response with an overall healthy status.
-
-## Query live entities and metrics
-
-```bash
-curl http://localhost:8000/v1/entity/order/ORD-20260404-1001
-curl "http://localhost:8000/v1/metrics/revenue?window=24h"
-```
-
-The local demo disables API-key enforcement through its demo environment. In a
-configured environment, send `X-API-Key: <key>` on protected routes.
-
-## Ask a natural-language query
-
-```bash
-curl -X POST http://localhost:8000/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"question":"top products by revenue today","limit":5}'
-```
-
-The response includes result rows, translated SQL metadata, and pagination
-fields when the query supports cursor pagination.
-
-## Serve this documentation site
-
-```bash
-mkdocs serve
-```
-
-Open `http://127.0.0.1:8000` if that port is free. If the AgentFlow API is
-already using port `8000`, run:
-
-```bash
-mkdocs serve -a 127.0.0.1:8010
-```
-
-Build the static site:
-
-```bash
-mkdocs build --strict
-```
+| Next task | Detailed owner |
+| --- | --- |
+| Prepare data without a server or choose a container-backed profile | [Deployment walkthrough](deployment.md) |
+| Discover data, read an entity, or run a query | [API walkthrough](api/index.md) |
+| Check authentication, parameters, response fields, or errors | [Full API reference](api-reference.md) |
+| Preview this site or verify a repository change | [Contributor guide](contributing.md) |

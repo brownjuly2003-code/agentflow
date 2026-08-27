@@ -1,8 +1,13 @@
 # Contributing
 
+Complete the [quickstart](quickstart.md) for the first executable local path.
+This guide owns change verification, specialist test selection, and local
+documentation tooling.
+
 ## Recommended Environments
 
-- Local demo: `make demo` for the fastest feedback loop on DuckDB + FastAPI.
+- Local demo: use the [quickstart](quickstart.md) for the fastest DuckDB +
+  FastAPI feedback loop.
 - Production-shaped local stack: `make stack-prod-shaped-local` when you need Redis, Jaeger, Prometheus, Alertmanager, or Grafana. `make stack-prod-shaped-local-smoke` proves an authenticated request works.
 - DevContainer: use `.devcontainer/` when you need one workspace for SDK work, chaos tests, and kind staging.
 
@@ -92,6 +97,33 @@ This path exercises registry pull by immutable digest, Helm install, and smoke
 validation. It deliberately does not rebuild or `kind load` the API image. The
 manual `Staging Deploy` workflow is the complete gate because it performs the
 pre-cluster checks and retains the existing E2E suite plus staging evidence.
+
+## Documentation Site
+
+Install the optional site tooling if it is not already available:
+
+```bash
+python -m pip install "mkdocs-material>=9.5,<10"
+```
+
+Preview the site locally:
+
+```bash
+mkdocs serve
+```
+
+The API and MkDocs both default to port `8000`. When the API is already using
+that port, bind the site to `8010`:
+
+```bash
+mkdocs serve -a 127.0.0.1:8010
+```
+
+Run the strict static build before submitting documentation changes:
+
+```bash
+mkdocs build --strict
+```
 
 ## Docs and API Changes
 

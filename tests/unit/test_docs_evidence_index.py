@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import tomllib
 from collections import Counter
 from pathlib import Path
 
@@ -9,8 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_DIR = ROOT / "docs" / "evidence"
 INDEX = EVIDENCE_DIR / "INDEX.md"
 STATUS = ROOT / "docs" / "STATUS.md"
+CLAIMS = ROOT / "config" / "project_claims.toml"
 
 SECURITY_DEPENDENCY_HEADING = "## Security and dependency records"
+ACCEPTANCE_HEADING = "## Golden topology acceptance records"
 REQUIRED_FIELDS = (
     "identity",
     "date",
@@ -30,6 +33,26 @@ PROTECTED_DIGESTS = {
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
     ),
 }
+GOLDEN_ACCEPTANCE_DIGESTS = {
+    "docs/perf/golden-flink-submission-2026-07-30.md": (
+        "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
+    ),
+    "docs/perf/golden-operator-acceptance-2026-07-30.md": (
+        "31ba968526adab529b93b55440aab3d5e0037c60f83d44ebb5bebfbeeedaa861"
+    ),
+}
+GOLDEN_ACCEPTANCE_DATE = "2026-07-30"
+SUBMISSION_RECORD = "docs/perf/golden-flink-submission-2026-07-30.md"
+OPERATOR_RECORD = "docs/perf/golden-operator-acceptance-2026-07-30.md"
+SUBMISSION_COMMIT = "ca82be5a84a58ae37dd71ef80e785deb8e70dcad"
+OPERATOR_COMMIT = "36ed1ecc250ac6c82ccc6f27de1b76a301b17a41"
+UNCLAIMED_BOUNDARIES = (
+    "full lake-to-serving production e2e",
+    "restore/replay",
+    "fresh 4h soak plus rollback after traffic",
+    "external penetration test",
+    "production acceptance",
+)
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -54,7 +77,7 @@ def _markdown_table(section: str) -> tuple[list[str], list[list[str]]]:
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         raw_rows.append(cells)
 
-    assert raw_rows, "security/dependency section has no Markdown table"
+    assert raw_rows, "section has no Markdown table"
     headers = [_normalize_field(cell) for cell in raw_rows[0]]
     body = raw_rows[1:]
     if body and all(SEPARATOR_CELL_RE.fullmatch(cell.replace(" ", "")) for cell in body[0]):
@@ -62,8 +85,8 @@ def _markdown_table(section: str) -> tuple[list[str], list[list[str]]]:
     return headers, body
 
 
-def _security_dependency_rows() -> list[dict[str, str]]:
-    section = _section(INDEX.read_text(encoding="utf-8"), SECURITY_DEPENDENCY_HEADING)
+def _rows_for_heading(heading: str) -> list[dict[str, str]]:
+    section = _section(INDEX.read_text(encoding="utf-8"), heading)
     headers, body = _markdown_table(section)
     rows: list[dict[str, str]] = []
     for cells in body:
@@ -71,8 +94,16 @@ def _security_dependency_rows() -> list[dict[str, str]]:
             f"expected {len(headers)} columns, got {len(cells)}: {cells!r}"
         )
         rows.append(dict(zip(headers, cells, strict=True)))
-    assert rows, "security/dependency table has no data rows"
+    assert rows, f"{heading} table has no data rows"
     return rows
+
+
+def _security_dependency_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
+
+
+def _acceptance_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(ACCEPTANCE_HEADING)
 
 
 def _on_disk_evidence_records() -> set[str]:
@@ -96,6 +127,25 @@ def _identity_path(cell: str) -> str:
 
 def _indexed_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _security_dependency_rows()]
+
+
+def _acceptance_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _acceptance_rows()]
+
+
+def _status_record_links() -> set[str]:
+    found: set[str] = set()
+    for target in LINK_RE.findall(STATUS.read_text(encoding="utf-8")):
+        resolved = (STATUS.parent / target).resolve()
+        try:
+            found.add(resolved.relative_to(ROOT).as_posix())
+        except ValueError:
+            continue
+    return found
+
+
+def _row_text(row: dict[str, str]) -> str:
+    return f"{row.get('result', '')} {row.get('claim boundary', '')}".lower()
 
 
 def _status_evidence_links() -> set[str]:
@@ -162,3 +212,83 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
     for row in _security_dependency_rows():
         _assert_supersession_cell(row.get("supersedes", ""))
         _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_golden_acceptance_index_lists_the_bounded_pair_once() -> None:
+    indexed = _acceptance_record_paths()
+    expected = (SUBMISSION_RECORD, OPERATOR_RECORD)
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    for relative in indexed:
+        assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+
+
+def test_golden_acceptance_index_exposes_required_nonempty_fields() -> None:
+    rows = _acceptance_rows()
+    headers = list(rows[0])
+
+    assert headers == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        assert row["date"] == GOLDEN_ACCEPTANCE_DATE
+
+
+def test_golden_acceptance_supersession_is_none() -> None:
+    for row in _acceptance_rows():
+        assert row.get("supersedes", "") == "None"
+        assert row.get("superseded by", "") == "None"
+        _assert_supersession_cell(row.get("supersedes", ""))
+        _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_golden_acceptance_records_keep_published_digests() -> None:
+    indexed = set(_acceptance_record_paths())
+
+    assert indexed == set(GOLDEN_ACCEPTANCE_DIGESTS)
+    for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_golden_acceptance_claim_links_match_indexed_records() -> None:
+    indexed = set(_acceptance_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    production = manifest["production"]
+    status_links = _status_record_links()
+
+    assert indexed == {SUBMISSION_RECORD, OPERATOR_RECORD}
+    assert production.get("verified_submission_smoke") == SUBMISSION_RECORD
+    assert production.get("verified_operator_acceptance") == OPERATOR_RECORD
+    assert production.get("status") == "candidate"
+    assert SUBMISSION_RECORD in manifest["required_evidence"]
+    assert OPERATOR_RECORD in manifest["required_evidence"]
+    assert SUBMISSION_RECORD in status_links
+    assert OPERATOR_RECORD in status_links
+
+
+def test_golden_acceptance_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _acceptance_rows()}
+    submission = _row_text(rows[SUBMISSION_RECORD])
+    operator = _row_text(rows[OPERATOR_RECORD])
+
+    assert "pass" in rows[SUBMISSION_RECORD]["result"].lower()
+    assert "clean-checkout" in submission
+    assert "oci" in submission
+    assert "submission" in submission
+    assert "running" in submission
+    assert SUBMISSION_COMMIT in submission
+    assert "pass" in rows[OPERATOR_RECORD]["result"].lower()
+    assert "kind" in operator
+    assert "operator" in operator
+    assert "helm" in operator
+    assert "hold" in operator
+    assert OPERATOR_COMMIT in operator
+    for text in (submission, operator):
+        assert "does not claim" in text
+        assert "candidate" in text
+        for phrase in UNCLAIMED_BOUNDARIES:
+            assert phrase in text

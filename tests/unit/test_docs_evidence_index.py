@@ -40,17 +40,53 @@ GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-operator-acceptance-2026-07-30.md": (
         "31ba968526adab529b93b55440aab3d5e0037c60f83d44ebb5bebfbeeedaa861"
     ),
+    "docs/perf/live-iceberg-materialization-2026-08-01.md": (
+        "a155f2f10b57acd00d5d74f80c36afdd04a3a501513e3e3dcb806a4c65b0ecc2"
+    ),
+    "docs/perf/full-lake-to-serving-e2e-2026-08-01.md": (
+        "0ffa18a977c4ee3ac96f02a0b57046c26197b9c3796cc88ba672b477e204312b"
+    ),
 }
 GOLDEN_ACCEPTANCE_DATE = "2026-07-30"
+LAKE_TO_SERVING_DATE = "2026-08-01"
 SUBMISSION_RECORD = "docs/perf/golden-flink-submission-2026-07-30.md"
 OPERATOR_RECORD = "docs/perf/golden-operator-acceptance-2026-07-30.md"
+ICEBERG_RECORD = "docs/perf/live-iceberg-materialization-2026-08-01.md"
+LAKE_TO_SERVING_RECORD = "docs/perf/full-lake-to-serving-e2e-2026-08-01.md"
 SUBMISSION_COMMIT = "ca82be5a84a58ae37dd71ef80e785deb8e70dcad"
 OPERATOR_COMMIT = "36ed1ecc250ac6c82ccc6f27de1b76a301b17a41"
+ICEBERG_RUNTIME = "ed03fc47"
+OPERATOR_STAND = "36ed1ec"
+GOLDEN_ACCEPTANCE_DATES = {
+    SUBMISSION_RECORD: GOLDEN_ACCEPTANCE_DATE,
+    OPERATOR_RECORD: GOLDEN_ACCEPTANCE_DATE,
+    ICEBERG_RECORD: LAKE_TO_SERVING_DATE,
+    LAKE_TO_SERVING_RECORD: LAKE_TO_SERVING_DATE,
+}
 UNCLAIMED_BOUNDARIES = (
     "full lake-to-serving production e2e",
     "restore/replay",
     "fresh 4h soak plus rollback after traffic",
     "external penetration test",
+    "production acceptance",
+)
+ICEBERG_UNCLAIMED_BOUNDARIES = (
+    "kafka source",
+    "clickhouse/api",
+    "restore/replay",
+    "fresh soak or rollback",
+    "external penetration test",
+    "npm approval",
+    "operator acceptance of ed03fc47",
+    "production acceptance",
+)
+LAKE_TO_SERVING_UNCLAIMED_BOUNDARIES = (
+    "same-sha operator acceptance",
+    "multi-tenant acceptance",
+    "restore/replay",
+    "fresh soak or rollback",
+    "external penetration test",
+    "npm approval",
     "production acceptance",
 )
 
@@ -216,12 +252,19 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
 
 def test_golden_acceptance_index_lists_the_bounded_pair_once() -> None:
     indexed = _acceptance_record_paths()
-    expected = (SUBMISSION_RECORD, OPERATOR_RECORD)
+    expected = (
+        SUBMISSION_RECORD,
+        OPERATOR_RECORD,
+        ICEBERG_RECORD,
+        LAKE_TO_SERVING_RECORD,
+    )
 
     assert set(indexed) == set(expected)
     assert Counter(indexed) == Counter(expected)
+    assert len(indexed) == 4
     for relative in indexed:
         assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+    assert indexed[:2] == [SUBMISSION_RECORD, OPERATOR_RECORD]
 
 
 def test_golden_acceptance_index_exposes_required_nonempty_fields() -> None:
@@ -229,12 +272,13 @@ def test_golden_acceptance_index_exposes_required_nonempty_fields() -> None:
     headers = list(rows[0])
 
     assert headers == list(REQUIRED_FIELDS)
-    assert len(rows) == 2
+    assert len(rows) == 4
     for row in rows:
         for field in REQUIRED_FIELDS:
             assert row[field].strip(), f"{field} is empty in {row!r}"
         assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
-        assert row["date"] == GOLDEN_ACCEPTANCE_DATE
+        identity = _identity_path(row["identity"])
+        assert row["date"] == GOLDEN_ACCEPTANCE_DATES[identity]
 
 
 def test_golden_acceptance_supersession_is_none() -> None:
@@ -260,20 +304,33 @@ def test_golden_acceptance_claim_links_match_indexed_records() -> None:
     production = manifest["production"]
     status_links = _status_record_links()
 
-    assert indexed == {SUBMISSION_RECORD, OPERATOR_RECORD}
+    assert indexed == {
+        SUBMISSION_RECORD,
+        OPERATOR_RECORD,
+        ICEBERG_RECORD,
+        LAKE_TO_SERVING_RECORD,
+    }
     assert production.get("verified_submission_smoke") == SUBMISSION_RECORD
     assert production.get("verified_operator_acceptance") == OPERATOR_RECORD
+    assert production.get("verified_iceberg_materialization") == ICEBERG_RECORD
+    assert production.get("verified_full_lake_to_serving_smoke") == LAKE_TO_SERVING_RECORD
     assert production.get("status") == "candidate"
     assert SUBMISSION_RECORD in manifest["required_evidence"]
     assert OPERATOR_RECORD in manifest["required_evidence"]
+    assert ICEBERG_RECORD in manifest["required_evidence"]
+    assert LAKE_TO_SERVING_RECORD in manifest["required_evidence"]
     assert SUBMISSION_RECORD in status_links
     assert OPERATOR_RECORD in status_links
+    assert ICEBERG_RECORD in status_links
+    assert LAKE_TO_SERVING_RECORD in status_links
 
 
 def test_golden_acceptance_boundaries_remain_conservative() -> None:
     rows = {_identity_path(row["identity"]): row for row in _acceptance_rows()}
     submission = _row_text(rows[SUBMISSION_RECORD])
     operator = _row_text(rows[OPERATOR_RECORD])
+    iceberg = _row_text(rows[ICEBERG_RECORD])
+    lake_to_serving = _row_text(rows[LAKE_TO_SERVING_RECORD])
 
     assert "pass" in rows[SUBMISSION_RECORD]["result"].lower()
     assert "clean-checkout" in submission
@@ -287,8 +344,31 @@ def test_golden_acceptance_boundaries_remain_conservative() -> None:
     assert "helm" in operator
     assert "hold" in operator
     assert OPERATOR_COMMIT in operator
-    for text in (submission, operator):
+    assert "pass" in rows[ICEBERG_RECORD]["result"].lower()
+    assert "events.validated" in iceberg
+    assert ICEBERG_RUNTIME in iceberg
+    assert "lake materializer" in iceberg
+    assert "iceberg" in iceberg
+    assert "match_count=1" in iceberg
+    assert OPERATOR_STAND in iceberg
+    assert "pass" in rows[LAKE_TO_SERVING_RECORD]["result"].lower()
+    assert "mixed-sha" in lake_to_serving
+    assert "orders.raw" in lake_to_serving
+    assert OPERATOR_STAND in lake_to_serving
+    assert "pyflink" in lake_to_serving
+    assert "events.validated" in lake_to_serving
+    assert "iceberg" in lake_to_serving
+    assert "bridge" in lake_to_serving
+    assert "clickhouse" in lake_to_serving
+    assert "task api" in lake_to_serving
+    assert ICEBERG_RUNTIME in lake_to_serving
+    for text in (submission, operator, iceberg, lake_to_serving):
         assert "does not claim" in text
         assert "candidate" in text
+    for text in (submission, operator):
         for phrase in UNCLAIMED_BOUNDARIES:
             assert phrase in text
+    for phrase in ICEBERG_UNCLAIMED_BOUNDARIES:
+        assert phrase in iceberg
+    for phrase in LAKE_TO_SERVING_UNCLAIMED_BOUNDARIES:
+        assert phrase in lake_to_serving

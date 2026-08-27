@@ -57,15 +57,17 @@ superseded.
 
 ## Golden topology acceptance records
 
-This table is the audit catalogue for the first golden-topology acceptance
-pair. The two records are complementary, not a supersession chain. Columns
-are identity, ISO date, result, supersedes, superseded by, and claim
-boundary. `None` means no supersession is recorded.
+This table is the audit catalogue for four golden-topology acceptance
+records. The four records are complementary, not a supersession chain.
+Columns are identity, ISO date, result, supersedes, superseded by, and
+claim boundary. `None` means no supersession is recorded.
 
 | Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
 | --- | --- | --- | --- | --- | --- |
 | [golden-flink-submission-2026-07-30.md](../perf/golden-flink-submission-2026-07-30.md) | 2026-07-30 | PASS only for clean-checkout OCI build plus real Flink job submission/RUNNING observation at exact commit ca82be5a84a58ae37dd71ef80e785deb8e70dcad | None | None | Does not claim full lake-to-serving production E2E, restore/replay, fresh 4h soak plus rollback after traffic, external penetration test, or production acceptance; production.status remains candidate. |
 | [golden-operator-acceptance-2026-07-30.md](../perf/golden-operator-acceptance-2026-07-30.md) | 2026-07-30 | PASS only for clean kind + Flink Kubernetes Operator + Helm deployment and recorded stability hold at exact commit 36ed1ecc250ac6c82ccc6f27de1b76a301b17a41 | None | None | Does not claim full lake-to-serving production E2E, restore/replay, fresh 4h soak plus rollback after traffic, external penetration test, or production acceptance; production.status remains candidate. |
+| [live-iceberg-materialization-2026-08-01.md](../perf/live-iceberg-materialization-2026-08-01.md) | 2026-08-01 | PASS only for direct events.validated injection through the ed03fc47 lake materializer into live Iceberg, with exact identity match_count=1, on an Operator/Flink stand based on 36ed1ec | None | None | Does not claim Kafka source, ClickHouse/API, restore/replay, fresh soak or rollback, external penetration test, npm approval, Operator acceptance of ed03fc47, or production acceptance; production.status remains candidate. |
+| [full-lake-to-serving-e2e-2026-08-01.md](../perf/full-lake-to-serving-e2e-2026-08-01.md) | 2026-08-01 | PASS only for one mixed-SHA event across orders.raw -> accepted 36ed1ec PyFlink -> events.validated -> Iceberg and bridge -> ClickHouse -> task API, using ed03fc47 runtime | None | None | Does not claim same-SHA Operator acceptance, multi-tenant acceptance, restore/replay, fresh soak or rollback, external penetration test, npm approval, or production acceptance; production.status remains candidate. |
 
 ## F-10 rollback and soak-capacity records (2026-08-23)
 

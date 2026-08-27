@@ -53,7 +53,29 @@ ARCHIVED_SCRATCH_VARIANTS = {
     ),
 }
 
+RECOVERY_DESIGN = ROOT / "docs" / "operations" / "api-duckdb-persistence-recovery-design.md"
+RECOVERY_CHRONOLOGY_ARCHIVE = (
+    ROOT
+    / "docs"
+    / "archive"
+    / "operations"
+    / "api-duckdb-persistence-recovery-chronology-2026-08-10-to-2026-08-23.md"
+)
+ORIGINAL_RECOVERY_DESIGN_DIGEST = "44910a7e3cb720eed3e11fda86c1307b83a3ad4cea228df347d23e138c6c8387"
+CURRENT_RECOVERY_DESIGN_LINK = "../../operations/api-duckdb-persistence-recovery-design.md"
+CHRONOLOGY_FROM_OPERATIONS_LINK = (
+    "../archive/operations/api-duckdb-persistence-recovery-chronology-2026-08-10-to-2026-08-23.md"
+)
+MAX_CURRENT_RECOVERY_DESIGN_LINES = 650
+
 ARCHIVE_BODY_MARKER = b"<!-- ARCHIVE BODY START -->\n\n"
+
+
+def _physical_line_count(text: str) -> int:
+    if text == "":
+        return 0
+    return text.count("\n") + (0 if text.endswith("\n") else 1)
+
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 
@@ -167,3 +189,60 @@ def test_current_scratch_guide_is_identity_neutral_and_links_archived_evidence()
         relative_link = f"../archive/operations/{archive_name}"
         assert relative_link in operations_index
         assert relative_link in recovery_design
+
+
+def test_recovery_design_chronology_is_archived_without_body_changes() -> None:
+    assert RECOVERY_CHRONOLOGY_ARCHIVE.is_file()
+    archive_bytes = RECOVERY_CHRONOLOGY_ARCHIVE.read_bytes()
+    header, marker, body = archive_bytes.partition(ARCHIVE_BODY_MARKER)
+
+    assert marker == ARCHIVE_BODY_MARKER
+    assert hashlib.sha256(body).hexdigest() == ORIGINAL_RECOVERY_DESIGN_DIGEST
+    header_text = header.decode("utf-8")
+    assert (
+        "Original path: *docs/operations/api-duckdb-persistence-recovery-design.md*" in header_text
+    )
+    assert "Archived: 2026-08-27" in header_text
+    assert ORIGINAL_RECOVERY_DESIGN_DIGEST in header_text
+    assert CURRENT_RECOVERY_DESIGN_LINK in header_text
+
+
+def test_current_recovery_design_separates_chronology_and_keeps_the_live_contract() -> None:
+    design = RECOVERY_DESIGN.read_text(encoding="utf-8")
+    operations_index = INDEX.read_text(encoding="utf-8")
+    archive_index = (ROOT / "docs" / "archive" / "operations" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    dated_h2 = [
+        line for line in design.splitlines() if line.startswith("## ") and " — 2026-" in line
+    ]
+
+    assert _physical_line_count(design) <= MAX_CURRENT_RECOVERY_DESIGN_LINES
+    assert dated_h2 == []
+    assert "Exact next separate slice" not in design
+    assert "**Status:** `CAPABILITY_REHEARSAL_REQUIRED`" in design
+    assert "not an approved operator runbook" in design
+    assert "Reading this document or preparing inputs is not authorization" in design
+    assert "access target bytes" in design
+    assert "mutate runtime state" in design
+    assert "recover the deployment" in design
+    assert "claim production readiness" in design
+    assert "no quiesce/capture operator runbook is approved" in design
+    assert "no verified external backup is known" in design
+    assert "best-effort read-only capture attempt" in design
+    assert "`READ_ONLY`" in design
+    assert "`EXPORT DATABASE`" in design
+    assert "sealed master" in design
+    assert "disposable working clone" in design
+    assert "emptyDir" in design
+    assert "irreversible" in design
+    assert "pod deletion" in design
+    assert CHRONOLOGY_FROM_OPERATIONS_LINK in design
+    assert "api-duckdb-non-target-scratch-rehearsal-runbook.md" in design
+    assert CHRONOLOGY_FROM_OPERATIONS_LINK in operations_index
+    assert "authorization-boundary owner" in operations_index
+    assert "dated decision history" not in operations_index
+    assert "historical only" in operations_index.lower()
+    assert "not executable" in operations_index.lower()
+    assert RECOVERY_CHRONOLOGY_ARCHIVE.name in archive_index
+    assert CURRENT_RECOVERY_DESIGN_LINK in archive_index

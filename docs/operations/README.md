@@ -39,7 +39,7 @@ are inputs to later work, not general-purpose procedures.
 
 | Material | Role | Operator boundary |
 | --- | --- | --- |
-| [API DuckDB persistence and recovery design](api-duckdb-persistence-recovery-design.md) | Preservation, rollback, and acceptance design plus its dated decision history | Status is `CAPABILITY_REHEARSAL_REQUIRED`; it is not an approved operator runbook |
+| [API DuckDB persistence and recovery design](api-duckdb-persistence-recovery-design.md) | Current preservation/recovery authorization-boundary owner | Status is `CAPABILITY_REHEARSAL_REQUIRED`; it is not an approved operator runbook |
 | [CI-soak Compose foundation](ci-soak-compose-foundation.md) | Topology and historical implementation reference | Its runtime-status sequence is superseded; resume from the current CI-soak runbook above |
 | [OpenSSF security posture](openssf-security-posture.md) | Scope and interpretation of free supply-chain posture signals | Neither Scorecard nor self-certification is a penetration test or attestation |
 
@@ -54,6 +54,7 @@ from an old PASS or blocker.
 | [E22 non-target scratch rehearsal](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e22-2026-08-11.md) | `CONSUMED_TRANSPORT_BLOCKED` | Archived evidence only; do not execute or reuse |
 | [E24 non-target scratch rehearsal](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e24-2026-08-11.md) | `CONSUMED_SCRATCH_REHEARSAL_BLOCKED` | Archived evidence only; do not execute or reuse |
 | [E26 non-target scratch rehearsal](../archive/operations/api-duckdb-non-target-scratch-rehearsal-e26-2026-08-11.md) | Executed once; `SCRATCH_REHEARSAL_BLOCKED` | Archived pre-execution contract; do not execute or reuse |
+| [API DuckDB recovery chronology, 2026-08-10 to 2026-08-23](../archive/operations/api-duckdb-persistence-recovery-chronology-2026-08-10-to-2026-08-23.md) | Interleaved design-and-execution snapshot through 2026-08-23 | historical only; not executable. Current preservation and authorization boundaries belong to the recovery design above |
 | [External pentest evidence blocker, 2026-08-01](external-pentest-evidence-blocker-2026-08-01.md) | `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE` at the recorded audit | Use the current intake guide and engineering status for present truth |
 | [npm environment approval verification, 2026-08-03](npm-environment-approval-2026-08-03.md) | Read-only PASS at the recorded identity | Evidence of that check only |
 | [npm environment approval blocker, 2026-08-01](npm-environment-approval-blocker-2026-08-01.md) | `BLOCKED_ENVIRONMENT_ABSENT` before the later verification | Superseded point-in-time evidence |

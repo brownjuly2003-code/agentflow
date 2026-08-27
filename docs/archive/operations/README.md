@@ -16,7 +16,19 @@ be reused.
 
 Each file has a provenance header followed by its byte-preserved original
 body. The body may describe the pre-execution truth at its original commit;
-the table above and the canonical recovery design own the later outcome.
+the table above and the
+[current recovery design](../../operations/api-duckdb-persistence-recovery-design.md)
+own the later outcome.
+
+## API DuckDB recovery chronology
+
+The interleaved 2026-08-10 to 2026-08-23 design-and-execution snapshot is
+historical only and not executable. Current preservation, recovery, and
+authorization boundaries belong to the current design.
+
+| Record | Boundary | Current owner |
+| --- | --- | --- |
+| [API DuckDB recovery chronology](api-duckdb-persistence-recovery-chronology-2026-08-10-to-2026-08-23.md) | Historical snapshot; do not execute or treat as current truth | [API DuckDB persistence and recovery design](../../operations/api-duckdb-persistence-recovery-design.md) |
 
 Return to the [documentation archive](../README.md) or the
 [operations index](../../operations/README.md).

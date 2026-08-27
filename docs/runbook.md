@@ -13,8 +13,10 @@
 | Jaeger | http://localhost:16686 | `curl -I http://localhost:16686` |
 | Toxiproxy API | http://localhost:8474 | `curl http://localhost:8474/proxies` |
 
-The [observability walkthrough](observability.md) explains how to combine
-these signals. This runbook owns their exact local commands, supported runtime
+The [troubleshooting walkthrough](troubleshooting.md) helps classify a symptom
+and select its owning procedure. The
+[observability walkthrough](observability.md) explains how to combine these
+signals. This runbook owns their exact local commands, supported runtime
 settings, and recurring maintenance.
 
 ## Observability Operations
@@ -56,6 +58,49 @@ runs the script automatically. See the
 before scheduling retention or tenant-erasure work.
 
 ## Local Pipeline Operations
+
+### Diagnose local walkthrough prerequisites
+
+For an optional service-backed path, verify the engine and inspect the default
+stack before changing data or ports:
+
+```bash
+docker version
+docker compose version
+docker compose ps
+docker compose logs kafka flink-jobmanager
+```
+
+If the expected local store is missing or surprising, confirm the selected
+path and visible files:
+
+=== "macOS / Linux"
+
+    ```bash
+    echo "$DUCKDB_PATH"
+    ls *.duckdb*
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Write-Output $env:DUCKDB_PATH
+    Get-ChildItem -Filter "*.duckdb*"
+    ```
+
+When the default API address is already owned, keep the existing process and
+start the walkthrough API on another port:
+
+```bash
+uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8001
+```
+
+Only after stale named volumes are the confirmed cause and their data is
+disposable, reset the default stack. This deletes those local volumes:
+
+```bash
+docker compose down -v
+```
 
 ### Start the local demo (Docker Redis + ClickHouse)
 

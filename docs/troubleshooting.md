@@ -1,128 +1,37 @@
 # Troubleshooting
 
-## Docker is not running
+Find the first failing boundary here, then follow its owner: the
+[operational runbook](runbook.md) for exact procedures, the
+[quickstart](quickstart.md) for the smallest local path, the
+[deployment walkthrough](deployment.md) for environment choices, the
+[full API reference](api-reference.md) for request and authentication
+contracts, or the [contributor guide](contributing.md) for change validation.
 
-Symptoms:
+## Triage by symptom
 
-- `docker compose up -d redis` fails
-- `make demo` cannot start Redis
-- compose health checks never start
+| Symptom | Narrow first | Procedure owner |
+| --- | --- | --- |
+| The first local run fails | Setup, preparation, or API boot | [Quickstart](quickstart.md) |
+| An optional service stack does not settle | Prerequisite or service health | [Deployment walkthrough](deployment.md), then [runbook](runbook.md) |
+| The API is unavailable or its address is occupied | Missing process, unhealthy process, or address conflict | [API incident procedure](runbook.md#api-does-not-respond) |
+| Event flow is slow or stopped | Source, transport, processing, or store | [Incident response](runbook.md#incident-response) |
+| Local data is missing or unexpected | Selected profile, preparation step, or concurrent writer | [Local pipeline operations](runbook.md#local-pipeline-operations) |
+| A request is rejected | Authentication, authorization, or request contract | [Full API reference](api-reference.md) |
 
-Checks:
+## Narrow the boundary
 
-```bash
-docker version
-docker compose version
-docker compose ps
-```
+1. Reproduce the smallest applicable quickstart path.
+2. Classify the failure as environment, request path, or event path.
+3. Record the first failed boundary, then follow its owner.
+4. Do not reset local state unless the procedure requires it.
 
-Fix:
+## Choose the verification owner
 
-- Start Docker Desktop or the local Docker daemon.
-- Re-run the command after Docker reports a healthy engine.
-- If ports are occupied, stop the conflicting local process or choose a
-  narrower compose stack.
+| Change or incident | Verification owner |
+| --- | --- |
+| Documentation, runtime, backend, or client change | [Contributor guide](contributing.md) |
+| Incident response or recurring maintenance | [Operational runbook](runbook.md) |
+| Current acceptance or external gate | [Engineering status](STATUS.md) |
 
-## API port is already in use
-
-AgentFlow API defaults to `8000`, and `mkdocs serve` also defaults to `8000`.
-Run docs on another port when the API is active:
-
-```bash
-mkdocs serve -a 127.0.0.1:8010
-```
-
-Run the API on another port when needed:
-
-```bash
-uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8001
-```
-
-## Kafka or Flink startup is slow
-
-Symptoms:
-
-- Kafka health check retries
-- Flink dashboard at `http://localhost:8081` is not ready
-- topic bootstrap fails because the broker is not healthy yet
-
-Checks:
-
-```bash
-docker compose ps
-docker compose logs kafka
-docker compose logs flink-jobmanager
-```
-
-Fix:
-
-- Wait for health checks to settle before registering connectors or producing
-  events.
-- Use the local demo path when you only need API/SDK walkthrough behavior.
-- Recreate the compose stack only when stale volumes are the suspected cause:
-  `docker compose down -v`.
-
-## DuckDB file path problems
-
-Symptoms:
-
-- `/v1/health` reports an unhealthy serving component
-- entity lookups return unavailable storage errors
-- local runs appear to use an unexpected database
-
-Checks:
-
-```bash
-echo $DUCKDB_PATH
-ls *.duckdb*
-```
-
-Fix:
-
-- For the demo path, use `DUCKDB_PATH=agentflow_demo.duckdb`.
-- Re-run `make demo` to seed the expected fixture data.
-- Avoid sharing the same DuckDB file between long-running writers.
-
-## Auth headers fail locally
-
-The demo path disables API-key enforcement. Configured environments require
-`X-API-Key: <key>` for most v1 routes and `X-Admin-Key: <admin-key>` for
-admin routes.
-
-Check whether you are using the demo path or a configured API-key file before
-debugging SDK behavior.
-
-## Common verification commands
-
-Docs-only changes:
-
-```bash
-mkdocs build --strict
-git diff --check
-```
-
-Python quality checks requested for this walkthrough:
-
-```bash
-python -m ruff check src/ tests/
-python -m ruff format --check src/ tests/
-```
-
-Full pytest is useful when backend or SDK behavior changes:
-
-```bash
-python -m pytest -p no:schemathesis --basetemp=.tmp/docs-walkthrough-basetemp -o cache_dir=.tmp/docs-walkthrough-cache
-```
-
-## When to use the existing runbook
-
-Use the operational runbook for incident-style workflows:
-
-- API unavailable
-- pipeline lag
-- dead-letter growth
-- webhook delivery failures
-- alert storms
-- key rotation issues
-
-The walkthrough is a learning path. The runbook is the operator procedure.
+When escalating, include the selected profile, first error, expected and actual
+results, and the latest relevant change. Exclude credentials and private data.

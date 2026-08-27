@@ -394,3 +394,57 @@ def test_curated_landing_defers_runtime_and_status_claims_to_owners() -> None:
         assert status_owned_claim not in landing
 
     assert len(landing.split()) * 5 < len(project_overview.split())
+
+
+def test_troubleshooting_walkthrough_defers_exact_procedures_to_owners() -> None:
+    walkthrough = (ROOT / "docs" / "troubleshooting.md").read_text(encoding="utf-8")
+    runbook = (ROOT / "docs" / "runbook.md").read_text(encoding="utf-8")
+    api_reference = (ROOT / "docs" / "api-reference.md").read_text(encoding="utf-8")
+    quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
+    contributor_guide = (ROOT / "docs" / "contributing.md").read_text(encoding="utf-8")
+
+    assert "[operational runbook](runbook.md)" in walkthrough
+    assert "[troubleshooting walkthrough](troubleshooting.md)" in runbook
+    assert "[quickstart](quickstart.md)" in walkthrough
+    assert "[deployment walkthrough](deployment.md)" in walkthrough
+    assert "[full API reference](api-reference.md)" in walkthrough
+    assert "[contributor guide](contributing.md)" in walkthrough
+
+    for stable_section in (
+        "## Triage by symptom",
+        "## Narrow the boundary",
+        "## Choose the verification owner",
+    ):
+        assert stable_section in walkthrough
+
+    for incident_procedure in (
+        "### API does not respond",
+        "### Pipeline lag > 60s",
+        "### Flink job failed",
+        "### Dead letter topic filling up",
+        "### Webhook deliveries failing",
+    ):
+        assert incident_procedure in runbook
+
+    for runbook_owned_command in (
+        "docker version",
+        "docker compose version",
+        "docker compose ps",
+        "docker compose logs kafka flink-jobmanager",
+        "docker compose down -v",
+        "DUCKDB_PATH",
+        "--port 8001",
+    ):
+        assert runbook_owned_command in runbook
+        assert runbook_owned_command not in walkthrough
+
+    assert "mkdocs serve -a" in quickstart
+    assert "mkdocs serve -a" not in walkthrough
+    assert "make lint" in contributor_guide
+    assert "python -m pytest" in contributor_guide
+    assert "python -m ruff" not in walkthrough
+    assert "python -m pytest" not in walkthrough
+
+    assert "X-Admin-Key" in api_reference
+    assert "X-Admin-Key" not in walkthrough
+    assert len(walkthrough.split()) * 5 < len(runbook.split())

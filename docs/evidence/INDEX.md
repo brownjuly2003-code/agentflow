@@ -85,6 +85,28 @@ supersession is recorded.
 | [checkpoint-restore-replay-2026-08-02.md](../perf/checkpoint-restore-replay-2026-08-02.md) | 2026-08-02 | PASS only for the isolated checkpoint/savepoint restore/replay gate on runtime SHA ed03fc47: byte-identical E1 replay plus E2, exactly one of each identity across the measured Kafka validated, Iceberg, ClickHouse and API surfaces, DLQ zero, source lag zero, and hard TTL PASS at 565 s | [checkpoint-restore-replay-capacity-blocker-2026-08-01.md](../perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md) | None | Does not claim a four-hour soak, Helm rollback, same-SHA acceptance of later chart/checkpoint configuration, external penetration testing, GitHub Environment/npm approval, or production acceptance; production.status remains candidate. |
 | [ready-baselined-checkpoint-hold-2026-08-03.md](../perf/ready-baselined-checkpoint-hold-2026-08-03.md) | 2026-08-03 | RUNTIME_HOLD_PASS only for a 930 s readiness-baselined, read-only, no-traffic hold of an already-running job: completed checkpoints 7675 to 8614, failed checkpoints 1 to 1, with the admitted startup failure attributed to NOT_ALL_REQUIRED_TASKS_RUNNING | None | None | Does not prove canary2, a four-hour soak, rollback, external penetration testing, or production acceptance; the earlier canary remains the latest traffic attempt and production.status remains candidate. |
 
+## Historical canary-failure and soak-start records
+
+This table is the audit catalogue for two historical predecessor records:
+the 2026-08-02 fail-closed catch-up-rate canary failure and the 2026-08-07
+`-01` `SOAK_RUNNING` start snapshot. These records are historical, not
+the current status owners, and they are not a PASS chain. The canary
+failure supersedes
+[golden-4h-soak-rollback-resource-blocker-2026-08-01.md](../perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md)
+only as the latest attempt state; the blocker's dated preflight remains
+valid. `Superseded by` is `None` because the later kind-residual PASS is
+differently scoped. The soak-start record supersedes nothing. It is
+superseded by
+[golden-4h-soak-05-failure-2026-08-08.md](../perf/golden-4h-soak-05-failure-2026-08-08.md)
+only as the current soak outcome, reciprocal with the existing soak-05
+row. Columns are identity, ISO date, result, supersedes, superseded by,
+and claim boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [golden-4h-soak-canary-failure-2026-08-02.md](../perf/golden-4h-soak-canary-failure-2026-08-02.md) | 2026-08-02 | FAIL_CANARY_CATCHUP_RATE_FLOOR for the fail-closed catch-up-rate canary: producer 2,000/2,000 with zero failures but only 88.715123 eps; downstream snapshot 1092/2000 pipeline and 546/2000 orders; no verifier PASS evidence; four-hour soak, observer, and rollback were not started | [golden-4h-soak-rollback-resource-blocker-2026-08-01.md](../perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md) | None | Does not claim four-hour soak evidence, rollback evidence, or production acceptance; this is historical and not a current status owner; production.status remains candidate. Supersedes the 2026-08-01 resource-capacity blocker only as latest attempt state; the blocker's dated preflight remains valid. |
+| [golden-4h-soak-start-2026-08-07.md](../perf/golden-4h-soak-start-2026-08-07.md) | 2026-08-07 | SOAK_RUNNING (not PASS) for identity `golden-4h-soak-rv-20260807-01`: start contract 1,440,000 at 100 delivered eps with `dual_mean_90`; session close about 72k delivered, observer/producer running, verifier and rollback not started | None | [golden-4h-soak-05-failure-2026-08-08.md](../perf/golden-4h-soak-05-failure-2026-08-08.md) | Does not claim soak PASS, mean >=90, rollback PASS, or production acceptance; production.status remains candidate. Historical start snapshot, not a current status owner; soak-05 is the current soak outcome. |
+
 ## Kind-residual canary and latest soak records
 
 This table is the audit catalogue for the current D+C1-20 kind-residual

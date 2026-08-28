@@ -173,6 +173,30 @@ SOAK_UNCLAIMED_BOUNDARIES = (
     "rollback pass",
     "production acceptance",
 )
+HISTORICAL_CANARY_SOAK_HEADING = "## Historical canary-failure and soak-start records"
+RESOURCE_BLOCKER_RECORD = "docs/perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md"
+CANARY_TRAFFIC_DATE = "2026-08-02"
+SOAK_START_DATE = "2026-08-07"
+HISTORICAL_CANARY_SOAK_DATES = {
+    CANARY_TRAFFIC_RECORD: CANARY_TRAFFIC_DATE,
+    SOAK_START_RECORD: SOAK_START_DATE,
+}
+HISTORICAL_CANARY_SOAK_DIGESTS = {
+    CANARY_TRAFFIC_RECORD: CANARY_TRAFFIC_DIGEST,
+    SOAK_START_RECORD: SOAK_START_DIGEST,
+}
+RESOURCE_BLOCKER_DIGEST = "3504c46afc276d5725576bcc0a1caa2415cf02e6b6bb3febe8e9fc22a070b8d5"
+CANARY_FAILURE_UNCLAIMED_BOUNDARIES = (
+    "four-hour soak",
+    "rollback",
+    "production acceptance",
+)
+SOAK_START_UNCLAIMED_BOUNDARIES = (
+    "soak pass",
+    "mean >=90",
+    "rollback pass",
+    "production acceptance",
+)
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -275,6 +299,14 @@ def _kind_soak_rows() -> list[dict[str, str]]:
 
 def _kind_soak_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _kind_soak_rows()]
+
+
+def _historical_canary_soak_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(HISTORICAL_CANARY_SOAK_HEADING)
+
+
+def _historical_canary_soak_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _historical_canary_soak_rows()]
 
 
 def _project_closure_record_links() -> set[str]:
@@ -932,3 +964,202 @@ def test_kind_soak_boundaries_remain_conservative() -> None:
         assert phrase in canary
     for phrase in SOAK_UNCLAIMED_BOUNDARIES:
         assert phrase in soak
+
+
+def test_historical_canary_soak_section_follows_checkpoint_readiness() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    assert HISTORICAL_CANARY_SOAK_HEADING in text
+    checkpoint_at = text.index(CHECKPOINT_READINESS_HEADING)
+    historical_at = text.index(HISTORICAL_CANARY_SOAK_HEADING)
+    kind_soak_at = text.index(KIND_SOAK_HEADING)
+    f10_at = text.index(F10_HEADING)
+
+    assert checkpoint_at < historical_at < kind_soak_at < f10_at
+
+
+def test_historical_canary_soak_index_lists_the_bounded_pair_once() -> None:
+    indexed = _historical_canary_soak_record_paths()
+    expected = (CANARY_TRAFFIC_RECORD, SOAK_START_RECORD)
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert len(indexed) == 2
+    for relative in indexed:
+        assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+    assert indexed == [CANARY_TRAFFIC_RECORD, SOAK_START_RECORD]
+    assert KIND_RESIDUAL_RECORD not in indexed
+    assert SOAK_05_RECORD not in indexed
+    assert RESOURCE_BLOCKER_RECORD not in indexed
+    assert CANARY_TRAFFIC_RECORD not in _kind_soak_record_paths()
+    assert SOAK_START_RECORD not in _kind_soak_record_paths()
+    for row in _historical_canary_soak_rows():
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_historical_canary_soak_index_exposes_required_nonempty_fields() -> None:
+    rows = _historical_canary_soak_rows()
+    headers = list(rows[0])
+
+    assert headers == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == HISTORICAL_CANARY_SOAK_DATES[identity]
+
+
+def test_historical_canary_soak_supersession_direction() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _historical_canary_soak_rows()}
+    canary = rows[CANARY_TRAFFIC_RECORD]
+    start = rows[SOAK_START_RECORD]
+    canary_supersedes_targets = LINK_RE.findall(canary["supersedes"])
+    start_superseded_by_targets = LINK_RE.findall(start["superseded by"])
+    kind_soak_rows = {_identity_path(row["identity"]): row for row in _kind_soak_rows()}
+    soak05 = kind_soak_rows[SOAK_05_RECORD]
+    soak05_supersedes_targets = LINK_RE.findall(soak05["supersedes"])
+
+    assert [_resolve_index_link(target) for target in canary_supersedes_targets] == [
+        RESOURCE_BLOCKER_RECORD
+    ]
+    assert canary_supersedes_targets[0].startswith("../perf/")
+    assert canary["superseded by"] == "None"
+    assert start["supersedes"] == "None"
+    assert [_resolve_index_link(target) for target in start_superseded_by_targets] == [
+        SOAK_05_RECORD
+    ]
+    assert start_superseded_by_targets[0].startswith("../perf/")
+    assert [_resolve_index_link(target) for target in soak05_supersedes_targets] == [
+        SOAK_START_RECORD
+    ]
+    _assert_supersession_cell(canary["supersedes"])
+    _assert_supersession_cell(canary["superseded by"])
+    _assert_supersession_cell(start["supersedes"])
+    _assert_supersession_cell(start["superseded by"])
+    canary_supersedes = [
+        _resolve_index_link(target) for target in LINK_RE.findall(canary["supersedes"])
+    ]
+    canary_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(canary["superseded by"])
+    ]
+    start_supersedes = [
+        _resolve_index_link(target) for target in LINK_RE.findall(start["supersedes"])
+    ]
+    start_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(start["superseded by"])
+    ]
+    assert KIND_RESIDUAL_RECORD not in canary_supersedes
+    assert KIND_RESIDUAL_RECORD not in canary_superseded_by
+    assert SOAK_05_RECORD not in canary_supersedes
+    assert SOAK_05_RECORD not in canary_superseded_by
+    assert SOAK_START_RECORD not in canary_supersedes
+    assert SOAK_START_RECORD not in canary_superseded_by
+    assert KIND_RESIDUAL_RECORD not in start_supersedes
+    assert KIND_RESIDUAL_RECORD not in start_superseded_by
+    assert CANARY_TRAFFIC_RECORD not in start_supersedes
+    assert CANARY_TRAFFIC_RECORD not in start_superseded_by
+    assert RESOURCE_BLOCKER_RECORD not in start_supersedes
+    assert RESOURCE_BLOCKER_RECORD not in start_superseded_by
+    assert SOAK_START_RECORD not in start_supersedes
+    assert CANARY_TRAFFIC_RECORD not in [
+        _resolve_index_link(target) for target in soak05_supersedes_targets
+    ]
+
+
+def test_historical_canary_soak_records_keep_published_digests() -> None:
+    indexed = set(_historical_canary_soak_record_paths())
+
+    assert indexed == set(HISTORICAL_CANARY_SOAK_DIGESTS)
+    for relative, expected in HISTORICAL_CANARY_SOAK_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    blocker_digest = hashlib.sha256((ROOT / RESOURCE_BLOCKER_RECORD).read_bytes()).hexdigest()
+    assert blocker_digest == RESOURCE_BLOCKER_DIGEST
+    soak05_digest = hashlib.sha256((ROOT / SOAK_05_RECORD).read_bytes()).hexdigest()
+    assert soak05_digest == KIND_SOAK_DIGESTS[SOAK_05_RECORD]
+    kind_residual_digest = hashlib.sha256((ROOT / KIND_RESIDUAL_RECORD).read_bytes()).hexdigest()
+    assert kind_residual_digest == KIND_SOAK_DIGESTS[KIND_RESIDUAL_RECORD]
+    for relative, expected in PROTECTED_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    checkpoint_blocker_digest = hashlib.sha256(
+        (ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()
+    ).hexdigest()
+    assert checkpoint_blocker_digest == CHECKPOINT_BLOCKER_DIGEST
+    for relative, expected in F10_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_historical_canary_soak_claim_links_match_indexed_records() -> None:
+    indexed = set(_historical_canary_soak_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    production = manifest["production"]
+    status_links = _status_record_links()
+    closure_links = _project_closure_record_links()
+
+    assert indexed == {CANARY_TRAFFIC_RECORD, SOAK_START_RECORD}
+    assert CANARY_TRAFFIC_RECORD in manifest["required_evidence"]
+    assert SOAK_START_RECORD in manifest["required_evidence"]
+    assert production.get("latest_kind_residual_canary") == KIND_RESIDUAL_RECORD
+    assert production.get("latest_kind_residual_canary") != CANARY_TRAFFIC_RECORD
+    assert production.get("latest_soak_attempt") == SOAK_05_RECORD
+    assert production.get("latest_soak_attempt") != SOAK_START_RECORD
+    assert production.get("status") == "candidate"
+    assert CANARY_TRAFFIC_RECORD not in status_links
+    assert SOAK_START_RECORD not in status_links
+    assert CANARY_TRAFFIC_RECORD not in closure_links
+    assert SOAK_START_RECORD not in closure_links
+    assert KIND_RESIDUAL_RECORD in status_links
+    assert SOAK_05_RECORD in status_links
+
+
+def test_historical_canary_soak_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _historical_canary_soak_rows()}
+    canary = _row_text(rows[CANARY_TRAFFIC_RECORD])
+    start = _row_text(rows[SOAK_START_RECORD])
+    section = _section(INDEX.read_text(encoding="utf-8"), HISTORICAL_CANARY_SOAK_HEADING).lower()
+
+    assert "fail_canary_catchup_rate_floor" in rows[CANARY_TRAFFIC_RECORD]["result"].lower()
+    assert "2,000/2,000" in canary
+    assert "zero failures" in canary
+    assert "88.715123" in canary
+    assert "1092/2000" in canary
+    assert "546/2000" in canary
+    assert "no verifier pass" in canary
+    assert "observer" in canary
+    assert "not started" in canary
+    assert "latest attempt state" in canary or "latest attempt state" in section
+    assert "preflight" in canary or "preflight" in section
+    assert "does not claim" in canary
+    assert "candidate" in canary
+    assert "soak_running" in rows[SOAK_START_RECORD]["result"].lower()
+    assert "not pass" in rows[SOAK_START_RECORD]["result"].lower()
+    assert "golden-4h-soak-rv-20260807-01" in rows[SOAK_START_RECORD]["result"].lower()
+    assert "1,440,000" in start
+    assert "100" in start
+    assert "dual_mean_90" in start
+    assert "72k" in start
+    assert "observer" in start
+    assert "producer" in start
+    assert "verifier" in start
+    assert "rollback" in start
+    assert "not started" in start
+    assert "does not claim" in start
+    assert "candidate" in start
+    assert "current" in start
+    assert "outcome" in start
+    assert "soak-05" in start or "-05" in start
+    assert "not a pass chain" in section
+    for phrase in CANARY_FAILURE_UNCLAIMED_BOUNDARIES:
+        assert phrase in canary
+    for phrase in SOAK_START_UNCLAIMED_BOUNDARIES:
+        assert phrase in start

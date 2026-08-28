@@ -379,6 +379,100 @@ S10_Q14_BOUNDARIES = (
     "golden full-soak",
     "remains open",
 )
+PACED_10M_1H_HEADING = "## Paced 10-minute and one-hour S10 throughput records"
+PACED_10M_1H_DATES = {
+    S10_PACED_10M_RECORD: "2026-07-17",
+    S10_PACED_1H_RECORD: "2026-07-17",
+}
+PACED_10M_1H_DIGESTS = {
+    S10_PACED_10M_RECORD: ("3d8ebc375f899b99b156dbfc57010eaade2a5c44516cbe5b693d2e7ac14d175f"),
+    S10_PACED_1H_RECORD: ("3b6db0774dc305d683b8fec256618f688e3d06a6a6e0fad3bfbce8b523b47361"),
+}
+PACED_10M_1H_OTHER_RECORDS = (
+    S10_BURST_BASELINE_RECORD,
+    S10_Q13_RECORD,
+    S10_Q14_RECORD,
+    S10_100EPS_TRY_RECORD,
+    S10_PACED_R1_RECORD,
+    S10_PACED_R3_RECORD,
+    S10_PACED_R4_RECORD,
+)
+PACED_10M_STATUS_STEP = "Paced 10 min @ 100 eps produce"
+PACED_10M_STATUS_RESULT = "**96.5 apply / 97.1 flink / 100 produce**"
+PACED_1H_STATUS_STEP = "Paced **1 h** @ 100 eps produce"
+PACED_1H_STATUS_RESULT = "**99.5 apply / 99.5 flink / 100 produce**"
+S10_PACED_10M_RESULT_FACTS = (
+    "2026-07-16t22:52",
+    "23:03z",
+    "deproject-mac",
+    "colima",
+    "6 gib",
+    "4 cpu",
+    "4631299",
+    "one flink taskmanager",
+    "100.0 eps",
+    "60 000",
+    "600.0 s",
+    "97.1 eps",
+    "96.5 eps",
+    "59 654",
+    "618.1 s",
+    "0 / 0",
+    "0 → 0",
+    "1037",
+    "pass",
+)
+S10_PACED_1H_RESULT_FACTS = (
+    "2026-07-16t23:30z",
+    "2026-07-17t00:30z",
+    "deproject-mac",
+    "colima",
+    "6 gib",
+    "4 cpu",
+    "b5d9ce0",
+    "one flink taskmanager",
+    "100.0 eps",
+    "360 000",
+    "3600.0 s",
+    "99.5 eps",
+    "3617 s",
+    "0 / 0",
+    "0 → 0",
+    "1679",
+    "pass",
+)
+S10_PACED_10M_BOUNDARIES = (
+    "paced",
+    "10-minute",
+    "first paced",
+    "duration milestone",
+    "not a supersession chain",
+    "historical facts remain valid",
+    "does not claim all 60 000 applied",
+    "multi-hour",
+    "four-hour r4",
+    "pre-materializer",
+    "golden full-soak",
+    "blocked_host_capacity",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
+S10_PACED_1H_BOUNDARIES = (
+    "paced",
+    "one continuous hour",
+    "duration milestone",
+    "not a supersession chain",
+    "historical facts remain valid",
+    "not multi-hour",
+    "four-hour r4",
+    "pre-materializer",
+    "golden full-soak",
+    "blocked_host_capacity",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -663,6 +757,14 @@ def _q13_q14_intermediate_s10_rows() -> list[dict[str, str]]:
 
 def _q13_q14_intermediate_s10_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _q13_q14_intermediate_s10_rows()]
+
+
+def _paced_10m_1h_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(PACED_10M_1H_HEADING)
+
+
+def _paced_10m_1h_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _paced_10m_1h_rows()]
 
 
 def _status_table_rows(heading: str) -> list[dict[str, str]]:
@@ -2237,17 +2339,18 @@ def test_q13_q14_intermediate_section_follows_current_s10() -> None:
     text = INDEX.read_text(encoding="utf-8")
     current_s10_at = text.index(CURRENT_S10_THROUGHPUT_HEADING)
     q13_q14_at = text.index(Q13_Q14_INTERMEDIATE_S10_HEADING)
+    paced_at = text.index(PACED_10M_1H_HEADING)
     golden_at = text.index(ACCEPTANCE_HEADING)
     between_current_and_new = text[
         current_s10_at + len(CURRENT_S10_THROUGHPUT_HEADING) : q13_q14_at
     ]
-    between_new_and_golden = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : golden_at]
+    between_new_and_paced = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : paced_at]
 
     assert "Q1.3/Q1.4" in Q13_Q14_INTERMEDIATE_S10_HEADING
     assert "intermediate S10 throughput" in Q13_Q14_INTERMEDIATE_S10_HEADING
-    assert current_s10_at < q13_q14_at < golden_at
+    assert current_s10_at < q13_q14_at < paced_at < golden_at
     assert "\n## " not in between_current_and_new
-    assert "\n## " not in between_new_and_golden
+    assert "\n## " not in between_new_and_paced
 
 
 def test_q13_q14_index_lists_the_bounded_pair_with_required_fields() -> None:
@@ -2399,3 +2502,127 @@ def test_q13_q14_boundaries_remain_conservative() -> None:
     assert "golden full-soak" in q14
     assert "remains open" in q13
     assert "remains open" in q14
+
+
+def test_paced_10m_1h_section_follows_q13_q14_and_precedes_golden() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    q13_q14_at = text.index(Q13_Q14_INTERMEDIATE_S10_HEADING)
+    paced_at = text.index(PACED_10M_1H_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    between_q13_q14_and_paced = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : paced_at]
+    between_paced_and_golden = text[paced_at + len(PACED_10M_1H_HEADING) : golden_at]
+
+    assert "Paced 10-minute and one-hour" in PACED_10M_1H_HEADING
+    assert "S10 throughput" in PACED_10M_1H_HEADING
+    assert q13_q14_at < paced_at < golden_at
+    assert "\n## " not in between_q13_q14_and_paced
+    assert "\n## " not in between_paced_and_golden
+
+
+def test_paced_10m_1h_index_lists_the_bounded_pair_with_required_fields() -> None:
+    indexed = _paced_10m_1h_record_paths()
+    expected = (S10_PACED_10M_RECORD, S10_PACED_1H_RECORD)
+    rows = _paced_10m_1h_rows()
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for relative in PACED_10M_1H_OTHER_RECORDS:
+        assert relative not in indexed
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == PACED_10M_1H_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_paced_10m_1h_are_duration_extensions_not_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), PACED_10M_1H_HEADING).lower()
+    rows = {_identity_path(row["identity"]): row for row in _paced_10m_1h_rows()}
+    current_rows = {_identity_path(row["identity"]): row for row in _current_s10_throughput_rows()}
+
+    assert "duration-extension" in section
+    assert "not a supersession chain" in section
+    assert "historical facts remain valid" in section
+    assert "four-hour r4" in section
+    for row in rows.values():
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+    r4 = current_rows[S10_PACED_R4_RECORD]
+    r4_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(r4["supersedes"])]
+    r4_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(r4["superseded by"])
+    ]
+    assert r4_supersedes == [S10_PACED_R1_RECORD, S10_PACED_R3_RECORD]
+    assert r4_superseded_by == []
+    assert S10_PACED_10M_RECORD not in r4_supersedes
+    assert S10_PACED_1H_RECORD not in r4_supersedes
+
+
+def test_paced_10m_1h_records_keep_published_digests() -> None:
+    indexed = set(_paced_10m_1h_record_paths())
+
+    assert indexed == set(PACED_10M_1H_DIGESTS)
+    for relative, expected in PACED_10M_1H_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in CURRENT_S10_THROUGHPUT_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_paced_10m_1h_status_rows_match_indexed_records() -> None:
+    indexed = _paced_10m_1h_record_paths()
+    current = _current_s10_throughput_record_paths()
+    q13_q14 = _q13_q14_intermediate_s10_record_paths()
+    status_links = _status_record_links()
+    bridge_rows = _status_table_rows(S10_R4_STATUS_HEADING)
+    by_path: dict[str, dict[str, str]] = {}
+    for row in bridge_rows:
+        for path in _status_cell_record_paths(row.get("state", "")):
+            by_path[path] = row
+
+    assert indexed == [S10_PACED_10M_RECORD, S10_PACED_1H_RECORD]
+    assert S10_PACED_10M_RECORD in status_links
+    assert S10_PACED_1H_RECORD in status_links
+    assert by_path[S10_PACED_10M_RECORD]["step"] == PACED_10M_STATUS_STEP
+    assert by_path[S10_PACED_10M_RECORD]["bridge apply"] == PACED_10M_STATUS_RESULT
+    assert by_path[S10_PACED_1H_RECORD]["step"] == PACED_1H_STATUS_STEP
+    assert by_path[S10_PACED_1H_RECORD]["bridge apply"] == PACED_1H_STATUS_RESULT
+    assert S10_PACED_10M_RECORD not in current
+    assert S10_PACED_1H_RECORD not in current
+    assert S10_PACED_10M_RECORD not in q13_q14
+    assert S10_PACED_1H_RECORD not in q13_q14
+    assert current == [S10_BURST_BASELINE_RECORD, S10_PACED_R4_RECORD]
+    assert q13_q14 == [S10_Q13_RECORD, S10_Q14_RECORD]
+
+
+def test_paced_10m_1h_results_and_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _paced_10m_1h_rows()}
+    ten_minutes = _row_text(rows[S10_PACED_10M_RECORD])
+    one_hour = _row_text(rows[S10_PACED_1H_RECORD])
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    assert "10-minute" in rows[S10_PACED_10M_RECORD]["result"].lower()
+    assert "one-hour" in rows[S10_PACED_1H_RECORD]["result"].lower()
+    for phrase in S10_PACED_10M_RESULT_FACTS:
+        assert phrase in ten_minutes
+    for phrase in S10_PACED_1H_RESULT_FACTS:
+        assert phrase in one_hour
+    for phrase in S10_PACED_10M_BOUNDARIES:
+        assert phrase in ten_minutes
+    for phrase in S10_PACED_1H_BOUNDARIES:
+        assert phrase in one_hour
+    assert S10_100EPS_TRY_RECORD not in _paced_10m_1h_record_paths()
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )

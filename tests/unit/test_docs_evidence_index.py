@@ -389,6 +389,52 @@ S10_PACED_R3_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+Q12_PREDECESSOR_HEADING = "## Q1.2 predecessor S10 throughput record"
+Q12_PREDECESSOR_DATE = "2026-07-09"
+Q12_PREDECESSOR_DIGEST = "a9d6ff046f678ec428ea437676d8007c1fa23de35e46147aac451aff4fcb54c3"
+Q12_PREDECESSOR_RESULT_FACTS = (
+    "2026-07-09t18:00:02+00:00",
+    "deproject-mac",
+    "5a7ed6f",
+    "skip_local_store",
+    "no scratch duckdb",
+    "colima",
+    "6 gib",
+    "4 cpu",
+    "400-event",
+    "unpaced",
+    "warm canonical",
+    "217 eps",
+    "flink hop = bridge apply = 11.4 eps",
+    "400 / 0 / 0",
+    "35.2 s",
+    "213",
+    "about 1.4x",
+    ">=80 target missed",
+    "api not started",
+)
+Q12_PREDECESSOR_BOUNDARIES = (
+    "historical intermediate",
+    "q1.2",
+    "root of the narrow",
+    "does not supersede",
+    "pre-q1.2 baseline",
+    "cold run was noisy",
+    "not a 10x win",
+    "low tens",
+    "does not claim hundreds",
+    "host/driver variance",
+    "not the product ceiling",
+    "400-event",
+    "q1.3",
+    "later apply-path outcome only",
+    "sustained",
+    "production sla",
+    "production acceptance",
+    "golden full-soak",
+    "remains open",
+    "candidate",
+)
 Q13_Q14_INTERMEDIATE_S10_HEADING = "## Q1.3/Q1.4 intermediate S10 throughput records"
 Q13_Q14_INTERMEDIATE_S10_DATES = {
     S10_Q13_RECORD: "2026-07-09",
@@ -932,6 +978,14 @@ def _historical_paced_4h_rows() -> list[dict[str, str]]:
 
 def _historical_paced_4h_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _historical_paced_4h_rows()]
+
+
+def _q12_predecessor_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(Q12_PREDECESSOR_HEADING)
+
+
+def _q12_predecessor_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _q12_predecessor_rows()]
 
 
 def _q13_q14_intermediate_s10_rows() -> list[dict[str, str]]:
@@ -2612,29 +2666,107 @@ def test_current_s10_throughput_boundaries_keep_scopes_distinct() -> None:
         assert phrase in r4
 
 
-def test_historical_paced_4h_section_follows_current_s10_and_precedes_q13_q14() -> None:
+def test_q12_predecessor_section_follows_historical_paced_and_precedes_q13_q14() -> None:
     text = INDEX.read_text(encoding="utf-8")
     current_s10_at = text.index(CURRENT_S10_THROUGHPUT_HEADING)
     historical_paced_at = text.index(HISTORICAL_PACED_4H_HEADING)
+    q12_at = text.index(Q12_PREDECESSOR_HEADING)
     q13_q14_at = text.index(Q13_Q14_INTERMEDIATE_S10_HEADING)
     paced_at = text.index(PACED_10M_1H_HEADING)
     golden_at = text.index(ACCEPTANCE_HEADING)
     between_current_and_historical = text[
         current_s10_at + len(CURRENT_S10_THROUGHPUT_HEADING) : historical_paced_at
     ]
-    between_historical_and_q13 = text[
-        historical_paced_at + len(HISTORICAL_PACED_4H_HEADING) : q13_q14_at
+    between_historical_and_q12 = text[
+        historical_paced_at + len(HISTORICAL_PACED_4H_HEADING) : q12_at
     ]
+    between_q12_and_q13 = text[q12_at + len(Q12_PREDECESSOR_HEADING) : q13_q14_at]
     between_new_and_paced = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : paced_at]
 
     assert "Historical four-hour paced" in HISTORICAL_PACED_4H_HEADING
     assert "S10 predecessor records" in HISTORICAL_PACED_4H_HEADING
+    assert "Q1.2 predecessor" in Q12_PREDECESSOR_HEADING
+    assert "S10 throughput record" in Q12_PREDECESSOR_HEADING
     assert "Q1.3/Q1.4" in Q13_Q14_INTERMEDIATE_S10_HEADING
     assert "intermediate S10 throughput" in Q13_Q14_INTERMEDIATE_S10_HEADING
-    assert current_s10_at < historical_paced_at < q13_q14_at < paced_at < golden_at
+    assert current_s10_at < historical_paced_at < q12_at < q13_q14_at < paced_at < golden_at
     assert "\n## " not in between_current_and_historical
-    assert "\n## " not in between_historical_and_q13
+    assert "\n## " not in between_historical_and_q12
+    assert "\n## " not in between_q12_and_q13
     assert "\n## " not in between_new_and_paced
+
+
+def test_q12_predecessor_index_lists_one_bounded_record_with_required_fields() -> None:
+    indexed = _q12_predecessor_record_paths()
+    rows = _q12_predecessor_rows()
+
+    assert indexed == [S10_Q12_RECORD]
+    assert Counter(indexed) == Counter([S10_Q12_RECORD])
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 1
+    row = rows[0]
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == Q12_PREDECESSOR_DATE
+    assert (ROOT / S10_Q12_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+    assert S10_Q12_RECORD not in _q13_q14_intermediate_s10_record_paths()
+
+
+def test_q12_predecessor_is_reciprocal_root_of_q13_q14_narrow_chain() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), Q12_PREDECESSOR_HEADING).lower()
+    q12 = _q12_predecessor_rows()[0]
+    q13_q14 = {_identity_path(row["identity"]): row for row in _q13_q14_intermediate_s10_rows()}
+    q13 = q13_q14[S10_Q13_RECORD]
+    q14 = q13_q14[S10_Q14_RECORD]
+    current = {_identity_path(row["identity"]): row for row in _current_s10_throughput_rows()}
+    baseline = current[S10_BURST_BASELINE_RECORD]
+
+    assert "root of the narrow" in section
+    assert "q1.2 -> q1.3 -> q1.4" in section
+    assert q12["supersedes"] == "None"
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(q12["superseded by"])] == [
+        S10_Q13_RECORD
+    ]
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(q13["supersedes"])] == [
+        S10_Q12_RECORD
+    ]
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(q13["superseded by"])] == [
+        S10_Q14_RECORD
+    ]
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(q14["supersedes"])] == [
+        S10_Q13_RECORD
+    ]
+    assert baseline["supersedes"] == "None"
+    assert baseline["superseded by"] == "None"
+    _assert_supersession_cell(q12["supersedes"])
+    _assert_supersession_cell(q12["superseded by"])
+
+
+def test_q12_predecessor_record_keeps_published_digest() -> None:
+    assert _q12_predecessor_record_paths() == [S10_Q12_RECORD]
+    digest = hashlib.sha256((ROOT / S10_Q12_RECORD).read_bytes()).hexdigest()
+    assert digest == Q12_PREDECESSOR_DIGEST
+
+
+def test_q12_predecessor_result_and_boundary_remain_conservative() -> None:
+    row = _q12_predecessor_rows()[0]
+    q12 = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    status_links = _status_record_links()
+
+    assert "q1.2" in row["result"].lower()
+    for phrase in Q12_PREDECESSOR_RESULT_FACTS:
+        assert phrase in q12
+    for phrase in Q12_PREDECESSOR_BOUNDARIES:
+        assert phrase in q12
+    assert S10_Q12_RECORD not in status_links
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )
 
 
 def test_historical_paced_4h_index_lists_the_bounded_pair_with_required_fields() -> None:

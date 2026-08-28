@@ -66,6 +66,37 @@ DEMO_FRESHNESS_BOUNDARIES = (
     "current production invalidation wiring",
     "production acceptance",
 )
+E4_REPLICA_HEADING = "## E4 replica-correctness evidence records"
+E4_TWO_POD_RECORD = "docs/perf/e4-2pod-topology-2026-07-09.md"
+E4_CHECK4_RECORD = "docs/perf/e4-check4-alert-single-page-2026-07-17.md"
+E4_REPLICA_DATES = {
+    E4_TWO_POD_RECORD: "2026-07-09",
+    E4_CHECK4_RECORD: "2026-07-17",
+}
+E4_REPLICA_DIGESTS = {
+    E4_TWO_POD_RECORD: ("39bf695eb3e7346bfc18acdb1487dfd2e8bc394ebe045b4e7bf9df721b1959ae"),
+    E4_CHECK4_RECORD: ("4af1aaf1963bd1747de678a28d6d08de6733f15ef7e44cb01216ab425cf76c3a"),
+}
+E4_TWO_POD_BOUNDARIES = (
+    "checks 1-2",
+    "two ready pods",
+    "postgres",
+    "8 round-robin",
+    "explicit a-to-b",
+    "does not claim checks 3-4",
+    "hq-demo",
+    "production acceptance",
+)
+E4_CHECK4_BOUNDARIES = (
+    "checks 1-4 pass",
+    "exactly one delivery",
+    "exactly one alert",
+    "agentflow-staging",
+    "local pre-push",
+    "httpbin",
+    "durable persistence",
+    "production acceptance",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -310,6 +341,14 @@ def _current_freshness_rows() -> list[dict[str, str]]:
 
 def _current_freshness_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _current_freshness_rows()]
+
+
+def _e4_replica_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(E4_REPLICA_HEADING)
+
+
+def _e4_replica_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _e4_replica_rows()]
 
 
 def _acceptance_rows() -> list[dict[str, str]]:
@@ -1426,3 +1465,77 @@ def test_current_freshness_boundaries_keep_scopes_distinct() -> None:
         assert phrase in real_path
     for phrase in DEMO_FRESHNESS_BOUNDARIES:
         assert phrase in demo
+
+
+def test_e4_replica_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    freshness_at = text.index(CURRENT_FRESHNESS_HEADING)
+    e4_at = text.index(E4_REPLICA_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    indexed = _e4_replica_record_paths()
+    expected = (E4_TWO_POD_RECORD, E4_CHECK4_RECORD)
+    rows = _e4_replica_rows()
+
+    assert freshness_at < e4_at < golden_at
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == E4_REPLICA_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_e4_replica_records_are_extension_not_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), E4_REPLICA_HEADING).lower()
+    rows = _e4_replica_rows()
+
+    assert "complementary extension" in section
+    assert "not a supersession chain" in section
+    assert "explicit a-to-b" in section
+    assert "different kind snapshot" in section
+    for row in rows:
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_e4_replica_records_keep_published_digests() -> None:
+    indexed = set(_e4_replica_record_paths())
+
+    assert indexed == set(E4_REPLICA_DIGESTS)
+    for relative, expected in E4_REPLICA_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_e4_replica_claim_links_match_indexed_records() -> None:
+    indexed = set(_e4_replica_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    status_links = _status_record_links()
+
+    assert indexed == {E4_TWO_POD_RECORD, E4_CHECK4_RECORD}
+    assert E4_TWO_POD_RECORD in status_links
+    assert E4_CHECK4_RECORD in status_links
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_e4_replica_boundaries_keep_topology_claims_distinct() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _e4_replica_rows()}
+    two_pod = _row_text(rows[E4_TWO_POD_RECORD])
+    check4 = _row_text(rows[E4_CHECK4_RECORD])
+
+    assert "pass" in rows[E4_TWO_POD_RECORD]["result"].lower()
+    assert "pass" in rows[E4_CHECK4_RECORD]["result"].lower()
+    for phrase in E4_TWO_POD_BOUNDARIES:
+        assert phrase in two_pod
+    for phrase in E4_CHECK4_BOUNDARIES:
+        assert phrase in check4

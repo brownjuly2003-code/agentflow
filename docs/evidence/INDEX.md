@@ -71,6 +71,21 @@ boundary. `None` means no supersession is recorded.
 | [freshness-e2e-realpath.md](../perf/freshness-e2e-realpath.md) | 2026-07-09 | S8 real-path event-to-live-revenue-metric measurement: p50 3.02 s, p95 5.70 s, n=20 with one miss, across Kafka -> Flink -> bridge -> ClickHouse -> Redis invalidation -> API | None | None | Measured on a single Mac/Colima stand for the revenue metric, with one miss. This is not an SLA, a cross-host production benchmark, the demo shortcut, or production acceptance; `production.status` remains `candidate`. |
 | [freshness-benchmark.md](../perf/freshness-benchmark.md) | 2026-06-06 | Generated in-process DuckDB shortcut pre-S7: `event_driven` p50 1.06 s and p95 1.99 s, n=30, on Windows with fakeredis-backed cache semantics | None | None | Does not measure Kafka, Flink, bridge, or ClickHouse and does not claim current production invalidation wiring, a production SLA, or production acceptance. This is a Windows/fakeredis demo-path baseline; the S8 real-path record is complementary. |
 
+## E4 replica-correctness evidence records
+
+This table is the audit catalogue for the baseline two-pod control-plane proof
+and its complementary extension through automated Checks 1-4.
+It is not a supersession chain: the later record adds delivery and alert
+assertions on a different kind snapshot. The earlier record retains the
+unique explicit A-to-B pod probe. Columns are identity, ISO date, result,
+supersedes, superseded by, and claim boundary. `None` means no supersession is
+recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [e4-2pod-topology-2026-07-09.md](../perf/e4-2pod-topology-2026-07-09.md) | 2026-07-09 | PASS for Checks 1-2: two ready pods using the PostgreSQL control plane; webhook visible on all 8 round-robin Service reads; explicit A-to-B registration/list probe on kind `hq-demo` | None | None | Does not claim Checks 3-4, exactly-once delivery, alert single-page, production availability, or production acceptance. The later Checks 1-4 record uses a different kind snapshot and does not supersede this explicit A-to-B proof. |
+| [e4-check4-alert-single-page-2026-07-17.md](../perf/e4-check4-alert-single-page-2026-07-17.md) | 2026-07-17 | Checks 1-4 PASS on kind `agentflow-staging`: 2/2 ready, webhook visible on 8 reads, exactly one delivery ID, and exactly one alert history row | None | None | Local pre-push main with a staging image and external httpbin target. Does not claim durable persistence, production availability or SLA, or production acceptance. It extends the automated checks but does not supersede the unique `hq-demo` A-to-B proof. |
+
 ## Golden topology acceptance records
 
 This table is the audit catalogue for four golden-topology acceptance

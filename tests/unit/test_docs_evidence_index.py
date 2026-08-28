@@ -197,6 +197,31 @@ SOAK_START_UNCLAIMED_BOUNDARIES = (
     "rollback pass",
     "production acceptance",
 )
+HISTORICAL_CAPACITY_BLOCKERS_HEADING = "## Historical capacity-blocker records"
+CAPACITY_BLOCKER_DATE = "2026-08-01"
+HISTORICAL_CAPACITY_BLOCKER_DATES = {
+    CHECKPOINT_BLOCKER_RECORD: CAPACITY_BLOCKER_DATE,
+    RESOURCE_BLOCKER_RECORD: CAPACITY_BLOCKER_DATE,
+}
+HISTORICAL_CAPACITY_BLOCKER_DIGESTS = {
+    CHECKPOINT_BLOCKER_RECORD: CHECKPOINT_BLOCKER_DIGEST,
+    RESOURCE_BLOCKER_RECORD: RESOURCE_BLOCKER_DIGEST,
+}
+CHECKPOINT_BLOCKER_UNCLAIMED_BOUNDARIES = (
+    "restore/replay acceptance",
+    "e1/e2",
+    "ttl",
+    "four-hour soak",
+    "rollback",
+    "production acceptance",
+)
+SOAK_RESOURCE_BLOCKER_UNCLAIMED_BOUNDARIES = (
+    "canary",
+    "four-hour soak",
+    "rollback",
+    "checkpoint restore/replay",
+    "production acceptance",
+)
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -307,6 +332,14 @@ def _historical_canary_soak_rows() -> list[dict[str, str]]:
 
 def _historical_canary_soak_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _historical_canary_soak_rows()]
+
+
+def _historical_capacity_blocker_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(HISTORICAL_CAPACITY_BLOCKERS_HEADING)
+
+
+def _historical_capacity_blocker_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _historical_capacity_blocker_rows()]
 
 
 def _project_closure_record_links() -> set[str]:
@@ -1163,3 +1196,109 @@ def test_historical_canary_soak_boundaries_remain_conservative() -> None:
         assert phrase in canary
     for phrase in SOAK_START_UNCLAIMED_BOUNDARIES:
         assert phrase in start
+
+
+def test_historical_capacity_blockers_section_precedes_current_outcomes() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    blockers_at = text.index(HISTORICAL_CAPACITY_BLOCKERS_HEADING)
+    checkpoint_at = text.index(CHECKPOINT_READINESS_HEADING)
+    canary_at = text.index(HISTORICAL_CANARY_SOAK_HEADING)
+
+    assert golden_at < blockers_at < checkpoint_at < canary_at
+
+
+def test_historical_capacity_blockers_index_lists_the_bounded_pair_once() -> None:
+    indexed = _historical_capacity_blocker_record_paths()
+    expected = (CHECKPOINT_BLOCKER_RECORD, RESOURCE_BLOCKER_RECORD)
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert len(indexed) == 2
+    assert indexed == list(expected)
+    for relative in indexed:
+        assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+    for row in _historical_capacity_blocker_rows():
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_historical_capacity_blockers_expose_required_nonempty_fields() -> None:
+    rows = _historical_capacity_blocker_rows()
+    headers = list(rows[0])
+
+    assert headers == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == HISTORICAL_CAPACITY_BLOCKER_DATES[identity]
+
+
+def test_historical_capacity_blockers_supersession_is_reciprocal() -> None:
+    blockers = {_identity_path(row["identity"]): row for row in _historical_capacity_blocker_rows()}
+    checkpoint_blocker = blockers[CHECKPOINT_BLOCKER_RECORD]
+    soak_resource_blocker = blockers[RESOURCE_BLOCKER_RECORD]
+    checkpoint = {_identity_path(row["identity"]): row for row in _checkpoint_readiness_rows()}[
+        CHECKPOINT_RECORD
+    ]
+    canary = {_identity_path(row["identity"]): row for row in _historical_canary_soak_rows()}[
+        CANARY_TRAFFIC_RECORD
+    ]
+
+    assert checkpoint_blocker["supersedes"] == "None"
+    assert soak_resource_blocker["supersedes"] == "None"
+    assert [
+        _resolve_index_link(target)
+        for target in LINK_RE.findall(checkpoint_blocker["superseded by"])
+    ] == [CHECKPOINT_RECORD]
+    assert [
+        _resolve_index_link(target)
+        for target in LINK_RE.findall(soak_resource_blocker["superseded by"])
+    ] == [CANARY_TRAFFIC_RECORD]
+    assert [
+        _resolve_index_link(target) for target in LINK_RE.findall(checkpoint["supersedes"])
+    ] == [CHECKPOINT_BLOCKER_RECORD]
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(canary["supersedes"])] == [
+        RESOURCE_BLOCKER_RECORD
+    ]
+    for row in (checkpoint_blocker, soak_resource_blocker):
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_historical_capacity_blockers_keep_published_digests() -> None:
+    indexed = set(_historical_capacity_blocker_record_paths())
+
+    assert indexed == set(HISTORICAL_CAPACITY_BLOCKER_DIGESTS)
+    for relative, expected in HISTORICAL_CAPACITY_BLOCKER_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_historical_capacity_blocker_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _historical_capacity_blocker_rows()}
+    checkpoint = _row_text(rows[CHECKPOINT_BLOCKER_RECORD])
+    soak = _row_text(rows[RESOURCE_BLOCKER_RECORD])
+
+    assert "unsafe_capacity" in rows[CHECKPOINT_BLOCKER_RECORD]["result"].lower()
+    assert "blocked_before_mutation" in checkpoint
+    assert "insufficient_non_protected_reclaim" in checkpoint
+    assert "not accepted" in checkpoint
+    assert "historical" in checkpoint
+    assert "health evidence" in checkpoint
+    assert "only for the restore/replay gate" in checkpoint
+    assert "candidate" in checkpoint
+    assert "blocked_resource_capacity" in rows[RESOURCE_BLOCKER_RECORD]["result"].lower()
+    assert "not started" in soak
+    assert "historical" in soak
+    assert "preflight remains valid" in soak
+    assert "health evidence" in soak
+    assert "only as the latest attempt state" in soak
+    assert "candidate" in soak
+    for phrase in CHECKPOINT_BLOCKER_UNCLAIMED_BOUNDARIES:
+        assert phrase in checkpoint
+    for phrase in SOAK_RESOURCE_BLOCKER_UNCLAIMED_BOUNDARIES:
+        assert phrase in soak

@@ -69,6 +69,21 @@ claim boundary. `None` means no supersession is recorded.
 | [live-iceberg-materialization-2026-08-01.md](../perf/live-iceberg-materialization-2026-08-01.md) | 2026-08-01 | PASS only for direct events.validated injection through the ed03fc47 lake materializer into live Iceberg, with exact identity match_count=1, on an Operator/Flink stand based on 36ed1ec | None | None | Does not claim Kafka source, ClickHouse/API, restore/replay, fresh soak or rollback, external penetration test, npm approval, Operator acceptance of ed03fc47, or production acceptance; production.status remains candidate. |
 | [full-lake-to-serving-e2e-2026-08-01.md](../perf/full-lake-to-serving-e2e-2026-08-01.md) | 2026-08-01 | PASS only for one mixed-SHA event across orders.raw -> accepted 36ed1ec PyFlink -> events.validated -> Iceberg and bridge -> ClickHouse -> task API, using ed03fc47 runtime | None | None | Does not claim same-SHA Operator acceptance, multi-tenant acceptance, restore/replay, fresh soak or rollback, external penetration test, npm approval, or production acceptance; production.status remains candidate. |
 
+## Historical capacity-blocker records
+
+This table is the audit catalogue for the two dated 2026-08-01 capacity
+blockers that precede later runtime outcomes. The checkpoint blocker is
+superseded by the later checkpoint PASS only for the restore/replay gate. The
+soak resource blocker is superseded by the later canary failure only as the
+latest attempt state; its dated preflight remains valid. Neither blocker is a
+current status owner. Columns are identity, ISO date, result, supersedes,
+superseded by, and claim boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [checkpoint-restore-replay-capacity-blocker-2026-08-01.md](../perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md) | 2026-08-01 | `UNSAFE_CAPACITY` first attempt; capacity change `BLOCKED_BEFORE_MUTATION`; alternate non-protected reclaim `INSUFFICIENT_NON_PROTECTED_RECLAIM`; restore/replay not accepted | None | [checkpoint-restore-replay-2026-08-02.md](../perf/checkpoint-restore-replay-2026-08-02.md) | Historical capacity record only. Does not claim restore/replay acceptance, E1/E2 production or exactness, TTL, four-hour soak, rollback, or production acceptance. The later checkpoint PASS supersedes it only for the restore/replay gate; documented protected recovery is health evidence only. `production.status` remains `candidate`. |
+| [golden-4h-soak-rollback-resource-blocker-2026-08-01.md](../perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md) | 2026-08-01 | Read-only preflight `BLOCKED_RESOURCE_CAPACITY`; canary, four-hour soak, and Helm rollback were `NOT STARTED` | None | [golden-4h-soak-canary-failure-2026-08-02.md](../perf/golden-4h-soak-canary-failure-2026-08-02.md) | Historical capacity preflight only. Does not claim canary, four-hour soak, rollback, checkpoint restore/replay, or production acceptance. The later canary failure supersedes it only as the latest attempt state; the dated preflight remains valid. Autonomous Flink recovery is health evidence only. `production.status` remains `candidate`. |
+
 ## Checkpoint and readiness acceptance records
 
 This table is the audit catalogue for the current checkpoint restore/replay

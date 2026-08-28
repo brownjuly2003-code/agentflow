@@ -55,6 +55,22 @@ superseded.
 | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
 | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
 
+## ClickHouse PII-governance verification records
+
+This table is the audit catalogue for the two standalone ClickHouse 26.7
+live-verification captures of the ADR 0006 Phase 2 PII boundary. The
+2026-07-03 capture refreshes the 2026-07-02 capture on the current seeds and
+checked-in probe set. It supersedes the earlier capture only as the latest
+ClickHouse live verification outcome. Historical facts remain valid. The
+separate PostgreSQL verification line measures another engine and is not part of this
+supersession chain. Columns are identity, ISO date, result, supersedes,
+superseded by, and claim boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [vault-pii-governance-verify-2026-07-02.md](../perf/vault-pii-governance-verify-2026-07-02.md) | 2026-07-02 | ADR 0006 Phase 2 live verification on standalone ClickHouse 26.7.1.368: 32/32 probes passed against a 2,000-customer demo vault (msk 800 / dxb 200); analyst PII shapes were denied, officers remained jurisdiction-scoped, admin was unaffected, and the PII-safe subquery workaround plus idempotent governance DDL were verified | None | [vault-pii-governance-verify-2026-07-03.md](../perf/vault-pii-governance-verify-2026-07-03.md) | Historical first ClickHouse capture on a standalone WSL synthetic-seed stand. Superseded only as the latest current-seed/current-script outcome; the dated findings remain valid. Does not claim the separate PostgreSQL line, promoted CDC volume, a separated production admin identity, an external penetration test, or production acceptance; `production.status` remains `candidate`. |
+| [vault-pii-governance-verify-2026-07-03.md](../perf/vault-pii-governance-verify-2026-07-03.md) | 2026-07-03 | Current ClickHouse refresh on standalone 26.7.1.492 with the current kitchen-gadget seeds and checked-in probe set: 29/29 passed, 0 FAIL / 0 WARN, with 2,500 customers (msk 2,190 / dxb 60) and all PII-denial and jurisdiction assertions green | [vault-pii-governance-verify-2026-07-02.md](../perf/vault-pii-governance-verify-2026-07-02.md) | None | Current ClickHouse live evidence for the checked-in script on a standalone synthetic-seed stand, not promoted CDC. The applying `default` admin sees everything, and the production identity split remains unverified. Does not supersede the separate PostgreSQL evidence or claim cross-engine/Kubernetes deployment, an external penetration test, or production acceptance; `production.status` remains `candidate`. |
+
 ## Current freshness evidence records
 
 This table is the audit catalogue for the current real-path freshness claim

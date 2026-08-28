@@ -11,6 +11,10 @@ EVIDENCE_DIR = ROOT / "docs" / "evidence"
 INDEX = EVIDENCE_DIR / "INDEX.md"
 STATUS = ROOT / "docs" / "STATUS.md"
 CLAIMS = ROOT / "config" / "project_claims.toml"
+ARCHITECTURE = ROOT / "docs" / "architecture.md"
+CHANGELOG = ROOT / "CHANGELOG.md"
+DV2_DEMO_EVIDENCE = ROOT / "docs" / "dv2-multi-branch" / "demo_evidence.md"
+DOCUMENTATION_PLAN = ROOT / "plan_26_08_2026.md"
 
 SECURITY_DEPENDENCY_HEADING = "## Security and dependency records"
 ACCEPTANCE_HEADING = "## Golden topology acceptance records"
@@ -33,6 +37,66 @@ PROTECTED_DIGESTS = {
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
     ),
 }
+CLICKHOUSE_PII_HEADING = "## ClickHouse PII-governance verification records"
+CLICKHOUSE_PII_0702_RECORD = "docs/perf/vault-pii-governance-verify-2026-07-02.md"
+CLICKHOUSE_PII_0703_RECORD = "docs/perf/vault-pii-governance-verify-2026-07-03.md"
+CLICKHOUSE_PII_DATES = {
+    CLICKHOUSE_PII_0702_RECORD: "2026-07-02",
+    CLICKHOUSE_PII_0703_RECORD: "2026-07-03",
+}
+CLICKHOUSE_PII_DIGESTS = {
+    CLICKHOUSE_PII_0702_RECORD: (
+        "9febe54c7bd99b88afb0138e7d85e2a138c9b77a6b1e9f758f4ab2e4cdc294fe"
+    ),
+    CLICKHOUSE_PII_0703_RECORD: (
+        "ad27d5ea81c02e363fce41dea460486b74690c7a6e581bc80064dcc3299eb8ac"
+    ),
+}
+CLICKHOUSE_PII_0702_FACTS = (
+    "26.7.1.368",
+    "32/32",
+    "2,000",
+    "msk 800",
+    "dxb 200",
+    "safe subquery",
+    "idempotent",
+)
+CLICKHOUSE_PII_0703_FACTS = (
+    "26.7.1.492",
+    "29/29",
+    "0 fail",
+    "0 warn",
+    "2,500",
+    "msk 2,190",
+    "dxb 60",
+    "current",
+)
+CLICKHOUSE_PII_0702_BOUNDARIES = (
+    "historical",
+    "standalone",
+    "wsl",
+    "synthetic",
+    "postgresql",
+    "promoted cdc",
+    "production admin identity",
+    "external penetration test",
+    "production acceptance",
+    "candidate",
+)
+CLICKHOUSE_PII_0703_BOUNDARIES = (
+    "current clickhouse",
+    "standalone",
+    "synthetic",
+    "not promoted cdc",
+    "`default` admin",
+    "production identity split",
+    "postgresql",
+    "cross-engine",
+    "kubernetes",
+    "external penetration test",
+    "production acceptance",
+    "candidate",
+)
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
 DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
@@ -924,6 +988,14 @@ def _security_dependency_rows() -> list[dict[str, str]]:
     return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
 
 
+def _clickhouse_pii_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CLICKHOUSE_PII_HEADING)
+
+
+def _clickhouse_pii_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _clickhouse_pii_rows()]
+
+
 def _current_freshness_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CURRENT_FRESHNESS_HEADING)
 
@@ -1192,6 +1264,100 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
     for row in _security_dependency_rows():
         _assert_supersession_cell(row.get("supersedes", ""))
         _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_clickhouse_pii_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    security_at = text.index(SECURITY_DEPENDENCY_HEADING)
+    clickhouse_pii_at = text.index(CLICKHOUSE_PII_HEADING)
+    freshness_at = text.index(CURRENT_FRESHNESS_HEADING)
+    indexed = _clickhouse_pii_record_paths()
+    expected = (CLICKHOUSE_PII_0702_RECORD, CLICKHOUSE_PII_0703_RECORD)
+    rows = _clickhouse_pii_rows()
+
+    assert security_at < clickhouse_pii_at < freshness_at
+    assert indexed == list(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == CLICKHOUSE_PII_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_clickhouse_pii_refresh_is_a_narrow_reciprocal_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), CLICKHOUSE_PII_HEADING).lower().split()
+    )
+    rows = {_identity_path(row["identity"]): row for row in _clickhouse_pii_rows()}
+    earlier = rows[CLICKHOUSE_PII_0702_RECORD]
+    current = rows[CLICKHOUSE_PII_0703_RECORD]
+
+    assert "latest clickhouse live verification outcome" in section
+    assert "historical facts remain valid" in section
+    assert "separate postgresql" in section
+    assert earlier["supersedes"] == "None"
+    assert [
+        _resolve_index_link(target) for target in LINK_RE.findall(earlier["superseded by"])
+    ] == [CLICKHOUSE_PII_0703_RECORD]
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(current["supersedes"])] == [
+        CLICKHOUSE_PII_0702_RECORD
+    ]
+    assert current["superseded by"] == "None"
+    for row in rows.values():
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+        supersession_text = f"{row['supersedes']} {row['superseded by']}"
+        assert "vault-pii-governance-pg-verify" not in supersession_text
+
+
+def test_clickhouse_pii_records_keep_published_digests() -> None:
+    indexed = set(_clickhouse_pii_record_paths())
+
+    assert indexed == set(CLICKHOUSE_PII_DIGESTS)
+    for relative, expected in CLICKHOUSE_PII_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_clickhouse_pii_canonical_claims_and_plan_match_the_index() -> None:
+    indexed = set(_clickhouse_pii_record_paths())
+    architecture = ARCHITECTURE.read_text(encoding="utf-8")
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    demo_evidence = DV2_DEMO_EVIDENCE.read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert indexed == {CLICKHOUSE_PII_0702_RECORD, CLICKHOUSE_PII_0703_RECORD}
+    assert CLICKHOUSE_PII_0702_RECORD in changelog
+    assert CLICKHOUSE_PII_0703_RECORD in architecture
+    assert Path(CLICKHOUSE_PII_0703_RECORD).name in demo_evidence
+    assert "clickhouse pii-governance evidence sub-slice" in plan
+    for digest in CLICKHOUSE_PII_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_clickhouse_pii_results_and_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _clickhouse_pii_rows()}
+    earlier = _row_text(rows[CLICKHOUSE_PII_0702_RECORD])
+    current = _row_text(rows[CLICKHOUSE_PII_0703_RECORD])
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in CLICKHOUSE_PII_0702_FACTS:
+        assert phrase in earlier
+    for phrase in CLICKHOUSE_PII_0703_FACTS:
+        assert phrase in current
+    for phrase in CLICKHOUSE_PII_0702_BOUNDARIES:
+        assert phrase in earlier
+    for phrase in CLICKHOUSE_PII_0703_BOUNDARIES:
+        assert phrase in current
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_golden_acceptance_index_lists_the_bounded_pair_once() -> None:

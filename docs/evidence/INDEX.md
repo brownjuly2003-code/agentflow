@@ -109,6 +109,27 @@ no supersession is recorded.
 | [e4-replica-topology-2026-07-11.md](../perf/e4-replica-topology-2026-07-11.md) | 2026-07-11 | PASS for Checks 1-2 on kind `agentflow-staging` at `9935bdc`: 2/2 ready postgres pods; webhook `4a4709a0-0bdc-42bc-803a-2d49c1fb8f04` visible on all 8 round-robin reads; closes the 2026-07-06 blocked Phase 3 topology attempt | None | None | Historical intermediate topology proof only. Does not claim Checks 3-4, exactly-one delivery, alert single-page, or production acceptance. Completes the two-real-pods Checks 1-2 layer on `agentflow-staging` after the 2026-07-06 resource-blocked attempt; it does not supersede the unique `hq-demo` A-to-B proof. Later Check 3 and Checks 1-4 records extend automated coverage and do not supersede this snapshot. `production.status` remains `candidate`. |
 | [e4-check3-exactly-one-delivery-2026-07-16.md](../perf/e4-check3-exactly-one-delivery-2026-07-16.md) | 2026-07-16 | Checks 1-3 PASS on kind `agentflow-staging` at `22fbae6`: 2/2 ready, webhook visible on 8 reads, exactly one delivery_id for event_id=replica-e4-858cce874ac04494 | None | None | Historical intermediate Check 3 proof only. Completes the delivery half that Checks 1-2 left open; it is an extension, not a supersession of the 2026-07-11 topology record. Does not claim Check 4, alert single-page, or production acceptance. The later Checks 1-4 record extends the automated script with alert single-page and does not supersede this exactly-one delivery snapshot. Not a current status owner; `production.status` remains `candidate`. |
 
+## Current endurance and scale evidence records
+
+This table is the audit catalogue for the current four-hour real-path
+plus API-read endurance claim and the complementary generated own-data
+scale proof. They measure different execution scopes and are not a supersession chain:
+S11 owns the produce → Flink → `events.validated` →
+serving bridge → ClickHouse path plus steady API reads, while S13 owns
+in-database generation of the project's own legend at 51.2 M rows.
+S13 explicitly records that streaming ingestion numbers live in the
+throughput-realpath and S11 records. The later
+[rss-reverify-183-2026-07-11.md](../perf/rss-reverify-183-2026-07-11.md)
+is a scoped partial supersession of S11's API RSS leak finding only; it
+does not supersede the S11 full-path endurance claim. Columns are
+identity, ISO date, result, supersedes, superseded by, and claim
+boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [soak-s11-2026-07-10.md](../perf/soak-s11-2026-07-10.md) | 2026-07-10 | S11 4 h real-path plus API-read endurance: ~47 eps avg, hourly lag 71/44/134/0 bounded, peak lag 2 915 during one Kafka session timeout then drained to 0, bridge RSS sawtooth 38→114→11 MB with FDs 94–95, one 256-event batch replayed exactly-once by the journal guard, zero cache drift (API 1 540 429 855.37 == ClickHouse) | None | [rss-reverify-183-2026-07-11.md](../perf/rss-reverify-183-2026-07-11.md) | Current status owner for four-hour real-path plus API-read endurance on the deproject-mac Colima 6 GiB/4 CPU stand. Driver-side shortfall (682 679 of 720 000 applied) is not serving-path loss. Later [rss-reverify-183-2026-07-11.md](../perf/rss-reverify-183-2026-07-11.md) is a scoped partial supersession of the API RSS finding (175 MB → 1.67 GB) only; it does not supersede this full-path endurance claim. Not a production SLA or production acceptance; `production.status` remains `candidate`. |
+| [scale-own-data-2026-07-11.md](../perf/scale-own-data-2026-07-11.md) | 2026-07-11 | S13 generated own-data scale: 51.2 M rows / 2.87 M orders / 4 years of legend history, analyst queries 20–730 ms, all 17 at-scale correctness checks pass | None | None | Current status owner for generated own-data scale only. In-database generation (`INSERT … SELECT FROM numbers()`) on a single-node laptop-class VM; 845 k rows/s is generator + ClickHouse write, not streaming ingestion. Customer-PII / loyalty / product-catalog satellites stay demo-scale. Does not prove the S11 endurance soak, a production SLA, or production acceptance; `production.status` remains `candidate`. |
+
 ## Golden topology acceptance records
 
 This table is the audit catalogue for four golden-topology acceptance

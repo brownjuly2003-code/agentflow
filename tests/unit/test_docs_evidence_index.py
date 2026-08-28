@@ -139,6 +139,65 @@ E4_CHECK3_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+CURRENT_ENDURANCE_SCALE_HEADING = "## Current endurance and scale evidence records"
+S11_SOAK_RECORD = "docs/perf/soak-s11-2026-07-10.md"
+S13_SCALE_RECORD = "docs/perf/scale-own-data-2026-07-11.md"
+RSS_REVERIFY_RECORD = "docs/perf/rss-reverify-183-2026-07-11.md"
+CURRENT_ENDURANCE_SCALE_DATES = {
+    S11_SOAK_RECORD: "2026-07-10",
+    S13_SCALE_RECORD: "2026-07-11",
+}
+CURRENT_ENDURANCE_SCALE_DIGESTS = {
+    S11_SOAK_RECORD: ("040e3f2c473b1a52426f0d4e77cefa2dc26e35fe3db09d1c453697eb9f1eaf91"),
+    S13_SCALE_RECORD: ("cebea4fe43c31380f589cf7e5dcf8706ef20314f1f2d104cb6ed06c8c52c6e5b"),
+}
+S11_STATUS_CLAIM = "4 h endurance soak (real path + API reads)"
+S11_STATUS_RESULT = (
+    "bounded lag (peak 2 915 → 0), bridge RSS/FD flat, one faulted batch "
+    "replayed exactly-once by the journal guard, **zero cache drift**"
+)
+S13_STATUS_CLAIM = "At-scale on own data (S13)"
+S13_STATUS_RESULT = (
+    "**51.2 M rows / 2.87 M orders / 4 years of legend history**, analyst "
+    "queries 20–730 ms, all 17 at-scale correctness checks pass"
+)
+S11_SOAK_BOUNDARIES = (
+    "4 h",
+    "real-path",
+    "api-read",
+    "deproject-mac",
+    "colima",
+    "bounded",
+    "2 915",
+    "journal guard",
+    "exactly-once",
+    "zero cache drift",
+    "1 540 429 855.37",
+    "682 679",
+    "rss-reverify-183-2026-07-11",
+    "scoped partial supersession",
+    "api rss",
+    "175 mb",
+    "1.67 gb",
+    "not a production sla",
+    "production acceptance",
+    "candidate",
+)
+S13_SCALE_BOUNDARIES = (
+    "51.2 m rows",
+    "2.87 m orders",
+    "4 years",
+    "20–730 ms",
+    "17 at-scale",
+    "in-database",
+    "single-node",
+    "laptop-class",
+    "not streaming",
+    "demo-scale",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -399,6 +458,33 @@ def _historical_e4_rows() -> list[dict[str, str]]:
 
 def _historical_e4_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _historical_e4_rows()]
+
+
+def _current_endurance_scale_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CURRENT_ENDURANCE_SCALE_HEADING)
+
+
+def _current_endurance_scale_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _current_endurance_scale_rows()]
+
+
+def _status_table_rows(heading: str) -> list[dict[str, str]]:
+    section = _section(STATUS.read_text(encoding="utf-8"), heading)
+    headers, body = _markdown_table(section)
+    rows: list[dict[str, str]] = []
+    for cells in body:
+        assert len(cells) == len(headers), (
+            f"expected {len(headers)} columns, got {len(cells)}: {cells!r}"
+        )
+        rows.append(dict(zip(headers, cells, strict=True)))
+    return rows
+
+
+def _status_cell_record_paths(cell: str) -> list[str]:
+    return [
+        (STATUS.parent / target).resolve().relative_to(ROOT).as_posix()
+        for target in LINK_RE.findall(cell)
+    ]
 
 
 def _acceptance_rows() -> list[dict[str, str]]:
@@ -1698,3 +1784,129 @@ def test_historical_e4_boundaries_keep_intermediate_proofs_distinct() -> None:
         assert phrase in topology
     for phrase in E4_CHECK3_BOUNDARIES:
         assert phrase in check3
+
+
+def test_current_endurance_scale_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    historical_e4_at = text.index(HISTORICAL_E4_HEADING)
+    endurance_at = text.index(CURRENT_ENDURANCE_SCALE_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    indexed = _current_endurance_scale_record_paths()
+    expected = (S11_SOAK_RECORD, S13_SCALE_RECORD)
+    rows = _current_endurance_scale_rows()
+
+    assert historical_e4_at < endurance_at < golden_at
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert RSS_REVERIFY_RECORD not in indexed
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == CURRENT_ENDURANCE_SCALE_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_current_endurance_scale_records_are_complementary_with_scoped_api_rss() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), CURRENT_ENDURANCE_SCALE_HEADING).lower()
+    indexed = _current_endurance_scale_record_paths()
+    rows = {_identity_path(row["identity"]): row for row in _current_endurance_scale_rows()}
+    s11 = rows[S11_SOAK_RECORD]
+    s13 = rows[S13_SCALE_RECORD]
+    s11_superseded_by_targets = LINK_RE.findall(s11["superseded by"])
+
+    assert "complementary" in section
+    assert "not a supersession chain" in section
+    assert "scoped partial supersession" in section
+    assert "api rss" in section
+    assert "full-path endurance" in section
+    assert "does not supersede" in section
+    assert "rss-reverify-183-2026-07-11" in section
+    assert RSS_REVERIFY_RECORD not in indexed
+    assert s11["supersedes"] == "None"
+    assert [_resolve_index_link(target) for target in s11_superseded_by_targets] == [
+        RSS_REVERIFY_RECORD
+    ]
+    assert s11_superseded_by_targets[0].startswith("../perf/")
+    assert s13["supersedes"] == "None"
+    assert s13["superseded by"] == "None"
+    _assert_supersession_cell(s11["supersedes"])
+    _assert_supersession_cell(s11["superseded by"])
+    _assert_supersession_cell(s13["supersedes"])
+    _assert_supersession_cell(s13["superseded by"])
+    s11_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(s11["supersedes"])]
+    s11_superseded_by = [_resolve_index_link(target) for target in s11_superseded_by_targets]
+    s13_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(s13["supersedes"])]
+    s13_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(s13["superseded by"])
+    ]
+    assert S11_SOAK_RECORD not in s11_supersedes
+    assert S13_SCALE_RECORD not in s11_supersedes
+    assert RSS_REVERIFY_RECORD not in s11_supersedes
+    assert S11_SOAK_RECORD not in s11_superseded_by
+    assert S13_SCALE_RECORD not in s11_superseded_by
+    assert S11_SOAK_RECORD not in s13_supersedes
+    assert S13_SCALE_RECORD not in s13_supersedes
+    assert RSS_REVERIFY_RECORD not in s13_supersedes
+    assert S11_SOAK_RECORD not in s13_superseded_by
+    assert S13_SCALE_RECORD not in s13_superseded_by
+    assert RSS_REVERIFY_RECORD not in s13_superseded_by
+
+
+def test_current_endurance_scale_records_keep_published_digests() -> None:
+    indexed = set(_current_endurance_scale_record_paths())
+
+    assert indexed == set(CURRENT_ENDURANCE_SCALE_DIGESTS)
+    for relative, expected in CURRENT_ENDURANCE_SCALE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    assert (ROOT / RSS_REVERIFY_RECORD).is_file()
+
+
+def test_current_endurance_scale_claim_links_match_status_rows() -> None:
+    indexed = set(_current_endurance_scale_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    status_links = _status_record_links()
+    proven_rows = _status_table_rows("## Proven")
+    known_issues = _section(STATUS.read_text(encoding="utf-8"), "## Known issues").lower()
+    proven_by_path: dict[str, dict[str, str]] = {}
+    proven_paths: set[str] = set()
+    for row in proven_rows:
+        for path in _status_cell_record_paths(row.get("evidence", "")):
+            proven_paths.add(path)
+            proven_by_path[path] = row
+
+    assert indexed == {S11_SOAK_RECORD, S13_SCALE_RECORD}
+    assert S11_SOAK_RECORD in status_links
+    assert S13_SCALE_RECORD in status_links
+    assert S11_SOAK_RECORD in proven_paths
+    assert S13_SCALE_RECORD in proven_paths
+    assert RSS_REVERIFY_RECORD not in proven_paths
+    assert RSS_REVERIFY_RECORD in status_links
+    assert "rss-reverify-183-2026-07-11.md" in known_issues
+    assert proven_by_path[S11_SOAK_RECORD]["claim"] == S11_STATUS_CLAIM
+    assert proven_by_path[S11_SOAK_RECORD]["result"] == S11_STATUS_RESULT
+    assert proven_by_path[S13_SCALE_RECORD]["claim"] == S13_STATUS_CLAIM
+    assert proven_by_path[S13_SCALE_RECORD]["result"] == S13_STATUS_RESULT
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_current_endurance_scale_boundaries_keep_scopes_distinct() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _current_endurance_scale_rows()}
+    s11 = _row_text(rows[S11_SOAK_RECORD])
+    s13 = _row_text(rows[S13_SCALE_RECORD])
+
+    assert "s11" in rows[S11_SOAK_RECORD]["result"].lower()
+    assert "s13" in rows[S13_SCALE_RECORD]["result"].lower()
+    assert "does not supersede" in s11
+    assert "full-path endurance" in s11
+    for phrase in S11_SOAK_BOUNDARIES:
+        assert phrase in s11
+    for phrase in S13_SCALE_BOUNDARIES:
+        assert phrase in s13

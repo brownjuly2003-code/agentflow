@@ -473,6 +473,62 @@ S10_PACED_1H_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+FINITE_100EPS_DRAIN_HEADING = "## Finite 2000-event S10 drain record"
+FINITE_100EPS_DRAIN_DATE = "2026-07-17"
+FINITE_100EPS_DRAIN_DIGEST = "6266c36fd694fc9b447f1cfbc2e177fb9c750f4aff6409102dc1ccdffb8172b7"
+FINITE_100EPS_DRAIN_OTHER_RECORDS = (
+    S10_BURST_BASELINE_RECORD,
+    S10_Q13_RECORD,
+    S10_Q14_RECORD,
+    S10_PACED_10M_RECORD,
+    S10_PACED_1H_RECORD,
+    S10_PACED_R1_RECORD,
+    S10_PACED_R3_RECORD,
+    S10_PACED_R4_RECORD,
+)
+FINITE_100EPS_STATUS_STEP = "Stretch try — 2000-event drain on same Mac class"
+FINITE_100EPS_STATUS_RESULT = "**107.3 eps**"
+FINITE_100EPS_DRAIN_RESULT_FACTS = (
+    "2026-07-16t22:28–22:29z",
+    "deproject-mac",
+    "colima",
+    "6 gib",
+    "4 cpu",
+    "macos 13.7.8",
+    "intel",
+    "88c9804",
+    "clickhouse-only",
+    "one flink taskmanager",
+    "finite",
+    "2000-event",
+    "produce 2216 eps",
+    "flink hop = bridge apply = 107.3 eps",
+    "0 / 0",
+    "18.65 s",
+    "187",
+    ">=100",
+    "single drain window",
+)
+FINITE_100EPS_DRAIN_BOUNDARIES = (
+    "finite produce + catch-up drain",
+    "not a sustained",
+    "paced-ingress",
+    "multi-hour",
+    "production sla",
+    "production acceptance",
+    "does not supersede",
+    "q1.4",
+    "10-minute",
+    "one-hour",
+    "four-hour r4",
+    "different windows",
+    "historical facts remain valid",
+    "pre-materializer",
+    "clickhouse-only",
+    "golden full-soak",
+    "blocked_host_capacity",
+    "candidate",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -765,6 +821,14 @@ def _paced_10m_1h_rows() -> list[dict[str, str]]:
 
 def _paced_10m_1h_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _paced_10m_1h_rows()]
+
+
+def _finite_100eps_drain_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(FINITE_100EPS_DRAIN_HEADING)
+
+
+def _finite_100eps_drain_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _finite_100eps_drain_rows()]
 
 
 def _status_table_rows(heading: str) -> list[dict[str, str]]:
@@ -2504,19 +2568,19 @@ def test_q13_q14_boundaries_remain_conservative() -> None:
     assert "remains open" in q14
 
 
-def test_paced_10m_1h_section_follows_q13_q14_and_precedes_golden() -> None:
+def test_paced_10m_1h_section_follows_q13_q14_and_precedes_finite_drain() -> None:
     text = INDEX.read_text(encoding="utf-8")
     q13_q14_at = text.index(Q13_Q14_INTERMEDIATE_S10_HEADING)
     paced_at = text.index(PACED_10M_1H_HEADING)
-    golden_at = text.index(ACCEPTANCE_HEADING)
+    finite_drain_at = text.index(FINITE_100EPS_DRAIN_HEADING)
     between_q13_q14_and_paced = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : paced_at]
-    between_paced_and_golden = text[paced_at + len(PACED_10M_1H_HEADING) : golden_at]
+    between_paced_and_finite_drain = text[paced_at + len(PACED_10M_1H_HEADING) : finite_drain_at]
 
     assert "Paced 10-minute and one-hour" in PACED_10M_1H_HEADING
     assert "S10 throughput" in PACED_10M_1H_HEADING
-    assert q13_q14_at < paced_at < golden_at
+    assert q13_q14_at < paced_at < finite_drain_at
     assert "\n## " not in between_q13_q14_and_paced
-    assert "\n## " not in between_paced_and_golden
+    assert "\n## " not in between_paced_and_finite_drain
 
 
 def test_paced_10m_1h_index_lists_the_bounded_pair_with_required_fields() -> None:
@@ -2622,6 +2686,105 @@ def test_paced_10m_1h_results_and_boundaries_remain_conservative() -> None:
     for phrase in S10_PACED_1H_BOUNDARIES:
         assert phrase in one_hour
     assert S10_100EPS_TRY_RECORD not in _paced_10m_1h_record_paths()
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )
+
+
+def test_finite_100eps_drain_section_follows_paced_and_precedes_golden() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    paced_at = text.index(PACED_10M_1H_HEADING)
+    finite_drain_at = text.index(FINITE_100EPS_DRAIN_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    between_finite_drain_and_golden = text[
+        finite_drain_at + len(FINITE_100EPS_DRAIN_HEADING) : golden_at
+    ]
+
+    assert "Finite 2000-event" in FINITE_100EPS_DRAIN_HEADING
+    assert "S10 drain record" in FINITE_100EPS_DRAIN_HEADING
+    assert paced_at < finite_drain_at < golden_at
+    assert "\n## " not in between_finite_drain_and_golden
+
+
+def test_finite_100eps_drain_index_lists_one_bounded_record_with_required_fields() -> None:
+    indexed = _finite_100eps_drain_record_paths()
+    rows = _finite_100eps_drain_rows()
+
+    assert indexed == [S10_100EPS_TRY_RECORD]
+    assert Counter(indexed) == Counter([S10_100EPS_TRY_RECORD])
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 1
+    for relative in FINITE_100EPS_DRAIN_OTHER_RECORDS:
+        assert relative not in indexed
+    row = rows[0]
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == FINITE_100EPS_DRAIN_DATE
+    assert (ROOT / S10_100EPS_TRY_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_finite_100eps_drain_is_not_a_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), FINITE_100EPS_DRAIN_HEADING).lower()
+    row = _finite_100eps_drain_rows()[0]
+
+    assert "different windows" in section
+    assert "not a supersession chain" in section
+    assert "historical facts remain valid" in section
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+    for rows in (
+        _current_s10_throughput_rows(),
+        _q13_q14_intermediate_s10_rows(),
+        _paced_10m_1h_rows(),
+    ):
+        for other_row in rows:
+            supersession_text = f"{other_row['supersedes']} {other_row['superseded by']}"
+            assert S10_100EPS_TRY_RECORD not in [
+                _resolve_index_link(target) for target in LINK_RE.findall(supersession_text)
+            ]
+
+
+def test_finite_100eps_drain_record_keeps_published_digest() -> None:
+    assert _finite_100eps_drain_record_paths() == [S10_100EPS_TRY_RECORD]
+    digest = hashlib.sha256((ROOT / S10_100EPS_TRY_RECORD).read_bytes()).hexdigest()
+    assert digest == FINITE_100EPS_DRAIN_DIGEST
+
+
+def test_finite_100eps_drain_status_row_matches_indexed_record() -> None:
+    indexed = _finite_100eps_drain_record_paths()
+    status_links = _status_record_links()
+    bridge_rows = _status_table_rows(S10_R4_STATUS_HEADING)
+    by_path: dict[str, dict[str, str]] = {}
+    for row in bridge_rows:
+        for path in _status_cell_record_paths(row.get("state", "")):
+            by_path[path] = row
+
+    assert indexed == [S10_100EPS_TRY_RECORD]
+    assert S10_100EPS_TRY_RECORD in status_links
+    assert by_path[S10_100EPS_TRY_RECORD]["step"] == FINITE_100EPS_STATUS_STEP
+    assert by_path[S10_100EPS_TRY_RECORD]["bridge apply"] == FINITE_100EPS_STATUS_RESULT
+    assert S10_100EPS_TRY_RECORD not in _current_s10_throughput_record_paths()
+    assert S10_100EPS_TRY_RECORD not in _q13_q14_intermediate_s10_record_paths()
+    assert S10_100EPS_TRY_RECORD not in _paced_10m_1h_record_paths()
+
+
+def test_finite_100eps_drain_result_and_boundary_remain_conservative() -> None:
+    row = _finite_100eps_drain_rows()[0]
+    drain = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    assert "finite" in row["result"].lower()
+    assert "drain" in row["result"].lower()
+    for phrase in FINITE_100EPS_DRAIN_RESULT_FACTS:
+        assert phrase in drain
+    for phrase in FINITE_100EPS_DRAIN_BOUNDARIES:
+        assert phrase in drain
     assert manifest["production"]["status"] == "candidate"
     assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
         "BLOCKED_HOST_CAPACITY"

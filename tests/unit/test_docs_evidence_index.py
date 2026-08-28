@@ -33,6 +33,39 @@ PROTECTED_DIGESTS = {
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
     ),
 }
+CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
+REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
+DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
+CURRENT_FRESHNESS_DATES = {
+    REAL_PATH_FRESHNESS_RECORD: "2026-07-09",
+    DEMO_FRESHNESS_RECORD: "2026-06-06",
+}
+CURRENT_FRESHNESS_DIGESTS = {
+    REAL_PATH_FRESHNESS_RECORD: (
+        "a7715b090f1593924a5503d18ed932c92681f874083a99625f2f0f9fa7050c88"
+    ),
+    DEMO_FRESHNESS_RECORD: ("3a21b981c81bf7178b5c9321a13af3f1f107c03123fe15ef66adb98b9ae8feba"),
+}
+REAL_PATH_FRESHNESS_BOUNDARIES = (
+    "single mac/colima stand",
+    "revenue metric",
+    "one miss",
+    "not an sla",
+    "demo shortcut",
+    "production acceptance",
+)
+DEMO_FRESHNESS_BOUNDARIES = (
+    "in-process duckdb shortcut",
+    "pre-s7",
+    "windows",
+    "fakeredis",
+    "kafka",
+    "flink",
+    "bridge",
+    "clickhouse",
+    "current production invalidation wiring",
+    "production acceptance",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -269,6 +302,14 @@ def _rows_for_heading(heading: str) -> list[dict[str, str]]:
 
 def _security_dependency_rows() -> list[dict[str, str]]:
     return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
+
+
+def _current_freshness_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CURRENT_FRESHNESS_HEADING)
+
+
+def _current_freshness_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _current_freshness_rows()]
 
 
 def _acceptance_rows() -> list[dict[str, str]]:
@@ -1302,3 +1343,86 @@ def test_historical_capacity_blocker_boundaries_remain_conservative() -> None:
         assert phrase in checkpoint
     for phrase in SOAK_RESOURCE_BLOCKER_UNCLAIMED_BOUNDARIES:
         assert phrase in soak
+
+
+def test_current_freshness_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    security_at = text.index(SECURITY_DEPENDENCY_HEADING)
+    freshness_at = text.index(CURRENT_FRESHNESS_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    indexed = _current_freshness_record_paths()
+    expected = (REAL_PATH_FRESHNESS_RECORD, DEMO_FRESHNESS_RECORD)
+    rows = _current_freshness_rows()
+
+    assert security_at < freshness_at < golden_at
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == CURRENT_FRESHNESS_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_current_freshness_records_are_complementary_not_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), CURRENT_FRESHNESS_HEADING).lower()
+    rows = _current_freshness_rows()
+
+    assert "complementary" in section
+    assert "not a supersession chain" in section
+    for row in rows:
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_current_freshness_records_keep_published_digests() -> None:
+    indexed = set(_current_freshness_record_paths())
+
+    assert indexed == set(CURRENT_FRESHNESS_DIGESTS)
+    for relative, expected in CURRENT_FRESHNESS_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_current_freshness_claim_links_match_indexed_records() -> None:
+    indexed = set(_current_freshness_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    latency = manifest["latency"]["real_path"]
+    status_links = _status_record_links()
+
+    assert indexed == {REAL_PATH_FRESHNESS_RECORD, DEMO_FRESHNESS_RECORD}
+    assert REAL_PATH_FRESHNESS_RECORD in manifest["required_evidence"]
+    assert latency["evidence"] == REAL_PATH_FRESHNESS_RECORD
+    assert latency["p50_seconds"] == 3.02
+    assert latency["p95_seconds"] == 5.70
+    assert REAL_PATH_FRESHNESS_RECORD in status_links
+    assert DEMO_FRESHNESS_RECORD in status_links
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_current_freshness_boundaries_keep_scopes_distinct() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _current_freshness_rows()}
+    real_path = _row_text(rows[REAL_PATH_FRESHNESS_RECORD])
+    demo = _row_text(rows[DEMO_FRESHNESS_RECORD])
+
+    assert "s8" in rows[REAL_PATH_FRESHNESS_RECORD]["result"].lower()
+    assert "3.02 s" in real_path
+    assert "5.70 s" in real_path
+    assert "n=20" in real_path
+    assert "event_driven" in rows[DEMO_FRESHNESS_RECORD]["result"].lower()
+    assert "1.06 s" in demo
+    assert "1.99 s" in demo
+    assert "n=30" in demo
+    for phrase in REAL_PATH_FRESHNESS_BOUNDARIES:
+        assert phrase in real_path
+    for phrase in DEMO_FRESHNESS_BOUNDARIES:
+        assert phrase in demo

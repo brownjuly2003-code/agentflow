@@ -55,6 +55,22 @@ superseded.
 | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
 | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
 
+## Current freshness evidence records
+
+This table is the audit catalogue for the current real-path freshness claim
+and the complementary in-process demo-path baseline. They measure different
+execution scopes and are not a supersession chain: S8 owns the
+Kafka-to-live-metric claim, while the generated demo report remains the
+shortcut baseline
+and explicitly records that its pre-S7 invalidation wiring is historical.
+Columns are identity, ISO date, result, supersedes, superseded by, and claim
+boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [freshness-e2e-realpath.md](../perf/freshness-e2e-realpath.md) | 2026-07-09 | S8 real-path event-to-live-revenue-metric measurement: p50 3.02 s, p95 5.70 s, n=20 with one miss, across Kafka -> Flink -> bridge -> ClickHouse -> Redis invalidation -> API | None | None | Measured on a single Mac/Colima stand for the revenue metric, with one miss. This is not an SLA, a cross-host production benchmark, the demo shortcut, or production acceptance; `production.status` remains `candidate`. |
+| [freshness-benchmark.md](../perf/freshness-benchmark.md) | 2026-06-06 | Generated in-process DuckDB shortcut pre-S7: `event_driven` p50 1.06 s and p95 1.99 s, n=30, on Windows with fakeredis-backed cache semantics | None | None | Does not measure Kafka, Flink, bridge, or ClickHouse and does not claim current production invalidation wiring, a production SLA, or production acceptance. This is a Windows/fakeredis demo-path baseline; the S8 real-path record is complementary. |
+
 ## Golden topology acceptance records
 
 This table is the audit catalogue for four golden-topology acceptance

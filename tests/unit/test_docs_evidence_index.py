@@ -278,6 +278,107 @@ S10_PACED_R4_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+Q13_Q14_INTERMEDIATE_S10_HEADING = "## Q1.3/Q1.4 intermediate S10 throughput records"
+Q13_Q14_INTERMEDIATE_S10_DATES = {
+    S10_Q13_RECORD: "2026-07-09",
+    S10_Q14_RECORD: "2026-07-10",
+}
+Q13_Q14_INTERMEDIATE_S10_DIGESTS = {
+    S10_Q13_RECORD: ("5671f60feac077d8fe9684f3c75e0a315edcb44676a97725af936db39ca0c96f"),
+    S10_Q14_RECORD: ("6c131f1887c219e186e7f709f547935596091da4cfddffc2ad3d4237552a8f90"),
+}
+Q13_Q14_NON_SUPERSESSION_RECORDS = (
+    S10_BURST_BASELINE_RECORD,
+    S10_100EPS_TRY_RECORD,
+    S10_PACED_10M_RECORD,
+    S10_PACED_1H_RECORD,
+    S10_PACED_R1_RECORD,
+    S10_PACED_R3_RECORD,
+    S10_PACED_R4_RECORD,
+)
+S10_Q13_RESULT_FACTS = (
+    "2026-07-09t18:08z",
+    "deproject-mac",
+    "q13-ch-batch-apply",
+    "88a3de4",
+    "5bd2189",
+    "clickhouse-only",
+    "no duckdb",
+    "unpaced",
+    "400-event",
+    "647",
+    "flink hop = bridge apply = 22.9",
+    "failures 0",
+    "17.5 s",
+    "218",
+    "2.9x",
+    "2.0x",
+    ">=80",
+    "missed",
+)
+S10_Q14_RESULT_FACTS = (
+    "2026-07-10",
+    "deproject-mac",
+    "colima",
+    "6 gib",
+    "4 cpu",
+    "macos 13.7.8",
+    "intel",
+    "one flink taskmanager",
+    "13a242d",
+    "clickhouse-only",
+    "no duckdb",
+    "unpaced",
+    "400-event",
+    "376",
+    "flink hop = bridge apply = 87.4",
+    "0 / 0",
+    "4.58 s",
+    "peak lag 0",
+    "3.8x",
+    "11x",
+    ">=80",
+    "met",
+    "10 non-empty",
+    "800",
+    "mean 80",
+    "p50 >32",
+)
+S10_Q13_BOUNDARIES = (
+    "intermediate",
+    "optimization",
+    "sustained-rate",
+    "production sla",
+    "production acceptance",
+    "current-best",
+    "400-event",
+    "apply-path",
+    "q1.2",
+    "q1.4",
+    "candidate",
+    "golden full-soak",
+    "remains open",
+)
+S10_Q14_BOUNDARIES = (
+    "docs/status.md",
+    "readme",
+    "400-event",
+    "intermediate",
+    "broader s10",
+    "sustained",
+    ">=100",
+    "multi-hour",
+    "production sla",
+    "production acceptance",
+    "107.3",
+    "10m",
+    "1h",
+    "r4",
+    "not direct supersession",
+    "candidate",
+    "golden full-soak",
+    "remains open",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -554,6 +655,14 @@ def _current_s10_throughput_rows() -> list[dict[str, str]]:
 
 def _current_s10_throughput_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _current_s10_throughput_rows()]
+
+
+def _q13_q14_intermediate_s10_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(Q13_Q14_INTERMEDIATE_S10_HEADING)
+
+
+def _q13_q14_intermediate_s10_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _q13_q14_intermediate_s10_rows()]
 
 
 def _status_table_rows(heading: str) -> list[dict[str, str]]:
@@ -2122,3 +2231,171 @@ def test_current_s10_throughput_boundaries_keep_scopes_distinct() -> None:
         assert phrase in baseline
     for phrase in S10_PACED_R4_BOUNDARIES:
         assert phrase in r4
+
+
+def test_q13_q14_intermediate_section_follows_current_s10() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    current_s10_at = text.index(CURRENT_S10_THROUGHPUT_HEADING)
+    q13_q14_at = text.index(Q13_Q14_INTERMEDIATE_S10_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    between_current_and_new = text[
+        current_s10_at + len(CURRENT_S10_THROUGHPUT_HEADING) : q13_q14_at
+    ]
+    between_new_and_golden = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : golden_at]
+
+    assert "Q1.3/Q1.4" in Q13_Q14_INTERMEDIATE_S10_HEADING
+    assert "intermediate S10 throughput" in Q13_Q14_INTERMEDIATE_S10_HEADING
+    assert current_s10_at < q13_q14_at < golden_at
+    assert "\n## " not in between_current_and_new
+    assert "\n## " not in between_new_and_golden
+
+
+def test_q13_q14_index_lists_the_bounded_pair_with_required_fields() -> None:
+    indexed = _q13_q14_intermediate_s10_record_paths()
+    expected = (S10_Q13_RECORD, S10_Q14_RECORD)
+    rows = _q13_q14_intermediate_s10_rows()
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    assert S10_Q12_RECORD not in indexed
+    for relative in Q13_Q14_NON_SUPERSESSION_RECORDS:
+        assert relative not in indexed
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == Q13_Q14_INTERMEDIATE_S10_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_q13_q14_narrow_reciprocal_supersession_chain() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), Q13_Q14_INTERMEDIATE_S10_HEADING)
+    section_lower = section.lower()
+    rows = {_identity_path(row["identity"]): row for row in _q13_q14_intermediate_s10_rows()}
+    q13 = rows[S10_Q13_RECORD]
+    q14 = rows[S10_Q14_RECORD]
+    q13_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(q13["supersedes"])]
+    q13_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(q13["superseded by"])
+    ]
+    q14_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(q14["supersedes"])]
+    q14_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(q14["superseded by"])
+    ]
+    current_rows = {_identity_path(row["identity"]): row for row in _current_s10_throughput_rows()}
+
+    assert "historical measurements remain valid" in section_lower
+    assert "do not merge" in section_lower
+    assert "four-hour paced" in section_lower
+    assert "narrow" in section_lower
+    assert q13_supersedes == [S10_Q12_RECORD]
+    assert q13["supersedes"].count("[") == 1
+    assert q13_superseded_by == [S10_Q14_RECORD]
+    assert q13["superseded by"].count("[") == 1
+    assert q14_supersedes == [S10_Q13_RECORD]
+    assert q14["supersedes"].count("[") == 1
+    assert q14["superseded by"] == "None"
+    assert q14_superseded_by == []
+    assert S10_Q12_RECORD not in q13_superseded_by
+    assert S10_Q12_RECORD not in q14_supersedes
+    assert S10_Q12_RECORD not in q14_superseded_by
+    for relative in Q13_Q14_NON_SUPERSESSION_RECORDS:
+        assert relative not in q13_supersedes
+        assert relative not in q13_superseded_by
+        assert relative not in q14_supersedes
+        assert relative not in q14_superseded_by
+    for row in current_rows.values():
+        current_supersedes = [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["supersedes"])
+        ]
+        current_superseded_by = [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["superseded by"])
+        ]
+        assert S10_Q13_RECORD not in current_supersedes
+        assert S10_Q14_RECORD not in current_supersedes
+        assert S10_Q13_RECORD not in current_superseded_by
+        assert S10_Q14_RECORD not in current_superseded_by
+    _assert_supersession_cell(q13["supersedes"])
+    _assert_supersession_cell(q13["superseded by"])
+    _assert_supersession_cell(q14["supersedes"])
+    _assert_supersession_cell(q14["superseded by"])
+
+
+def test_q13_q14_records_keep_published_digests() -> None:
+    indexed = set(_q13_q14_intermediate_s10_record_paths())
+
+    assert indexed == set(Q13_Q14_INTERMEDIATE_S10_DIGESTS)
+    for relative, expected in Q13_Q14_INTERMEDIATE_S10_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    assert (ROOT / S10_Q12_RECORD).is_file()
+    for relative, expected in CURRENT_S10_THROUGHPUT_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_q13_q14_status_readme_ownership_and_current_endpoint_exclusion() -> None:
+    indexed = _q13_q14_intermediate_s10_record_paths()
+    rows = {_identity_path(row["identity"]): row for row in _q13_q14_intermediate_s10_rows()}
+    current = _current_s10_throughput_record_paths()
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    status_links = _status_record_links()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    bridge_rows = _status_table_rows(S10_R4_STATUS_HEADING)
+    q14_status_rows = [
+        row
+        for row in bridge_rows
+        if S10_Q14_RECORD in _status_cell_record_paths(row.get("state", ""))
+    ]
+    q14_claim = rows[S10_Q14_RECORD]["claim boundary"].lower()
+
+    assert indexed == [S10_Q13_RECORD, S10_Q14_RECORD]
+    assert S10_Q13_RECORD not in current
+    assert S10_Q14_RECORD not in current
+    assert current == [S10_BURST_BASELINE_RECORD, S10_PACED_R4_RECORD]
+    assert S10_Q14_RECORD in status_links
+    assert len(q14_status_rows) == 1
+    assert "87.4" in q14_status_rows[0]["bridge apply"]
+    assert "throughput-realpath-q14-2026-07-10.md" in readme
+    assert "87.4 events/s" in readme
+    assert "400-event burst" in readme
+    assert "docs/status.md" in q14_claim
+    assert "readme" in q14_claim
+    assert "400-event" in q14_claim
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )
+
+
+def test_q13_q14_boundaries_remain_conservative() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), Q13_Q14_INTERMEDIATE_S10_HEADING).lower()
+    rows = {_identity_path(row["identity"]): row for row in _q13_q14_intermediate_s10_rows()}
+    q13 = _row_text(rows[S10_Q13_RECORD])
+    q14 = _row_text(rows[S10_Q14_RECORD])
+
+    assert "q1.3" in rows[S10_Q13_RECORD]["result"].lower()
+    assert "q1.4" in rows[S10_Q14_RECORD]["result"].lower()
+    for phrase in S10_Q13_RESULT_FACTS:
+        assert phrase in q13
+    for phrase in S10_Q14_RESULT_FACTS:
+        assert phrase in q14
+    for phrase in S10_Q13_BOUNDARIES:
+        assert phrase in q13
+    for phrase in S10_Q14_BOUNDARIES:
+        assert phrase in q14
+    assert "historical measurements remain valid" in section
+    assert "do not merge" in section
+    assert "four-hour paced" in section
+    assert "candidate" in q13
+    assert "candidate" in q14
+    assert "golden full-soak" in q13
+    assert "golden full-soak" in q14
+    assert "remains open" in q13
+    assert "remains open" in q14

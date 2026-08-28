@@ -151,6 +151,64 @@ POSTGRESQL_PII_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+POSTGRESQL_RUNTIME_HEADING = "## PostgreSQL control-plane and canonical-order verification records"
+CONTROL_PLANE_PG_RECORD = "docs/perf/control-plane-pg-verify-2026-07-03.md"
+BV_ORDER_CANONICAL_PG_RECORD = "docs/perf/bv-order-canonical-pg-smoke-2026-07-06.md"
+POSTGRESQL_RUNTIME_DATES = {
+    CONTROL_PLANE_PG_RECORD: "2026-07-03",
+    BV_ORDER_CANONICAL_PG_RECORD: "2026-07-06",
+}
+POSTGRESQL_RUNTIME_DIGESTS = {
+    CONTROL_PLANE_PG_RECORD: ("1fed01fd91d09548d44342a78d00093d0e3a41cf8c831ed91d8c9ce85e69260c"),
+    BV_ORDER_CANONICAL_PG_RECORD: (
+        "4844cb202105780b4466e19f0fca15f2d71e6a64ed46dbd7cda071d1aa2dfd7a"
+    ),
+}
+CONTROL_PLANE_PG_FACTS = (
+    "postgresql 17.5",
+    "31/31",
+    "19.45s",
+    "psycopg 3.3.4",
+    "8 threads",
+    "4 threads",
+    "restart re-drive",
+    "outbox",
+    "alert-tick",
+    "two app boots",
+    "api_usage",
+)
+CONTROL_PLANE_PG_BOUNDARIES = (
+    "standalone windows",
+    "trust auth",
+    "no pooling",
+    "one connection per method",
+    "not a production deployment",
+    "not an sla",
+    "production acceptance",
+    "candidate",
+)
+BV_ORDER_CANONICAL_PG_FACTS = (
+    "postgresql 16.14",
+    "17/17",
+    "0 fail",
+    "8 deterministic orders",
+    "197166.67",
+    "latest-wins",
+    "soft-delete",
+    "7 of 8",
+    "5%",
+    "20%",
+)
+BV_ORDER_CANONICAL_PG_BOUNDARIES = (
+    "mac",
+    "colima/docker",
+    "standalone seed smoke",
+    "not promoted cdc",
+    "cdc-to-serving",
+    "not integrated with the control plane",
+    "production acceptance",
+    "candidate",
+)
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
 DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
@@ -1058,6 +1116,14 @@ def _postgresql_pii_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _postgresql_pii_rows()]
 
 
+def _postgresql_runtime_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(POSTGRESQL_RUNTIME_HEADING)
+
+
+def _postgresql_runtime_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _postgresql_runtime_rows()]
+
+
 def _current_freshness_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CURRENT_FRESHNESS_HEADING)
 
@@ -1511,6 +1577,91 @@ def test_postgresql_pii_results_and_boundaries_remain_conservative() -> None:
     for phrase in POSTGRESQL_PII_BOUNDARIES:
         assert phrase in earlier
         assert phrase in current
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_postgresql_runtime_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    postgresql_pii_at = text.index(POSTGRESQL_PII_HEADING)
+    runtime_at = text.index(POSTGRESQL_RUNTIME_HEADING)
+    freshness_at = text.index(CURRENT_FRESHNESS_HEADING)
+    indexed = _postgresql_runtime_record_paths()
+    expected = (CONTROL_PLANE_PG_RECORD, BV_ORDER_CANONICAL_PG_RECORD)
+    rows = _postgresql_runtime_rows()
+
+    assert postgresql_pii_at < runtime_at < freshness_at
+    assert indexed == list(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == POSTGRESQL_RUNTIME_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_postgresql_runtime_records_are_complementary_not_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), POSTGRESQL_RUNTIME_HEADING).lower().split()
+    )
+    rows = _postgresql_runtime_rows()
+
+    assert "complementary" in section
+    assert "not a supersession chain" in section
+    assert "separate runtime surfaces" in section
+    assert "different postgresql versions and hosts" in section
+    for row in rows:
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_postgresql_runtime_records_keep_published_digests() -> None:
+    indexed = set(_postgresql_runtime_record_paths())
+
+    assert indexed == set(POSTGRESQL_RUNTIME_DIGESTS)
+    for relative, expected in POSTGRESQL_RUNTIME_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_postgresql_runtime_sources_and_plan_match_the_index() -> None:
+    indexed = set(_postgresql_runtime_record_paths())
+    control_plane_adr = (
+        ROOT / "docs" / "decisions" / "0010-control-plane-externalization-postgres.md"
+    ).read_text(encoding="utf-8")
+    order_record = (ROOT / BV_ORDER_CANONICAL_PG_RECORD).read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert indexed == {CONTROL_PLANE_PG_RECORD, BV_ORDER_CANONICAL_PG_RECORD}
+    assert CONTROL_PLANE_PG_RECORD in control_plane_adr
+    assert "warehouse/agentflow/dv2/postgres/smoke/README.md" in order_record
+    assert "postgresql runtime verification evidence sub-slice" in plan
+    for digest in POSTGRESQL_RUNTIME_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_postgresql_runtime_results_and_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _postgresql_runtime_rows()}
+    control_plane = _row_text(rows[CONTROL_PLANE_PG_RECORD])
+    canonical_order = _row_text(rows[BV_ORDER_CANONICAL_PG_RECORD])
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in CONTROL_PLANE_PG_FACTS:
+        assert phrase in control_plane
+    for phrase in CONTROL_PLANE_PG_BOUNDARIES:
+        assert phrase in control_plane
+    for phrase in BV_ORDER_CANONICAL_PG_FACTS:
+        assert phrase in canonical_order
+    for phrase in BV_ORDER_CANONICAL_PG_BOUNDARIES:
+        assert phrase in canonical_order
     assert manifest["production"]["status"] == "candidate"
 
 

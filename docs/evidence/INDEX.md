@@ -87,6 +87,21 @@ boundary. `None` means no supersession is recorded.
 | [vault-pii-governance-pg-verify-2026-07-02.md](../perf/vault-pii-governance-pg-verify-2026-07-02.md) | 2026-07-02 | First standalone PostgreSQL 17.5 capture: 33/33 probes passed on a deterministic 10-row demo seed (msk 8 / dxb 2); column ACL denial, officer row scoping, PostgreSQL default-deny RLS, owner bypass, and four-file idempotent governance re-apply were verified | None | [vault-pii-governance-pg-verify-2026-07-03.md](../perf/vault-pii-governance-pg-verify-2026-07-03.md) | Historical standalone Windows throwaway stand with a deterministic demo seed, not promoted CDC. The admin/owner sees all data, and the production identity split remains unverified. The dbt marts and `bv_order_canonical_mat` exist only on ClickHouse and are outside this record. Does not establish cross-engine/Kubernetes deployment, an external penetration test, production SLA, or production acceptance; `production.status` remains `candidate`. |
 | [vault-pii-governance-pg-verify-2026-07-03.md](../perf/vault-pii-governance-pg-verify-2026-07-03.md) | 2026-07-03 | Current PostgreSQL 17.5 kitchen-gadget/current-prefix refresh: 33/33 probes passed, 0 FAIL / 0 WARN, on a deterministic 10-row demo seed (msk 8 / dxb 2); `1c__msk`, `pg_ops__msk`, and `mp__msk` were exercised, and all four governance files re-applied idempotently | [vault-pii-governance-pg-verify-2026-07-02.md](../perf/vault-pii-governance-pg-verify-2026-07-02.md) | None | Current standalone Windows throwaway-stand evidence with a deterministic demo seed, not promoted CDC. The admin/owner sees all data, and the production identity split remains unverified. The dbt marts and `bv_order_canonical_mat` exist only on ClickHouse and are outside this record. Does not establish cross-engine/Kubernetes deployment, an external penetration test, production SLA, or production acceptance; `production.status` remains `candidate`. |
 
+## PostgreSQL control-plane and canonical-order verification records
+
+This table catalogues two point-in-time PostgreSQL live-verification records
+for separate runtime surfaces. They are complementary, not a supersession
+chain: one verifies control-plane persistence and concurrency, while the other
+verifies canonical-order view reconstruction. They ran on different PostgreSQL
+versions and hosts and do not establish an integrated deployment. Columns are
+identity, ISO date, result, supersedes, superseded by, and claim boundary.
+`None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [control-plane-pg-verify-2026-07-03.md](../perf/control-plane-pg-verify-2026-07-03.md) | 2026-07-03 | Standalone PostgreSQL 17.5 control-plane live verification: 31/31 probes passed in 19.45s with psycopg 3.3.4; 8 threads produced one enqueue winner, 4 threads claimed without duplicates or loss, and restart re-drive, outbox/dead-letter rollback atomicity, alert-tick single-flight, two app boots sharing state, and `api_usage` persistence passed | None | None | Point-in-time standalone Windows trust auth stand, not a production deployment. The adapter uses no pooling and one connection per method; pooling remains a follow-up. Two sequential app boots do not prove an actual multi-pod rollout. This is not an SLA or production acceptance; `production.status` remains `candidate`. |
+| [bv-order-canonical-pg-smoke-2026-07-06.md](../perf/bv-order-canonical-pg-smoke-2026-07-06.md) | 2026-07-06 | PostgreSQL 16.14 canonical-order live smoke on Mac Colima/Docker: 17/17 assertions passed, 0 FAIL, over 8 deterministic orders; the 197166.67 total, SCD2 latest-wins collapse, soft-delete tombstone, pricing on 7 of 8 orders, and jurisdiction VAT at 5% and 20% matched the hand-verified contract | None | None | Point-in-time standalone seed smoke, not promoted CDC. The end-to-end CDC-to-serving variant remains open, and this view-logic run was not integrated with the control plane. It does not establish PostgreSQL 17.5 execution, production SLA, or production acceptance; `production.status` remains `candidate`. |
+
 ## Current freshness evidence records
 
 This table is the audit catalogue for the current real-path freshness claim

@@ -97,6 +97,60 @@ CLICKHOUSE_PII_0703_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+POSTGRESQL_PII_HEADING = "## PostgreSQL PII-governance verification records"
+POSTGRESQL_PII_0702_RECORD = "docs/perf/vault-pii-governance-pg-verify-2026-07-02.md"
+POSTGRESQL_PII_0703_RECORD = "docs/perf/vault-pii-governance-pg-verify-2026-07-03.md"
+POSTGRESQL_PII_DATES = {
+    POSTGRESQL_PII_0702_RECORD: "2026-07-02",
+    POSTGRESQL_PII_0703_RECORD: "2026-07-03",
+}
+POSTGRESQL_PII_DIGESTS = {
+    POSTGRESQL_PII_0702_RECORD: (
+        "1d6f3ebe183ce098d2ad49b519ad46171cb5d9f6bae9cc5edbdc1d85a428266b"
+    ),
+    POSTGRESQL_PII_0703_RECORD: (
+        "f4234235d1c28b37e72389e37521c0f46c13a428a7691d77544cf8f6d3dbc55e"
+    ),
+}
+POSTGRESQL_PII_0702_FACTS = (
+    "postgresql 17.5",
+    "33/33",
+    "10-row",
+    "msk 8",
+    "dxb 2",
+    "column acl",
+    "default-deny",
+    "four-file idempotent",
+)
+POSTGRESQL_PII_0703_FACTS = (
+    "postgresql 17.5",
+    "33/33",
+    "0 fail",
+    "0 warn",
+    "10-row",
+    "msk 8",
+    "dxb 2",
+    "`1c__msk`",
+    "`pg_ops__msk`",
+    "`mp__msk`",
+    "four governance files",
+)
+POSTGRESQL_PII_BOUNDARIES = (
+    "standalone windows",
+    "deterministic demo seed",
+    "not promoted cdc",
+    "admin/owner sees all",
+    "production identity split",
+    "dbt marts",
+    "`bv_order_canonical_mat`",
+    "clickhouse",
+    "cross-engine",
+    "kubernetes",
+    "external penetration test",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
 DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
@@ -996,6 +1050,14 @@ def _clickhouse_pii_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _clickhouse_pii_rows()]
 
 
+def _postgresql_pii_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(POSTGRESQL_PII_HEADING)
+
+
+def _postgresql_pii_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _postgresql_pii_rows()]
+
+
 def _current_freshness_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CURRENT_FRESHNESS_HEADING)
 
@@ -1356,6 +1418,98 @@ def test_clickhouse_pii_results_and_boundaries_remain_conservative() -> None:
     for phrase in CLICKHOUSE_PII_0702_BOUNDARIES:
         assert phrase in earlier
     for phrase in CLICKHOUSE_PII_0703_BOUNDARIES:
+        assert phrase in current
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_postgresql_pii_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    clickhouse_pii_at = text.index(CLICKHOUSE_PII_HEADING)
+    postgresql_pii_at = text.index(POSTGRESQL_PII_HEADING)
+    freshness_at = text.index(CURRENT_FRESHNESS_HEADING)
+    indexed = _postgresql_pii_record_paths()
+    expected = (POSTGRESQL_PII_0702_RECORD, POSTGRESQL_PII_0703_RECORD)
+    rows = _postgresql_pii_rows()
+
+    assert clickhouse_pii_at < postgresql_pii_at < freshness_at
+    assert indexed == list(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == POSTGRESQL_PII_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_postgresql_pii_refresh_is_a_narrow_reciprocal_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), POSTGRESQL_PII_HEADING).lower().split()
+    )
+    rows = {_identity_path(row["identity"]): row for row in _postgresql_pii_rows()}
+    earlier = rows[POSTGRESQL_PII_0702_RECORD]
+    current = rows[POSTGRESQL_PII_0703_RECORD]
+
+    assert "latest postgresql live-verification outcome" in section
+    assert "historical facts remain valid" in section
+    assert "clickhouse" in section
+    assert earlier["supersedes"] == "None"
+    assert [
+        _resolve_index_link(target) for target in LINK_RE.findall(earlier["superseded by"])
+    ] == [POSTGRESQL_PII_0703_RECORD]
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(current["supersedes"])] == [
+        POSTGRESQL_PII_0702_RECORD
+    ]
+    assert current["superseded by"] == "None"
+    for row in rows.values():
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+        supersession_text = f"{row['supersedes']} {row['superseded by']}"
+        assert Path(CLICKHOUSE_PII_0702_RECORD).name not in supersession_text
+        assert Path(CLICKHOUSE_PII_0703_RECORD).name not in supersession_text
+
+
+def test_postgresql_pii_records_keep_published_digests() -> None:
+    indexed = set(_postgresql_pii_record_paths())
+
+    assert indexed == set(POSTGRESQL_PII_DIGESTS)
+    for relative, expected in POSTGRESQL_PII_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_postgresql_pii_canonical_claims_and_plan_match_the_index() -> None:
+    indexed = set(_postgresql_pii_record_paths())
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    demo_evidence = DV2_DEMO_EVIDENCE.read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert indexed == {POSTGRESQL_PII_0702_RECORD, POSTGRESQL_PII_0703_RECORD}
+    assert "docs/perf/vault-pii-governance-pg-verify-2026-07-0{2,3}.md" in changelog
+    assert Path(POSTGRESQL_PII_0703_RECORD).name in demo_evidence
+    assert "postgresql pii-governance evidence sub-slice" in plan
+    for digest in POSTGRESQL_PII_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_postgresql_pii_results_and_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _postgresql_pii_rows()}
+    earlier = _row_text(rows[POSTGRESQL_PII_0702_RECORD])
+    current = _row_text(rows[POSTGRESQL_PII_0703_RECORD])
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in POSTGRESQL_PII_0702_FACTS:
+        assert phrase in earlier
+    for phrase in POSTGRESQL_PII_0703_FACTS:
+        assert phrase in current
+    for phrase in POSTGRESQL_PII_BOUNDARIES:
+        assert phrase in earlier
         assert phrase in current
     assert manifest["production"]["status"] == "candidate"
 

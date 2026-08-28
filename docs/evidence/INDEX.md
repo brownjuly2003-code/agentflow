@@ -92,7 +92,15 @@ These two records stay at the repository root because `docs/STATUS.md`,
 paths — the same root-path stability as the CI-soak series above. They are
 not new evidence under `docs/evidence/`.
 
-| Record | What it fixes in time |
-| --- | --- |
-| [corrected-rollback-pair-runtime-20260823-01.md](../../corrected-rollback-pair-runtime-20260823-01.md) | Corrected rollback mechanics PASS (rev5 probe → rev6 = byte-identical rev3; no traffic) |
-| [ci-soak-f02-capacity-decision-20260823-01.md](../../ci-soak-f02-capacity-decision-20260823-01.md) | Full 4h soak plus rollback after traffic remains `BLOCKED_HOST_CAPACITY` |
+This table is the audit catalogue for the corrected rollback mechanics PASS
+and the complementary full-soak-plus-rollback-after-traffic capacity
+decision. The two records are complementary, not a supersession chain:
+rollback mechanics prove a no-traffic Helm pair, while the capacity
+decision keeps the full soak gate blocked without a runtime attempt.
+Columns are identity, ISO date, result, supersedes, superseded by, and
+claim boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [corrected-rollback-pair-runtime-20260823-01.md](../../corrected-rollback-pair-runtime-20260823-01.md) | 2026-08-23 | PASS only for corrected rollback mechanics (rev5 probe → rev6 = byte-identical rev3; no traffic) | None | None | Does not close the full-soak gate. Does not claim a successful fresh four-hour soak plus rollback after traffic, production acceptance, deploy, or publication; production.status remains candidate. |
+| [ci-soak-f02-capacity-decision-20260823-01.md](../../ci-soak-f02-capacity-decision-20260823-01.md) | 2026-08-23 | BLOCKED_HOST_CAPACITY for the golden full-soak plus rollback-after-traffic gate (audit F-02); no r17+ attempt authorized or executed | None | None | Does not claim a runtime soak attempt or a successful fresh four-hour soak plus rollback after traffic, production acceptance, deploy, or publication; the F-02 gate remains open and production.status remains candidate. |

@@ -126,6 +126,25 @@ READINESS_UNCLAIMED_BOUNDARIES = (
     "external penetration",
     "production acceptance",
 )
+F10_HEADING = "## F-10 rollback and soak-capacity records (2026-08-23)"
+ROLLBACK_RECORD = "corrected-rollback-pair-runtime-20260823-01.md"
+SOAK_CAPACITY_RECORD = "ci-soak-f02-capacity-decision-20260823-01.md"
+PROJECT_CLOSURE = ROOT / "docs" / "PROJECT_CLOSURE.md"
+F10_DATE = "2026-08-23"
+F10_DATES = {
+    ROLLBACK_RECORD: F10_DATE,
+    SOAK_CAPACITY_RECORD: F10_DATE,
+}
+F10_DIGESTS = {
+    ROLLBACK_RECORD: ("fc963bd0062a5b41ca13edfd640df0f497fcde8d8030ff1d23387980c6e84fae"),
+    SOAK_CAPACITY_RECORD: ("f6e3f906f449816d4fb7a583a4b64ac724c56be794203837608ddbd6f43d3fe9"),
+}
+F10_SHARED_UNCLAIMED_BOUNDARIES = (
+    "fresh four-hour soak plus rollback after traffic",
+    "production acceptance",
+    "deploy",
+    "publication",
+)
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -212,6 +231,25 @@ def _checkpoint_readiness_rows() -> list[dict[str, str]]:
 
 def _checkpoint_readiness_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _checkpoint_readiness_rows()]
+
+
+def _f10_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(F10_HEADING)
+
+
+def _f10_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _f10_rows()]
+
+
+def _project_closure_record_links() -> set[str]:
+    found: set[str] = set()
+    for target in LINK_RE.findall(PROJECT_CLOSURE.read_text(encoding="utf-8")):
+        resolved = (PROJECT_CLOSURE.parent / target).resolve()
+        try:
+            found.add(resolved.relative_to(ROOT).as_posix())
+        except ValueError:
+            continue
+    return found
 
 
 def _status_record_links() -> set[str]:
@@ -556,3 +594,141 @@ def test_checkpoint_readiness_boundaries_remain_conservative() -> None:
         assert phrase in checkpoint
     for phrase in READINESS_UNCLAIMED_BOUNDARIES:
         assert phrase in readiness
+
+
+def test_f10_section_follows_checkpoint_readiness() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    checkpoint_at = text.index(CHECKPOINT_READINESS_HEADING)
+    f10_at = text.index(F10_HEADING)
+
+    assert checkpoint_at < f10_at
+
+
+def test_f10_section_keeps_root_path_stability() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), F10_HEADING)
+
+    assert "`docs/STATUS.md`" in section
+    assert "`docs/PROJECT_CLOSURE.md`" in section
+    assert "`config/project_claims.toml`" in section
+    assert "root-path stability" in section
+    assert "not new evidence under `docs/evidence/`" in section
+
+
+def test_f10_index_lists_the_bounded_pair_once() -> None:
+    indexed = _f10_record_paths()
+    expected = (ROLLBACK_RECORD, SOAK_CAPACITY_RECORD)
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert len(indexed) == 2
+    for relative in indexed:
+        assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+    assert indexed == [ROLLBACK_RECORD, SOAK_CAPACITY_RECORD]
+    for row in _f10_rows():
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../../"), row["identity"]
+
+
+def test_f10_index_exposes_required_nonempty_fields() -> None:
+    rows = _f10_rows()
+    headers = list(rows[0])
+
+    assert headers == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == F10_DATES[identity]
+
+
+def test_f10_supersession_is_none() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _f10_rows()}
+    rollback = rows[ROLLBACK_RECORD]
+    soak = rows[SOAK_CAPACITY_RECORD]
+
+    assert rollback["supersedes"] == "None"
+    assert rollback["superseded by"] == "None"
+    assert soak["supersedes"] == "None"
+    assert soak["superseded by"] == "None"
+    for row in (rollback, soak):
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+        resolved_supersedes = [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["supersedes"])
+        ]
+        resolved_superseded_by = [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["superseded by"])
+        ]
+        assert ROLLBACK_RECORD not in resolved_supersedes
+        assert SOAK_CAPACITY_RECORD not in resolved_supersedes
+        assert ROLLBACK_RECORD not in resolved_superseded_by
+        assert SOAK_CAPACITY_RECORD not in resolved_superseded_by
+
+
+def test_f10_records_keep_published_digests() -> None:
+    indexed = set(_f10_record_paths())
+
+    assert indexed == set(F10_DIGESTS)
+    for relative, expected in F10_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in PROTECTED_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    blocker_digest = hashlib.sha256((ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()).hexdigest()
+    assert blocker_digest == CHECKPOINT_BLOCKER_DIGEST
+
+
+def test_f10_claim_links_match_indexed_records() -> None:
+    indexed = set(_f10_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    production = manifest["production"]
+    status_links = _status_record_links()
+    closure_links = _project_closure_record_links()
+
+    assert indexed == {ROLLBACK_RECORD, SOAK_CAPACITY_RECORD}
+    assert production.get("rollback_mechanics_evidence") == ROLLBACK_RECORD
+    assert production.get("rollback_mechanics") == "PASS"
+    assert production.get("full_soak_plus_rollback_after_traffic_evidence") == (
+        SOAK_CAPACITY_RECORD
+    )
+    assert production.get("full_soak_plus_rollback_after_traffic") == ("BLOCKED_HOST_CAPACITY")
+    assert production.get("status") == "candidate"
+    assert ROLLBACK_RECORD in manifest["required_evidence"]
+    assert SOAK_CAPACITY_RECORD in manifest["required_evidence"]
+    assert ROLLBACK_RECORD in status_links
+    assert SOAK_CAPACITY_RECORD in status_links
+    assert ROLLBACK_RECORD in closure_links
+    assert SOAK_CAPACITY_RECORD in closure_links
+
+
+def test_f10_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _f10_rows()}
+    rollback = _row_text(rows[ROLLBACK_RECORD])
+    soak = _row_text(rows[SOAK_CAPACITY_RECORD])
+
+    assert "pass" in rows[ROLLBACK_RECORD]["result"].lower()
+    assert "rev5" in rollback
+    assert "rev6" in rollback
+    assert "byte-identical" in rollback
+    assert "rev3" in rollback
+    assert "no traffic" in rollback
+    assert "blocked_host_capacity" in rows[SOAK_CAPACITY_RECORD]["result"].lower()
+    assert "f-02" in soak
+    assert "r17" in soak
+    assert "pass" not in rows[SOAK_CAPACITY_RECORD]["result"].lower()
+    assert "does not claim" in rollback
+    assert "does not claim" in soak
+    assert "candidate" in rollback
+    assert "candidate" in soak
+    for phrase in F10_SHARED_UNCLAIMED_BOUNDARIES:
+        assert phrase in rollback
+        assert phrase in soak

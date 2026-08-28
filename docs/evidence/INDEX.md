@@ -86,6 +86,29 @@ recorded.
 | [e4-2pod-topology-2026-07-09.md](../perf/e4-2pod-topology-2026-07-09.md) | 2026-07-09 | PASS for Checks 1-2: two ready pods using the PostgreSQL control plane; webhook visible on all 8 round-robin Service reads; explicit A-to-B registration/list probe on kind `hq-demo` | None | None | Does not claim Checks 3-4, exactly-once delivery, alert single-page, production availability, or production acceptance. The later Checks 1-4 record uses a different kind snapshot and does not supersede this explicit A-to-B proof. |
 | [e4-check4-alert-single-page-2026-07-17.md](../perf/e4-check4-alert-single-page-2026-07-17.md) | 2026-07-17 | Checks 1-4 PASS on kind `agentflow-staging`: 2/2 ready, webhook visible on 8 reads, exactly one delivery ID, and exactly one alert history row | None | None | Local pre-push main with a staging image and external httpbin target. Does not claim durable persistence, production availability or SLA, or production acceptance. It extends the automated checks but does not supersede the unique `hq-demo` A-to-B proof. |
 
+## Historical E4 intermediate replica-correctness records
+
+This table is the audit catalogue for two historical intermediate
+replica-correctness proofs that sit between the already indexed
+current E4 records: the 2026-07-09 `hq-demo` Checks 1-2 snapshot and
+the 2026-07-17 Checks 1-4 `agentflow-staging` snapshot. These records
+are historical intermediate topology evidence, not current status
+owners. They are an extension of automated check coverage, not a supersession chain:
+the 2026-07-11 record closes the two-real-pods
+Checks 1-2 layer on kind `agentflow-staging` after the 2026-07-06
+resource-blocked attempt; the 2026-07-16 record completes the
+exactly-one delivery half that Checks 1-2 left open. The later Checks
+1-4 record extends the same script with alert single-page and does
+not supersede these intermediate snapshots. Neither record supersedes
+the unique `hq-demo` A-to-B proof. Columns are identity, ISO date,
+result, supersedes, superseded by, and claim boundary. `None` means
+no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [e4-replica-topology-2026-07-11.md](../perf/e4-replica-topology-2026-07-11.md) | 2026-07-11 | PASS for Checks 1-2 on kind `agentflow-staging` at `9935bdc`: 2/2 ready postgres pods; webhook `4a4709a0-0bdc-42bc-803a-2d49c1fb8f04` visible on all 8 round-robin reads; closes the 2026-07-06 blocked Phase 3 topology attempt | None | None | Historical intermediate topology proof only. Does not claim Checks 3-4, exactly-one delivery, alert single-page, or production acceptance. Completes the two-real-pods Checks 1-2 layer on `agentflow-staging` after the 2026-07-06 resource-blocked attempt; it does not supersede the unique `hq-demo` A-to-B proof. Later Check 3 and Checks 1-4 records extend automated coverage and do not supersede this snapshot. `production.status` remains `candidate`. |
+| [e4-check3-exactly-one-delivery-2026-07-16.md](../perf/e4-check3-exactly-one-delivery-2026-07-16.md) | 2026-07-16 | Checks 1-3 PASS on kind `agentflow-staging` at `22fbae6`: 2/2 ready, webhook visible on 8 reads, exactly one delivery_id for event_id=replica-e4-858cce874ac04494 | None | None | Historical intermediate Check 3 proof only. Completes the delivery half that Checks 1-2 left open; it is an extension, not a supersession of the 2026-07-11 topology record. Does not claim Check 4, alert single-page, or production acceptance. The later Checks 1-4 record extends the automated script with alert single-page and does not supersede this exactly-one delivery snapshot. Not a current status owner; `production.status` remains `candidate`. |
+
 ## Golden topology acceptance records
 
 This table is the audit catalogue for four golden-topology acceptance

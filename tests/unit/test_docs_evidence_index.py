@@ -97,6 +97,48 @@ E4_CHECK4_BOUNDARIES = (
     "durable persistence",
     "production acceptance",
 )
+HISTORICAL_E4_HEADING = "## Historical E4 intermediate replica-correctness records"
+E4_REPLICA_TOPOLOGY_RECORD = "docs/perf/e4-replica-topology-2026-07-11.md"
+E4_CHECK3_RECORD = "docs/perf/e4-check3-exactly-one-delivery-2026-07-16.md"
+HISTORICAL_E4_DATES = {
+    E4_REPLICA_TOPOLOGY_RECORD: "2026-07-11",
+    E4_CHECK3_RECORD: "2026-07-16",
+}
+HISTORICAL_E4_DIGESTS = {
+    E4_REPLICA_TOPOLOGY_RECORD: (
+        "dcab8c990386afa3dff065fb07be2195cc40bb20d0328c0f1441b2d7c148a571"
+    ),
+    E4_CHECK3_RECORD: ("6bf8d6773997e69d1634eddcb3a7fdf2aa881a404af360e7d762ed22ca283bf8"),
+}
+E4_REPLICA_TOPOLOGY_BOUNDARIES = (
+    "historical",
+    "intermediate",
+    "checks 1-2",
+    "agentflow-staging",
+    "2026-07-06",
+    "9935bdc",
+    "does not claim checks 3-4",
+    "exactly-one delivery",
+    "alert single-page",
+    "hq-demo",
+    "a-to-b",
+    "production acceptance",
+    "candidate",
+)
+E4_CHECK3_BOUNDARIES = (
+    "historical",
+    "intermediate",
+    "checks 1-3 pass",
+    "exactly one delivery",
+    "replica-e4-858cce874ac04494",
+    "22fbae6",
+    "delivery half",
+    "does not claim check 4",
+    "alert single-page",
+    "not a current status owner",
+    "production acceptance",
+    "candidate",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -349,6 +391,14 @@ def _e4_replica_rows() -> list[dict[str, str]]:
 
 def _e4_replica_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _e4_replica_rows()]
+
+
+def _historical_e4_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(HISTORICAL_E4_HEADING)
+
+
+def _historical_e4_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _historical_e4_rows()]
 
 
 def _acceptance_rows() -> list[dict[str, str]]:
@@ -1539,3 +1589,112 @@ def test_e4_replica_boundaries_keep_topology_claims_distinct() -> None:
         assert phrase in two_pod
     for phrase in E4_CHECK4_BOUNDARIES:
         assert phrase in check4
+
+
+def test_historical_e4_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    current_e4_at = text.index(E4_REPLICA_HEADING)
+    historical_e4_at = text.index(HISTORICAL_E4_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    indexed = _historical_e4_record_paths()
+    expected = (E4_REPLICA_TOPOLOGY_RECORD, E4_CHECK3_RECORD)
+    rows = _historical_e4_rows()
+
+    assert current_e4_at < historical_e4_at < golden_at
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    assert E4_TWO_POD_RECORD not in indexed
+    assert E4_CHECK4_RECORD not in indexed
+    assert E4_REPLICA_TOPOLOGY_RECORD not in _e4_replica_record_paths()
+    assert E4_CHECK3_RECORD not in _e4_replica_record_paths()
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == HISTORICAL_E4_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_historical_e4_records_are_extension_not_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), HISTORICAL_E4_HEADING).lower()
+    rows = _historical_e4_rows()
+
+    assert "historical" in section
+    assert "intermediate" in section
+    assert "extension" in section
+    assert "not a supersession chain" in section
+    assert "current status" in section
+    assert "checks 1-2" in section
+    assert "exactly-one delivery" in section or "exactly one delivery" in section
+    assert "does not supersede" in section
+    for row in rows:
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+        resolved_supersedes = [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["supersedes"])
+        ]
+        resolved_superseded_by = [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["superseded by"])
+        ]
+        assert E4_TWO_POD_RECORD not in resolved_supersedes
+        assert E4_CHECK4_RECORD not in resolved_supersedes
+        assert E4_REPLICA_TOPOLOGY_RECORD not in resolved_supersedes
+        assert E4_CHECK3_RECORD not in resolved_supersedes
+        assert E4_TWO_POD_RECORD not in resolved_superseded_by
+        assert E4_CHECK4_RECORD not in resolved_superseded_by
+        assert E4_REPLICA_TOPOLOGY_RECORD not in resolved_superseded_by
+        assert E4_CHECK3_RECORD not in resolved_superseded_by
+
+
+def test_historical_e4_records_keep_published_digests() -> None:
+    indexed = set(_historical_e4_record_paths())
+
+    assert indexed == set(HISTORICAL_E4_DIGESTS)
+    for relative, expected in HISTORICAL_E4_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in E4_REPLICA_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_historical_e4_claim_links_are_not_current_status_owners() -> None:
+    indexed = set(_historical_e4_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    status_links = _status_record_links()
+    closure_links = _project_closure_record_links()
+    required = manifest["required_evidence"]
+
+    assert indexed == {E4_REPLICA_TOPOLOGY_RECORD, E4_CHECK3_RECORD}
+    assert E4_REPLICA_TOPOLOGY_RECORD not in status_links
+    assert E4_CHECK3_RECORD not in status_links
+    assert E4_TWO_POD_RECORD in status_links
+    assert E4_CHECK4_RECORD in status_links
+    assert E4_REPLICA_TOPOLOGY_RECORD not in required
+    assert E4_CHECK3_RECORD not in required
+    assert E4_REPLICA_TOPOLOGY_RECORD not in closure_links
+    assert E4_CHECK3_RECORD not in closure_links
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_historical_e4_boundaries_keep_intermediate_proofs_distinct() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _historical_e4_rows()}
+    topology = _row_text(rows[E4_REPLICA_TOPOLOGY_RECORD])
+    check3 = _row_text(rows[E4_CHECK3_RECORD])
+
+    assert "pass" in rows[E4_REPLICA_TOPOLOGY_RECORD]["result"].lower()
+    assert "pass" in rows[E4_CHECK3_RECORD]["result"].lower()
+    assert "4a4709a0-0bdc-42bc-803a-2d49c1fb8f04" in topology
+    assert "8 round-robin" in topology
+    for phrase in E4_REPLICA_TOPOLOGY_BOUNDARIES:
+        assert phrase in topology
+    for phrase in E4_CHECK3_BOUNDARIES:
+        assert phrase in check3

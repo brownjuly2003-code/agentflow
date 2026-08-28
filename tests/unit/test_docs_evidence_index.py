@@ -198,6 +198,38 @@ S13_SCALE_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+RSS_REVERIFY_HEADING = "## API RSS fix re-verification record"
+RSS_REVERIFY_DATE = "2026-07-11"
+RSS_REVERIFY_DIGEST = "ad0b57d79eee5fdaf7b00f435647c4bacd5a7ee2ae2d1a147f43394e7e5b414b"
+RSS_REVERIFY_RESULT_FACTS = (
+    "97 min",
+    "98 one-minute samples",
+    "1.371 m",
+    "1.732 m",
+    "77.3 mb → 100.9 mb",
+    "+7.5 mb/h",
+    "+3.2 mb/h",
+    "q4 below q3",
+    "185 mb",
+    "reclaimed",
+    "149–152",
+    "1 149 / 1 149",
+    "0 errors",
+    "issue #183",
+    "closed live",
+)
+RSS_REVERIFY_BOUNDARIES = (
+    "scoped partial supersession",
+    "api rss leak finding only",
+    "full-path endurance remains s11-owned",
+    "flink hop was bypassed",
+    "events.validated",
+    "97-minute",
+    "not a four-hour",
+    "not a production sla",
+    "production acceptance",
+    "candidate",
+)
 CURRENT_S10_THROUGHPUT_HEADING = "## Current S10 throughput evidence records"
 S10_BURST_BASELINE_RECORD = "docs/perf/throughput-realpath.md"
 S10_PACED_R4_RECORD = "docs/perf/throughput-realpath-paced100-4h-r4-2026-07-19.md"
@@ -797,6 +829,14 @@ def _current_endurance_scale_rows() -> list[dict[str, str]]:
 
 def _current_endurance_scale_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _current_endurance_scale_rows()]
+
+
+def _rss_reverify_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(RSS_REVERIFY_HEADING)
+
+
+def _rss_reverify_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _rss_reverify_rows()]
 
 
 def _current_s10_throughput_rows() -> list[dict[str, str]]:
@@ -2273,6 +2313,92 @@ def test_current_endurance_scale_boundaries_keep_scopes_distinct() -> None:
         assert phrase in s11
     for phrase in S13_SCALE_BOUNDARIES:
         assert phrase in s13
+
+
+def test_rss_reverify_section_follows_endurance_and_precedes_s10() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    endurance_at = text.index(CURRENT_ENDURANCE_SCALE_HEADING)
+    rss_reverify_at = text.index(RSS_REVERIFY_HEADING)
+    s10_at = text.index(CURRENT_S10_THROUGHPUT_HEADING)
+    between_rss_reverify_and_s10 = text[rss_reverify_at + len(RSS_REVERIFY_HEADING) : s10_at]
+
+    assert "API RSS fix" in RSS_REVERIFY_HEADING
+    assert endurance_at < rss_reverify_at < s10_at
+    assert "\n## " not in between_rss_reverify_and_s10
+
+
+def test_rss_reverify_index_lists_one_bounded_record_with_required_fields() -> None:
+    indexed = _rss_reverify_record_paths()
+    rows = _rss_reverify_rows()
+
+    assert indexed == [RSS_REVERIFY_RECORD]
+    assert Counter(indexed) == Counter([RSS_REVERIFY_RECORD])
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 1
+    row = rows[0]
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == RSS_REVERIFY_DATE
+    assert (ROOT / RSS_REVERIFY_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_rss_reverify_is_reciprocal_partial_supersession_of_s11_api_rss_finding() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), RSS_REVERIFY_HEADING).lower()
+    rss_row = _rss_reverify_rows()[0]
+    endurance_rows = {
+        _identity_path(row["identity"]): row for row in _current_endurance_scale_rows()
+    }
+    s11 = endurance_rows[S11_SOAK_RECORD]
+    s13 = endurance_rows[S13_SCALE_RECORD]
+
+    assert "scoped partial supersession" in section
+    assert "api rss" in section
+    assert "full-path endurance" in section
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(rss_row["supersedes"])] == [
+        S11_SOAK_RECORD
+    ]
+    assert rss_row["superseded by"] == "None"
+    assert [_resolve_index_link(target) for target in LINK_RE.findall(s11["superseded by"])] == [
+        RSS_REVERIFY_RECORD
+    ]
+    assert s13["supersedes"] == "None"
+    assert s13["superseded by"] == "None"
+    _assert_supersession_cell(rss_row["supersedes"])
+    _assert_supersession_cell(rss_row["superseded by"])
+
+
+def test_rss_reverify_record_keeps_published_digest_and_status_owner() -> None:
+    status_links = _status_record_links()
+    known_issues = _section(STATUS.read_text(encoding="utf-8"), "## Known issues").lower()
+
+    assert _rss_reverify_record_paths() == [RSS_REVERIFY_RECORD]
+    digest = hashlib.sha256((ROOT / RSS_REVERIFY_RECORD).read_bytes()).hexdigest()
+    assert digest == RSS_REVERIFY_DIGEST
+    assert RSS_REVERIFY_RECORD in status_links
+    assert "api rss growth under steady load" in known_issues
+    assert "97 min" in known_issues
+    assert "+7.5 mb/h" in known_issues
+    assert "plateaued" in known_issues
+
+
+def test_rss_reverify_result_and_boundary_remain_conservative() -> None:
+    row = _rss_reverify_rows()[0]
+    record = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    assert "rss" in row["result"].lower()
+    assert "re-verification" in row["result"].lower()
+    for phrase in RSS_REVERIFY_RESULT_FACTS:
+        assert phrase in record
+    for phrase in RSS_REVERIFY_BOUNDARIES:
+        assert phrase in record
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )
 
 
 def test_current_s10_throughput_index_lists_the_bounded_pair_with_required_fields() -> None:

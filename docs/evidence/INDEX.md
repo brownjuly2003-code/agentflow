@@ -130,6 +130,20 @@ boundary. `None` means no supersession is recorded.
 | [soak-s11-2026-07-10.md](../perf/soak-s11-2026-07-10.md) | 2026-07-10 | S11 4 h real-path plus API-read endurance: ~47 eps avg, hourly lag 71/44/134/0 bounded, peak lag 2 915 during one Kafka session timeout then drained to 0, bridge RSS sawtooth 38→114→11 MB with FDs 94–95, one 256-event batch replayed exactly-once by the journal guard, zero cache drift (API 1 540 429 855.37 == ClickHouse) | None | [rss-reverify-183-2026-07-11.md](../perf/rss-reverify-183-2026-07-11.md) | Current status owner for four-hour real-path plus API-read endurance on the deproject-mac Colima 6 GiB/4 CPU stand. Driver-side shortfall (682 679 of 720 000 applied) is not serving-path loss. Later [rss-reverify-183-2026-07-11.md](../perf/rss-reverify-183-2026-07-11.md) is a scoped partial supersession of the API RSS finding (175 MB → 1.67 GB) only; it does not supersede this full-path endurance claim. Not a production SLA or production acceptance; `production.status` remains `candidate`. |
 | [scale-own-data-2026-07-11.md](../perf/scale-own-data-2026-07-11.md) | 2026-07-11 | S13 generated own-data scale: 51.2 M rows / 2.87 M orders / 4 years of legend history, analyst queries 20–730 ms, all 17 at-scale correctness checks pass | None | None | Current status owner for generated own-data scale only. In-database generation (`INSERT … SELECT FROM numbers()`) on a single-node laptop-class VM; 845 k rows/s is generator + ClickHouse write, not streaming ingestion. Customer-PII / loyalty / product-catalog satellites stay demo-scale. Does not prove the S11 endurance soak, a production SLA, or production acceptance; `production.status` remains `candidate`. |
 
+## API RSS fix re-verification record
+
+This table is the audit catalogue for the STATUS-linked live re-verification
+of the API RSS fix for issue #183. It is a scoped partial supersession of
+S11's API RSS leak finding only. The full-path endurance claim remains
+S11-owned: the re-verification exercised the same bridge, ClickHouse journal,
+dispatcher cursor, and API-read surface, but the Flink hop was bypassed during
+the growth phase. Columns are identity, ISO date, result, supersedes,
+superseded by, and claim boundary. `None` means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [rss-reverify-183-2026-07-11.md](../perf/rss-reverify-183-2026-07-11.md) | 2026-07-11 | API RSS fix live re-verification on deproject-mac: 97 min / 98 one-minute samples; journal 1.371 M rows at start and 1.732 M after growth; API RSS 77.3 MB → 100.9 MB, full-window slope +7.5 MB/h and growth-phase slope +3.2 MB/h; quartile Q4 below Q3; 185 MB maximum transient reclaimed; FDs 149–152; reads 1 149 / 1 149 HTTP 200 with 0 errors; issue #183 closed live | [soak-s11-2026-07-10.md](../perf/soak-s11-2026-07-10.md) | None | Scoped partial supersession of S11's API RSS leak finding only; full-path endurance remains S11-owned. The Flink hop was bypassed and fresh events entered directly at `events.validated`, so this 97-minute API/bridge-surface re-verification is not a four-hour full-path soak, not a production SLA, and not production acceptance. `production.status` remains `candidate`. |
+
 ## Current S10 throughput evidence records
 
 This table is the audit catalogue for the two current STATUS-linked

@@ -145,6 +145,34 @@ F10_SHARED_UNCLAIMED_BOUNDARIES = (
     "deploy",
     "publication",
 )
+KIND_SOAK_HEADING = "## Kind-residual canary and latest soak records"
+KIND_RESIDUAL_RECORD = "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md"
+SOAK_05_RECORD = "docs/perf/golden-4h-soak-05-failure-2026-08-08.md"
+SOAK_START_RECORD = "docs/perf/golden-4h-soak-start-2026-08-07.md"
+KIND_RESIDUAL_DATE = "2026-08-07"
+SOAK_05_DATE = "2026-08-08"
+KIND_SOAK_DATES = {
+    KIND_RESIDUAL_RECORD: KIND_RESIDUAL_DATE,
+    SOAK_05_RECORD: SOAK_05_DATE,
+}
+KIND_SOAK_DIGESTS = {
+    KIND_RESIDUAL_RECORD: ("86715d0b29a36f2d5669099e6b85aeceb3abadce7fab7d82f239bf6062f9c1e9"),
+    SOAK_05_RECORD: ("30c95061ce0596aeb9612027f47919a9f4f4e22a168a3f25ff70dee7a465a202"),
+}
+SOAK_START_DIGEST = "cfec64254a5d35f7d3124441ad20784a81b69b3907a27be64cf2062fbb7251ec"
+CANARY_TRAFFIC_DIGEST = "fa9460c0c7af678546680c6a9889780fc51b4abf492025878daeee5648b30adc"
+KIND_RESIDUAL_UNCLAIMED_BOUNDARIES = (
+    "dual-mean >=90",
+    "four-hour soak",
+    "helm rollback",
+    "production acceptance",
+)
+SOAK_UNCLAIMED_BOUNDARIES = (
+    "soak pass",
+    "dual-mean pass",
+    "rollback pass",
+    "production acceptance",
+)
 
 LINK_RE = re.compile(r"\[[^]]+\]\(([^)#?]+\.md)\)")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -239,6 +267,14 @@ def _f10_rows() -> list[dict[str, str]]:
 
 def _f10_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _f10_rows()]
+
+
+def _kind_soak_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(KIND_SOAK_HEADING)
+
+
+def _kind_soak_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _kind_soak_rows()]
 
 
 def _project_closure_record_links() -> set[str]:
@@ -731,4 +767,168 @@ def test_f10_boundaries_remain_conservative() -> None:
     assert "candidate" in soak
     for phrase in F10_SHARED_UNCLAIMED_BOUNDARIES:
         assert phrase in rollback
+        assert phrase in soak
+
+
+def test_kind_soak_section_follows_checkpoint_readiness() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    assert KIND_SOAK_HEADING in text
+    checkpoint_at = text.index(CHECKPOINT_READINESS_HEADING)
+    kind_soak_at = text.index(KIND_SOAK_HEADING)
+    f10_at = text.index(F10_HEADING)
+
+    assert checkpoint_at < kind_soak_at < f10_at
+
+
+def test_kind_soak_index_lists_the_bounded_pair_once() -> None:
+    indexed = _kind_soak_record_paths()
+    expected = (KIND_RESIDUAL_RECORD, SOAK_05_RECORD)
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert len(indexed) == 2
+    for relative in indexed:
+        assert (ROOT / relative).is_file(), f"indexed identity is missing: {relative}"
+    assert indexed == [KIND_RESIDUAL_RECORD, SOAK_05_RECORD]
+    for row in _kind_soak_rows():
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_kind_soak_index_exposes_required_nonempty_fields() -> None:
+    rows = _kind_soak_rows()
+    headers = list(rows[0])
+
+    assert headers == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == KIND_SOAK_DATES[identity]
+
+
+def test_kind_soak_supersession_direction() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _kind_soak_rows()}
+    canary = rows[KIND_RESIDUAL_RECORD]
+    soak = rows[SOAK_05_RECORD]
+    soak_supersedes_targets = LINK_RE.findall(soak["supersedes"])
+
+    assert canary["supersedes"] == "None"
+    assert canary["superseded by"] == "None"
+    assert [_resolve_index_link(target) for target in soak_supersedes_targets] == [
+        SOAK_START_RECORD
+    ]
+    assert soak_supersedes_targets[0].startswith("../perf/")
+    assert soak["superseded by"] == "None"
+    _assert_supersession_cell(canary["supersedes"])
+    _assert_supersession_cell(canary["superseded by"])
+    _assert_supersession_cell(soak["supersedes"])
+    _assert_supersession_cell(soak["superseded by"])
+    for cell in (canary["supersedes"], canary["superseded by"]):
+        resolved = [_resolve_index_link(target) for target in LINK_RE.findall(cell)]
+        assert CANARY_TRAFFIC_RECORD not in resolved
+        assert SOAK_05_RECORD not in resolved
+        assert SOAK_START_RECORD not in resolved
+    soak_supersedes = [
+        _resolve_index_link(target) for target in LINK_RE.findall(soak["supersedes"])
+    ]
+    soak_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(soak["superseded by"])
+    ]
+    assert KIND_RESIDUAL_RECORD not in soak_supersedes
+    assert CANARY_TRAFFIC_RECORD not in soak_supersedes
+    assert KIND_RESIDUAL_RECORD not in soak_superseded_by
+    assert CANARY_TRAFFIC_RECORD not in soak_superseded_by
+    assert SOAK_START_RECORD not in soak_superseded_by
+
+
+def test_kind_soak_records_keep_published_digests() -> None:
+    indexed = set(_kind_soak_record_paths())
+
+    assert indexed == set(KIND_SOAK_DIGESTS)
+    for relative, expected in KIND_SOAK_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    start_digest = hashlib.sha256((ROOT / SOAK_START_RECORD).read_bytes()).hexdigest()
+    assert start_digest == SOAK_START_DIGEST
+    canary_fail_digest = hashlib.sha256((ROOT / CANARY_TRAFFIC_RECORD).read_bytes()).hexdigest()
+    assert canary_fail_digest == CANARY_TRAFFIC_DIGEST
+    for relative, expected in PROTECTED_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    blocker_digest = hashlib.sha256((ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()).hexdigest()
+    assert blocker_digest == CHECKPOINT_BLOCKER_DIGEST
+    for relative, expected in F10_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_kind_soak_claim_links_match_indexed_records() -> None:
+    indexed = set(_kind_soak_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    production = manifest["production"]
+    status_links = _status_record_links()
+    closure_links = _project_closure_record_links()
+
+    assert indexed == {KIND_RESIDUAL_RECORD, SOAK_05_RECORD}
+    assert production.get("latest_kind_residual_canary") == KIND_RESIDUAL_RECORD
+    assert production.get("latest_kind_residual_canary_result") == (
+        "pass-residual-7p51s-budget-20s"
+    )
+    assert production.get("latest_soak_attempt") == SOAK_05_RECORD
+    assert production.get("latest_soak_attempt_result") == (
+        "soak-fail-unresolved-flink-terminal-failure"
+    )
+    assert production.get("status") == "candidate"
+    assert KIND_RESIDUAL_RECORD in manifest["required_evidence"]
+    assert SOAK_05_RECORD in manifest["required_evidence"]
+    assert SOAK_START_RECORD in manifest["required_evidence"]
+    assert KIND_RESIDUAL_RECORD in status_links
+    assert SOAK_05_RECORD in status_links
+    assert SOAK_05_RECORD in closure_links
+
+
+def test_kind_soak_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _kind_soak_rows()}
+    canary = _row_text(rows[KIND_RESIDUAL_RECORD])
+    soak = _row_text(rows[SOAK_05_RECORD])
+
+    assert "pass_kind_residual_20" in rows[KIND_RESIDUAL_RECORD]["result"].lower()
+    assert "d+c1-20" in canary
+    assert "7.5127 s" in canary
+    assert "20 s" in canary
+    assert "2000/2000" in canary
+    assert "dlq" in canary
+    assert "lag" in canary
+    assert "applied_mean_eps=77.9059" in canary
+    assert "does not claim" in canary
+    assert "candidate" in canary
+    assert "soak_fail" in rows[SOAK_05_RECORD]["result"].lower()
+    assert "-05" in rows[SOAK_05_RECORD]["result"].lower()
+    assert "1,440,000/1,440,000" in soak
+    assert "zero producer failures" in soak
+    assert "99.99979" in soak
+    assert "failed" in soak
+    assert "flink" in soak
+    assert "pass json" in soak
+    assert "rollback" in soak
+    assert "not started" in soak
+    assert "unresolved_flink_terminal_failure" in soak
+    assert "evidence-retention" in soak
+    assert "topology abort" in soak
+    assert "does not claim" in soak
+    assert "candidate" in soak
+    assert "combined gate" in soak
+    assert "open" in soak
+    for phrase in KIND_RESIDUAL_UNCLAIMED_BOUNDARIES:
+        assert phrase in canary
+    for phrase in SOAK_UNCLAIMED_BOUNDARIES:
         assert phrase in soak

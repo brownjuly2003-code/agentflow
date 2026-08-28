@@ -85,6 +85,26 @@ supersession is recorded.
 | [checkpoint-restore-replay-2026-08-02.md](../perf/checkpoint-restore-replay-2026-08-02.md) | 2026-08-02 | PASS only for the isolated checkpoint/savepoint restore/replay gate on runtime SHA ed03fc47: byte-identical E1 replay plus E2, exactly one of each identity across the measured Kafka validated, Iceberg, ClickHouse and API surfaces, DLQ zero, source lag zero, and hard TTL PASS at 565 s | [checkpoint-restore-replay-capacity-blocker-2026-08-01.md](../perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md) | None | Does not claim a four-hour soak, Helm rollback, same-SHA acceptance of later chart/checkpoint configuration, external penetration testing, GitHub Environment/npm approval, or production acceptance; production.status remains candidate. |
 | [ready-baselined-checkpoint-hold-2026-08-03.md](../perf/ready-baselined-checkpoint-hold-2026-08-03.md) | 2026-08-03 | RUNTIME_HOLD_PASS only for a 930 s readiness-baselined, read-only, no-traffic hold of an already-running job: completed checkpoints 7675 to 8614, failed checkpoints 1 to 1, with the admitted startup failure attributed to NOT_ALL_REQUIRED_TASKS_RUNNING | None | None | Does not prove canary2, a four-hour soak, rollback, external penetration testing, or production acceptance; the earlier canary remains the latest traffic attempt and production.status remains candidate. |
 
+## Kind-residual canary and latest soak records
+
+This table is the audit catalogue for the current D+C1-20 kind-residual
+canary PASS and the complementary latest soak-05 terminal outcome. The
+two records are complementary, not a PASS chain: the canary proves only
+the kind-residual contract and is the prerequisite for later soak work.
+The soak-05 record is the current terminal soak outcome and is
+`SOAK_FAIL`. It supersedes
+[golden-4h-soak-start-2026-08-07.md](../perf/golden-4h-soak-start-2026-08-07.md)
+only as the current soak outcome; it does not supersede the canary
+prerequisite. The kind-residual PASS does not supersede the differently
+scoped 2026-08-02 catch-up-rate canary failure. Columns are identity,
+ISO date, result, supersedes, superseded by, and claim boundary. `None`
+means no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](../perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md) | 2026-08-07 | PASS_KIND_RESIDUAL_20 only for the D+C1-20 kind-residual contract: residual after produce 7.5127 s within 20 s, 2000/2000 exactness with DLQ/lag zero | None | None | Does not claim dual-mean >=90 PASS (`applied_mean_eps=77.9059` is not dual-mean >=90 PASS), four-hour soak PASS, Helm rollback PASS, or production acceptance; production.status remains candidate. |
+| [golden-4h-soak-05-failure-2026-08-08.md](../perf/golden-4h-soak-05-failure-2026-08-08.md) | 2026-08-08 | SOAK_FAIL for identity `-05`: producer 1,440,000/1,440,000 with zero producer failures and about 99.99979 eps, but overall emitted result SOAK_FAIL; Flink was terminal FAILED, no dual-mean verifier PASS JSON existed, and corrected rollback was not started; diagnosis UNRESOLVED_FLINK_TERMINAL_FAILURE due to an evidence-retention gap | [golden-4h-soak-start-2026-08-07.md](../perf/golden-4h-soak-start-2026-08-07.md) | None | Does not claim soak PASS, dual-mean PASS, rollback PASS, or production acceptance; the later topology ABORT text is a downstream symptom, not the cause of the Flink failure; production.status remains candidate and the combined gate stays open. |
+
 ## F-10 rollback and soak-capacity records (2026-08-23)
 
 These two records stay at the repository root because `docs/STATUS.md`,

@@ -310,6 +310,85 @@ S10_PACED_R4_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+HISTORICAL_PACED_4H_HEADING = "## Historical four-hour paced S10 predecessor records"
+HISTORICAL_PACED_4H_DATES = {
+    S10_PACED_R1_RECORD: "2026-07-18",
+    S10_PACED_R3_RECORD: "2026-07-19",
+}
+HISTORICAL_PACED_4H_DIGESTS = {
+    S10_PACED_R1_RECORD: ("c63ead23c4b9992459f8ec3f1f28abe36c68516847464f100d82df960f0b693f"),
+    S10_PACED_R3_RECORD: ("f56e80447eb315e93d1cfce60f5a9c1078b9595c8089d0fb18cce0ed21c02247"),
+}
+S10_PACED_R1_RESULT_FACTS = (
+    "2026-07-18t00:23:20z",
+    "05:03:25z",
+    "05afb32",
+    "1 440 000",
+    "100.0 eps",
+    "1 424 309",
+    "84.8 eps",
+    "1 132 164",
+    "67.4 eps",
+    "0 / 292 145",
+    "0 → 0",
+    "1939",
+    "99–100 %",
+    "116",
+    "exit 127",
+    "1 424 309 = 1 132 164 + 292 145",
+    "fail",
+)
+S10_PACED_R3_RESULT_FACTS = (
+    "2026-07-19t01:26z",
+    "06:07z",
+    "05afb32",
+    "1 440 000",
+    "14 430 s",
+    "1 031 462",
+    "408 538",
+    "100 % of delivered",
+    "0 / 0",
+    "0 → 0",
+    "2015",
+    "0 restarts",
+    "578/578",
+    "4.7 h",
+    "2 h 52 m",
+    "73 %",
+    "formal fail",
+)
+S10_PACED_R1_BOUNDARIES = (
+    "historical",
+    "stand disk exhaustion",
+    "not an apply-path defect",
+    "healthy for about 2.5 h",
+    "multi-hour sustained >=100 eps remains open",
+    "current four-hour paced-gate outcome only",
+    "historical facts remain valid",
+    "pre-materializer",
+    "golden full-soak",
+    "blocked_host_capacity",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
+S10_PACED_R3_BOUNDARIES = (
+    "historical",
+    "harness delivery-accounting failure",
+    "408 538 lost client-side",
+    "serving path processed every delivered event exactly once",
+    "16 s broker fencing",
+    "actual load for 2 h 52 m",
+    "multi-hour sustained >=100 eps remains open",
+    "current four-hour paced-gate outcome only",
+    "historical facts remain valid",
+    "pre-materializer",
+    "golden full-soak",
+    "blocked_host_capacity",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
 Q13_Q14_INTERMEDIATE_S10_HEADING = "## Q1.3/Q1.4 intermediate S10 throughput records"
 Q13_Q14_INTERMEDIATE_S10_DATES = {
     S10_Q13_RECORD: "2026-07-09",
@@ -845,6 +924,14 @@ def _current_s10_throughput_rows() -> list[dict[str, str]]:
 
 def _current_s10_throughput_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _current_s10_throughput_rows()]
+
+
+def _historical_paced_4h_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(HISTORICAL_PACED_4H_HEADING)
+
+
+def _historical_paced_4h_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _historical_paced_4h_rows()]
 
 
 def _q13_q14_intermediate_s10_rows() -> list[dict[str, str]]:
@@ -2525,22 +2612,108 @@ def test_current_s10_throughput_boundaries_keep_scopes_distinct() -> None:
         assert phrase in r4
 
 
-def test_q13_q14_intermediate_section_follows_current_s10() -> None:
+def test_historical_paced_4h_section_follows_current_s10_and_precedes_q13_q14() -> None:
     text = INDEX.read_text(encoding="utf-8")
     current_s10_at = text.index(CURRENT_S10_THROUGHPUT_HEADING)
+    historical_paced_at = text.index(HISTORICAL_PACED_4H_HEADING)
     q13_q14_at = text.index(Q13_Q14_INTERMEDIATE_S10_HEADING)
     paced_at = text.index(PACED_10M_1H_HEADING)
     golden_at = text.index(ACCEPTANCE_HEADING)
-    between_current_and_new = text[
-        current_s10_at + len(CURRENT_S10_THROUGHPUT_HEADING) : q13_q14_at
+    between_current_and_historical = text[
+        current_s10_at + len(CURRENT_S10_THROUGHPUT_HEADING) : historical_paced_at
+    ]
+    between_historical_and_q13 = text[
+        historical_paced_at + len(HISTORICAL_PACED_4H_HEADING) : q13_q14_at
     ]
     between_new_and_paced = text[q13_q14_at + len(Q13_Q14_INTERMEDIATE_S10_HEADING) : paced_at]
 
+    assert "Historical four-hour paced" in HISTORICAL_PACED_4H_HEADING
+    assert "S10 predecessor records" in HISTORICAL_PACED_4H_HEADING
     assert "Q1.3/Q1.4" in Q13_Q14_INTERMEDIATE_S10_HEADING
     assert "intermediate S10 throughput" in Q13_Q14_INTERMEDIATE_S10_HEADING
-    assert current_s10_at < q13_q14_at < paced_at < golden_at
-    assert "\n## " not in between_current_and_new
+    assert current_s10_at < historical_paced_at < q13_q14_at < paced_at < golden_at
+    assert "\n## " not in between_current_and_historical
+    assert "\n## " not in between_historical_and_q13
     assert "\n## " not in between_new_and_paced
+
+
+def test_historical_paced_4h_index_lists_the_bounded_pair_with_required_fields() -> None:
+    indexed = _historical_paced_4h_record_paths()
+    expected = (S10_PACED_R1_RECORD, S10_PACED_R3_RECORD)
+    rows = _historical_paced_4h_rows()
+
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    assert S10_PACED_R4_RECORD not in indexed
+    assert S10_Q12_RECORD not in indexed
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == HISTORICAL_PACED_4H_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_historical_paced_4h_rows_reciprocate_r4_without_cross_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), HISTORICAL_PACED_4H_HEADING).lower()
+    historical_rows = {_identity_path(row["identity"]): row for row in _historical_paced_4h_rows()}
+    current_rows = {_identity_path(row["identity"]): row for row in _current_s10_throughput_rows()}
+    r4 = current_rows[S10_PACED_R4_RECORD]
+    r4_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(r4["supersedes"])]
+
+    assert "distinct failure modes" in section
+    assert "not a supersession chain" in section
+    assert "current four-hour paced-gate outcome" in section
+    assert r4_supersedes == [S10_PACED_R1_RECORD, S10_PACED_R3_RECORD]
+    for relative in (S10_PACED_R1_RECORD, S10_PACED_R3_RECORD):
+        row = historical_rows[relative]
+        assert row["supersedes"] == "None"
+        assert [
+            _resolve_index_link(target) for target in LINK_RE.findall(row["superseded by"])
+        ] == [S10_PACED_R4_RECORD]
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+    assert S10_PACED_R3_RECORD not in [
+        _resolve_index_link(target)
+        for target in LINK_RE.findall(historical_rows[S10_PACED_R1_RECORD]["superseded by"])
+    ]
+    assert S10_PACED_R1_RECORD not in [
+        _resolve_index_link(target)
+        for target in LINK_RE.findall(historical_rows[S10_PACED_R3_RECORD]["superseded by"])
+    ]
+
+
+def test_historical_paced_4h_records_keep_published_digests() -> None:
+    assert set(_historical_paced_4h_record_paths()) == set(HISTORICAL_PACED_4H_DIGESTS)
+    for relative, expected in HISTORICAL_PACED_4H_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_historical_paced_4h_results_and_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _historical_paced_4h_rows()}
+    r1 = _row_text(rows[S10_PACED_R1_RECORD])
+    r3 = _row_text(rows[S10_PACED_R3_RECORD])
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in S10_PACED_R1_RESULT_FACTS:
+        assert phrase in r1
+    for phrase in S10_PACED_R3_RESULT_FACTS:
+        assert phrase in r3
+    for phrase in S10_PACED_R1_BOUNDARIES:
+        assert phrase in r1
+    for phrase in S10_PACED_R3_BOUNDARIES:
+        assert phrase in r3
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )
 
 
 def test_q13_q14_index_lists_the_bounded_pair_with_required_fields() -> None:

@@ -198,6 +198,86 @@ S13_SCALE_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+CURRENT_S10_THROUGHPUT_HEADING = "## Current S10 throughput evidence records"
+S10_BURST_BASELINE_RECORD = "docs/perf/throughput-realpath.md"
+S10_PACED_R4_RECORD = "docs/perf/throughput-realpath-paced100-4h-r4-2026-07-19.md"
+S10_PACED_R1_RECORD = "docs/perf/throughput-realpath-paced100-4h-2026-07-18.md"
+S10_PACED_R3_RECORD = "docs/perf/throughput-realpath-paced100-4h-r3-2026-07-19.md"
+S10_Q12_RECORD = "docs/perf/throughput-realpath-q12-2026-07-09.md"
+S10_Q13_RECORD = "docs/perf/throughput-realpath-q13-2026-07-09.md"
+S10_Q14_RECORD = "docs/perf/throughput-realpath-q14-2026-07-10.md"
+S10_100EPS_TRY_RECORD = "docs/perf/throughput-realpath-100eps-try-2026-07-17.md"
+S10_PACED_10M_RECORD = "docs/perf/throughput-realpath-paced100-2026-07-17.md"
+S10_PACED_1H_RECORD = "docs/perf/throughput-realpath-paced100-1h-2026-07-17.md"
+CURRENT_S10_THROUGHPUT_DATES = {
+    S10_BURST_BASELINE_RECORD: "2026-07-09",
+    S10_PACED_R4_RECORD: "2026-07-19",
+}
+CURRENT_S10_THROUGHPUT_DIGESTS = {
+    S10_BURST_BASELINE_RECORD: ("ab6c459064593ff092c6b7bf1ab4050357ee202d63ec9ca6b9608ab978816174"),
+    S10_PACED_R4_RECORD: ("08027f210934070053de3cdabd3065d7bb0a0dc8d5a9387b77880b45cd6adbda"),
+}
+S10_INTERMEDIATE_RECORDS = (
+    S10_Q12_RECORD,
+    S10_Q13_RECORD,
+    S10_Q14_RECORD,
+    S10_100EPS_TRY_RECORD,
+    S10_PACED_10M_RECORD,
+    S10_PACED_1H_RECORD,
+    S10_PACED_R1_RECORD,
+    S10_PACED_R3_RECORD,
+)
+S10_BASELINE_STATUS_HEADING = "## Proven"
+S10_BASELINE_STATUS_CLAIM = "Real-path throughput measured"
+S10_BASELINE_STATUS_RESULT = "produce ~700 eps; bridge apply is the ceiling (see below)"
+S10_R4_STATUS_HEADING = "## Bridge write-path throughput — drain ceiling measured"
+S10_R4_STATUS_CLAIM = "Paced **4 h** @ 100 eps produce (r4)"
+S10_R4_STATUS_RESULT = (
+    "**99.9 apply / 99.9 flink / 100.0 produce** — 1 440 000 events, "
+    "dup = 0, failures = 0, lag 0 → 0, 0 Flink restarts"
+)
+S10_BURST_BASELINE_BOUNDARIES = (
+    "pre-q1.2",
+    "canonical s10",
+    "burst",
+    "400",
+    "699",
+    "7.97",
+    "deproject-mac",
+    "colima",
+    "later best sustained",
+    "current freshness headline",
+    "not a direct supersession chain",
+    "production sla",
+    "production acceptance",
+    "candidate",
+)
+S10_PACED_R4_BOUNDARIES = (
+    "four-hour",
+    "paced",
+    "serving-path",
+    "1 440 000",
+    "100.0",
+    "99.9",
+    "produced",
+    "delivered",
+    "duplicates 0",
+    "apply failures 0",
+    "1956",
+    "484/484",
+    "never restarted",
+    "current four-hour paced-gate outcome",
+    "historical facts remain valid",
+    "already-closed serving-path gate",
+    "golden full-soak",
+    "remains open",
+    "blocked_host_capacity",
+    "pre-materializer",
+    "does not merge",
+    "not a direct supersession chain",
+    "production acceptance",
+    "candidate",
+)
 GOLDEN_ACCEPTANCE_DIGESTS = {
     "docs/perf/golden-flink-submission-2026-07-30.md": (
         "f1494f0f7664816e8be01151af2406e82bcab9a4348af30839dcead039112f21"
@@ -466,6 +546,14 @@ def _current_endurance_scale_rows() -> list[dict[str, str]]:
 
 def _current_endurance_scale_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _current_endurance_scale_rows()]
+
+
+def _current_s10_throughput_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CURRENT_S10_THROUGHPUT_HEADING)
+
+
+def _current_s10_throughput_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _current_s10_throughput_rows()]
 
 
 def _status_table_rows(heading: str) -> list[dict[str, str]]:
@@ -1910,3 +1998,127 @@ def test_current_endurance_scale_boundaries_keep_scopes_distinct() -> None:
         assert phrase in s11
     for phrase in S13_SCALE_BOUNDARIES:
         assert phrase in s13
+
+
+def test_current_s10_throughput_index_lists_the_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    endurance_at = text.index(CURRENT_ENDURANCE_SCALE_HEADING)
+    s10_at = text.index(CURRENT_S10_THROUGHPUT_HEADING)
+    golden_at = text.index(ACCEPTANCE_HEADING)
+    indexed = _current_s10_throughput_record_paths()
+    expected = (S10_BURST_BASELINE_RECORD, S10_PACED_R4_RECORD)
+    rows = _current_s10_throughput_rows()
+
+    assert endurance_at < s10_at < golden_at
+    assert set(indexed) == set(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert indexed == list(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for relative in S10_INTERMEDIATE_RECORDS:
+        assert relative not in indexed
+    assert REAL_PATH_FRESHNESS_RECORD not in indexed
+    assert SOAK_CAPACITY_RECORD not in indexed
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == CURRENT_S10_THROUGHPUT_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_current_s10_throughput_records_are_not_a_direct_supersession_chain() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), CURRENT_S10_THROUGHPUT_HEADING)
+    section_lower = section.lower()
+    rows = {_identity_path(row["identity"]): row for row in _current_s10_throughput_rows()}
+    baseline = rows[S10_BURST_BASELINE_RECORD]
+    r4 = rows[S10_PACED_R4_RECORD]
+    r4_supersedes = [_resolve_index_link(target) for target in LINK_RE.findall(r4["supersedes"])]
+    r4_superseded_by = [
+        _resolve_index_link(target) for target in LINK_RE.findall(r4["superseded by"])
+    ]
+
+    assert any("not a direct supersession chain" in line for line in section.splitlines())
+    assert "different modes" in section_lower
+    assert "current four-hour paced-gate outcome" in section_lower
+    assert "historical facts remain valid" in section_lower
+    assert "already-closed serving-path gate" in section_lower
+    assert "remains open" in section_lower
+    assert baseline["supersedes"] == "None"
+    assert baseline["superseded by"] == "None"
+    assert r4_supersedes == [S10_PACED_R1_RECORD, S10_PACED_R3_RECORD]
+    assert r4["supersedes"].count("[") == 2
+    assert r4["superseded by"] == "None"
+    assert S10_BURST_BASELINE_RECORD not in r4_supersedes
+    assert S10_BURST_BASELINE_RECORD not in r4_superseded_by
+    assert SOAK_CAPACITY_RECORD not in r4_supersedes
+    assert SOAK_CAPACITY_RECORD not in r4_superseded_by
+    _assert_supersession_cell(baseline["supersedes"])
+    _assert_supersession_cell(baseline["superseded by"])
+    _assert_supersession_cell(r4["supersedes"])
+    _assert_supersession_cell(r4["superseded by"])
+
+
+def test_current_s10_throughput_records_keep_published_digests() -> None:
+    indexed = set(_current_s10_throughput_record_paths())
+
+    assert indexed == set(CURRENT_S10_THROUGHPUT_DIGESTS)
+    for relative, expected in CURRENT_S10_THROUGHPUT_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+    assert (ROOT / S10_PACED_R1_RECORD).is_file()
+    assert (ROOT / S10_PACED_R3_RECORD).is_file()
+    f02_digest = hashlib.sha256((ROOT / SOAK_CAPACITY_RECORD).read_bytes()).hexdigest()
+    assert f02_digest == F10_DIGESTS[SOAK_CAPACITY_RECORD]
+
+
+def test_current_s10_throughput_claim_links_match_status_rows() -> None:
+    indexed = set(_current_s10_throughput_record_paths())
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    status_links = _status_record_links()
+    proven_rows = _status_table_rows(S10_BASELINE_STATUS_HEADING)
+    bridge_rows = _status_table_rows(S10_R4_STATUS_HEADING)
+    proven_by_path: dict[str, dict[str, str]] = {}
+    for row in proven_rows:
+        for path in _status_cell_record_paths(row.get("evidence", "")):
+            proven_by_path[path] = row
+    bridge_by_path: dict[str, dict[str, str]] = {}
+    for row in bridge_rows:
+        for path in _status_cell_record_paths(row.get("state", "")):
+            bridge_by_path[path] = row
+
+    assert indexed == {S10_BURST_BASELINE_RECORD, S10_PACED_R4_RECORD}
+    assert S10_BURST_BASELINE_RECORD in status_links
+    assert S10_PACED_R4_RECORD in status_links
+    assert S10_PACED_R1_RECORD not in status_links
+    assert S10_PACED_R3_RECORD not in status_links
+    assert proven_by_path[S10_BURST_BASELINE_RECORD]["claim"] == S10_BASELINE_STATUS_CLAIM
+    assert proven_by_path[S10_BURST_BASELINE_RECORD]["result"] == S10_BASELINE_STATUS_RESULT
+    assert S10_PACED_R4_RECORD not in proven_by_path
+    assert bridge_by_path[S10_PACED_R4_RECORD]["step"] == S10_R4_STATUS_CLAIM
+    assert bridge_by_path[S10_PACED_R4_RECORD]["bridge apply"] == S10_R4_STATUS_RESULT
+    assert S10_BURST_BASELINE_RECORD not in bridge_by_path
+    assert SOAK_CAPACITY_RECORD in status_links
+    assert SOAK_CAPACITY_RECORD in _f10_record_paths()
+    assert manifest["production"]["status"] == "candidate"
+    assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
+        "BLOCKED_HOST_CAPACITY"
+    )
+
+
+def test_current_s10_throughput_boundaries_keep_scopes_distinct() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _current_s10_throughput_rows()}
+    baseline = _row_text(rows[S10_BURST_BASELINE_RECORD])
+    r4 = _row_text(rows[S10_PACED_R4_RECORD])
+
+    assert "s10" in rows[S10_BURST_BASELINE_RECORD]["result"].lower()
+    assert "pass" in rows[S10_PACED_R4_RECORD]["result"].lower()
+    assert "consumed = applied = 1 440 000" in r4
+    assert "produced = delivered = 1 440 000" in r4
+    for phrase in S10_BURST_BASELINE_BOUNDARIES:
+        assert phrase in baseline
+    for phrase in S10_PACED_R4_BOUNDARIES:
+        assert phrase in r4

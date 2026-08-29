@@ -55,6 +55,21 @@ superseded.
 | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
 | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
 
+## Historical authentication performance baseline
+
+This table catalogues the point-in-time authentication microbenchmark that
+motivated the M-C4 hash-format change and closed M-C5 as not a bottleneck. The
+2026-06-05 closure notice was added to the same immutable identity; the
+current runbook and implementation narrow where its historical bcrypt result
+still applies. They do not create a second evidence identity, so this is not a
+document supersession chain. Columns are identity, ISO date, result,
+supersedes, superseded by, and claim boundary. `None` means no supersession is
+recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [auth-bench-2026-05-26.md](../perf/auth-bench-2026-05-26.md) | 2026-05-26 | Historical bcrypt baseline on Intel Ultra 5 125H, Windows 11, and Python 3.13: at `bcrypt_rounds=12` and N=20 over 3 trials, hit-last p95 8146.6 ms and miss-all p95 8221.9 ms; rate-window trim at `rate_limit_rpm=120` over 5,000 calls was p95 0.006 ms. The same record's 2026-06-05 closure notice reports indexed Argon2id hit-last cold at approximately 34 ms and misses at approximately 0.1 ms. | None | None | Point-in-time microbenchmark on a single Windows 11 laptop under the `Cool Limited` power profile, not a served-API benchmark and not a concurrent-load benchmark. The historical bcrypt figures apply to legacy entries without `key_lookup`; current indexed Argon2id keys use O(1) candidate lookup. The current figures are closure-note comparisons, not a production latency SLA. Does not establish production acceptance; `production.status` remains `candidate`. |
+
 ## ClickHouse serving-path verification record
 
 This table catalogues the ADR 0006 Phase 1 serving surface behavior capture.

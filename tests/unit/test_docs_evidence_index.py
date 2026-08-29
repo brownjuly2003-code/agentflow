@@ -37,6 +37,41 @@ PROTECTED_DIGESTS = {
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
     ),
 }
+HISTORICAL_AUTH_BENCH_HEADING = "## Historical authentication performance baseline"
+HISTORICAL_AUTH_BENCH_RECORD = "docs/perf/auth-bench-2026-05-26.md"
+HISTORICAL_AUTH_BENCH_DATE = "2026-05-26"
+HISTORICAL_AUTH_BENCH_DIGEST = "da2ba9f6e47da56bb3d982ed4b435e58c78b602ec20dea1e1e2cb3c272fec9ad"
+HISTORICAL_AUTH_BENCH_FACTS = (
+    "intel ultra 5 125h",
+    "windows 11",
+    "python 3.13",
+    "bcrypt_rounds=12",
+    "n=20",
+    "3 trials",
+    "hit-last p95 8146.6 ms",
+    "miss-all p95 8221.9 ms",
+    "rate_limit_rpm=120",
+    "5,000 calls",
+    "p95 0.006 ms",
+    "argon2id",
+    "34 ms",
+    "0.1 ms",
+)
+HISTORICAL_AUTH_BENCH_BOUNDARIES = (
+    "historical bcrypt",
+    "single windows 11 laptop",
+    "cool limited",
+    "microbenchmark",
+    "not a served-api",
+    "not a concurrent-load",
+    "legacy entries",
+    "key_lookup",
+    "current indexed argon2id",
+    "closure-note comparisons",
+    "not a production latency sla",
+    "production acceptance",
+    "candidate",
+)
 CLICKHOUSE_SERVING_HEADING = "## ClickHouse serving-path verification record"
 CLICKHOUSE_SERVING_RECORD = "docs/perf/clickhouse-serving-verify-2026-07-02.md"
 CLICKHOUSE_SERVING_DATE = "2026-07-02"
@@ -1225,6 +1260,14 @@ def _security_dependency_rows() -> list[dict[str, str]]:
     return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
 
 
+def _historical_auth_bench_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(HISTORICAL_AUTH_BENCH_HEADING)
+
+
+def _historical_auth_bench_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _historical_auth_bench_rows()]
+
+
 def _clickhouse_serving_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CLICKHOUSE_SERVING_HEADING)
 
@@ -1541,6 +1584,77 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
     for row in _security_dependency_rows():
         _assert_supersession_cell(row.get("supersedes", ""))
         _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_historical_auth_bench_index_lists_one_bounded_record() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    security_at = text.index(SECURITY_DEPENDENCY_HEADING)
+    auth_at = text.index(HISTORICAL_AUTH_BENCH_HEADING)
+    serving_at = text.index(CLICKHOUSE_SERVING_HEADING)
+    indexed = _historical_auth_bench_record_paths()
+    rows = _historical_auth_bench_rows()
+
+    assert security_at < auth_at < serving_at
+    assert indexed == [HISTORICAL_AUTH_BENCH_RECORD]
+    assert Counter(indexed) == Counter((HISTORICAL_AUTH_BENCH_RECORD,))
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 1
+    row = rows[0]
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == HISTORICAL_AUTH_BENCH_DATE
+    assert (ROOT / HISTORICAL_AUTH_BENCH_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_historical_auth_bench_is_one_identity_not_document_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), HISTORICAL_AUTH_BENCH_HEADING).lower().split()
+    )
+    row = _historical_auth_bench_rows()[0]
+
+    assert "same immutable identity" in section
+    assert "not a document supersession chain" in section
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+
+
+def test_historical_auth_bench_record_keeps_published_digest() -> None:
+    assert _historical_auth_bench_record_paths() == [HISTORICAL_AUTH_BENCH_RECORD]
+    digest = hashlib.sha256((ROOT / HISTORICAL_AUTH_BENCH_RECORD).read_bytes()).hexdigest()
+    assert digest == HISTORICAL_AUTH_BENCH_DIGEST
+
+
+def test_historical_auth_bench_sources_and_plan_match_the_index() -> None:
+    source = (ROOT / HISTORICAL_AUTH_BENCH_RECORD).read_text(encoding="utf-8")
+    runbook = (ROOT / "docs" / "runbooks" / "auth-401-spike.md").read_text(encoding="utf-8")
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert "scripts/perf/auth_bench.py" in source
+    assert Path(HISTORICAL_AUTH_BENCH_RECORD).name in runbook
+    assert HISTORICAL_AUTH_BENCH_RECORD in changelog
+    assert HISTORICAL_AUTH_BENCH_RECORD not in manifest["required_evidence"]
+    assert "historical authentication performance baseline sub-slice" in plan
+    assert HISTORICAL_AUTH_BENCH_DIGEST in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_historical_auth_bench_result_and_boundary_remain_conservative() -> None:
+    row = _historical_auth_bench_rows()[0]
+    historical = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in HISTORICAL_AUTH_BENCH_FACTS:
+        assert phrase in historical
+    for phrase in HISTORICAL_AUTH_BENCH_BOUNDARIES:
+        assert phrase in historical
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_clickhouse_serving_index_lists_one_bounded_record() -> None:

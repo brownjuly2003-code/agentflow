@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
 import tomllib
 from collections import Counter
 from pathlib import Path
@@ -35,6 +36,111 @@ PROTECTED_DIGESTS = {
     ),
     "docs/evidence/dependency-compatibility-2026-07-30.md": (
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
+    ),
+}
+ENTITY_HOT_PATH_HEADING = "## Historical entity hot-path optimization records"
+ENTITY_BASELINE_RECORD = "docs/perf/entity-profile-2026-04-24.md"
+ENTITY_PII_CACHE_RECORD = "docs/perf/entity-profile-after-pii-masker-cache.md"
+ENTITY_TENANT_CACHE_RECORD = "docs/perf/entity-profile-after-tenant-qualification-cache.md"
+ENTITY_HOT_PATH_RECORDS = (
+    ENTITY_BASELINE_RECORD,
+    ENTITY_PII_CACHE_RECORD,
+    ENTITY_TENANT_CACHE_RECORD,
+)
+ENTITY_HOT_PATH_DATES = {
+    ENTITY_BASELINE_RECORD: "2026-04-24",
+    ENTITY_PII_CACHE_RECORD: "2026-04-24",
+    ENTITY_TENANT_CACHE_RECORD: "2026-04-25",
+}
+ENTITY_HOT_PATH_DIGESTS = {
+    ENTITY_BASELINE_RECORD: ("99904b66387dcd002095d9fe17458891099de81ff03d2719837038266f252c99"),
+    ENTITY_PII_CACHE_RECORD: ("27ba68bb1ef0541f72afe7055fec8f81d011c1688638b32f7f858fc4745667aa"),
+    ENTITY_TENANT_CACHE_RECORD: (
+        "2728e47a30eab0cde0a175759c86e2de9ee3dfc61d7d5751b62f7c76517952fa"
+    ),
+}
+ENTITY_HOT_PATH_REMAINING_PERF_PATHS = {
+    "docs/perf/benchmark-split-decision.md",
+    "docs/perf/bridge-ch-native-apply-q1-2026-07-09.md",
+    "docs/perf/entity-benchmark-contract.md",
+    "docs/perf/load-benchmark-latest.md",
+    "docs/perf/public-production-hardware-benchmark-plan.md",
+}
+ENTITY_HOT_PATH_FACTS = {
+    ENTITY_BASELINE_RECORD: (
+        "composite historical dossier",
+        "97a1902",
+        "windows 11",
+        "18 logical cores",
+        "15.5 gb",
+        "python 3.13.7",
+        "redis in docker",
+        "duckdb",
+        "p50/p95/p99 179.29/615.62/936.34 ms",
+        "68.57 rps",
+        "2000/2000",
+        "5b57cf4",
+        "p50/p95/p99 165.89/620.51/962.22 ms",
+        "70.49 rps",
+    ),
+    ENTITY_PII_CACHE_RECORD: (
+        "220f94c",
+        "p50/p95/p99 56.65/233.78/360.97 ms",
+        "193.73 rps",
+        "2000/2000",
+        "-61%",
+    ),
+    ENTITY_TENANT_CACHE_RECORD: (
+        "best-of-3",
+        "p50 193.29 -> 113.01 ms",
+        "p95 242.42 -> 140.88 ms",
+        "p99 288.85 -> 167.14 ms",
+        "81.10 -> 138.08 rps",
+        "42.13%",
+        "open auth",
+        "worst after 261.46 ms",
+        "best before 288.85 ms",
+    ),
+}
+ENTITY_HOT_PATH_BOUNDARIES = {
+    ENTITY_BASELINE_RECORD: (
+        "composite dossier",
+        "expanded after the original date",
+        "profiling overhead",
+        "not directly comparable",
+        "historical src/serving paths",
+        "not current ownership",
+        "local-development",
+        "not a ci or cross-host benchmark",
+        "not a current-code benchmark",
+        "production sla",
+        "production acceptance",
+        "candidate",
+    ),
+    ENTITY_PII_CACHE_RECORD: (
+        "point-in-time",
+        "not a stable current baseline",
+        "later dossier refresh",
+        "962.22 ms",
+        "source-stated hypotheses",
+        "not proved causes",
+        "not a ci or cross-host benchmark",
+        "production sla",
+        "production acceptance",
+        "candidate",
+    ),
+    ENTITY_TENANT_CACHE_RECORD: (
+        "creation-commit date",
+        "source has no date field",
+        "5b57cf4",
+        "aae27bf",
+        "exact after-run bytes are not commit-bound",
+        "spread above 10%",
+        "hardware and dependency versions are not inherited",
+        "not a ci or cross-host benchmark",
+        "production sla",
+        "production acceptance",
+        "candidate",
     ),
 }
 OPENAPI_DIVERGENCE_HEADING = "## Historical OpenAPI contract divergence diagnostic"
@@ -1446,6 +1552,14 @@ def _security_dependency_rows() -> list[dict[str, str]]:
     return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
 
 
+def _entity_hot_path_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(ENTITY_HOT_PATH_HEADING)
+
+
+def _entity_hot_path_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _entity_hot_path_rows()]
+
+
 def _openapi_divergence_rows() -> list[dict[str, str]]:
     return _rows_for_heading(OPENAPI_DIVERGENCE_HEADING)
 
@@ -1649,6 +1763,35 @@ def _resolve_index_link(target: str) -> str:
     return (INDEX.parent / target).resolve().relative_to(ROOT).as_posix()
 
 
+def _tracked_perf_markdown_paths() -> set[str]:
+    completed = subprocess.run(
+        ["git", "ls-files", "--", "docs/perf"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return {
+        line.strip().replace("\\", "/")
+        for line in completed.stdout.splitlines()
+        if line.strip().endswith(".md")
+    }
+
+
+def _represented_perf_markdown_paths() -> set[str]:
+    tracked = _tracked_perf_markdown_paths()
+    represented: set[str] = set()
+    for target in LINK_RE.findall(INDEX.read_text(encoding="utf-8")):
+        target_without_fragment = target.split("#", 1)[0]
+        if not target_without_fragment:
+            continue
+        resolved = _resolve_index_link(target_without_fragment)
+        if resolved in tracked:
+            represented.add(resolved)
+    return represented
+
+
 def _identity_path(cell: str) -> str:
     matches = LINK_RE.findall(cell)
     assert matches, f"identity cell has no markdown path: {cell!r}"
@@ -1802,6 +1945,112 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
     for row in _security_dependency_rows():
         _assert_supersession_cell(row.get("supersedes", ""))
         _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_entity_hot_path_index_lists_three_bounded_records() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    security_at = text.index(SECURITY_DEPENDENCY_HEADING)
+    entity_at = text.index(ENTITY_HOT_PATH_HEADING)
+    openapi_at = text.index(OPENAPI_DIVERGENCE_HEADING)
+    indexed = _entity_hot_path_record_paths()
+    rows = _entity_hot_path_rows()
+
+    assert security_at < entity_at < openapi_at
+    assert indexed == list(ENTITY_HOT_PATH_RECORDS)
+    assert Counter(indexed) == Counter(ENTITY_HOT_PATH_RECORDS)
+    assert len(rows) == 3
+    for row in rows:
+        assert list(row) == list(REQUIRED_FIELDS)
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        record = _identity_path(row["identity"])
+        assert row["date"] == ENTITY_HOT_PATH_DATES[record]
+        assert (ROOT / record).is_file()
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_entity_hot_path_records_are_complementary_not_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), ENTITY_HOT_PATH_HEADING).lower().split()
+    )
+
+    assert "three human-authored identities" in section
+    assert "json/svg companions" in section
+    assert "not separate evidence identities" in section
+    assert "complementary stages" in section
+    assert "not a document supersession chain" in section
+    assert "not a monotonic performance trajectory" in section
+    for row in _entity_hot_path_rows():
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_entity_hot_path_records_keep_published_digests() -> None:
+    assert _entity_hot_path_record_paths() == list(ENTITY_HOT_PATH_RECORDS)
+    for relative, expected in ENTITY_HOT_PATH_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_entity_hot_path_sources_and_plan_match_the_index() -> None:
+    sources = {
+        record: (ROOT / record).read_text(encoding="utf-8") for record in ENTITY_HOT_PATH_RECORDS
+    }
+    perf_readme = (ROOT / "docs" / "perf" / "README.md").read_text(encoding="utf-8")
+    ci_gap = (ROOT / CI_HARDWARE_GAP_RECORD).read_text(encoding="utf-8")
+    ci_gap_normalized = " ".join(ci_gap.split())
+    index_normalized = " ".join(INDEX.read_text(encoding="utf-8").split())
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+    tracked_perf = _tracked_perf_markdown_paths()
+    represented_perf = _represented_perf_markdown_paths()
+    remaining_perf = tracked_perf - represented_perf
+
+    assert "written by hand" in perf_readme
+    assert ENTITY_TENANT_CACHE_RECORD in ci_gap
+    assert "936 ms to 167 ms" in ci_gap
+    assert "throughput 68 → 138 RPS" in ci_gap_normalized
+    assert "for inventory only" in index_normalized.lower()
+    assert (
+        "representation does not make navigation or supporting companions evidence identities"
+        in (index_normalized.lower())
+    )
+    assert (len(tracked_perf), len(represented_perf), len(remaining_perf)) == (58, 53, 5)
+    assert remaining_perf == ENTITY_HOT_PATH_REMAINING_PERF_PATHS
+    assert "latest refresh" in sources[ENTITY_BASELINE_RECORD].lower()
+    assert "97a190248a943b5ef6910881be4b9c010eceb33f" in sources[ENTITY_BASELINE_RECORD]
+    assert "5b57cf4" in sources[ENTITY_BASELINE_RECORD]
+    assert "**date:** 2026-04-24" in sources[ENTITY_PII_CACHE_RECORD].lower()
+    assert "**head:** `220f94c`" in sources[ENTITY_PII_CACHE_RECORD].lower()
+    assert "all 2000 requests succeeded" in sources[ENTITY_PII_CACHE_RECORD].lower()
+    assert (
+        "**head measured:** `5b57cf4020f8c7f0138e313d47ab644c2b33f6a4`"
+        in sources[ENTITY_TENANT_CACHE_RECORD].lower()
+    )
+    assert "p99 spread above" in sources[ENTITY_TENANT_CACHE_RECORD].lower()
+    assert "historical entity hot-path optimization records sub-slice" in plan
+    for digest in ENTITY_HOT_PATH_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_entity_hot_path_results_and_boundaries_remain_conservative() -> None:
+    rows_by_record = {_identity_path(row["identity"]): row for row in _entity_hot_path_rows()}
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    assert set(rows_by_record) == set(ENTITY_HOT_PATH_RECORDS)
+    for record, phrases in ENTITY_HOT_PATH_FACTS.items():
+        row_text = _row_text(rows_by_record[record])
+        for phrase in phrases:
+            assert phrase in row_text
+    for record, phrases in ENTITY_HOT_PATH_BOUNDARIES.items():
+        row_text = _row_text(rows_by_record[record])
+        for phrase in phrases:
+            assert phrase in row_text
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_openapi_divergence_index_lists_one_bounded_record() -> None:

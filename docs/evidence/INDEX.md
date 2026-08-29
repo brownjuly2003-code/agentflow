@@ -15,6 +15,12 @@ Entry documents (start here, not below): `README.md`, `docs/STATUS.md`,
 `docs/SESSION_HANDOFF.md`, [`docs/perf/README.md`](../perf/README.md), and
 `docs/operations/ci-soak-next-session-runbook.md`.
 
+For inventory only, a tracked `docs/perf` Markdown path is represented when
+this index links it explicitly, whether as an identity, a classified supporting
+companion, or a navigation entry. Representation does not make navigation or
+supporting companions evidence identities; identity counts come only from the
+catalogue table rows.
+
 ## CI-soak rehearsal series (r1–r12, consumed)
 
 | Record | What it fixes in time |
@@ -55,6 +61,24 @@ superseded.
 | [security-s12-2026-07-09.md](security-s12-2026-07-09.md) | 2026-07-09 | offline/unit remainder closed; third-party pen-test **not** claimed | None | None | Does not claim an external penetration test or production acceptance; live schemathesis remains the CI contract, and the live ClickHouse execution matrix remains a separate gate. |
 | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
 | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
+
+## Historical entity hot-path optimization records
+
+This table catalogues three human-authored identities from one bounded local
+entity hot-path investigation. Their JSON/SVG companions remain supporting
+artifacts, not separate evidence identities. The records are chronological
+complementary stages, not a document supersession chain. In particular, the
+recorded 936 -> 361 -> 962 -> 289 -> 167 ms sequence is not a monotonic
+performance trajectory: it combines different windows, profiling overhead,
+and noisy before/after series. Columns are identity, ISO date, result,
+supersedes, superseded by, and claim boundary. `None` means no supersession is
+recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [entity-profile-2026-04-24.md](../perf/entity-profile-2026-04-24.md) | 2026-04-24 | Composite historical dossier. Baseline HEAD `97a1902` on Windows 11, Intel i7 with 18 logical cores, 15.5 GB RAM, Python 3.13.7, Redis in Docker, DuckDB, and a localhost API recorded p50/p95/p99 179.29/615.62/936.34 ms, 68.57 RPS, and 2000/2000 successes. A later T23 refresh at `5b57cf4` recorded p50/p95/p99 165.89/620.51/962.22 ms and 70.49 RPS while moving the dominant observed frames to tenant/YAML/metadata work. | None | None | Composite dossier expanded after the original date. The later flamegraph window includes profiling overhead and is not directly comparable with the unprofiled baseline. Historical src/serving paths and line numbers are not current ownership. Local-development evidence only; not a CI or cross-host benchmark, not a current-code benchmark, and not a production SLA or production acceptance. `production.status` remains `candidate`. |
+| [entity-profile-after-pii-masker-cache.md](../perf/entity-profile-after-pii-masker-cache.md) | 2026-04-24 | Point-in-time PII-masker cache result at `220f94c` with the same recorded local fixture and 2000-request contract: p50/p95/p99 56.65/233.78/360.97 ms, 193.73 RPS, 2000/2000 successes, and a reported -61% p99 delta from the initial baseline. | None | None | Point-in-time result, not a stable current baseline. The later dossier refresh recorded 962.22 ms p99 in a different profiled and noisy window. Explanations for the larger-than-predicted magnitude remain source-stated hypotheses, not proved causes beyond the cache-key fix. Not a CI or cross-host benchmark, production SLA, or production acceptance; `production.status` remains `candidate`. |
+| [entity-profile-after-tenant-qualification-cache.md](../perf/entity-profile-after-tenant-qualification-cache.md) | 2026-04-25 | Accepted local best-of-3 T24 result with open auth: p50 193.29 -> 113.01 ms, p95 242.42 -> 140.88 ms, p99 288.85 -> 167.14 ms, and 81.10 -> 138.08 RPS, a 42.13% p99 improvement. Despite the noise, the worst after 261.46 ms beat the best before 288.85 ms. | None | None | The Date cell is the creation-commit date; the source has no Date field. It labels HEAD measured `5b57cf4`, while the cache implementation and profile first enter tracked history in `aae27bf`; exact after-run bytes are not commit-bound. Both before/after series had spread above 10%, and hardware and dependency versions are not inherited from the baseline. Historical local evidence only; not a CI or cross-host benchmark, production SLA, or production acceptance. `production.status` remains `candidate`. |
 
 ## Historical OpenAPI contract divergence diagnostic
 

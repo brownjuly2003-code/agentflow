@@ -70,6 +70,22 @@ recorded.
 | --- | --- | --- | --- | --- | --- |
 | [auth-bench-2026-05-26.md](../perf/auth-bench-2026-05-26.md) | 2026-05-26 | Historical bcrypt baseline on Intel Ultra 5 125H, Windows 11, and Python 3.13: at `bcrypt_rounds=12` and N=20 over 3 trials, hit-last p95 8146.6 ms and miss-all p95 8221.9 ms; rate-window trim at `rate_limit_rpm=120` over 5,000 calls was p95 0.006 ms. The same record's 2026-06-05 closure notice reports indexed Argon2id hit-last cold at approximately 34 ms and misses at approximately 0.1 ms. | None | None | Point-in-time microbenchmark on a single Windows 11 laptop under the `Cool Limited` power profile, not a served-API benchmark and not a concurrent-load benchmark. The historical bcrypt figures apply to legacy entries without `key_lookup`; current indexed Argon2id keys use O(1) candidate lookup. The current figures are closure-note comparisons, not a production latency SLA. Does not establish production acceptance; `production.status` remains `candidate`. |
 
+## CI performance interpretation records
+
+This table catalogues two point-in-time records that delimit separate CI
+performance claims. The 2026-05-24 A03 record calibrated shared-runner gates
+against a dated baseline. The 2026-07-09 record later disproved runner speed as
+the cause of finding N1's bimodal Load Test and records the request-path
+`api_usage` fix. That correction narrows how CI variance may be interpreted;
+it does not supersede the A03 document or erase its dated decision. The
+records are complementary, so both use `None`/`None`. Columns are identity,
+ISO date, result, supersedes, superseded by, and claim boundary.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [ci-hardware-gap-2026-05-24.md](../perf/ci-hardware-gap-2026-05-24.md) | 2026-05-24 | Point-in-time A03 decision: after local entity p99 fell from 936 ms to 167 ms (-82%) and throughput rose from 68 to 138 RPS, the 2026-04-25 shared `ubuntu-latest` baseline remained 600-800 ms for GET and 740-980 ms for POST endpoints. A 1.3x CI headroom was adopted with 900 ms, 1100 ms, and 1200 ms endpoint gates while the local p99 < 200 ms SLO remained unchanged. | None | None | Dated calibration on shared 2-core, 4-7 GB runners. It does not prove every later CI tail is hardware, does not supersede later application-bottleneck findings, and does not authorize future threshold relaxation without the record's re-evaluation triggers. This is not a production latency SLA or production acceptance; `production.status` remains `candidate`. |
+| [usage-write-bifurcation-2026-07-09.md](../perf/usage-write-bifurcation-2026-07-09.md) | 2026-07-09 | Finding N1 root cause and fix: three red runs clustered at 29.4, 29.1, and 28.9 RPS (1.7% spread), while nine green runs ranged from 37.0 to 46.2 RPS; a 1.5x RPS change accompanied a 10x p99 change. Synchronous DuckDB `api_usage` commits capped the API at `1/s`; an injected 34 ms write reproduced 31.4 RPS, while the background path held 37.9 RPS and 37.2 RPS at 34 ms and 60 ms. The fix uses a queue, one background writer, and batch commits. | None | None | Corrects only the runner-speed reading of finding N1 and does not supersede the A03 hardware-gap record or deny remaining runner variability. Durability moves after the response, so a crash can lose queued rows; the admin read is affected, but `api_usage` is not billing and not rate limiting. This is not a production throughput SLA or production acceptance; `production.status` remains `candidate`. |
+
 ## ClickHouse serving-path verification record
 
 This table catalogues the ADR 0006 Phase 1 serving surface behavior capture.

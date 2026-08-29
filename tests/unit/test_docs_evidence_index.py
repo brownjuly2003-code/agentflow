@@ -72,6 +72,78 @@ HISTORICAL_AUTH_BENCH_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+CI_PERFORMANCE_HEADING = "## CI performance interpretation records"
+CI_HARDWARE_GAP_RECORD = "docs/perf/ci-hardware-gap-2026-05-24.md"
+CI_USAGE_WRITE_RECORD = "docs/perf/usage-write-bifurcation-2026-07-09.md"
+CI_PERFORMANCE_RECORDS = (CI_HARDWARE_GAP_RECORD, CI_USAGE_WRITE_RECORD)
+CI_PERFORMANCE_DATES = {
+    CI_HARDWARE_GAP_RECORD: "2026-05-24",
+    CI_USAGE_WRITE_RECORD: "2026-07-09",
+}
+CI_PERFORMANCE_DIGESTS = {
+    CI_HARDWARE_GAP_RECORD: ("b259d746e4231cea11a974417bfdce88b29d55693889d2d943a4a6c6d4859761"),
+    CI_USAGE_WRITE_RECORD: ("db324b94b1903d058a1eca9287a952566a21c629bfcb41980b776bc9f413526e"),
+}
+CI_PERFORMANCE_FACTS = {
+    CI_HARDWARE_GAP_RECORD: (
+        "936 ms",
+        "167 ms",
+        "-82%",
+        "68",
+        "138 rps",
+        "600-800 ms",
+        "740-980 ms",
+        "1.3x",
+        "900 ms",
+        "1100 ms",
+        "1200 ms",
+        "p99 < 200 ms",
+    ),
+    CI_USAGE_WRITE_RECORD: (
+        "29.4",
+        "29.1",
+        "28.9",
+        "1.7%",
+        "37.0",
+        "46.2",
+        "1.5x",
+        "10x",
+        "1/s",
+        "34 ms",
+        "31.4 rps",
+        "37.9 rps",
+        "37.2 rps",
+        "background",
+        "batch",
+    ),
+}
+CI_PERFORMANCE_BOUNDARIES = {
+    CI_HARDWARE_GAP_RECORD: (
+        "point-in-time",
+        "shared",
+        "2-core",
+        "4-7 gb",
+        "does not prove every later ci tail",
+        "does not authorize future threshold relaxation",
+        "production latency sla",
+        "production acceptance",
+        "candidate",
+    ),
+    CI_USAGE_WRITE_RECORD: (
+        "finding n1",
+        "runner-speed reading",
+        "does not supersede the a03",
+        "runner variability",
+        "durability",
+        "crash",
+        "admin read",
+        "not billing",
+        "not rate limiting",
+        "production throughput sla",
+        "production acceptance",
+        "candidate",
+    ),
+}
 CLICKHOUSE_SERVING_HEADING = "## ClickHouse serving-path verification record"
 CLICKHOUSE_SERVING_RECORD = "docs/perf/clickhouse-serving-verify-2026-07-02.md"
 CLICKHOUSE_SERVING_DATE = "2026-07-02"
@@ -1268,6 +1340,14 @@ def _historical_auth_bench_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _historical_auth_bench_rows()]
 
 
+def _ci_performance_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CI_PERFORMANCE_HEADING)
+
+
+def _ci_performance_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _ci_performance_rows()]
+
+
 def _clickhouse_serving_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CLICKHOUSE_SERVING_HEADING)
 
@@ -1654,6 +1734,92 @@ def test_historical_auth_bench_result_and_boundary_remain_conservative() -> None
         assert phrase in historical
     for phrase in HISTORICAL_AUTH_BENCH_BOUNDARIES:
         assert phrase in historical
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_ci_performance_interpretation_index_lists_two_bounded_records() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    auth_at = text.index(HISTORICAL_AUTH_BENCH_HEADING)
+    performance_at = text.index(CI_PERFORMANCE_HEADING)
+    serving_at = text.index(CLICKHOUSE_SERVING_HEADING)
+    indexed = _ci_performance_record_paths()
+    rows = _ci_performance_rows()
+
+    assert auth_at < performance_at < serving_at
+    assert indexed == list(CI_PERFORMANCE_RECORDS)
+    assert Counter(indexed) == Counter(CI_PERFORMANCE_RECORDS)
+    assert len(rows) == 2
+    for row in rows:
+        assert list(row) == list(REQUIRED_FIELDS)
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        record = _identity_path(row["identity"])
+        assert row["date"] == CI_PERFORMANCE_DATES[record]
+        assert (ROOT / record).is_file()
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_ci_performance_records_are_complementary_not_document_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), CI_PERFORMANCE_HEADING).lower().split()
+    )
+
+    assert "complementary" in section
+    assert "does not supersede the a03 document" in section
+    for row in _ci_performance_rows():
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_ci_performance_records_keep_published_digests() -> None:
+    assert _ci_performance_record_paths() == list(CI_PERFORMANCE_RECORDS)
+    for relative, expected in CI_PERFORMANCE_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_ci_performance_sources_and_plan_match_the_index() -> None:
+    assert _ci_performance_record_paths() == list(CI_PERFORMANCE_RECORDS)
+    baseline = (ROOT / "docs" / "benchmark-baseline.json").read_text(encoding="utf-8")
+    release_status = (ROOT / "docs" / "dv2-multi-branch" / "RELEASE_STATUS.md").read_text(
+        encoding="utf-8"
+    )
+    readiness = (ROOT / "docs" / "release-readiness.md").read_text(encoding="utf-8")
+    legacy_plan = (ROOT / "plan_07_07_26.md").read_text(encoding="utf-8").lower()
+    usage_writer = (
+        ROOT / "src" / "agentflow_runtime" / "serving" / "api" / "auth" / "usage_writer.py"
+    ).read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert CI_HARDWARE_GAP_RECORD in baseline
+    assert CI_HARDWARE_GAP_RECORD in release_status
+    assert CI_HARDWARE_GAP_RECORD in readiness
+    assert CI_USAGE_WRITE_RECORD in legacy_plan
+    assert "не раннер" in legacy_plan
+    assert CI_USAGE_WRITE_RECORD in usage_writer
+    assert "ci performance interpretation evidence pair sub-slice" in plan
+    for digest in CI_PERFORMANCE_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_ci_performance_results_and_boundaries_remain_conservative() -> None:
+    rows_by_record = {_identity_path(row["identity"]): row for row in _ci_performance_rows()}
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    assert set(rows_by_record) == set(CI_PERFORMANCE_RECORDS)
+    for record, phrases in CI_PERFORMANCE_FACTS.items():
+        row_text = _row_text(rows_by_record[record])
+        for phrase in phrases:
+            assert phrase in row_text
+    for record, phrases in CI_PERFORMANCE_BOUNDARIES.items():
+        row_text = _row_text(rows_by_record[record])
+        for phrase in phrases:
+            assert phrase in row_text
     assert manifest["production"]["status"] == "candidate"
 
 

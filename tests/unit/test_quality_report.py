@@ -9,10 +9,22 @@ import pytest
 import scripts.quality_report as quality_report
 
 
-def test_resolve_output_path_anchors_relative_paths() -> None:
-    assert quality_report.resolve_output_path("docs/quality.md") == (
-        quality_report.PROJECT_ROOT / "docs" / "quality.md"
+def test_default_output_path_is_an_ignored_runtime_artifact() -> None:
+    assert quality_report.OUTPUT_PATH == (
+        quality_report.PROJECT_ROOT / ".artifacts" / "quality" / "quality-report.md"
     )
+    assert quality_report.resolve_output_path(".artifacts/quality/quality-report.md") == (
+        quality_report.OUTPUT_PATH
+    )
+    assert (
+        ".artifacts/"
+        in (quality_report.PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    )
+
+
+def test_current_quality_reference_cannot_be_overwritten() -> None:
+    with pytest.raises(ValueError, match="export_quality_reference.py"):
+        quality_report.resolve_output_path("docs/quality.md")
 
 
 def test_build_generator_command_includes_skip_flags() -> None:

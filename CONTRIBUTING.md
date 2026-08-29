@@ -73,6 +73,7 @@ python scripts/check_performance.py --baseline docs/benchmark-baseline.json --cu
 python scripts/generate_contracts.py --check
 python scripts/export_openapi.py --check
 python scripts/export_sdk_capabilities.py --check
+python scripts/export_quality_reference.py --check
 ```
 
 After changing an API route or schema, run `python scripts/export_openapi.py`
@@ -83,6 +84,12 @@ After changing `[sdk]` claims or either public SDK client surface, run
 `python scripts/export_sdk_capabilities.py` and commit
 `docs/sdk-capabilities.md`. The `--check` form reproduces the tracked output;
 the project-claims validator also checks that every declared method exists.
+
+After changing `[quality]` claims, run
+`python scripts/export_quality_reference.py` and commit `docs/quality.md`.
+Host-specific reports belong to the ignored default output of
+`python scripts/quality_report.py`; do not use that collector to overwrite the
+tracked current reference.
 
 ## Dependabot pip PRs and `uv.lock`
 

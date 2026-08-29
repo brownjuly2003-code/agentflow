@@ -33,7 +33,7 @@ is needed.
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
-| Generated/reference artifacts | [OpenAPI ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [latest load benchmark](perf/load-benchmark-latest.md) | Regenerate the whole owned family; do not hand-edit generated output |
+| Generated/reference artifacts | [Generated-reference ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [latest load benchmark](perf/load-benchmark-latest.md) | Regenerate the whole owned family; do not hand-edit generated output |
 | Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |
 
 ## Generated-reference ownership
@@ -46,6 +46,7 @@ review. Do not hand-edit or update only part of the family.
 | --- | --- | --- | --- | --- |
 | OpenAPI and agent tools | `docs/openapi.json`, `docs/agent-tools/claude-tools.json`, `docs/agent-tools/openai-tools.json` | `python scripts/export_openapi.py` | `python scripts/export_openapi.py --check` | Current generated references; all three outputs move together. The contract workflow runs the drift check. |
 | SDK capabilities | `docs/sdk-capabilities.md` | `python scripts/export_sdk_capabilities.py` | `python scripts/export_sdk_capabilities.py --check` | Current generated reference from `config/project_claims.toml`; the CI project-claims gate also checks SDK method parity and output drift. |
+| Quality gates | `docs/quality.md` | `python scripts/export_quality_reference.py` | `python scripts/export_quality_reference.py --check` | Deterministic current reference from `config/project_claims.toml`; the CI project-claims gate checks config alignment and output drift. |
 
 Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
 `docs/perf/live_openapi_ci.json` are evidence, not current generated
@@ -56,6 +57,14 @@ The SDK capability family currently has one tracked output and no historical
 generated snapshots. If a dated capability snapshot is needed as evidence,
 preserve it under the evidence/archive policy instead of refreshing it as the
 current contract.
+
+`docs/quality.md` contains only reproducible quality-gate claims. The dynamic
+`scripts/quality_report.py` collector writes
+`.artifacts/quality/quality-report.md` by default because its timestamp and
+coverage, security, mutation, chaos, and load inputs are host-specific. The
+last tracked dynamic report is preserved as a
+[historical generated snapshot](archive/quality-report-2026-07-23.md); do not
+refresh it as the current reference.
 
 ## Sources of truth
 

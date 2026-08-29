@@ -27,7 +27,8 @@ from scripts.security_check import (  # noqa: E402
 )
 from tests.load.thresholds import LOAD_PROFILE  # noqa: E402
 
-OUTPUT_PATH = PROJECT_ROOT / "docs" / "quality.md"
+OUTPUT_PATH = PROJECT_ROOT / ".artifacts" / "quality" / "quality-report.md"
+CURRENT_REFERENCE_PATH = PROJECT_ROOT / "docs" / "quality.md"
 NODEIDS_CACHE_PATH = PROJECT_ROOT / ".pytest_cache" / "v" / "cache" / "nodeids"
 SECURITY_TIMEOUT_SECONDS = 300
 COLLECTION_TIMEOUT_SECONDS = 120
@@ -121,9 +122,13 @@ def should_skip_docker(skip_docker_arg: bool) -> bool:
 
 def resolve_output_path(output: str) -> Path:
     output_path = Path(output)
-    if output_path.is_absolute():
-        return output_path
-    return PROJECT_ROOT / output_path
+    resolved = output_path if output_path.is_absolute() else PROJECT_ROOT / output_path
+    if resolved.resolve() == CURRENT_REFERENCE_PATH.resolve():
+        raise ValueError(
+            "docs/quality.md is owned by `python scripts/export_quality_reference.py`; "
+            "write host-specific quality snapshots under .artifacts/ instead"
+        )
+    return resolved
 
 
 def build_generator_command(
@@ -701,7 +706,11 @@ def render_markdown(
 
 def main() -> int:
     args = parse_args()
-    output_path = resolve_output_path(args.output)
+    try:
+        output_path = resolve_output_path(args.output)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     skip_docker = should_skip_docker(args.skip_docker)
     generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     suite_metrics = [collect_suite_metric(name, paths) for name, paths in TEST_SUITES.items()]

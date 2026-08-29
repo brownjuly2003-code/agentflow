@@ -16,6 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.export_quality_reference import (  # noqa: E402
+    _build_artifacts as _build_quality_reference_artifacts,
+)
 from scripts.export_sdk_capabilities import (  # noqa: E402
     _build_artifacts as _build_sdk_capability_artifacts,
 )
@@ -168,6 +171,16 @@ def _validate_quality_gates(root: Path, manifest: dict[str, Any]) -> list[str]:
     codecov_patch = int(codecov["coverage"]["status"]["patch"]["default"]["target"].rstrip("%"))
     if codecov_patch != patch_floor:
         errors.append(f"codecov.yml: patch coverage target {codecov_patch} != claims {patch_floor}")
+
+    for docs_path, expected_docs in _build_quality_reference_artifacts(root, manifest):
+        relative = docs_path.relative_to(root).as_posix()
+        if not docs_path.is_file():
+            errors.append(f"{relative}: generated quality reference is missing")
+        elif docs_path.read_text(encoding="utf-8") != expected_docs:
+            errors.append(
+                f"{relative}: generated quality reference is stale; regenerate with "
+                "`python scripts/export_quality_reference.py`"
+            )
     return errors
 
 

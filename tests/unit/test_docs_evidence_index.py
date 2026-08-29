@@ -1234,6 +1234,45 @@ SOAK_UNCLAIMED_BOUNDARIES = (
     "rollback pass",
     "production acceptance",
 )
+SOAK_RCA_HEADING = "## Golden soak cross-run causal analysis"
+SOAK_RCA_RECORD = "docs/perf/golden-4h-soak-failures-01-05-rca-2026-08-09.md"
+SOAK_RCA_DATE = "2026-08-09"
+SOAK_RCA_DIGEST = "3f501d06bd85e6c1b38d34767089b57f5369bff8d6081f2bc90306868a4ac9c3"
+SOAK_RCA_FACTS = (
+    "read-only",
+    "five consumed soak attempts",
+    "-01",
+    "-05",
+    "no soak pass",
+    "dual_mean_90",
+    "not started",
+    "unresolved_flink_terminal_failure",
+    "0/2",
+    "container-runtime",
+    "kafka data loss",
+    "1,440,000/1,440,000",
+    "99.99979",
+    "guest-clock backward jumps",
+)
+SOAK_RCA_BOUNDARIES = (
+    "complementary",
+    "not a supersession",
+    "clock jump alone",
+    "producer failure",
+    "kafka failure",
+    "oom",
+    "verifier load",
+    "pod-topology failure",
+    "one exact flink exception",
+    "post-failure recovery",
+    "consumed",
+    "does not authorize",
+    "rerun",
+    "live remediation",
+    "helm rollback",
+    "production elevation",
+    "candidate",
+)
 HISTORICAL_CANARY_SOAK_HEADING = "## Historical canary-failure and soak-start records"
 RESOURCE_BLOCKER_RECORD = "docs/perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md"
 CANARY_TRAFFIC_DATE = "2026-08-02"
@@ -1556,6 +1595,14 @@ def _kind_soak_rows() -> list[dict[str, str]]:
 
 def _kind_soak_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _kind_soak_rows()]
+
+
+def _soak_rca_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(SOAK_RCA_HEADING)
+
+
+def _soak_rca_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _soak_rca_rows()]
 
 
 def _historical_canary_soak_rows() -> list[dict[str, str]]:
@@ -2815,6 +2862,82 @@ def test_kind_soak_boundaries_remain_conservative() -> None:
         assert phrase in canary
     for phrase in SOAK_UNCLAIMED_BOUNDARIES:
         assert phrase in soak
+
+
+def test_golden_soak_rca_index_lists_one_bounded_record() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    kind_soak_at = text.index(KIND_SOAK_HEADING)
+    rca_at = text.index(SOAK_RCA_HEADING)
+    f10_at = text.index(F10_HEADING)
+    rows = _soak_rca_rows()
+    indexed = _soak_rca_record_paths()
+
+    assert kind_soak_at < rca_at < f10_at
+    assert indexed == [SOAK_RCA_RECORD]
+    assert Counter(indexed) == Counter((SOAK_RCA_RECORD,))
+    assert len(rows) == 1
+    row = rows[0]
+    assert list(row) == list(REQUIRED_FIELDS)
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == SOAK_RCA_DATE
+    assert (ROOT / SOAK_RCA_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_golden_soak_rca_complements_soak_05_without_supersession() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), SOAK_RCA_HEADING)
+    section_text = " ".join(section.lower().split())
+    row = _soak_rca_rows()[0]
+    resolved_links = {_resolve_index_link(target) for target in LINK_RE.findall(section)}
+
+    assert "complementary" in section_text
+    assert "does not supersede" in section_text
+    assert resolved_links == {SOAK_RCA_RECORD, SOAK_05_RECORD}
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+
+
+def test_golden_soak_rca_record_keeps_published_digest() -> None:
+    assert _soak_rca_record_paths() == [SOAK_RCA_RECORD]
+    digest = hashlib.sha256((ROOT / SOAK_RCA_RECORD).read_bytes()).hexdigest()
+    assert digest == SOAK_RCA_DIGEST
+
+
+def test_golden_soak_rca_sources_and_plan_match_the_index() -> None:
+    assert _soak_rca_record_paths() == [SOAK_RCA_RECORD]
+    retention = (ROOT / "flink-failure-evidence-retention.md").read_text(encoding="utf-8")
+    policy = (ROOT / "scripts" / "soak_observer_policy.py").read_text(encoding="utf-8")
+    policy_tests = (ROOT / "tests" / "unit" / "test_soak_observer_policy.py").read_text(
+        encoding="utf-8"
+    )
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert SOAK_RCA_RECORD in retention
+    assert SOAK_RCA_RECORD in policy
+    assert SOAK_RCA_RECORD in policy_tests
+    assert manifest["production"]["latest_soak_attempt"] == SOAK_05_RECORD
+    assert SOAK_RCA_RECORD not in manifest["required_evidence"]
+    assert "golden soak cross-run rca evidence sub-slice" in plan
+    assert SOAK_RCA_DIGEST in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_golden_soak_rca_result_and_boundary_remain_conservative() -> None:
+    row = _soak_rca_rows()[0]
+    row_text = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in SOAK_RCA_FACTS:
+        assert phrase in row_text
+    for phrase in SOAK_RCA_BOUNDARIES:
+        assert phrase in row_text
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_historical_canary_soak_section_follows_checkpoint_readiness() -> None:

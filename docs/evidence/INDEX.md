@@ -452,6 +452,21 @@ means no supersession is recorded.
 | [golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](../perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md) | 2026-08-07 | PASS_KIND_RESIDUAL_20 only for the D+C1-20 kind-residual contract: residual after produce 7.5127 s within 20 s, 2000/2000 exactness with DLQ/lag zero | None | None | Does not claim dual-mean >=90 PASS (`applied_mean_eps=77.9059` is not dual-mean >=90 PASS), four-hour soak PASS, Helm rollback PASS, or production acceptance; production.status remains candidate. |
 | [golden-4h-soak-05-failure-2026-08-08.md](../perf/golden-4h-soak-05-failure-2026-08-08.md) | 2026-08-08 | SOAK_FAIL for identity `-05`: producer 1,440,000/1,440,000 with zero producer failures and about 99.99979 eps, but overall emitted result SOAK_FAIL; Flink was terminal FAILED, no dual-mean verifier PASS JSON existed, and corrected rollback was not started; diagnosis UNRESOLVED_FLINK_TERMINAL_FAILURE due to an evidence-retention gap | [golden-4h-soak-start-2026-08-07.md](../perf/golden-4h-soak-start-2026-08-07.md) | None | Does not claim soak PASS, dual-mean PASS, rollback PASS, or production acceptance; the later topology ABORT text is a downstream symptom, not the cause of the Flink failure; production.status remains candidate and the combined gate stays open. |
 
+## Golden soak cross-run causal analysis
+
+This table catalogues the read-only causal analysis across consumed golden-soak
+attempts `-01` through `-05`. It is complementary to the canonical
+[`-05` outcome](../perf/golden-4h-soak-05-failure-2026-08-08.md): the RCA
+preserves cross-run confidence levels and retention gaps but does not supersede
+that current latest-soak record or change its claim ownership. The RCA uses
+`None`/`None` because analysis is not a document supersession relationship.
+Columns are identity, ISO date, result, supersedes, superseded by, and claim
+boundary.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [golden-4h-soak-failures-01-05-rca-2026-08-09.md](../perf/golden-4h-soak-failures-01-05-rca-2026-08-09.md) | 2026-08-09 | Read-only RCA of five consumed soak attempts `-01` through `-05`: no soak PASS, no `dual_mean_90` PASS JSON, and corrected Helm rollback not started. Runs `-01`/`-02` show high-confidence shared VM/control-plane disruption but unresolved exact exceptions; `-03` admitted a `RUNNING 0/2` job; `-04` proves a container-runtime/control-plane infrastructure failure and Kafka data loss as a post-collapse recovery blocker; `-05` produced 1,440,000/1,440,000 at 99.99979 EPS before terminal Flink failure and remains `UNRESOLVED_FLINK_TERMINAL_FAILURE`. Guest-clock backward jumps appear in every failure window. | None | None | Complementary to the canonical `-05` report, not a supersession. It does not prove that a clock jump alone caused `-01`, `-02`, or `-05`; does not relabel `-05` as producer failure, Kafka failure, OOM, verifier load, or pod-topology failure; and does not claim one exact Flink exception across all five attempts. The P0 Kafka exceptions are post-failure recovery evidence. Identities `-01` through `-05` are consumed. This record does not authorize a rerun, live remediation, Helm rollback, production elevation, push, or identity reuse; `production.status` remains `candidate`. |
+
 ## F-10 rollback and soak-capacity records (2026-08-23)
 
 These two records stay at the repository root because `docs/STATUS.md`,

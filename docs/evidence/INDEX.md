@@ -12,7 +12,8 @@ locations. New or deliberately migrated evidence belongs under
 series) rather than the documentation root.
 
 Entry documents (start here, not below): `README.md`, `docs/STATUS.md`,
-`docs/SESSION_HANDOFF.md`, `docs/operations/ci-soak-next-session-runbook.md`.
+`docs/SESSION_HANDOFF.md`, [`docs/perf/README.md`](../perf/README.md), and
+`docs/operations/ci-soak-next-session-runbook.md`.
 
 ## CI-soak rehearsal series (r1–r12, consumed)
 
@@ -54,6 +55,18 @@ superseded.
 | [security-s12-2026-07-09.md](security-s12-2026-07-09.md) | 2026-07-09 | offline/unit remainder closed; third-party pen-test **not** claimed | None | None | Does not claim an external penetration test or production acceptance; live schemathesis remains the CI contract, and the live ClickHouse execution matrix remains a separate gate. |
 | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
 | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
+
+## Historical OpenAPI contract divergence diagnostic
+
+This table catalogues one immutable diagnostic identity for a dated local
+OpenAPI contract-test divergence. The record explains a compatibility
+normalization; it is not a document supersession chain. Columns are identity,
+ISO date, result, supersedes, superseded by, and claim boundary. `None` means
+no supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [test_openapi_compliance-divergence-2026-04-25.md](../perf/test_openapi_compliance-divergence-2026-04-25.md) | 2026-04-25 | Point-in-time contract-test diagnostic: local Python 3.13.7, FastAPI 0.128.0, Pydantic 2.12.5, and Starlette 0.50.0 added `ValidationError` fields `input` and `ctx` relative to the project `.venv` on FastAPI 0.135.3 and the Docker CI-like line on FastAPI 0.136.1. The project `.venv` passed on Python 3.13.7, ruling out Python 3.13 itself. Normalization was limited to the FastAPI-owned validation-error fields while project-owned schemas and paths remained strict. | None | None | Historical local diagnostic of one FastAPI-version-specific schema divergence. This is not a full Python/FastAPI/Pydantic/Starlette compatibility matrix and does not establish runtime API acceptance, production compatibility, an SLA, or production acceptance; `production.status` remains `candidate`. |
 
 ## Historical authentication performance baseline
 

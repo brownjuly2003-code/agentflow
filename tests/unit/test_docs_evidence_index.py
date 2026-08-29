@@ -37,6 +37,34 @@ PROTECTED_DIGESTS = {
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
     ),
 }
+OPENAPI_DIVERGENCE_HEADING = "## Historical OpenAPI contract divergence diagnostic"
+OPENAPI_DIVERGENCE_RECORD = "docs/perf/test_openapi_compliance-divergence-2026-04-25.md"
+OPENAPI_DIVERGENCE_DATE = "2026-04-25"
+OPENAPI_DIVERGENCE_DIGEST = "aeecc15d9d1892259259f9fd49d147939c97a81178c4e36fec03d278eb746c6f"
+OPENAPI_DIVERGENCE_FACTS = (
+    "python 3.13.7",
+    "fastapi 0.128.0",
+    "pydantic 2.12.5",
+    "starlette 0.50.0",
+    "fastapi 0.135.3",
+    "fastapi 0.136.1",
+    "validationerror",
+    "input",
+    "ctx",
+    "ruling out python 3.13",
+    "fastapi-owned",
+    "project-owned schemas and paths",
+)
+OPENAPI_DIVERGENCE_BOUNDARIES = (
+    "historical local diagnostic",
+    "fastapi-version-specific",
+    "not a full python/fastapi/pydantic/starlette compatibility matrix",
+    "does not establish runtime api acceptance",
+    "production compatibility",
+    "an sla",
+    "production acceptance",
+    "candidate",
+)
 HISTORICAL_AUTH_BENCH_HEADING = "## Historical authentication performance baseline"
 HISTORICAL_AUTH_BENCH_RECORD = "docs/perf/auth-bench-2026-05-26.md"
 HISTORICAL_AUTH_BENCH_DATE = "2026-05-26"
@@ -1418,6 +1446,14 @@ def _security_dependency_rows() -> list[dict[str, str]]:
     return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
 
 
+def _openapi_divergence_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(OPENAPI_DIVERGENCE_HEADING)
+
+
+def _openapi_divergence_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _openapi_divergence_rows()]
+
+
 def _historical_auth_bench_rows() -> list[dict[str, str]]:
     return _rows_for_heading(HISTORICAL_AUTH_BENCH_HEADING)
 
@@ -1766,6 +1802,95 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
     for row in _security_dependency_rows():
         _assert_supersession_cell(row.get("supersedes", ""))
         _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_openapi_divergence_index_lists_one_bounded_record() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    security_at = text.index(SECURITY_DEPENDENCY_HEADING)
+    divergence_at = text.index(OPENAPI_DIVERGENCE_HEADING)
+    auth_at = text.index(HISTORICAL_AUTH_BENCH_HEADING)
+    indexed = _openapi_divergence_record_paths()
+    rows = _openapi_divergence_rows()
+
+    assert security_at < divergence_at < auth_at
+    assert indexed == [OPENAPI_DIVERGENCE_RECORD]
+    assert Counter(indexed) == Counter((OPENAPI_DIVERGENCE_RECORD,))
+    assert len(rows) == 1
+    row = rows[0]
+    assert list(row) == list(REQUIRED_FIELDS)
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == OPENAPI_DIVERGENCE_DATE
+    assert (ROOT / OPENAPI_DIVERGENCE_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_openapi_divergence_is_one_diagnostic_not_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), OPENAPI_DIVERGENCE_HEADING).lower().split()
+    )
+    row = _openapi_divergence_rows()[0]
+
+    assert "one immutable diagnostic identity" in section
+    assert "not a document supersession chain" in section
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+
+
+def test_openapi_divergence_record_keeps_published_digest() -> None:
+    assert _openapi_divergence_record_paths() == [OPENAPI_DIVERGENCE_RECORD]
+    digest = hashlib.sha256((ROOT / OPENAPI_DIVERGENCE_RECORD).read_bytes()).hexdigest()
+    assert digest == OPENAPI_DIVERGENCE_DIGEST
+
+
+def test_openapi_divergence_sources_and_plan_match_the_index() -> None:
+    source = (ROOT / OPENAPI_DIVERGENCE_RECORD).read_text(encoding="utf-8")
+    index = INDEX.read_text(encoding="utf-8")
+    contract_test = (ROOT / "tests" / "contract" / "test_openapi_compliance.py").read_text(
+        encoding="utf-8"
+    )
+    exporter = (ROOT / "scripts" / "export_openapi.py").read_text(encoding="utf-8")
+    exporter_test = (ROOT / "tests" / "unit" / "test_export_openapi.py").read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert "test_documented_openapi_snapshot_matches_live_api" in source
+    assert "python 3.13 passed" in source.lower()
+    for phrase in (
+        "FastAPI 0.128.0",
+        "Pydantic 2.12.5",
+        "Starlette 0.50.0",
+        "FastAPI 0.135.3",
+        "FastAPI 0.136.1",
+        "`components.schemas.ValidationError.properties.input` and `ctx`",
+        "strict for project-owned schemas and paths",
+    ):
+        assert phrase in source
+    assert "(../perf/README.md)" in index
+    assert "_normalize_openapi_schemas" in contract_test
+    assert "_normalize_fastapi_validation_error_schema" in exporter
+    assert "_normalize_fastapi_validation_error_schema" in exporter_test
+    for implementation in (contract_test, exporter):
+        assert 'properties.pop("input", None)' in implementation
+        assert 'properties.pop("ctx", None)' in implementation
+    assert "historical openapi contract divergence diagnostic sub-slice" in plan
+    assert OPENAPI_DIVERGENCE_DIGEST in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_openapi_divergence_result_and_boundary_remain_conservative() -> None:
+    row = _openapi_divergence_rows()[0]
+    row_text = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in OPENAPI_DIVERGENCE_FACTS:
+        assert phrase in row_text
+    for phrase in OPENAPI_DIVERGENCE_BOUNDARIES:
+        assert phrase in row_text
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_historical_auth_bench_index_lists_one_bounded_record() -> None:

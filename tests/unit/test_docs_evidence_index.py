@@ -209,6 +209,60 @@ BV_ORDER_CANONICAL_PG_BOUNDARIES = (
     "production acceptance",
     "candidate",
 )
+NL_SQL_EVALUATION_HEADING = "## NL-to-SQL evaluation records"
+RULE_BASED_NL_SQL_RECORD = "docs/perf/nl-sql-eval-2026-07-01.md"
+SONNET_5_NL_SQL_RECORD = "docs/perf/nl-sql-eval-sonnet5-2026-07-01.md"
+NL_SQL_EVALUATION_DATES = {
+    RULE_BASED_NL_SQL_RECORD: "2026-07-01",
+    SONNET_5_NL_SQL_RECORD: "2026-07-01",
+}
+NL_SQL_EVALUATION_DIGESTS = {
+    RULE_BASED_NL_SQL_RECORD: ("c1de34750781650ed249c50feb66451cec031ab17e8837aebc66e67d644921a8"),
+    SONNET_5_NL_SQL_RECORD: ("472cb424b3866f675817fd8f3e1e7b1d887f98675926ff7472c2d97a2df23e8a"),
+}
+RULE_BASED_NL_SQL_FACTS = (
+    "rule-based",
+    "shipped default",
+    "27.8%",
+    "5/18",
+    "62.5%",
+    "5/8",
+    "0.0%",
+    "0/10",
+)
+SONNET_5_NL_SQL_FACTS = (
+    "sonnet 5",
+    "gracekelly",
+    "opt-in",
+    "100.0%",
+    "18/18",
+    "8/8",
+    "10/10",
+    "single generation pass",
+    "no repairs",
+    "11-24 s",
+    "4.5 min",
+)
+RULE_BASED_NL_SQL_BOUNDARIES = (
+    "direct translator",
+    "time windows",
+    "no-op",
+    "pii deny-gate",
+    "88.9%",
+    "companion record",
+    "not a production",
+    "candidate",
+)
+SONNET_5_NL_SQL_BOUNDARIES = (
+    "18 curated demo questions",
+    "not a benchmark",
+    "live and non-deterministic",
+    "not pinned in ci",
+    "direct translator",
+    "pii deny-gate",
+    "not a production",
+    "candidate",
+)
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
 DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
@@ -1124,6 +1178,14 @@ def _postgresql_runtime_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _postgresql_runtime_rows()]
 
 
+def _nl_sql_evaluation_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(NL_SQL_EVALUATION_HEADING)
+
+
+def _nl_sql_evaluation_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _nl_sql_evaluation_rows()]
+
+
 def _current_freshness_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CURRENT_FRESHNESS_HEADING)
 
@@ -1662,6 +1724,90 @@ def test_postgresql_runtime_results_and_boundaries_remain_conservative() -> None
         assert phrase in canonical_order
     for phrase in BV_ORDER_CANONICAL_PG_BOUNDARIES:
         assert phrase in canonical_order
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_nl_sql_evidence_index_lists_bounded_pair_with_required_fields() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    runtime_at = text.index(POSTGRESQL_RUNTIME_HEADING)
+    nl_sql_at = text.index(NL_SQL_EVALUATION_HEADING)
+    freshness_at = text.index(CURRENT_FRESHNESS_HEADING)
+    indexed = _nl_sql_evaluation_record_paths()
+    expected = (RULE_BASED_NL_SQL_RECORD, SONNET_5_NL_SQL_RECORD)
+    rows = _nl_sql_evaluation_rows()
+
+    assert runtime_at < nl_sql_at < freshness_at
+    assert indexed == list(expected)
+    assert Counter(indexed) == Counter(expected)
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 2
+    for row in rows:
+        for field in REQUIRED_FIELDS:
+            assert row[field].strip(), f"{field} is empty in {row!r}"
+        assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+        identity = _identity_path(row["identity"])
+        assert row["date"] == NL_SQL_EVALUATION_DATES[identity]
+        assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
+        targets = LINK_RE.findall(row["identity"])
+        assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_nl_sql_evidence_records_are_complementary_not_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), NL_SQL_EVALUATION_HEADING).lower().split()
+    )
+    rows = _nl_sql_evaluation_rows()
+
+    assert "complementary engine configurations" in section
+    assert "not a supersession chain" in section
+    assert "same 18-question harness" in section
+    for row in rows:
+        assert row["supersedes"] == "None"
+        assert row["superseded by"] == "None"
+        _assert_supersession_cell(row["supersedes"])
+        _assert_supersession_cell(row["superseded by"])
+
+
+def test_nl_sql_evidence_records_keep_published_digests() -> None:
+    indexed = set(_nl_sql_evaluation_record_paths())
+
+    assert indexed == set(NL_SQL_EVALUATION_DIGESTS)
+    for relative, expected in NL_SQL_EVALUATION_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_nl_sql_evidence_source_links_and_plan_match_the_index() -> None:
+    indexed = set(_nl_sql_evaluation_record_paths())
+    adr = (ROOT / "docs" / "decisions" / "0008-adopt-nl-sql-engine.md").read_text(encoding="utf-8")
+    baseline = (ROOT / RULE_BASED_NL_SQL_RECORD).read_text(encoding="utf-8")
+    sonnet = (ROOT / SONNET_5_NL_SQL_RECORD).read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert indexed == {RULE_BASED_NL_SQL_RECORD, SONNET_5_NL_SQL_RECORD}
+    assert SONNET_5_NL_SQL_RECORD in adr
+    assert Path(SONNET_5_NL_SQL_RECORD).name in baseline
+    assert Path(RULE_BASED_NL_SQL_RECORD).name in sonnet
+    assert "nl→sql evaluation evidence pair sub-slice" in plan
+    for digest in NL_SQL_EVALUATION_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_nl_sql_evidence_results_and_boundaries_remain_conservative() -> None:
+    rows = {_identity_path(row["identity"]): row for row in _nl_sql_evaluation_rows()}
+    rule_based = _row_text(rows[RULE_BASED_NL_SQL_RECORD])
+    sonnet = _row_text(rows[SONNET_5_NL_SQL_RECORD])
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in RULE_BASED_NL_SQL_FACTS:
+        assert phrase in rule_based
+    for phrase in RULE_BASED_NL_SQL_BOUNDARIES:
+        assert phrase in rule_based
+    for phrase in SONNET_5_NL_SQL_FACTS:
+        assert phrase in sonnet
+    for phrase in SONNET_5_NL_SQL_BOUNDARIES:
+        assert phrase in sonnet
     assert manifest["production"]["status"] == "candidate"
 
 

@@ -102,6 +102,20 @@ identity, ISO date, result, supersedes, superseded by, and claim boundary.
 | [control-plane-pg-verify-2026-07-03.md](../perf/control-plane-pg-verify-2026-07-03.md) | 2026-07-03 | Standalone PostgreSQL 17.5 control-plane live verification: 31/31 probes passed in 19.45s with psycopg 3.3.4; 8 threads produced one enqueue winner, 4 threads claimed without duplicates or loss, and restart re-drive, outbox/dead-letter rollback atomicity, alert-tick single-flight, two app boots sharing state, and `api_usage` persistence passed | None | None | Point-in-time standalone Windows trust auth stand, not a production deployment. The adapter uses no pooling and one connection per method; pooling remains a follow-up. Two sequential app boots do not prove an actual multi-pod rollout. This is not an SLA or production acceptance; `production.status` remains `candidate`. |
 | [bv-order-canonical-pg-smoke-2026-07-06.md](../perf/bv-order-canonical-pg-smoke-2026-07-06.md) | 2026-07-06 | PostgreSQL 16.14 canonical-order live smoke on Mac Colima/Docker: 17/17 assertions passed, 0 FAIL, over 8 deterministic orders; the 197166.67 total, SCD2 latest-wins collapse, soft-delete tombstone, pricing on 7 of 8 orders, and jurisdiction VAT at 5% and 20% matched the hand-verified contract | None | None | Point-in-time standalone seed smoke, not promoted CDC. The end-to-end CDC-to-serving variant remains open, and this view-logic run was not integrated with the control plane. It does not establish PostgreSQL 17.5 execution, production SLA, or production acceptance; `production.status` remains `candidate`. |
 
+## NL-to-SQL evaluation records
+
+This table catalogues two point-in-time results from the same 18-question
+harness and normalised gold set. They are complementary engine configurations,
+not a supersession chain: one measures the shipped rule-based default, while
+the other measures the opt-in GraceKelly/Sonnet path. Columns are identity, ISO
+date, result, supersedes, superseded by, and claim boundary. `None` means no
+supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [nl-sql-eval-2026-07-01.md](../perf/nl-sql-eval-2026-07-01.md) | 2026-07-01 | Shipped default rule-based translator on the fixed in-memory DuckDB harness: overall 27.8% (5/18), in-pattern 62.5% (5/8), and out-of-pattern 0.0% (0/10); three in-pattern misses exposed fixed-projection brittleness, while all ten out-of-pattern questions were untranslated | None | None | Point-in-time direct translator harness, not the served endpoint. Time windows were a deliberate no-op, so time-window precision was not tested; the `/query` PII deny-gate was also outside scope. The immutable source's companion cross-reference still says 88.9%; the companion record owns the final 100.0% post-normalisation outcome. This is not a production benchmark, SLA, or production acceptance; `production.status` remains `candidate`. |
+| [nl-sql-eval-sonnet5-2026-07-01.md](../perf/nl-sql-eval-sonnet5-2026-07-01.md) | 2026-07-01 | Opt-in Sonnet 5 via GraceKelly: 100.0% (18/18) overall, 100.0% (8/8) in-pattern, and 100.0% (10/10) out-of-pattern; each question used a single generation pass with no repairs, taking about 11-24 s per question and 4.5 min wall-clock total | None | None | Point-in-time direct translator result on 18 curated demo questions, not a benchmark. It is live and non-deterministic and not pinned in CI; GraceKelly is opt-in, while the shipped default remains rule-based. Time windows were a no-op and the served `/query` PII deny-gate was outside scope. This is not a production accuracy benchmark, SLA, or production acceptance; `production.status` remains `candidate`. |
+
 ## Current freshness evidence records
 
 This table is the audit catalogue for the current real-path freshness claim

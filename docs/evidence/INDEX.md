@@ -116,6 +116,20 @@ supersession is recorded.
 | [nl-sql-eval-2026-07-01.md](../perf/nl-sql-eval-2026-07-01.md) | 2026-07-01 | Shipped default rule-based translator on the fixed in-memory DuckDB harness: overall 27.8% (5/18), in-pattern 62.5% (5/8), and out-of-pattern 0.0% (0/10); three in-pattern misses exposed fixed-projection brittleness, while all ten out-of-pattern questions were untranslated | None | None | Point-in-time direct translator harness, not the served endpoint. Time windows were a deliberate no-op, so time-window precision was not tested; the `/query` PII deny-gate was also outside scope. The immutable source's companion cross-reference still says 88.9%; the companion record owns the final 100.0% post-normalisation outcome. This is not a production benchmark, SLA, or production acceptance; `production.status` remains `candidate`. |
 | [nl-sql-eval-sonnet5-2026-07-01.md](../perf/nl-sql-eval-sonnet5-2026-07-01.md) | 2026-07-01 | Opt-in Sonnet 5 via GraceKelly: 100.0% (18/18) overall, 100.0% (8/8) in-pattern, and 100.0% (10/10) out-of-pattern; each question used a single generation pass with no repairs, taking about 11-24 s per question and 4.5 min wall-clock total | None | None | Point-in-time direct translator result on 18 curated demo questions, not a benchmark. It is live and non-deterministic and not pinned in CI; GraceKelly is opt-in, while the shipped default remains rule-based. Time windows were a no-op and the served `/query` PII deny-gate was outside scope. This is not a production accuracy benchmark, SLA, or production acceptance; `production.status` remains `candidate`. |
 
+## Historical streaming-hop freshness record
+
+This table catalogues the dated Kafka-to-Flink streaming-hop measurement that
+preceded the complete serving bridge. It remains a separate measurement
+segment, not a supersession relationship: S8 extends the measured path through
+the serving stack and owns the current full event-to-metric claim without
+erasing the earlier hop-only observation. Columns are identity, ISO date,
+result, supersedes, superseded by, and claim boundary. `None` means no
+supersession is recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [freshness-realpath-2026-06-30.md](../perf/freshness-realpath-2026-06-30.md) | 2026-06-30 | Historical streaming-hop-only measurement on `deproject-mac`, macOS 13.7.8 / Intel i5-7500, Colima 6 GiB / 4 CPU, Flink 2.2.1-java17, Kafka 7.7.0, and Python 3.11.15: n=30 with 0 misses from `orders.raw` to `events.validated`; p50 2.50 s, p95 10.11 s, p99 15.42 s, and mean 3.33 s | None | None | Historical streaming-hop-only observation of `orders.raw` to `events.validated`. It does not include the serving bridge, ClickHouse, Redis, or API and is not event-to-metric evidence. S8 remains the current full-path claim owner and extends the measured path; this is not a supersession because the segment remains separately valid. Measured on a single-node Mac/Colima stand; not an SLA, a cross-host benchmark, or production acceptance. `production.status` remains `candidate`. |
+
 ## Current freshness evidence records
 
 This table is the audit catalogue for the current real-path freshness claim

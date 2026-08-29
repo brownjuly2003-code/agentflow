@@ -263,6 +263,43 @@ SONNET_5_NL_SQL_BOUNDARIES = (
     "not a production",
     "candidate",
 )
+HISTORICAL_STREAMING_HOP_HEADING = "## Historical streaming-hop freshness record"
+HISTORICAL_STREAMING_HOP_RECORD = "docs/perf/freshness-realpath-2026-06-30.md"
+HISTORICAL_STREAMING_HOP_DATE = "2026-06-30"
+HISTORICAL_STREAMING_HOP_DIGEST = "8ee9d878e24012530ee654fd75cd1f6338e96d24fdedb5f60a1dca2e7cfb408b"
+HISTORICAL_STREAMING_HOP_FACTS = (
+    "deproject-mac",
+    "macos 13.7.8",
+    "intel i5-7500",
+    "colima",
+    "6 gib / 4 cpu",
+    "flink 2.2.1-java17",
+    "kafka 7.7.0",
+    "python 3.11.15",
+    "n=30",
+    "0 misses",
+    "p50 2.50 s",
+    "p95 10.11 s",
+    "p99 15.42 s",
+    "mean 3.33 s",
+)
+HISTORICAL_STREAMING_HOP_BOUNDARIES = (
+    "historical streaming-hop-only",
+    "orders.raw",
+    "events.validated",
+    "does not include the serving bridge",
+    "clickhouse",
+    "redis",
+    "api",
+    "not event-to-metric",
+    "s8",
+    "current full-path claim owner",
+    "not a supersession",
+    "single-node mac/colima",
+    "not an sla",
+    "production acceptance",
+    "candidate",
+)
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
 DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
@@ -1184,6 +1221,14 @@ def _nl_sql_evaluation_rows() -> list[dict[str, str]]:
 
 def _nl_sql_evaluation_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _nl_sql_evaluation_rows()]
+
+
+def _historical_streaming_hop_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(HISTORICAL_STREAMING_HOP_HEADING)
+
+
+def _historical_streaming_hop_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _historical_streaming_hop_rows()]
 
 
 def _current_freshness_rows() -> list[dict[str, str]]:
@@ -2679,6 +2724,91 @@ def test_historical_capacity_blocker_boundaries_remain_conservative() -> None:
         assert phrase in checkpoint
     for phrase in SOAK_RESOURCE_BLOCKER_UNCLAIMED_BOUNDARIES:
         assert phrase in soak
+
+
+def test_historical_streaming_hop_index_lists_one_bounded_record() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    nl_sql_at = text.index(NL_SQL_EVALUATION_HEADING)
+    historical_at = text.index(HISTORICAL_STREAMING_HOP_HEADING)
+    current_at = text.index(CURRENT_FRESHNESS_HEADING)
+    indexed = _historical_streaming_hop_record_paths()
+    rows = _historical_streaming_hop_rows()
+
+    assert nl_sql_at < historical_at < current_at
+    assert indexed == [HISTORICAL_STREAMING_HOP_RECORD]
+    assert Counter(indexed) == Counter((HISTORICAL_STREAMING_HOP_RECORD,))
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 1
+    row = rows[0]
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == HISTORICAL_STREAMING_HOP_DATE
+    assert (ROOT / HISTORICAL_STREAMING_HOP_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_historical_streaming_hop_is_a_distinct_segment_not_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), HISTORICAL_STREAMING_HOP_HEADING)
+        .lower()
+        .split()
+    )
+    row = _historical_streaming_hop_rows()[0]
+    current = {_identity_path(item["identity"]): item for item in _current_freshness_rows()}[
+        REAL_PATH_FRESHNESS_RECORD
+    ]
+
+    assert "separate measurement segment" in section
+    assert "not a supersession" in section
+    assert "s8 extends the measured path" in section
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    assert current["supersedes"] == "None"
+    assert current["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+
+
+def test_historical_streaming_hop_record_keeps_published_digest() -> None:
+    assert _historical_streaming_hop_record_paths() == [HISTORICAL_STREAMING_HOP_RECORD]
+    digest = hashlib.sha256((ROOT / HISTORICAL_STREAMING_HOP_RECORD).read_bytes()).hexdigest()
+    assert digest == HISTORICAL_STREAMING_HOP_DIGEST
+
+
+def test_historical_streaming_hop_sources_and_plan_match_the_index() -> None:
+    historical = (ROOT / HISTORICAL_STREAMING_HOP_RECORD).read_text(encoding="utf-8")
+    current = (ROOT / REAL_PATH_FRESHNESS_RECORD).read_text(encoding="utf-8")
+    bridge = (ROOT / "docs" / "architecture" / "serving-bridge.md").read_text(encoding="utf-8")
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert Path(REAL_PATH_FRESHNESS_RECORD).name in historical
+    assert HISTORICAL_STREAMING_HOP_RECORD in current
+    assert Path(HISTORICAL_STREAMING_HOP_RECORD).name in bridge
+    assert manifest["latency"]["real_path"]["evidence"] == REAL_PATH_FRESHNESS_RECORD
+    assert HISTORICAL_STREAMING_HOP_RECORD not in manifest["required_evidence"]
+    assert "historical streaming-hop freshness sub-slice" in plan
+    assert HISTORICAL_STREAMING_HOP_DIGEST in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_historical_streaming_hop_result_and_boundary_remain_conservative() -> None:
+    row = _historical_streaming_hop_rows()[0]
+    historical = _row_text(row)
+    current = {_identity_path(item["identity"]): item for item in _current_freshness_rows()}[
+        REAL_PATH_FRESHNESS_RECORD
+    ]
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in HISTORICAL_STREAMING_HOP_FACTS:
+        assert phrase in historical
+    for phrase in HISTORICAL_STREAMING_HOP_BOUNDARIES:
+        assert phrase in historical
+    assert "3.02 s" in _row_text(current)
+    assert "5.70 s" in _row_text(current)
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_current_freshness_index_lists_the_bounded_pair_with_required_fields() -> None:

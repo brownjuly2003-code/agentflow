@@ -20,7 +20,7 @@
 - `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60`
 - `pytest tests/integration/ -v --tb=short`
 - `python scripts/run_benchmark.py`
-- `python scripts/check_performance.py docs/benchmark-baseline.json /tmp/current.json`
+- `python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20`
 - `terraform fmt -check -recursive infrastructure/terraform/`
 - `terraform init -backend=false && terraform validate`
 

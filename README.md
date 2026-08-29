@@ -229,7 +229,7 @@ python scripts/run_windows_unit_shards.py tests/unit
 
 # benchmark and regression gate
 python scripts/run_benchmark.py
-python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
+python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20
 
 # benchmark trend: [.github/perf-history.json](.github/perf-history.json) is appended on every main push;
 # render the history locally with `make perf-plot` (writes docs/perf/history.html).

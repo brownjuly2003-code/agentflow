@@ -64,7 +64,8 @@ python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 3. Benchmark does not regress past the release gate:
 
 ```bash
-python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
+python scripts/run_benchmark.py
+python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20
 ```
 
 4. Contracts are still in sync:

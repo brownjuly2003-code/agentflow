@@ -86,6 +86,23 @@ ISO date, result, supersedes, superseded by, and claim boundary.
 | [ci-hardware-gap-2026-05-24.md](../perf/ci-hardware-gap-2026-05-24.md) | 2026-05-24 | Point-in-time A03 decision: after local entity p99 fell from 936 ms to 167 ms (-82%) and throughput rose from 68 to 138 RPS, the 2026-04-25 shared `ubuntu-latest` baseline remained 600-800 ms for GET and 740-980 ms for POST endpoints. A 1.3x CI headroom was adopted with 900 ms, 1100 ms, and 1200 ms endpoint gates while the local p99 < 200 ms SLO remained unchanged. | None | None | Dated calibration on shared 2-core, 4-7 GB runners. It does not prove every later CI tail is hardware, does not supersede later application-bottleneck findings, and does not authorize future threshold relaxation without the record's re-evaluation triggers. This is not a production latency SLA or production acceptance; `production.status` remains `candidate`. |
 | [usage-write-bifurcation-2026-07-09.md](../perf/usage-write-bifurcation-2026-07-09.md) | 2026-07-09 | Finding N1 root cause and fix: three red runs clustered at 29.4, 29.1, and 28.9 RPS (1.7% spread), while nine green runs ranged from 37.0 to 46.2 RPS; a 1.5x RPS change accompanied a 10x p99 change. Synchronous DuckDB `api_usage` commits capped the API at `1/s`; an injected 34 ms write reproduced 31.4 RPS, while the background path held 37.9 RPS and 37.2 RPS at 34 ms and 60 ms. The fix uses a queue, one background writer, and batch commits. | None | None | Corrects only the runner-speed reading of finding N1 and does not supersede the A03 hardware-gap record or deny remaining runner variability. Durability moves after the response, so a crash can lose queued rows; the admin read is affected, but `api_usage` is not billing and not rate limiting. This is not a production throughput SLA or production acceptance; `production.status` remains `candidate`. |
 
+## ARM shared-runner benchmark packet
+
+This table catalogues one immutable benchmark identity: the dated human-authored
+summary. Its tracked packet also contains the generated companions
+[`docs/perf/arm-benchmark-2026-06-05/arm-benchmark.md`](../perf/arm-benchmark-2026-06-05/arm-benchmark.md),
+[`docs/perf/arm-benchmark-2026-06-05/arm-host-metadata.md`](../perf/arm-benchmark-2026-06-05/arm-host-metadata.md),
+and
+[`docs/perf/arm-benchmark-2026-06-05/arm-current.json`](../perf/arm-benchmark-2026-06-05/arm-current.json).
+Those generated companions are protected as the raw packet, not separate
+evidence identities. The summary uses `None`/`None`; this packet does not form
+a document supersession chain. Columns are identity, ISO date, result,
+supersedes, superseded by, and claim boundary.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [arm-server-benchmark-2026-06-05.md](../perf/arm-server-benchmark-2026-06-05.md) | 2026-06-05 | Dispatch-only workflow run 27012731848 at commit `60e0f3d` on GitHub-hosted `ubuntu-24.04-arm`: Neoverse-N2, 4 vCPU, 15.6 GB RAM, and Python 3.11.15. The canonical DuckDB harness used 50 users, spawn rate 10/s, duration 60 s, and a 10 s warmup. It completed 554 requests with zero failures at 37.41 RPS, aggregate p50 6.0 ms, p95 44.0 ms, and p99 150.0 ms. Every entity release gate passed; worst entity p50 4.0 ms and worst entity p99 150.0 ms. | None | None | Point-in-time result on a shared CI runner, not a dedicated 16-vCPU production host; there is no c8g.4xlarge performance claim. The run used DuckDB and a synthetic seeded fixture. The historical x64 figures are not strictly comparable across hosts and this is not a regression claim. It is not production-class hardware, not a production latency SLA, and not production acceptance; `production.status` remains `candidate`. |
+
 ## ClickHouse serving-path verification record
 
 This table catalogues the ADR 0006 Phase 1 serving surface behavior capture.

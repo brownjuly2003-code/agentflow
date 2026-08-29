@@ -144,6 +144,53 @@ CI_PERFORMANCE_BOUNDARIES = {
         "candidate",
     ),
 }
+ARM_BENCHMARK_HEADING = "## ARM shared-runner benchmark packet"
+ARM_BENCHMARK_RECORD = "docs/perf/arm-server-benchmark-2026-06-05.md"
+ARM_REPORT_COMPANION = "docs/perf/arm-benchmark-2026-06-05/arm-benchmark.md"
+ARM_HOST_COMPANION = "docs/perf/arm-benchmark-2026-06-05/arm-host-metadata.md"
+ARM_JSON_COMPANION = "docs/perf/arm-benchmark-2026-06-05/arm-current.json"
+ARM_BENCHMARK_DATE = "2026-06-05"
+ARM_PACKET_DIGESTS = {
+    ARM_BENCHMARK_RECORD: ("a88427346c891915652a3ba57fc9e018d28628ad58f1d36207f84e1b74a73452"),
+    ARM_REPORT_COMPANION: ("7b89d09404487c9dbf05eddf673c8a4c0721e1d3cdc1efd650769b3d9d67056b"),
+    ARM_HOST_COMPANION: ("39693a4921e167284f8a4028ca22979c33c62d7438a4caf54d3316a2c13a320e"),
+    ARM_JSON_COMPANION: ("68d3398350caf25083882074dc340f1e12b444751e712bac81865cbb04fbdd62"),
+}
+ARM_BENCHMARK_FACTS = (
+    "ubuntu-24.04-arm",
+    "neoverse-n2",
+    "4 vcpu",
+    "15.6 gb",
+    "python 3.11.15",
+    "dispatch-only",
+    "27012731848",
+    "60e0f3d",
+    "50 users",
+    "10/s",
+    "60 s",
+    "10 s warmup",
+    "554 requests",
+    "zero failures",
+    "37.41 rps",
+    "p50 6.0 ms",
+    "p95 44.0 ms",
+    "p99 150.0 ms",
+    "worst entity p50 4.0 ms",
+    "worst entity p99 150.0 ms",
+)
+ARM_BENCHMARK_BOUNDARIES = (
+    "shared ci runner",
+    "not a dedicated 16-vcpu",
+    "no c8g.4xlarge performance claim",
+    "duckdb",
+    "synthetic",
+    "not strictly comparable",
+    "not a regression claim",
+    "not production-class hardware",
+    "not a production latency sla",
+    "production acceptance",
+    "candidate",
+)
 CLICKHOUSE_SERVING_HEADING = "## ClickHouse serving-path verification record"
 CLICKHOUSE_SERVING_RECORD = "docs/perf/clickhouse-serving-verify-2026-07-02.md"
 CLICKHOUSE_SERVING_DATE = "2026-07-02"
@@ -1387,6 +1434,14 @@ def _ci_performance_record_paths() -> list[str]:
     return [_identity_path(row.get("identity", "")) for row in _ci_performance_rows()]
 
 
+def _arm_benchmark_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(ARM_BENCHMARK_HEADING)
+
+
+def _arm_benchmark_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _arm_benchmark_rows()]
+
+
 def _clickhouse_serving_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CLICKHOUSE_SERVING_HEADING)
 
@@ -1867,6 +1922,97 @@ def test_ci_performance_results_and_boundaries_remain_conservative() -> None:
         row_text = _row_text(rows_by_record[record])
         for phrase in phrases:
             assert phrase in row_text
+    assert manifest["production"]["status"] == "candidate"
+
+
+def test_arm_shared_runner_index_lists_one_bounded_identity() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    ci_at = text.index(CI_PERFORMANCE_HEADING)
+    arm_at = text.index(ARM_BENCHMARK_HEADING)
+    serving_at = text.index(CLICKHOUSE_SERVING_HEADING)
+    rows = _arm_benchmark_rows()
+    indexed = _arm_benchmark_record_paths()
+
+    assert ci_at < arm_at < serving_at
+    assert indexed == [ARM_BENCHMARK_RECORD]
+    assert Counter(indexed) == Counter((ARM_BENCHMARK_RECORD,))
+    assert len(rows) == 1
+    row = rows[0]
+    assert list(row) == list(REQUIRED_FIELDS)
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == ARM_BENCHMARK_DATE
+    assert (ROOT / ARM_BENCHMARK_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_arm_shared_runner_generated_companions_are_not_separate_identities() -> None:
+    section = _section(INDEX.read_text(encoding="utf-8"), ARM_BENCHMARK_HEADING)
+    section_text = " ".join(section.lower().split())
+    resolved_markdown_links = {_resolve_index_link(target) for target in LINK_RE.findall(section)}
+    row = _arm_benchmark_rows()[0]
+
+    assert "one immutable benchmark identity" in section_text
+    assert "generated companions" in section_text
+    assert "not separate evidence identities" in section_text
+    assert resolved_markdown_links == {
+        ARM_BENCHMARK_RECORD,
+        ARM_REPORT_COMPANION,
+        ARM_HOST_COMPANION,
+    }
+    assert ARM_JSON_COMPANION in section
+    assert _arm_benchmark_record_paths() == [ARM_BENCHMARK_RECORD]
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+
+
+def test_arm_shared_runner_packet_keeps_published_digests() -> None:
+    assert _arm_benchmark_record_paths() == [ARM_BENCHMARK_RECORD]
+    for relative, expected in ARM_PACKET_DIGESTS.items():
+        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        assert digest == expected
+
+
+def test_arm_shared_runner_sources_and_plan_match_the_index() -> None:
+    assert _arm_benchmark_record_paths() == [ARM_BENCHMARK_RECORD]
+    summary = (ROOT / ARM_BENCHMARK_RECORD).read_text(encoding="utf-8")
+    hardware_plan = (
+        ROOT / "docs" / "perf" / "public-production-hardware-benchmark-plan.md"
+    ).read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "benchmark-arm.yml").read_text(encoding="utf-8")
+    workflow_tests = (ROOT / "tests" / "unit" / "test_benchmark_arm_workflow.py").read_text(
+        encoding="utf-8"
+    )
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert "actions/runs/27012731848" in summary
+    assert "commit: `60e0f3d`" in summary.lower()
+    assert Path(ARM_BENCHMARK_RECORD).name in hardware_plan
+    assert ARM_BENCHMARK_RECORD in CHANGELOG.read_text(encoding="utf-8")
+    assert "workflow_dispatch" in workflow
+    assert "runs-on: ubuntu-24.04-arm" in workflow
+    for companion in (ARM_REPORT_COMPANION, ARM_HOST_COMPANION, ARM_JSON_COMPANION):
+        assert Path(companion).name in workflow
+        assert Path(companion).name in workflow_tests
+    assert "arm shared-runner benchmark packet sub-slice" in plan
+    for digest in ARM_PACKET_DIGESTS.values():
+        assert digest in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_arm_shared_runner_result_and_boundary_remain_conservative() -> None:
+    row = _arm_benchmark_rows()[0]
+    row_text = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in ARM_BENCHMARK_FACTS:
+        assert phrase in row_text
+    for phrase in ARM_BENCHMARK_BOUNDARIES:
+        assert phrase in row_text
     assert manifest["production"]["status"] == "candidate"
 
 

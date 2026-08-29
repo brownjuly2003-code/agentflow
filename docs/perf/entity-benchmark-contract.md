@@ -95,8 +95,13 @@ python scripts/run_benchmark.py \
 
 This auto-starts the API on port 8001, seeds data, runs Locust warmup + measured window, and produces:
 
-- `docs/perf/load-benchmark-latest.md` -- human-readable report
+- `.artifacts/benchmark/benchmark.md` -- human-readable runtime report
 - `.artifacts/benchmark/current.json` -- machine-readable results
+
+The report and JSON are ignored, host-specific runtime artifacts. The former
+mutable tracked report is preserved as a
+[2026-04-17 historical snapshot](../archive/performance/load-benchmark-2026-04-17.md);
+promote future evidence only under a date-stamped name with exact provenance.
 
 ### Full-benchmark load profile (locked)
 
@@ -138,7 +143,7 @@ Every baseline artifact must include:
 | Full benchmark JSON | `benchmark-<label>.json` | `.artifacts/benchmark/` |
 | Flamegraph | `flamegraph-<label>.svg` | `docs/perf/` |
 | Profile write-up | `entity-profile-<label>.md` | `docs/perf/` |
-| Latest generated report | `load-benchmark-latest.md` | `docs/perf/` |
+| Full benchmark report | `benchmark.md` | `.artifacts/benchmark/` |
 
 `<label>` conventions:
 

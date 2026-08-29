@@ -33,20 +33,23 @@ is needed.
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
-| Generated/reference artifacts | [Generated-reference ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [latest load benchmark](perf/load-benchmark-latest.md) | Regenerate the whole owned family; do not hand-edit generated output |
+| Generated/reference artifacts | [Generated-reference ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [full-load benchmark lifecycle](perf/load-benchmark-latest.md) | Regenerate deterministic families; keep mutable measurements in ignored artifacts |
 | Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |
 
 ## Generated-reference ownership
 
-One writer owns each current generated family. Run the writer when its source
-changes, commit the complete output family, and run the drift check before
-review. Do not hand-edit or update only part of the family.
+One writer owns each current generated family. For deterministic references,
+run the writer when its source changes, commit the complete output family, and
+run the drift check before review. Host- and time-dependent measurement outputs
+stay in ignored runtime artifacts; promote only immutable, date-stamped evidence.
+Do not hand-edit or update only part of the family.
 
 | Family | Tracked outputs | Write | Drift check | Lifecycle |
 | --- | --- | --- | --- | --- |
 | OpenAPI and agent tools | `docs/openapi.json`, `docs/agent-tools/claude-tools.json`, `docs/agent-tools/openai-tools.json` | `python scripts/export_openapi.py` | `python scripts/export_openapi.py --check` | Current generated references; all three outputs move together. The contract workflow runs the drift check. |
 | SDK capabilities | `docs/sdk-capabilities.md` | `python scripts/export_sdk_capabilities.py` | `python scripts/export_sdk_capabilities.py --check` | Current generated reference from `config/project_claims.toml`; the CI project-claims gate also checks SDK method parity and output drift. |
 | Quality gates | `docs/quality.md` | `python scripts/export_quality_reference.py` | `python scripts/export_quality_reference.py --check` | Deterministic current reference from `config/project_claims.toml`; the CI project-claims gate checks config alignment and output drift. |
+| Full-load benchmark | None; `docs/perf/load-benchmark-latest.md` is a lifecycle page | `python scripts/run_benchmark.py` writes `.artifacts/benchmark/benchmark.md` and `.artifacts/benchmark/current.json` | Runtime metric comparison, not byte drift | Measurements vary by host and time. CI consumes ignored artifacts; promote only date-stamped evidence with provenance. |
 
 Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
 `docs/perf/live_openapi_ci.json` are evidence, not current generated
@@ -65,6 +68,12 @@ coverage, security, mutation, chaos, and load inputs are host-specific. The
 last tracked dynamic report is preserved as a
 [historical generated snapshot](archive/quality-report-2026-07-23.md); do not
 refresh it as the current reference.
+
+The full-load benchmark has the same dynamic boundary: its former mutable
+tracked report is preserved as a
+[2026-04-17 historical snapshot](archive/performance/load-benchmark-2026-04-17.md).
+The stable [artifact lifecycle page](perf/load-benchmark-latest.md) names the
+runtime outputs, CI comparison, promotion rule, and protected tracked paths.
 
 ## Sources of truth
 

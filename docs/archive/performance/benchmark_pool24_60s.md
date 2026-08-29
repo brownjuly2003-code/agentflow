@@ -7,7 +7,7 @@
 > - Reason: non-canonical mixed-load run superseded by the entity benchmark
 >   contract
 > - Current replacement:
->   [latest load report](../../perf/load-benchmark-latest.md) and
+>   [full-load benchmark lifecycle](../../perf/load-benchmark-latest.md) and
 >   [entity benchmark contract](../../perf/entity-benchmark-contract.md)
 > - Content type: immutable historical performance evidence
 >

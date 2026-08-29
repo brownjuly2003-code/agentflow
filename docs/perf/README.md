@@ -1,10 +1,11 @@
 # Performance evidence
 
-This directory holds current and historical performance evidence. The latest
-committed full-API report is
-[`load-benchmark-latest.md`](load-benchmark-latest.md); targeted entity-latency
-snapshots and flamegraphs remain alongside it. The latest generated in-process
-demo freshness report is
+This directory holds current and historical performance evidence. The
+[full-load benchmark lifecycle](load-benchmark-latest.md) names the ignored
+runtime outputs and promotion rule; the former mutable report is preserved as
+an [archived 2026-04-17 snapshot](../archive/performance/load-benchmark-2026-04-17.md).
+Targeted entity-latency snapshots and flamegraphs remain alongside it. The
+latest generated in-process demo freshness report is
 [`freshness-benchmark.md`](freshness-benchmark.md). Non-canonical mixed-load
 reports from the former `docs/benchmark_pool*.md` series are preserved in the
 [documentation archive](../archive/performance/README.md).
@@ -17,7 +18,8 @@ reports from the former `docs/benchmark_pool*.md` series are preserved in the
   This is the cheapest way to check "did my change move the needle"
   without spinning up the full Locust matrix.
 - `scripts/run_benchmark.py` — full Locust matrix across the whole API
-  surface. Slower to start, canonical source of the release baseline.
+  surface. Slower to start; writes `.artifacts/benchmark/benchmark.md` and
+  `.artifacts/benchmark/current.json` rather than a mutable tracked report.
 - `scripts/benchmark_freshness.py` — in-process demo event-to-metric freshness
   harness and owner of `docs/perf/freshness-benchmark.md`.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn

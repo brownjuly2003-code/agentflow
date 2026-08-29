@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import sys
+from pathlib import Path
+
+import pytest
 
 from scripts import run_benchmark
+
+ROOT = Path(__file__).resolve().parents[2]
+ARCHIVED_LOAD_BENCHMARK_BLOB = "8488572c9abb10b2aedf9aae35e0467de672cf9e"
 
 
 def test_read_readme_claims_returns_none_when_claim_table_missing(tmp_path, monkeypatch):
@@ -48,14 +55,27 @@ def test_parse_args_accepts_output_alias(monkeypatch):
     assert args.results_json == "alias.json"
 
 
-def test_parse_args_defaults_report_to_performance_directory(monkeypatch):
+def test_parse_args_defaults_report_to_ignored_runtime_artifact(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["run_benchmark.py"])
 
     args = run_benchmark.parse_args()
 
     assert args.report_path == str(
-        run_benchmark.PROJECT_ROOT / "docs" / "perf" / "load-benchmark-latest.md"
+        run_benchmark.PROJECT_ROOT / ".artifacts" / "benchmark" / "benchmark.md"
     )
+    assert ".artifacts/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "docs/perf/load-benchmark-latest.md",
+        "docs/archive/performance/load-benchmark-2026-04-17.md",
+    ],
+)
+def test_tracked_benchmark_docs_cannot_be_overwritten(relative_path):
+    with pytest.raises(ValueError, match=r"\.artifacts/benchmark"):
+        run_benchmark.resolve_report_path(relative_path)
 
 
 def test_resolve_host_seed_db_path_defaults_to_demo_db(monkeypatch):
@@ -149,7 +169,7 @@ def test_build_report_documents_warmup_step():
     assert "10s" in report
 
 
-def test_build_report_documents_overwrite_scope():
+def test_build_report_documents_runtime_artifact_scope():
     report = run_benchmark.build_report(
         generated_at="2026-04-17T13:00:00+03:00",
         base_url="http://127.0.0.1:8001",
@@ -177,8 +197,58 @@ def test_build_report_documents_overwrite_scope():
         endpoint_rows=[],
     )
 
-    assert "overwritten by the latest long-running benchmark" in report
+    assert "runtime artifact" in report
+    assert ".artifacts/benchmark/benchmark.md" in report
+    assert "date-stamped" in report
     assert "docs/perf/entity-benchmark-contract.md" in report
+
+
+def test_full_load_benchmark_docs_name_owner_and_snapshot_lifecycle():
+    current = " ".join(
+        (ROOT / "docs" / "perf" / "load-benchmark-latest.md").read_text(encoding="utf-8").split()
+    )
+    archived = " ".join(
+        (ROOT / "docs" / "archive" / "performance" / "load-benchmark-2026-04-17.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+    docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
+    contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
+    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+
+    assert "Full-load benchmark artifact lifecycle" in current
+    assert "`python scripts/run_benchmark.py`" in current
+    assert "`.artifacts/benchmark/benchmark.md`" in current
+    assert "`.artifacts/benchmark/current.json`" in current
+    assert "archive/performance/load-benchmark-2026-04-17.md" in current
+    assert "Original path: *docs/perf/load-benchmark-latest.md*" in archived
+    assert "Content type: historical generated full-load benchmark snapshot" in archived
+    assert "Generated: `2026-04-17T12:55:58+03:00`" in archived
+    assert "| Full-load benchmark |" in docs_hub
+    assert ".artifacts/benchmark/benchmark.md" in docs_hub
+    assert "python scripts/run_benchmark.py" in contributing
+    assert ".artifacts/benchmark/benchmark.md" in contributing
+    assert "Full-load benchmark snapshot/lifecycle sub-slice" in plan
+    assert "Пункт 6 остаётся открыт" in plan
+
+
+def test_archived_load_benchmark_body_preserves_the_original_git_blob():
+    archived = (
+        ROOT / "docs" / "archive" / "performance" / "load-benchmark-2026-04-17.md"
+    ).read_bytes()
+    marker = b"> The report body below is unchanged; only this provenance block was added."
+    _metadata, original_tail = archived.split(marker, maxsplit=1)
+    original = b"# AgentFlow Benchmark Report" + original_tail
+    git_blob = b"blob " + str(len(original)).encode("ascii") + b"\0" + original
+
+    assert hashlib.sha1(git_blob, usedforsecurity=False).hexdigest() == ARCHIVED_LOAD_BENCHMARK_BLOB
+
+
+def test_ci_consumes_the_ignored_runtime_report() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert 'report_path = Path(".artifacts/benchmark/benchmark.md")' in workflow
+    assert 'report_path = Path("docs/perf/load-benchmark-latest.md")' not in workflow
 
 
 def test_start_api_routes_server_output_to_log_file(monkeypatch, tmp_path):

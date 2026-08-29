@@ -1,5 +1,12 @@
 # Benchmark Split Decision
 
+> **Lifecycle update (2026-08-29):** the mutable tracked
+> `docs/perf/load-benchmark-latest.md` output described below is retired. That
+> path now documents ownership; `scripts/run_benchmark.py` writes ignored
+> `.artifacts/benchmark/` outputs, and the former report is preserved as the
+> [2026-04-17 historical snapshot](../archive/performance/load-benchmark-2026-04-17.md).
+> The dated decision text below is otherwise unchanged.
+
 **Date:** 2026-04-24
 **Context:** A03 entity latency re-baseline
 

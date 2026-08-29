@@ -93,10 +93,10 @@ PERF_NON_IDENTITY_PHRASES = {
         "not an evidence identity",
     ),
     "docs/perf/load-benchmark-latest.md": (
-        "generated mutable report",
+        "current benchmark lifecycle reference",
         "scripts/run_benchmark.py",
-        "overwritten",
-        "not an immutable evidence identity",
+        ".artifacts/benchmark",
+        "not a measured result",
     ),
     "docs/perf/public-production-hardware-benchmark-plan.md": (
         "operator plan",

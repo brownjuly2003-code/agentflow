@@ -9,7 +9,7 @@
 > - Current replacement:
 >   [entity benchmark contract](../../perf/entity-benchmark-contract.md),
 >   [entity profile](../../perf/entity-profile-2026-04-24.md), and
->   [latest load report](../../perf/load-benchmark-latest.md)
+>   [full-load benchmark lifecycle](../../perf/load-benchmark-latest.md)
 > - Content type: historical performance narrative
 >
 > The report body below is unchanged; only this provenance block was added.

@@ -85,7 +85,7 @@ def test_openapi_generated_reference_docs_name_owner_commands_and_lifecycle() ->
     )
     assert "[`sdk-capabilities.md`](sdk-capabilities.md)" in docs_hub
     assert "[`quality.md`](quality.md)" in docs_hub
-    assert "[latest load benchmark](perf/load-benchmark-latest.md)" in docs_hub
+    assert "[full-load benchmark lifecycle](perf/load-benchmark-latest.md)" in docs_hub
     assert "python scripts/export_openapi.py" in contributing
     assert "python scripts/export_openapi.py --check" in contributing
     assert "all three outputs" in contributing

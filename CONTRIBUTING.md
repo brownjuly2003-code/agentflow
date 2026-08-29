@@ -91,6 +91,13 @@ Host-specific reports belong to the ignored default output of
 `python scripts/quality_report.py`; do not use that collector to overwrite the
 tracked current reference.
 
+`python scripts/run_benchmark.py` writes its host- and time-dependent report to
+`.artifacts/benchmark/benchmark.md` and its JSON metrics to
+`.artifacts/benchmark/current.json`. These runtime outputs have no byte-drift
+check and must not replace `docs/perf/load-benchmark-latest.md` or an archived
+snapshot. CI compares the fresh JSON metrics with the tracked gate baseline;
+promote evidence only under a date-stamped name with its run provenance.
+
 ## Dependabot pip PRs and `uv.lock`
 
 Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**

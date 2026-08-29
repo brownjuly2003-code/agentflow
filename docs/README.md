@@ -33,8 +33,23 @@ is needed.
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
-| Generated/reference artifacts | `openapi.json`, `sdk-capabilities.md`, `quality.md`, and the [latest load benchmark](perf/load-benchmark-latest.md) | Regenerate from the owning source; do not hand-edit generated output |
+| Generated/reference artifacts | [OpenAPI ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [latest load benchmark](perf/load-benchmark-latest.md) | Regenerate the whole owned family; do not hand-edit generated output |
 | Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |
+
+## Generated-reference ownership
+
+One writer owns each current generated family. Run the writer when its source
+changes, commit the complete output family, and run the drift check before
+review. Do not hand-edit or update only part of the family.
+
+| Family | Tracked outputs | Write | Drift check | Lifecycle |
+| --- | --- | --- | --- | --- |
+| OpenAPI and agent tools | `docs/openapi.json`, `docs/agent-tools/claude-tools.json`, `docs/agent-tools/openai-tools.json` | `python scripts/export_openapi.py` | `python scripts/export_openapi.py --check` | Current generated references; all three outputs move together. The contract workflow runs the drift check. |
+
+Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
+`docs/perf/live_openapi_ci.json` are evidence, not current generated
+references. Preserve those captures under the evidence policy; do not replace
+them when refreshing the current OpenAPI family.
 
 ## Sources of truth
 

@@ -71,7 +71,12 @@ python scripts/check_performance.py --baseline docs/benchmark-baseline.json --cu
 
 ```bash
 python scripts/generate_contracts.py --check
+python scripts/export_openapi.py --check
 ```
+
+After changing an API route or schema, run `python scripts/export_openapi.py`
+and commit all three outputs (`docs/openapi.json` plus both files under
+`docs/agent-tools/`). Do not edit one generated output independently.
 
 ## Dependabot pip PRs and `uv.lock`
 

@@ -15,6 +15,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+GENERATED_ARTIFACT_PATHS = (
+    Path("docs/openapi.json"),
+    Path("docs/agent-tools/claude-tools.json"),
+    Path("docs/agent-tools/openai-tools.json"),
+)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 # F-09: the runtime package lives under the src/ container dir
@@ -141,6 +146,17 @@ def _build_openai_tools(schema: dict[str, object]) -> list[dict[str, object]]:
     return tools
 
 
+def _build_artifacts(schema: dict[str, object]) -> list[tuple[Path, object]]:
+    openapi_path, claude_tools_path, openai_tools_path = (
+        ROOT / relative for relative in GENERATED_ARTIFACT_PATHS
+    )
+    return [
+        (openapi_path, schema),
+        (claude_tools_path, _build_claude_tools(schema)),
+        (openai_tools_path, _build_openai_tools(schema)),
+    ]
+
+
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="\n") as handle:
@@ -193,14 +209,7 @@ def main() -> int:
     from agentflow_runtime.serving.api.main import app
 
     schema = _normalize_fastapi_validation_error_schema(app.openapi())
-    docs_dir = ROOT / "docs"
-    agent_tools_dir = docs_dir / "agent-tools"
-
-    artifacts: list[tuple[Path, object]] = [
-        (docs_dir / "openapi.json", schema),
-        (agent_tools_dir / "claude-tools.json", _build_claude_tools(schema)),
-        (agent_tools_dir / "openai-tools.json", _build_openai_tools(schema)),
-    ]
+    artifacts = _build_artifacts(schema)
 
     if args.check:
         drift: list[str] = []

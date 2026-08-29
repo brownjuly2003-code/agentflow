@@ -65,8 +65,8 @@ measured steps on the same Mac compose stand (Kafka → Flink → bridge → CH)
 
 | Step | Bridge apply | State |
 |------|-------------:|-------|
-| Baseline (per-event apply) | ~8 eps | measured |
-| Q1.2 — ClickHouse-only sink, no scratch lake | 11.4 eps | measured |
+| Baseline (per-event apply) | ~8 eps | measured — [perf/throughput-realpath.md](perf/throughput-realpath.md) |
+| Q1.2 — ClickHouse-only sink, no scratch lake | 11.4 eps | measured — [perf/throughput-realpath-q12-2026-07-09.md](perf/throughput-realpath-q12-2026-07-09.md) |
 | Q1.3 — multi-row batch apply | 22.9 eps | measured — [perf/throughput-realpath-q13-2026-07-09.md](perf/throughput-realpath-q13-2026-07-09.md) |
 | Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | **87.4 eps** | measured — [perf/throughput-realpath-q14-2026-07-10.md](perf/throughput-realpath-q14-2026-07-10.md) |
 | Stretch try — 2000-event drain on same Mac class | **107.3 eps** | measured — [perf/throughput-realpath-100eps-try-2026-07-17.md](perf/throughput-realpath-100eps-try-2026-07-17.md) |

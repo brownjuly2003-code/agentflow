@@ -4,12 +4,14 @@ Audit F-11 (2026-08-21): the checkout root accumulated immutable operational
 evidence next to the entry documents, which makes the authoritative state
 hard to find. This index is the authoritative catalogue of that evidence.
 
-The files below are **immutable records** — do not edit, rerun, or clean the
-identities they describe. Legacy records stay at their recorded root paths
-when resume runbooks, `AGENT_STATE.md`, and prior handoffs depend on those
-locations. New or deliberately migrated evidence belongs under
-`docs/evidence/` (or `docs/perf/`, `docs/operations/` for their existing
-series) rather than the documentation root.
+The catalogue identity rows below are **immutable records** — do not edit,
+rerun, or clean the identities they describe. The classified non-identity
+paths below retain their stated lifecycle and are outside this immutability
+rule. Legacy records stay at their recorded root paths when resume runbooks,
+`AGENT_STATE.md`, and prior handoffs depend on those locations. New or
+deliberately migrated evidence belongs under `docs/evidence/` (or `docs/perf/`,
+`docs/operations/` for their existing series) rather than the documentation
+root.
 
 Entry documents (start here, not below): `README.md`, `docs/STATUS.md`,
 `docs/SESSION_HANDOFF.md`, [`docs/perf/README.md`](../perf/README.md), and
@@ -20,6 +22,22 @@ this index links it explicitly, whether as an identity, a classified supporting
 companion, or a navigation entry. Representation does not make navigation or
 supporting companions evidence identities; identity counts come only from the
 catalogue table rows.
+
+## Classified non-identity performance paths
+
+These five paths complete the tracked `docs/perf` Markdown inventory without
+manufacturing evidence identities. They are decisions, procedures, generated
+output, plans, or implementation companions. Supersession belongs only to the
+catalogue identity rows below; none of these paths has a `supersedes` or
+`superseded by` relationship.
+
+| Path | Class | Status/claim owner | Evidence relationship |
+| --- | --- | --- | --- |
+| [benchmark-split-decision.md](../perf/benchmark-split-decision.md) | Dated decision | The executable CI gate is owned by `.github/workflows/perf-regression.yml` and the current benchmark scripts. | Supporting decision, not a current status owner and not an evidence identity. |
+| [bridge-ch-native-apply-q1-2026-07-09.md](../perf/bridge-ch-native-apply-q1-2026-07-09.md) | Implementation companion | The Q1.2 measured result is owned by [throughput-realpath-q12-2026-07-09.md](../perf/throughput-realpath-q12-2026-07-09.md). | Code-slice explanation, not an evidence identity. |
+| [entity-benchmark-contract.md](../perf/entity-benchmark-contract.md) | Current benchmark reference | Executable behavior is owned by `scripts/profile_entity.py` and `scripts/run_benchmark.py`. | Measurement procedure, not a measured result and not an evidence identity. |
+| [load-benchmark-latest.md](../perf/load-benchmark-latest.md) | Generated mutable report | This path is overwritten by its owner, `scripts/run_benchmark.py`. | Latest generated output, not an immutable evidence identity. |
+| [public-production-hardware-benchmark-plan.md](../perf/public-production-hardware-benchmark-plan.md) | Operator plan | The completed shared-runner result is owned by [arm-server-benchmark-2026-06-05.md](../perf/arm-server-benchmark-2026-06-05.md); a dedicated production-class result remains absent. | Procedure and access boundary, not an evidence identity. |
 
 ## CI-soak rehearsal series (r1–r12, consumed)
 

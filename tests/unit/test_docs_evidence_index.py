@@ -59,12 +59,51 @@ ENTITY_HOT_PATH_DIGESTS = {
         "2728e47a30eab0cde0a175759c86e2de9ee3dfc61d7d5751b62f7c76517952fa"
     ),
 }
-ENTITY_HOT_PATH_REMAINING_PERF_PATHS = {
+PERF_NON_IDENTITY_HEADING = "## Classified non-identity performance paths"
+PERF_NON_IDENTITY_FIELDS = (
+    "path",
+    "class",
+    "status/claim owner",
+    "evidence relationship",
+)
+PERF_NON_IDENTITY_PATHS = {
     "docs/perf/benchmark-split-decision.md",
     "docs/perf/bridge-ch-native-apply-q1-2026-07-09.md",
     "docs/perf/entity-benchmark-contract.md",
     "docs/perf/load-benchmark-latest.md",
     "docs/perf/public-production-hardware-benchmark-plan.md",
+}
+PERF_NON_IDENTITY_PHRASES = {
+    "docs/perf/benchmark-split-decision.md": (
+        "dated decision",
+        "executable ci gate",
+        "not a current status owner",
+        "not an evidence identity",
+    ),
+    "docs/perf/bridge-ch-native-apply-q1-2026-07-09.md": (
+        "implementation companion",
+        "q1.2",
+        "throughput-realpath-q12-2026-07-09.md",
+        "not an evidence identity",
+    ),
+    "docs/perf/entity-benchmark-contract.md": (
+        "current benchmark reference",
+        "scripts/profile_entity.py",
+        "not a measured result",
+        "not an evidence identity",
+    ),
+    "docs/perf/load-benchmark-latest.md": (
+        "generated mutable report",
+        "scripts/run_benchmark.py",
+        "overwritten",
+        "not an immutable evidence identity",
+    ),
+    "docs/perf/public-production-hardware-benchmark-plan.md": (
+        "operator plan",
+        "arm-server-benchmark-2026-06-05.md",
+        "dedicated production-class",
+        "not an evidence identity",
+    ),
 }
 ENTITY_HOT_PATH_FACTS = {
     ENTITY_BASELINE_RECORD: (
@@ -1792,6 +1831,38 @@ def _represented_perf_markdown_paths() -> set[str]:
     return represented
 
 
+def _catalogue_rows() -> list[dict[str, str]]:
+    lines = INDEX.read_text(encoding="utf-8").splitlines()
+    rows: list[dict[str, str]] = []
+    line_index = 0
+    while line_index < len(lines):
+        if not lines[line_index].startswith("|"):
+            line_index += 1
+            continue
+        table_lines: list[str] = []
+        while line_index < len(lines) and lines[line_index].startswith("|"):
+            table_lines.append(lines[line_index])
+            line_index += 1
+        headers, body = _markdown_table("\n".join(table_lines))
+        if headers != list(REQUIRED_FIELDS):
+            continue
+        for cells in body:
+            assert len(cells) == len(headers), (
+                f"expected {len(headers)} columns, got {len(cells)}: {cells!r}"
+            )
+            rows.append(dict(zip(headers, cells, strict=True)))
+    return rows
+
+
+def _catalogue_rows_by_path() -> dict[str, dict[str, str]]:
+    rows_by_path: dict[str, dict[str, str]] = {}
+    for row in _catalogue_rows():
+        path = _identity_path(row["identity"])
+        assert path not in rows_by_path, f"duplicate evidence identity: {path}"
+        rows_by_path[path] = row
+    return rows_by_path
+
+
 def _identity_path(cell: str) -> str:
     matches = LINK_RE.findall(cell)
     assert matches, f"identity cell has no markdown path: {cell!r}"
@@ -2018,8 +2089,9 @@ def test_entity_hot_path_sources_and_plan_match_the_index() -> None:
         "representation does not make navigation or supporting companions evidence identities"
         in (index_normalized.lower())
     )
-    assert (len(tracked_perf), len(represented_perf), len(remaining_perf)) == (58, 53, 5)
-    assert remaining_perf == ENTITY_HOT_PATH_REMAINING_PERF_PATHS
+    assert (len(tracked_perf), len(represented_perf), len(remaining_perf)) == (58, 58, 0)
+    assert not remaining_perf
+    assert PERF_NON_IDENTITY_PATHS <= represented_perf
     assert "latest refresh" in sources[ENTITY_BASELINE_RECORD].lower()
     assert "97a190248a943b5ef6910881be4b9c010eceb33f" in sources[ENTITY_BASELINE_RECORD]
     assert "5b57cf4" in sources[ENTITY_BASELINE_RECORD]
@@ -2034,7 +2106,81 @@ def test_entity_hot_path_sources_and_plan_match_the_index() -> None:
     assert "historical entity hot-path optimization records sub-slice" in plan
     for digest in ENTITY_HOT_PATH_DIGESTS.values():
         assert digest in plan
-    assert "пункт 5 остаётся открыт" in plan
+    assert "пункт 5 закрыт" in plan
+
+
+def test_perf_inventory_classifies_non_identity_paths_without_manufacturing_records() -> None:
+    rows = _rows_for_heading(PERF_NON_IDENTITY_HEADING)
+    listed = [_identity_path(row["path"]) for row in rows]
+    tracked = _tracked_perf_markdown_paths()
+    represented = _represented_perf_markdown_paths()
+    identities = set(_catalogue_rows_by_path())
+    index_text = " ".join(INDEX.read_text(encoding="utf-8").lower().split())
+    plan = " ".join(DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower().split())
+
+    assert list(rows[0]) == list(PERF_NON_IDENTITY_FIELDS)
+    assert set(listed) == PERF_NON_IDENTITY_PATHS
+    assert Counter(listed) == Counter(PERF_NON_IDENTITY_PATHS)
+    assert PERF_NON_IDENTITY_PATHS.isdisjoint(identities)
+    assert (len(tracked), len(represented), len(tracked - represented)) == (58, 58, 0)
+    assert "catalogue identity rows below are **immutable records**" in index_text
+    assert "classified non-identity paths below retain their stated lifecycle" in index_text
+    assert "outside this immutability rule" in index_text
+    for row, path in zip(rows, listed, strict=True):
+        assert (ROOT / path).is_file()
+        row_text = " ".join(row.values()).lower()
+        for phrase in PERF_NON_IDENTITY_PHRASES[path]:
+            assert phrase in row_text
+    assert "- [x] **5. упорядочить evidence.**" in plan
+    assert "status/orphan/supersession closure audit" in plan
+    assert "58 tracked `docs/perf` markdown paths, 58" in plan
+    assert "0 остаются unrepresented" in plan
+
+
+def test_status_perf_claims_link_to_indexed_identities() -> None:
+    identities = set(_catalogue_rows_by_path())
+    status_perf_links = {
+        path for path in _status_record_links() if Path(path).parent.as_posix() == "docs/perf"
+    }
+    bridge_rows = _status_table_rows(S10_R4_STATUS_HEADING)
+    expected_bridge_records = (
+        S10_BURST_BASELINE_RECORD,
+        S10_Q12_RECORD,
+        S10_Q13_RECORD,
+        S10_Q14_RECORD,
+        S10_100EPS_TRY_RECORD,
+        S10_PACED_10M_RECORD,
+        S10_PACED_1H_RECORD,
+        S10_PACED_R4_RECORD,
+    )
+
+    assert status_perf_links <= identities
+    assert len(bridge_rows) == len(expected_bridge_records)
+    for row, expected in zip(bridge_rows, expected_bridge_records, strict=True):
+        links = _status_cell_record_paths(row["state"])
+        assert links == [expected], f"status claim lacks one indexed identity: {row!r}"
+
+
+def test_catalogue_supersession_links_are_existing_and_reciprocal() -> None:
+    rows_by_path = _catalogue_rows_by_path()
+    reciprocal_fields = {
+        "supersedes": "superseded by",
+        "superseded by": "supersedes",
+    }
+
+    for source, row in rows_by_path.items():
+        for field, reciprocal_field in reciprocal_fields.items():
+            _assert_supersession_cell(row[field])
+            for target in LINK_RE.findall(row[field]):
+                target_path = _resolve_index_link(target)
+                assert target_path in rows_by_path, f"{source} {field} non-identity {target_path}"
+                reciprocal_targets = {
+                    _resolve_index_link(link)
+                    for link in LINK_RE.findall(rows_by_path[target_path][reciprocal_field])
+                }
+                assert source in reciprocal_targets, (
+                    f"{source} {field} {target_path} without reciprocal {reciprocal_field}"
+                )
 
 
 def test_entity_hot_path_results_and_boundaries_remain_conservative() -> None:
@@ -4428,7 +4574,8 @@ def test_current_s10_throughput_claim_links_match_status_rows() -> None:
     assert S10_PACED_R4_RECORD not in proven_by_path
     assert bridge_by_path[S10_PACED_R4_RECORD]["step"] == S10_R4_STATUS_CLAIM
     assert bridge_by_path[S10_PACED_R4_RECORD]["bridge apply"] == S10_R4_STATUS_RESULT
-    assert S10_BURST_BASELINE_RECORD not in bridge_by_path
+    assert bridge_by_path[S10_BURST_BASELINE_RECORD]["step"] == "Baseline (per-event apply)"
+    assert bridge_by_path[S10_BURST_BASELINE_RECORD]["bridge apply"] == "~8 eps"
     assert SOAK_CAPACITY_RECORD in status_links
     assert SOAK_CAPACITY_RECORD in _f10_record_paths()
     assert manifest["production"]["status"] == "candidate"
@@ -4548,7 +4695,7 @@ def test_q12_predecessor_result_and_boundary_remain_conservative() -> None:
         assert phrase in q12
     for phrase in Q12_PREDECESSOR_BOUNDARIES:
         assert phrase in q12
-    assert S10_Q12_RECORD not in status_links
+    assert S10_Q12_RECORD in status_links
     assert manifest["production"]["status"] == "candidate"
     assert manifest["production"]["full_soak_plus_rollback_after_traffic"] == (
         "BLOCKED_HOST_CAPACITY"

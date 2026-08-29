@@ -55,6 +55,19 @@ superseded.
 | [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; core-only API import/HTTP smoke PASS; Trivy 0.70.0 reports 0 HIGH/CRITICAL (ignore-unfixed) after runtime installer removal | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, or production acceptance; the next pushed SHA must still pass GitHub Security Scan. |
 | [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md) | 2026-07-30 | local/isolated-Mac; Windows Python 3.13 unit/property 2170 PASS; mcp==1.29.0, pyiceberg==0.11.1, pyiceberg-core==0.7.0 and 39 focused tests PASS | None | None | Does not claim pushed/required CI state, published-image signing, external penetration testing, production acceptance, or remaining live gates (lake-to-serving, restore/replay, soak/rollback). |
 
+## ClickHouse serving-path verification record
+
+This table catalogues the ADR 0006 Phase 1 serving surface behavior capture.
+That Phase 1 serving surface is separate from Phase 2 PII-governance and is not
+a supersession relationship: the records verify different contracts on the
+same standalone engine family. Columns are identity, ISO date, result,
+supersedes, superseded by, and claim boundary. `None` means no supersession is
+recorded.
+
+| Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
+| --- | --- | --- | --- | --- | --- |
+| [clickhouse-serving-verify-2026-07-02.md](../perf/clickhouse-serving-verify-2026-07-02.md) | 2026-07-02 | ADR 0006 Phase 1/1a live behavior verification against standalone ClickHouse 26.7.1.368 in WSL Ubuntu 22.04, no Docker: pipeline burst 60 was 60/60 valid, orders_v2=13, and pipeline_events=73; the API returned the seeded order, revenue 2799.65, top-3 products with the latest row version, and ClickHouse-only SSE events; a separate-process burst moved revenue to 3279.57, upsert dedup returned exactly 1 row, the dispatcher reported api_ready with 0 dispatcher/scan errors, and tenant-scope transpile had no false positives | None | None | Single-node, single-writer demo profile with auth disabled; it does not prove multi-writer version ordering. Kafka/Flink health remained placeholder-unhealthy in this bring-up. No equivalent p50/p95 was measured: this verifies behavior and is not a latency figure. Phase 2 PII-governance is a separate surface, not a supersession. Does not establish production SLA or production acceptance; `production.status` remains `candidate`. |
+
 ## ClickHouse PII-governance verification records
 
 This table is the audit catalogue for the two standalone ClickHouse 26.7

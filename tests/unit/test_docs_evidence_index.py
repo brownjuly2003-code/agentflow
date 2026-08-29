@@ -37,6 +37,40 @@ PROTECTED_DIGESTS = {
         "79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f"
     ),
 }
+CLICKHOUSE_SERVING_HEADING = "## ClickHouse serving-path verification record"
+CLICKHOUSE_SERVING_RECORD = "docs/perf/clickhouse-serving-verify-2026-07-02.md"
+CLICKHOUSE_SERVING_DATE = "2026-07-02"
+CLICKHOUSE_SERVING_DIGEST = "1cb01b6733b624fd6cc71baca714c4e6ff06a55ec2f676a152365a7edae9d530"
+CLICKHOUSE_SERVING_FACTS = (
+    "adr 0006 phase 1",
+    "clickhouse 26.7.1.368",
+    "wsl ubuntu 22.04",
+    "no docker",
+    "60/60",
+    "orders_v2=13",
+    "pipeline_events=73",
+    "2799.65",
+    "top-3 products",
+    "3279.57",
+    "exactly 1 row",
+    "api_ready",
+    "0 dispatcher/scan errors",
+    "no false positives",
+)
+CLICKHOUSE_SERVING_BOUNDARIES = (
+    "single-node",
+    "single-writer demo profile",
+    "multi-writer version ordering",
+    "auth disabled",
+    "placeholder-unhealthy",
+    "no equivalent p50/p95",
+    "behavior",
+    "not a latency figure",
+    "phase 2 pii-governance",
+    "not a supersession",
+    "production acceptance",
+    "candidate",
+)
 CLICKHOUSE_PII_HEADING = "## ClickHouse PII-governance verification records"
 CLICKHOUSE_PII_0702_RECORD = "docs/perf/vault-pii-governance-verify-2026-07-02.md"
 CLICKHOUSE_PII_0703_RECORD = "docs/perf/vault-pii-governance-verify-2026-07-03.md"
@@ -1191,6 +1225,14 @@ def _security_dependency_rows() -> list[dict[str, str]]:
     return _rows_for_heading(SECURITY_DEPENDENCY_HEADING)
 
 
+def _clickhouse_serving_rows() -> list[dict[str, str]]:
+    return _rows_for_heading(CLICKHOUSE_SERVING_HEADING)
+
+
+def _clickhouse_serving_record_paths() -> list[str]:
+    return [_identity_path(row.get("identity", "")) for row in _clickhouse_serving_rows()]
+
+
 def _clickhouse_pii_rows() -> list[dict[str, str]]:
     return _rows_for_heading(CLICKHOUSE_PII_HEADING)
 
@@ -1499,6 +1541,80 @@ def test_supersession_fields_are_none_or_existing_paths() -> None:
     for row in _security_dependency_rows():
         _assert_supersession_cell(row.get("supersedes", ""))
         _assert_supersession_cell(row.get("superseded by", ""))
+
+
+def test_clickhouse_serving_index_lists_one_bounded_record() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    security_at = text.index(SECURITY_DEPENDENCY_HEADING)
+    serving_at = text.index(CLICKHOUSE_SERVING_HEADING)
+    pii_at = text.index(CLICKHOUSE_PII_HEADING)
+    indexed = _clickhouse_serving_record_paths()
+    rows = _clickhouse_serving_rows()
+
+    assert security_at < serving_at < pii_at
+    assert indexed == [CLICKHOUSE_SERVING_RECORD]
+    assert Counter(indexed) == Counter((CLICKHOUSE_SERVING_RECORD,))
+    assert list(rows[0]) == list(REQUIRED_FIELDS)
+    assert len(rows) == 1
+    row = rows[0]
+    for field in REQUIRED_FIELDS:
+        assert row[field].strip(), f"{field} is empty in {row!r}"
+    assert ISO_DATE_RE.fullmatch(row["date"]), row["date"]
+    assert row["date"] == CLICKHOUSE_SERVING_DATE
+    assert (ROOT / CLICKHOUSE_SERVING_RECORD).is_file()
+    targets = LINK_RE.findall(row["identity"])
+    assert targets[0].startswith("../perf/"), row["identity"]
+
+
+def test_clickhouse_serving_is_separate_from_pii_not_supersession() -> None:
+    section = " ".join(
+        _section(INDEX.read_text(encoding="utf-8"), CLICKHOUSE_SERVING_HEADING).lower().split()
+    )
+    row = _clickhouse_serving_rows()[0]
+    pii_rows = _clickhouse_pii_rows()
+
+    assert "phase 1 serving surface" in section
+    assert "separate from phase 2 pii-governance" in section
+    assert "not a supersession" in section
+    assert row["supersedes"] == "None"
+    assert row["superseded by"] == "None"
+    _assert_supersession_cell(row["supersedes"])
+    _assert_supersession_cell(row["superseded by"])
+    for pii_row in pii_rows:
+        assert CLICKHOUSE_SERVING_RECORD not in pii_row["supersedes"]
+        assert CLICKHOUSE_SERVING_RECORD not in pii_row["superseded by"]
+
+
+def test_clickhouse_serving_record_keeps_published_digest() -> None:
+    assert _clickhouse_serving_record_paths() == [CLICKHOUSE_SERVING_RECORD]
+    digest = hashlib.sha256((ROOT / CLICKHOUSE_SERVING_RECORD).read_bytes()).hexdigest()
+    assert digest == CLICKHOUSE_SERVING_DIGEST
+
+
+def test_clickhouse_serving_sources_and_plan_match_the_index() -> None:
+    migration = (ROOT / "docs" / "clickhouse-migration.md").read_text(encoding="utf-8")
+    cutover = (ROOT / "docs" / "plans" / "clickhouse-cutover-plan.md").read_text(encoding="utf-8")
+    phase_2 = (ROOT / CLICKHOUSE_PII_0702_RECORD).read_text(encoding="utf-8")
+    plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
+
+    assert Path(CLICKHOUSE_SERVING_RECORD).name in migration
+    assert CLICKHOUSE_SERVING_RECORD in cutover
+    assert Path(CLICKHOUSE_SERVING_RECORD).name in phase_2
+    assert "clickhouse serving-path verification sub-slice" in plan
+    assert CLICKHOUSE_SERVING_DIGEST in plan
+    assert "пункт 5 остаётся открыт" in plan
+
+
+def test_clickhouse_serving_result_and_boundary_remain_conservative() -> None:
+    row = _clickhouse_serving_rows()[0]
+    serving = _row_text(row)
+    manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
+
+    for phrase in CLICKHOUSE_SERVING_FACTS:
+        assert phrase in serving
+    for phrase in CLICKHOUSE_SERVING_BOUNDARIES:
+        assert phrase in serving
+    assert manifest["production"]["status"] == "candidate"
 
 
 def test_clickhouse_pii_index_lists_the_bounded_pair_with_required_fields() -> None:

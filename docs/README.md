@@ -45,11 +45,17 @@ review. Do not hand-edit or update only part of the family.
 | Family | Tracked outputs | Write | Drift check | Lifecycle |
 | --- | --- | --- | --- | --- |
 | OpenAPI and agent tools | `docs/openapi.json`, `docs/agent-tools/claude-tools.json`, `docs/agent-tools/openai-tools.json` | `python scripts/export_openapi.py` | `python scripts/export_openapi.py --check` | Current generated references; all three outputs move together. The contract workflow runs the drift check. |
+| SDK capabilities | `docs/sdk-capabilities.md` | `python scripts/export_sdk_capabilities.py` | `python scripts/export_sdk_capabilities.py --check` | Current generated reference from `config/project_claims.toml`; the CI project-claims gate also checks SDK method parity and output drift. |
 
 Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
 `docs/perf/live_openapi_ci.json` are evidence, not current generated
 references. Preserve those captures under the evidence policy; do not replace
 them when refreshing the current OpenAPI family.
+
+The SDK capability family currently has one tracked output and no historical
+generated snapshots. If a dated capability snapshot is needed as evidence,
+preserve it under the evidence/archive policy instead of refreshing it as the
+current contract.
 
 ## Sources of truth
 

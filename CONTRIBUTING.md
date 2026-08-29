@@ -72,11 +72,17 @@ python scripts/check_performance.py --baseline docs/benchmark-baseline.json --cu
 ```bash
 python scripts/generate_contracts.py --check
 python scripts/export_openapi.py --check
+python scripts/export_sdk_capabilities.py --check
 ```
 
 After changing an API route or schema, run `python scripts/export_openapi.py`
 and commit all three outputs (`docs/openapi.json` plus both files under
 `docs/agent-tools/`). Do not edit one generated output independently.
+
+After changing `[sdk]` claims or either public SDK client surface, run
+`python scripts/export_sdk_capabilities.py` and commit
+`docs/sdk-capabilities.md`. The `--check` form reproduces the tracked output;
+the project-claims validator also checks that every declared method exists.
 
 ## Dependabot pip PRs and `uv.lock`
 

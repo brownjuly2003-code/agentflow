@@ -1,6 +1,6 @@
 # SDK capability contract
 
-Generated from [`config/project_claims.toml`](../config/project_claims.toml). Edit the manifest, not this table.
+Generated from [`config/project_claims.toml`](../config/project_claims.toml) by `python scripts/export_sdk_capabilities.py`. Edit the manifest, not this table.
 
 | Capability | Python methods | TypeScript methods |
 | --- | --- | --- |

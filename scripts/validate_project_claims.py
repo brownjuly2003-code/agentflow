@@ -13,6 +13,12 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.export_sdk_capabilities import (  # noqa: E402
+    _build_artifacts as _build_sdk_capability_artifacts,
+)
 
 
 def _load_manifest(root: Path) -> dict[str, Any]:
@@ -165,24 +171,6 @@ def _validate_quality_gates(root: Path, manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _render_sdk_capabilities(manifest: dict[str, Any]) -> str:
-    rows = [
-        "# SDK capability contract",
-        "",
-        "Generated from [`config/project_claims.toml`](../config/project_claims.toml). "
-        "Edit the manifest, not this table.",
-        "",
-        "| Capability | Python methods | TypeScript methods |",
-        "| --- | --- | --- |",
-    ]
-    for capability in manifest["sdk"].get("capability", []):
-        python_methods = ", ".join(f"`{name}`" for name in capability["python_methods"])
-        typescript_methods = ", ".join(f"`{name}`" for name in capability["typescript_methods"])
-        rows.append(f"| {capability['name']} | {python_methods} | {typescript_methods} |")
-    rows.append("")
-    return "\n".join(rows)
-
-
 def _validate_sdk_capabilities(root: Path, manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     python_path = root / "sdk" / "agentflow" / "client.py"
@@ -230,15 +218,15 @@ def _validate_sdk_capabilities(root: Path, manifest: dict[str, Any]) -> list[str
                     f"requires public method {method!r}"
                 )
 
-    docs_path = root / "docs" / "sdk-capabilities.md"
-    expected_docs = _render_sdk_capabilities(manifest)
-    if not docs_path.is_file():
-        errors.append("docs/sdk-capabilities.md: generated capability table is missing")
-    elif docs_path.read_text(encoding="utf-8") != expected_docs:
-        errors.append(
-            "docs/sdk-capabilities.md: generated capability table is stale; "
-            "render it from config/project_claims.toml"
-        )
+    for docs_path, expected_docs in _build_sdk_capability_artifacts(root, manifest):
+        relative = docs_path.relative_to(root).as_posix()
+        if not docs_path.is_file():
+            errors.append(f"{relative}: generated capability table is missing")
+        elif docs_path.read_text(encoding="utf-8") != expected_docs:
+            errors.append(
+                f"{relative}: generated capability table is stale; regenerate with "
+                "`python scripts/export_sdk_capabilities.py`"
+            )
     return errors
 
 

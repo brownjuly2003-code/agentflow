@@ -30,6 +30,11 @@ series are preserved in the [documentation archive](../archive/performance/READM
 - `scripts/benchmark_freshness.py` — in-process demo event-to-metric freshness
   harness. Writes `.artifacts/freshness/freshness-benchmark.md` and
   `.artifacts/freshness/current.json`; the tracked path is its lifecycle page.
+- `scripts/benchmark_freshness_realpath.py` — Kafka → Flink →
+  `events.validated` streaming-hop freshness harness for the Mac runtime stand.
+  Writes `.artifacts/freshness/realpath-current.json` and refuses to overwrite
+  the immutable 2026-06-30 evidence record; reviewed runs require a new dated
+  identity with complete provenance.
 - `scripts/benchmark_freshness_e2e.py` — Kafka → Flink → bridge → ClickHouse →
   Redis → API event-to-metric freshness harness for the Mac runtime stand.
   Writes `.artifacts/freshness/e2e-realpath.md` and

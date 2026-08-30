@@ -38,10 +38,38 @@ import time
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 from confluent_kafka import Consumer, Producer
 
-DEFAULT_REPORT = ".artifacts/freshness/realpath-current.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_REPORT = PROJECT_ROOT / ".artifacts" / "freshness" / "realpath-current.json"
+HISTORICAL_RECORD_PATH = PROJECT_ROOT / "docs" / "perf" / "freshness-realpath-2026-06-30.md"
+PROTECTED_REPORT_PATHS = (HISTORICAL_RECORD_PATH,)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bootstrap", default=os.getenv("KAFKA_BOOTSTRAP", "localhost:19092"))
+    parser.add_argument("--source-topic", default="orders.raw")
+    parser.add_argument("--validated-topic", default="events.validated")
+    parser.add_argument("--iterations", type=int, default=30, help="measured samples")
+    parser.add_argument("--warmup", type=int, default=3, help="discarded leading samples")
+    parser.add_argument("--timeout-seconds", type=float, default=30.0)
+    parser.add_argument("--report-json", default=str(DEFAULT_REPORT))
+    return parser.parse_args()
+
+
+def resolve_report_path(report_path: str) -> Path:
+    candidate = Path(report_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    protected_paths = {path.resolve() for path in PROTECTED_REPORT_PATHS}
+    if resolved.resolve() in protected_paths:
+        raise ValueError(
+            "Tracked streaming-hop freshness evidence cannot be overwritten; write runtime "
+            "artifacts under .artifacts/freshness/ instead."
+        )
+    return resolved
 
 
 def build_order_event(amount: Decimal, sequence: int) -> dict:
@@ -132,15 +160,12 @@ def wait_for_validated(consumer: Consumer, event_id: str, timeout_s: float) -> f
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bootstrap", default=os.getenv("KAFKA_BOOTSTRAP", "localhost:19092"))
-    parser.add_argument("--source-topic", default="orders.raw")
-    parser.add_argument("--validated-topic", default="events.validated")
-    parser.add_argument("--iterations", type=int, default=30, help="measured samples")
-    parser.add_argument("--warmup", type=int, default=3, help="discarded leading samples")
-    parser.add_argument("--timeout-seconds", type=float, default=30.0)
-    parser.add_argument("--report-json", default=DEFAULT_REPORT)
-    args = parser.parse_args()
+    args = parse_args()
+    try:
+        report_path = resolve_report_path(args.report_json)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
 
     producer = Producer(
         {
@@ -231,9 +256,8 @@ def main() -> int:
         "samples_ms": [round(s, 1) for s in samples],
     }
 
-    os.makedirs(os.path.dirname(args.report_json) or ".", exist_ok=True)
-    with open(args.report_json, "w", encoding="utf-8") as fh:
-        json.dump(report, fh, indent=2)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
     print("\n=== Real-path freshness (produce -> Flink -> events.validated) ===")
     print(f"  samples : {summary['samples']}  (misses: {summary['misses']})")
@@ -242,7 +266,7 @@ def main() -> int:
     print(f"  p99     : {summary['p99_ms']:.1f} ms")
     print(f"  min/max : {summary['min_ms']:.1f} / {summary['max_ms']:.1f} ms")
     print(f"  mean    : {summary['mean_ms']:.1f} ms")
-    print(f"\nwrote {args.report_json}")
+    print(f"\nwrote {report_path}")
     return 0
 
 

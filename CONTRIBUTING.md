@@ -106,6 +106,14 @@ promote evidence only under a date-stamped name with its run provenance.
 Promote a meaningful run only under a date-stamped name with its JSON companion
 and exact run, host, and source provenance.
 
+`python scripts/benchmark_freshness_realpath.py` writes the Kafka → Flink
+streaming-hop result to `.artifacts/freshness/realpath-current.json`. Run its
+Kafka/Flink prerequisites on `deproject-mac`, not the Windows host. The driver
+refuses to overwrite the immutable
+`docs/perf/freshness-realpath-2026-06-30.md` record; promote a reviewed run only
+under a new date-stamped evidence identity with exact source, host, runtime,
+command, configuration, sample count, miss count, and JSON hash.
+
 `python scripts/benchmark_freshness_e2e.py` writes the S8 real-path report to
 `.artifacts/freshness/e2e-realpath.md` and machine-readable results to
 `.artifacts/freshness/e2e-realpath-current.json`. Run its Kafka/Flink/bridge/

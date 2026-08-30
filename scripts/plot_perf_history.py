@@ -11,6 +11,10 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from plotly.graph_objects import Figure
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / ".artifacts" / "perf-history"
@@ -62,7 +66,7 @@ def load_history(path: Path) -> list[dict[str, object]]:
     return data
 
 
-def build_figure(history: list[dict[str, object]]):
+def build_figure(history: list[dict[str, object]]) -> Figure:
     try:
         import plotly.graph_objects as go
         from plotly.subplots import make_subplots

@@ -23,9 +23,17 @@ trend.
 
 | Archived snapshot | Original path | Last entry | Lifecycle |
 | --- | --- | --- | --- |
+| [`benchmark-compare-baseline-2026-04-12.json`](benchmark-compare-baseline-2026-04-12.json) | *docs/benchmarks/baseline.json* | 2026-04-12 18:04 UTC | Exact orphaned v7 p95-comparator baseline. The unused comparator was retired; the current release gate uses `scripts/check_performance.py` and `docs/benchmark-baseline.json`. |
 | [`perf-history-2026-04-27.json`](perf-history-2026-04-27.json) | *.github/perf-history.json* | 2026-04-27 08:14 UTC | Exact four-entry bot-managed log. The writer was removed after branch protection rejected its self-push; current history is ignored local runtime state. |
 
-The snapshot was archived on 2026-08-30 without changing its tracked Git blob
+The comparator baseline was archived on 2026-08-30 without changing its
+tracked Git blob `ba43d81d20015121a2c0748b3fba95ae52ded374`; its SHA-256 is
+`df7183fa7fc42b6741bd369ebf9ff7b835df5f77bf17d7dda63dfaa038bc4916`.
+The retired *scripts/benchmark_compare.py* had no current workflow,
+documentation, or test consumer.
+
+The performance-history snapshot was archived on 2026-08-30 without changing
+its tracked Git blob
 `8ba12095aa0aefe43cff2cb78ecb9cbbb22edb65`; its SHA-256 is
 `3b522ea0e68159a3147538ec124bcec73fcebf06a762d9537db9b11aa37b9573`.
 

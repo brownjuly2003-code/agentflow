@@ -2,6 +2,23 @@
 
 All notable changes to AgentFlow are documented in this file.
 
+## [Unreleased]
+
+### Documentation — benchmark runs are separated from immutable evidence
+
+The demo freshness and real-path throughput drivers now write their default
+Markdown and JSON outputs only under ignored `.artifacts/freshness/` and
+`.artifacts/throughput/` directories. The former undated tracked reports are
+stable lifecycle pages; their last generated contents are preserved as the
+immutable [2026-06-06 demo freshness](docs/archive/performance/freshness-benchmark-2026-06-06.md)
+and [2026-07-09 S10 throughput](docs/archive/performance/throughput-realpath-2026-07-09.md)
+snapshots. Current documentation cites those snapshots for measured values and
+uses the [demo](docs/perf/freshness-benchmark.md) and
+[real-path](docs/perf/throughput-realpath.md) lifecycle pages only for command,
+output, and evidence-promotion ownership. Both drivers fail closed when asked
+to overwrite tracked lifecycle or archived evidence paths; real-path runtime
+verification remains on `deproject-mac`, not the Windows development host.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

@@ -231,6 +231,10 @@ python scripts/run_windows_unit_shards.py tests/unit
 python scripts/run_benchmark.py
 python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20
 
+# legacy authentication-path reproducibility diagnostic (run on deproject-mac; no Docker)
+# writes the ignored .artifacts/perf/auth-bench-current.md runtime report
+python scripts/perf/auth_bench.py
+
 # benchmark trend: [.github/perf-history.json](.github/perf-history.json) is appended on every main push;
 # render the history locally with `make perf-plot` (writes docs/perf/history.html).
 
@@ -239,6 +243,12 @@ python scripts/generate_contracts.py --check
 bandit -r src sdk --ini .bandit --severity-level medium -f json -o .tmp/bandit-current.json
 python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
 ```
+
+The authentication microbenchmark intentionally reproduces the legacy bcrypt
+O(n) lookup that motivated the current O(1) `key_lookup` path. It is not a
+current production-path benchmark or an SLA; see the
+[artifact lifecycle](docs/perf/auth-bench.md) and immutable
+[2026-05-26 baseline](docs/perf/auth-bench-2026-05-26.md).
 
 ## Status
 

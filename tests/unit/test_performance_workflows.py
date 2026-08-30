@@ -23,7 +23,8 @@ def test_perf_regression_workflow_defines_entity_smoke_gate():
     assert "scripts/profile_entity.py" in step_commands
     assert "--iterations 2000" in step_commands
     assert "--concurrency 16" in step_commands
-    assert "docs/perf/ci-smoke-latest.json" in step_commands
+    assert ".artifacts/perf-smoke/entity-profile.json" in step_commands
+    assert "docs/perf/ci-smoke-latest.json" not in step_commands
     assert "p99_ms" in step_commands
     assert "500" in step_commands
 

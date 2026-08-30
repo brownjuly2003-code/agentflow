@@ -39,7 +39,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
-          mkdir -p .artifacts/perf-smoke docs/perf
+          mkdir -p .artifacts/perf-smoke
           docker compose up -d --wait redis
           python tests/load/run_load_test.py --duckdb-path "$DUCKDB_PATH" --seed-data --seed-only
           python -m uvicorn agentflow_runtime.serving.api.main:app --host 127.0.0.1 --port 8012 > .artifacts/perf-smoke/api.log 2>&1 &
@@ -52,12 +52,14 @@ jobs:
             --entity-id ORD-20260404-1001 \
             --iterations 2000 \
             --concurrency 16 \
-            --output docs/perf/ci-smoke-latest.json
+            --output .artifacts/perf-smoke/entity-profile.json
           python - <<'PY'
           import json
           from pathlib import Path
 
-          payload = json.loads(Path("docs/perf/ci-smoke-latest.json").read_text(encoding="utf-8"))
+          payload = json.loads(
+              Path(".artifacts/perf-smoke/entity-profile.json").read_text(encoding="utf-8")
+          )
           p99_ms = float(payload["p99_ms"])
           if p99_ms > 500:
               raise SystemExit(f"p99_ms {p99_ms:.1f} exceeds perf-smoke gate 500 ms")
@@ -69,6 +71,4 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: perf-smoke-results
-          path: |
-            .artifacts/perf-smoke/
-            docs/perf/ci-smoke-latest.json
+          path: .artifacts/perf-smoke/

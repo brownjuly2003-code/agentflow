@@ -6,6 +6,11 @@
 **Replaces:** ad-hoc benchmark files formerly stored as `docs/benchmark*.md`;
 the non-canonical runs now live under `docs/archive/performance/`.
 
+> **Artifact lifecycle update (2026-08-30):** `scripts/profile_entity.py`
+> writes ignored `.artifacts/perf-smoke/entity-profile.json` by default and
+> refuses output anywhere under `docs/perf/`. Promote a reviewed run only as a
+> new date-stamped evidence identity with its write-up and exact provenance.
+
 ## 1. Purpose
 
 This document defines the **single repeatable way** to measure entity-endpoint
@@ -44,7 +49,7 @@ python scripts/profile_entity.py \
   --entity-id ORD-20260404-1001 \
   --iterations 2000 \
   --concurrency 16 \
-  --output docs/perf/entity-latency-<label>.json
+  --output .artifacts/perf-smoke/entity-profile.json
 ```
 
 ### Parameters (locked)
@@ -139,11 +144,20 @@ Every baseline artifact must include:
 
 | Artifact type | Pattern | Location |
 |---------------|---------|----------|
-| Quick profile JSON | `entity-latency-<label>.json` | `docs/perf/` |
+| Runtime quick profile JSON | `entity-profile.json` (default) | `.artifacts/perf-smoke/` |
+| Promoted quick profile JSON | `entity-latency-<date-or-hypothesis>.json` | `docs/perf/` |
 | Full benchmark JSON | `benchmark-<label>.json` | `.artifacts/benchmark/` |
-| Flamegraph | `flamegraph-<label>.svg` | `docs/perf/` |
+| Runtime flamegraph | `flamegraph-<label>.svg` | `.artifacts/perf-smoke/` |
+| Promoted flamegraph | `flamegraph-<date-or-hypothesis>.svg` | `docs/perf/` |
 | Profile write-up | `entity-profile-<label>.md` | `docs/perf/` |
 | Full benchmark report | `benchmark.md` | `.artifacts/benchmark/` |
+
+Runtime files are ignored and replaceable. The harness resolves relative
+output paths from the project root and rejects `docs/perf/` before making an
+HTTP request. Copy only a reviewed result into `docs/perf/` under a new
+date-stamped name, together with host, runtime, source SHA, command, sample
+counts, and the companion profile write-up; never overwrite an existing
+evidence file.
 
 `<label>` conventions:
 

@@ -92,6 +92,13 @@ Host-specific reports belong to the ignored default output of
 `python scripts/quality_report.py`; do not use that collector to overwrite the
 tracked current reference.
 
+`python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
+the quick entity-latency runtime result to ignored
+`.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the
+project root, and the harness refuses to write anywhere under `docs/perf/`.
+Promote only a reviewed run under a new date-stamped identity with its
+host/runtime, source SHA, exact command, sample counts, and profile write-up.
+
 `python scripts/run_benchmark.py` writes its host- and time-dependent report to
 `.artifacts/benchmark/benchmark.md` and its JSON metrics to
 `.artifacts/benchmark/current.json`. These runtime outputs have no byte-drift

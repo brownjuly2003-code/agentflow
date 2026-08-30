@@ -100,6 +100,7 @@ PERF_NON_IDENTITY_PHRASES = {
     "docs/perf/entity-benchmark-contract.md": (
         "current benchmark reference",
         "scripts/profile_entity.py",
+        ".artifacts/perf-smoke",
         "not a measured result",
         "not an evidence identity",
     ),

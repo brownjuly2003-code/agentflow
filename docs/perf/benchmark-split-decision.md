@@ -5,6 +5,11 @@
 > path now documents ownership; `scripts/run_benchmark.py` writes ignored
 > `.artifacts/benchmark/` outputs, and the former report is preserved as the
 > [2026-04-17 historical snapshot](../archive/performance/load-benchmark-2026-04-17.md).
+> The former `docs/perf/ci-smoke-latest.json` CI output is also retired:
+> `scripts/profile_entity.py` and the PR smoke workflow now write ignored
+> `.artifacts/perf-smoke/entity-profile.json`. Existing tracked entity profiles,
+> latency JSON, and flamegraphs remain point-in-time evidence and are not
+> mutable runtime destinations.
 > The dated decision text below is otherwise unchanged.
 
 **Date:** 2026-04-24

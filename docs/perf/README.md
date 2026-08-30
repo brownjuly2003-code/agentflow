@@ -21,14 +21,20 @@ the retired bot-managed log is preserved as an
 [archived 2026-04-27 snapshot](../archive/performance/perf-history-2026-04-27.json).
 Non-canonical mixed-load reports from the former `docs/benchmark_pool*.md`
 series are preserved in the [documentation archive](../archive/performance/README.md).
+Entity quick-profile runs also stay outside this directory by default:
+`scripts/profile_entity.py` owns ignored
+`.artifacts/perf-smoke/entity-profile.json`; the tracked entity JSON, SVG, and
+write-ups here are point-in-time evidence, not mutable runtime destinations.
 
 ## Tooling
 
 - `scripts/profile_entity.py` — client-side latency harness. Hits one
   entity endpoint `N` times at fixed concurrency and prints a JSON
-  summary with `p50_ms`, `p95_ms`, `p99_ms`, throughput, and raw counts.
-  This is the cheapest way to check "did my change move the needle"
-  without spinning up the full Locust matrix.
+  summary with `p50_ms`, `p95_ms`, `p99_ms`, throughput, and raw counts. It
+  writes `.artifacts/perf-smoke/entity-profile.json` by default, resolves
+  relative output paths from the project root, and refuses output under
+  `docs/perf/`. This is the cheapest way to check "did my change move the
+  needle" without spinning up the full Locust matrix.
 - `scripts/run_benchmark.py` — full Locust matrix across the whole API
   surface. Slower to start; writes `.artifacts/benchmark/benchmark.md` and
   `.artifacts/benchmark/current.json` rather than a mutable tracked report.
@@ -126,28 +132,32 @@ logging, not the serving path.
      --entity-id ORD-20260401-7829 \
      --iterations 2000 \
      --concurrency 16 \
-     --output docs/perf/entity-latency-before.json
+     --output .artifacts/perf-smoke/entity-latency-before.json
    ```
 3. Start a flamegraph sampler in parallel:
    ```bash
-   py-spy record --pid <uvicorn-pid> --duration 30 --output docs/perf/flamegraph-before.svg
+   py-spy record --pid <uvicorn-pid> --duration 30 --output .artifacts/perf-smoke/flamegraph-before.svg
    ```
 4. Drive the same load against the API while `py-spy record` is active
    (re-run step 2 without `--output` is fine).
 5. Apply the code change. Restart `make demo`.
 6. Repeat steps 2 and 3 with `-after` suffixes.
-7. Compare the two `entity-latency-*.json` files; if p99 improved by
+7. Compare the two `.artifacts/perf-smoke/entity-latency-*.json` files; if p99 improved by
    less than 5%, drop the change per the T05 ground rule.
 
 ## File naming
 
-- `entity-latency-<label>.json` — harness output for one run.
-- `flamegraph-<label>.svg` — py-spy flamegraph for one run.
+- `.artifacts/perf-smoke/entity-latency-<label>.json` — runtime harness output.
+- `.artifacts/perf-smoke/flamegraph-<label>.svg` — runtime py-spy flamegraph.
 - `entity-profile-<label>.md` — written by hand, summarizes the top 20
   functions from the flamegraph plus the hypothesis being evaluated.
 
 `label` is usually `before`, `after`, or a hypothesis slug like
 `sqlglot-cache`.
+
+Promote a result only after review, under a new date-stamped `docs/perf/`
+identity with host/runtime details, source SHA, exact command, sample counts,
+and its profile write-up. The harness will not overwrite tracked evidence.
 
 ## Ground rules
 

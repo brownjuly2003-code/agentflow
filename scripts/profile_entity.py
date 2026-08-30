@@ -33,6 +33,11 @@ import statistics
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_PATH = PROJECT_ROOT / ".artifacts" / "perf-smoke" / "entity-profile.json"
+DOCS_PERF_ROOT = PROJECT_ROOT / "docs" / "perf"
 
 
 @dataclass
@@ -148,19 +153,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--request-timeout", type=float, default=10.0)
     parser.add_argument("--api-key", default=None, help="Value to send as X-API-Key header.")
-    parser.add_argument("--output", default=None, help="Optional path to write JSON summary.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_PATH,
+        help="Runtime JSON output (default: .artifacts/perf-smoke/entity-profile.json).",
+    )
     return parser.parse_args()
+
+
+def resolve_output_path(output_path: str | Path) -> Path:
+    candidate = Path(output_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    try:
+        resolved.resolve().relative_to(DOCS_PERF_ROOT.resolve())
+    except ValueError:
+        return resolved
+    raise ValueError(
+        "Entity profile output is runtime state; write it under "
+        ".artifacts/perf-smoke/ instead of docs/perf/."
+    )
 
 
 def main() -> int:
     args = parse_args()
+    try:
+        output_path = resolve_output_path(args.output)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     summary = asyncio.run(run(args))
     text = json.dumps(summary, indent=2)
     print(text)
-    if args.output:
-        from pathlib import Path
-
-        Path(args.output).write_text(text + "\n", encoding="utf-8")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(text + "\n", encoding="utf-8", newline="\n")
     return 0
 
 

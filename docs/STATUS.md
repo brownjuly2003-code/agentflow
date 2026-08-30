@@ -48,7 +48,7 @@ Historical soak chronology (canary1 catch-up fail, resource blockers, kind resid
 |-------|--------|----------|
 | Real-path freshness e2e | **3.02 s p50 / 5.70 s p95** (n=20) | [perf/freshness-e2e-realpath.md](perf/freshness-e2e-realpath.md) |
 | In-process demo freshness | 1.06 s p50 / 1.99 s p95 | [freshness-benchmark-2026-06-06.md](archive/performance/freshness-benchmark-2026-06-06.md) |
-| Real-path throughput measured | produce ~700 eps; bridge apply is the ceiling (see below) | [perf/throughput-realpath.md](perf/throughput-realpath.md) |
+| Real-path throughput measured | produce ~700 eps; bridge apply is the ceiling (see below) | [throughput-realpath-2026-07-09.md](archive/performance/throughput-realpath-2026-07-09.md) |
 | 2-pod control plane on kind | webhook registered on pod A visible on pod B; verify script PASS | [perf/e4-2pod-topology-2026-07-09.md](perf/e4-2pod-topology-2026-07-09.md) |
 | E4 Checks 1–4 (2 pods, delivery + alert single-page) | **PASS** on kind | [perf/e4-check4-alert-single-page-2026-07-17.md](perf/e4-check4-alert-single-page-2026-07-17.md) |
 | 4 h endurance soak (real path + API reads) | bounded lag (peak 2 915 → 0), bridge RSS/FD flat, one faulted batch replayed exactly-once by the journal guard, **zero cache drift** | [perf/soak-s11-2026-07-10.md](perf/soak-s11-2026-07-10.md) |
@@ -65,7 +65,7 @@ measured steps on the same Mac compose stand (Kafka → Flink → bridge → CH)
 
 | Step | Bridge apply | State |
 |------|-------------:|-------|
-| Baseline (per-event apply) | ~8 eps | measured — [perf/throughput-realpath.md](perf/throughput-realpath.md) |
+| Baseline (per-event apply) | ~8 eps | measured — [throughput-realpath-2026-07-09.md](archive/performance/throughput-realpath-2026-07-09.md) |
 | Q1.2 — ClickHouse-only sink, no scratch lake | 11.4 eps | measured — [perf/throughput-realpath-q12-2026-07-09.md](perf/throughput-realpath-q12-2026-07-09.md) |
 | Q1.3 — multi-row batch apply | 22.9 eps | measured — [perf/throughput-realpath-q13-2026-07-09.md](perf/throughput-realpath-q13-2026-07-09.md) |
 | Q1.4 — batched session/user read-modify-writes (constant round-trips per batch) | **87.4 eps** | measured — [perf/throughput-realpath-q14-2026-07-10.md](perf/throughput-realpath-q14-2026-07-10.md) |

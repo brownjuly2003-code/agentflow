@@ -25,7 +25,7 @@ catalogue table rows.
 
 ## Classified non-identity performance paths
 
-These six paths complete the tracked `docs/perf` Markdown inventory without
+These seven paths complete the tracked `docs/perf` Markdown inventory without
 manufacturing evidence identities. They are decisions, procedures, lifecycle
 references, plans, or implementation companions. Supersession belongs only to
 the catalogue identity rows below; none of these paths has a `supersedes` or
@@ -39,6 +39,7 @@ the catalogue identity rows below; none of these paths has a `supersedes` or
 | [freshness-benchmark.md](../perf/freshness-benchmark.md) | Current benchmark lifecycle reference | `scripts/benchmark_freshness.py` writes ignored `.artifacts/freshness/` outputs and refuses to overwrite tracked documentation. | Ownership procedure, not a measured result and not an evidence identity. |
 | [load-benchmark-latest.md](../perf/load-benchmark-latest.md) | Current benchmark lifecycle reference | `scripts/run_benchmark.py` writes ignored `.artifacts/benchmark/` outputs and refuses to overwrite tracked documentation. | Ownership procedure, not a measured result and not an evidence identity. |
 | [public-production-hardware-benchmark-plan.md](../perf/public-production-hardware-benchmark-plan.md) | Operator plan | The completed shared-runner result is owned by [arm-server-benchmark-2026-06-05.md](../perf/arm-server-benchmark-2026-06-05.md); a dedicated production-class result remains absent. | Procedure and access boundary, not an evidence identity. |
+| [throughput-realpath.md](../perf/throughput-realpath.md) | Current benchmark lifecycle reference | `scripts/benchmark_throughput_realpath.py` writes ignored `.artifacts/throughput/` outputs and refuses to overwrite tracked documentation. | Ownership procedure, not a measured result and not an evidence identity. |
 
 ## CI-soak rehearsal series (r1–r12, consumed)
 
@@ -342,10 +343,10 @@ This table is the audit catalogue for the two current STATUS-linked
 S10 throughput endpoints: the retained pre-Q1.2 canonical burst
 baseline and the 2026-07-19 four-hour paced serving-path PASS.
 They measure different modes and are not a direct supersession chain.
-`throughput-realpath.md` is the explicitly retained pre-Q1.2 canonical
-S10 burst baseline, not the later best sustained rate and not the
-current freshness headline. r4 is the current four-hour paced-gate
-outcome; r1/r3 historical facts remain valid. The later F-02 decision
+The archived `throughput-realpath-2026-07-09.md` snapshot is the explicitly
+retained pre-Q1.2 canonical S10 burst baseline, not the later best sustained
+rate and not the current freshness headline. r4 is the current four-hour
+paced-gate outcome; r1/r3 historical facts remain valid. The later F-02 decision
 explicitly preserves r4 as the already-closed serving-path gate while
 the broader golden full-soak plus rollback gate remains open. Do not
 merge those gates or imply production acceptance. Columns are
@@ -354,7 +355,7 @@ boundary. `None` means no supersession is recorded.
 
 | Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
 | --- | --- | --- | --- | --- | --- |
-| [throughput-realpath.md](../perf/throughput-realpath.md) | 2026-07-09 | pre-Q1.2 canonical S10 unpaced burst baseline: 400 events, produce 699 events/s, Flink hop 7.97 events/s, bridge apply 7.97 events/s, duplicates 0, apply failures 0, lag 0 → 0 / peak 329 | None | None | Explicitly retained pre-Q1.2 canonical S10 burst baseline on deproject-mac Colima vz 6 GiB / 4 CPU. Different mode from the later four-hour paced r4 PASS; not a direct supersession chain. Not the later best sustained rate (q13/q14/100eps/10m/1h remain separately evidenced) and not the current freshness headline. Not a production SLA or production acceptance; `production.status` remains `candidate`. |
+| [throughput-realpath-2026-07-09.md](../archive/performance/throughput-realpath-2026-07-09.md) | 2026-07-09 | pre-Q1.2 canonical S10 unpaced burst baseline: 400 events, produce 699 events/s, Flink hop 7.97 events/s, bridge apply 7.97 events/s, duplicates 0, apply failures 0, lag 0 → 0 / peak 329 | None | None | Explicitly retained pre-Q1.2 canonical S10 burst baseline on deproject-mac Colima vz 6 GiB / 4 CPU. Different mode from the later four-hour paced r4 PASS; not a direct supersession chain. Not the later best sustained rate (q13/q14/100eps/10m/1h remain separately evidenced) and not the current freshness headline. Not a production SLA or production acceptance; `production.status` remains `candidate`. |
 | [throughput-realpath-paced100-4h-r4-2026-07-19.md](../perf/throughput-realpath-paced100-4h-r4-2026-07-19.md) | 2026-07-19 | S10 four-hour paced serving-path PASS: produced = delivered = 1 440 000 at 100.0 eps, Flink hop 99.9 eps (1 440 000 validated), bridge apply 99.9 eps (+1 440 000 unique), consumed = applied = 1 440 000, duplicates 0, apply failures 0, lag 0 → 0 (peak 1956), Flink never restarted (checkpoints restored 0, completed 484/484, failed 0), disk ≤ 74 % | [throughput-realpath-paced100-4h-2026-07-18.md](../perf/throughput-realpath-paced100-4h-2026-07-18.md) [throughput-realpath-paced100-4h-r3-2026-07-19.md](../perf/throughput-realpath-paced100-4h-r3-2026-07-19.md) | None | Current four-hour paced-gate outcome only; r1/r3 historical facts remain valid. F-02 preserves r4 as the already-closed serving-path gate while the broader golden full-soak plus rollback gate remains open. Pre-materializer Kafka→Flink→bridge→ClickHouse path on deproject-mac Colima vz 6 GiB / 4 CPU / 60 GiB; advisory for the post-Iceberg golden gate, which remains `BLOCKED_HOST_CAPACITY`. Different mode from the pre-Q1.2 burst baseline; not a direct supersession chain. Does not merge those gates or claim a production SLA or production acceptance; `production.status` remains `candidate`. |
 
 ## Historical four-hour paced S10 predecessor records

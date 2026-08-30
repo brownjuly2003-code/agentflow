@@ -106,6 +106,14 @@ promote evidence only under a date-stamped name with its run provenance.
 Promote a meaningful run only under a date-stamped name with its JSON companion
 and exact run, host, and source provenance.
 
+`python scripts/benchmark_throughput_realpath.py` writes the real-path report
+to `.artifacts/throughput/realpath-current.md` and machine-readable results to
+`.artifacts/throughput/realpath-current.json`. Run its Kafka/Flink/bridge/
+ClickHouse prerequisites on `deproject-mac`, not the Windows development host.
+Do not overwrite the tracked `docs/perf/throughput-realpath.md` lifecycle page
+or its archived S10 baseline; promote only date-stamped evidence with exact
+run, host, source, and configuration provenance.
+
 ## Dependabot pip PRs and `uv.lock`
 
 Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**

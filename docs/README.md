@@ -51,6 +51,7 @@ Do not hand-edit or update only part of the family.
 | Quality gates | `docs/quality.md` | `python scripts/export_quality_reference.py` | `python scripts/export_quality_reference.py --check` | Deterministic current reference from `config/project_claims.toml`; the CI project-claims gate checks config alignment and output drift. |
 | Full-load benchmark | None; `docs/perf/load-benchmark-latest.md` is a lifecycle page | `python scripts/run_benchmark.py` writes `.artifacts/benchmark/benchmark.md` and `.artifacts/benchmark/current.json` | Runtime metric comparison, not byte drift | Measurements vary by host and time. CI consumes ignored artifacts; promote only date-stamped evidence with provenance. |
 | Demo freshness benchmark | None; `docs/perf/freshness-benchmark.md` is a lifecycle page | `python scripts/benchmark_freshness.py` writes `.artifacts/freshness/freshness-benchmark.md` and `.artifacts/freshness/current.json` | Runtime evidence review, not byte drift | Measurements vary by host and time. The 2026-06-06 snapshot is archived; promote only date-stamped evidence with provenance. |
+| Real-path throughput benchmark | None; `docs/perf/throughput-realpath.md` is a lifecycle page | `python scripts/benchmark_throughput_realpath.py` writes `.artifacts/throughput/realpath-current.md` and `.artifacts/throughput/realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink/bridge/ClickHouse stand. The pre-Q1.2 S10 baseline is archived; promote only date-stamped evidence with provenance. |
 
 Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
 `docs/perf/live_openapi_ci.json` are evidence, not current generated
@@ -81,6 +82,12 @@ The demo freshness benchmark is also host- and time-dependent. Its
 runtime outputs and protects both tracked documentation paths; the last
 mutable report is preserved as a
 [2026-06-06 historical snapshot](archive/performance/freshness-benchmark-2026-06-06.md).
+
+The real-path throughput harness requires the Mac runtime stand. Its
+[artifact lifecycle page](perf/throughput-realpath.md) names the ignored
+Markdown/JSON outputs and keeps later date-stamped throughput records distinct;
+the former mutable pre-Q1.2 report is preserved as the
+[2026-07-09 S10 baseline](archive/performance/throughput-realpath-2026-07-09.md).
 
 ## Sources of truth
 

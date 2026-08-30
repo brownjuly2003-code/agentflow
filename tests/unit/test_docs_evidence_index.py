@@ -73,6 +73,7 @@ PERF_NON_IDENTITY_PATHS = {
     "docs/perf/freshness-benchmark.md",
     "docs/perf/load-benchmark-latest.md",
     "docs/perf/public-production-hardware-benchmark-plan.md",
+    "docs/perf/throughput-realpath.md",
 }
 PERF_NON_IDENTITY_PHRASES = {
     "docs/perf/benchmark-split-decision.md": (
@@ -110,6 +111,12 @@ PERF_NON_IDENTITY_PHRASES = {
         "arm-server-benchmark-2026-06-05.md",
         "dedicated production-class",
         "not an evidence identity",
+    ),
+    "docs/perf/throughput-realpath.md": (
+        "current benchmark lifecycle reference",
+        "scripts/benchmark_throughput_realpath.py",
+        ".artifacts/throughput",
+        "not a measured result",
     ),
 }
 ENTITY_HOT_PATH_FACTS = {
@@ -866,7 +873,7 @@ RSS_REVERIFY_BOUNDARIES = (
     "candidate",
 )
 CURRENT_S10_THROUGHPUT_HEADING = "## Current S10 throughput evidence records"
-S10_BURST_BASELINE_RECORD = "docs/perf/throughput-realpath.md"
+S10_BURST_BASELINE_RECORD = "docs/archive/performance/throughput-realpath-2026-07-09.md"
 S10_PACED_R4_RECORD = "docs/perf/throughput-realpath-paced100-4h-r4-2026-07-19.md"
 S10_PACED_R1_RECORD = "docs/perf/throughput-realpath-paced100-4h-2026-07-18.md"
 S10_PACED_R3_RECORD = "docs/perf/throughput-realpath-paced100-4h-r3-2026-07-19.md"
@@ -881,7 +888,7 @@ CURRENT_S10_THROUGHPUT_DATES = {
     S10_PACED_R4_RECORD: "2026-07-19",
 }
 CURRENT_S10_THROUGHPUT_DIGESTS = {
-    S10_BURST_BASELINE_RECORD: ("ab6c459064593ff092c6b7bf1ab4050357ee202d63ec9ca6b9608ab978816174"),
+    S10_BURST_BASELINE_RECORD: ("f029493f3d6cf26c2ecaf527c27d47b17d0869af2e222da12a35e0f54e04292f"),
     S10_PACED_R4_RECORD: ("08027f210934070053de3cdabd3065d7bb0a0dc8d5a9387b77880b45cd6adbda"),
 }
 S10_INTERMEDIATE_RECORDS = (
@@ -4511,7 +4518,10 @@ def test_current_s10_throughput_index_lists_the_bounded_pair_with_required_field
         assert row["date"] == CURRENT_S10_THROUGHPUT_DATES[identity]
         assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
         targets = LINK_RE.findall(row["identity"])
-        assert targets[0].startswith("../perf/"), row["identity"]
+        if identity == S10_BURST_BASELINE_RECORD:
+            assert targets[0].startswith("../archive/performance/"), row["identity"]
+        else:
+            assert targets[0].startswith("../perf/"), row["identity"]
 
 
 def test_current_s10_throughput_records_are_not_a_direct_supersession_chain() -> None:

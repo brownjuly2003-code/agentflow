@@ -78,6 +78,33 @@ def test_tracked_benchmark_docs_cannot_be_overwritten(relative_path):
         run_benchmark.resolve_report_path(relative_path)
 
 
+@pytest.mark.parametrize(
+    "results_path",
+    [
+        "docs/benchmark-baseline.json",
+        str(ROOT / "docs" / "benchmark-baseline.json"),
+    ],
+)
+def test_main_rejects_canonical_baseline_before_runtime(results_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_benchmark.py", "--results-json", results_path],
+    )
+
+    def fail_if_runtime_starts() -> None:
+        raise AssertionError("benchmark runtime started before output validation")
+
+    monkeypatch.setattr(
+        run_benchmark,
+        "ensure_locust_available",
+        fail_if_runtime_starts,
+    )
+
+    assert run_benchmark.main() == 2
+    assert "canonical benchmark baseline" in capsys.readouterr().err.lower()
+
+
 def test_resolve_host_seed_db_path_defaults_to_demo_db(monkeypatch):
     monkeypatch.delenv("DUCKDB_PATH", raising=False)
 
@@ -220,15 +247,20 @@ def test_full_load_benchmark_docs_name_owner_and_snapshot_lifecycle():
     assert "`python scripts/run_benchmark.py`" in current
     assert "`.artifacts/benchmark/benchmark.md`" in current
     assert "`.artifacts/benchmark/current.json`" in current
+    assert "read-only gate input" in current
+    assert "`docs/benchmark-baseline.json`" in current
     assert "archive/performance/load-benchmark-2026-04-17.md" in current
     assert "Original path: *docs/perf/load-benchmark-latest.md*" in archived
     assert "Content type: historical generated full-load benchmark snapshot" in archived
     assert "Generated: `2026-04-17T12:55:58+03:00`" in archived
     assert "| Full-load benchmark |" in docs_hub
+    assert "Read-only gate input `docs/benchmark-baseline.json`" in docs_hub
     assert ".artifacts/benchmark/benchmark.md" in docs_hub
     assert "python scripts/run_benchmark.py" in contributing
     assert ".artifacts/benchmark/benchmark.md" in contributing
+    assert "must not replace `docs/benchmark-baseline.json`" in contributing
     assert "Full-load benchmark snapshot/lifecycle sub-slice" in plan
+    assert "Canonical full-load gate baseline protection sub-slice" in plan
     assert "Пункт 6 остаётся открыт" in plan
 
 

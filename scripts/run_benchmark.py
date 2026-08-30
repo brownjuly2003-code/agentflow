@@ -26,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 README_PATH = PROJECT_ROOT / "README.md"
 REPORT_PATH = PROJECT_ROOT / ".artifacts" / "benchmark" / "benchmark.md"
 RESULTS_PATH = PROJECT_ROOT / ".artifacts" / "benchmark" / "current.json"
+CANONICAL_BASELINE_PATH = PROJECT_ROOT / "docs" / "benchmark-baseline.json"
 CURRENT_LIFECYCLE_PATH = PROJECT_ROOT / "docs" / "perf" / "load-benchmark-latest.md"
 ARCHIVED_SNAPSHOT_PATH = (
     PROJECT_ROOT / "docs" / "archive" / "performance" / "load-benchmark-2026-04-17.md"
@@ -63,6 +64,17 @@ def resolve_report_path(report_path: str) -> Path:
         raise ValueError(
             "Tracked benchmark documentation cannot be overwritten; write runtime reports "
             "under .artifacts/benchmark instead"
+        )
+    return resolved
+
+
+def resolve_results_path(results_path: str) -> Path:
+    candidate = Path(results_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    if resolved.resolve() == CANONICAL_BASELINE_PATH.resolve():
+        raise ValueError(
+            "The canonical benchmark baseline cannot be overwritten by runtime output; "
+            "write runtime results under .artifacts/benchmark instead"
         )
     return resolved
 
@@ -636,6 +648,7 @@ def main() -> int:
     args = parse_args()
     try:
         report_path = resolve_report_path(args.report_path)
+        results_path = resolve_results_path(args.results_json)
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 2
@@ -643,9 +656,6 @@ def main() -> int:
     claims = read_readme_claims()
     system_info = collect_system_info()
     generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    results_path = Path(args.results_json)
-    if not results_path.is_absolute():
-        results_path = PROJECT_ROOT / results_path
     with tempfile.TemporaryDirectory(prefix="agentflow-benchmark-") as temp_dir:
         temp_path = Path(temp_dir)
         db_path = temp_path / "benchmark.duckdb"

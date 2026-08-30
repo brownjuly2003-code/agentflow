@@ -103,8 +103,10 @@ host/runtime, source SHA, exact command, sample counts, and profile write-up.
 `.artifacts/benchmark/benchmark.md` and its JSON metrics to
 `.artifacts/benchmark/current.json`. These runtime outputs have no byte-drift
 check and must not replace `docs/perf/load-benchmark-latest.md` or an archived
-snapshot. CI compares the fresh JSON metrics with the tracked gate baseline;
-promote evidence only under a date-stamped name with its run provenance.
+snapshot. They also must not replace `docs/benchmark-baseline.json`, which is a
+reviewed gate-policy input rather than generated runtime output. CI compares
+the fresh JSON metrics with that tracked gate baseline; promote evidence only
+under a date-stamped name with its run provenance.
 
 `python tests/load/run_load_test.py` writes the Locust p99 CI-smoke CSV prefix
 to `.artifacts/load/results` and JSON metrics to `.artifacts/load/results.json`.

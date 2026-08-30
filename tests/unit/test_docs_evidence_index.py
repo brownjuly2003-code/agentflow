@@ -71,6 +71,7 @@ PERF_NON_IDENTITY_PATHS = {
     "docs/perf/bridge-ch-native-apply-q1-2026-07-09.md",
     "docs/perf/entity-benchmark-contract.md",
     "docs/perf/freshness-benchmark.md",
+    "docs/perf/freshness-e2e-realpath.md",
     "docs/perf/load-benchmark-latest.md",
     "docs/perf/public-production-hardware-benchmark-plan.md",
     "docs/perf/throughput-realpath.md",
@@ -97,6 +98,12 @@ PERF_NON_IDENTITY_PHRASES = {
     "docs/perf/freshness-benchmark.md": (
         "current benchmark lifecycle reference",
         "scripts/benchmark_freshness.py",
+        ".artifacts/freshness",
+        "not a measured result",
+    ),
+    "docs/perf/freshness-e2e-realpath.md": (
+        "current benchmark lifecycle reference",
+        "scripts/benchmark_freshness_e2e.py",
         ".artifacts/freshness",
         "not a measured result",
     ),
@@ -676,7 +683,10 @@ HISTORICAL_STREAMING_HOP_BOUNDARIES = (
     "candidate",
 )
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
-REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
+REAL_PATH_FRESHNESS_LIFECYCLE = "docs/perf/freshness-e2e-realpath.md"
+REAL_PATH_FRESHNESS_RECORD = (
+    "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md"
+)
 DEMO_FRESHNESS_RECORD = "docs/archive/performance/freshness-benchmark-2026-06-06.md"
 CURRENT_FRESHNESS_DATES = {
     REAL_PATH_FRESHNESS_RECORD: "2026-07-09",
@@ -684,7 +694,7 @@ CURRENT_FRESHNESS_DATES = {
 }
 CURRENT_FRESHNESS_DIGESTS = {
     REAL_PATH_FRESHNESS_RECORD: (
-        "a7715b090f1593924a5503d18ed932c92681f874083a99625f2f0f9fa7050c88"
+        "4c169f42610d2acab88f05f818feb0e8c7a808c24db19fd7013b63f5021bd523"
     ),
     DEMO_FRESHNESS_RECORD: ("371f62ad7ecc64954ba42fe5ae24b2c30615429e2cf53bca6d88c402fd449f2d"),
 }
@@ -3979,12 +3989,14 @@ def test_historical_streaming_hop_record_keeps_published_digest() -> None:
 def test_historical_streaming_hop_sources_and_plan_match_the_index() -> None:
     historical = (ROOT / HISTORICAL_STREAMING_HOP_RECORD).read_text(encoding="utf-8")
     current = (ROOT / REAL_PATH_FRESHNESS_RECORD).read_text(encoding="utf-8")
+    lifecycle = (ROOT / REAL_PATH_FRESHNESS_LIFECYCLE).read_text(encoding="utf-8")
     bridge = (ROOT / "docs" / "architecture" / "serving-bridge.md").read_text(encoding="utf-8")
     manifest = tomllib.loads(CLAIMS.read_text(encoding="utf-8"))
     plan = DOCUMENTATION_PLAN.read_text(encoding="utf-8").lower()
 
-    assert Path(REAL_PATH_FRESHNESS_RECORD).name in historical
+    assert Path(REAL_PATH_FRESHNESS_LIFECYCLE).name in historical
     assert HISTORICAL_STREAMING_HOP_RECORD in current
+    assert Path(REAL_PATH_FRESHNESS_RECORD).name in lifecycle
     assert Path(HISTORICAL_STREAMING_HOP_RECORD).name in bridge
     assert manifest["latency"]["real_path"]["evidence"] == REAL_PATH_FRESHNESS_RECORD
     assert HISTORICAL_STREAMING_HOP_RECORD not in manifest["required_evidence"]
@@ -4033,10 +4045,7 @@ def test_current_freshness_index_lists_the_bounded_pair_with_required_fields() -
         assert row["date"] == CURRENT_FRESHNESS_DATES[identity]
         assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
         targets = LINK_RE.findall(row["identity"])
-        if identity == DEMO_FRESHNESS_RECORD:
-            assert targets[0].startswith("../archive/performance/"), row["identity"]
-        else:
-            assert targets[0].startswith("../perf/"), row["identity"]
+        assert targets[0].startswith("../archive/performance/"), row["identity"]
 
 
 def test_current_freshness_records_are_complementary_not_supersession() -> None:

@@ -20,7 +20,7 @@ fakeredis-backed cache semantics: 1.06 s p50 and 1.99 s p95 for the
 `event_driven` arm. It does not measure Kafka, Flink, the serving bridge, or
 ClickHouse and does not describe current production invalidation wiring.
 
-The complementary [S8 real-path record](freshness-e2e-realpath.md) measures
+The complementary [archived S8 real-path record](../archive/performance/freshness-e2e-realpath-2026-07-09.md) measures
 Kafka through the live metric on the Mac/Colima stand. The two records cover
 different execution scopes and are not a supersession chain.
 

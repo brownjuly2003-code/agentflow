@@ -12,6 +12,7 @@ measurements remain intact, but they are not the current performance gate.
 | [`benchmark_pool16_60s.md`](benchmark_pool16_60s.md) | *docs/benchmark_pool16_60s.md* | 2026-04-17 07:58 +03:00 | 50 users / 60 s |
 | [`benchmark_pool24_60s.md`](benchmark_pool24_60s.md) | *docs/benchmark_pool24_60s.md* | 2026-04-17 07:59 +03:00 | 50 users / 60 s, different pool configuration |
 | [`freshness-benchmark-2026-06-06.md`](freshness-benchmark-2026-06-06.md) | *docs/perf/freshness-benchmark.md* | 2026-06-06 10:10 +03:00 | In-process DuckDB demo shortcut; former mutable tracked report |
+| [`freshness-e2e-realpath-2026-07-09.md`](freshness-e2e-realpath-2026-07-09.md) | *docs/perf/freshness-e2e-realpath.md* | 2026-07-09 15:33 UTC | S8 event-to-live-metric real path; former mutable tracked report |
 | [`load-benchmark-2026-04-17.md`](load-benchmark-2026-04-17.md) | *docs/perf/load-benchmark-latest.md* | 2026-04-17 12:55 +03:00 | 20 users / 30 s; former mutable tracked report |
 | [`throughput-realpath-2026-07-09.md`](throughput-realpath-2026-07-09.md) | *docs/perf/throughput-realpath.md* | 2026-07-09 15:41 UTC | Pre-Q1.2 S10 real-path burst baseline; former mutable tracked report |
 
@@ -26,6 +27,7 @@ trend.
 
 Use the [full-load benchmark artifact lifecycle](../../perf/load-benchmark-latest.md),
 the [demo freshness benchmark lifecycle](../../perf/freshness-benchmark.md),
+the [S8 real-path freshness lifecycle](../../perf/freshness-e2e-realpath.md),
 and the [real-path throughput benchmark lifecycle](../../perf/throughput-realpath.md)
 for current output and promotion rules. New mutable reports belong under
 their ignored `.artifacts/` directories; use the

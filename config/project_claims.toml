@@ -1,7 +1,7 @@
 schema_version = 1
 
 required_evidence = [
-    "docs/perf/freshness-e2e-realpath.md",
+    "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md",
     "docs/decisions/0013-golden-production-topology.md",
     "src/agentflow_runtime/processing/flink_jobs/Dockerfile",
     "src/agentflow_runtime/processing/flink_jobs/requirements.txt",
@@ -64,7 +64,7 @@ reference_only_infrastructure = ["infrastructure/terraform/modules/flink"]
 [latency.real_path]
 p50_seconds = 3.02
 p95_seconds = 5.70
-evidence = "docs/perf/freshness-e2e-realpath.md"
+evidence = "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md"
 
 [python]
 declared_versions = ["3.11", "3.12", "3.13"]

@@ -15,7 +15,7 @@ gates are recorded in [docs/PROJECT_CLOSURE.md](docs/PROJECT_CLOSURE.md).
 
 BI on a replica answers yesterday's questions. Support, ops, and merch workflows need *current* orders, metrics, and health signals at the moment of decision — not a stale warehouse snapshot, not a pile of one-off service adapters, and not a cache that quietly serves 30-second-old numbers.
 
-AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([demo snapshot](docs/archive/performance/freshness-benchmark-2026-06-06.md), [real-path S8](docs/perf/freshness-e2e-realpath.md)). One serving boundary on top of that axis:
+AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([demo snapshot](docs/archive/performance/freshness-benchmark-2026-06-06.md), [real-path S8 snapshot](docs/archive/performance/freshness-e2e-realpath-2026-07-09.md)). One serving boundary on top of that axis:
 
 - streaming ingestion for operational events (validated, enriched, journaled)
 - a semantic layer that exposes entities, metrics, lineage, and query endpoints
@@ -28,7 +28,7 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 ## Highlights
 
 - **Measured event-to-metric freshness** — two measured arms, not one number:
-  - **Real path** (Kafka → Flink 2.3.0 → serving bridge → ClickHouse → `GET /v1/metrics/*` with Redis push invalidation): **3.02 s p50 / 5.70 s p95** (n=20, Mac/Colima) — [S8 e2e](docs/perf/freshness-e2e-realpath.md), `python scripts/benchmark_freshness_e2e.py`
+  - **Real path** (Kafka → Flink 2.3.0 → serving bridge → ClickHouse → `GET /v1/metrics/*` with Redis push invalidation): **3.02 s p50 / 5.70 s p95** (n=20, Mac/Colima) — [S8 e2e snapshot](docs/archive/performance/freshness-e2e-realpath-2026-07-09.md); current output ownership: [benchmark lifecycle](docs/perf/freshness-e2e-realpath.md), `python scripts/benchmark_freshness_e2e.py`
   - **In-process demo shortcut** (`local_pipeline` → DuckDB, no Kafka/Flink): **1.06 s p50 / 1.99 s p95**, tunable to **238 ms p50**; TTL-only ~15 s — [2026-06-06 demo snapshot](docs/archive/performance/freshness-benchmark-2026-06-06.md); current output ownership: [benchmark lifecycle](docs/perf/freshness-benchmark.md), `python scripts/benchmark_freshness.py`
   Do not present the 1.06 s figure as the production streaming path.
 - **Measured write-path throughput** — bridge apply **87.4 events/s** on a 400-event burst (catch-up 4.6 s, peak lag 0) after three measured optimization steps (8 → 11.4 → 22.9 → 87.4), and a **4 h endurance soak** at the delivered ~47 eps with bounded lag, flat bridge RSS/FDs, one live fault replayed exactly-once, and zero cache drift — [q14 report](docs/perf/throughput-realpath-q14-2026-07-10.md), [S11 soak](docs/perf/soak-s11-2026-07-10.md)

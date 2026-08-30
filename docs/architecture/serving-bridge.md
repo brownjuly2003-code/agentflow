@@ -32,7 +32,7 @@ runtime the repo pins), 2026-07-09:
 - **S8 (same day, full distribution):** the same path through to
   `GET /v1/metrics/revenue` measured **3.02 s p50 / 5.70 s p95** (n=20, 1
   warmup miss) with Redis push invalidation active. Report:
-  [`perf/freshness-e2e-realpath.md`](../perf/freshness-e2e-realpath.md);
+  [`archive/performance/freshness-e2e-realpath-2026-07-09.md`](../archive/performance/freshness-e2e-realpath-2026-07-09.md);
   driver: `scripts/benchmark_freshness_e2e.py`.
 - The in-process (DuckDB) arm served the same shape of event **1.1 s** after it
   was produced to `events.validated` (not the full produce→metric claim).

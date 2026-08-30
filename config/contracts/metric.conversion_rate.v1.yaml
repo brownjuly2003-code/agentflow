@@ -24,5 +24,5 @@ source_events:
 source_table: sessions_aggregated
 freshness:
   p95_staleness_budget_seconds: 8.0
-  basis: docs/perf/freshness-e2e-realpath.md (S8 real path p95 5.70s + headroom; demo
+  basis: docs/archive/performance/freshness-e2e-realpath-2026-07-09.md (S8 real path p95 5.70s + headroom; demo
     arm still in docs/perf/freshness-benchmark.md)

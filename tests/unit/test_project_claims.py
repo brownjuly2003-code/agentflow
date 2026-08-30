@@ -28,7 +28,7 @@ VALIDATOR_INPUTS = (
     "docs/STATUS.md",
     "docs/quality.md",
     "docs/decisions/0013-golden-production-topology.md",
-    "docs/perf/freshness-e2e-realpath.md",
+    "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md",
     "docs/perf/golden-flink-submission-2026-07-30.md",
     "docs/perf/live-iceberg-materialization-2026-08-01.md",
     "docs/perf/full-lake-to-serving-e2e-2026-08-01.md",

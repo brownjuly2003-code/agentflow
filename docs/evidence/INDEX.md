@@ -25,7 +25,7 @@ catalogue table rows.
 
 ## Classified non-identity performance paths
 
-These seven paths complete the tracked `docs/perf` Markdown inventory without
+These eight paths complete the tracked `docs/perf` Markdown inventory without
 manufacturing evidence identities. They are decisions, procedures, lifecycle
 references, plans, or implementation companions. Supersession belongs only to
 the catalogue identity rows below; none of these paths has a `supersedes` or
@@ -37,6 +37,7 @@ the catalogue identity rows below; none of these paths has a `supersedes` or
 | [bridge-ch-native-apply-q1-2026-07-09.md](../perf/bridge-ch-native-apply-q1-2026-07-09.md) | Implementation companion | The Q1.2 measured result is owned by [throughput-realpath-q12-2026-07-09.md](../perf/throughput-realpath-q12-2026-07-09.md). | Code-slice explanation, not an evidence identity. |
 | [entity-benchmark-contract.md](../perf/entity-benchmark-contract.md) | Current benchmark reference | Executable behavior is owned by `scripts/profile_entity.py` and `scripts/run_benchmark.py`. | Measurement procedure, not a measured result and not an evidence identity. |
 | [freshness-benchmark.md](../perf/freshness-benchmark.md) | Current benchmark lifecycle reference | `scripts/benchmark_freshness.py` writes ignored `.artifacts/freshness/` outputs and refuses to overwrite tracked documentation. | Ownership procedure, not a measured result and not an evidence identity. |
+| [freshness-e2e-realpath.md](../perf/freshness-e2e-realpath.md) | Current benchmark lifecycle reference | `scripts/benchmark_freshness_e2e.py` writes ignored `.artifacts/freshness/` outputs and refuses to overwrite the lifecycle page or archived snapshot. | Ownership procedure for the [dated S8 evidence](../archive/performance/freshness-e2e-realpath-2026-07-09.md), not a measured result and not an evidence identity. |
 | [load-benchmark-latest.md](../perf/load-benchmark-latest.md) | Current benchmark lifecycle reference | `scripts/run_benchmark.py` writes ignored `.artifacts/benchmark/` outputs and refuses to overwrite tracked documentation. | Ownership procedure, not a measured result and not an evidence identity. |
 | [public-production-hardware-benchmark-plan.md](../perf/public-production-hardware-benchmark-plan.md) | Operator plan | The completed shared-runner result is owned by [arm-server-benchmark-2026-06-05.md](../perf/arm-server-benchmark-2026-06-05.md); a dedicated production-class result remains absent. | Procedure and access boundary, not an evidence identity. |
 | [throughput-realpath.md](../perf/throughput-realpath.md) | Current benchmark lifecycle reference | `scripts/benchmark_throughput_realpath.py` writes ignored `.artifacts/throughput/` outputs and refuses to overwrite tracked documentation. | Ownership procedure, not a measured result and not an evidence identity. |
@@ -261,7 +262,7 @@ boundary. `None` means no supersession is recorded.
 
 | Identity | Date | Result | Supersedes | Superseded by | Claim boundary |
 | --- | --- | --- | --- | --- | --- |
-| [freshness-e2e-realpath.md](../perf/freshness-e2e-realpath.md) | 2026-07-09 | S8 real-path event-to-live-revenue-metric measurement: p50 3.02 s, p95 5.70 s, n=20 with one miss, across Kafka -> Flink -> bridge -> ClickHouse -> Redis invalidation -> API | None | None | Measured on a single Mac/Colima stand for the revenue metric, with one miss. This is not an SLA, a cross-host production benchmark, the demo shortcut, or production acceptance; `production.status` remains `candidate`. |
+| [freshness-e2e-realpath-2026-07-09.md](../archive/performance/freshness-e2e-realpath-2026-07-09.md) | 2026-07-09 | S8 real-path event-to-live-revenue-metric measurement: p50 3.02 s, p95 5.70 s, n=20 with one miss, across Kafka -> Flink -> bridge -> ClickHouse -> Redis invalidation -> API | None | None | Measured on a single Mac/Colima stand for the revenue metric, with one miss. This is not an SLA, a cross-host production benchmark, the demo shortcut, or production acceptance; `production.status` remains `candidate`. |
 | [freshness-benchmark-2026-06-06.md](../archive/performance/freshness-benchmark-2026-06-06.md) | 2026-06-06 | Generated in-process DuckDB shortcut pre-S7: `event_driven` p50 1.06 s and p95 1.99 s, n=30, on Windows with fakeredis-backed cache semantics | None | None | Does not measure Kafka, Flink, bridge, or ClickHouse and does not claim current production invalidation wiring, a production SLA, or production acceptance. This is a Windows/fakeredis demo-path baseline; the S8 real-path record is complementary. |
 
 ## E4 replica-correctness evidence records

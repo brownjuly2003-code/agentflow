@@ -8,6 +8,9 @@ Targeted entity-latency snapshots and flamegraphs remain alongside it. The
 [demo freshness benchmark lifecycle](freshness-benchmark.md) names separate
 ignored runtime outputs; its former mutable report is preserved as an
 [archived 2026-06-06 snapshot](../archive/performance/freshness-benchmark-2026-06-06.md).
+The [S8 real-path freshness lifecycle](freshness-e2e-realpath.md) keeps its
+Mac runtime outputs ignored; the measured full-path result is preserved as an
+[archived 2026-07-09 snapshot](../archive/performance/freshness-e2e-realpath-2026-07-09.md).
 The [real-path throughput benchmark lifecycle](throughput-realpath.md) keeps
 Mac runtime outputs ignored; its pre-Q1.2 S10 burst baseline is preserved as
 an [archived 2026-07-09 snapshot](../archive/performance/throughput-realpath-2026-07-09.md).
@@ -27,6 +30,11 @@ series are preserved in the [documentation archive](../archive/performance/READM
 - `scripts/benchmark_freshness.py` — in-process demo event-to-metric freshness
   harness. Writes `.artifacts/freshness/freshness-benchmark.md` and
   `.artifacts/freshness/current.json`; the tracked path is its lifecycle page.
+- `scripts/benchmark_freshness_e2e.py` — Kafka → Flink → bridge → ClickHouse →
+  Redis → API event-to-metric freshness harness for the Mac runtime stand.
+  Writes `.artifacts/freshness/e2e-realpath.md` and
+  `.artifacts/freshness/e2e-realpath-current.json`; the tracked undated path is
+  its lifecycle page.
 - `scripts/benchmark_throughput_realpath.py` — Kafka → Flink → bridge →
   ClickHouse harness for the Mac runtime stand. Writes
   `.artifacts/throughput/realpath-current.md` and

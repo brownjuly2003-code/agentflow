@@ -106,6 +106,14 @@ promote evidence only under a date-stamped name with its run provenance.
 Promote a meaningful run only under a date-stamped name with its JSON companion
 and exact run, host, and source provenance.
 
+`python scripts/benchmark_freshness_e2e.py` writes the S8 real-path report to
+`.artifacts/freshness/e2e-realpath.md` and machine-readable results to
+`.artifacts/freshness/e2e-realpath-current.json`. Run its Kafka/Flink/bridge/
+ClickHouse/Redis/API prerequisites on `deproject-mac`, not the Windows host.
+Do not overwrite the tracked `docs/perf/freshness-e2e-realpath.md` lifecycle
+page or its archived 2026-07-09 snapshot; promote only date-stamped evidence
+with exact run, host, source, configuration, and JSON-companion provenance.
+
 `python scripts/benchmark_throughput_realpath.py` writes the real-path report
 to `.artifacts/throughput/realpath-current.md` and machine-readable results to
 `.artifacts/throughput/realpath-current.json`. Run its Kafka/Flink/bridge/

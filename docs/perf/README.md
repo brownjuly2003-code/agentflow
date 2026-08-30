@@ -45,6 +45,11 @@ series are preserved in the [documentation archive](../archive/performance/READM
   `.artifacts/throughput/realpath-current.md` and
   `.artifacts/throughput/realpath-current.json`; the tracked undated path is
   its lifecycle page.
+- `scripts/benchmark_scale_own_data.py` — own synthetic-data scale and
+  correctness harness against live ClickHouse on the Mac stand. Writes
+  `.artifacts/scale/own-data-current.md` and
+  `.artifacts/scale/own-data-current.json`, protects the immutable S13 record,
+  and requires a new dated identity to promote a reviewed run.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn
   process (no restart required) and record a flamegraph.
 - `.github/perf-history.json` + `make perf-plot` — rolling trend of

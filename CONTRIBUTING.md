@@ -130,6 +130,14 @@ Do not overwrite the tracked `docs/perf/throughput-realpath.md` lifecycle page
 or its archived S10 baseline; promote only date-stamped evidence with exact
 run, host, source, and configuration provenance.
 
+`python scripts/benchmark_scale_own_data.py` writes the S13 own-data scale
+reports to `.artifacts/scale/own-data-current.md` and
+`.artifacts/scale/own-data-current.json`. Run its live ClickHouse workload on
+`deproject-mac`, not the Windows host. The driver refuses to overwrite
+`docs/perf/scale-own-data-2026-07-11.md`; promote a reviewed run only under a
+new date-stamped identity with exact source, host/runtime, command,
+configuration, volume/check results, and Markdown/JSON hashes.
+
 ## Dependabot pip PRs and `uv.lock`
 
 Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**

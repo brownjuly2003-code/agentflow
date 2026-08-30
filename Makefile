@@ -1,4 +1,4 @@
-.PHONY: up down stack-dev stack-prod stack-prod-shaped-local stack-prod-shaped-local-smoke produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot
+.PHONY: up down stack-dev stack-prod stack-prod-shaped-local stack-prod-shaped-local-smoke produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot trivy-policy
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -165,3 +165,16 @@ clean:
 	python -c "import shutil, pathlib; [shutil.rmtree(p) for p in pathlib.Path('.').rglob('.pytest_cache')]" 2>/dev/null || true
 	python -c "import shutil; [shutil.rmtree(p, True) for p in ['.coverage', 'htmlcov', 'dist', 'build']]" 2>/dev/null || true
 	python -c "import pathlib; [p.unlink() for p in pathlib.Path('.').glob('*.duckdb*')]" 2>/dev/null || true
+
+# ── Image scan policy ─────────────────────────────────────────────
+# Evaluate locally generated Trivy JSON reports. This target does not
+# build or scan images; a missing report or nonzero evaluator exit fails.
+
+TRIVY_API_REPORT ?= trivy-api.json
+TRIVY_FLINK_REPORT ?= trivy-flink.json
+TRIVY_API_POLICY_SUMMARY ?= trivy-api-policy.json
+TRIVY_FLINK_POLICY_SUMMARY ?= trivy-flink-policy.json
+
+trivy-policy:
+	python scripts/evaluate_trivy_policy.py --report $(TRIVY_API_REPORT) --waivers security/trivy-waivers.json --scope api-runtime --output $(TRIVY_API_POLICY_SUMMARY)
+	python scripts/evaluate_trivy_policy.py --report $(TRIVY_FLINK_REPORT) --waivers security/trivy-waivers.json --scope flink-runtime --output $(TRIVY_FLINK_POLICY_SUMMARY)

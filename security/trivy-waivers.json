@@ -2,6 +2,12 @@
   "schema_version": 1,
   "reviewed_on": "2026-07-27",
   "scopes": {
+    "api-runtime": {
+      "image": "agentflow-api",
+      "owner": "security",
+      "upstream_constraints": [],
+      "waivers": []
+    },
     "flink-runtime": {
       "image": "agentflow-flink",
       "owner": "security",

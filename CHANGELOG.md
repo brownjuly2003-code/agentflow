@@ -33,6 +33,14 @@ scale writes `.artifacts/scale/own-data-current.md` and
 benchmark verification remains on `deproject-mac`, not the Windows development
 host.
 
+The authentication microbenchmark now writes
+`.artifacts/perf/auth-bench-current.md`, protects its lifecycle page and the
+immutable [2026-05-26 record](docs/perf/auth-bench-2026-05-26.md), and requests
+legacy bcrypt explicitly. This keeps the reproduction aligned with the
+historical M-C4 measurement after the project default moved to Argon2id; it does
+not present the legacy O(n) loop as the current O(1) authentication path or as
+a production SLA.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

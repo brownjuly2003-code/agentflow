@@ -14,6 +14,8 @@ Mac runtime outputs ignored; the measured full-path result is preserved as an
 The [real-path throughput benchmark lifecycle](throughput-realpath.md) keeps
 Mac runtime outputs ignored; its pre-Q1.2 S10 burst baseline is preserved as
 an [archived 2026-07-09 snapshot](../archive/performance/throughput-realpath-2026-07-09.md).
+The [authentication legacy-path benchmark lifecycle](auth-bench.md) owns an
+ignored runtime report while preserving the dated 2026-05-26 bcrypt evidence.
 Non-canonical mixed-load reports from the former `docs/benchmark_pool*.md`
 series are preserved in the [documentation archive](../archive/performance/README.md).
 
@@ -50,6 +52,11 @@ series are preserved in the [documentation archive](../archive/performance/READM
   `.artifacts/scale/own-data-current.md` and
   `.artifacts/scale/own-data-current.json`, protects the immutable S13 record,
   and requires a new dated identity to promote a reviewed run.
+- `scripts/perf/auth_bench.py` — explicit legacy bcrypt O(n) authentication
+  reproduction plus current rate-window trim microbenchmark. Run the
+  host-dependent workload on the Mac; it writes
+  `.artifacts/perf/auth-bench-current.md`, protects both tracked auth benchmark
+  pages, and does not represent the current O(1) authentication path.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn
   process (no restart required) and record a flamegraph.
 - `.github/perf-history.json` + `make perf-plot` — rolling trend of

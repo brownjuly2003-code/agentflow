@@ -138,6 +138,15 @@ reports to `.artifacts/scale/own-data-current.md` and
 new date-stamped identity with exact source, host/runtime, command,
 configuration, volume/check results, and Markdown/JSON hashes.
 
+`python scripts/perf/auth_bench.py` writes its host-dependent legacy-path
+microbenchmark to `.artifacts/perf/auth-bench-current.md`. Run the full bcrypt
+workload on `deproject-mac`, not the Windows development host. The driver uses
+explicit legacy bcrypt semantics and refuses to overwrite
+`docs/perf/auth-bench.md` or the immutable 2026-05-26 record. Promote a reviewed
+run only under a new date-stamped identity with exact source, host/power,
+Python/dependency, command/configuration, sample-count, boundary, and report-hash
+provenance.
+
 ## Dependabot pip PRs and `uv.lock`
 
 Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**

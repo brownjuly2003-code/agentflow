@@ -240,3 +240,12 @@ def test_main_allows_custom_regression_threshold(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 0
     assert "Status: `PASS`" in captured.out
+
+
+def test_current_path_candidates_drop_legacy_load_results():
+    legacy = check_performance.PROJECT_ROOT / "tests" / "load" / "results.json"
+    load_smoke = check_performance.PROJECT_ROOT / ".artifacts" / "load" / "results.json"
+
+    assert check_performance.DEFAULT_CURRENT_PATH in check_performance.CURRENT_PATH_CANDIDATES
+    assert load_smoke in check_performance.CURRENT_PATH_CANDIDATES
+    assert legacy not in check_performance.CURRENT_PATH_CANDIDATES

@@ -11,8 +11,7 @@ Usage:
     locust -f tests/load/locustfile.py --host http://localhost:8000
 
     # Headless (CI):
-    locust -f tests/load/locustfile.py --host http://localhost:8000 \
-        --headless -u 50 -r 10 --run-time 60s
+    python tests/load/run_load_test.py --host http://localhost:8000
 """
 
 import os

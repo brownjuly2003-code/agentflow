@@ -52,6 +52,7 @@ Do not hand-edit or update only part of the family.
 | Entity quick profile | Existing date/hypothesis-labelled JSON, SVG, and write-ups are point-in-time evidence; no mutable current output | `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes `.artifacts/perf-smoke/entity-profile.json` | Runtime evidence review, not byte drift | The harness rejects output under `docs/perf/`; promote only a new date-stamped identity with host/runtime, source, command, sample counts, and write-up provenance. |
 | Authentication legacy-path benchmark | Immutable `docs/perf/auth-bench-2026-05-26.md`; `docs/perf/auth-bench.md` is a lifecycle page | `python scripts/perf/auth_bench.py` writes `.artifacts/perf/auth-bench-current.md` | Runtime evidence review, not byte drift | Reproduces the explicit legacy bcrypt O(n) path, not current O(1) candidate selection. Run the host-dependent workload on the Mac and promote only a new date-stamped identity with provenance. |
 | Full-load benchmark | None; `docs/perf/load-benchmark-latest.md` is a lifecycle page | `python scripts/run_benchmark.py` writes `.artifacts/benchmark/benchmark.md` and `.artifacts/benchmark/current.json` | Runtime metric comparison, not byte drift | Measurements vary by host and time. CI consumes ignored artifacts; promote only date-stamped evidence with provenance. |
+| Locust p99 CI-smoke | None; ignored runtime only | `python tests/load/run_load_test.py` writes `.artifacts/load/results` and `.artifacts/load/results.json` | Runtime comparison with `python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json` | Host/time-dependent CI-smoke runtime evidence, not a byte-regenerated tracked reference, production SLA, full-load benchmark, or acceptance. Promote only a new date-stamped identity with provenance. |
 | Performance history | Immutable `docs/archive/performance/perf-history-2026-04-27.json`; no current tracked output | `python scripts/record_perf_history.py` appends `.artifacts/perf-history/history.json`; `python scripts/plot_perf_history.py` renders beside it | Runtime trend review, not byte drift | The local ignored file can span repeated runs on one checkout. CI no longer persists cross-run history after the bot push conflicted with branch protection. |
 | Demo freshness benchmark | None; `docs/perf/freshness-benchmark.md` is a lifecycle page | `python scripts/benchmark_freshness.py` writes `.artifacts/freshness/freshness-benchmark.md` and `.artifacts/freshness/current.json` | Runtime evidence review, not byte drift | Measurements vary by host and time. The 2026-06-06 snapshot is archived; promote only date-stamped evidence with provenance. |
 | Streaming-hop freshness benchmark | Immutable `docs/perf/freshness-realpath-2026-06-30.md`; no mutable tracked output | `python scripts/benchmark_freshness_realpath.py` writes `.artifacts/freshness/realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink stand. The driver protects the dated record; promote reviewed runs under new date-stamped identities with provenance. |
@@ -83,6 +84,12 @@ tracked report is preserved as a
 [2026-04-17 historical snapshot](archive/performance/load-benchmark-2026-04-17.md).
 The stable [artifact lifecycle page](perf/load-benchmark-latest.md) names the
 runtime outputs, CI comparison, promotion rule, and protected tracked paths.
+
+The Locust p99 CI-smoke family is separate. `python tests/load/run_load_test.py`
+writes ignored `.artifacts/load/results` and `.artifacts/load/results.json`.
+CI compares that JSON with `docs/benchmark-baseline.json`. The output is
+host/time-dependent CI-smoke runtime evidence, not a byte-regenerated tracked
+reference, production SLA, full-load benchmark, or acceptance.
 
 Performance-history aggregation is local runtime state. The recorder appends
 `.artifacts/perf-history/history.json`, and the plotter writes ignored HTML/PNG

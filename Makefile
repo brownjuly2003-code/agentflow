@@ -116,7 +116,7 @@ quality:
 
 load-test:
 	@echo "Starting load test (50 users, 60s). API must be running on :8000"
-	locust -f tests/load/locustfile.py --host http://localhost:8000 --headless -u 50 -r 10 --run-time 60s
+	python tests/load/run_load_test.py --host http://localhost:8000
 
 benchmark:
 	python scripts/run_benchmark.py

@@ -42,6 +42,15 @@ accuracy claims.
 - `scripts/run_benchmark.py` — full Locust matrix across the whole API
   surface. Slower to start; writes `.artifacts/benchmark/benchmark.md` and
   `.artifacts/benchmark/current.json` rather than a mutable tracked report.
+- `tests/load/run_load_test.py` — Locust p99 CI-smoke runner owned by
+  `python tests/load/run_load_test.py`. Writes `.artifacts/load/results` (CSV
+  prefix) and `.artifacts/load/results.json` by default, resolves relative
+  output paths from the project root, and refuses destinations under
+  `docs/perf/` or `tests/load/`. Compare a run with
+  `python scripts/check_performance.py --baseline docs/benchmark-baseline.json
+  --current .artifacts/load/results.json`. This is host/time-dependent CI-smoke
+  runtime evidence, not a byte-regenerated tracked reference, production SLA,
+  full-load benchmark, or acceptance.
 - `scripts/benchmark_freshness.py` — in-process demo event-to-metric freshness
   harness. Writes `.artifacts/freshness/freshness-benchmark.md` and
   `.artifacts/freshness/current.json`; the tracked path is its lifecycle page.

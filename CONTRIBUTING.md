@@ -106,6 +106,18 @@ check and must not replace `docs/perf/load-benchmark-latest.md` or an archived
 snapshot. CI compares the fresh JSON metrics with the tracked gate baseline;
 promote evidence only under a date-stamped name with its run provenance.
 
+`python tests/load/run_load_test.py` writes the Locust p99 CI-smoke CSV prefix
+to `.artifacts/load/results` and JSON metrics to `.artifacts/load/results.json`.
+Relative outputs resolve from the project root, and the runner refuses
+destinations under `docs/perf/` or `tests/load/` before seed or Locust work.
+`make load-test` invokes this runner with the localhost default and the
+50 users / 10 spawn-rate / 60-second profile. Compare a run with
+`python scripts/check_performance.py --baseline docs/benchmark-baseline.json
+--current .artifacts/load/results.json`. This is host- and time-dependent
+CI-smoke runtime evidence, not a byte-regenerated tracked reference, production
+SLA, full-load benchmark, or acceptance. Promote a reviewed result only under
+a new date-stamped identity with provenance.
+
 To compare repeated local runs, append one results file with
 `python scripts/record_perf_history.py --results .artifacts/benchmark/current.json`,
 then run `python scripts/plot_perf_history.py`. The commands own

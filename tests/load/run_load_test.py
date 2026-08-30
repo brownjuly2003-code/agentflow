@@ -76,8 +76,8 @@ def test_check_thresholds_reports_latency_and_error_violations():
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STATS_PREFIX = PROJECT_ROOT / "tests" / "load" / "results"
-DEFAULT_RESULTS_PATH = PROJECT_ROOT / "tests" / "load" / "results.json"
+DEFAULT_STATS_PREFIX = PROJECT_ROOT / ".artifacts" / "load" / "results"
+DEFAULT_RESULTS_PATH = PROJECT_ROOT / ".artifacts" / "load" / "results.json"
 
 
 def load_profile_from_env() -> dict[str, int | str]:
@@ -97,6 +97,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed-data", action="store_true")
     parser.add_argument("--seed-only", action="store_true")
     return parser.parse_args()
+
+
+def resolve_output_path(output_path: str | Path) -> Path:
+    candidate = Path(output_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    forbidden_roots = (
+        (PROJECT_ROOT / "docs" / "perf").resolve(),
+        (PROJECT_ROOT / "tests" / "load").resolve(),
+    )
+    if any(resolved.resolve().is_relative_to(root) for root in forbidden_roots):
+        raise ValueError(
+            "Locust p99 CI-smoke runtime artifacts cannot be written under "
+            "docs/perf/ or tests/load/; write them under .artifacts/load/ instead."
+        )
+    return resolved
 
 
 def _parse_int(value: str | None) -> int:
@@ -351,6 +366,12 @@ def write_results(
 
 def main() -> int:
     args = parse_args()
+    try:
+        stats_prefix = resolve_output_path(args.stats_prefix)
+        results_path = resolve_output_path(args.results_json)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
 
     if args.duckdb_path and (args.seed_data or args.seed_only):
         seed_benchmark_data(Path(args.duckdb_path))
@@ -360,13 +381,6 @@ def main() -> int:
 
     if args.seed_only:
         raise SystemExit("--seed-only requires --duckdb-path")
-
-    stats_prefix = Path(args.stats_prefix)
-    if not stats_prefix.is_absolute():
-        stats_prefix = PROJECT_ROOT / stats_prefix
-    results_path = Path(args.results_json)
-    if not results_path.is_absolute():
-        results_path = PROJECT_ROOT / results_path
 
     load_profile = load_profile_from_env()
     stats_csv = run_locust(args.host, stats_prefix, load_profile)

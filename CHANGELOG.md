@@ -16,8 +16,22 @@ snapshots. Current documentation cites those snapshots for measured values and
 uses the [demo](docs/perf/freshness-benchmark.md) and
 [real-path](docs/perf/throughput-realpath.md) lifecycle pages only for command,
 output, and evidence-promotion ownership. Both drivers fail closed when asked
-to overwrite tracked lifecycle or archived evidence paths; real-path runtime
-verification remains on `deproject-mac`, not the Windows development host.
+to overwrite tracked lifecycle or archived evidence paths.
+
+The same ownership boundary now covers three more real-path benchmark
+families. S8 end-to-end freshness writes
+`.artifacts/freshness/e2e-realpath.md` and
+`.artifacts/freshness/e2e-realpath-current.json`; its
+[lifecycle page](docs/perf/freshness-e2e-realpath.md) protects both itself and
+the immutable [2026-07-09 snapshot](docs/archive/performance/freshness-e2e-realpath-2026-07-09.md).
+Streaming-hop freshness writes `.artifacts/freshness/realpath-current.json`
+and protects the immutable
+[2026-06-30 record](docs/perf/freshness-realpath-2026-06-30.md). S13 own-data
+scale writes `.artifacts/scale/own-data-current.md` and
+`.artifacts/scale/own-data-current.json` and protects the immutable
+[2026-07-11 record](docs/perf/scale-own-data-2026-07-11.md). All runtime-heavy
+benchmark verification remains on `deproject-mac`, not the Windows development
+host.
 
 ## [2.1.0] - 2026-08-23
 

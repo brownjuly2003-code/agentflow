@@ -25,6 +25,10 @@ Entity quick-profile runs also stay outside this directory by default:
 `scripts/profile_entity.py` owns ignored
 `.artifacts/perf-smoke/entity-profile.json`; the tracked entity JSON, SVG, and
 write-ups here are point-in-time evidence, not mutable runtime destinations.
+NL-to-SQL evaluation runs likewise write ignored
+`.artifacts/nl-sql-eval/current.md`; the two dated 2026-07-01 records remain
+immutable direct-translator evidence, not mutable destinations or production
+accuracy claims.
 
 ## Tooling
 
@@ -66,6 +70,14 @@ write-ups here are point-in-time evidence, not mutable runtime destinations.
   host-dependent workload on the Mac; it writes
   `.artifacts/perf/auth-bench-current.md`, protects both tracked auth benchmark
   pages, and does not represent the current O(1) authentication path.
+- `scripts/run_nl_sql_eval.py` — direct-translator execution-accuracy harness
+  on the fixed in-memory DuckDB demo set. Writes
+  `.artifacts/nl-sql-eval/current.md`, resolves relative output paths from the
+  project root, and rejects output under `docs/perf/` before evaluation. The
+  rule-based default is reproducible locally; the opt-in LLM path is live and
+  non-deterministic. Promote either only under a new date-stamped identity with
+  source, host/runtime, engine/model, exact command/configuration, and report
+  hash provenance.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn
   process (no restart required) and record a flamegraph.
 - `scripts/record_perf_history.py` + `scripts/plot_perf_history.py` — append

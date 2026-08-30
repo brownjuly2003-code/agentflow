@@ -162,6 +162,18 @@ run only under a new date-stamped identity with exact source, host/power,
 Python/dependency, command/configuration, sample-count, boundary, and report-hash
 provenance.
 
+`python -m scripts.run_nl_sql_eval` writes the direct-translator result to
+`.artifacts/nl-sql-eval/current.md`. Relative outputs resolve from the project
+root, and the command rejects every path under `docs/perf/` before running the
+evaluation. In particular, it cannot overwrite
+`docs/perf/nl-sql-eval-2026-07-01.md` or
+`docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`. The rule-based path uses the
+fixed in-memory DuckDB demo set; the opt-in LLM path is live and
+non-deterministic. Neither is the served `/query` path, a production benchmark,
+an SLA, or acceptance. Promote a reviewed result only under a new date-stamped
+identity with source, host/runtime, engine/model, exact command/configuration,
+and report-hash provenance.
+
 ## Dependabot pip PRs and `uv.lock`
 
 Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**

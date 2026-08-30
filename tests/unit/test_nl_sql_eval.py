@@ -1,15 +1,23 @@
 """Keep the NL->SQL eval harness alive and honest in CI.
 
-Two jobs:
+Three jobs:
 1. Pin the metric math (`compare_results` / `execution_accuracy`) exactly.
 2. Prove the harness runs end-to-end on the seeded warehouse — this also
    validates every gold SQL, since `score_item` raises if a gold query fails —
    and pin the documented rule-based baseline shape so the number in
    docs/perf/nl-sql-eval-*.md can't drift silently.
+3. Keep runtime output out of tracked performance evidence and document its
+   promotion boundary.
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+import pytest
+
+from scripts import run_nl_sql_eval as run_nl_sql_eval_cli
 from scripts.nl_sql_eval import (
     GOLD_SET,
     build_demo_warehouse,
@@ -18,6 +26,81 @@ from scripts.nl_sql_eval import (
     run_eval,
 )
 from scripts.nl_sql_eval.dataset import GoldItem
+
+ROOT = Path(__file__).resolve().parents[2]
+RULE_BASED_RECORD = ROOT / "docs" / "perf" / "nl-sql-eval-2026-07-01.md"
+SONNET_RECORD = ROOT / "docs" / "perf" / "nl-sql-eval-sonnet5-2026-07-01.md"
+
+
+def test_cli_defaults_to_ignored_project_root_runtime_report(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["run_nl_sql_eval.py"])
+
+    args = run_nl_sql_eval_cli.parse_args()
+
+    assert args.md == ROOT / ".artifacts" / "nl-sql-eval" / "current.md"
+    assert ".artifacts/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_relative_report_path_resolves_from_project_root() -> None:
+    assert (
+        run_nl_sql_eval_cli.resolve_report_path(Path(".artifacts/nl-sql-eval/custom.md"))
+        == ROOT / ".artifacts" / "nl-sql-eval" / "custom.md"
+    )
+
+
+@pytest.mark.parametrize(
+    "report_path",
+    [
+        Path("docs/perf/nl-sql-eval-2026-07-01.md"),
+        RULE_BASED_RECORD,
+        Path("docs/perf/nl-sql-eval-sonnet5-2026-07-01.md"),
+        SONNET_RECORD,
+        Path("docs/perf/nl-sql-eval-next.md"),
+    ],
+)
+def test_tracked_performance_evidence_cannot_be_overwritten(report_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"\.artifacts/nl-sql-eval"):
+        run_nl_sql_eval_cli.resolve_report_path(report_path)
+
+
+def test_cli_rejects_tracked_output_before_running_eval(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_nl_sql_eval.py", "--md", "docs/perf/nl-sql-eval-2026-07-01.md"],
+    )
+
+    def fail_if_eval_runs():
+        pytest.fail("tracked-output validation must run before the evaluation")
+
+    monkeypatch.setattr(run_nl_sql_eval_cli, "run_eval", fail_if_eval_runs)
+
+    assert run_nl_sql_eval_cli.main() == 2
+    assert ".artifacts/nl-sql-eval" in capsys.readouterr().err
+
+
+def test_runtime_markdown_names_artifact_and_promotion_boundary() -> None:
+    markdown = run_nl_sql_eval_cli._render_markdown(run_eval(), "rule-based")
+
+    assert ".artifacts/nl-sql-eval/current.md" in markdown
+    assert "runtime artifact" in markdown.lower()
+    assert "date-stamped" in markdown
+    assert "not a production benchmark" in markdown.lower()
+    assert "served `/query`" in markdown
+
+
+def test_current_docs_name_nl_sql_eval_owner_and_evidence_boundary() -> None:
+    docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
+    perf_hub = " ".join((ROOT / "docs" / "perf" / "README.md").read_text(encoding="utf-8").split())
+    contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
+    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+
+    assert "| NL-to-SQL evaluation |" in docs_hub
+    assert "scripts/run_nl_sql_eval.py" in perf_hub
+    assert ".artifacts/nl-sql-eval/current.md" in perf_hub
+    assert "docs/perf/nl-sql-eval-2026-07-01.md" in contributing
+    assert "docs/perf/nl-sql-eval-sonnet5-2026-07-01.md" in contributing
+    assert "NL-to-SQL evaluation runtime-artifact ownership sub-slice" in plan
 
 
 def test_compare_results_set_equality_ignores_order_and_names() -> None:

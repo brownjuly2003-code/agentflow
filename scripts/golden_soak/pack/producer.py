@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# Canonical OrderEvent.order_id pattern (src/ingestion/schemas/events.py).
+# Canonical OrderEvent.order_id pattern (src/agentflow_runtime/ingestion/schemas/events.py).
 _ORDER_ID_RE = re.compile(r"^ORD-\d{8}-\d{4,}$")
 # Canonical BaseEvent.event_id pattern (UUID-shaped, 36 chars).
 _EVENT_ID_RE = re.compile(r"^[a-f0-9\-]{36}$")

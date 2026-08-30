@@ -55,13 +55,17 @@ jobs:
 
           def load_project_dependencies(pyproject_path: Path) -> list[str]:
               if not pyproject_path.exists():
-                  return []
+                  raise SystemExit(
+                      f"Required dependency manifest is missing: {pyproject_path}"
+                  )
               data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
               return list(data.get("project", {}).get("dependencies", []))
 
           def load_requirements(requirements_path: Path) -> list[str]:
               if not requirements_path.exists():
-                  return []
+                  raise SystemExit(
+                      f"Required dependency manifest is missing: {requirements_path}"
+                  )
               requirements: list[str] = []
               for line in requirements_path.read_text(encoding="utf-8").splitlines():
                   stripped = line.strip()
@@ -75,6 +79,10 @@ jobs:
               target.write_text("\n".join(deduped) + "\n", encoding="utf-8")
 
           def resolve_requirements(name: str, entries: list[str], target: Path) -> int:
+              if not entries:
+                  raise SystemExit(
+                      f"Required dependency bucket {name!r} resolved to zero packages"
+                  )
               temp_input = output_dir / f"{name}.in"
               write_requirements(temp_input, entries)
 
@@ -93,6 +101,10 @@ jobs:
                   )
 
               resolved = [line for line in freeze.stdout.splitlines() if line.strip()]
+              if not resolved:
+                  raise SystemExit(
+                      f"Required dependency bucket {name!r} resolved to zero packages"
+                  )
               if any("==" not in line for line in resolved):
                   raise SystemExit(f"{name} requirements were not fully resolved")
               target.write_text("\n".join(resolved) + "\n", encoding="utf-8")
@@ -125,9 +137,16 @@ jobs:
 
           def load_optional_dependencies(pyproject_path: Path, extra: str) -> list[str]:
               if not pyproject_path.exists():
-                  return []
+                  raise SystemExit(
+                      f"Required dependency manifest is missing: {pyproject_path}"
+                  )
               data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-              return list(data.get("project", {}).get("optional-dependencies", {}).get(extra, []))
+              extras = data.get("project", {}).get("optional-dependencies", {})
+              if extra not in extras:
+                  raise SystemExit(
+                      f"Required extra {extra!r} is missing from {pyproject_path}"
+                  )
+              return list(extras[extra])
 
           # Audit P1-3: scan every published/deployed extra, not just the
           # unconditional core dependencies — cloud, postgres, the root
@@ -152,7 +171,7 @@ jobs:
           flink_count = resolve_requirements(
               "flink-runtime",
               load_requirements(
-                  root / "src" / "processing" / "flink_jobs" / "requirements.txt"
+                  root / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "requirements.txt"
               ),
               output_dir / "requirements-flink-runtime.txt",
           )

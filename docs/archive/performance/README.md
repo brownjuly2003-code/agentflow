@@ -6,11 +6,12 @@ measurements remain intact, but they are not the current performance gate.
 
 ## Mixed-load benchmark reports
 
-| Archived report | Original path | Generated | Load profile |
+| Archived report | Original path | Generated | Measurement profile |
 | --- | --- | --- | --- |
 | [`benchmark_pool16.md`](benchmark_pool16.md) | *docs/benchmark_pool16.md* | 2026-04-17 07:55 +03:00 | 50 users / 20 s |
 | [`benchmark_pool16_60s.md`](benchmark_pool16_60s.md) | *docs/benchmark_pool16_60s.md* | 2026-04-17 07:58 +03:00 | 50 users / 60 s |
 | [`benchmark_pool24_60s.md`](benchmark_pool24_60s.md) | *docs/benchmark_pool24_60s.md* | 2026-04-17 07:59 +03:00 | 50 users / 60 s, different pool configuration |
+| [`freshness-benchmark-2026-06-06.md`](freshness-benchmark-2026-06-06.md) | *docs/perf/freshness-benchmark.md* | 2026-06-06 10:10 +03:00 | In-process DuckDB demo shortcut; former mutable tracked report |
 | [`load-benchmark-2026-04-17.md`](load-benchmark-2026-04-17.md) | *docs/perf/load-benchmark-latest.md* | 2026-04-17 12:55 +03:00 | 20 users / 30 s; former mutable tracked report |
 
 The mixed-load parameters differ, so the reports must not be combined into a
@@ -23,8 +24,9 @@ trend.
 | [`regression-report.md`](regression-report.md) | *docs/regression-report.md* | 2026-04-17 | [Entity benchmark contract](../../perf/entity-benchmark-contract.md) and [2026-04-24 entity profile](../../perf/entity-profile-2026-04-24.md) |
 
 Use the [full-load benchmark artifact lifecycle](../../perf/load-benchmark-latest.md)
+and [demo freshness benchmark lifecycle](../../perf/freshness-benchmark.md)
 for current output and promotion rules. New mutable reports belong under
-ignored `.artifacts/benchmark/`; use the
+their ignored `.artifacts/` directories; use the
 [entity benchmark contract](../../perf/entity-benchmark-contract.md) for
 repeatable entity-latency comparisons.
 

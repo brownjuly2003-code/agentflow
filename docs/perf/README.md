@@ -5,10 +5,11 @@ This directory holds current and historical performance evidence. The
 runtime outputs and promotion rule; the former mutable report is preserved as
 an [archived 2026-04-17 snapshot](../archive/performance/load-benchmark-2026-04-17.md).
 Targeted entity-latency snapshots and flamegraphs remain alongside it. The
-latest generated in-process demo freshness report is
-[`freshness-benchmark.md`](freshness-benchmark.md). Non-canonical mixed-load
-reports from the former `docs/benchmark_pool*.md` series are preserved in the
-[documentation archive](../archive/performance/README.md).
+[demo freshness benchmark lifecycle](freshness-benchmark.md) names separate
+ignored runtime outputs; its former mutable report is preserved as an
+[archived 2026-06-06 snapshot](../archive/performance/freshness-benchmark-2026-06-06.md).
+Non-canonical mixed-load reports from the former `docs/benchmark_pool*.md`
+series are preserved in the [documentation archive](../archive/performance/README.md).
 
 ## Tooling
 
@@ -21,7 +22,8 @@ reports from the former `docs/benchmark_pool*.md` series are preserved in the
   surface. Slower to start; writes `.artifacts/benchmark/benchmark.md` and
   `.artifacts/benchmark/current.json` rather than a mutable tracked report.
 - `scripts/benchmark_freshness.py` — in-process demo event-to-metric freshness
-  harness and owner of `docs/perf/freshness-benchmark.md`.
+  harness. Writes `.artifacts/freshness/freshness-benchmark.md` and
+  `.artifacts/freshness/current.json`; the tracked path is its lifecycle page.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn
   process (no restart required) and record a flamegraph.
 - `.github/perf-history.json` + `make perf-plot` — rolling trend of

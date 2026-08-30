@@ -70,6 +70,7 @@ PERF_NON_IDENTITY_PATHS = {
     "docs/perf/benchmark-split-decision.md",
     "docs/perf/bridge-ch-native-apply-q1-2026-07-09.md",
     "docs/perf/entity-benchmark-contract.md",
+    "docs/perf/freshness-benchmark.md",
     "docs/perf/load-benchmark-latest.md",
     "docs/perf/public-production-hardware-benchmark-plan.md",
 }
@@ -91,6 +92,12 @@ PERF_NON_IDENTITY_PHRASES = {
         "scripts/profile_entity.py",
         "not a measured result",
         "not an evidence identity",
+    ),
+    "docs/perf/freshness-benchmark.md": (
+        "current benchmark lifecycle reference",
+        "scripts/benchmark_freshness.py",
+        ".artifacts/freshness",
+        "not a measured result",
     ),
     "docs/perf/load-benchmark-latest.md": (
         "current benchmark lifecycle reference",
@@ -663,7 +670,7 @@ HISTORICAL_STREAMING_HOP_BOUNDARIES = (
 )
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_RECORD = "docs/perf/freshness-e2e-realpath.md"
-DEMO_FRESHNESS_RECORD = "docs/perf/freshness-benchmark.md"
+DEMO_FRESHNESS_RECORD = "docs/archive/performance/freshness-benchmark-2026-06-06.md"
 CURRENT_FRESHNESS_DATES = {
     REAL_PATH_FRESHNESS_RECORD: "2026-07-09",
     DEMO_FRESHNESS_RECORD: "2026-06-06",
@@ -672,7 +679,7 @@ CURRENT_FRESHNESS_DIGESTS = {
     REAL_PATH_FRESHNESS_RECORD: (
         "a7715b090f1593924a5503d18ed932c92681f874083a99625f2f0f9fa7050c88"
     ),
-    DEMO_FRESHNESS_RECORD: ("3a21b981c81bf7178b5c9321a13af3f1f107c03123fe15ef66adb98b9ae8feba"),
+    DEMO_FRESHNESS_RECORD: ("371f62ad7ecc64954ba42fe5ae24b2c30615429e2cf53bca6d88c402fd449f2d"),
 }
 REAL_PATH_FRESHNESS_BOUNDARIES = (
     "single mac/colima stand",
@@ -4019,7 +4026,10 @@ def test_current_freshness_index_lists_the_bounded_pair_with_required_fields() -
         assert row["date"] == CURRENT_FRESHNESS_DATES[identity]
         assert (ROOT / identity).is_file(), f"indexed identity is missing: {identity}"
         targets = LINK_RE.findall(row["identity"])
-        assert targets[0].startswith("../perf/"), row["identity"]
+        if identity == DEMO_FRESHNESS_RECORD:
+            assert targets[0].startswith("../archive/performance/"), row["identity"]
+        else:
+            assert targets[0].startswith("../perf/"), row["identity"]
 
 
 def test_current_freshness_records_are_complementary_not_supersession() -> None:

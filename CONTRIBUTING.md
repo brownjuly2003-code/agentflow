@@ -99,6 +99,13 @@ check and must not replace `docs/perf/load-benchmark-latest.md` or an archived
 snapshot. CI compares the fresh JSON metrics with the tracked gate baseline;
 promote evidence only under a date-stamped name with its run provenance.
 
+`python scripts/benchmark_freshness.py` writes the in-process demo report to
+`.artifacts/freshness/freshness-benchmark.md` and machine-readable results to
+`.artifacts/freshness/current.json`. Do not overwrite the tracked
+`docs/perf/freshness-benchmark.md` lifecycle page or its archived snapshot.
+Promote a meaningful run only under a date-stamped name with its JSON companion
+and exact run, host, and source provenance.
+
 ## Dependabot pip PRs and `uv.lock`
 
 Dependabot bumps grouped pip dependencies in `pyproject.toml` **without**

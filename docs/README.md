@@ -50,6 +50,7 @@ Do not hand-edit or update only part of the family.
 | SDK capabilities | `docs/sdk-capabilities.md` | `python scripts/export_sdk_capabilities.py` | `python scripts/export_sdk_capabilities.py --check` | Current generated reference from `config/project_claims.toml`; the CI project-claims gate also checks SDK method parity and output drift. |
 | Quality gates | `docs/quality.md` | `python scripts/export_quality_reference.py` | `python scripts/export_quality_reference.py --check` | Deterministic current reference from `config/project_claims.toml`; the CI project-claims gate checks config alignment and output drift. |
 | Full-load benchmark | None; `docs/perf/load-benchmark-latest.md` is a lifecycle page | `python scripts/run_benchmark.py` writes `.artifacts/benchmark/benchmark.md` and `.artifacts/benchmark/current.json` | Runtime metric comparison, not byte drift | Measurements vary by host and time. CI consumes ignored artifacts; promote only date-stamped evidence with provenance. |
+| Demo freshness benchmark | None; `docs/perf/freshness-benchmark.md` is a lifecycle page | `python scripts/benchmark_freshness.py` writes `.artifacts/freshness/freshness-benchmark.md` and `.artifacts/freshness/current.json` | Runtime evidence review, not byte drift | Measurements vary by host and time. The 2026-06-06 snapshot is archived; promote only date-stamped evidence with provenance. |
 
 Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
 `docs/perf/live_openapi_ci.json` are evidence, not current generated
@@ -74,6 +75,12 @@ tracked report is preserved as a
 [2026-04-17 historical snapshot](archive/performance/load-benchmark-2026-04-17.md).
 The stable [artifact lifecycle page](perf/load-benchmark-latest.md) names the
 runtime outputs, CI comparison, promotion rule, and protected tracked paths.
+
+The demo freshness benchmark is also host- and time-dependent. Its
+[artifact lifecycle page](perf/freshness-benchmark.md) names the ignored
+runtime outputs and protects both tracked documentation paths; the last
+mutable report is preserved as a
+[2026-06-06 historical snapshot](archive/performance/freshness-benchmark-2026-06-06.md).
 
 ## Sources of truth
 

@@ -25,7 +25,7 @@ catalogue table rows.
 
 ## Classified non-identity performance paths
 
-These eight paths complete the tracked `docs/perf` Markdown inventory without
+These nine paths complete the tracked `docs/perf` Markdown inventory without
 manufacturing evidence identities. They are decisions, procedures, lifecycle
 references, plans, or implementation companions. Supersession belongs only to
 the catalogue identity rows below; none of these paths has a `supersedes` or
@@ -33,6 +33,7 @@ the catalogue identity rows below; none of these paths has a `supersedes` or
 
 | Path | Class | Status/claim owner | Evidence relationship |
 | --- | --- | --- | --- |
+| [auth-bench.md](../perf/auth-bench.md) | Current benchmark lifecycle reference | `scripts/perf/auth_bench.py` writes the ignored `.artifacts/perf/auth-bench-current.md` runtime report and refuses to overwrite tracked authentication benchmark documentation. | Ownership procedure for the [dated 2026-05-26 evidence](../perf/auth-bench-2026-05-26.md), not a measured result and not an evidence identity. |
 | [benchmark-split-decision.md](../perf/benchmark-split-decision.md) | Dated decision | The executable CI gate is owned by `.github/workflows/perf-regression.yml` and the current benchmark scripts. | Supporting decision, not a current status owner and not an evidence identity. |
 | [bridge-ch-native-apply-q1-2026-07-09.md](../perf/bridge-ch-native-apply-q1-2026-07-09.md) | Implementation companion | The Q1.2 measured result is owned by [throughput-realpath-q12-2026-07-09.md](../perf/throughput-realpath-q12-2026-07-09.md). | Code-slice explanation, not an evidence identity. |
 | [entity-benchmark-contract.md](../perf/entity-benchmark-contract.md) | Current benchmark reference | Executable behavior is owned by `scripts/profile_entity.py` and `scripts/run_benchmark.py`. | Measurement procedure, not a measured result and not an evidence identity. |

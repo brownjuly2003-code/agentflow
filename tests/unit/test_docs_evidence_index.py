@@ -67,6 +67,7 @@ PERF_NON_IDENTITY_FIELDS = (
     "evidence relationship",
 )
 PERF_NON_IDENTITY_PATHS = {
+    "docs/perf/auth-bench.md",
     "docs/perf/benchmark-split-decision.md",
     "docs/perf/bridge-ch-native-apply-q1-2026-07-09.md",
     "docs/perf/entity-benchmark-contract.md",
@@ -77,6 +78,13 @@ PERF_NON_IDENTITY_PATHS = {
     "docs/perf/throughput-realpath.md",
 }
 PERF_NON_IDENTITY_PHRASES = {
+    "docs/perf/auth-bench.md": (
+        "current benchmark lifecycle reference",
+        "scripts/perf/auth_bench.py",
+        ".artifacts/perf",
+        "not a measured result",
+        "not an evidence identity",
+    ),
     "docs/perf/benchmark-split-decision.md": (
         "dated decision",
         "executable ci gate",
@@ -2113,7 +2121,7 @@ def test_entity_hot_path_sources_and_plan_match_the_index() -> None:
         "representation does not make navigation or supporting companions evidence identities"
         in (index_normalized.lower())
     )
-    assert (len(tracked_perf), len(represented_perf), len(remaining_perf)) == (58, 58, 0)
+    assert (len(tracked_perf), len(represented_perf), len(remaining_perf)) == (59, 59, 0)
     assert not remaining_perf
     assert PERF_NON_IDENTITY_PATHS <= represented_perf
     assert "latest refresh" in sources[ENTITY_BASELINE_RECORD].lower()
@@ -2146,7 +2154,7 @@ def test_perf_inventory_classifies_non_identity_paths_without_manufacturing_reco
     assert set(listed) == PERF_NON_IDENTITY_PATHS
     assert Counter(listed) == Counter(PERF_NON_IDENTITY_PATHS)
     assert PERF_NON_IDENTITY_PATHS.isdisjoint(identities)
-    assert (len(tracked), len(represented), len(tracked - represented)) == (58, 58, 0)
+    assert (len(tracked), len(represented), len(tracked - represented)) == (59, 59, 0)
     assert "catalogue identity rows below are **immutable records**" in index_text
     assert "classified non-identity paths below retain their stated lifecycle" in index_text
     assert "outside this immutability rule" in index_text
@@ -2157,7 +2165,7 @@ def test_perf_inventory_classifies_non_identity_paths_without_manufacturing_reco
             assert phrase in row_text
     assert "- [x] **5. упорядочить evidence.**" in plan
     assert "status/orphan/supersession closure audit" in plan
-    assert "58 tracked `docs/perf` markdown paths, 58" in plan
+    assert "59 tracked `docs/perf` markdown paths, 59" in plan
     assert "0 остаются unrepresented" in plan
 
 

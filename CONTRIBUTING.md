@@ -99,6 +99,14 @@ check and must not replace `docs/perf/load-benchmark-latest.md` or an archived
 snapshot. CI compares the fresh JSON metrics with the tracked gate baseline;
 promote evidence only under a date-stamped name with its run provenance.
 
+To compare repeated local runs, append one results file with
+`python scripts/record_perf_history.py --results .artifacts/benchmark/current.json`,
+then run `python scripts/plot_perf_history.py`. The commands own
+`.artifacts/perf-history/history.json`, `history.html`, and optional
+`history.png`; they refuse to overwrite the retired tracked history or write
+plots under `docs/`. CI does not persist this history across runners, so do not
+cite the local trend as continuous CI or release evidence.
+
 `python scripts/benchmark_freshness.py` writes the in-process demo report to
 `.artifacts/freshness/freshness-benchmark.md` and machine-readable results to
 `.artifacts/freshness/current.json`. Do not overwrite the tracked

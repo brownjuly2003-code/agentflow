@@ -41,6 +41,13 @@ historical M-C4 measurement after the project default moved to Argon2id; it does
 not present the legacy O(n) loop as the current O(1) authentication path or as
 a production SLA.
 
+The performance-history recorder and plotter now default to ignored
+`.artifacts/perf-history/` outputs and reject tracked history/documentation
+targets. The four-entry `.github/perf-history.json` log is preserved byte for
+byte as the [2026-04-27 archive](docs/archive/performance/perf-history-2026-04-27.json).
+Current documentation no longer claims that CI appends a cross-run trend: the
+bot writer was removed when its self-push conflicted with branch protection.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

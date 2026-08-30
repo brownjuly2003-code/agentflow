@@ -51,6 +51,7 @@ Do not hand-edit or update only part of the family.
 | Quality gates | `docs/quality.md` | `python scripts/export_quality_reference.py` | `python scripts/export_quality_reference.py --check` | Deterministic current reference from `config/project_claims.toml`; the CI project-claims gate checks config alignment and output drift. |
 | Authentication legacy-path benchmark | Immutable `docs/perf/auth-bench-2026-05-26.md`; `docs/perf/auth-bench.md` is a lifecycle page | `python scripts/perf/auth_bench.py` writes `.artifacts/perf/auth-bench-current.md` | Runtime evidence review, not byte drift | Reproduces the explicit legacy bcrypt O(n) path, not current O(1) candidate selection. Run the host-dependent workload on the Mac and promote only a new date-stamped identity with provenance. |
 | Full-load benchmark | None; `docs/perf/load-benchmark-latest.md` is a lifecycle page | `python scripts/run_benchmark.py` writes `.artifacts/benchmark/benchmark.md` and `.artifacts/benchmark/current.json` | Runtime metric comparison, not byte drift | Measurements vary by host and time. CI consumes ignored artifacts; promote only date-stamped evidence with provenance. |
+| Performance history | Immutable `docs/archive/performance/perf-history-2026-04-27.json`; no current tracked output | `python scripts/record_perf_history.py` appends `.artifacts/perf-history/history.json`; `python scripts/plot_perf_history.py` renders beside it | Runtime trend review, not byte drift | The local ignored file can span repeated runs on one checkout. CI no longer persists cross-run history after the bot push conflicted with branch protection. |
 | Demo freshness benchmark | None; `docs/perf/freshness-benchmark.md` is a lifecycle page | `python scripts/benchmark_freshness.py` writes `.artifacts/freshness/freshness-benchmark.md` and `.artifacts/freshness/current.json` | Runtime evidence review, not byte drift | Measurements vary by host and time. The 2026-06-06 snapshot is archived; promote only date-stamped evidence with provenance. |
 | Streaming-hop freshness benchmark | Immutable `docs/perf/freshness-realpath-2026-06-30.md`; no mutable tracked output | `python scripts/benchmark_freshness_realpath.py` writes `.artifacts/freshness/realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink stand. The driver protects the dated record; promote reviewed runs under new date-stamped identities with provenance. |
 | S8 real-path freshness benchmark | None; `docs/perf/freshness-e2e-realpath.md` is a lifecycle page | `python scripts/benchmark_freshness_e2e.py` writes `.artifacts/freshness/e2e-realpath.md` and `.artifacts/freshness/e2e-realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink/bridge/ClickHouse/Redis/API stand. The 2026-07-09 S8 snapshot is archived; promote only date-stamped evidence with provenance. |
@@ -80,6 +81,12 @@ tracked report is preserved as a
 [2026-04-17 historical snapshot](archive/performance/load-benchmark-2026-04-17.md).
 The stable [artifact lifecycle page](perf/load-benchmark-latest.md) names the
 runtime outputs, CI comparison, promotion rule, and protected tracked paths.
+
+Performance-history aggregation is local runtime state. The recorder appends
+`.artifacts/perf-history/history.json`, and the plotter writes ignored HTML/PNG
+beside it. The former bot-managed tracked log is preserved as the immutable
+[2026-04-27 snapshot](archive/performance/perf-history-2026-04-27.json); current
+CI does not persist a cross-run trend.
 
 The demo freshness benchmark is also host- and time-dependent. Its
 [artifact lifecycle page](perf/freshness-benchmark.md) names the ignored

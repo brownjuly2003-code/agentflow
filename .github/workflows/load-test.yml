@@ -9,8 +9,6 @@ on:
       - "docs/benchmark-baseline.json"
   push:
     branches: [main]
-    paths-ignore:
-      - ".github/perf-history.json"
   workflow_dispatch:
 
 permissions:

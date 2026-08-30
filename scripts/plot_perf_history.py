@@ -1,19 +1,21 @@
-"""Render the latency trend from .github/perf-history.json.
+"""Render the latency trend from ignored local performance history.
 
 Produces an interactive Plotly HTML and, when kaleido is installed, a
 static PNG. Designed for `make perf-plot` and manual investigation; the
-output lands under docs/perf/ so it can be linked from README.
+output lands under `.artifacts/perf-history/` and is not tracked evidence.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_HISTORY_PATH = PROJECT_ROOT / ".github" / "perf-history.json"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "docs" / "perf"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / ".artifacts" / "perf-history"
+DEFAULT_HISTORY_PATH = DEFAULT_OUTPUT_DIR / "history.json"
+DOCS_ROOT = PROJECT_ROOT / "docs"
 
 
 def parse_args() -> argparse.Namespace:
@@ -22,15 +24,33 @@ def parse_args() -> argparse.Namespace:
         "--history",
         type=Path,
         default=DEFAULT_HISTORY_PATH,
-        help="Path to the rolling perf history file.",
+        help="Path to the rolling runtime history.",
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
-        help="Output directory for history.html and history.png.",
+        help="Runtime output directory for history.html and history.png.",
     )
     return parser.parse_args()
+
+
+def resolve_history_path(history_path: str | Path) -> Path:
+    candidate = Path(history_path)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
+def resolve_output_dir(output_dir: str | Path) -> Path:
+    candidate = Path(output_dir)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    try:
+        resolved.resolve().relative_to(DOCS_ROOT.resolve())
+    except ValueError:
+        return resolved
+    raise ValueError(
+        "Performance-history plots are runtime artifacts; write them under "
+        ".artifacts/perf-history/ instead of docs/."
+    )
 
 
 def load_history(path: Path) -> list[dict[str, object]]:
@@ -108,15 +128,22 @@ def build_figure(history: list[dict[str, object]]):
 
 def main() -> int:
     args = parse_args()
-    history = load_history(args.history)
+    try:
+        history_path = resolve_history_path(args.history)
+        output_dir = resolve_output_dir(args.output)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    history = load_history(history_path)
     figure = build_figure(history)
 
-    args.output.mkdir(parents=True, exist_ok=True)
-    html_path = args.output / "history.html"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    html_path = output_dir / "history.html"
     figure.write_html(html_path, include_plotlyjs="cdn")
     print(f"Wrote {html_path} ({len(history)} entries)")
 
-    png_path = args.output / "history.png"
+    png_path = output_dir / "history.png"
     try:
         figure.write_image(png_path, width=1200, height=640, scale=2)
         print(f"Wrote {png_path}")

@@ -19,6 +19,16 @@ measurements remain intact, but they are not the current performance gate.
 The mixed-load parameters differ, so the reports must not be combined into a
 trend.
 
+## Retired generated histories
+
+| Archived snapshot | Original path | Last entry | Lifecycle |
+| --- | --- | --- | --- |
+| [`perf-history-2026-04-27.json`](perf-history-2026-04-27.json) | *.github/perf-history.json* | 2026-04-27 08:14 UTC | Exact four-entry bot-managed log. The writer was removed after branch protection rejected its self-push; current history is ignored local runtime state. |
+
+The snapshot was archived on 2026-08-30 without changing its tracked Git blob
+`8ba12095aa0aefe43cff2cb78ecb9cbbb22edb65`; its SHA-256 is
+`3b522ea0e68159a3147538ec124bcec73fcebf06a762d9537db9b11aa37b9573`.
+
 ## Superseded follow-ups
 
 | Archived report | Original path | Recorded | Current replacement |
@@ -32,7 +42,9 @@ and the [real-path throughput benchmark lifecycle](../../perf/throughput-realpat
 for current output and promotion rules. New mutable reports belong under
 their ignored `.artifacts/` directories; use the
 [entity benchmark contract](../../perf/entity-benchmark-contract.md) for
-repeatable entity-latency comparisons.
+repeatable entity-latency comparisons and the
+[performance evidence hub](../../perf/README.md) for the current local-history
+lifecycle.
 
 Return to the [archive map](../README.md) or the
 [documentation hub](../../README.md).

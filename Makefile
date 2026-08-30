@@ -126,7 +126,7 @@ bench:
 
 perf-plot:
 	python -m pip install --quiet "plotly>=5,<7"
-	python scripts/plot_perf_history.py --output docs/perf/
+	python scripts/plot_perf_history.py
 
 # ── Code Quality ──────────────────────────────────────────────────
 

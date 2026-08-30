@@ -235,8 +235,10 @@ python scripts/check_performance.py --baseline docs/benchmark-baseline.json --cu
 # writes the ignored .artifacts/perf/auth-bench-current.md runtime report
 python scripts/perf/auth_bench.py
 
-# benchmark trend: [.github/perf-history.json](.github/perf-history.json) is appended on every main push;
-# render the history locally with `make perf-plot` (writes docs/perf/history.html).
+# local benchmark trend (ignored runtime state; not retained across CI runners)
+python scripts/record_perf_history.py --results .artifacts/benchmark/current.json
+make perf-plot
+# writes .artifacts/perf-history/history.json, history.html, and optional history.png
 
 # contracts and security
 python scripts/generate_contracts.py --check

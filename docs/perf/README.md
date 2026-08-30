@@ -16,6 +16,9 @@ Mac runtime outputs ignored; its pre-Q1.2 S10 burst baseline is preserved as
 an [archived 2026-07-09 snapshot](../archive/performance/throughput-realpath-2026-07-09.md).
 The [authentication legacy-path benchmark lifecycle](auth-bench.md) owns an
 ignored runtime report while preserving the dated 2026-05-26 bcrypt evidence.
+Local performance-history tooling also writes only ignored runtime artifacts;
+the retired bot-managed log is preserved as an
+[archived 2026-04-27 snapshot](../archive/performance/perf-history-2026-04-27.json).
 Non-canonical mixed-load reports from the former `docs/benchmark_pool*.md`
 series are preserved in the [documentation archive](../archive/performance/README.md).
 
@@ -59,8 +62,30 @@ series are preserved in the [documentation archive](../archive/performance/READM
   pages, and does not represent the current O(1) authentication path.
 - `py-spy` — external sampling profiler. Attach to the live uvicorn
   process (no restart required) and record a flamegraph.
-- `.github/perf-history.json` + `make perf-plot` — rolling trend of
-  the aggregate load-test metrics. Useful for spotting slow drifts.
+- `scripts/record_perf_history.py` + `scripts/plot_perf_history.py` — append
+  aggregate load-test metrics to `.artifacts/perf-history/history.json` and
+  render ignored `history.html` plus optional `history.png`. Useful for
+  comparing repeated runs in one checkout.
+
+## Performance history artifact lifecycle
+
+`python scripts/record_perf_history.py --results <results.json>` owns the local
+rolling JSON. Relative paths resolve from the project root, and the recorder
+refuses to overwrite either the former `.github/perf-history.json` path or its
+immutable archived snapshot. `python scripts/plot_perf_history.py` reads that
+runtime JSON and writes under `.artifacts/perf-history/` by default; it refuses
+plot output anywhere under `docs/`.
+
+The original workflow appended four main-branch results through 2026-04-27.
+Its bot commit required `contents: write`, but branch protection rejected the
+self-push before the required checks could be satisfied, so commit `b2c0bc0`
+removed the writer. The exact four-entry JSON remains in the
+[dated archive](../archive/performance/perf-history-2026-04-27.json).
+
+Current CI uploads each run's benchmark results but does not persist a
+cross-run history. Therefore the ignored local history and its plots are
+diagnostic runtime artifacts, not a continuous CI trend, release evidence,
+an SLA, or production acceptance.
 
 ## Stack requirements for meaningful numbers
 

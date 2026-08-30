@@ -3,7 +3,7 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
-**Last updated:** 2026-07-23 (authentication defaults and quality gates revalidated)
+**Last updated:** 2026-08-30 (API/Flink image-policy gate)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
@@ -154,6 +154,21 @@ The repository includes a dedicated security workflow in GitHub Actions:
 - Safety for dependency vulnerability scanning
 - Trivy for container image scanning and CycloneDX SBOM generation
 
+The security workflow now scans both shipping runtime images:
+`agentflow-api:security-scan` and `agentflow-flink:security-scan`.
+Each image produces distinct CycloneDX, JSON, and SARIF outputs.
+JSON and SARIF scans use HIGH,CRITICAL plus ignore-unfixed; report
+generation uses exit-code 0 so the waiver-aware evaluator, rather
+than the raw scanner, decides policy. `scripts/evaluate_trivy_policy.py`
+runs once for `api-runtime` and once for `flink-runtime` against
+`security/trivy-waivers.json` and fails for unwaived findings, expired
+waivers, or stale waivers. API and Flink SARIF uploads have distinct
+categories; SBOM artifacts also have distinct names. `make trivy-policy`
+evaluates already-generated JSON reports for both scopes; it does not
+build or scan images and does not suppress failures. The `api-runtime`
+policy scope is empty, so every API finding is unwaived; the existing
+Flink scope retains its narrow expiring waivers.
+
 On 2026-07-30, a Trivy scan of the API image identified vulnerable packages
 vendored by runtime `pip`, not dependencies from the application lock. The
 final stage now removes `pip`, `setuptools`, and `wheel` after the hash-locked
@@ -175,7 +190,9 @@ Helm defaults no longer embed production-shaped API-key verifier hashes. Operato
 
 Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
 `docs/operations/helm-deployment.md`,
-`docs/evidence/security-runtime-image-trivy-2026-07-30.md`
+`docs/evidence/security-runtime-image-trivy-2026-07-30.md`,
+`scripts/evaluate_trivy_policy.py`, `security/trivy-waivers.json`,
+`Makefile`, `tests/unit/test_security_image_scan_policy.py`
 
 ## 9. Operational Security and Auditability
 

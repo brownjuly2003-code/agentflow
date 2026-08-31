@@ -1,6 +1,6 @@
 # Chaos Runbook
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-08-31
 
 ## Purpose
 
@@ -66,6 +66,27 @@ docker compose -p agentflow-chaos -f docker-compose.chaos.yml down -v
 ```
 
 If a future `make chaos-local` target is added, it should wrap this CI-like path. At the moment, no such Make target exists in the repository.
+
+### Report CLI ownership
+
+`python scripts/chaos_report.py` defaults its input to ignored
+`.artifacts/chaos/chaos-report.json` owned from the project root. Relative
+`--input`, `--output`, and `--markdown` paths also resolve from the project
+root; absolute paths remain supported. Optional JSON and Markdown outputs
+create parent directories and are written as UTF-8 with LF newlines.
+
+The CLI only summarizes an existing pytest JSON report. It does not start
+Docker, Toxiproxy, or the chaos suite, and it does not change workflow
+triggers, artifact names, teardown, or issue behavior. Missing input exits 1
+after emitting the missing-status report. When `--markdown` is omitted,
+Markdown still goes to stdout.
+
+Do not treat `chaos-report.json`, `chaos-summary.json`, or `chaos-summary.md`
+at the repository root as canonical. These files are host/time/test-run
+dependent runtime evidence, not a tracked current reference and not a
+byte-regenerated production acceptance artifact. Promote a reviewed snapshot
+only under a new date-stamped identity with source SHA, scenario/configuration,
+host/runtime, exact command, result counts, and artifact hashes.
 
 ## Severity Escalation Matrix
 

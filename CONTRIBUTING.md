@@ -102,6 +102,18 @@ or a byte-regenerated reference. Promote a reviewed snapshot only under a new
 date-stamped identity with source SHA, window/branch, data sources, exact
 command/configuration, host/runtime, and artifact hash provenance.
 
+`python scripts/chaos_report.py` reads ignored
+`.artifacts/chaos/chaos-report.json` by default and may write
+`.artifacts/chaos/chaos-summary.json` plus `.artifacts/chaos/chaos-summary.md`.
+Relative `--input`, `--output`, and `--markdown` paths resolve from the project
+root; optional output parents are created. Do not leave `chaos-report.json`,
+`chaos-summary.json`, or `chaos-summary.md` in the repository root; the chaos
+workflow already keeps those working files under `.artifacts/chaos/`. This is
+host/time/test-run-dependent runtime evidence, not production acceptance or a
+byte-regenerated reference. Promote a reviewed snapshot only under a new
+date-stamped identity with source SHA, scenario/configuration, host/runtime,
+exact command, result counts, and artifact hashes.
+
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored
 `.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the

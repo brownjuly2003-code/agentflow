@@ -114,6 +114,15 @@ byte-regenerated reference. Promote a reviewed snapshot only under a new
 date-stamped identity with source SHA, scenario/configuration, host/runtime,
 exact command, result counts, and artifact hashes.
 
+`python scripts/mutation_report.py` writes ignored mutation JSON and work files
+under `.artifacts/mutation/` (`mutmut-cicd-stats.json` and per-module `.meta`
+files). Relative `--results-dir` resolves from the project root, not the caller
+CWD, and every destination under `docs/` is rejected before mutmut runs. The
+weekly mutation workflow uploads `.artifacts/mutation/`. These files are
+replaceable runtime artifacts, not reviewed evidence or production acceptance.
+Promote a reviewed snapshot only under a new date-stamped identity with
+provenance.
+
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored
 `.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the

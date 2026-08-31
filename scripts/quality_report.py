@@ -568,8 +568,12 @@ def load_chaos_detail() -> str:
 
 
 def load_mutation_metrics() -> tuple[list[MutationMetric], str]:
-    results_dir = PROJECT_ROOT / "mutants"
-    overall_path = results_dir / "mutmut-cicd-stats.json"
+    results_dir = mutation_report_module.DEFAULT_RESULTS_DIR
+    overall_path = results_dir / mutation_report_module.SUMMARY_FILENAME
+    try:
+        source_label = overall_path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except ValueError:
+        source_label = overall_path.as_posix()
     overall = (
         json.loads(overall_path.read_text(encoding="utf-8-sig")) if overall_path.exists() else None
     )
@@ -607,13 +611,13 @@ def load_mutation_metrics() -> tuple[list[MutationMetric], str]:
         )
 
     if overall is None:
-        overall_detail = "overall mutmut summary not found"
+        overall_detail = f"overall mutmut summary not found (source `{source_label}`)"
     else:
         overall_detail = (
             f"killed={overall.get('killed', 0)}, "
             f"survived={overall.get('survived', 0)}, "
             f"total={overall.get('total', 0)} "
-            f"(source `mutants/mutmut-cicd-stats.json`)"
+            f"(source `{source_label}`)"
         )
     return metrics, overall_detail
 

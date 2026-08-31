@@ -108,6 +108,13 @@ reviewed gate-policy input rather than generated runtime output. CI compares
 the fresh JSON metrics with that tracked gate baseline; promote evidence only
 under a date-stamped name with its run provenance.
 
+The GitHub ARM workflow writes the same host-dependent pair plus host metadata
+to ignored `.artifacts/benchmark/arm-*`. Those runtime artifacts must not
+replace the four immutable 2026-06-05 files under `docs/perf/`. The harness
+rejects those reviewed tracked paths as runtime output. Promote a reviewed ARM
+run only under a new date-stamped identity with source, host/runtime, exact
+command/configuration, sample/threshold information, and artifact hashes.
+
 `python tests/load/run_load_test.py` writes the Locust p99 CI-smoke CSV prefix
 to `.artifacts/load/results` and JSON metrics to `.artifacts/load/results.json`.
 Relative outputs resolve from the project root, and the runner refuses

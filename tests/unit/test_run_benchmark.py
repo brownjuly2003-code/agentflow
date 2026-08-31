@@ -105,6 +105,77 @@ def test_main_rejects_canonical_baseline_before_runtime(results_path, monkeypatc
     assert "canonical benchmark baseline" in capsys.readouterr().err.lower()
 
 
+@pytest.mark.parametrize(
+    "report_path",
+    [
+        "docs/perf/arm-server-benchmark-2026-06-05.md",
+        "docs/perf/arm-benchmark-2026-06-05/arm-benchmark.md",
+        "docs/perf/arm-benchmark-2026-06-05/arm-host-metadata.md",
+        str(ROOT / "docs" / "perf" / "arm-server-benchmark-2026-06-05.md"),
+        str(ROOT / "docs" / "perf" / "arm-benchmark-2026-06-05" / "arm-benchmark.md"),
+        str(ROOT / "docs" / "perf" / "arm-benchmark-2026-06-05" / "arm-host-metadata.md"),
+    ],
+)
+def test_arm_reviewed_reports_cannot_be_runtime_output(report_path):
+    with pytest.raises(ValueError, match=r"(?i)reviewed tracked evidence"):
+        run_benchmark.resolve_report_path(report_path)
+
+
+@pytest.mark.parametrize(
+    "results_path",
+    [
+        "docs/perf/arm-benchmark-2026-06-05/arm-current.json",
+        str(ROOT / "docs" / "perf" / "arm-benchmark-2026-06-05" / "arm-current.json"),
+    ],
+)
+def test_arm_reviewed_results_cannot_be_runtime_output(results_path):
+    with pytest.raises(ValueError, match=r"(?i)reviewed tracked evidence"):
+        run_benchmark.resolve_results_path(results_path)
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [
+        ("--report-path", "docs/perf/arm-benchmark-2026-06-05/arm-benchmark.md"),
+        (
+            "--results-json",
+            "docs/perf/arm-benchmark-2026-06-05/arm-current.json",
+        ),
+    ],
+)
+def test_main_rejects_arm_reviewed_evidence_before_runtime(flag, value, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["run_benchmark.py", flag, value])
+
+    def fail_if_runtime_starts() -> None:
+        raise AssertionError("benchmark runtime started before output validation")
+
+    monkeypatch.setattr(
+        run_benchmark,
+        "ensure_locust_available",
+        fail_if_runtime_starts,
+    )
+
+    assert run_benchmark.main() == 2
+    assert "reviewed tracked evidence" in capsys.readouterr().err.lower()
+
+
+def test_ignored_benchmark_runtime_artifacts_remain_writable():
+    report_paths = (
+        ".artifacts/benchmark/benchmark.md",
+        ".artifacts/benchmark/arm-benchmark.md",
+        ".artifacts/benchmark/arm-host-metadata.md",
+    )
+    results_paths = (
+        ".artifacts/benchmark/current.json",
+        ".artifacts/benchmark/arm-current.json",
+    )
+
+    for relative in report_paths:
+        assert run_benchmark.resolve_report_path(relative) == ROOT / relative
+    for relative in results_paths:
+        assert run_benchmark.resolve_results_path(relative) == ROOT / relative
+
+
 def test_resolve_host_seed_db_path_defaults_to_demo_db(monkeypatch):
     monkeypatch.delenv("DUCKDB_PATH", raising=False)
 

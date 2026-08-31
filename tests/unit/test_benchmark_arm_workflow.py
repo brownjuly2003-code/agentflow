@@ -4,9 +4,10 @@ Evidence channel: a dispatch-only benchmark on the
 GitHub-hosted arm64 runner for public repositories (ubuntu-24.04-arm), the
 available ARM server class for this project. The workflow must stay
 dispatch-only (it is real load work, not a PR
-gate), must run on the arm64 runner label, and must upload the three evidence
-artifacts (host metadata, report, results JSON) so docs/perf/ records can be
-verified against a real run.
+gate), must run on the arm64 runner label, and must upload the three ignored
+runtime artifacts (host metadata, report, results JSON) under
+.artifacts/benchmark/arm-*. Tracked docs/perf/ evidence is created only by
+separate review/promotion.
 """
 
 from pathlib import Path
@@ -63,9 +64,26 @@ def test_benchmark_arm_uploads_evidence_artifacts():
     assert upload_steps
     paths = upload_steps[0]["with"]["path"]
     for artifact in (
-        "arm-host-metadata.md",
-        "arm-benchmark.md",
-        "arm-current.json",
+        ".artifacts/benchmark/arm-host-metadata.md",
+        ".artifacts/benchmark/arm-benchmark.md",
+        ".artifacts/benchmark/arm-current.json",
     ):
         assert artifact in paths
+    assert "docs/perf/" not in paths
     assert upload_steps[0]["with"]["if-no-files-found"] == "error"
+
+
+def test_benchmark_arm_keeps_runtime_output_on_ignored_artifacts():
+    workflow_path = PROJECT_ROOT / ".github" / "workflows" / "benchmark-arm.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    job = _job(_load_workflow())
+    run_steps = [step.get("run", "") for step in job["steps"] if "run" in step]
+    joined = "\n".join(run_steps)
+
+    assert ".artifacts/benchmark/arm-host-metadata.md" in joined
+    assert "--report-path .artifacts/benchmark/arm-benchmark.md" in joined
+    assert "--results-json .artifacts/benchmark/arm-current.json" in joined
+    assert "docs/perf/" not in joined
+    assert "recorded into docs/perf/" not in workflow_text
+    assert "runtime artifacts" in workflow_text
+    assert "review/promotion" in workflow_text

@@ -31,7 +31,17 @@ CURRENT_LIFECYCLE_PATH = PROJECT_ROOT / "docs" / "perf" / "load-benchmark-latest
 ARCHIVED_SNAPSHOT_PATH = (
     PROJECT_ROOT / "docs" / "archive" / "performance" / "load-benchmark-2026-04-17.md"
 )
-PROTECTED_REPORT_PATHS = (CURRENT_LIFECYCLE_PATH, ARCHIVED_SNAPSHOT_PATH)
+ARM_REVIEWED_EVIDENCE_PATHS = (
+    PROJECT_ROOT / "docs" / "perf" / "arm-server-benchmark-2026-06-05.md",
+    PROJECT_ROOT / "docs" / "perf" / "arm-benchmark-2026-06-05" / "arm-benchmark.md",
+    PROJECT_ROOT / "docs" / "perf" / "arm-benchmark-2026-06-05" / "arm-host-metadata.md",
+    PROJECT_ROOT / "docs" / "perf" / "arm-benchmark-2026-06-05" / "arm-current.json",
+)
+PROTECTED_REPORT_PATHS = (
+    CURRENT_LIFECYCLE_PATH,
+    ARCHIVED_SNAPSHOT_PATH,
+    *ARM_REVIEWED_EVIDENCE_PATHS,
+)
 CANONICAL_USERS = 50
 CANONICAL_SPAWN_RATE = 10
 CANONICAL_RUN_TIME_SECONDS = 60
@@ -62,8 +72,8 @@ def resolve_report_path(report_path: str) -> Path:
     protected_paths = {path.resolve() for path in PROTECTED_REPORT_PATHS}
     if resolved.resolve() in protected_paths:
         raise ValueError(
-            "Tracked benchmark documentation cannot be overwritten; write runtime reports "
-            "under .artifacts/benchmark instead"
+            "Reviewed tracked evidence cannot be used as runtime output; "
+            "write runtime reports under .artifacts/benchmark instead"
         )
     return resolved
 
@@ -71,9 +81,16 @@ def resolve_report_path(report_path: str) -> Path:
 def resolve_results_path(results_path: str) -> Path:
     candidate = Path(results_path)
     resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
-    if resolved.resolve() == CANONICAL_BASELINE_PATH.resolve():
+    resolved_path = resolved.resolve()
+    if resolved_path == CANONICAL_BASELINE_PATH.resolve():
         raise ValueError(
             "The canonical benchmark baseline cannot be overwritten by runtime output; "
+            "write runtime results under .artifacts/benchmark instead"
+        )
+    protected_arm_paths = {path.resolve() for path in ARM_REVIEWED_EVIDENCE_PATHS}
+    if resolved_path in protected_arm_paths:
+        raise ValueError(
+            "Reviewed tracked evidence cannot be used as runtime output; "
             "write runtime results under .artifacts/benchmark instead"
         )
     return resolved

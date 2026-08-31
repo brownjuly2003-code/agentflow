@@ -42,6 +42,13 @@ accuracy claims.
 - `scripts/run_benchmark.py` — full Locust matrix across the whole API
   surface. Slower to start; writes `.artifacts/benchmark/benchmark.md` and
   `.artifacts/benchmark/current.json` rather than a mutable tracked report.
+  The ARM shared-runner workflow writes ignored
+  `.artifacts/benchmark/arm-host-metadata.md`,
+  `.artifacts/benchmark/arm-benchmark.md`, and
+  `.artifacts/benchmark/arm-current.json`. The four 2026-06-05 tracked files
+  remain immutable reviewed evidence, not runtime destinations; promote only a
+  new date-stamped identity with source, host/runtime, exact
+  command/configuration, sample/threshold information, and artifact hashes.
 - `tests/load/run_load_test.py` — Locust p99 CI-smoke runner owned by
   `python tests/load/run_load_test.py`. Writes `.artifacts/load/results` (CSV
   prefix) and `.artifacts/load/results.json` by default, resolves relative

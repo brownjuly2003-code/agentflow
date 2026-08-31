@@ -41,14 +41,14 @@ jobs:
           GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python scripts/dora_metrics.py --days 30 --output dora-report.json
+        run: python scripts/dora_metrics.py --days 30 --output .artifacts/dora/dora-report.json
       - name: Render markdown summary
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          report = json.loads(Path("dora-report.json").read_text(encoding="utf-8"))
+          report = json.loads(Path(".artifacts/dora/dora-report.json").read_text(encoding="utf-8"))
           metrics = report["metrics"]
           deployment = metrics["deployment_frequency"]
           lead_time = metrics["lead_time_for_changes"]
@@ -75,27 +75,27 @@ jobs:
               lines.extend([f"- {note}" for note in report["notes"]])
 
           summary = "\n".join(lines) + "\n"
-          Path("dora-summary.md").write_text(summary, encoding="utf-8")
-          Path("dora-comment.md").write_text(
+          Path(".artifacts/dora/dora-summary.md").write_text(summary, encoding="utf-8")
+          Path(".artifacts/dora/dora-comment.md").write_text(
               "<!-- dora-report -->\n" + summary,
               encoding="utf-8",
           )
           PY
-          cat dora-summary.md >> "$GITHUB_STEP_SUMMARY"
+          cat .artifacts/dora/dora-summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload DORA artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dora-report
           path: |
-            dora-report.json
-            dora-summary.md
+            .artifacts/dora/dora-report.json
+            .artifacts/dora/dora-summary.md
       - name: Comment on pull request
         if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require("fs");
-            const body = fs.readFileSync("dora-comment.md", "utf8");
+            const body = fs.readFileSync(".artifacts/dora/dora-comment.md", "utf8");
             const marker = "<!-- dora-report -->";
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;

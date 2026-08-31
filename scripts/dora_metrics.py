@@ -17,6 +17,8 @@ from urllib.request import Request, urlopen
 HOTFIX_PATTERN = re.compile(r"\b(hotfix|rollback|revert|patch|fix)\b", re.IGNORECASE)
 FAILURE_CONCLUSIONS = {"action_required", "failure", "startup_failure", "timed_out"}
 SUCCESS_CONCLUSIONS = {"success"}
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_PATH = PROJECT_ROOT / ".artifacts" / "dora" / "dora-report.json"
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
@@ -276,13 +278,32 @@ def _calculate_mttr(
     }
 
 
+def resolve_output_path(output: str | Path) -> Path:
+    candidate = Path(output)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
+def write_report(output_path: Path, report: dict[str, Any]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(report, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Compute DORA metrics from local git history and GitHub Actions runs.",
     )
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--branch", default="main")
-    parser.add_argument("--output")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_PATH,
+        help="Runtime JSON output (default: .artifacts/dora/dora-report.json).",
+    )
     parser.add_argument(
         "--github-api-url", default=os.getenv("GITHUB_API_URL", "https://api.github.com")
     )
@@ -295,7 +316,7 @@ def main() -> int:
     if args.days <= 0:
         raise SystemExit("--days must be a positive integer.")
 
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = PROJECT_ROOT
     since = datetime.now(tz=UTC) - timedelta(days=args.days)
     commits = _load_commits(repo_root, args.branch, since)
     deployment_log = _load_deployment_log(
@@ -398,10 +419,9 @@ def main() -> int:
     for note in report["notes"]:
         print(f"Note: {note}")
 
-    if args.output:
-        output_path = Path(args.output)
-        output_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        print(f"Wrote report to {output_path}")
+    output_path = resolve_output_path(args.output)
+    write_report(output_path, report)
+    print(f"Wrote report to {output_path}")
 
     return 0
 

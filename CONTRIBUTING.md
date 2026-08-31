@@ -92,6 +92,16 @@ Host-specific reports belong to the ignored default output of
 `python scripts/quality_report.py`; do not use that collector to overwrite the
 tracked current reference.
 
+`python scripts/dora_metrics.py --days 30` writes the host-, time-, and
+GitHub-history-dependent DORA JSON to ignored
+`.artifacts/dora/dora-report.json`. Relative outputs resolve from the project
+root. Do not leave `dora-report.json`, `dora-summary.md`, or `dora-comment.md`
+in the repository root; the weekly/PR workflow also keeps those working files
+under `.artifacts/dora/`. This is runtime evidence, not production acceptance
+or a byte-regenerated reference. Promote a reviewed snapshot only under a new
+date-stamped identity with source SHA, window/branch, data sources, exact
+command/configuration, host/runtime, and artifact hash provenance.
+
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored
 `.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the

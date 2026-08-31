@@ -9,7 +9,7 @@
 | Change failure rate | < 5% | < 15% |
 | MTTR | < 1 hour | < 4 hours |
 
-`python scripts/dora_metrics.py --days 30 --output dora-report.json` is the canonical report for the last 30 days. In this repo, a successful push to `main` is treated as a deployment because CI is the last gate before release packaging.
+`python scripts/dora_metrics.py --days 30 --output .artifacts/dora/dora-report.json` is the canonical local report for the last 30 days. The default destination is that ignored runtime file; relative `--output` paths resolve from the project root. The result is host-, time-, and GitHub-history-dependent evidence, not production acceptance and not a byte-regenerated reference. `.github/workflows/dora.yml` writes the same JSON plus `dora-summary.md` and `dora-comment.md` under `.artifacts/dora/`, uploads the report/summary as the `dora-report` artifact, and updates the pinned PR comment. Promote a reviewed snapshot only under a new date-stamped identity with source SHA, window/branch, data sources, exact command/configuration, host/runtime, and artifact hash provenance. In this repo, a successful push to `main` is treated as a deployment because CI is the last gate before release packaging.
 
 ## Quality Gates
 

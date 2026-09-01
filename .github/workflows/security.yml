@@ -319,6 +319,8 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare Trivy artifact directory
+        run: mkdir -p .artifacts/trivy
       - name: Build API image
         env:
           COMPOSE_PROJECT_NAME: agentflow-security
@@ -347,31 +349,31 @@ jobs:
         with:
           image-ref: agentflow-api:security-scan
           format: cyclonedx
-          output: agentflow-api.cdx.json
+          output: .artifacts/trivy/agentflow-api.cdx.json
       - name: Upload CycloneDX SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agentflow-api-sbom-cyclonedx
-          path: agentflow-api.cdx.json
+          path: .artifacts/trivy/agentflow-api.cdx.json
           if-no-files-found: error
       - name: Generate Flink CycloneDX SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: agentflow-flink:security-scan
           format: cyclonedx
-          output: agentflow-flink.cdx.json
+          output: .artifacts/trivy/agentflow-flink.cdx.json
       - name: Upload Flink CycloneDX SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agentflow-flink-sbom-cyclonedx
-          path: agentflow-flink.cdx.json
+          path: .artifacts/trivy/agentflow-flink.cdx.json
           if-no-files-found: error
       - name: Run Trivy JSON scan (API)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: agentflow-api:security-scan
           format: json
-          output: trivy-api.json
+          output: .artifacts/trivy/trivy-api.json
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "0"
@@ -380,7 +382,7 @@ jobs:
         with:
           image-ref: agentflow-flink:security-scan
           format: json
-          output: trivy-flink.json
+          output: .artifacts/trivy/trivy-flink.json
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "0"
@@ -389,7 +391,7 @@ jobs:
         with:
           image-ref: agentflow-api:security-scan
           format: sarif
-          output: trivy-api.sarif
+          output: .artifacts/trivy/trivy-api.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "0"
@@ -405,7 +407,7 @@ jobs:
         with:
           image-ref: agentflow-flink:security-scan
           format: sarif
-          output: trivy-flink.sarif
+          output: .artifacts/trivy/trivy-flink.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "0"
@@ -414,18 +416,18 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
-          sarif_file: trivy-api.sarif
+          sarif_file: .artifacts/trivy/trivy-api.sarif
           category: trivy-api-image
       - name: Upload Trivy Flink SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
-          sarif_file: trivy-flink.sarif
+          sarif_file: .artifacts/trivy/trivy-flink.sarif
           category: trivy-flink-image
       - name: Evaluate API Trivy policy
-        run: python3 scripts/evaluate_trivy_policy.py --report trivy-api.json --waivers security/trivy-waivers.json --scope api-runtime --output trivy-api-policy.json
+        run: python3 scripts/evaluate_trivy_policy.py --report .artifacts/trivy/trivy-api.json --waivers security/trivy-waivers.json --scope api-runtime --output .artifacts/trivy/trivy-api-policy.json
       - name: Evaluate Flink Trivy policy
-        run: python3 scripts/evaluate_trivy_policy.py --report trivy-flink.json --waivers security/trivy-waivers.json --scope flink-runtime --output trivy-flink-policy.json
+        run: python3 scripts/evaluate_trivy_policy.py --report .artifacts/trivy/trivy-flink.json --waivers security/trivy-waivers.json --scope flink-runtime --output .artifacts/trivy/trivy-flink-policy.json
 
   iac:
     runs-on: ubuntu-latest
@@ -435,13 +437,15 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare Trivy artifact directory
+        run: mkdir -p .artifacts/trivy
       - name: Run Trivy IaC misconfiguration scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: infrastructure/terraform
           format: sarif
-          output: trivy-iac.sarif
+          output: .artifacts/trivy/trivy-iac.sarif
           severity: MEDIUM,HIGH,CRITICAL
           exit-code: "1"
           limit-severities-for-sarif: true
@@ -449,7 +453,7 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
-          sarif_file: trivy-iac.sarif
+          sarif_file: .artifacts/trivy/trivy-iac.sarif
           # Distinct category so these alerts do not collide with the image
           # scan's SARIF upload in the trivy job.
           category: trivy-iac

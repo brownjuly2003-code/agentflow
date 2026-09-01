@@ -17,6 +17,16 @@ FLINK_IMAGE = "agentflow-flink:security-scan"
 API_SCOPE = "api-runtime"
 FLINK_SCOPE = "flink-runtime"
 REQUIRED_EVALUATOR_FLAGS = ("--report", "--waivers", "--scope", "--output")
+TRIVY_ARTIFACT_DIR = ".artifacts/trivy"
+API_SBOM = f"{TRIVY_ARTIFACT_DIR}/agentflow-api.cdx.json"
+FLINK_SBOM = f"{TRIVY_ARTIFACT_DIR}/agentflow-flink.cdx.json"
+API_JSON = f"{TRIVY_ARTIFACT_DIR}/trivy-api.json"
+FLINK_JSON = f"{TRIVY_ARTIFACT_DIR}/trivy-flink.json"
+API_SARIF = f"{TRIVY_ARTIFACT_DIR}/trivy-api.sarif"
+FLINK_SARIF = f"{TRIVY_ARTIFACT_DIR}/trivy-flink.sarif"
+API_POLICY = f"{TRIVY_ARTIFACT_DIR}/trivy-api-policy.json"
+FLINK_POLICY = f"{TRIVY_ARTIFACT_DIR}/trivy-flink-policy.json"
+IAC_SARIF = f"{TRIVY_ARTIFACT_DIR}/trivy-iac.sarif"
 
 
 def _load_security_workflow() -> dict[str, Any]:
@@ -153,11 +163,14 @@ def test_each_shipping_image_has_filtered_json_sarif_sbom_and_unique_artifact() 
     assert api_sbom["with"] == {
         "image-ref": API_IMAGE,
         "format": "cyclonedx",
-        "output": "agentflow-api.cdx.json",
+        "output": API_SBOM,
     }
     api_upload = next(step for step in steps if step.get("name") == "Upload CycloneDX SBOM")
     assert api_upload["with"]["name"] == "agentflow-api-sbom-cyclonedx"
-    assert api_upload["with"]["path"] == "agentflow-api.cdx.json"
+    assert api_upload["with"]["path"] == API_SBOM
+    assert set(json_outputs) == {API_JSON, FLINK_JSON}
+    assert set(sarif_outputs) == {API_SARIF, FLINK_SARIF}
+    assert set(sbom_outputs) == {API_SBOM, FLINK_SBOM}
 
 
 def test_evaluator_calls_use_exact_cli_and_valid_scopes() -> None:
@@ -179,8 +192,10 @@ def test_evaluator_calls_use_exact_cli_and_valid_scopes() -> None:
         step["with"]["image-ref"]: step["with"]["output"]
         for step in _image_trivy_steps(_trivy_steps(), "json")
     }
-    assert parsed[API_SCOPE]["--report"] == json_by_image[API_IMAGE]
-    assert parsed[FLINK_SCOPE]["--report"] == json_by_image[FLINK_IMAGE]
+    assert parsed[API_SCOPE]["--report"] == json_by_image[API_IMAGE] == API_JSON
+    assert parsed[FLINK_SCOPE]["--report"] == json_by_image[FLINK_IMAGE] == FLINK_JSON
+    assert parsed[API_SCOPE]["--output"] == API_POLICY
+    assert parsed[FLINK_SCOPE]["--output"] == FLINK_POLICY
     assert parsed[API_SCOPE]["--output"] != parsed[FLINK_SCOPE]["--output"]
 
     policy_scopes = set(_policy()["scopes"])
@@ -201,6 +216,8 @@ def test_sarif_outputs_and_categories_are_unique_per_image() -> None:
     category_by_file = {step["with"]["sarif_file"]: step["with"]["category"] for step in uploads}
     assert category_by_file[output_by_image[API_IMAGE]] == "trivy-api-image"
     assert category_by_file[output_by_image[FLINK_IMAGE]] == "trivy-flink-image"
+    assert output_by_image[API_IMAGE] == API_SARIF
+    assert output_by_image[FLINK_IMAGE] == FLINK_SARIF
     assert len(set(category_by_file.values())) == 2
 
 
@@ -274,6 +291,47 @@ def test_make_trivy_policy_invokes_both_scopes_without_suppressing_failure() -> 
         assert "|| true" not in body
         assert "|| exit 0" not in body
         assert "2>/dev/null" not in body
+
+
+def test_makefile_trivy_path_defaults_use_canonical_artifacts_directory() -> None:
+    makefile = _makefile_text()
+    assert "TRIVY_API_REPORT ?= .artifacts/trivy/trivy-api.json" in makefile
+    assert "TRIVY_FLINK_REPORT ?= .artifacts/trivy/trivy-flink.json" in makefile
+    assert "TRIVY_API_POLICY_SUMMARY ?= .artifacts/trivy/trivy-api-policy.json" in makefile
+    assert "TRIVY_FLINK_POLICY_SUMMARY ?= .artifacts/trivy/trivy-flink-policy.json" in makefile
+
+
+def test_trivy_and_iac_jobs_prepare_canonical_directory_before_writers() -> None:
+    workflow = _load_security_workflow()
+    iac_steps = workflow["jobs"]["iac"]["steps"]
+    iac_outputs = [
+        step["with"]["output"]
+        for step in iac_steps
+        if str(step.get("uses", "")).startswith("aquasecurity/trivy-action@")
+    ]
+    iac_uploads = [
+        step["with"]["sarif_file"]
+        for step in iac_steps
+        if str(step.get("uses", "")).startswith("github/codeql-action/upload-sarif@")
+    ]
+    assert iac_outputs == [IAC_SARIF]
+    assert iac_uploads == [IAC_SARIF]
+
+    for job_name in ("trivy", "iac"):
+        steps = workflow["jobs"][job_name]["steps"]
+        prepare = [
+            index
+            for index, step in enumerate(steps)
+            if isinstance(step.get("run"), str) and "mkdir -p .artifacts/trivy" in step["run"]
+        ]
+        writer = next(
+            index
+            for index, step in enumerate(steps)
+            if str(step.get("uses", "")).startswith("aquasecurity/trivy-action@")
+            or EVALUATOR in str(step.get("run", ""))
+        )
+        assert prepare, f"{job_name} must create {TRIVY_ARTIFACT_DIR}"
+        assert prepare[0] < writer
 
 
 def test_pinned_trivy_action_sha_is_shared_across_image_scan_and_sbom_steps() -> None:

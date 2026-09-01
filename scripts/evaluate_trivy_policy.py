@@ -8,8 +8,26 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 Finding = dict[str, Any]
 Waiver = dict[str, Any]
+
+
+def resolve_cli_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
+def reject_docs_output(output_path: Path) -> None:
+    docs_root = (PROJECT_ROOT / "docs").resolve()
+    try:
+        output_path.resolve().relative_to(docs_root)
+    except ValueError:
+        return
+    raise ValueError(
+        "Trivy policy summaries are replaceable runtime artifacts; write them "
+        "under .artifacts/trivy/ instead of docs/."
+    )
 
 
 def _finding_key(item: Finding) -> tuple[str, str, str, str]:
@@ -143,11 +161,16 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-    report = json.loads(args.report.read_text(encoding="utf-8"))
-    policy = json.loads(args.waivers.read_text(encoding="utf-8"))
+    report_path = resolve_cli_path(args.report)
+    waivers_path = resolve_cli_path(args.waivers)
+    output_path = resolve_cli_path(args.output)
+    reject_docs_output(output_path)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    policy = json.loads(waivers_path.read_text(encoding="utf-8"))
     as_of = args.as_of or datetime.now(UTC).date()
     summary = evaluate_report(report, policy, scope_name=args.scope, as_of=as_of)
-    args.output.write_text(
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
         newline="\n",

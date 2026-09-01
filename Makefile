@@ -170,10 +170,10 @@ clean:
 # Evaluate locally generated Trivy JSON reports. This target does not
 # build or scan images; a missing report or nonzero evaluator exit fails.
 
-TRIVY_API_REPORT ?= trivy-api.json
-TRIVY_FLINK_REPORT ?= trivy-flink.json
-TRIVY_API_POLICY_SUMMARY ?= trivy-api-policy.json
-TRIVY_FLINK_POLICY_SUMMARY ?= trivy-flink-policy.json
+TRIVY_API_REPORT ?= .artifacts/trivy/trivy-api.json
+TRIVY_FLINK_REPORT ?= .artifacts/trivy/trivy-flink.json
+TRIVY_API_POLICY_SUMMARY ?= .artifacts/trivy/trivy-api-policy.json
+TRIVY_FLINK_POLICY_SUMMARY ?= .artifacts/trivy/trivy-flink-policy.json
 
 trivy-policy:
 	python scripts/evaluate_trivy_policy.py --report $(TRIVY_API_REPORT) --waivers security/trivy-waivers.json --scope api-runtime --output $(TRIVY_API_POLICY_SUMMARY)

@@ -165,7 +165,11 @@ runs once for `api-runtime` and once for `flink-runtime` against
 waivers, or stale waivers. API and Flink SARIF uploads have distinct
 categories; SBOM artifacts also have distinct names. `make trivy-policy`
 evaluates already-generated JSON reports for both scopes; it does not
-build or scan images and does not suppress failures. The `api-runtime`
+build or scan images and does not suppress failures. JSON, SARIF, SBOM,
+policy-summary, and IaC working files live under ignored
+`.artifacts/trivy/`. They are replaceable runtime/CI artifacts, not
+reviewed evidence or production acceptance; promotion requires a new
+date-stamped identity with provenance. The `api-runtime`
 policy scope is empty, so every API finding is unwaived; the existing
 Flink scope retains its narrow expiring waivers.
 

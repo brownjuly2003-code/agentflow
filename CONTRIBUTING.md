@@ -123,6 +123,15 @@ replaceable runtime artifacts, not reviewed evidence or production acceptance.
 Promote a reviewed snapshot only under a new date-stamped identity with
 provenance.
 
+`python scripts/evaluate_trivy_policy.py` writes ignored Trivy policy
+summaries under `.artifacts/trivy/`. Relative `--report`, `--waivers`, and
+`--output` paths resolve from the project root, not the caller CWD, and every
+destination under `docs/` is rejected before the report is read. The security
+workflow keeps SBOM, JSON, SARIF, policy-summary, and IaC working files under
+`.artifacts/trivy/`. These files are replaceable runtime/CI artifacts, not
+reviewed evidence or production acceptance. Promote a reviewed snapshot only
+under a new date-stamped identity with provenance.
+
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored
 `.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the

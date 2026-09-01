@@ -84,6 +84,9 @@ posture -- plaintext Kafka, Redis and ClickHouse on loopback, dev credentials,
 no TLS. The API runs with `AGENTFLOW_DEMO_MODE=true`, which the runtime refuses
 to combine with `AGENTFLOW_PROFILE=production`, so this stack cannot be
 relabelled into a production one by flipping a variable.
+The same profile also refuses to boot without an operator-supplied
+`AGENTFLOW_QUERY_FINGERPRINT_PEPPER` (audit AF-13): the built-in query
+fingerprint pepper is a public constant and is accepted on demo and dev only.
 
 The local auth contract is explicit: the API loads `config/api_keys.yaml` and
 demo mode adds the published `demo-key`, so `/v1` routes answer 401 without a

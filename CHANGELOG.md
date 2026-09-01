@@ -4,6 +4,16 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — production boot requires a query-fingerprint pepper (AF-13)
+
+`QueryAnalyticsPolicy.from_env` now fails closed on `AGENTFLOW_PROFILE=production`
+when `AGENTFLOW_QUERY_FINGERPRINT_PEPPER` is unset or equals the built-in
+constant. The default pepper is committed to the repository, so it never
+protected a leaked production analytics table from offline joins; demo and dev
+profiles keep the default so a fresh checkout still starts. The check runs at
+API import time through `build_analytics_middleware`, so a misconfigured
+production process dies before it serves a request.
+
 ### Documentation — benchmark runs are separated from immutable evidence
 
 The demo freshness and real-path throughput drivers now write their default

@@ -26,6 +26,12 @@ The fingerprint is peppered so a leaked analytics table cannot be joined
 against fingerprints of the same questions computed elsewhere -- the same
 reasoning as the key-lookup pepper in `security.py`. Changing the pepper
 re-partitions historical fingerprints: old rows stop grouping with new ones.
+
+The default pepper is a public constant in this repository, so it protects
+nothing once the table leaks (audit AF-13). It exists for demo and test boots
+only: on the ``production`` profile ``from_env`` refuses to start without an
+operator-supplied ``AGENTFLOW_QUERY_FINGERPRINT_PEPPER`` that differs from the
+constant.
 """
 
 from __future__ import annotations
@@ -36,6 +42,8 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+
+from agentflow_runtime.serving.transport_policy import resolve_profile
 
 STORE_TEXT_ENV = "AGENTFLOW_QUERY_ANALYTICS_STORE_TEXT"
 RETENTION_DAYS_ENV = "AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS"
@@ -85,6 +93,30 @@ def _resolve_bool(env: Mapping[str, str], name: str, *, default: bool) -> bool:
     )
 
 
+def _resolve_pepper(env: Mapping[str, str]) -> str:
+    """Pick the fingerprint pepper, refusing the public default in production.
+
+    The constant is committed to the repository, so a production table peppered
+    with it can be joined by anyone who can read the source (audit AF-13). Demo
+    and dev boots keep the default so a fresh checkout still starts.
+    """
+    pepper = (env.get(FINGERPRINT_PEPPER_ENV) or "").strip()
+    if resolve_profile(env) != "production":
+        return pepper or DEFAULT_FINGERPRINT_PEPPER
+    if not pepper:
+        raise QueryAnalyticsPolicyError(
+            f"AGENTFLOW_PROFILE=production requires {FINGERPRINT_PEPPER_ENV} to be set: "
+            "the built-in pepper is a public constant and gives production fingerprints "
+            "no protection against offline joins."
+        )
+    if pepper == DEFAULT_FINGERPRINT_PEPPER:
+        raise QueryAnalyticsPolicyError(
+            f"{FINGERPRINT_PEPPER_ENV} equals the built-in default pepper; "
+            "production must use a value that is not committed to the repository."
+        )
+    return pepper
+
+
 @dataclass(frozen=True)
 class QueryAnalyticsPolicy:
     """What may be kept from a `/v1/query` question, and for how long."""
@@ -126,7 +158,7 @@ class QueryAnalyticsPolicy:
         return cls(
             store_query_text=_resolve_bool(env, STORE_TEXT_ENV, default=False),
             retention_days=retention_days,
-            fingerprint_pepper=env.get(FINGERPRINT_PEPPER_ENV) or DEFAULT_FINGERPRINT_PEPPER,
+            fingerprint_pepper=_resolve_pepper(env),
         )
 
     def fingerprint(self, question: str) -> str:

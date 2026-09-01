@@ -16,6 +16,7 @@ import duckdb
 import pytest
 
 from agentflow_runtime.serving.api.query_analytics_policy import (
+    DEFAULT_FINGERPRINT_PEPPER,
     DEFAULT_RETENTION_DAYS,
     QueryAnalyticsPolicy,
     QueryAnalyticsPolicyError,
@@ -156,6 +157,36 @@ def test_from_env_defaults_to_fingerprint_only_with_a_finite_window():
 
     assert policy.store_query_text is False
     assert policy.retention_days == DEFAULT_RETENTION_DAYS
+
+
+def test_production_refuses_to_boot_without_an_operator_pepper():
+    """AF-13: the default pepper is committed to the repo, so on production it
+    protects nothing. Fail at boot, not after the first leaked table."""
+    with pytest.raises(QueryAnalyticsPolicyError, match="AGENTFLOW_QUERY_FINGERPRINT_PEPPER"):
+        QueryAnalyticsPolicy.from_env({"AGENTFLOW_PROFILE": "production"})
+
+
+def test_production_refuses_the_default_pepper_even_when_set_explicitly():
+    with pytest.raises(QueryAnalyticsPolicyError, match="built-in default"):
+        QueryAnalyticsPolicy.from_env(
+            {
+                "AGENTFLOW_PROFILE": "production",
+                "AGENTFLOW_QUERY_FINGERPRINT_PEPPER": DEFAULT_FINGERPRINT_PEPPER,
+            }
+        )
+
+
+def test_production_accepts_an_operator_pepper():
+    policy = QueryAnalyticsPolicy.from_env(
+        {"AGENTFLOW_PROFILE": "production", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER": " s3cret "}
+    )
+    assert policy.fingerprint_pepper == "s3cret"
+
+
+@pytest.mark.parametrize("profile", ["", "dev", "demo"])
+def test_non_production_profiles_keep_the_default_pepper(profile: str):
+    env = {"AGENTFLOW_PROFILE": profile} if profile else {}
+    assert QueryAnalyticsPolicy.from_env(env).fingerprint_pepper == DEFAULT_FINGERPRINT_PEPPER
 
 
 @pytest.mark.parametrize("value", ["1", "true", "YES", "on"])

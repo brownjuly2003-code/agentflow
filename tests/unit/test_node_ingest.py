@@ -277,9 +277,9 @@ def test_mixed_batch_counts_each_outcome_once(center: TestClient) -> None:
 def test_event_without_an_id_is_never_a_duplicate(center: TestClient) -> None:
     # The filter keys on event_id, so an event without one cannot be recognised
     # on retry. The schema requires an id, so such an event is dead-lettered
-    # both times — never applied, never counted as seen. (Whether a retry
-    # should also re-journal it is not pinned: the row is written with the
-    # pipeline's literal `'unknown'` id, which is the pipeline's business.)
+    # both times — never applied, never counted as seen. Each id-less reject is
+    # journaled under a fresh ``missing-id:`` identity, so retries grow the
+    # dead-letter journal instead of colliding on a shared literal id.
     event = _order_event()
     del event["event_id"]
 
@@ -288,6 +288,23 @@ def test_event_without_an_id_is_never_a_duplicate(center: TestClient) -> None:
 
     assert first == {"accepted": 1, "applied": 0, "dead_lettered": 1, "duplicates": 0}
     assert second == first
+
+
+def test_literal_unknown_id_is_not_shadowed_by_idless_reject(center: TestClient) -> None:
+    # An id-less reject must not occupy the journal identity ``unknown``, or a
+    # later valid event that actually carries that id is treated as a duplicate.
+    idless = _order_event()
+    del idless["event_id"]
+    _post(center, [idless])
+
+    # OrderEvent.event_id is a UUID pattern; CdcEvent is the schema-valid way
+    # to carry the literal id ``unknown`` through apply.
+    event = _cdc_event({"db": "shop", "lsn": 42})
+    event["event_id"] = "unknown"
+    body = _post(center, [event])
+
+    assert body["applied"] == 1
+    assert body["duplicates"] == 0
 
 
 # --- the branch stamp -----------------------------------------------------

@@ -14,6 +14,15 @@ profiles keep the default so a fresh checkout still starts. The check runs at
 API import time through `build_analytics_middleware`, so a misconfigured
 production process dies before it serves a request.
 
+### Fixed — id-less dead-letters get distinct journal identities (AF-10)
+
+Id-less rejects used to share the literal journal id `unknown` in
+`pipeline_events`, so a later real event whose id was the string `unknown` was
+treated as an already-seen duplicate by the unchanged ingest and ClickHouse
+idempotency guards. Each id-less dead-letter now journals under a fresh
+`missing-id:<uuid4>` identity. Iceberg `dead_letter` rows still store the raw
+payload id (null when the event had none).
+
 ### Documentation — benchmark runs are separated from immutable evidence
 
 The demo freshness and real-path throughput drivers now write their default

@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import time
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -103,6 +104,17 @@ def _derive_entity_id(event: dict, event_type: str) -> str | None:
     return None
 
 
+MISSING_EVENT_ID_PREFIX = "missing-id:"
+
+
+def _journal_event_id(event: dict) -> str:
+    """Journal identity for an event: its own id, or a fresh synthetic one."""
+    raw = event.get("event_id")
+    if raw is None or str(raw) == "":
+        return MISSING_EVENT_ID_PREFIX + uuid.uuid4().hex
+    return str(event["event_id"])
+
+
 def _process_event(
     conn: duckdb.DuckDBPyConnection,
     event: dict,
@@ -125,7 +137,7 @@ def _process_event(
         return _process_event_serving_only(event, clickhouse_sink)
 
     event_type = event.get("event_type", "")
-    event_id = event.get("event_id", "unknown")
+    event_id = _journal_event_id(event)
     tenant_id = _event_tenant(event)
     entity_id = _derive_entity_id(event, event_type)
     branch = _event_branch(event)
@@ -337,7 +349,7 @@ def apply_serving_batch(
 
     for event in events:
         event_type = event.get("event_type", "")
-        event_id = str(event.get("event_id", "unknown"))
+        event_id = _journal_event_id(event)
         tenant_id = _event_tenant(event)
         entity_id = _derive_entity_id(event, event_type)
 

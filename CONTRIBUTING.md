@@ -132,6 +132,14 @@ workflow keeps SBOM, JSON, SARIF, policy-summary, and IaC working files under
 reviewed evidence or production acceptance. Promote a reviewed snapshot only
 under a new date-stamped identity with provenance.
 
+The Scorecard workflow writes one ignored per-run SARIF working copy to
+`.artifacts/scorecard/results.sarif`. That local/uploaded SARIF is not
+reviewed evidence, a penetration-test attestation, or production acceptance.
+The Code scanning upload and public OpenSSF registry result remain the
+channel outputs. Promote a reviewed snapshot only under a new date-stamped
+identity with source SHA, workflow run, tool/action version, exact
+configuration, and hash provenance.
+
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored
 `.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the

@@ -25,6 +25,12 @@ project can produce to document its supply-chain security posture.
   Pinned-Dependencies, Dangerous-Workflow, Code-Review, Maintained,
   Vulnerabilities, and SAST.
 - **Artifacts produced:**
+  - A replaceable per-run SARIF working copy at
+    `.artifacts/scorecard/results.sarif` (ignored). The local/uploaded SARIF
+    is not reviewed evidence, a penetration-test attestation, or production
+    acceptance. A reviewed repository snapshot would require a new
+    date-stamped identity with source SHA, workflow run, tool/action version,
+    exact configuration, and hash provenance.
   - A SARIF result uploaded to the repository's **Code scanning** dashboard
     (`security-events: write`).
   - A **public, citable result** published to the OpenSSF registry
@@ -32,6 +38,7 @@ project can produce to document its supply-chain security posture.
     `https://api.securityscorecards.dev/projects/github.com/<owner>/<repo>`
     and badge-able via `api.securityscorecards.dev` /
     `scorecard.dev` shields.
+  Code scanning and the public OpenSSF registry remain the channel outputs.
 - **How to read it after the first run:**
   1. Open the repo → **Security → Code scanning** to see per-check findings.
   2. Fetch the public JSON:

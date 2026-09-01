@@ -203,7 +203,7 @@ Graceful degradation нельзя доказать только код-ревь�
 Terraform описывает инфраструктуру как код. `plan` показывает, что изменится, а `apply` применяет изменения. OIDC позволяет GitHub Actions получать облачные креды без статических long-lived secret keys.
 
 ### Как в AgentFlow
-Основной IaC лежит в [../infrastructure/terraform](../infrastructure/terraform). Workflow [../.github/workflows/terraform-apply.yml](../.github/workflows/terraform-apply.yml) делает отдельный `plan`, сохраняет артефакт `tfplan`, а затем даёт `apply` только после environment-gated шага. AWS-доступ настраивается через `aws-actions/configure-aws-credentials` и `role-to-assume`.
+Основной IaC лежит в [../infrastructure/terraform](../infrastructure/terraform). Workflow [../.github/workflows/terraform-apply.yml](../.github/workflows/terraform-apply.yml) делает отдельный `plan`, сохраняет артефакт `tfplan` (ignored рабочий файл `.artifacts/terraform/tfplan`, replaceable per-run, не evidence), а затем даёт `apply` только после environment-gated шага. AWS-доступ настраивается через `aws-actions/configure-aws-credentials` и `role-to-assume`.
 
 ### Почему это важно
 Инфраструктура - такая же часть системы, как код. Если деплой делать руками, знание остаётся в головах, а не в репозитории. Разделение `plan/apply` плюс approval делает изменения видимыми и безопаснее.

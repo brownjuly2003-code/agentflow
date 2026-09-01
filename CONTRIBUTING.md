@@ -156,6 +156,19 @@ attestation, or production acceptance. Promote a reviewed scan only under a
 new date-stamped identity with source SHA, workflow run, scanner versions,
 exact command and configuration, outcome, and hash provenance.
 
+The Terraform workflow keeps its `plan` and `apply` jobs disabled (`if: false`)
+until AWS is explicitly reintroduced, but their artifact contract is fixed now:
+the plan job writes the binary plan to ignored `.artifacts/terraform/tfplan`
+(addressed through `$GITHUB_WORKSPACE` because both steps run from
+`infrastructure/terraform/`), uploads it as `terraform-plan-<environment>`, and
+the apply job downloads the same path. Never write a plan file next to the
+configuration or commit one: plan files embed resolved variable values. The
+plan file is a replaceable per-run working copy, not reviewed evidence,
+OIDC/apply evidence, or production acceptance. Promote a reviewed plan only
+under a new date-stamped identity with source SHA, workflow run,
+Terraform/action versions, tfvars identity, exact command, outcome, and hash
+provenance.
+
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored
 `.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the

@@ -4,6 +4,8 @@
 
 This archived optional guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml` if AWS is ever explicitly reintroduced.
 
+The workflow's `plan` job writes its binary plan to ignored `.artifacts/terraform/tfplan` and uploads it as `terraform-plan-<environment>`; the `apply` job downloads the same path. That file is a replaceable per-run working copy that embeds resolved variable values: never write it next to the configuration or commit it, and do not treat it as reviewed evidence, OIDC/apply evidence, or production acceptance.
+
 Current project decision as of 2026-05-30: a managed-AWS / Terraform-apply production deployment is out of scope for this pre-production portfolio project — a deliberate non-goal, with the stack validated end-to-end on a local/kind demo instead. Do not treat missing AWS apply evidence as a project deficiency, active blocker, or autonomous follow-up. Reopen this path only if the operator explicitly provides an AWS account and approval to reintroduce it.
 
 For the DV2 demo, use the already documented S3-compatible cold-tier path with HF Datasets or Backblaze B2 for derived/anonymized parquet. Do not require AWS/S3 for that dataset.

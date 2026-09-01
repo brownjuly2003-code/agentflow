@@ -90,12 +90,12 @@ jobs:
               conn.close()
           PY
       - name: Create backup archive (synthetic fixture)
-        run: python scripts/backup.py --output backup-artifacts
+        run: python scripts/backup.py --output .artifacts/backup-regression
       - name: Resolve backup path
         id: backup
         shell: bash
         run: |
-          archive_path="$(ls -1t backup-artifacts/*.tar.gz | head -n 1)"
+          archive_path="$(ls -1t .artifacts/backup-regression/*.tar.gz | head -n 1)"
           echo "archive_path=$archive_path" >> "$GITHUB_OUTPUT"
       - name: Verify backup manifest
         run: python scripts/verify_backup.py "${{ steps.backup.outputs.archive_path }}"

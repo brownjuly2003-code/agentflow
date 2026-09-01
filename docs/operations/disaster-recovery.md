@@ -222,12 +222,19 @@ deployed environment — it is a regression test for the backup/restore code
 path, not a disaster-recovery control. The workflow:
 
 1. Builds synthetic DuckDB fixtures on the runner.
-2. Creates a timestamped backup archive from those fixtures.
+2. Creates a timestamped backup archive from those fixtures in the ignored
+   per-run working directory `.artifacts/backup-regression/`.
 3. Verifies the SHA-256 manifest.
 4. Runs a restore smoke test into a temporary directory.
 5. Uploads the resulting archive as a GitHub Actions artifact
    (`agentflow-backup-restore-regression-fixture`, 7-day retention).
 
-A green run means `scripts/backup.py`, `scripts/verify_backup.py` and
-`scripts/restore.py` still work together correctly. It does not mean a real
-environment has been backed up or could be restored.
+The ignored `.artifacts/backup-regression/` working archive and the uploaded
+synthetic fixture are replaceable diagnostic/regression output. They are not
+reviewed evidence, a real environment backup, DR acceptance, or production
+acceptance. A green run means `scripts/backup.py`, `scripts/verify_backup.py`
+and `scripts/restore.py` still work together correctly. It does not mean a
+real environment has been backed up or could be restored. Reviewed promotion
+requires a new date-stamped identity with source SHA, workflow run,
+Python/DuckDB/runtime versions, exact command/configuration, outcome, and
+archive hash provenance.

@@ -136,8 +136,15 @@ double-instrumenting the `coverage run` — the same pattern the auth and outbox
 gates use.
 
 CI runs exactly this in the `test-integration` job against its `postgres:17`
-service, and publishes `coverage-control-plane.xml` as a build artifact. It is
-deliberately separate from the repository-wide report: folding integration
+service, writes the working XML to
+`.artifacts/coverage/coverage-control-plane.xml`, and uploads that exact path
+as the `coverage-control-plane` artifact. The parent directory is created
+before `coverage xml`. This replaceable per-run CI artifact is not reviewed
+evidence, a production acceptance record, or a way to inflate the
+repository-wide floor. A reviewed promotion requires a new date-stamped
+identity with source SHA, run identity, host/runtime, exact
+command/include/floors, and artifact hash provenance. It is deliberately
+separate from the repository-wide `coverage.xml` report: folding integration
 coverage into the general floor would raise the aggregate without covering
 anything new, which is the arithmetic F-12 objected to.
 

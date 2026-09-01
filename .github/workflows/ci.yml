@@ -235,7 +235,8 @@ jobs:
     # removed, so the job that executes repository-owned test code no longer
     # carries an OIDC capability it cannot use. Coverage floors below remain
     # the blocking gates. Reintroduce upload in a separate job consuming a
-    # coverage.xml artifact if external reporting is ever enabled.
+    # .artifacts/coverage/coverage.xml artifact if external reporting is ever
+    # enabled.
     permissions:
       contents: read
     steps:
@@ -258,9 +259,10 @@ jobs:
           # --cov-branch turns the floor into a combined line+branch metric — local baseline
           # 2026-05-25 is 62% (7716 lines / 2010 branches measured on HEAD `22b1be9`), so the
           # 60% gate stays passing with a 2pp cushion. Raise the gate once that cushion grows.
-          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-branch --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+          mkdir -p .artifacts/coverage
+          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-branch --cov-report=xml:.artifacts/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=60
       - name: Enforce changed-code coverage
-        run: diff-cover coverage.xml --compare-branch=origin/main --fail-under=80
+        run: diff-cover .artifacts/coverage/coverage.xml --compare-branch=origin/main --fail-under=80
       - name: Run quality validators coverage gate
         run: |
           python -m pytest tests/unit/test_validators.py -v --tb=short --cov=agentflow_runtime.quality.validators --cov-report=term-missing --cov-fail-under=90

@@ -17,16 +17,22 @@
 - `ruff format --check src/ tests/`
 - `mypy src/ --ignore-missing-imports`
 - `python scripts/check_schema_evolution.py`
-- `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60`
+- `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml:.artifacts/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=60`
 - `pytest tests/integration/ -v --tb=short`
 - `python scripts/run_benchmark.py`
 - `python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20`
 - `terraform fmt -check -recursive infrastructure/terraform/`
 - `terraform init -backend=false && terraform validate`
 
+CI creates `.artifacts/coverage/` and writes that ignored XML before local
+`diff-cover` enforces 80% on changed lines. The file is a replaceable per-run
+CI working copy, not reviewed evidence or production acceptance. Reviewed
+promotion requires a new date-stamped identity with source SHA, run identity,
+host/runtime, exact command/configuration/floor, and artifact hash provenance.
+
 ## CI/CD Enforcement
 
-- Pull requests to `main` must pass lint, mypy, unit + property tests with a full-project coverage floor of `>= 60%`, Codecov patch coverage at `>= 80%`, integration tests, schema evolution check, performance regression check, and Terraform validation.
+- Pull requests to `main` must pass lint, mypy, unit + property tests with a full-project coverage floor of `>= 60%`, local `diff-cover` patch coverage at `>= 80%` against `.artifacts/coverage/coverage.xml`, integration tests, schema evolution check, performance regression check, and Terraform validation.
 - Pushes to `main` append a JSONL deployment event to `.dora/deployments.jsonl` inside the workflow workspace and upload it as an artifact for auditability.
 - `scripts/dora_metrics.py` prefers GitHub Actions history when `GITHUB_TOKEN` and `GITHUB_REPOSITORY` are available; otherwise it falls back to local git history and `.dora/deployments.jsonl`.
 - Weekly DORA reporting lives in `.github/workflows/dora.yml` and publishes a markdown summary. On pull requests, the workflow also updates a pinned DORA comment.

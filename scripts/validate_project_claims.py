@@ -152,7 +152,8 @@ def _validate_quality_gates(root: Path, manifest: dict[str, Any]) -> list[str]:
             f"project coverage floor {project_floor}",
         ),
         (
-            f"diff-cover coverage.xml --compare-branch=origin/main --fail-under={patch_floor}",
+            "diff-cover .artifacts/coverage/coverage.xml "
+            f"--compare-branch=origin/main --fail-under={patch_floor}",
             f"patch coverage floor {patch_floor}",
         ),
         (

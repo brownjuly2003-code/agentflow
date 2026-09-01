@@ -44,10 +44,17 @@ cd sdk-ts && npm install && cd ..
 |------|---------|-------|
 | Lint | `make lint` | Runs Ruff and mypy |
 | Unit | `pytest tests/unit/ -v --tb=short` | Fastest signal for Python-only changes |
-| CI unit + property coverage | `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60` | Full `src/` + `sdk/` baseline floor in CI; changed-line coverage stays at 80% via Codecov patch status |
+| CI unit + property coverage | `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml:.artifacts/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=60` | Full `src/` + `sdk/` baseline floor in CI; local `diff-cover` enforces 80% on changed lines against ignored `.artifacts/coverage/coverage.xml` |
 | Integration | `pytest tests/integration/ -v --tb=short -m integration` | Covers routers, persistence, and service integration without the full prod stack |
 | Full Python suite | `make test` | Runs `pytest tests/ -v --tb=short --ignore=tests/load` |
 | TypeScript SDK | `cd sdk-ts && npm test` | Runs the Vitest client checks |
+
+CI creates `.artifacts/coverage/` and writes the repository-wide XML to
+`.artifacts/coverage/coverage.xml` before `diff-cover` reads that same path.
+The file is a replaceable per-run CI working copy, not reviewed evidence or
+production acceptance. Reviewed promotion requires a new date-stamped identity
+with source SHA, run identity, host/runtime, exact command/configuration/floor,
+and artifact hash provenance.
 
 ## E2E Tests
 

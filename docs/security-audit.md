@@ -173,6 +173,19 @@ date-stamped identity with provenance. The `api-runtime`
 policy scope is empty, so every API finding is unwaived; the existing
 Flink scope retains its narrow expiring waivers.
 
+Dependency-scan working files follow the same ownership. The Bandit job
+writes its raw JSON report to ignored `.artifacts/security/bandit-current.json`
+and `scripts/bandit_diff.py` compares it against the tracked
+`.bandit-baseline.json`, which is the only reviewed input. The Safety job
+resolves its requirement buckets, resolver virtualenvs, and the
+vulnerable-pin regression probe under `.artifacts/security/safety/`, and the
+pip-audit job exports the full locked profile set to
+`.artifacts/security/pip-audit/`; the production pip-audit step reads the
+tracked `requirements-docker.lock` directly. These are replaceable per-run
+working files, not reviewed evidence or production acceptance; promotion
+requires a new date-stamped identity with source SHA, workflow run, scanner
+versions, exact command/configuration, outcome, and hash provenance.
+
 On 2026-07-30, a Trivy scan of the API image identified vulnerable packages
 vendored by runtime `pip`, not dependencies from the application lock. The
 final stage now removes `pip`, `setuptools`, and `wheel` after the hash-locked
@@ -196,7 +209,8 @@ Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
 `docs/operations/helm-deployment.md`,
 `docs/evidence/security-runtime-image-trivy-2026-07-30.md`,
 `scripts/evaluate_trivy_policy.py`, `security/trivy-waivers.json`,
-`Makefile`, `tests/unit/test_security_image_scan_policy.py`
+`Makefile`, `tests/unit/test_security_image_scan_policy.py`,
+`tests/unit/test_security_workflow.py`
 
 ## 9. Operational Security and Auditability
 

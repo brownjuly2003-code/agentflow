@@ -57,8 +57,9 @@ make test
 2. Security diff is clean:
 
 ```bash
-bandit -r src sdk --ini .bandit --severity-level medium -f json -o .tmp/bandit-current.json
-python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
+mkdir -p .artifacts/security
+bandit -r src sdk --ini .bandit --severity-level medium -f json -o .artifacts/security/bandit-current.json
+python scripts/bandit_diff.py .bandit-baseline.json .artifacts/security/bandit-current.json
 ```
 
 3. Benchmark does not regress past the release gate:
@@ -139,6 +140,21 @@ The Code scanning upload and public OpenSSF registry result remain the
 channel outputs. Promote a reviewed snapshot only under a new date-stamped
 identity with source SHA, workflow run, tool/action version, exact
 configuration, and hash provenance.
+
+The security workflow keeps its dependency-scan working files under ignored
+`.artifacts/security/`. The Bandit job writes `bandit-current.json` there and
+diffs it against the tracked `.bandit-baseline.json`, which is the only
+reviewed input; the local Bandit command above uses the same path. The Safety
+job resolves its requirement buckets, resolver virtualenvs, and the
+vulnerable-pin regression probe under `.artifacts/security/safety/`. The
+pip-audit job exports the full locked profile set to
+`.artifacts/security/pip-audit/requirements-all-profiles.txt`; its production
+step still reads the tracked `requirements-docker.lock` directly. Do not leave
+scanner output in the repository root or `.tmp/`. These files are replaceable
+per-run working copies, not reviewed evidence, a dependency-compatibility
+attestation, or production acceptance. Promote a reviewed scan only under a
+new date-stamped identity with source SHA, workflow run, scanner versions,
+exact command and configuration, outcome, and hash provenance.
 
 `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
 the quick entity-latency runtime result to ignored

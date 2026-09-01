@@ -28,8 +28,12 @@ jobs:
         run: python -m pip install --upgrade pip bandit
       - name: Run Bandit
         run: |
-          bandit -r src sdk --ini .bandit --severity-level medium -f json -o /tmp/bandit-current.json || true
-          python scripts/bandit_diff.py .bandit-baseline.json /tmp/bandit-current.json
+          # Runtime-artifact ownership: the raw report is a replaceable per-run
+          # working file under ignored .artifacts/security/; the diff against the
+          # tracked .bandit-baseline.json is what decides the outcome.
+          mkdir -p .artifacts/security
+          bandit -r src sdk --ini .bandit --severity-level medium -f json -o .artifacts/security/bandit-current.json || true
+          python scripts/bandit_diff.py .bandit-baseline.json .artifacts/security/bandit-current.json
 
   safety:
     runs-on: ubuntu-latest
@@ -50,8 +54,10 @@ jobs:
           import tomllib
 
           root = Path(".")
-          output_dir = root / ".tmp-security"
-          output_dir.mkdir(exist_ok=True)
+          # Runtime-artifact ownership: requirement buckets and resolver venvs
+          # are replaceable per-run files under ignored .artifacts/security/safety/.
+          output_dir = root / ".artifacts" / "security" / "safety"
+          output_dir.mkdir(parents=True, exist_ok=True)
 
           def load_project_dependencies(pyproject_path: Path) -> list[str]:
               if not pyproject_path.exists():
@@ -203,14 +209,15 @@ jobs:
         run: python -m pip install --upgrade pip "safety<3"
       - name: Verify Safety fails on a known vulnerable pin
         run: |
-          printf 'urllib3==1.24.1\n' > .tmp-security/requirements-regression.txt
-          if safety check -r .tmp-security/requirements-regression.txt > .tmp-security/safety-regression.log 2>&1; then
-            cat .tmp-security/safety-regression.log
+          mkdir -p .artifacts/security/safety
+          printf 'urllib3==1.24.1\n' > .artifacts/security/safety/requirements-regression.txt
+          if safety check -r .artifacts/security/safety/requirements-regression.txt > .artifacts/security/safety/safety-regression.log 2>&1; then
+            cat .artifacts/security/safety/safety-regression.log
             echo "Safety unexpectedly passed the vulnerable regression probe"
             exit 1
           fi
-          if ! grep -q "urllib3" .tmp-security/safety-regression.log; then
-            cat .tmp-security/safety-regression.log
+          if ! grep -q "urllib3" .artifacts/security/safety/safety-regression.log; then
+            cat .artifacts/security/safety/safety-regression.log
             echo "Safety failed the regression probe for an unexpected reason"
             exit 1
           fi
@@ -255,15 +262,15 @@ jobs:
           # ignore is gone. If it ever resurfaces, it fails this job loudly.
           safety check \
             --ignore SFTY-20260217-93940 \
-            -r .tmp-security/requirements-main.txt \
-            -r .tmp-security/requirements-sdk.txt \
-            -r .tmp-security/requirements-integrations.txt \
-            -r .tmp-security/requirements-extra-cloud.txt \
-            -r .tmp-security/requirements-extra-postgres.txt \
-            -r .tmp-security/requirements-extra-integrations.txt \
-            -r .tmp-security/requirements-flink-runtime.txt \
-            -r .tmp-security/requirements-extra-load.txt \
-            -r .tmp-security/requirements-extra-contract.txt
+            -r .artifacts/security/safety/requirements-main.txt \
+            -r .artifacts/security/safety/requirements-sdk.txt \
+            -r .artifacts/security/safety/requirements-integrations.txt \
+            -r .artifacts/security/safety/requirements-extra-cloud.txt \
+            -r .artifacts/security/safety/requirements-extra-postgres.txt \
+            -r .artifacts/security/safety/requirements-extra-integrations.txt \
+            -r .artifacts/security/safety/requirements-flink-runtime.txt \
+            -r .artifacts/security/safety/requirements-extra-load.txt \
+            -r .artifacts/security/safety/requirements-extra-contract.txt
 
   # Audit P1-3: pip-audit against the hash-pinned export of uv.lock. The
   # unlocked run could not even finish resolving in three minutes; with the
@@ -290,9 +297,12 @@ jobs:
       # actually sync.
       - name: Audit the full locked profile set (all extras, dev included)
         run: |
+          # Runtime-artifact ownership: the export is a replaceable per-run
+          # working file under ignored .artifacts/security/pip-audit/.
+          mkdir -p .artifacts/security/pip-audit
           uv export --frozen --format requirements-txt --all-extras \
-            --no-emit-project -o .tmp-security-all-profiles.txt
-          pip-audit --no-deps -r .tmp-security-all-profiles.txt
+            --no-emit-project -o .artifacts/security/pip-audit/requirements-all-profiles.txt
+          pip-audit --no-deps -r .artifacts/security/pip-audit/requirements-all-profiles.txt
 
   npm-audit:
     runs-on: ubuntu-latest

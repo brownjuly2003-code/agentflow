@@ -242,8 +242,9 @@ make perf-plot
 
 # contracts and security
 python scripts/generate_contracts.py --check
-bandit -r src sdk --ini .bandit --severity-level medium -f json -o .tmp/bandit-current.json
-python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
+mkdir -p .artifacts/security
+bandit -r src sdk --ini .bandit --severity-level medium -f json -o .artifacts/security/bandit-current.json
+python scripts/bandit_diff.py .bandit-baseline.json .artifacts/security/bandit-current.json
 ```
 
 The authentication microbenchmark intentionally reproduces the legacy bcrypt

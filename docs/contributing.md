@@ -76,6 +76,14 @@ export AGENTFLOW_E2E_BASE_URL=http://127.0.0.1:8000
 pytest tests/e2e/ -v --tb=short --timeout=60
 ```
 
+`.github/workflows/e2e.yml` writes failure logs to ignored
+`.artifacts/e2e/e2e-logs.txt` and uploads that path as artifact `e2e-logs`.
+The log is replaceable per-run diagnostic output, not reviewed evidence,
+production acceptance, or proof that the E2E suite or ClickHouse serving
+verification succeeded. Reviewed promotion requires a new date-stamped
+identity with source SHA, workflow run, Compose/runtime versions, exact
+configuration/command, outcome, and artifact hash provenance.
+
 ## Chaos Tests
 
 Use the chaos suite when a change touches Redis, Kafka behavior, outbox replay, rate limiting, dead-letter replay, or graceful degradation.

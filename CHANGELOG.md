@@ -23,6 +23,18 @@ idempotency guards. Each id-less dead-letter now journals under a fresh
 `missing-id:<uuid4>` identity. Iceberg `dead_letter` rows still store the raw
 payload id (null when the event had none).
 
+### Documentation — release-readiness rollback state aligned with STATUS (AF-08)
+
+`docs/release-readiness.md` reported in two places that the corrected Helm
+rollback was **not started**, with no date attached, so a historical fact about
+the 2026-08-08 soak-05 attempt read as the current state and contradicted
+`docs/STATUS.md`. Both sites now scope that clause to 2026-08-08 and carry the
+current split: corrected rollback *mechanics* **PASS**ed on 2026-08-23 without
+traffic (probe revision 5, rollback to revision 6, byte-identical to revision
+3), while rollback after sustained soak traffic remains
+**`BLOCKED_HOST_CAPACITY`**. The mechanics PASS does not close this gate; the
+combined soak/rollback acceptance gate is still open.
+
 ### Documentation — benchmark runs are separated from immutable evidence
 
 The demo freshness and real-path throughput drivers now write their default

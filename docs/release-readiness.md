@@ -74,9 +74,16 @@ A later kind residual canary **PASS** unlocked soak traffic
 Multiple soak identities were attempted; latest
 `golden-4h-soak-rv-20260807-05` producer **PASS**ed (`1_440_000` delivered,
 failures `0`) but overall soak **`SOAK_FAIL`**ed on terminal Flink health
-before dual-mean verify could PASS; corrected Helm rollback was **not
-started**
+before dual-mean verify could PASS; in that 2026-08-08 attempt the
+corrected Helm rollback was **not started**
 ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+Corrected rollback *mechanics* were later exercised separately and
+**PASS**ed on 2026-08-23 without traffic (probe revision 5, rollback to
+revision 6, byte-identical to revision 3;
+[corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md));
+that does not close this gate, because rollback **after** sustained soak
+traffic remains **`BLOCKED_HOST_CAPACITY`**
+([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md)).
 External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
@@ -245,8 +252,16 @@ untracked prompts.
    Latest soak identity `golden-4h-soak-rv-20260807-05` completed the
    producer (**PASS**, `1_440_000` delivered, failures `0`) but failed the
    soak gate with **`SOAK_FAIL`** on terminal Flink health before dual-mean
-   verify could PASS; corrected rollback was **not started**
+   verify could PASS; in that 2026-08-08 attempt the corrected rollback
+   was **not started**
    ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+   Corrected rollback *mechanics* were later exercised separately and
+   **PASS**ed on 2026-08-23 without traffic (probe revision 5, rollback to
+   revision 6, byte-identical to revision 3;
+   [corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md));
+   that does not close this gate, because rollback **after** sustained
+   soak traffic remains **`BLOCKED_HOST_CAPACITY`**
+   ([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md)).
    The combined soak/rollback acceptance gate remains open. A future newly
    identified soak run should retain JobManager/TaskManager logs and Flink
    exception-history evidence before retry.

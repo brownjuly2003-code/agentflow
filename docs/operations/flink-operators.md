@@ -147,3 +147,14 @@ Covered scenarios:
 - state caps and truncation metadata
 - identical session IDs remain isolated across tenants
 - checkpointing uses exactly-once settings
+
+## Flink smoke failure logs
+
+`.github/workflows/flink-smoke.yml` writes Compose logs on failure to
+`.artifacts/flink-smoke/flink-smoke-logs.txt` and uploads that exact path as
+the `flink-smoke-logs` artifact. The parent directory is created before the
+log redirection. This replaceable per-run diagnostic output is not reviewed
+evidence, production acceptance, or proof that submission succeeded. Reviewed
+promotion requires a new date-stamped identity with source SHA, workflow run,
+compose/runtime versions, exact configuration/command, outcome, and artifact
+hash provenance.

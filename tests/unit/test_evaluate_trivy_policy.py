@@ -383,5 +383,5 @@ def test_docs_contributing_and_plan_name_trivy_runtime_owner() -> None:
     assert "date-stamped" in contributing
     assert ".artifacts/trivy/" in security_audit
     assert "Trivy scan-policy runtime-artifact ownership sub-slice" in plan
-    assert "- [ ] **6. Отделить generated reference.**" in plan
+    assert "- [x] **6. Отделить generated reference.**" in plan
     assert "Пункт 6 остаётся открыт" in plan

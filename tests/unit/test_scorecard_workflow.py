@@ -166,5 +166,5 @@ def test_docs_contributing_and_plan_name_scorecard_runtime_owner():
     assert SCORECARD_SARIF in posture
     assert "replaceable" in posture
     assert "Scorecard SARIF runtime-artifact ownership sub-slice" in plan
-    assert "- [ ] **6. Отделить generated reference.**" in plan
+    assert "- [x] **6. Отделить generated reference.**" in plan
     assert "Пункт 6 остаётся открыт" in plan

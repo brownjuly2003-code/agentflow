@@ -87,6 +87,16 @@ five provenance facts from its first 40 lines. `tests/unit/test_archive_provenan
 covers the live tree plus negative fixtures. Item 8 stays open for the remaining
 hygiene ratchets.
 
+### Documentation — living-status vocabulary is banned from historical pages (item 8)
+
+`scripts/check_historical_claims.py` fails closed when a tracked point-in-time
+page under `docs/archive/`, `docs/decisions/`, `docs/evidence/` (except
+`INDEX.md`), `docs/migration/` or `docs/perf/` uses living-status vocabulary
+owned by `docs/STATUS.md`: `Updated:`, `production accepted`,
+`production-accepted`, `closure candidate`, `release line`. It covers 95 pages
+today; `tests/unit/test_historical_claims.py` pins the live tree plus negative
+fixtures. Item 8 stays open for the canonical-owner and orphan-link ratchets.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

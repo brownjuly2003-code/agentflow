@@ -24,6 +24,12 @@ directories are historical by design and do not need a second archive move.
 over every tracked `docs/archive/**/*.md` except `README.md` index pages and fails
 when any of the five facts is missing from the first 40 lines (the replacement
 fact is also satisfied when the `Original path` still names a tracked file).
+`tests/unit/test_historical_claims.py` runs `scripts/check_historical_claims.py`
+over every tracked point-in-time page under `docs/archive/`, `docs/decisions/`,
+`docs/evidence/` (except `INDEX.md`), `docs/migration/` and `docs/perf/` and
+fails when a page uses living-status vocabulary owned by `docs/STATUS.md`:
+`Updated:`, `production accepted`, `production-accepted`, `closure candidate`,
+or `release line`.
 
 ## Current archive map
 

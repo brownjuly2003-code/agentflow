@@ -254,7 +254,33 @@ jobs:
           # `from apache_beam.io.parquetio import *`, and parquetio's class
           # bodies evaluate `pa.Table` annotations with pa=None ->
           # AttributeError). The dependency is load-bearing at import time
-          # even though our jobs never use it.
+          # even though our jobs never use it. Expires 2026-10-27 (same as
+          # the Trivy waiver). Disposition is recorded in
+          # security/trivy-waivers.json (flink-runtime, CVE-2026-25087).
+          #
+          # SFTY-20260724-05622 (CVE-2026-59939): unbounded decompression of
+          # HTTP response bodies encoded with Content-Encoding: gzip or
+          # deflate in _decompressContent (httplib2/__init__.py), fixed in
+          # 0.32.0. A malicious or compromised HTTP server can return a
+          # small compressed payload that expands to an arbitrarily large
+          # size in memory (MemoryError / OOM-kill). Only the flink-runtime
+          # bucket resolves an affected httplib2 (apache-flink's beam chain
+          # caps httplib2<0.23). Why the risk is negligible here:
+          #   1. The Flink DataStream job has no httplib2 import or HTTP
+          #      client path. Its ingress is Kafka, and it never processes
+          #      attacker-controlled compressed HTTP response bodies.
+          # Blocked upstream, not by our pin: apache-flink==2.3.0 requires
+          # apache-beam>=2.54.0,<=2.61.0; apache-beam==2.61.0 requires
+          # httplib2>=0.8,<0.23.0. Installing httplib2 0.32 into this graph
+          # is impossible without breaking Beam. Dependabot watches the
+          # Flink manifest (src/agentflow_runtime/processing/flink_jobs),
+          # so the next apache-flink release opens a PR — re-check this
+          # ignore there. Remove this ignore when a supported apache-flink/
+          # apache-beam dependency set accepts httplib2>=0.32.0, or
+          # immediately if an httplib2 call path is added. Expires 2026-10-27
+          # (same as the Trivy waiver).
+          # Disposition is recorded in security/trivy-waivers.json
+          # (flink-runtime, CVE-2026-59939).
           #
           # 88512 (langchain cross-ecosystem false positive) was ignored here
           # until 2026-07-20; PyUp corrected the entry (verified: safety
@@ -262,6 +288,7 @@ jobs:
           # ignore is gone. If it ever resurfaces, it fails this job loudly.
           safety check \
             --ignore SFTY-20260217-93940 \
+            --ignore SFTY-20260724-05622 \
             -r .artifacts/security/safety/requirements-main.txt \
             -r .artifacts/security/safety/requirements-sdk.txt \
             -r .artifacts/security/safety/requirements-integrations.txt \

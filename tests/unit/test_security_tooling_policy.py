@@ -44,8 +44,11 @@ def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
 
     assert "requirements-flink-runtime.txt" in security_workflow
     assert security_workflow.count("--ignore SFTY-20260217-93940") == 1
+    assert security_workflow.count("--ignore SFTY-20260724-05622") == 1
     assert "resolved flink-runtime bucket installs pyarrow>=23.0.1" in security_workflow
     assert 'Do NOT retry "uninstall unused pyarrow from the image"' in security_workflow
+    assert "accepts httplib2>=0.32.0" in security_workflow
+    assert "immediately if an httplib2 call path is added" in security_workflow
 
     flink_updates = [
         entry

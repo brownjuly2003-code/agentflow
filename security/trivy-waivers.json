@@ -19,6 +19,7 @@
       "waivers": [
         {
           "id": "CVE-2026-59939",
+          "safety_id": "SFTY-20260724-05622",
           "package": "httplib2",
           "installed_version": "0.22.0",
           "fixed_version": "0.32.0",
@@ -33,6 +34,7 @@
         },
         {
           "id": "CVE-2026-25087",
+          "safety_id": "SFTY-20260217-93940",
           "package": "pyarrow",
           "installed_version": "16.1.0",
           "fixed_version": "23.0.1",

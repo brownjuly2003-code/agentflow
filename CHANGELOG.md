@@ -157,6 +157,15 @@ paragraph plus `**Audience:**` and `**Prerequisites:**` lines. Every living page
 opens per the documentation convention by inspection; the fail-closed opening
 checker remains the next slice, and item 7 stays open.
 
+### Documentation — page openings are now a CI ratchet (item 7)
+
+`scripts/check_docs_page_openings.py` now fail-closes living-page openings:
+exactly one unfenced H1, a purpose paragraph before the first section heading,
+and `**Audience:**` then `**Prerequisites:**` on operator pages outside a
+fourteen-page pending allowlist that may only shrink. The contract lives in
+`tests/unit/test_docs_page_openings.py`; item 7 stays open until that allowlist
+is empty.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

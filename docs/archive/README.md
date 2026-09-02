@@ -49,6 +49,10 @@ MkDocs heading id.
 The Updated-stamp checker `scripts/check_docs_updated_stamps.py` (unit test
 `tests/unit/test_docs_updated_stamps.py`) allows `Updated` stamps only on the
 dated-page allowlist and only in the canonical form.
+The page-opening checker `scripts/check_docs_page_openings.py` (unit test
+`tests/unit/test_docs_page_openings.py`) requires every living page to open with
+a single H1 and a purpose paragraph, and every operator page outside the pending
+allowlist to carry `**Audience:**` then `**Prerequisites:**`.
 
 ## Current archive map
 

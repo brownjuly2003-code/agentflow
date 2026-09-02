@@ -83,6 +83,7 @@ commands and links, and Git history is the date. Enforced by:
 
 ```powershell
 python scripts/check_docs_updated_stamps.py
+python scripts/check_docs_page_openings.py
 python scripts/check_docs_anchors.py
 python scripts/check_historical_claims.py
 ```

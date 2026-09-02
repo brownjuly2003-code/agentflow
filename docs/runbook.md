@@ -1,5 +1,16 @@
 # Operational Runbook
 
+This page owns the exact local commands, supported runtime settings, and
+recurring maintenance for the compose stack, local Flink, and DuckDB paths. It
+is for the local and demo operator who is bringing those services up,
+inspecting them, or recovering a local incident. Production-incident response
+lives in the [on-call runbooks](runbooks/README.md); controlled gates and
+specialized procedures live in the [operations index](operations/README.md).
+
+**Audience:** local/demo operator for the compose stack, local Flink, and DuckDB paths
+
+**Prerequisites:** Docker Compose, DuckDB CLI, Kafka CLI tools; kind staging also requires docker, kubectl, helm, and kind as named by `scripts/k8s_staging_up.sh`
+
 ## Quick Reference
 
 | Service | Local URL | Health check |

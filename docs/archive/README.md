@@ -42,6 +42,13 @@ table in `docs/README.md` to the tracked tree: it fails when a row names a path 
 not track, when a `.artifacts/` runtime path has become tracked, when a row runs a
 `--check` drift check without listing a tracked output, or when a tracked
 `scripts/**/*.py` that declares `--check` has no row at all.
+The anchor checker `scripts/check_docs_anchors.py` (unit test
+`tests/unit/test_docs_anchors.py`) requires every tracked Markdown file to decode as
+strict UTF-8 with no U+FFFD, and every living-page fragment link to resolve to a
+MkDocs heading id.
+The Updated-stamp checker `scripts/check_docs_updated_stamps.py` (unit test
+`tests/unit/test_docs_updated_stamps.py`) allows `Updated` stamps only on the
+dated-page allowlist and only in the canonical form.
 
 ## Current archive map
 

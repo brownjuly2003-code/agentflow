@@ -137,6 +137,16 @@ six on-call runbooks lost stamps nobody maintained, so Git history is now their
 date. `docs/engineering-standards.md` records the convention once and
 `tests/unit/test_docs_updated_stamps.py` pins the allowlist.
 
+### Documentation — root pages and on-call runbooks open with purpose, audience, prerequisites (item 7)
+
+A living page now opens with its H1 and one paragraph of purpose; operator and runbook
+pages then carry `**Audience:**` and `**Prerequisites:**` lines. The nine pages that
+had a blank opening — `docs/product.md`, `docs/clickhouse-migration.md`,
+`docs/engineering-standards.md`, `docs/runbook.md`, and the five `docs/runbooks/*.md`
+on-call pages — received that header in this slice, and `docs/archive/README.md` now
+names the anchor and Updated-stamp ratchets beside the other enforcements. Five
+`docs/operations/` pages and the fail-closed opening checker remain; item 7 stays open.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

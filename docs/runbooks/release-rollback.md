@@ -1,5 +1,16 @@
 # Release Rollback / Package Yank
 
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for yanking a published PyPI or npm version after a blocking bug,
+bundled secret, breaking change, or license issue. Use it when a version
+already on PyPI (`agentflow-runtime`, `agentflow-client`) or npm
+(`@yuliaedomskikh/agentflow-client`) must be pulled. It does not define
+on-call scope or the severity ladder; those live in [README.md](README.md).
+
+**Audience:** release manager who cut the tag; loop in Security on any secret-leak path
+
+**Prerequisites:** PyPI and npm maintainer rights, `gh` for a Security Advisory, and git tag push access
+
 ## Symptom
 
 A version already published to PyPI (`agentflow-runtime`, `agentflow-client`)

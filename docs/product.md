@@ -1,5 +1,12 @@
 # Product Framework
 
+This page owns the problem AgentFlow exists to solve, the intended users and
+anti-ICP, the three agent journeys, the product-gate metrics, and the
+v1-versus-roadmap split. Read it when you need that stable product story for
+evaluation or planning. It does not own the business legend — that is
+[domain.md](domain.md) — and it does not carry measured engineering status,
+which lives in [STATUS.md](STATUS.md).
+
 ## Problem Statement
 
 AgentFlow is a data serving layer for AI agents, not a BI dashboard stack. It exists for teams whose agents need fresh answers about orders, inventory, users, revenue, and pipeline state while a conversation is still happening. If the data is six hours old, the agent is wrong in real time.

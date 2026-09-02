@@ -1,5 +1,15 @@
 # API 5xx Spike
 
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for a `/v1/*` 5xx rate spike or a failing `/v1/health` probe. Use it
+when Grafana or a synthetic probe shows 5xx on those routes. It does not
+define on-call scope or the severity ladder; those live in
+[README.md](README.md).
+
+**Audience:** Platform / API on-call
+
+**Prerequisites:** kubectl access to the cluster namespace, Grafana AgentFlow API panels, Jaeger, and API log queries
+
 ## Symptom
 
 Grafana panel `agentflow / API 5xx rate` crosses 1% sustained for ≥ 2 minutes,

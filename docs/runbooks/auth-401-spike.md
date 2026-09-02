@@ -1,5 +1,15 @@
 # Auth 401/403 Spike
 
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for a sudden 401/403 wave or fail-closed 503 on `/v1/*` while
+`/v1/health` may still return 200. Use it when known-good keys start failing
+or Grafana auth-failure counters spike. It does not define on-call scope or
+the severity ladder; those live in [README.md](README.md).
+
+**Audience:** Platform / API on-call, looping in Security on a key-rotation or secret-mount trigger
+
+**Prerequisites:** kubectl access to the namespace, Grafana Auth panel, and secret-store access for the API keys Secret
+
 ## Symptom
 
 One of:

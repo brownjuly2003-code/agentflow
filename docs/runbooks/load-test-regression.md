@@ -1,5 +1,15 @@
 # Load Test Regression on `main`
 
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for a Load Test p99 gate failure on `main`. Use it when GitHub Actions
+`Load Test` turns red after a green streak. It does not define on-call scope
+or the severity ladder; those live in [README.md](README.md). A production p99
+regression is [api-5xx-spike.md](api-5xx-spike.md) territory, not this CI gate.
+
+**Audience:** author of the most recent change to serving, processing, or load tests; Platform on-call until ownership is assigned
+
+**Prerequisites:** GitHub `gh` access to the Load Test workflow on `main`, and a local pytest path for `tests/load`
+
 ## Symptom
 
 GitHub Actions `Load Test` workflow turns red on `main` after being green for

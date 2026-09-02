@@ -1,5 +1,11 @@
 # Engineering Standards
 
+This page owns the DORA targets, quality gates, CI/CD enforcement, deployment
+event shape, and documentation conventions this repository holds itself to.
+Read it when changing gates, workflows, or living-page style. It does not
+inventory generated quality-gate numbers — that is [quality.md](quality.md) —
+and it does not report measured status, which lives in [STATUS.md](STATUS.md).
+
 ## DORA Targets
 
 | Metric | Elite benchmark | Our target |

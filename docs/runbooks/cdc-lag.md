@@ -1,5 +1,17 @@
 # CDC Lag / Stuck Connectors
 
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for CDC lag, a FAILED Kafka Connect connector or task, dead-letter
+growth, or stale entity reads. Use it when Grafana CDC lag, the Connect REST
+API, or downstream freshness shows the capture path is stuck. It does not
+define on-call scope or the severity ladder — those live in
+[README.md](README.md) — and it does not replace
+[Production CDC source onboarding](../operations/cdc-production-onboarding.md).
+
+**Audience:** Data on-call
+
+**Prerequisites:** kubectl access to the Kafka Connect namespace, Grafana CDC lag panel, helm for `helm/kafka-connect`, and source-DB `psql` for Postgres slots
+
 ## Symptom
 
 One or more of:

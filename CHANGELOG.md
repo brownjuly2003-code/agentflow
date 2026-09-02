@@ -116,6 +116,15 @@ generated-reference ownership table to the tree: untracked paths, tracked
 `--check` generators; `tests/unit/test_generated_reference_owners.py` pins the
 live tree plus negative fixtures. Item 8 is closed.
 
+### Documentation — anchors and replacement characters are now a CI ratchet (item 7)
+
+`scripts/check_docs_anchors.py` fails closed when a tracked Markdown file is not
+strict UTF-8 or contains U+FFFD, and when a living page's `](target#fragment)`
+link does not resolve to a MkDocs heading id (`markdown.extensions.toc`
+slugify/unique). `tests/unit/test_docs_anchors.py` pins the live tree plus
+negative fixtures. Item 7 stays open for the remaining style/language content
+slices.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

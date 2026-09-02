@@ -155,8 +155,9 @@ Run the proportional documentation gate after edits:
 ```powershell
 python scripts/check_docs_links.py
 python scripts/check_docs_root_placement.py
+python scripts/check_docs_anchors.py
 python scripts/validate_project_claims.py
-python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
+python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_anchors.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
 python -m mkdocs build --strict
 ```
 

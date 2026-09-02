@@ -30,6 +30,12 @@ over every tracked point-in-time page under `docs/archive/`, `docs/decisions/`,
 fails when a page uses living-status vocabulary owned by `docs/STATUS.md`:
 `Updated:`, `production accepted`, `production-accepted`, `closure candidate`,
 or `release line`.
+The orphan-link checker `scripts/check_docs_orphans.py` (unit test
+`tests/unit/test_docs_orphans.py`) covers every tracked living `docs/**/*.md` page outside
+those historical directories and `docs/dv2-multi-branch/` (hubs `docs/README.md`
+and `docs/index.md` need no inbound) and fails when a living page has no inbound
+link from tracked Markdown or the MkDocs nav: it must be reachable from the
+documentation hub or archived with provenance.
 
 ## Current archive map
 

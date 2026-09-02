@@ -97,6 +97,15 @@ owned by `docs/STATUS.md`: `Updated:`, `production accepted`,
 today; `tests/unit/test_historical_claims.py` pins the live tree plus negative
 fixtures. Item 8 stays open for the canonical-owner and orphan-link ratchets.
 
+### Documentation — orphan pages are now a CI ratchet (item 8)
+
+`scripts/check_docs_orphans.py` fails closed when a living `docs/**/*.md` page
+(outside archive, decisions, dv2-multi-branch, evidence, migration, and perf;
+hubs `docs/README.md` and `docs/index.md` exempt) has no inbound Markdown or
+MkDocs nav link. `tests/unit/test_docs_orphans.py` pins the live tree plus
+negative fixtures. The seven previously unlinked pages are now linked from the
+corpus map. Item 8 stays open for the canonical-owner ratchet.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

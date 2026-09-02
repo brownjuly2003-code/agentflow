@@ -27,9 +27,10 @@ is needed.
 | Set | Purpose | Maintenance rule |
 | --- | --- | --- |
 | [MkDocs walkthrough](index.md) | Curated learning path: quickstart, architecture, API, SDK, deployment, observability, troubleshooting | Keep concise and runnable; `mkdocs build --strict` must pass |
-| Current-state references | `STATUS.md`, `architecture.md`, `release-readiness.md`, `security-audit.md`, `runbook.md` | Update with code or operational truth; links and current versions are gated |
-| Product and domain specs | `product.md`, `domain.md`, `generator-spec.md`, `ops-surfaces-spec.md` | Explain stable behavior and invariants; do not carry live status |
+| Current-state references | `STATUS.md`, `architecture.md`, `release-readiness.md`, `security-audit.md`, `runbook.md`, [`engineering-standards.md`](engineering-standards.md), [`glossary.md`](glossary.md), [`integrations.md`](integrations.md), [`clickhouse-migration.md`](clickhouse-migration.md) | Update with code or operational truth; links and current versions are gated |
+| Product and domain specs | `product.md`, `domain.md`, `generator-spec.md`, `ops-surfaces-spec.md`, [`how-to-add-entity.md`](contracts/how-to-add-entity.md) | Explain stable behavior and invariants; do not carry live status |
 | Operations | [Operations index](operations/README.md) and [on-call runbooks](runbooks/README.md) | Current procedures stay actionable; superseded execution narratives move to the archive |
+| Plans | [`clickhouse-cutover-plan.md`](plans/clickhouse-cutover-plan.md) and [`2026-04-debezium-kafka-connect-deployment-plan.md`](plans/2026-04-debezium-kafka-connect-deployment-plan.md) | Preserve executed cutover and CDC onboarding plans; they are not current status |
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |

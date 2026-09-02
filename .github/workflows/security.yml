@@ -424,13 +424,13 @@ jobs:
           limit-severities-for-sarif: true
       - name: Upload Trivy API SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: .artifacts/trivy/trivy-api.sarif
           category: trivy-api-image
       - name: Upload Trivy Flink SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: .artifacts/trivy/trivy-flink.sarif
           category: trivy-flink-image
@@ -461,7 +461,7 @@ jobs:
           limit-severities-for-sarif: true
       - name: Upload Trivy IaC scan results
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: .artifacts/trivy/trivy-iac.sarif
           # Distinct category so these alerts do not collide with the image

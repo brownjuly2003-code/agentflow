@@ -1,5 +1,17 @@
 # AgentFlow Disaster Recovery Runbook
 
+This page owns backup, restore, and host-loss rehearsal for the embedded
+single-host demo profile: the primary DuckDB file, the API usage DuckDB
+file, and the non-secret parts of `config/`. Use it when that demo operator
+is creating, verifying, or restoring those files. Persistence ownership and
+repair analysis live in the
+[API DuckDB persistence recovery design](api-duckdb-persistence-recovery-design.md);
+measured engineering status lives in [STATUS.md](../STATUS.md).
+
+**Audience:** operator of the embedded single-host demo profile (DuckDB files)
+
+**Prerequisites:** repository checkout with `.venv`, the DuckDB files `agentflow_demo.duckdb` and `agentflow_api.duckdb`, and the `config/` paths named on this page
+
 ## Scope
 
 **This runbook covers local DuckDB file backup/restore only** — the primary

@@ -147,6 +147,16 @@ on-call pages — received that header in this slice, and `docs/archive/README.m
 names the anchor and Updated-stamp ratchets beside the other enforcements. Five
 `docs/operations/` pages and the fail-closed opening checker remain; item 7 stays open.
 
+### Documentation — operations pages open with purpose, audience, prerequisites (item 7)
+
+The five `docs/operations/` pages that still opened on their first section —
+`docs/operations/aws-oidc-setup.md`, `docs/operations/cdc-production-onboarding.md`,
+`docs/operations/disaster-recovery.md`, `docs/operations/helm-deployment.md`, and
+`docs/operations/third-party-pen-test-intake.md` — now open with a purpose
+paragraph plus `**Audience:**` and `**Prerequisites:**` lines. Every living page now
+opens per the documentation convention by inspection; the fail-closed opening
+checker remains the next slice, and item 7 stays open.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

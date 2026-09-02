@@ -1,5 +1,15 @@
 # Helm Deployment
 
+This page owns install, upgrade, uninstall, values, the production render
+contract, horizontal scaling, and troubleshooting for the `helm/agentflow`
+chart that deploys the FastAPI API to Kubernetes. Read it when a Kubernetes
+operator is installing or upgrading that chart. It does not replace the
+shorter curated path in [deployment.md](../deployment.md).
+
+**Audience:** Kubernetes operator installing or upgrading the chart
+
+**Prerequisites:** Kubernetes 1.27+, Helm 3.x, a published or cluster-loaded API image, metrics-server for CPU-based HPA, and a storage class when persistence is enabled; see [Prerequisites](#prerequisites)
+
 ## Overview
 
 For the shorter curated path, start with the

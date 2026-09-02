@@ -1,5 +1,17 @@
 # Production CDC Source Onboarding
 
+This page owns the decision record, preflight and no-go checks, and the
+rollout and rollback steps for attaching a real Postgres or MySQL source to
+AgentFlow. Use it when the platform owner, with the source-system owner and
+security owner, is signing that record and preparing the connector. It does
+not replace the [operations index](README.md), and once a source exists,
+lag and stuck connectors belong to
+[CDC Lag / Stuck Connectors](../runbooks/cdc-lag.md).
+
+**Audience:** platform owner with the source-system owner and security owner who sign the decision record
+
+**Prerequisites:** approved decision record, and `helm` and `curl` access to the Kafka Connect deployment named on this page
+
 ## Status
 
 Production CDC onboarding is not enabled. The checked-in CDC path covers the

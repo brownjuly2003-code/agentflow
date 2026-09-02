@@ -1,5 +1,17 @@
 # AWS OIDC setup for Terraform apply
 
+This page owns the optional bootstrap of the AWS IAM OIDC provider and the
+GitHub Actions role used by `.github/workflows/terraform-apply.yml`, plus
+the GitHub variable, environment, and CloudTrail checks that follow a first
+local apply. Read it when the repository owner and AWS account owner are
+performing that bootstrap. It does not inventory other operations
+procedures — those live in [README.md](README.md) — and it does not report
+measured engineering status, which lives in [STATUS.md](../STATUS.md).
+
+**Audience:** repository owner / AWS account owner performing the optional OIDC bootstrap
+
+**Prerequisites:** AWS administrator credentials for the initial bootstrap only, the existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`, GitHub repository admin access, and Terraform CLI or an equivalent container image; see [Prerequisites](#prerequisites)
+
 ## Purpose
 
 This archived optional guide bootstraps the AWS IAM OIDC provider and the GitHub Actions role used by `.github/workflows/terraform-apply.yml` if AWS is ever explicitly reintroduced.

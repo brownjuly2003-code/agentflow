@@ -24,9 +24,16 @@ FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad
 # trixie point release and trixie-security). Until a base digest with the
 # fix exists, upgrade exactly the installed util-linux binary packages here;
 # the digest pin above still anchors everything else.
+#
+# Audit AG-06 / F-03 (2026-09-02): the same pinned digest ships OpenSSL
+# 3.5.6-1~deb13u2 (libssl3t64, openssl, openssl-provider-legacy), which
+# carries CVE-2026-14456. The fix is 3.5.7-1~deb13u2 in trixie-security.
+# Upgrade those three packages here. Drop these package names when a base
+# digest ships OpenSSL >= 3.5.7.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade \
         bsdutils libblkid1 libmount1 libsmartcols1 libuuid1 mount util-linux \
+        libssl3t64 openssl openssl-provider-legacy \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

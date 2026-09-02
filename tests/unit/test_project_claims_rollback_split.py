@@ -7,8 +7,8 @@ from scripts.check_docs_links import load_tracked_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 
-ROLLBACK_EVIDENCE = "corrected-rollback-pair-runtime-20260823-01.md"
-SOAK_CAPACITY_EVIDENCE = "ci-soak-f02-capacity-decision-20260823-01.md"
+ROLLBACK_EVIDENCE = "docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md"
+SOAK_CAPACITY_EVIDENCE = "docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md"
 HISTORICAL_PENDING = ["4h soak and rollback rehearsal on the golden topology"]
 
 

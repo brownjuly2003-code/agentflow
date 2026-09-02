@@ -4,6 +4,12 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Documentation — root evidence records relocated (2026-09-02)
+
+Twenty-one immutable tracked Markdown records moved from the repository root
+to `docs/evidence/records/` with unchanged filenames and SHA-256 digests.
+Living citations now use those paths. `plan_26_08_2026.md` stays at the root.
+
 ### Security — nltk 3.10.0 -> 3.10.3 in uv.lock (Dependabot GHSA-m4rf-3fr8-xwx3, GHSA-6hwm-xvph-95vm)
 
 - `uv lock --upgrade-package nltk` only; nltk is a transitive dependency of `llama-index-core` and is not part of the `cloud`/`postgres` export, so `requirements-docker.lock` is unchanged. Closes the critical (JVM argument injection in the Stanford wrappers) and high (uncontrolled `dot` search path) advisories GitHub reported on the default branch on 2026-09-01.
@@ -359,9 +365,9 @@ recorded on failed authentication. New `config.trustedProxies` value wires
 
 Living STATUS/CLOSURE and `config/project_claims.toml` now match the 2026-08-23
 evidence: corrected rollback mechanics **PASS**
-(`corrected-rollback-pair-runtime-20260823-01.md`); the full 4h soak plus
+(`docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md`); the full 4h soak plus
 rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
-(`ci-soak-f02-capacity-decision-20260823-01.md`). The consumer string in
+(`docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md`). The consumer string in
 `pending_acceptance` is unchanged. Namespace-migration dead `src/...` paths
 and broken glossary links are repaired. `scripts/check_docs_links.py` fails
 closed on missing local Markdown targets and backticked repo paths in living

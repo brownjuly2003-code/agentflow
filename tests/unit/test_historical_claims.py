@@ -8,6 +8,7 @@ from scripts.check_historical_claims import (
     CLAIM_OWNERS,
     FORBIDDEN_PHRASES,
     HISTORICAL_DIRECTORIES,
+    IMMUTABLE_RECORD_DIRECTORIES,
     LIVING_INDEX_PAGES,
     check_historical_claims,
     find_claims,
@@ -44,6 +45,8 @@ def test_public_constants_describe_the_real_tree() -> None:
     assert tracked is not None
     for directory in HISTORICAL_DIRECTORIES:
         assert (ROOT / directory).is_dir()
+    for directory in IMMUTABLE_RECORD_DIRECTORIES:
+        assert (ROOT / directory).is_dir()
     for owner in CLAIM_OWNERS:
         assert owner in tracked
     for page in LIVING_INDEX_PAGES:
@@ -65,6 +68,8 @@ def test_forbidden_phrases_are_living_status_vocabulary(phrase: str) -> None:
         ("docs/archive/README.md", False),
         ("docs/archive/product/README.md", False),
         ("docs/evidence/INDEX.md", False),
+        ("docs/evidence/records/colima-runtime-stabilization.md", False),
+        ("docs/evidence/other-record.md", True),
         ("docs/STATUS.md", False),
         ("docs/perf/notes.txt", False),
     ],
@@ -119,6 +124,19 @@ def test_index_readme_and_living_owner_pages_are_ignored(tmp_path: Path) -> None
     for relative in (readme, nested, index, owner):
         _write(tmp_path, relative, body)
     assert check_historical_claims(tmp_path, tracked_paths={readme, nested, index, owner}) == []
+
+
+def test_immutable_record_directory_is_ignored_while_sibling_evidence_is_not(
+    tmp_path: Path,
+) -> None:
+    record = "docs/evidence/records/colima-runtime-stabilization.md"
+    sibling = "docs/evidence/other-record.md"
+    body = "Updated: 2026-08-21\n"
+    _write(tmp_path, record, body)
+    _write(tmp_path, sibling, body)
+    assert check_historical_claims(tmp_path, tracked_paths={record, sibling}) == [
+        _problem(sibling, 1, "updated:"),
+    ]
 
 
 def test_main_passing_fixture_prints_ok(

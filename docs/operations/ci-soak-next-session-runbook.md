@@ -23,7 +23,7 @@ not authorize an external action.
 | Local verification | Focused gate: `129 passed`; Ruff check/format, `py_compile`, `git diff --check`, strict UTF-8/LF/no-BOM/no-NUL, and the clean-HEAD architecture gate passed |
 | Post-fix external rehearsal | **Not run**; r12 preflight failed before stop/controller mutation |
 | Last external evidence | Retained r9 attempt: **FAIL** against older source `7e8ec87c25bbdc8f8aa58c116ded9914470789cb` |
-| Latest orchestration evidence | [r12 preflight failed before stop](../../ci-soak-r12-preflight-fail-20260821-01.md); no rehearsal verdict exists |
+| Latest orchestration evidence | [r12 preflight failed before stop](../evidence/records/ci-soak-r12-preflight-fail-20260821-01.md); no rehearsal verdict exists |
 | Push/fetch | Neither was performed for the closing slice; push remains unauthorized |
 
 The local correction is closed. Counts below `1_440_000` use
@@ -47,13 +47,13 @@ Use this order when sources disagree:
    present.
 3. This tracked runbook for the resume sequence and authorization boundary.
 4. The retained
-   [r12 preflight-failure report](../../ci-soak-r12-preflight-fail-20260821-01.md)
+   [r12 preflight-failure report](../evidence/records/ci-soak-r12-preflight-fail-20260821-01.md)
    for the latest external facts and consumed identities.
-5. [`ci-soak-runtime-harness.md`](../../ci-soak-runtime-harness.md) for the
+5. [`ci-soak-runtime-harness.md`](../evidence/records/ci-soak-runtime-harness.md) for the
    accumulated harness history and detailed contracts.
 6. The immutable
-   [r9 rehearsal report](../../ci-soak-r9-rehearsal-20260821-01.md) and
-   [r1-r7 architecture audit](../../ci-soak-r1-r7-architecture-audit.md) for
+   [r9 rehearsal report](../evidence/records/ci-soak-r9-rehearsal-20260821-01.md) and
+   [r1-r7 architecture audit](../evidence/records/ci-soak-r1-r7-architecture-audit.md) for
    historical evidence.
 
 `docs/SESSION_HANDOFF.md` is an ignored local mirror. It is useful on this
@@ -123,7 +123,7 @@ co-tenants remained healthy under their exact IDs with restart count zero.
 
 Treat the r10 attempt name, prompt, local control directory, and authorization
 as consumed evidence. The exact record is the
-[r10 orchestration-stop report](../../ci-soak-r10-orchestration-stop-20260821-01.md).
+[r10 orchestration-stop report](../evidence/records/ci-soak-r10-orchestration-stop-20260821-01.md).
 Do not resume r10 or launch a duplicate; the later r11/r12 outcomes below now
 supersede that historical continuation boundary.
 
@@ -140,7 +140,7 @@ co-tenant stop, or controller invocation. It released the owner lock and left
 project resources `0/0/0`. Independent postflight proved all four protected
 exact IDs still running with restart count zero and every readiness route
 green. The exact record is the
-[r12 preflight-failure report](../../ci-soak-r12-preflight-fail-20260821-01.md).
+[r12 preflight-failure report](../evidence/records/ci-soak-r12-preflight-fail-20260821-01.md).
 
 Treat all r11/r12 local identities and retained r12 remote paths as consumed.
 Do not rerun, overwrite, adopt, or clean them. A future attempt starts at r13
@@ -230,9 +230,9 @@ self-written marker.
 ## Detailed references
 
 - [Golden-soak source-pack README](../../scripts/golden_soak/README.md)
-- [Runtime harness history](../../ci-soak-runtime-harness.md)
-- [Immutable r9 failure report](../../ci-soak-r9-rehearsal-20260821-01.md)
-- [r10 orchestration-stop report](../../ci-soak-r10-orchestration-stop-20260821-01.md)
-- [r12 preflight-failure report](../../ci-soak-r12-preflight-fail-20260821-01.md)
-- [Architecture audit and readiness contract](../../ci-soak-r1-r7-architecture-audit.md)
+- [Runtime harness history](../evidence/records/ci-soak-runtime-harness.md)
+- [Immutable r9 failure report](../evidence/records/ci-soak-r9-rehearsal-20260821-01.md)
+- [r10 orchestration-stop report](../evidence/records/ci-soak-r10-orchestration-stop-20260821-01.md)
+- [r12 preflight-failure report](../evidence/records/ci-soak-r12-preflight-fail-20260821-01.md)
+- [Architecture audit and readiness contract](../evidence/records/ci-soak-r1-r7-architecture-audit.md)
 - [Compose foundation context](ci-soak-compose-foundation.md)

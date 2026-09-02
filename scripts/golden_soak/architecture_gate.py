@@ -58,9 +58,9 @@ _FORMAT_PATHS = (
 _TEXT_PATHS = (
     *_PYTHON_PATHS,
     "scripts/golden_soak/README.md",
-    "ci-soak-r1-r7-architecture-audit.md",
-    "ci-soak-runtime-harness.md",
-    "ci-soak-architecture-gate-plan.md",
+    "docs/evidence/records/ci-soak-r1-r7-architecture-audit.md",
+    "docs/evidence/records/ci-soak-runtime-harness.md",
+    "docs/evidence/records/ci-soak-architecture-gate-plan.md",
 )
 
 
@@ -197,7 +197,9 @@ def build_config(repo_root: Path) -> GateConfig:
     )
     return GateConfig(
         repo_root=repo_root,
-        audit_path=repo_root / "ci-soak-r1-r7-architecture-audit.md",
+        audit_path=(
+            repo_root / "docs" / "evidence" / "records" / "ci-soak-r1-r7-architecture-audit.md"
+        ),
         manifest_path=repo_root / "scripts" / "golden_soak" / "MANIFEST.json",
         pack_root=repo_root / "scripts" / "golden_soak",
         text_paths=tuple(repo_root / relative for relative in _TEXT_PATHS),

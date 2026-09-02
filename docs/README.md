@@ -33,6 +33,7 @@ is needed.
 | Plans | [`clickhouse-cutover-plan.md`](plans/clickhouse-cutover-plan.md) and [`2026-04-debezium-kafka-connect-deployment-plan.md`](plans/2026-04-debezium-kafka-connect-deployment-plan.md) | Preserve executed cutover and CDC onboarding plans; they are not current status |
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
+| Evidence records | [`evidence/records/`](evidence/records/) | Immutable dated records relocated from the repository root; never edit, never delete; add new records under `docs/evidence/` or `docs/perf/` instead |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
 | Generated/reference artifacts | [Generated-reference ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [full-load benchmark lifecycle](perf/load-benchmark-latest.md) | Regenerate deterministic families; keep mutable measurements in ignored artifacts |
 | Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |

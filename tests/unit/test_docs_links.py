@@ -43,7 +43,8 @@ def test_exclusion_rules_skip_immutable_evidence_only(tmp_path: Path) -> None:
         "See [missing](gone.md).\n",
         encoding="utf-8",
     )
-    (tmp_path / "docs" / "evidence" / "security-record-2026-08-01.md").write_text(
+    (tmp_path / "docs" / "evidence" / "records").mkdir(parents=True)
+    (tmp_path / "docs" / "evidence" / "records" / "security-record-2026-08-01.md").write_text(
         "See [missing](gone.md) and `src/gone.py`.\n",
         encoding="utf-8",
     )
@@ -58,10 +59,11 @@ def test_exclusion_rules_skip_immutable_evidence_only(tmp_path: Path) -> None:
     assert "docs/note-2026-08-01.md:1: missing link target 'gone.md'" in problems
     assert "docs/evidence/INDEX.md:1: missing link target 'gone.md'" in problems
     assert "docs/perf/old.md" not in report
-    assert "docs/evidence/security-record-2026-08-01.md" not in report
+    assert "docs/evidence/records/security-record-2026-08-01.md" not in report
 
     assert is_historical_evidence("docs/perf/golden-4h-soak-05-failure-2026-08-08.md")
     # A dated validation record pins paths to blob hashes at its own commit.
+    assert is_historical_evidence("docs/evidence/records/security-record-2026-08-01.md")
     assert is_historical_evidence("docs/evidence/security-runtime-image-trivy-2026-07-30.md")
     assert not is_historical_evidence("docs/security-runtime-image-trivy-2026-07-30.md")
     assert not is_historical_evidence("docs/STATUS.md")
@@ -72,6 +74,28 @@ def test_exclusion_rules_skip_immutable_evidence_only(tmp_path: Path) -> None:
     assert not is_historical_evidence("docs/runbooks/api-5xx-spike.md")
     assert not is_historical_evidence("docs/security-audit.md")
     assert not is_historical_evidence("docs/decisions/0013-golden-production-topology.md")
+    assert not is_historical_evidence("docs/evidence/other.md")
+
+
+def test_broken_link_in_evidence_records_is_ignored_but_sibling_pages_are_checked(
+    tmp_path: Path,
+) -> None:
+    records = tmp_path / "docs" / "evidence" / "records"
+    records.mkdir(parents=True)
+    (records / "x.md").write_text(
+        "See [missing](broken-inside-record.md).\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "evidence" / "other.md").write_text(
+        "See [missing](broken-sibling.md).\n",
+        encoding="utf-8",
+    )
+
+    problems = check_docs_links(tmp_path)
+    report = "\n".join(problems)
+
+    assert "docs/evidence/records/x.md" not in report
+    assert "docs/evidence/other.md:1: missing link target 'broken-sibling.md'" in problems
 
 
 def test_archive_body_marker_skips_only_the_preserved_body(tmp_path: Path) -> None:
@@ -129,6 +153,7 @@ def test_iter_living_docs_covers_live_directories() -> None:
     assert "docs/operations/ci-soak-next-session-runbook.md" in living
     assert not any(path.startswith("docs/perf/") for path in living)
     assert "docs/evidence/security-runtime-image-trivy-2026-07-30.md" not in living
+    assert not any(path.startswith("docs/evidence/records/") for path in living)
 
 
 def test_enumeration_follows_the_tracked_set(tmp_path: Path) -> None:

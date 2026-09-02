@@ -1439,8 +1439,8 @@ READINESS_UNCLAIMED_BOUNDARIES = (
     "production acceptance",
 )
 F10_HEADING = "## F-10 rollback and soak-capacity records (2026-08-23)"
-ROLLBACK_RECORD = "corrected-rollback-pair-runtime-20260823-01.md"
-SOAK_CAPACITY_RECORD = "ci-soak-f02-capacity-decision-20260823-01.md"
+ROLLBACK_RECORD = "docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md"
+SOAK_CAPACITY_RECORD = "docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md"
 PROJECT_CLOSURE = ROOT / "docs" / "PROJECT_CLOSURE.md"
 F10_DATE = "2026-08-23"
 F10_DATES = {
@@ -3305,11 +3305,14 @@ def test_f10_section_follows_checkpoint_readiness() -> None:
 def test_f10_section_keeps_root_path_stability() -> None:
     section = _section(INDEX.read_text(encoding="utf-8"), F10_HEADING)
 
+    assert "2026-09-02" in section
+    assert "`docs/evidence/records/`" in section
+    assert "unchanged filenames" in section
+    assert "digests" in section
+    assert "path-stable home" in section
     assert "`docs/STATUS.md`" in section
     assert "`docs/PROJECT_CLOSURE.md`" in section
     assert "`config/project_claims.toml`" in section
-    assert "root-path stability" in section
-    assert "not new evidence under `docs/evidence/`" in section
 
 
 def test_f10_index_lists_the_bounded_pair_once() -> None:
@@ -3324,7 +3327,7 @@ def test_f10_index_lists_the_bounded_pair_once() -> None:
     assert indexed == [ROLLBACK_RECORD, SOAK_CAPACITY_RECORD]
     for row in _f10_rows():
         targets = LINK_RE.findall(row["identity"])
-        assert targets[0].startswith("../../"), row["identity"]
+        assert targets[0].startswith("records/"), row["identity"]
 
 
 def test_f10_index_exposes_required_nonempty_fields() -> None:
@@ -3642,7 +3645,9 @@ def test_golden_soak_rca_record_keeps_published_digest() -> None:
 
 def test_golden_soak_rca_sources_and_plan_match_the_index() -> None:
     assert _soak_rca_record_paths() == [SOAK_RCA_RECORD]
-    retention = (ROOT / "flink-failure-evidence-retention.md").read_text(encoding="utf-8")
+    retention = (ROOT / "docs/evidence/records/flink-failure-evidence-retention.md").read_text(
+        encoding="utf-8"
+    )
     policy = (ROOT / "scripts" / "soak_observer_policy.py").read_text(encoding="utf-8")
     policy_tests = (ROOT / "tests" / "unit" / "test_soak_observer_policy.py").read_text(
         encoding="utf-8"

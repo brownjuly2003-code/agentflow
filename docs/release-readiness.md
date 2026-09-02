@@ -80,10 +80,10 @@ corrected Helm rollback was **not started**
 Corrected rollback *mechanics* were later exercised separately and
 **PASS**ed on 2026-08-23 without traffic (probe revision 5, rollback to
 revision 6, byte-identical to revision 3;
-[corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md));
+[corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md));
 that does not close this gate, because rollback **after** sustained soak
 traffic remains **`BLOCKED_HOST_CAPACITY`**
-([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md)).
+([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md)).
 External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
@@ -258,10 +258,10 @@ untracked prompts.
    Corrected rollback *mechanics* were later exercised separately and
    **PASS**ed on 2026-08-23 without traffic (probe revision 5, rollback to
    revision 6, byte-identical to revision 3;
-   [corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md));
+   [corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md));
    that does not close this gate, because rollback **after** sustained
    soak traffic remains **`BLOCKED_HOST_CAPACITY`**
-   ([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md)).
+   ([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md)).
    The combined soak/rollback acceptance gate remains open. A future newly
    identified soak run should retain JobManager/TaskManager logs and Flink
    exception-history evidence before retry.

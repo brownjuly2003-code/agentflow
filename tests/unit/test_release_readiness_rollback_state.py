@@ -18,8 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "docs" / "release-readiness.md"
 STATUS = ROOT / "docs" / "STATUS.md"
 
-MECHANICS_LINK = "../corrected-rollback-pair-runtime-20260823-01.md"
-CAPACITY_LINK = "../ci-soak-f02-capacity-decision-20260823-01.md"
+MECHANICS_LINK = "evidence/records/corrected-rollback-pair-runtime-20260823-01.md"
+CAPACITY_LINK = "evidence/records/ci-soak-f02-capacity-decision-20260823-01.md"
 
 # Every site that keeps the historical "not started" clause must also carry
 # the date it belongs to and the current, contradicting truth.
@@ -63,7 +63,7 @@ def test_both_sites_link_the_two_root_rollback_records() -> None:
     assert text.count(MECHANICS_LINK) >= 2, f"{MECHANICS_LINK} cited {text.count(MECHANICS_LINK)}x"
     assert text.count(CAPACITY_LINK) >= 2, f"{CAPACITY_LINK} cited {text.count(CAPACITY_LINK)}x"
     for link in (MECHANICS_LINK, CAPACITY_LINK):
-        target = ROOT / link.removeprefix("../")
+        target = (PAGE.parent / link).resolve()
         assert target.is_file(), f"cited record missing on disk: {target}"
 
 

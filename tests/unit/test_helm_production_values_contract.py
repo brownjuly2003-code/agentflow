@@ -92,6 +92,16 @@ def _output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
 
 
+def _schema_path_reported(output: str, *segments: str) -> bool:
+    """Helm's JSON Schema printer names a values path as dotted (`a.b`) or as a
+    JSON pointer (`/a/b`), depending on the Helm release. CI installs unpinned
+    Helm; both forms are live.
+    """
+    dotted = ".".join(segments)
+    pointer = "/" + "/".join(segments)
+    return dotted in output or pointer in output
+
+
 def test_chart_defaults_match_the_canonical_security_policy():
     """The chart shipped bcrypt and a two-header denylist while the runtime and
     `config/security.yaml` were on argon2id and five headers, so installing the
@@ -162,7 +172,16 @@ def test_production_overlay_alone_refuses_to_render():
     output = _output(result)
 
     assert result.returncode != 0
-    assert "secrets.existingSecret" in output
+    assert _schema_path_reported(output, "secrets", "existingSecret")
+
+
+def test_schema_path_reported_accepts_both_printers_and_rejects_unrelated_output():
+    """Negative control: the helper must not match an unrelated refusal string."""
+    pointer = "- at '/secrets/existingSecret': minLength: got 0, want 1"
+    dotted = "secrets.existingSecret: minLength: got 0, want 1"
+    assert _schema_path_reported(pointer, "secrets", "existingSecret")
+    assert _schema_path_reported(dotted, "secrets", "existingSecret")
+    assert not _schema_path_reported("nothing here", "secrets", "existingSecret")
 
 
 def test_compliant_production_render_carries_the_declared_posture(tmp_path: Path):

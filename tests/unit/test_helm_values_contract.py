@@ -37,6 +37,16 @@ def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
 
 
+def _schema_path_reported(output: str, *segments: str) -> bool:
+    """Helm's JSON Schema printer names a values path as dotted (`a.b`) or as a
+    JSON pointer (`/a/b`), depending on the Helm release. CI installs unpinned
+    Helm; both forms are live.
+    """
+    dotted = ".".join(segments)
+    pointer = "/" + "/".join(segments)
+    return dotted in output or pointer in output
+
+
 # The chart's defaults are dev posture, and `config.profile=production` now
 # refuses to render on them (audit F-11, templates/production-contract.yaml).
 # Tests that need the production *profile* for something else -- the Kafka
@@ -174,8 +184,17 @@ def test_api_image_digest_schema_rejects_non_sha256_values():
     output = _combined_output(result)
 
     assert result.returncode != 0
-    assert "image.digest" in output
+    assert _schema_path_reported(output, "image", "digest")
     assert "sha256" in output
+
+
+def test_schema_path_reported_accepts_both_printers_and_rejects_unrelated_output():
+    """Negative control: the helper must not match an unrelated refusal string."""
+    pointer = "- at '/image/digest': 'latest' does not match pattern '^(sha256:[0-9a-f]{64})?$'"
+    dotted = "image.digest: 'latest' does not match pattern '^(sha256:[0-9a-f]{64})?$'"
+    assert _schema_path_reported(pointer, "image", "digest")
+    assert _schema_path_reported(dotted, "image", "digest")
+    assert not _schema_path_reported("nothing here", "image", "digest")
 
 
 def test_chart_defaults_do_not_embed_production_shaped_api_key_hashes():

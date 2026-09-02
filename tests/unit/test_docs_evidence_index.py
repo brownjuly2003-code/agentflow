@@ -215,7 +215,7 @@ ENTITY_HOT_PATH_BOUNDARIES = {
 OPENAPI_DIVERGENCE_HEADING = "## Historical OpenAPI contract divergence diagnostic"
 OPENAPI_DIVERGENCE_RECORD = "docs/perf/test_openapi_compliance-divergence-2026-04-25.md"
 OPENAPI_DIVERGENCE_DATE = "2026-04-25"
-OPENAPI_DIVERGENCE_DIGEST = "aeecc15d9d1892259259f9fd49d147939c97a81178c4e36fec03d278eb746c6f"
+OPENAPI_DIVERGENCE_DIGEST = "ea21daafe883f63c4e196d6d168b72a22ac4dfc7879528a51a1af6bde7df804b"
 OPENAPI_DIVERGENCE_FACTS = (
     "python 3.13.7",
     "fastapi 0.128.0",
@@ -1579,6 +1579,38 @@ ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SEPARATOR_CELL_RE = re.compile(r":?-{3,}:?")
 
 
+def _record_digest(relative: str) -> str:
+    """Return SHA-256 of an evidence record as its git blob.
+
+    Evidence identity is the git blob, so the digest must be identical on a
+    CRLF Windows checkout and a clean Linux CI checkout. LF working-tree
+    bytes are hashed as-is. When the working tree has ``\\r\\n``, the HEAD
+    blob is hashed if content matches after newline folding — that keeps LF
+    blobs (the OpenAPI divergence record) and the one CRLF blob
+    (``docs/perf/scale-own-data-2026-07-11.md``) on their published
+    digests. Unpublished content edits, and CRLF files with no HEAD path
+    (new or renamed records), hash the working-tree LF bytes and fail the
+    ratchet.
+    """
+    working = (ROOT / relative).read_bytes()
+    if b"\r\n" not in working:
+        return hashlib.sha256(working).hexdigest()
+    working_lf = working.replace(b"\r\n", b"\n")
+    posix = Path(relative).as_posix()
+    try:
+        blob = subprocess.check_output(
+            ["git", "cat-file", "blob", f"HEAD:{posix}"],
+            cwd=ROOT,
+        )
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode != 128:
+            raise
+        return hashlib.sha256(working_lf).hexdigest()
+    if working_lf == blob.replace(b"\r\n", b"\n"):
+        return hashlib.sha256(blob).hexdigest()
+    return hashlib.sha256(working_lf).hexdigest()
+
+
 def _section(text: str, heading: str) -> str:
     start = text.index(heading) + len(heading)
     end = text.find("\n## ", start)
@@ -2039,7 +2071,7 @@ def test_status_evidence_links_match_indexed_records() -> None:
 
 def test_protected_evidence_records_keep_published_digests() -> None:
     for relative, expected in PROTECTED_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2094,7 +2126,7 @@ def test_entity_hot_path_records_are_complementary_not_supersession() -> None:
 def test_entity_hot_path_records_keep_published_digests() -> None:
     assert _entity_hot_path_record_paths() == list(ENTITY_HOT_PATH_RECORDS)
     for relative, expected in ENTITY_HOT_PATH_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2269,7 +2301,7 @@ def test_openapi_divergence_is_one_diagnostic_not_supersession() -> None:
 
 def test_openapi_divergence_record_keeps_published_digest() -> None:
     assert _openapi_divergence_record_paths() == [OPENAPI_DIVERGENCE_RECORD]
-    digest = hashlib.sha256((ROOT / OPENAPI_DIVERGENCE_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(OPENAPI_DIVERGENCE_RECORD)
     assert digest == OPENAPI_DIVERGENCE_DIGEST
 
 
@@ -2358,7 +2390,7 @@ def test_historical_auth_bench_is_one_identity_not_document_supersession() -> No
 
 def test_historical_auth_bench_record_keeps_published_digest() -> None:
     assert _historical_auth_bench_record_paths() == [HISTORICAL_AUTH_BENCH_RECORD]
-    digest = hashlib.sha256((ROOT / HISTORICAL_AUTH_BENCH_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(HISTORICAL_AUTH_BENCH_RECORD)
     assert digest == HISTORICAL_AUTH_BENCH_DIGEST
 
 
@@ -2431,7 +2463,7 @@ def test_ci_performance_records_are_complementary_not_document_supersession() ->
 def test_ci_performance_records_keep_published_digests() -> None:
     assert _ci_performance_record_paths() == list(CI_PERFORMANCE_RECORDS)
     for relative, expected in CI_PERFORMANCE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2442,7 +2474,7 @@ def test_ci_performance_sources_and_plan_match_the_index() -> None:
         encoding="utf-8"
     )
     readiness = (ROOT / "docs" / "release-readiness.md").read_text(encoding="utf-8")
-    legacy_plan = (ROOT / "plan_07_07_26.md").read_text(encoding="utf-8").lower()
+    usage_write_record = (ROOT / CI_USAGE_WRITE_RECORD).read_text(encoding="utf-8")
     usage_writer = (
         ROOT / "src" / "agentflow_runtime" / "serving" / "api" / "auth" / "usage_writer.py"
     ).read_text(encoding="utf-8")
@@ -2451,8 +2483,11 @@ def test_ci_performance_sources_and_plan_match_the_index() -> None:
     assert CI_HARDWARE_GAP_RECORD in baseline
     assert CI_HARDWARE_GAP_RECORD in release_status
     assert CI_HARDWARE_GAP_RECORD in readiness
-    assert CI_USAGE_WRITE_RECORD in legacy_plan
-    assert "не раннер" in legacy_plan
+    assert (
+        "Every authenticated request wrote its own `api_usage` row before the response"
+        in usage_write_record
+    )
+    assert "The `Load Test` was not bimodal because of the runner" in usage_write_record
     assert CI_USAGE_WRITE_RECORD in usage_writer
     assert "ci performance interpretation evidence pair sub-slice" in plan
     for digest in CI_PERFORMANCE_DIGESTS.values():
@@ -2524,7 +2559,7 @@ def test_arm_shared_runner_generated_companions_are_not_separate_identities() ->
 def test_arm_shared_runner_packet_keeps_published_digests() -> None:
     assert _arm_benchmark_record_paths() == [ARM_BENCHMARK_RECORD]
     for relative, expected in ARM_PACKET_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2611,7 +2646,7 @@ def test_clickhouse_serving_is_separate_from_pii_not_supersession() -> None:
 
 def test_clickhouse_serving_record_keeps_published_digest() -> None:
     assert _clickhouse_serving_record_paths() == [CLICKHOUSE_SERVING_RECORD]
-    digest = hashlib.sha256((ROOT / CLICKHOUSE_SERVING_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(CLICKHOUSE_SERVING_RECORD)
     assert digest == CLICKHOUSE_SERVING_DIGEST
 
 
@@ -2697,7 +2732,7 @@ def test_clickhouse_pii_records_keep_published_digests() -> None:
 
     assert indexed == set(CLICKHOUSE_PII_DIGESTS)
     for relative, expected in CLICKHOUSE_PII_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2792,7 +2827,7 @@ def test_postgresql_pii_records_keep_published_digests() -> None:
 
     assert indexed == set(POSTGRESQL_PII_DIGESTS)
     for relative, expected in POSTGRESQL_PII_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2874,7 +2909,7 @@ def test_postgresql_runtime_records_keep_published_digests() -> None:
 
     assert indexed == set(POSTGRESQL_RUNTIME_DIGESTS)
     for relative, expected in POSTGRESQL_RUNTIME_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -2958,7 +2993,7 @@ def test_nl_sql_evidence_records_keep_published_digests() -> None:
 
     assert indexed == set(NL_SQL_EVALUATION_DIGESTS)
     for relative, expected in NL_SQL_EVALUATION_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -3040,7 +3075,7 @@ def test_golden_acceptance_records_keep_published_digests() -> None:
 
     assert indexed == set(GOLDEN_ACCEPTANCE_DIGESTS)
     for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -3187,15 +3222,15 @@ def test_checkpoint_readiness_records_keep_published_digests() -> None:
 
     assert indexed == set(CHECKPOINT_READINESS_DIGESTS)
     for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
-    blocker_digest = hashlib.sha256((ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()).hexdigest()
+    blocker_digest = _record_digest(CHECKPOINT_BLOCKER_RECORD)
     assert blocker_digest == CHECKPOINT_BLOCKER_DIGEST
     for relative, expected in PROTECTED_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -3335,18 +3370,18 @@ def test_f10_records_keep_published_digests() -> None:
 
     assert indexed == set(F10_DIGESTS)
     for relative, expected in F10_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in PROTECTED_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
-    blocker_digest = hashlib.sha256((ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()).hexdigest()
+    blocker_digest = _record_digest(CHECKPOINT_BLOCKER_RECORD)
     assert blocker_digest == CHECKPOINT_BLOCKER_DIGEST
 
 
@@ -3476,25 +3511,25 @@ def test_kind_soak_records_keep_published_digests() -> None:
 
     assert indexed == set(KIND_SOAK_DIGESTS)
     for relative, expected in KIND_SOAK_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
-    start_digest = hashlib.sha256((ROOT / SOAK_START_RECORD).read_bytes()).hexdigest()
+    start_digest = _record_digest(SOAK_START_RECORD)
     assert start_digest == SOAK_START_DIGEST
-    canary_fail_digest = hashlib.sha256((ROOT / CANARY_TRAFFIC_RECORD).read_bytes()).hexdigest()
+    canary_fail_digest = _record_digest(CANARY_TRAFFIC_RECORD)
     assert canary_fail_digest == CANARY_TRAFFIC_DIGEST
     for relative, expected in PROTECTED_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
-    blocker_digest = hashlib.sha256((ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()).hexdigest()
+    blocker_digest = _record_digest(CHECKPOINT_BLOCKER_RECORD)
     assert blocker_digest == CHECKPOINT_BLOCKER_DIGEST
     for relative, expected in F10_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -3601,7 +3636,7 @@ def test_golden_soak_rca_complements_soak_05_without_supersession() -> None:
 
 def test_golden_soak_rca_record_keeps_published_digest() -> None:
     assert _soak_rca_record_paths() == [SOAK_RCA_RECORD]
-    digest = hashlib.sha256((ROOT / SOAK_RCA_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(SOAK_RCA_RECORD)
     assert digest == SOAK_RCA_DIGEST
 
 
@@ -3744,29 +3779,27 @@ def test_historical_canary_soak_records_keep_published_digests() -> None:
 
     assert indexed == set(HISTORICAL_CANARY_SOAK_DIGESTS)
     for relative, expected in HISTORICAL_CANARY_SOAK_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
-    blocker_digest = hashlib.sha256((ROOT / RESOURCE_BLOCKER_RECORD).read_bytes()).hexdigest()
+    blocker_digest = _record_digest(RESOURCE_BLOCKER_RECORD)
     assert blocker_digest == RESOURCE_BLOCKER_DIGEST
-    soak05_digest = hashlib.sha256((ROOT / SOAK_05_RECORD).read_bytes()).hexdigest()
+    soak05_digest = _record_digest(SOAK_05_RECORD)
     assert soak05_digest == KIND_SOAK_DIGESTS[SOAK_05_RECORD]
-    kind_residual_digest = hashlib.sha256((ROOT / KIND_RESIDUAL_RECORD).read_bytes()).hexdigest()
+    kind_residual_digest = _record_digest(KIND_RESIDUAL_RECORD)
     assert kind_residual_digest == KIND_SOAK_DIGESTS[KIND_RESIDUAL_RECORD]
     for relative, expected in PROTECTED_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in GOLDEN_ACCEPTANCE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in CHECKPOINT_READINESS_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
-    checkpoint_blocker_digest = hashlib.sha256(
-        (ROOT / CHECKPOINT_BLOCKER_RECORD).read_bytes()
-    ).hexdigest()
+    checkpoint_blocker_digest = _record_digest(CHECKPOINT_BLOCKER_RECORD)
     assert checkpoint_blocker_digest == CHECKPOINT_BLOCKER_DIGEST
     for relative, expected in F10_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -3912,7 +3945,7 @@ def test_historical_capacity_blockers_keep_published_digests() -> None:
 
     assert indexed == set(HISTORICAL_CAPACITY_BLOCKER_DIGESTS)
     for relative, expected in HISTORICAL_CAPACITY_BLOCKER_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -3989,7 +4022,7 @@ def test_historical_streaming_hop_is_a_distinct_segment_not_supersession() -> No
 
 def test_historical_streaming_hop_record_keeps_published_digest() -> None:
     assert _historical_streaming_hop_record_paths() == [HISTORICAL_STREAMING_HOP_RECORD]
-    digest = hashlib.sha256((ROOT / HISTORICAL_STREAMING_HOP_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(HISTORICAL_STREAMING_HOP_RECORD)
     assert digest == HISTORICAL_STREAMING_HOP_DIGEST
 
 
@@ -4073,7 +4106,7 @@ def test_current_freshness_records_keep_published_digests() -> None:
 
     assert indexed == set(CURRENT_FRESHNESS_DIGESTS)
     for relative, expected in CURRENT_FRESHNESS_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -4158,7 +4191,7 @@ def test_e4_replica_records_keep_published_digests() -> None:
 
     assert indexed == set(E4_REPLICA_DIGESTS)
     for relative, expected in E4_REPLICA_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -4254,10 +4287,10 @@ def test_historical_e4_records_keep_published_digests() -> None:
 
     assert indexed == set(HISTORICAL_E4_DIGESTS)
     for relative, expected in HISTORICAL_E4_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in E4_REPLICA_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -4373,7 +4406,7 @@ def test_current_endurance_scale_records_keep_published_digests() -> None:
 
     assert indexed == set(CURRENT_ENDURANCE_SCALE_DIGESTS)
     for relative, expected in CURRENT_ENDURANCE_SCALE_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     assert (ROOT / RSS_REVERIFY_RECORD).is_file()
 
@@ -4481,7 +4514,7 @@ def test_rss_reverify_record_keeps_published_digest_and_status_owner() -> None:
     known_issues = _section(STATUS.read_text(encoding="utf-8"), "## Known issues").lower()
 
     assert _rss_reverify_record_paths() == [RSS_REVERIFY_RECORD]
-    digest = hashlib.sha256((ROOT / RSS_REVERIFY_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(RSS_REVERIFY_RECORD)
     assert digest == RSS_REVERIFY_DIGEST
     assert RSS_REVERIFY_RECORD in status_links
     assert "api rss growth under steady load" in known_issues
@@ -4577,11 +4610,11 @@ def test_current_s10_throughput_records_keep_published_digests() -> None:
 
     assert indexed == set(CURRENT_S10_THROUGHPUT_DIGESTS)
     for relative, expected in CURRENT_S10_THROUGHPUT_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     assert (ROOT / S10_PACED_R1_RECORD).is_file()
     assert (ROOT / S10_PACED_R3_RECORD).is_file()
-    f02_digest = hashlib.sha256((ROOT / SOAK_CAPACITY_RECORD).read_bytes()).hexdigest()
+    f02_digest = _record_digest(SOAK_CAPACITY_RECORD)
     assert f02_digest == F10_DIGESTS[SOAK_CAPACITY_RECORD]
 
 
@@ -4716,7 +4749,7 @@ def test_q12_predecessor_is_reciprocal_root_of_q13_q14_narrow_chain() -> None:
 
 def test_q12_predecessor_record_keeps_published_digest() -> None:
     assert _q12_predecessor_record_paths() == [S10_Q12_RECORD]
-    digest = hashlib.sha256((ROOT / S10_Q12_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(S10_Q12_RECORD)
     assert digest == Q12_PREDECESSOR_DIGEST
 
 
@@ -4793,7 +4826,7 @@ def test_historical_paced_4h_rows_reciprocate_r4_without_cross_supersession() ->
 def test_historical_paced_4h_records_keep_published_digests() -> None:
     assert set(_historical_paced_4h_record_paths()) == set(HISTORICAL_PACED_4H_DIGESTS)
     for relative, expected in HISTORICAL_PACED_4H_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -4899,11 +4932,11 @@ def test_q13_q14_records_keep_published_digests() -> None:
 
     assert indexed == set(Q13_Q14_INTERMEDIATE_S10_DIGESTS)
     for relative, expected in Q13_Q14_INTERMEDIATE_S10_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     assert (ROOT / S10_Q12_RECORD).is_file()
     for relative, expected in CURRENT_S10_THROUGHPUT_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -5036,10 +5069,10 @@ def test_paced_10m_1h_records_keep_published_digests() -> None:
 
     assert indexed == set(PACED_10M_1H_DIGESTS)
     for relative, expected in PACED_10M_1H_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
     for relative, expected in CURRENT_S10_THROUGHPUT_DIGESTS.items():
-        digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        digest = _record_digest(relative)
         assert digest == expected
 
 
@@ -5152,7 +5185,7 @@ def test_finite_100eps_drain_is_not_a_supersession() -> None:
 
 def test_finite_100eps_drain_record_keeps_published_digest() -> None:
     assert _finite_100eps_drain_record_paths() == [S10_100EPS_TRY_RECORD]
-    digest = hashlib.sha256((ROOT / S10_100EPS_TRY_RECORD).read_bytes()).hexdigest()
+    digest = _record_digest(S10_100EPS_TRY_RECORD)
     assert digest == FINITE_100EPS_DRAIN_DIGEST
 
 

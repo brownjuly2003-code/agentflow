@@ -693,9 +693,7 @@ HISTORICAL_STREAMING_HOP_BOUNDARIES = (
 )
 CURRENT_FRESHNESS_HEADING = "## Current freshness evidence records"
 REAL_PATH_FRESHNESS_LIFECYCLE = "docs/perf/freshness-e2e-realpath.md"
-REAL_PATH_FRESHNESS_RECORD = (
-    "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md"
-)
+REAL_PATH_FRESHNESS_RECORD = "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md"
 DEMO_FRESHNESS_RECORD = "docs/archive/performance/freshness-benchmark-2026-06-06.md"
 CURRENT_FRESHNESS_DATES = {
     REAL_PATH_FRESHNESS_RECORD: "2026-07-09",

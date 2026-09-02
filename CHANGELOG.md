@@ -4,6 +4,10 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — nltk 3.10.0 -> 3.10.3 in uv.lock (Dependabot GHSA-m4rf-3fr8-xwx3, GHSA-6hwm-xvph-95vm)
+
+- `uv lock --upgrade-package nltk` only; nltk is a transitive dependency of `llama-index-core` and is not part of the `cloud`/`postgres` export, so `requirements-docker.lock` is unchanged. Closes the critical (JVM argument injection in the Stanford wrappers) and high (uncontrolled `dot` search path) advisories GitHub reported on the default branch on 2026-09-01.
+
 ### Security — production boot requires a query-fingerprint pepper (AF-13)
 
 `QueryAnalyticsPolicy.from_env` now fails closed on `AGENTFLOW_PROFILE=production`

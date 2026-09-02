@@ -1,7 +1,5 @@
 # Load Test Regression on `main`
 
-**Last updated:** 2026-05-24
-
 ## Symptom
 
 GitHub Actions `Load Test` workflow turns red on `main` after being green for

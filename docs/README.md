@@ -1,6 +1,6 @@
 # AgentFlow documentation
 
-> Updated: 2026-08-26. This page is the navigation hub for the complete
+> This page is the navigation hub for the complete
 > documentation corpus. It does not replace engineering evidence or status.
 
 AgentFlow has documentation for several audiences: users evaluating the
@@ -156,8 +156,9 @@ Run the proportional documentation gate after edits:
 python scripts/check_docs_links.py
 python scripts/check_docs_root_placement.py
 python scripts/check_docs_anchors.py
+python scripts/check_docs_updated_stamps.py
 python scripts/validate_project_claims.py
-python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_anchors.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
+python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_anchors.py tests/unit/test_docs_updated_stamps.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
 python -m mkdocs build --strict
 ```
 

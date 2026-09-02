@@ -1,7 +1,5 @@
 # CDC Lag / Stuck Connectors
 
-**Last updated:** 2026-05-24
-
 ## Symptom
 
 One or more of:

@@ -1,7 +1,5 @@
 # Auth 401/403 Spike
 
-**Last updated:** 2026-05-26
-
 ## Symptom
 
 One of:

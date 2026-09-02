@@ -1,7 +1,5 @@
 # On-Call Runbooks
 
-**Last updated:** 2026-05-24
-
 This directory holds production-incident response runbooks for AgentFlow. The format and severity ladder are aligned with `docs/operations/chaos-runbook.md`.
 
 ## Scope

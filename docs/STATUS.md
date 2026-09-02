@@ -1,6 +1,8 @@
 # Engineering Status
 
-> Updated: **2026-08-26**. The golden topology remains a production candidate, not
+**Updated:** 2026-08-26
+
+> The golden topology remains a production candidate, not
 > production accepted. Published release line **`v2.0.0`**; unpublished lockstep
 > **2.1.0** is prepared locally. Numbers below come only from measured, in-repo
 > evidence.

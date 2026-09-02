@@ -8,7 +8,7 @@
 > historical implementation reference only; do not execute its older
 > recommended rehearsal sequence.
 
-**Last updated:** 2026-08-19
+**Updated:** 2026-08-19
 
 **Status:** soak-only startup grace is implemented for the Flink JobManager and
 MinIO; the controller now binds every init wait to an exact stopped container

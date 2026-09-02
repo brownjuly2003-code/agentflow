@@ -1,6 +1,6 @@
 # Chaos Runbook
 
-**Last updated:** 2026-08-31
+**Updated:** 2026-08-31
 
 ## Purpose
 

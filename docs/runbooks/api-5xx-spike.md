@@ -1,7 +1,5 @@
 # API 5xx Spike
 
-**Last updated:** 2026-05-24
-
 ## Symptom
 
 Grafana panel `agentflow / API 5xx rate` crosses 1% sustained for ≥ 2 minutes,

@@ -1,7 +1,5 @@
 # Release Rollback / Package Yank
 
-**Last updated:** 2026-05-24
-
 ## Symptom
 
 A version already published to PyPI (`agentflow-runtime`, `agentflow-client`)

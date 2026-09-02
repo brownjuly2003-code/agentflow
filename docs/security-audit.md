@@ -3,7 +3,7 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
-**Last updated:** 2026-08-30 (API/Flink image-policy gate)
+**Updated:** 2026-08-30 (API/Flink image-policy gate)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary

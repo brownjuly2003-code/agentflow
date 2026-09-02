@@ -1,6 +1,6 @@
 # Operations index
 
-> Updated: 2026-08-27. This page routes operators to the maintained procedure
+> This page routes operators to the maintained procedure
 > or reference that owns a task. It does not replace the
 > [engineering status](../STATUS.md) or turn a recorded result into current
 > readiness.

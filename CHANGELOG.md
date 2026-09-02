@@ -125,6 +125,18 @@ slugify/unique). `tests/unit/test_docs_anchors.py` pins the live tree plus
 negative fixtures. Item 7 stays open for the remaining style/language content
 slices.
 
+### Documentation — Updated stamps follow a dated-page allowlist (item 7)
+
+An `Updated` stamp now appears only on a living page whose date is part of the
+claim: the engineering status snapshot, the security audit, and the five dated
+operations records. `scripts/check_docs_updated_stamps.py` fails closed when a
+page outside that allowlist carries any stamp, when a dated page has none before
+its first section heading, and when a stamp is not exactly the canonical
+`**Updated:** YYYY-MM-DD` line with a real, non-future date. The two hubs and the
+six on-call runbooks lost stamps nobody maintained, so Git history is now their
+date. `docs/engineering-standards.md` records the convention once and
+`tests/unit/test_docs_updated_stamps.py` pins the allowlist.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

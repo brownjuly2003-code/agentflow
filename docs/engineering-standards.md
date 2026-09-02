@@ -49,3 +49,34 @@ Each line in `.dora/deployments.jsonl` contains:
 - `status`
 - `html_url`
 - `jobs`
+
+## Documentation Conventions
+
+A living page is a tracked `docs/**/*.md` file outside `docs/archive/`, `docs/decisions/`,
+`docs/dv2-multi-branch/`, `docs/evidence/`, `docs/migration/` and `docs/perf/`; hubs and indexes
+are living pages. Pages under those directories are point-in-time records held to the
+[archive contract](archive/README.md), and their historical wording is never modernized.
+
+A page opens with its H1 and one paragraph of purpose. Operator and runbook pages then carry
+`**Audience:**` and `**Prerequisites:**` lines; commands appear in fenced blocks and must have
+been run as written; every procedure states its failure boundary — what it cannot prove and what
+it does not authorize.
+
+A living page carries an `Updated` stamp only when the date is part of the claim the reader must
+trust: a status snapshot, an audit result, a rehearsal or resume boundary, a record carrying a
+superseded notice. The seven dated pages are [STATUS.md](STATUS.md),
+[security-audit.md](security-audit.md),
+[api-duckdb-non-target-scratch-rehearsal-runbook.md](operations/api-duckdb-non-target-scratch-rehearsal-runbook.md),
+[api-duckdb-persistence-recovery-design.md](operations/api-duckdb-persistence-recovery-design.md),
+[ci-soak-next-session-runbook.md](operations/ci-soak-next-session-runbook.md),
+[chaos-runbook.md](operations/chaos-runbook.md) and
+[ci-soak-compose-foundation.md](operations/ci-soak-compose-foundation.md); each carries exactly
+one `**Updated:** YYYY-MM-DD` line (optionally plus a short note) after the H1 and before the
+first section heading. Every other living page is undated: its validity comes from verified
+commands and links, and Git history is the date. Enforced by:
+
+```powershell
+python scripts/check_docs_updated_stamps.py
+python scripts/check_docs_anchors.py
+python scripts/check_historical_claims.py
+```

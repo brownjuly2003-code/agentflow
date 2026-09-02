@@ -106,6 +106,16 @@ MkDocs nav link. `tests/unit/test_docs_orphans.py` pins the live tree plus
 negative fixtures. The seven previously unlinked pages are now linked from the
 corpus map. Item 8 stays open for the canonical-owner ratchet.
 
+### Documentation — generated-reference owners are now a CI ratchet (item 8 closed)
+
+`scripts/check_generated_reference_owners.py` pins the `docs/README.md`
+generated-reference ownership table to the tree: untracked paths, tracked
+`.artifacts/` runtime paths, `--check` rows with no tracked output, and unowned
+`--check` generators all fail. The new `Data contracts` row closes the
+`scripts/generate_contracts.py` gap, so the table now covers 23 families and 4
+`--check` generators; `tests/unit/test_generated_reference_owners.py` pins the
+live tree plus negative fixtures. Item 8 is closed.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

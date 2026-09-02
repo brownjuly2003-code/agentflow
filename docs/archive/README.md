@@ -36,6 +36,12 @@ those historical directories and `docs/dv2-multi-branch/` (hubs `docs/README.md`
 and `docs/index.md` need no inbound) and fails when a living page has no inbound
 link from tracked Markdown or the MkDocs nav: it must be reachable from the
 documentation hub or archived with provenance.
+The generated-owner checker `scripts/check_generated_reference_owners.py` (unit test
+`tests/unit/test_generated_reference_owners.py`) pins the generated-reference ownership
+table in `docs/README.md` to the tracked tree: it fails when a row names a path Git does
+not track, when a `.artifacts/` runtime path has become tracked, when a row runs a
+`--check` drift check without listing a tracked output, or when a tracked
+`scripts/**/*.py` that declares `--check` has no row at all.
 
 ## Current archive map
 

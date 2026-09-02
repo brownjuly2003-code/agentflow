@@ -4,8 +4,9 @@
 
 **Status:** `CAPABILITY_REHEARSAL_REQUIRED`; this file is not an approved operator runbook
 
-**Audience:** developers and operators evaluating a future separately
-authorized recovery action for `API_DUCKDB_WAL_REPLAY_FAILURE`
+**Audience:** developers and operators evaluating a future separately authorized recovery action for `API_DUCKDB_WAL_REPLAY_FAILURE`
+
+**Prerequisites:** the archived chronology named on this page; any runtime action requires a separately written authorization
 
 ## Purpose and authority boundary
 

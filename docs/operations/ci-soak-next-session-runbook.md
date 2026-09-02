@@ -9,6 +9,10 @@ Live repository facts from the commands below override copied chat context and
 older status sections. This runbook records the operational boundary; it does
 not authorize an external action.
 
+**Audience:** engineer resuming the CI-soak work
+
+**Prerequisites:** a clean tracked checkout whose `HEAD` contains `726d171322dc8933d8788e7388f1bcd5d0d8e32e`, `scripts/golden_soak/architecture_gate.py`, and `scripts/golden_soak/gen_attempt_bundle.py`; SSH, Docker/Colima, or a Mac snapshot also require a fresh explicit authorization
+
 ## Status at a glance
 
 | Surface | Exact state |

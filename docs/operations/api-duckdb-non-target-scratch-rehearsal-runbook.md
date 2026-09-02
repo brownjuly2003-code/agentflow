@@ -6,6 +6,8 @@
 
 **Audience:** operator preparing one separately authorized non-target rehearsal
 
+**Prerequisites:** a separately authorized run identity, the scratch target under `/tmp/agentflow-api-duckdb-capability-rehearsal/`, SSH host `deproject-mac`, and `scripts/rehearse_api_duckdb_quiesce_capabilities.py`
+
 ## Purpose and authority boundary
 
 This is the current procedure for exercising the API DuckDB capability harness

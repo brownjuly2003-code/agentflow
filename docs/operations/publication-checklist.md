@@ -5,6 +5,10 @@ pushing a release tag. Confirm the current release line in
 [release readiness](../release-readiness.md); if an already published artifact
 must be withdrawn, follow the [release rollback runbook](../runbooks/release-rollback.md).
 
+**Audience:** release operator publishing a release
+
+**Prerequisites:** a clean venv, `scripts/release.py`, npm in `sdk-ts/`, `python -m build`, twine, and `scripts/check_release_artifacts.py`; a real publish also requires the approved release tag and the GitHub/registry access named on this page
+
 ## Content
 
 - [x] `README.md` is publication-ready

@@ -75,8 +75,8 @@ def test_real_docs_tree_has_no_page_opening_problems() -> None:
     living = [path for path in tracked if is_living_page(path)]
     operator = [path for path in living if is_operator_page(path)]
     assert len(living) >= 61
-    assert len(operator) == 25
-    assert len(PENDING_OPERATOR_PAGES) == 14
+    assert len(operator) >= 25
+    assert len(PENDING_OPERATOR_PAGES) == 0
     assert PENDING_OPERATOR_PAGES <= set(tracked)
     for page in sorted(PENDING_OPERATOR_PAGES):
         assert is_operator_page(page)
@@ -91,10 +91,11 @@ def test_real_docs_tree_main_prints_ok(capsys: pytest.CaptureFixture[str]) -> No
         output.removeprefix("docs page openings: OK (").removesuffix(")").split(", ")
     )
     living = int(living_part.split()[0])
+    operator = int(operator_part.split()[0])
     pending = int(pending_part.split()[0])
     assert living >= 61
-    assert operator_part == "25 operator pages"
-    assert pending == 14
+    assert operator >= 25
+    assert pending == 0
 
 
 @pytest.mark.parametrize(

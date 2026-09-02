@@ -166,6 +166,15 @@ fourteen-page pending allowlist that may only shrink. The contract lives in
 `tests/unit/test_docs_page_openings.py`; item 7 stays open until that allowlist
 is empty.
 
+### Documentation — every operator page carries audience and prerequisites; plan item 7 closed
+
+The fourteen pending operator pages in `docs/operations/` now carry one
+`**Audience:**` line and one `**Prerequisites:**` line; `chaos-runbook.md` also
+gains a purpose paragraph. `PENDING_OPERATOR_PAGES` is empty, and
+`scripts/check_docs_page_openings.py` reports `61 living pages, 25 operator pages, 0 pending`.
+Plan item 7 is closed; `docs/glossary.md` and `docs/PROJECT_CLOSURE.md` language
+and historical wording were left untouched.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

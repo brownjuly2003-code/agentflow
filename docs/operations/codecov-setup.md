@@ -4,6 +4,10 @@ This guide connects the AgentFlow repository to Codecov so the coverage
 badge in `README.md` resolves and coverage reports flow in on every CI
 run.
 
+**Audience:** repository maintainer connecting Codecov
+
+**Prerequisites:** GitHub access as the repository owner, a Codecov account that can enable the repository, and `codecov.yml` for the `curl --data-binary @codecov.yml https://codecov.io/validate` check
+
 ## How uploads work today
 
 - `ci.yml` calls pinned `codecov/codecov-action` v7.0.0 with

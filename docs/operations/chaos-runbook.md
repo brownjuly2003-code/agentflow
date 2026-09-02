@@ -2,6 +2,15 @@
 
 **Updated:** 2026-08-31
 
+This page owns the full chaos workflow in `.github/workflows/chaos.yml`, the
+steps after a `chaos-failure` issue opens, and the local path that reproduces
+the failing scenario. It does not inventory other operations procedures —
+those live in [README.md](README.md).
+
+**Audience:** maintainer triaging a chaos-workflow failure issue
+
+**Prerequisites:** GitHub access to the failed `chaos.yml` run and the `chaos-report` artifact, Docker Compose for `docker-compose.chaos.yml`, pytest for `tests/chaos/`, and `scripts/chaos_report.py`
+
 ## Purpose
 
 This runbook covers scheduled and manually dispatched full chaos runs from `.github/workflows/chaos.yml`, triage steps when a failure issue is opened, and the fastest way to reproduce the failing scenario locally.

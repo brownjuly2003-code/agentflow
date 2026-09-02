@@ -13,6 +13,9 @@ remains `ed03fc47fa5f411016e588774d61a5b5eef21213`.<br>
 **Task control artifact (local only):**
 `.codex-grok-tasks/npm-environment-approval-20260801/preflight-result.md`<br>
 
+**Audience:** release manager / repository admin reading the audit record
+
+**Prerequisites:** none; this page is a record, the procedure lives in [publication-checklist.md](publication-checklist.md)
 
 ## Claim boundary
 

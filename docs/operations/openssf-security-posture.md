@@ -14,6 +14,10 @@ project can produce to document its supply-chain security posture.
 > distinct from third-party attestation, in the same discipline the audit doc
 > already uses.
 
+**Audience:** maintainer keeping the OpenSSF posture artifacts current
+
+**Prerequisites:** GitHub access to `.github/workflows/scorecard.yml` and Code scanning, and `curl` for the public Scorecard JSON named on this page
+
 ## 1. OpenSSF Scorecard (automated, live)
 
 - **Channel:** `.github/workflows/scorecard.yml` (shape-pinned by

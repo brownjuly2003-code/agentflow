@@ -26,6 +26,10 @@ PASS exists
 
 **One-shot wait commit:** `8a77088` (`fix(ops): bind soak init waits to container ids`)
 
+**Audience:** engineer resuming the CI-soak compose work
+
+**Prerequisites:** `tests/unit/test_ci_soak_foundation.py`, `tests/unit/test_ci_soak_runtime.py`, and Docker Compose for the merged `docker-compose.soak.yml` config check named on this page
+
 ## Read this first
 
 - The repository contains a tracked source pack, a Docker Compose topology, a

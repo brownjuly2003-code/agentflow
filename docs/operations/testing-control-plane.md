@@ -8,6 +8,10 @@ no exception, no failing request, just an event delivered twice or lost — whic
 is why they get a coverage floor of their own rather than sharing the
 repository-wide one.
 
+**Audience:** developer changing the PostgreSQL control-plane adapters
+
+**Prerequisites:** pytest, `scripts/check_control_plane_coverage.py`, and for the live suite a disposable PostgreSQL reachable at `AGENTFLOW_TEST_PG_DSN`
+
 ## Why unit-only coverage misleads here
 
 Audit F-12 measured nine modules at 18–46% and correctly declined to read that

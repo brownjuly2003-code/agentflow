@@ -4,6 +4,10 @@ This page is the detailed reference for the operator-managed Flink jobs. For
 service startup, health checks, and incident response, start with the
 [operational runbook](../runbook.md).
 
+**Audience:** operator managing the Flink jobs
+
+**Prerequisites:** a separate venv with `src/agentflow_runtime/processing/flink_jobs/requirements.txt`, `KAFKA_BOOTSTRAP_SERVERS`, and the `flink` CLI; the Kubernetes Operator 1.15.0 path also requires `scripts/patch_flink_operator_1_15_crd.py`
+
 ## Session Aggregation
 
 `src/agentflow_runtime/processing/flink_jobs/session_aggregator.py` is the single canonical

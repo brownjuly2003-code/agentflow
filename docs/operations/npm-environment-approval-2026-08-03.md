@@ -5,6 +5,10 @@
 - **Repository:** `brownjuly2003-code/agentflow`
 - **Local HEAD:** `6d8ead454181fe898aebfc75aec2e3b9a460f74b`
 
+**Audience:** release manager / repository admin reading the audit record
+
+**Prerequisites:** none; this page is a record, the procedure lives in [publication-checklist.md](publication-checklist.md)
+
 ## Verdict
 
 **PASS.** The GitHub Environment used by the npm publishing workflow exists

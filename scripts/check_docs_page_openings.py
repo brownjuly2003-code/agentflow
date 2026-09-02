@@ -38,24 +38,8 @@ HISTORICAL_DIRECTORIES = (
 OPERATOR_PAGE_PREFIXES = ("docs/operations/", "docs/runbooks/")
 OPERATOR_PAGES_EXTRA = frozenset({"docs/runbook.md"})
 
-PENDING_OPERATOR_PAGES = frozenset(
-    {
-        "docs/operations/api-duckdb-non-target-scratch-rehearsal-runbook.md",
-        "docs/operations/api-duckdb-persistence-recovery-design.md",
-        "docs/operations/chaos-runbook.md",
-        "docs/operations/ci-soak-compose-foundation.md",
-        "docs/operations/ci-soak-next-session-runbook.md",
-        "docs/operations/codecov-setup.md",
-        "docs/operations/external-dependency-recovery-gate.md",
-        "docs/operations/external-pentest-evidence-blocker-2026-08-01.md",
-        "docs/operations/flink-operators.md",
-        "docs/operations/npm-environment-approval-2026-08-03.md",
-        "docs/operations/npm-environment-approval-blocker-2026-08-01.md",
-        "docs/operations/openssf-security-posture.md",
-        "docs/operations/publication-checklist.md",
-        "docs/operations/testing-control-plane.md",
-    }
-)
+# Emptied on 2026-09-01; kept so a future operator page can be staged.
+PENDING_OPERATOR_PAGES: frozenset[str] = frozenset()
 
 H1 = re.compile(r"^#\s+\S")
 SECTION_HEADING = re.compile(r"^#{2,6}\s")

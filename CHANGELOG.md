@@ -79,6 +79,14 @@ byte as the [2026-04-27 archive](docs/archive/performance/perf-history-2026-04-2
 Current documentation no longer claims that CI appends a cross-run trend: the
 bot writer was removed when its self-push conflicted with branch protection.
 
+### Documentation — archive provenance is now a CI ratchet (item 8)
+
+`scripts/check_archive_provenance.py` fails closed when a tracked
+`docs/archive/**/*.md` page (except `README.md` indexes) is missing any of the
+five provenance facts from its first 40 lines. `tests/unit/test_archive_provenance.py`
+covers the live tree plus negative fixtures. Item 8 stays open for the remaining
+hygiene ratchets.
+
 ## [2.1.0] - 2026-08-23
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)

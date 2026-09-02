@@ -20,6 +20,11 @@ and update all inbound links in the same commit. Dated evidence already placed
 under `docs/perf/`, `docs/evidence/`, or an ADR directory stays there; those
 directories are historical by design and do not need a second archive move.
 
+`tests/unit/test_archive_provenance.py` runs `scripts/check_archive_provenance.py`
+over every tracked `docs/archive/**/*.md` except `README.md` index pages and fails
+when any of the five facts is missing from the first 40 lines (the replacement
+fact is also satisfied when the `Original path` still names a tracked file).
+
 ## Current archive map
 
 | Area | Contents | Current replacement |

@@ -3,7 +3,7 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
-**Updated:** 2026-08-30 (API/Flink image-policy gate)
+**Updated:** 2026-09-02 (Safety per-bucket ignores)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
@@ -178,8 +178,10 @@ writes its raw JSON report to ignored `.artifacts/security/bandit-current.json`
 and `scripts/bandit_diff.py` compares it against the tracked
 `.bandit-baseline.json`, which is the only reviewed input. The Safety job
 resolves its requirement buckets, resolver virtualenvs, and the
-vulnerable-pin regression probe under `.artifacts/security/safety/`, and the
-pip-audit job exports the full locked profile set to
+vulnerable-pin regression probe under `.artifacts/security/safety/`.
+`scripts/run_safety_scan.py` runs `safety check` once per bucket and applies
+`--ignore` only for waiver `safety_id` values whose scope matches that
+bucket. The pip-audit job exports the full locked profile set to
 `.artifacts/security/pip-audit/`; the production pip-audit step reads the
 tracked `requirements-docker.lock` directly. These are replaceable per-run
 working files, not reviewed evidence or production acceptance; promotion

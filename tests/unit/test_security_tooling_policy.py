@@ -3,9 +3,38 @@ import tomllib
 from configparser import ConfigParser
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _run_safety_step_run(workflow: dict) -> str:
+    step = next(
+        item for item in workflow["jobs"]["safety"]["steps"] if item.get("name") == "Run Safety"
+    )
+    run = step["run"]
+    assert isinstance(run, str)
+    return run
+
+
+def _assert_run_safety_has_no_ignore_token(run: str) -> None:
+    tokens: list[str] = []
+    pending: list[str] = []
+    for raw in run.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        continued = stripped.endswith("\\")
+        pending.append(stripped.rstrip("\\").strip())
+        if not continued:
+            tokens.extend(" ".join(pending).split())
+            pending = []
+    if pending:
+        tokens.extend(" ".join(pending).split())
+    assert "--ignore" not in tokens, (
+        "Run Safety must not pass --ignore; ignores are derived per bucket from the waiver file"
+    )
 
 
 def test_bandit_baseline_carries_no_suppressed_findings() -> None:
@@ -40,11 +69,19 @@ def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
     security_workflow = (ROOT / ".github" / "workflows" / "security.yml").read_text(
         encoding="utf-8"
     )
+    workflow = yaml.safe_load(security_workflow)
     dependabot = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
 
     assert "requirements-flink-runtime.txt" in security_workflow
-    assert security_workflow.count("--ignore SFTY-20260217-93940") == 1
-    assert security_workflow.count("--ignore SFTY-20260724-05622") == 1
+    waivers = json.loads((ROOT / "security" / "trivy-waivers.json").read_text(encoding="utf-8"))
+    flink_safety_ids = [
+        str(item["safety_id"])
+        for item in waivers["scopes"]["flink-runtime"]["waivers"]
+        if item.get("safety_id")
+    ]
+    assert flink_safety_ids.count("SFTY-20260217-93940") == 1
+    assert flink_safety_ids.count("SFTY-20260724-05622") == 1
+    _assert_run_safety_has_no_ignore_token(_run_safety_step_run(workflow))
     assert "resolved flink-runtime bucket installs pyarrow>=23.0.1" in security_workflow
     assert 'Do NOT retry "uninstall unused pyarrow from the image"' in security_workflow
     assert "accepts httplib2>=0.32.0" in security_workflow
@@ -63,6 +100,26 @@ def test_flink_runtime_safety_ignore_has_release_watchdog() -> None:
     assert "flink" in flink_update["labels"]
     assert "ignore" not in flink_update
     assert "groups" not in flink_update
+
+
+def test_run_safety_ignore_token_ignores_unrelated_pip_step() -> None:
+    """F-T-25-10: `--ignore*` on another step must not fail the Run Safety contract."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "security.yml").read_text(encoding="utf-8")
+    )
+    install = next(
+        item for item in workflow["jobs"]["safety"]["steps"] if item.get("name") == "Install Safety"
+    )
+    install["run"] = f"{install['run'].rstrip()} --ignore-installed"
+    _assert_run_safety_has_no_ignore_token(_run_safety_step_run(workflow))
+
+    mutated_run = _run_safety_step_run(workflow).replace(
+        "scripts/run_safety_scan.py",
+        "scripts/run_safety_scan.py --ignore SFTY-20260217-93940",
+        1,
+    )
+    with pytest.raises(AssertionError, match="--ignore"):
+        _assert_run_safety_has_no_ignore_token(mutated_run)
 
 
 def test_external_pen_test_handoff_exists_without_claiming_attestation() -> None:

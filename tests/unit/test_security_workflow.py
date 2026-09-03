@@ -199,7 +199,7 @@ def test_safety_job_keeps_working_files_under_canonical_directory() -> None:
 
     # Every bucket the inventory writes is exactly what Safety reads.
     assert _requirement_inputs(run) == {f"{SAFETY_WORK_DIR}/{bucket}" for bucket in SAFETY_BUCKETS}
-    assert run["run"].count("--ignore SFTY-20260217-93940") == 1
+    assert "--ignore" not in run["run"]
 
 
 def test_pip_audit_job_exports_all_profiles_under_canonical_directory() -> None:

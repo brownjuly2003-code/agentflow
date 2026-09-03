@@ -286,9 +286,7 @@ jobs:
           # until 2026-07-20; PyUp corrected the entry (verified: safety
           # 2.3.5 reports 0 findings on the pinned langchain stack), so the
           # ignore is gone. If it ever resurfaces, it fails this job loudly.
-          safety check \
-            --ignore SFTY-20260217-93940 \
-            --ignore SFTY-20260724-05622 \
+          python scripts/run_safety_scan.py --waivers security/trivy-waivers.json \
             -r .artifacts/security/safety/requirements-main.txt \
             -r .artifacts/security/safety/requirements-sdk.txt \
             -r .artifacts/security/safety/requirements-integrations.txt \

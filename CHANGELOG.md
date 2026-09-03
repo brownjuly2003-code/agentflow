@@ -4,6 +4,13 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — Safety ignores are scoped per requirements bucket
+
+`scripts/run_safety_scan.py` runs `safety check` once per inventory bucket and
+applies `--ignore` only for `safety_id` values whose waiver scope matches that
+bucket. Expired waivers stop suppressing findings. A waiver whose scope is not
+scanned, or a duplicate `safety_id`, fails closed.
+
 ### Documentation — root evidence records relocated (2026-09-02)
 
 Twenty-one immutable tracked Markdown records moved from the repository root

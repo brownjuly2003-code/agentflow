@@ -47,6 +47,11 @@ Auth exemptions:
 - `GET /openapi.json`
 - `GET /metrics`
 
+`/metrics` is exempt because Prometheus scrapes it in-cluster through the
+ClusterIP Service. A production Ingress must not route it; the chart's
+production contract (`config.profile=production`) rejects a values file
+that would.
+
 ## Query and Pagination Model
 
 Natural-language queries support cursor pagination through `POST /v1/query`.
@@ -120,7 +125,7 @@ Typical paginated response:
 | `POST` | `/v1/alerts/{alert_id}/test` | Send a synthetic alert notification | Path param only |
 | `GET` | `/v1/alerts/{alert_id}/history` | Alert evaluation and delivery history | Path param only |
 | `GET` | `/v1/slo` | SLIs (share of good units per window), error budget, multi-window burn rates; `unknown` when the window holds no data | None |
-| `GET` | `/metrics` | Prometheus scrape endpoint | No auth required |
+| `GET` | `/metrics` | Prometheus scrape endpoint | No auth required; in-cluster scrape only — production ingress must not route it |
 
 ## Admin API
 

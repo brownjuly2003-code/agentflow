@@ -38,7 +38,18 @@ _ENVIRONMENT_VALUES = {
     },
     "ingress": {
         "className": "nginx",
-        "hosts": [{"host": "api.example.com", "paths": [{"path": "/", "pathType": "Prefix"}]}],
+        "hosts": [
+            {
+                "host": "api.example.com",
+                "paths": [
+                    {"path": "/v1", "pathType": "Prefix"},
+                    {"path": "/admin", "pathType": "Prefix"},
+                    {"path": "/docs", "pathType": "Prefix"},
+                    {"path": "/redoc", "pathType": "Prefix"},
+                    {"path": "/openapi.json", "pathType": "Prefix"},
+                ],
+            }
+        ],
         "tls": [{"secretName": "agentflow-tls", "hosts": ["api.example.com"]}],
     },
     "secrets": {"existingSecret": "agentflow-production-secret"},

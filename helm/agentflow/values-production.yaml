@@ -79,6 +79,30 @@ secrets:
 # TLS terminates here by default. If your platform terminates it in a gateway
 # ahead of the chart, set ingress.enabled=false and record that decision --
 # the contract then stops asking for `tls` and for trustedProxies.
+#
+# Production ingress must not route /metrics (audit F-10). That endpoint is
+# unauthenticated by design so in-cluster Prometheus can scrape the ClusterIP
+# Service. A Prefix path of `/` or `/metrics` is refused, as is Exact `/metrics`
+# (Exact `/` matches only `/` and cannot reach the mount). pathType
+# ImplementationSpecific is refused (controller-defined matching cannot be
+# proven). Enumerate the public prefixes instead of Prefix `/`, for example:
+#
+#   hosts:
+#     - host: api.example.com
+#       paths:
+#         - path: /v1
+#           pathType: Prefix
+#         - path: /admin
+#           pathType: Prefix
+#         - path: /docs
+#           pathType: Prefix
+#         - path: /redoc
+#           pathType: Prefix
+#         - path: /openapi.json
+#           pathType: Prefix
+#
+# Or route metrics on a separate internal-only host/ingress. Dev defaults in
+# values.yaml stay `path: /` -- the guard is production-only.
 ingress:
   enabled: true
   className: ""  # empty selects the cluster's default IngressClass -- name it

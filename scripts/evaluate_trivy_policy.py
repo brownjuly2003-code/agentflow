@@ -60,7 +60,7 @@ def _normalized_finding(item: Finding, target: str) -> Finding:
     }
 
 
-def _validate_waiver(item: Waiver) -> None:
+def validate_waiver(item: Waiver) -> None:
     required = (
         "id",
         "package",
@@ -96,7 +96,7 @@ def evaluate_report(
 
     waivers = list(scope.get("waivers") or [])
     for waiver in waivers:
-        _validate_waiver(waiver)
+        validate_waiver(waiver)
     keys = [_waiver_key(waiver) for waiver in waivers]
     if len(keys) != len(set(keys)):
         raise ValueError(f"duplicate waiver key in scope {scope_name}")

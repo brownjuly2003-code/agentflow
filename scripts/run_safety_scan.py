@@ -12,6 +12,12 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.evaluate_trivy_policy import validate_waiver
+
 EXIT_SCAN_FAILED = 1
 EXIT_NO_BUCKETS = 2
 EXIT_BUCKET_MISSING_OR_EMPTY = 3
@@ -101,6 +107,13 @@ def _load_policy(path: Path) -> dict[str, Any]:
                     f"malformed waiver file: waiver in scope {scope_name!r} must be an object",
                     EXIT_MALFORMED_WAIVERS,
                 )
+            try:
+                validate_waiver(waiver)
+            except ValueError as exc:
+                raise SafetyScanError(
+                    f"malformed waiver file: invalid waiver in scope {scope_name!r}: {exc}",
+                    EXIT_MALFORMED_WAIVERS,
+                ) from exc
             _validated_safety_id(waiver, str(scope_name))
     return payload
 

@@ -584,6 +584,67 @@ def test_non_string_expires_on_fails_closed(
     assert "expires_on" in captured.err.lower()
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "id",
+        "package",
+        "installed_version",
+        "fixed_version",
+        "expires_on",
+        "disposition",
+        "rationale",
+        "removal_condition",
+    ],
+)
+def test_missing_shared_waiver_field_fails_closed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    field: str,
+) -> None:
+    payload = _policy(**{"flink-runtime": [_waiver(HTTPLIB2_ID)]})
+    del payload["scopes"]["flink-runtime"]["waivers"][0][field]
+    waivers = _write_json(tmp_path / "waivers.json", payload)
+
+    with pytest.raises(SafetyScanError) as excinfo:
+        _load_policy(waivers)
+    assert excinfo.value.exit_code == EXIT_MALFORMED_WAIVERS
+    assert field in str(excinfo.value)
+
+    bucket = _write_bucket(tmp_path / "requirements-flink-runtime.txt")
+    runner = FakeRunner()
+    code = main(_argv(waivers, bucket), runner=runner)
+    captured = capsys.readouterr()
+
+    assert code == EXIT_MALFORMED_WAIVERS
+    assert runner.calls == []
+    assert "malformed" in captured.err.lower()
+    assert field in captured.err
+
+
+def test_unsupported_shared_waiver_disposition_fails_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload = _policy(**{"flink-runtime": [_waiver(HTTPLIB2_ID)]})
+    payload["scopes"]["flink-runtime"]["waivers"][0]["disposition"] = "affected"
+    waivers = _write_json(tmp_path / "waivers.json", payload)
+
+    with pytest.raises(SafetyScanError) as excinfo:
+        _load_policy(waivers)
+    assert excinfo.value.exit_code == EXIT_MALFORMED_WAIVERS
+    assert "disposition" in str(excinfo.value)
+
+    bucket = _write_bucket(tmp_path / "requirements-flink-runtime.txt")
+    runner = FakeRunner()
+    code = main(_argv(waivers, bucket), runner=runner)
+    captured = capsys.readouterr()
+
+    assert code == EXIT_MALFORMED_WAIVERS
+    assert runner.calls == []
+    assert "malformed" in captured.err.lower()
+    assert "disposition" in captured.err
+
+
 def test_absent_safety_id_is_skipped_not_malformed(tmp_path: Path) -> None:
     waiver = _waiver(HTTPLIB2_ID)
     del waiver["safety_id"]

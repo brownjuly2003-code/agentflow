@@ -460,6 +460,10 @@ jobs:
       - name: Install dependencies (frozen lock profile)
         run: bash scripts/ci_sync.sh dev-tools
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.3
+      - name: Report Helm version
+        run: helm version --short
       - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           install_only: true

@@ -31,6 +31,21 @@ After setup, install the TypeScript SDK dependencies if you touch `sdk-ts/`:
 cd sdk-ts && npm install && cd ..
 ```
 
+Before a pre-release or pre-audit run, verify that the active Python
+interpreter still matches the frozen dependency resolution and the metadata of
+local editable packages:
+
+```bash
+python scripts/check_env_matches_lock.py
+```
+
+The preflight is offline and read-only. It prints the exact lock or editable
+drift plus repair commands and exits non-zero when the environment is stale.
+A successful `pip check` from a stale shared virtual environment is not
+release evidence: `pip check` proves only that the packages currently present
+are internally compatible, not that they are the versions in `uv.lock` or the
+current workspace metadata.
+
 ## Daily Workflow
 
 1. Run the smallest relevant test slice first.

@@ -68,6 +68,12 @@ _PRODUCTION_POSTURE: tuple[str, ...] = (
     "secrets.existingSecret=agentflow-prod-secret",
     "--set",
     "config.corsOrigins=https://app.example.com",
+    "--set",
+    "analyticsRetention.enabled=true",
+    "--set",
+    "analyticsRetention.dryRun=false",
+    "--set",
+    "analyticsRetention.concurrencyPolicy=Forbid",
 )
 
 

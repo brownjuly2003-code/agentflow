@@ -9,6 +9,11 @@ spec:
   podSelector:
     matchLabels:
       {{- include "agentflow.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values:
+          - analytics-retention
   policyTypes:
     - Ingress
     - Egress
@@ -72,3 +77,64 @@ spec:
           port: {{ .Values.networkPolicy.egressPorts.postgres }}
     {{- end }}
 {{- end }}
+{{ if and .Values.networkPolicy.enabled .Values.analyticsRetention.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentflow.fullname" . }}-analytics-retention-egress
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: analytics-retention
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # DNS is required before the API Service name can be resolved.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "agentflow.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentflow.fullname" . }}-analytics-retention-api-ingress
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "agentflow.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: analytics-retention
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+{{ end }}

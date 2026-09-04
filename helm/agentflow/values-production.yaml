@@ -78,6 +78,13 @@ networkPolicy:
     - kubernetes.io/metadata.name: ingress-nginx
     # - kubernetes.io/metadata.name: monitoring   # <- replace with the namespace that runs Prometheus
 
+# The API owns query-analytics storage; this job only calls its authenticated
+# admin endpoint. Production must execute the final prune and forbid overlap.
+analyticsRetention:
+  enabled: true
+  dryRun: false
+  concurrencyPolicy: Forbid
+
 # Key material stays outside Helm: values land in release metadata and shell
 # history. Point existingSecret at the Secret your secrets operator or CSI
 # driver projects, holding `admin-key` and `api_keys.yaml`.

@@ -132,6 +132,21 @@ networkPolicy:
     icebergCatalog: 8181
     objectStore: 9000
 
+# Scheduled pruning runs through the authenticated API so the API process
+# remains the sole owner of its DuckDB/PVC. retentionDays="" delegates the
+# window to QueryAnalyticsPolicy (30 days by default).
+analyticsRetention:
+  enabled: false
+  schedule: "0 3 * * *"
+  retentionDays: ""
+  dryRun: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  backoffLimit: 1
+  resources: {}
+
 # Kafka clients use the same fail-closed SASL/TLS contract. Credentials are
 # always read from an operator-managed Secret.
 kafkaAuth:

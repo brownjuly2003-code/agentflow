@@ -145,11 +145,17 @@ All admin endpoints require `X-Admin-Key`.
 | `GET` | `/v1/admin/analytics/top-entities` | Most requested entities | `limit`, `window` |
 | `GET` | `/v1/admin/analytics/latency` | Latency analytics | `window` |
 | `GET` | `/v1/admin/analytics/anomalies` | Usage anomalies | `window` |
+| `POST` | `/v1/admin/analytics/retention` | Prune expired query analytics through the API-owned store | Body: optional `retention_days` (>=1), `dry_run` (default `false`) |
 
 `top-queries` items carry `{"query": ..., "fingerprint": ..., "count": ...}`.
 `query` is `null` unless the deployment opted into storing question text; the
 peppered `fingerprint` is what groups repeats either way, and the counts are the
 same. See [what query analytics keeps](../SECURITY.md#what-query-analytics-keeps).
+
+When `retention_days` is omitted, the retention endpoint uses
+`AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS` (30 by default). A dry run returns
+`deleted_rows: null` without calling the store; a final run returns the deleted
+row count.
 
 ## Examples
 
@@ -752,12 +758,16 @@ All admin routes require `X-Admin-Key` and are intended for platform owners, not
 - `GET /v1/admin/analytics/top-entities`
 - `GET /v1/admin/analytics/latency`
 - `GET /v1/admin/analytics/anomalies`
+- `POST /v1/admin/analytics/retention`
 
 **Representative curl**
 
 ```bash
 curl -H "X-Admin-Key: admin-secret" http://localhost:8000/v1/admin/keys
 curl -H "X-Admin-Key: admin-secret" http://localhost:8000/v1/admin/usage
+curl -X POST -H "X-Admin-Key: admin-secret" -H "Content-Type: application/json" \
+  -d '{"retention_days":30,"dry_run":true}' \
+  http://localhost:8000/v1/admin/analytics/retention
 ```
 
 **Representative Python (HTTP)**

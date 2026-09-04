@@ -36,6 +36,16 @@ Deliberately NOT checked here:
 {{- $problems = append $problems "image.digest is empty: production must deploy the immutable API artifact as repository@sha256:...; tags do not prove that staging and release use the same image (audit F-19)" -}}
 {{- end -}}
 
+{{- if not .Values.analyticsRetention.enabled -}}
+{{- $problems = append $problems "analyticsRetention.enabled=false: production must schedule finite query-analytics retention through the authenticated API" -}}
+{{- end -}}
+{{- if .Values.analyticsRetention.dryRun -}}
+{{- $problems = append $problems "analyticsRetention.dryRun=true: production retention must execute the final delete, not only preview it" -}}
+{{- end -}}
+{{- if ne .Values.analyticsRetention.concurrencyPolicy "Forbid" -}}
+{{- $problems = append $problems (printf "analyticsRetention.concurrencyPolicy=%s: production must use Forbid so retention jobs cannot overlap" .Values.analyticsRetention.concurrencyPolicy) -}}
+{{- end -}}
+
 {{- /* Operator-declared plaintext exemptions, mirroring the app-side gate. */ -}}
 {{- $insecureOk := "" -}}
 {{- range .Values.extraEnv -}}

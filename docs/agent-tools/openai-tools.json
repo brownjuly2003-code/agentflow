@@ -578,6 +578,46 @@
   {
     "type": "function",
     "function": {
+      "name": "prune_analytics_retention_v1_admin_analytics_retention_post",
+      "description": "Prune Analytics Retention",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "X-Admin-Key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X-Admin-Key"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "list_my_alerts_v1_alerts_get",
       "description": "List My Alerts",
       "parameters": {

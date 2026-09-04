@@ -20,7 +20,9 @@ The policy here is deliberately conservative:
   operator's intent to read questions is not the user's consent to have a
   pasted secret retained.
 * **Retention is finite and stated.** ``retention_days`` (default 30) is the
-  contract `scripts/prune_query_analytics.py` enforces against both stores.
+  contract enforced by the authenticated admin retention endpoint. The opt-in
+  Helm CronJob invokes that endpoint, keeping the API process as the sole store
+  owner; `scripts/prune_query_analytics.py` remains an offline maintenance tool.
 
 The fingerprint is peppered so a leaked analytics table cannot be joined
 against fingerprints of the same questions computed elsewhere -- the same

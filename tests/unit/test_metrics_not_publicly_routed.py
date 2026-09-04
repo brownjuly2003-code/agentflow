@@ -150,12 +150,16 @@ def _subject_is_ingress_rooted(subject: str, enclosing_ingress: bool) -> bool:
     return True
 
 
-def _rhs_is_ingress_value(expr: str, stack: list[tuple[str, bool]], ingress_vars: set[str]) -> bool:
-    """True when an assignment RHS is an ingress-rooted / user-controlled value."""
+def _rhs_is_user_value(
+    expr: str,
+    stack: list[tuple[str, bool]],
+    user_value_vars: set[str],
+) -> bool:
+    """True when an assignment RHS is a user-controlled Helm value."""
     refs = _VALUES_REF.findall(expr)
-    if any(_INGRESS_VALUES_REF.search(ref) for ref in refs):
+    if refs:
         return True
-    if any(name in ingress_vars for name in _HELM_VAR.findall(expr)):
+    if any(name in user_value_vars for name in _HELM_VAR.findall(expr)):
         return True
     if not _dot_is_ingress(stack):
         return False
@@ -173,13 +177,13 @@ def _analyze_ingress_interpolations(source: str) -> tuple[list[str], set[str]]:
     Scope-aware: `with`/`range` whose subject is rooted at `.Values.ingress`
     (directly, or because the enclosing rebinding scope already is) make every
     interpolating action user-controlled — a bare `.`, `.anything`, `.a.b` —
-    without enumerating field names. Outside those scopes, explicit
-    `.Values.ingress.*` / `$.Values.ingress.*` refs are checked the same way.
+    without enumerating field names. Outside those scopes, every explicit
+    `.Values.*` / `$.Values.*` ref is checked the same way.
     """
     unquoted: list[str] = []
     seen_exceptions: set[str] = set()
     stack: list[tuple[str, bool]] = []
-    ingress_vars: set[str] = set()
+    user_value_vars: set[str] = set()
 
     for action in _helm_actions(source):
         if action.startswith("/*"):
@@ -205,10 +209,10 @@ def _analyze_ingress_interpolations(source: str) -> tuple[list[str], set[str]]:
         assigned = _ASSIGNMENT_ACTION.match(action)
         if assigned is not None:
             name, expr = assigned.group(1), assigned.group(2)
-            if _rhs_is_ingress_value(expr, stack, ingress_vars):
-                ingress_vars.add(name)
+            if _rhs_is_user_value(expr, stack, user_value_vars):
+                user_value_vars.add(name)
             else:
-                ingress_vars.discard(name)
+                user_value_vars.discard(name)
             continue
 
         if _CHART_AUTHORED.match(action):
@@ -224,8 +228,8 @@ def _analyze_ingress_interpolations(source: str) -> tuple[list[str], set[str]]:
 
         user_controlled = (
             _dot_is_ingress(stack)
-            or any(_INGRESS_VALUES_REF.search(ref) for ref in refs)
-            or any(name in ingress_vars for name in _HELM_VAR.findall(action))
+            or bool(refs)
+            or any(name in user_value_vars for name in _HELM_VAR.findall(action))
         )
         if user_controlled and _SAFE_PIPE.search(action) is None:
             unquoted.append(action)
@@ -653,12 +657,60 @@ def test_production_render_refuses_a_path_containing_cr(tmp_path: Path) -> None:
     assert "canonical single-line absolute path" in output
 
 
+@requires_helm
+@pytest.mark.parametrize("path", ["/ ", "/v1?debug=true"])
+def test_production_render_refuses_a_noncanonical_path(tmp_path: Path, path: str) -> None:
+    result = _render(
+        tmp_path,
+        {
+            "ingress": {
+                "hosts": [
+                    {
+                        "host": "api.example.com",
+                        "paths": [{"path": path, "pathType": "Exact"}],
+                    }
+                ]
+            }
+        },
+    )
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""
+    assert "api.example.com" in output
+    assert "canonical single-line absolute path" in output
+
+
+@requires_helm
+def test_production_render_refuses_an_ingress_host_without_paths(tmp_path: Path) -> None:
+    result = _render(
+        tmp_path,
+        {
+            "ingress": {
+                "hosts": [
+                    {
+                        "host": "api.example.com",
+                        "paths": [],
+                    }
+                ]
+            }
+        },
+    )
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""
+    assert "api.example.com" in output
+    assert "paths" in output
+    assert "route nothing" in output
+
+
 def test_ingress_template_quotes_every_user_controlled_scalar() -> None:
     """R3: a field added to ingress.yaml without quote/toYaml fails here.
 
     Control actions (`if`/`with`/`range`/`end`) may read `.Values.ingress.*`
     unquoted because they emit no YAML. Every interpolating action in an
-    ingress-rooted `with`/`range` (and every explicit `.Values.ingress.*` ref)
+    ingress-rooted `with`/`range` (and every explicit `.Values.*` ref)
     must pipe through `quote` or `toYaml`, except the schema-typed integer port.
     """
     source = INGRESS_TEMPLATE.read_text(encoding="utf-8")
@@ -748,6 +800,19 @@ def test_unquoted_ingress_analyzer_flags_in_memory_template_mutations() -> None:
     assert _unquoted_ingress_interpolations(assigned_quoted) == []
 
 
+def test_unquoted_ingress_analyzer_flags_values_outside_ingress_scope() -> None:
+    source = INGRESS_TEMPLATE.read_text(encoding="utf-8")
+    with_root_value = source.replace(
+        '  name: {{ include "agentflow.fullname" . }}',
+        '  name: {{ include "agentflow.fullname" . }}\n  suffix: {{ .Values.nameOverride }}',
+    )
+
+    assert with_root_value != source
+    flags = _unquoted_ingress_interpolations(with_root_value)
+    assert ".Values.nameOverride" in flags, flags
+    assert all('include "agentflow.fullname" .' not in flag for flag in flags), flags
+
+
 @requires_helm
 def test_production_render_refuses_multiline_ingress_class_name(tmp_path: Path) -> None:
     """A newline in className used to inject spec.defaultBackend for /metrics."""
@@ -782,6 +847,39 @@ def test_production_render_refuses_multiline_ingress_host(tmp_path: Path) -> Non
     assert result.returncode != 0
     assert result.stdout.strip() == ""
     assert "ingress.host" in output
+
+
+@requires_helm
+@pytest.mark.parametrize(
+    ("ingress", "field"),
+    [
+        ({"className": "nginx/controller"}, "ingress.className"),
+        (
+            {
+                "hosts": [
+                    {
+                        "host": "api_example.com",
+                        "paths": [{"path": "/v1", "pathType": "Prefix"}],
+                    }
+                ]
+            },
+            "ingress.host",
+        ),
+    ],
+    ids=("class-name", "host"),
+)
+def test_production_render_refuses_noncanonical_ingress_identity(
+    tmp_path: Path,
+    ingress: dict,
+    field: str,
+) -> None:
+    result = _render(tmp_path, {"ingress": ingress})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""
+    assert field in output
+    assert "canonical" in output
 
 
 @requires_helm

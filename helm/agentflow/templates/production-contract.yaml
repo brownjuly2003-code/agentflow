@@ -146,20 +146,25 @@ Deliberately NOT checked here:
 {{- if not .Values.config.trustedProxies -}}
 {{- $problems = append $problems "config.trustedProxies is empty while ingress is enabled: behind a proxy every caller shares the controller's address, so the failed-auth limiter keys on it. Name the proxy peers allowed to set X-Forwarded-For" -}}
 {{- end -}}
+{{- $ingressIdentityPattern := "^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$" }}
 {{- $className := .Values.ingress.className | default "" | toString }}
-{{- if or (contains "\n" $className) (contains "\r" $className) (contains "\t" $className) }}
-{{- $problems = append $problems (printf "ingress.className=%q is not a canonical single-line value: it contains CR, LF, or tab, which can inject spec.defaultBackend and send unmatched requests (including unauthenticated /metrics) to the API. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; keep className a single line (or route metrics on a separate internal-only host/ingress)" $className) }}
+{{- if not (regexMatch $ingressIdentityPattern $className) }}
+{{- $problems = append $problems (printf "ingress.className=%q is not a canonical single-line value matching %s, so this render cannot prove it is one ingress class rather than injected YAML. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; use a canonical class name (or route metrics on a separate internal-only host/ingress)" $className $ingressIdentityPattern) }}
 {{- end }}
 {{- range .Values.ingress.hosts }}
 {{- $host := .host | default "" | toString }}
-{{- if or (contains "\n" $host) (contains "\r" $host) (contains "\t" $host) }}
-{{- $problems = append $problems (printf "ingress.host=%q is not a canonical single-line value: it contains CR, LF, or tab, so this render cannot prove /metrics stays off the public Ingress. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; enumerate the public path prefixes instead of / (or route metrics on a separate internal-only host/ingress)" $host) }}
+{{- if not (regexMatch $ingressIdentityPattern $host) }}
+{{- $problems = append $problems (printf "ingress.host=%q is not a canonical single-line value matching %s, so this render cannot prove /metrics stays off one public Ingress rule. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; use a canonical host and enumerate the public path prefixes (or route metrics on a separate internal-only host/ingress)" $host $ingressIdentityPattern) }}
+{{- end }}
+{{- if not .paths }}
+{{- $problems = append $problems (printf "ingress host %q has no paths: the rendered Ingress rule would be invalid and route nothing; enumerate the public path prefixes" $host) }}
 {{- end }}
 {{- range .paths }}
 {{- $path := .path | default "" }}
 {{- $pathType := .pathType | default "" }}
-{{- if or (not (hasPrefix "/" $path)) (contains "\n" $path) (contains "\r" $path) (contains "\t" $path) }}
-{{- $problems = append $problems (printf "ingress host %q path %q is not a canonical single-line absolute path: it must start with / and contain no CR, LF, or tab, so this render cannot prove /metrics stays off the public Ingress. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; enumerate the public path prefixes instead of / (or route metrics on a separate internal-only host/ingress)" $host $path) }}
+{{- $pathPattern := "^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$" }}
+{{- if not (regexMatch $pathPattern $path) }}
+{{- $problems = append $problems (printf "ingress host %q path %q is not a canonical single-line absolute path matching %s, so this render cannot prove /metrics stays off the public Ingress. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; enumerate canonical public path prefixes (or route metrics on a separate internal-only host/ingress)" $host $path $pathPattern) }}
 {{- end }}
 {{- $trimmed := $path | trimSuffix "/" }}
 {{- if eq $trimmed "" }}

@@ -162,11 +162,12 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
+| Every `ingress.hosts[]` entry has a non-empty `paths` list | An Ingress rule with no HTTP paths is invalid and routes nothing |
 | `ingress.tls` non-empty when ingress is enabled | TLS terminates somewhere you can point at |
 | `ingress.annotations` has none of `rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, or `server-snippet` under `nginx.ingress.kubernetes.io/` or legacy `ingress.kubernetes.io/` | ingress-nginx interprets these routing-control annotations after Helm checks the literal host/path, so they can change matching or the upstream URI and reach `/metrics` |
 | `ingress.hosts[].paths[]` must not route `/metrics` | `/metrics` is unauthenticated for in-cluster scrape; enumerate the public prefixes instead of Prefix `/` ([Production ingress and `/metrics`](../deployment.md#production-ingress-and-metrics)) |
 | `pathType` is `Prefix` or `Exact` | Controller-defined matching cannot be proven at render time, so ImplementationSpecific cannot be shown to keep `/metrics` off Ingress |
-| `path`, `host` and `className` are canonical single-line values (no CR/LF/tab; `path` absolute) | A newline in an unquoted scalar can inject `spec.defaultBackend` or a second rule and send unmatched `/metrics` to the API |
+| `path` matches `^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$`; `host` and `className` match `^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$` | Canonical single-line routing values exclude whitespace, YAML injection, and controller-ambiguous spellings that could expose unmatched `/metrics` |
 | `config.trustedProxies` set when ingress is enabled | Behind a proxy every caller otherwise shares the controller's address, which is what the failed-auth limiter keys on |
 | Explicit `config.corsOrigins` | CORS runs with credentials; a wildcard lets any site read authenticated responses, and the chart's `localhost` default is not an answer |
 | `serving.clickhouse.secure=true` | No plaintext hop to an external ClickHouse |

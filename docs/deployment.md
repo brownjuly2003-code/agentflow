@@ -125,17 +125,20 @@ Prometheus scrapes `/metrics` in-cluster through the ClusterIP Service; the
 endpoint is unauthenticated by design. A production Ingress
 (`config.profile=production`) must not route it: the chart's production
 contract rejects a values file whose host paths would send `/metrics` to the
-API. Enumerate these public path prefixes instead of `path: /` (or expose
-metrics on a separate internal-only host/ingress). Dev chart defaults keep
-`path: /` and are unchanged.
+API. Enumerate only the production path prefixes below instead of `path: /`
+(or expose metrics on a separate internal-only host/ingress). Dev chart
+defaults keep `path: /` and are unchanged.
 
 ```
 /v1
 /admin
-/docs
-/redoc
-/openapi.json
 ```
+
+The interactive documentation and schema paths are development surfaces, not
+production ingress prefixes. With `config.profile=production`, the application
+returns `404` for `/docs`, `/redoc`, and `/openapi*`; do not publish them through
+the production Ingress. `/docs` and `/openapi.json` are auth-exempt outside
+production, while `/redoc` follows the normal X-API-Key middleware.
 
 `/health/live` and `/health/ready` are in-cluster-only for the same reason as
 `/metrics`: kubelet probes dial the Pod IP and never traverse Ingress.

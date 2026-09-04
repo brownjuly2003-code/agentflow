@@ -125,12 +125,10 @@ service:
 #           pathType: Prefix
 #         - path: /admin
 #           pathType: Prefix
-#         - path: /docs
-#           pathType: Prefix
-#         - path: /redoc
-#           pathType: Prefix
-#         - path: /openapi.json
-#           pathType: Prefix
+#
+# Interactive docs and the OpenAPI schema are demo/development surfaces. The
+# application returns 404 for /docs, /redoc, and /openapi* in production; do
+# not add them to the production Ingress.
 #
 # Or route metrics on a separate internal-only host/ingress. Dev defaults in
 # values.yaml stay `path: /` -- the guard is production-only.

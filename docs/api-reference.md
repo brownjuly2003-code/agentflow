@@ -40,17 +40,26 @@ cancellation. The [machine-readable capability matrix](../config/project_claims.
 is checked against the actual public methods and renders the
 [SDK capability contract](sdk-capabilities.md).
 
-Auth exemptions:
-- `GET /v1/health`
-- `GET /docs`
-- `GET /redoc`
-- `GET /openapi.json`
-- `GET /metrics`
+X-API-Key middleware exemptions:
+
+- `GET /v1/health` is the public pipeline-health endpoint.
+- `GET /health/live` and `GET /health/ready` are internal orchestrator probes.
+- `GET /docs` and `GET /openapi.json` are available without a key in demo and
+  development profiles only.
+- `GET /metrics` is the in-cluster Prometheus scrape endpoint.
+- `POST /v1/node/events` uses its own bearer node token instead of an API key.
+
+Admin routes bypass the X-API-Key middleware but require `X-Admin-Key`; the
+node-ingest route likewise remains authenticated by its bearer token. `GET /redoc`
+is not exempt from the X-API-Key middleware outside production. In the
+production profile, the application returns `404` for `/docs`, `/redoc`, and
+`/openapi*`, so none is a production publication surface. `/health` without a
+suffix is not a registered endpoint.
 
 `/metrics` is exempt because Prometheus scrapes it in-cluster through the
 ClusterIP Service. A production Ingress must not route it; the chart's
-production contract (`config.profile=production`) rejects a values file
-that would.
+production contract (`config.profile=production`) rejects a values file that
+would.
 
 ## Query and Pagination Model
 

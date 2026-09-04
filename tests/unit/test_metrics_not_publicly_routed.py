@@ -82,6 +82,7 @@ _HELM_VAR = re.compile(r"\$([A-Za-z0-9_]+)\b")
 _REBIND_KEYWORDS = frozenset({"with", "range"})
 _PUSH_KEYWORDS = frozenset({"if", "with", "range", "define", "block"})
 _IN_CLUSTER_ONLY = ("/metrics", "/health/live", "/health/ready")
+_PRODUCTION_HIDDEN = ("/docs", "/redoc", "/openapi.json")
 
 
 def _ingress_documents(stdout: str) -> list[dict]:
@@ -296,7 +297,7 @@ def _iter_app_paths() -> Iterator[str]:
     yield from walk(app.routes, "")
 
 
-def test_documented_prefixes_cover_public_routes_and_exclude_metrics() -> None:
+def test_documented_prefixes_cover_production_routes_only() -> None:
     prefixes = _documented_public_prefixes()
     for prefix in prefixes:
         assert not _would_route_metrics(prefix), (
@@ -305,6 +306,10 @@ def test_documented_prefixes_cover_public_routes_and_exclude_metrics() -> None:
         for in_cluster in _IN_CLUSTER_ONLY:
             assert not _prefix_matches(prefix, in_cluster), (
                 f"documented prefix {prefix!r} would match in-cluster-only {in_cluster!r}"
+            )
+        for hidden in _PRODUCTION_HIDDEN:
+            assert not _prefix_matches(prefix, hidden), (
+                f"documented prefix {prefix!r} would publish production-hidden {hidden!r}"
             )
 
     fixture_paths = [
@@ -315,6 +320,8 @@ def test_documented_prefixes_cover_public_routes_and_exclude_metrics() -> None:
     uncovered: list[str] = []
     for path in _iter_app_paths():
         if any(_prefix_matches(in_cluster, path) for in_cluster in _IN_CLUSTER_ONLY):
+            continue
+        if any(_prefix_matches(hidden, path) for hidden in _PRODUCTION_HIDDEN):
             continue
         if not any(_prefix_matches(prefix, path) for prefix in prefixes):
             uncovered.append(path)

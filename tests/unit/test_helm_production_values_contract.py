@@ -52,9 +52,6 @@ _ENVIRONMENT_VALUES = {
                 "paths": [
                     {"path": "/v1", "pathType": "Prefix"},
                     {"path": "/admin", "pathType": "Prefix"},
-                    {"path": "/docs", "pathType": "Prefix"},
-                    {"path": "/redoc", "pathType": "Prefix"},
-                    {"path": "/openapi.json", "pathType": "Prefix"},
                 ],
             }
         ],

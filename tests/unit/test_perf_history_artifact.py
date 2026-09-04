@@ -120,7 +120,11 @@ def test_current_docs_name_history_owner_and_snapshot_lifecycle() -> None:
     )
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
     load_workflow = (ROOT / ".github" / "workflows" / "load-test.yml").read_text(encoding="utf-8")
 
     for current_doc in (readme, docs_hub, perf_hub, contributing):

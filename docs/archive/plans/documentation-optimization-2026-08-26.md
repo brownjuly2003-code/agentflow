@@ -1,3 +1,15 @@
+# Archived plan: DE_project documentation optimization
+
+- Original location: `plan_26_08_2026.md`
+- Archived: 2026-09-04
+- Reason: all eight checklist items were completed; the plan is no longer an active repository-root entrypoint
+- Replacement: [documentation hub](../../README.md), [engineering status](../../STATUS.md), and the documentation checks under `scripts/`
+- Content type: completed implementation plan and closure evidence
+
+The completed plan body below is preserved from the repository-root version.
+
+<!-- ARCHIVE BODY START -->
+
 # Оптимизация документации DE_project
 
 > Обновлено: 2026-08-27. Scope — документация реального AgentFlow Runtime.

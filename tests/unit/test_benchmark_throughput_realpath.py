@@ -70,7 +70,11 @@ def test_throughput_docs_name_owner_and_snapshot_lifecycle() -> None:
     )
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "Real-path throughput benchmark artifact lifecycle" in current
     assert "`python scripts/benchmark_throughput_realpath.py`" in current

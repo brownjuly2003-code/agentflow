@@ -84,11 +84,15 @@ applies `--ignore` only for `safety_id` values whose waiver scope matches that
 bucket. Expired waivers stop suppressing findings. A waiver whose scope is not
 scanned, or a duplicate `safety_id`, fails closed.
 
-### Documentation — root evidence records relocated (2026-09-02)
+### Documentation — root records archived (2026-09-02–2026-09-04)
 
 Twenty-one immutable tracked Markdown records moved from the repository root
 to `docs/evidence/records/` with unchanged filenames and SHA-256 digests.
-Living citations now use those paths. `plan_26_08_2026.md` stays at the root.
+Living citations now use those paths. After all eight documentation-cleanup
+items closed, `plan_26_08_2026.md` moved to `docs/archive/plans/` with its
+closure evidence intact. The retired local 2026-04-17 benchmark baseline moved
+from the standalone `docs/benchmark-baseline-archive/` directory into the
+performance archive.
 
 ### Security — nltk 3.10.0 -> 3.10.3 in uv.lock (Dependabot GHSA-m4rf-3fr8-xwx3, GHSA-6hwm-xvph-95vm)
 

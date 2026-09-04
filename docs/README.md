@@ -51,7 +51,7 @@ is needed.
 | Agent tool schemas | [`agent-tools/`](agent-tools/) | Generated Claude/OpenAI tool JSON; regenerate with the OpenAPI family, never hand-edit |
 | API walkthrough | [`api/`](api/index.md) | Curated HTTP integration path; keep runnable with the MkDocs walkthrough |
 | Architecture walkthrough | [`architecture/`](architecture/index.md) | Curated system walkthrough; keep aligned with `architecture.md` |
-| Benchmark baseline archive | [`benchmark-baseline-archive/`](benchmark-baseline-archive/) | Immutable copy of a retired gate baseline; do not refresh in place |
+| Benchmark baseline archive | [`archive/performance/benchmark-baseline-2026-04-17-local.json`](archive/performance/benchmark-baseline-2026-04-17-local.json) | Immutable copy of a retired gate baseline; do not refresh in place |
 | Benchmarks directory | `benchmarks/` | Reserved empty directory; do not dump host-specific reports here |
 | Codex task captures | `codex-tasks/` (gitignored) | Local session captures; not a living entrypoint |
 | Entity contract how-to | [`contracts/`](contracts/how-to-add-entity.md) | How to add an entity; keep with `config/contracts/` and the generator |

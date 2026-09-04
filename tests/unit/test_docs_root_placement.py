@@ -14,6 +14,10 @@ from scripts.check_docs_root_placement import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_completed_documentation_plan_is_not_a_repo_root_entrypoint() -> None:
+    assert "plan_26_08_2026.md" not in REPO_ROOT_MARKDOWN_ALLOWLIST
+
+
 def test_tracked_root_markdown_matches_the_allowlist() -> None:
     tracked = load_tracked_paths(ROOT)
 

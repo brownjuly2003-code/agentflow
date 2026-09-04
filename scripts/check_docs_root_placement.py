@@ -63,15 +63,13 @@ ROOT_MARKDOWN_ALLOWLIST = frozenset().union(
     GENERATED_REFERENCE_ROOT,
 )
 
-# Tracked Markdown that may sit directly under the repository root.
-# plan_26_08_2026.md stays until its plan items close.
+# Permanent project-facing Markdown that may sit directly under the repository root.
 REPO_ROOT_MARKDOWN_ALLOWLIST = frozenset(
     {
         "README.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
         "SECURITY.md",
-        "plan_26_08_2026.md",
     }
 )
 

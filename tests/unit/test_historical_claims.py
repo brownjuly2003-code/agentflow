@@ -9,6 +9,7 @@ from scripts.check_historical_claims import (
     FORBIDDEN_PHRASES,
     HISTORICAL_DIRECTORIES,
     IMMUTABLE_RECORD_DIRECTORIES,
+    IMMUTABLE_RECORD_PAGES,
     LIVING_INDEX_PAGES,
     check_historical_claims,
     find_claims,
@@ -47,6 +48,8 @@ def test_public_constants_describe_the_real_tree() -> None:
         assert (ROOT / directory).is_dir()
     for directory in IMMUTABLE_RECORD_DIRECTORIES:
         assert (ROOT / directory).is_dir()
+    for page in IMMUTABLE_RECORD_PAGES:
+        assert (ROOT / page).is_file()
     for owner in CLAIM_OWNERS:
         assert owner in tracked
     for page in LIVING_INDEX_PAGES:
@@ -69,6 +72,7 @@ def test_forbidden_phrases_are_living_status_vocabulary(phrase: str) -> None:
         ("docs/archive/product/README.md", False),
         ("docs/evidence/INDEX.md", False),
         ("docs/evidence/records/colima-runtime-stabilization.md", False),
+        ("docs/archive/plans/documentation-optimization-2026-08-26.md", False),
         ("docs/evidence/other-record.md", True),
         ("docs/STATUS.md", False),
         ("docs/perf/notes.txt", False),

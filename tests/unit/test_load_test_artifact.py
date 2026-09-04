@@ -127,7 +127,11 @@ def test_makefile_usage_docs_and_plan_name_load_smoke_owner() -> None:
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     perf_hub = " ".join((ROOT / "docs" / "perf" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "python tests/load/run_load_test.py" in makefile
     assert "--host http://localhost:8000" in makefile

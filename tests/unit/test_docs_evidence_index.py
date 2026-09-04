@@ -15,7 +15,7 @@ CLAIMS = ROOT / "config" / "project_claims.toml"
 ARCHITECTURE = ROOT / "docs" / "architecture.md"
 CHANGELOG = ROOT / "CHANGELOG.md"
 DV2_DEMO_EVIDENCE = ROOT / "docs" / "dv2-multi-branch" / "demo_evidence.md"
-DOCUMENTATION_PLAN = ROOT / "plan_26_08_2026.md"
+DOCUMENTATION_PLAN = ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md"
 
 SECURITY_DEPENDENCY_HEADING = "## Security and dependency records"
 ACCEPTANCE_HEADING = "## Golden topology acceptance records"

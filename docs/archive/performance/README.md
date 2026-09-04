@@ -23,6 +23,7 @@ trend.
 
 | Archived snapshot | Original path | Last entry | Lifecycle |
 | --- | --- | --- | --- |
+| [`benchmark-baseline-2026-04-17-local.json`](benchmark-baseline-2026-04-17-local.json) | *docs/benchmark-baseline-archive/benchmark-baseline-2026-04-17-local.json* | 2026-04-17 | Immutable retired local 50-user / 60-second gate baseline; the current gate reads `docs/benchmark-baseline.json`. |
 | [`benchmark-compare-baseline-2026-04-12.json`](benchmark-compare-baseline-2026-04-12.json) | *docs/benchmarks/baseline.json* | 2026-04-12 18:04 UTC | Exact orphaned v7 p95-comparator baseline. The unused comparator was retired; the current release gate uses `scripts/check_performance.py` and `docs/benchmark-baseline.json`. |
 | [`perf-history-2026-04-27.json`](perf-history-2026-04-27.json) | *.github/perf-history.json* | 2026-04-27 08:14 UTC | Exact four-entry bot-managed log. The writer was removed after branch protection rejected its self-push; current history is ignored local runtime state. |
 

@@ -372,7 +372,9 @@ def test_docs_contributing_and_plan_name_trivy_runtime_owner() -> None:
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
     security_audit = (ROOT / "docs" / "security-audit.md").read_text(encoding="utf-8")
-    plan = (ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8")
+    plan = (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "| Trivy scan policy |" in docs_hub
     assert ".artifacts/trivy/" in docs_hub

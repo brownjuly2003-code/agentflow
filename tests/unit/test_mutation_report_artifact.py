@@ -152,7 +152,9 @@ def test_quality_report_reads_canonical_mutation_directory() -> None:
 def test_docs_contributing_and_plan_name_mutation_runtime_owner() -> None:
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
-    plan = (ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8")
+    plan = (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "| Mutation report |" in docs_hub
     assert "python scripts/mutation_report.py" in docs_hub

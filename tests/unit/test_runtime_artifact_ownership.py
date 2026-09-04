@@ -1,6 +1,6 @@
 """Runtime-artifact ownership closure ratchet for documentation-plan item 6.
 
-Item 6 of `plan_26_08_2026.md` moved every replaceable runtime output family
+Item 6 of `docs/archive/plans/documentation-optimization-2026-08-26.md` moved every replaceable runtime output family
 (benchmarks, quality/evaluation reports, scanner working files, chaos and
 mutation reports, promotion evidence, the Terraform plan file, ...) under the
 ignored `.artifacts/` root, one family per sub-slice. This module keeps that
@@ -16,7 +16,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = PROJECT_ROOT / ".github" / "workflows"
-PLAN = PROJECT_ROOT / "plan_26_08_2026.md"
+PLAN = PROJECT_ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md"
 ARTIFACT_ROOT = ".artifacts/"
 ARTIFACT_ACTIONS = (
     "actions/upload-artifact@",

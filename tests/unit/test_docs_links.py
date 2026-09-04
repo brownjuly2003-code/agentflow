@@ -98,6 +98,19 @@ def test_broken_link_in_evidence_records_is_ignored_but_sibling_pages_are_checke
     assert "docs/evidence/other.md:1: missing link target 'broken-sibling.md'" in problems
 
 
+def test_inline_code_is_not_parsed_as_a_markdown_link(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "contract.md").write_text(
+        "Use `^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$`; "
+        "see [`missing`](missing.md).\n",
+        encoding="utf-8",
+    )
+
+    assert check_docs_links(tmp_path) == [
+        "docs/contract.md:1: missing link target 'missing.md'"
+    ]
+
+
 def test_archive_body_marker_skips_only_the_preserved_body(tmp_path: Path) -> None:
     (tmp_path / "docs" / "archive").mkdir(parents=True)
     (tmp_path / "docs" / "archive" / "record.md").write_text(

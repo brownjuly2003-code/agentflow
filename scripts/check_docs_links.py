@@ -306,7 +306,7 @@ def _link_problems(
     line: str,
     tracked: set[str] | None,
 ) -> Iterable[str]:
-    for target in MARKDOWN_LINK_RE.findall(line):
+    for target in MARKDOWN_LINK_RE.findall(BACKTICK_RE.sub("", line)):
         if target.startswith(("http://", "https://", "mailto:", "#")):
             continue
         path_part = target.split("#", 1)[0]

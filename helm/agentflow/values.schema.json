@@ -1208,7 +1208,15 @@
           "type": "boolean"
         },
         "ingressFromNamespaces": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "scrapeFromIngressNamespace": {
+          "type": "boolean"
         },
         "egressPorts": {
           "type": "object"

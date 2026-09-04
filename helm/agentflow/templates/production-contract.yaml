@@ -11,6 +11,15 @@ This file renders no object. It only evaluates, and on `profile=production`
 fails the render with every violation listed at once, so an operator fixes the
 whole set in one pass instead of one message per `helm template` round trip.
 
+`networkPolicy.ingressFromNamespaces` is checked when the policy is on: an
+empty list renders `ingress: []` (deny all), so neither the ingress
+controller nor Prometheus can reach the service port. An empty-map entry
+matches every namespace and is refused. A list whose every
+`kubernetes.io/metadata.name` is still `ingress-nginx` (and no non-empty
+entry lacks that key) blocks scrape from a dedicated monitoring namespace.
+Co-location (Prometheus in the ingress-controller namespace) is named via
+networkPolicy.scrapeFromIngressNamespace=true.
+
 Deliberately NOT checked here:
 
 - the control-plane PostgreSQL DSN, which the chart only ever sees as a Secret
@@ -37,6 +46,47 @@ Deliberately NOT checked here:
 
 {{- if not .Values.networkPolicy.enabled -}}
 {{- $problems = append $problems "networkPolicy.enabled=false: production requires the default-deny baseline (set networkPolicy.enabled=true; the cluster needs a NetworkPolicy controller)" -}}
+{{- else -}}
+{{- /* /metrics is unauthenticated so in-cluster Prometheus can scrape the
+     ClusterIP Service. The NetworkPolicy is the allow-list. An empty list
+     renders ingress: [] (deny all). An empty-map entry matches every
+     namespace. A list whose every kubernetes.io/metadata.name is
+     ingress-nginx (and no non-empty entry lacks that key) is the chart
+     default and blocks scrape from a dedicated monitoring namespace unless
+     scrapeFromIngressNamespace records co-location. */ -}}
+{{- $fromNs := .Values.networkPolicy.ingressFromNamespaces | default list -}}
+{{- $prometheusInIngress := .Values.networkPolicy.scrapeFromIngressNamespace -}}
+{{- if eq (len $fromNs) 0 -}}
+{{- $problems = append $problems "networkPolicy.ingressFromNamespaces is empty: the chart renders `ingress: []` (deny all), so neither the ingress controller nor in-cluster Prometheus can reach the service port. Enumerate the ingress-controller namespace and the scrape namespace." -}}
+{{- else -}}
+{{- range $fromNs -}}
+{{- if and (kindIs "map" .) (eq (len .) 0) -}}
+{{- $problems = append $problems "networkPolicy.ingressFromNamespaces contains an empty selector {}: an empty namespaceSelector matches every namespace and publishes the service port (/metrics included) cluster-wide. Name the namespace label." -}}
+{{- end -}}
+{{- end -}}
+{{- if not $prometheusInIngress -}}
+{{- $ingressOnly := true -}}
+{{- range $fromNs -}}
+{{- if kindIs "map" . -}}
+{{- if gt (len .) 0 -}}
+{{- if hasKey . "kubernetes.io/metadata.name" -}}
+{{- $nsName := index . "kubernetes.io/metadata.name" | toString -}}
+{{- if ne $nsName "ingress-nginx" -}}
+{{- $ingressOnly = false -}}
+{{- end -}}
+{{- else -}}
+{{- $ingressOnly = false -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- $ingressOnly = false -}}
+{{- end -}}
+{{- end -}}
+{{- if $ingressOnly -}}
+{{- $problems = append $problems "networkPolicy.ingressFromNamespaces enumerates only kubernetes.io/metadata.name=ingress-nginx: that is the chart default and it blocks in-cluster Prometheus scrape of unauthenticated /metrics from a dedicated monitoring namespace. Add the scrape namespace (values-production.yaml comments a monitoring placeholder to replace). If Prometheus deliberately runs in the ingress-controller namespace, keep this selector and set networkPolicy.scrapeFromIngressNamespace=true." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{- if .Values.serviceAccount.name -}}

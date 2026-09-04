@@ -63,8 +63,20 @@ config:
 
 # Default-deny baseline with explicit ingress/egress. The cluster needs a
 # NetworkPolicy controller for this to mean anything -- verify, do not assume.
+#
+# /metrics is unauthenticated so in-cluster Prometheus can scrape the ClusterIP
+# Service. The NetworkPolicy is the allow-list. This overlay keeps the chart
+# default (ingress-controller namespace only) and does not guess a scrape
+# namespace. The production contract refuses that unedited list until the
+# operator names the namespace that runs Prometheus, or sets
+# networkPolicy.scrapeFromIngressNamespace: true when Prometheus is
+# co-located in the ingress-controller namespace. Same pattern as
+# image.digest and secrets.existingSecret.
 networkPolicy:
   enabled: true
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: ingress-nginx
+    # - kubernetes.io/metadata.name: monitoring   # <- replace with the namespace that runs Prometheus
 
 # Key material stays outside Helm: values land in release metadata and shell
 # history. Point existingSecret at the Secret your secrets operator or CSI

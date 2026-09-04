@@ -12,6 +12,7 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+  {{- if .Values.networkPolicy.ingressFromNamespaces }}
   ingress:
     - from:
         {{- range .Values.networkPolicy.ingressFromNamespaces }}
@@ -22,6 +23,9 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.service.port }}
+  {{- else }}
+  ingress: []
+  {{- end }}
   egress:
     # DNS — required for any service-name resolution.
     - to:

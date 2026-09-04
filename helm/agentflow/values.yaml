@@ -119,6 +119,10 @@ networkPolicy:
   enabled: false
   ingressFromNamespaces:
     - kubernetes.io/metadata.name: ingress-nginx
+  # Set true only when Prometheus runs in the ingress-controller namespace,
+  # so an ingress-nginx-only ingressFromNamespaces list is deliberate.
+  # Production contract accepts that list only when this is true.
+  scrapeFromIngressNamespace: false
   egressPorts:
     redis: 6379
     kafka: 9092

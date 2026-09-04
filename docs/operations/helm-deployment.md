@@ -135,7 +135,20 @@ helm upgrade --install agentflow ./helm/agentflow   -f helm/agentflow/values-pro
 
 The overlay leaves empty exactly the values only your environment can supply
 (the verified API image digest, the Secret name, the origins, the ingress
-class/hosts/TLS, the trusted proxies). Render is fail-closed:
+class/hosts/TLS, the trusted proxies, and the Prometheus scrape namespace).
+Helm replaces lists instead of merging them — an environment file that
+names only the scrape namespace removes the ingress-controller entry and
+blocks the production Ingress. Repeat both selectors in the environment
+file:
+
+```yaml
+networkPolicy:
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: ingress-nginx
+    - kubernetes.io/metadata.name: monitoring
+```
+
+Render is fail-closed:
 `templates/production-contract.yaml` refuses a
 `profile=production` render that still violates the contract and reports every
 violation in one message, so you fix the whole set in one pass. It checks:
@@ -144,6 +157,7 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | --- | --- |
 | `image.digest=sha256:...` | Every API-derived workload consumes one immutable artifact; a tag cannot prove staging/release identity |
 | `networkPolicy.enabled=true` | Default-deny baseline; needs a NetworkPolicy controller in the cluster |
+| `networkPolicy.ingressFromNamespaces` not empty; not every `kubernetes.io/metadata.name` equal to `ingress-nginx` | `/metrics` is unauthenticated for in-cluster scrape; the NetworkPolicy is the allow-list. An empty list renders `ingress: []` (deny all), so neither the ingress controller nor Prometheus can reach the service port. An empty-map entry (`{}`) matches every namespace and is refused. A non-empty list is refused when every entry that carries `kubernetes.io/metadata.name` equals `ingress-nginx` and no non-empty entry lacks that key (a non-empty entry selecting by another label counts as other and passes), unless `networkPolicy.scrapeFromIngressNamespace=true` records that Prometheus deliberately runs in the ingress-controller namespace |
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |

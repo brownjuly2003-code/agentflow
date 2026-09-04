@@ -4,6 +4,22 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — production NetworkPolicy must name the Prometheus scrape namespace (T-33, F-T-32-4)
+
+The production contract refuses `networkPolicy.ingressFromNamespaces` when
+the list is empty or every `kubernetes.io/metadata.name` selector is
+`ingress-nginx`, unless `networkPolicy.scrapeFromIngressNamespace=true`
+records that Prometheus shares the ingress-controller namespace. An empty
+list renders `ingress: []` (deny all) on every profile. An empty-map
+selector (`{}`) matches every namespace and is refused by the schema
+(`minProperties: 1`) and by the production contract.
+`values-production.yaml` ships no guessed scrape namespace.
+`values.schema.json` requires each `ingressFromNamespaces` item to be a
+non-empty string-to-string label map; a string, null, or empty-map
+element is refused. Environment values must repeat both the
+ingress-controller selector and the scrape namespace: Helm replaces lists
+instead of merging them.
+
 ### Security — production Ingress rules cannot route the unauthenticated /metrics (audit 2026-09-02 F-10)
 
 `/metrics` is mounted without API-key auth so Prometheus can scrape it
@@ -25,11 +41,10 @@ rule with no paths, which routes nothing and is rejected on apply.
 user-controlled interpolations so an injected value stays a scalar.
 Production already requires `networkPolicy.enabled=true`, and the
 NetworkPolicy limits pod ingress to the namespaces in
-`networkPolicy.ingressFromNamespaces` on the service port. The chart default
-for `networkPolicy.ingressFromNamespaces` (`helm/agentflow/values.yaml`)
-enumerates only `ingress-nginx` and `values-production.yaml` does not
-override it, so the operator must add the monitoring/scrape namespace for
-the in-cluster scrape to work.
+`networkPolicy.ingressFromNamespaces` on the service port. The production
+contract refuses an empty or ingress-controller-only list unless
+`networkPolicy.scrapeFromIngressNamespace=true`, and an empty list renders
+`ingress: []` (deny all).
 
 The 2026-09-02 audit's F-10 acceptance criteria are only partially met:
 

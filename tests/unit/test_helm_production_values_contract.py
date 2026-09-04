@@ -30,11 +30,19 @@ _API_IMAGE_DIGEST = "sha256:" + "b" * 64
 # What an environment file owes the production overlay. The overlay itself
 # leaves these empty on purpose -- they are the values only the environment
 # knows -- so every render here supplies them and then breaks one clause.
+# The scrape namespace is one of those: values-production.yaml does not guess
+# it, and a render that still has only ingress-nginx is refused.
 _ENVIRONMENT_VALUES = {
     "image": {"digest": _API_IMAGE_DIGEST},
     "config": {
         "corsOrigins": "https://app.example.com",
         "trustedProxies": "10.0.0.0/8",
+    },
+    "networkPolicy": {
+        "ingressFromNamespaces": [
+            {"kubernetes.io/metadata.name": "ingress-nginx"},
+            {"kubernetes.io/metadata.name": "monitoring"},
+        ],
     },
     "ingress": {
         "className": "nginx",
@@ -156,6 +164,12 @@ def test_production_overlay_ships_no_inline_key_material():
     assert values["image"]["digest"] == ""
     assert values["config"]["profile"] == "production"
     assert values["networkPolicy"]["enabled"] is True
+    from_ns = values["networkPolicy"]["ingressFromNamespaces"]
+    ns_names = [
+        item.get("kubernetes.io/metadata.name") for item in from_ns if isinstance(item, dict)
+    ]
+    assert "ingress-nginx" in ns_names
+    assert ns_names == ["ingress-nginx"]
     assert values["secrets"]["create"] is False
     assert values["secrets"]["existingSecret"] == ""
     assert values["secrets"]["adminKey"] == ""

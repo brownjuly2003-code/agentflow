@@ -11,10 +11,10 @@ ARG PYFLINK_KAFKA_JAR_VERSION=5.0.0-2.2
 ARG PYFLINK_KAFKA_JAR_SHA1=7bf2ded1144cb8aece05adcaccbc81b2ac3ef339
 ARG PYFLINK_KAFKA_JAR_BYTES=10666527
 
-# The Python manifest lives next to this Dockerfile (compose builds with
-# context ./src). The assert below keeps its apache-flink pin from drifting
-# away from the Flink binary distribution version above.
-COPY agentflow_runtime/processing/flink_jobs/requirements.txt /tmp/flink-requirements.txt
+# The hash lock is compiled from the human-owned manifest next to this
+# Dockerfile (compose builds with context ./src). The assert below keeps its
+# apache-flink pin from drifting away from the Flink binary distribution.
+COPY agentflow_runtime/processing/flink_jobs/flink-requirements.lock /tmp/flink-requirements.lock
 
 ARG CURL_GUARDS="--connect-timeout 30 --speed-limit 65536 --speed-time 60 --retry 5 --retry-all-errors"
 
@@ -61,9 +61,9 @@ RUN --mount=type=cache,id=flink-sql-connector-kafka-5.0.0-2.2,target=/var/cache/
     && test -e "/opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop-${FLINK_VERSION}.jar" \
     && python3 -m venv /opt/pyflink-venv \
     && /opt/pyflink-venv/bin/python -m pip install --no-cache-dir --upgrade pip \
-    && /opt/pyflink-venv/bin/python -m pip install --no-cache-dir -r /tmp/flink-requirements.txt \
-    && /opt/pyflink-venv/bin/python -c "from importlib.metadata import version; v = version('apache-flink'); assert v == '${FLINK_VERSION}', f'requirements.txt installed apache-flink {v}, ARG FLINK_VERSION is ${FLINK_VERSION}'" \
-    && rm -rf /var/lib/apt/lists/* /tmp/flink-requirements.txt
+    && /opt/pyflink-venv/bin/python -m pip install --no-cache-dir --require-hashes -r /tmp/flink-requirements.lock \
+    && /opt/pyflink-venv/bin/python -c "from importlib.metadata import version; v = version('apache-flink'); assert v == '${FLINK_VERSION}', f'flink-requirements.lock installed apache-flink {v}, ARG FLINK_VERSION is ${FLINK_VERSION}'" \
+    && rm -rf /var/lib/apt/lists/* /tmp/flink-requirements.lock
 
 WORKDIR /opt/agentflow
 ENV PATH="/opt/pyflink-venv/bin:/opt/flink/bin:${PATH}"

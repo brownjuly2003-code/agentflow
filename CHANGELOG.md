@@ -4,6 +4,51 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — production Ingress rules cannot route the unauthenticated /metrics (audit 2026-09-02 F-10)
+
+`/metrics` is mounted without API-key auth so Prometheus can scrape it
+in-cluster through the ClusterIP Service; the liveness and readiness probe
+paths are exempt for the same reason. A production values file whose Ingress
+rules would send `/metrics` to the API no longer renders. The production
+contract refuses a `/` Prefix path, `/metrics` under Prefix or Exact, a
+`path` that is not a canonical single-line absolute path (unquoted, a CR, LF
+or tab used to inject a second Ingress rule for `/metrics`), a
+`className` that is not a canonical single line (unquoted, it used to inject
+`spec.defaultBackend` and send unmatched requests, `/metrics` included, to
+the API), a `host` that is not a canonical single line (`.host` has always
+been quoted, but a multi-line host makes the rendered Ingress unprovable, so
+the contract refuses it defensively), or a `pathType` other than
+`Prefix`/`Exact`. The path clauses are a denylist: a production host with
+an empty `paths` list satisfies them vacuously — the render then carries a
+rule with no paths, which routes nothing and is rejected on apply.
+`helm/agentflow/templates/ingress.yaml` quotes the
+user-controlled interpolations so an injected value stays a scalar.
+Production already requires `networkPolicy.enabled=true`, and the
+NetworkPolicy limits pod ingress to the namespaces in
+`networkPolicy.ingressFromNamespaces` on the service port. The chart default
+for `networkPolicy.ingressFromNamespaces` (`helm/agentflow/values.yaml`)
+enumerates only `ingress-nginx` and `values-production.yaml` does not
+override it, so the operator must add the monitoring/scrape namespace for
+the in-cluster scrape to work.
+
+The 2026-09-02 audit's F-10 acceptance criteria are only partially met:
+
+- this is a values-contract check at `helm template` time, not a runtime
+  network control, and it binds the production profile only — a `/` path still
+  renders green on the chart's deliberately dev-shaped defaults;
+- the endpoint remains unauthenticated to anything that can already reach the
+  pod port; no monitoring identity (mTLS, auth proxy, or IP allowlist) is
+  implemented;
+- an ingress-controller annotation (`nginx.ingress.kubernetes.io/rewrite-target`,
+  `use-regex`, `configuration-snippet`/`server-snippet`) can still re-route a
+  contract-compliant path to `/metrics` at the controller level (recorded as a
+  follow-up);
+- the contract constrains only the Ingress this chart renders — `service.type`
+  is unchecked, so `NodePort`/`LoadBalancer` publishes the service port
+  (`/metrics` included) on a green production render, and
+  `ingress.enabled=false` skips the ingress clauses and moves routing outside
+  the chart (recorded as a follow-up).
+
 ### Security — Safety ignores are scoped per requirements bucket
 
 `scripts/run_safety_scan.py` runs `safety check` once per inventory bucket and
@@ -368,7 +413,7 @@ omitting the key logged session cookies and the admin key in the header map
 recorded on failed authentication. New `config.trustedProxies` value wires
 `AGENTFLOW_TRUSTED_PROXIES` from the chart instead of `extraEnv`.
 
-### Docs — living claims, rollback/soak gate split, docs-link checker (audit F-10)
+### Docs — living claims, rollback/soak gate split, docs-link checker (audit 2026-08-23 F-10)
 
 Living STATUS/CLOSURE and `config/project_claims.toml` now match the 2026-08-23
 evidence: corrected rollback mechanics **PASS**

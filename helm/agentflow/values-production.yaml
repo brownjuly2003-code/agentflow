@@ -101,7 +101,15 @@ service:
 # Service. A Prefix path of `/` or `/metrics` is refused, as is Exact `/metrics`
 # (Exact `/` matches only `/` and cannot reach the mount). pathType
 # ImplementationSpecific is refused (controller-defined matching cannot be
-# proven). Enumerate the public prefixes instead of Prefix `/`, for example:
+# proven). The exact ingress-nginx routing-control annotations rewrite-target,
+# use-regex, app-root, configuration-snippet and server-snippet are also
+# refused under both `nginx.ingress.kubernetes.io/` and the legacy
+# `ingress.kubernetes.io/` prefix: the controller applies them after Helm has
+# checked the literal paths. Other annotations remain available. This binds
+# only the Ingress rendered by this chart, not the controller ConfigMap or
+# separately managed Ingress objects.
+#
+# Enumerate the public prefixes instead of Prefix `/`, for example:
 #
 #   hosts:
 #     - host: api.example.com

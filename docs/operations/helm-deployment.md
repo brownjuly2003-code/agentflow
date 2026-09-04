@@ -163,6 +163,7 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
 | `ingress.tls` non-empty when ingress is enabled | TLS terminates somewhere you can point at |
+| `ingress.annotations` has none of `rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, or `server-snippet` under `nginx.ingress.kubernetes.io/` or legacy `ingress.kubernetes.io/` | ingress-nginx interprets these routing-control annotations after Helm checks the literal host/path, so they can change matching or the upstream URI and reach `/metrics` |
 | `ingress.hosts[].paths[]` must not route `/metrics` | `/metrics` is unauthenticated for in-cluster scrape; enumerate the public prefixes instead of Prefix `/` ([Production ingress and `/metrics`](../deployment.md#production-ingress-and-metrics)) |
 | `pathType` is `Prefix` or `Exact` | Controller-defined matching cannot be proven at render time, so ImplementationSpecific cannot be shown to keep `/metrics` off Ingress |
 | `path`, `host` and `className` are canonical single-line values (no CR/LF/tab; `path` absolute) | A newline in an unquoted scalar can inject `spec.defaultBackend` or a second rule and send unmatched `/metrics` to the API |
@@ -180,6 +181,13 @@ same greppable opt-out the runtime honours at boot. And terminating TLS in a
 gateway ahead of the chart is a legitimate topology: set `ingress.enabled=false`
 and the TLS and trusted-proxy clauses stop applying. That move puts the routing
 decision, and the `/metrics` exposure question, outside this chart.
+
+The annotation clause is an exact denylist on the Ingress object rendered by
+this chart. It does not constrain the ingress-nginx controller ConfigMap or
+separately managed Ingress objects; review those cluster-level inputs as part
+of the platform routing policy. Unrelated annotations such as
+`cert-manager.io/cluster-issuer`, `nginx.ingress.kubernetes.io/ssl-redirect`,
+and `nginx.ingress.kubernetes.io/proxy-body-size` remain available.
 
 Enforced elsewhere, so the contract does not repeat it: Kafka SASL/TLS for
 every Kafka workload (`templates/_kafka.tpl`), plaintext external stores at boot

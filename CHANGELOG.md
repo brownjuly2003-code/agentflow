@@ -30,7 +30,7 @@ element is refused. Environment values must repeat both the
 ingress-controller selector and the scrape namespace: Helm replaces lists
 instead of merging them.
 
-### Security — production Ingress rules cannot route the unauthenticated /metrics (audit 2026-09-02 F-10)
+### Security — production chart Ingress rejects /metrics routes and nginx routing-control annotations (T-35, audit 2026-09-02 F-10)
 
 `/metrics` is mounted without API-key auth so Prometheus can scrape it
 in-cluster through the ClusterIP Service; the liveness and readiness probe
@@ -44,11 +44,16 @@ or tab used to inject a second Ingress rule for `/metrics`), a
 the API), a `host` that is not a canonical single line (`.host` has always
 been quoted, but a multi-line host makes the rendered Ingress unprovable, so
 the contract refuses it defensively), or a `pathType` other than
-`Prefix`/`Exact`. The path clauses are a denylist: a production host with
-an empty `paths` list satisfies them vacuously — the render then carries a
-rule with no paths, which routes nothing and is rejected on apply.
-`helm/agentflow/templates/ingress.yaml` quotes the
-user-controlled interpolations so an injected value stays a scalar.
+`Prefix`/`Exact`. It also refuses the exact `ingress.annotations` keys
+`rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, and
+`server-snippet` under both `nginx.ingress.kubernetes.io/` and the legacy
+`ingress.kubernetes.io/` prefix because ingress-nginx interprets them after
+Helm checks the literal host/path. The path clauses are a denylist: a
+production host with an empty `paths` list satisfies them vacuously — the
+render then carries a rule with no paths, which routes nothing and is rejected
+on apply. `helm/agentflow/templates/ingress.yaml` quotes or
+`toYaml`-serialises every user-controlled interpolation so an injected value
+stays a scalar.
 Production already requires `networkPolicy.enabled=true`, and the
 NetworkPolicy limits pod ingress to the namespaces in
 `networkPolicy.ingressFromNamespaces` on the service port. The production
@@ -64,10 +69,9 @@ The 2026-09-02 audit's F-10 acceptance criteria are only partially met:
 - the endpoint remains unauthenticated to anything that can already reach the
   pod port; no monitoring identity (mTLS, auth proxy, or IP allowlist) is
   implemented;
-- an ingress-controller annotation (`nginx.ingress.kubernetes.io/rewrite-target`,
-  `use-regex`, `configuration-snippet`/`server-snippet`) can still re-route a
-  contract-compliant path to `/metrics` at the controller level (recorded as a
-  follow-up);
+- the exact annotation denylist binds only the Ingress object rendered by this
+  chart; it cannot constrain the ingress-nginx controller ConfigMap or
+  separately managed Ingress objects, which remain platform routing inputs;
 - production binds `service.type` to `ClusterIP`, so `NodePort`/`LoadBalancer`
   no longer publish the service port (`/metrics` included) on a green render;
   `ingress.enabled=false` remains the sanctioned external-gateway shape and

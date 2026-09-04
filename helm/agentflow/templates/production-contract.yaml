@@ -115,6 +115,18 @@ Deliberately NOT checked here:
 {{- end -}}
 
 {{- if .Values.ingress.enabled -}}
+{{- /* ingress-nginx interprets these annotations after Helm has checked the
+     literal host/path. Refuse exact routing-control keys for this chart's
+     production Ingress; unrelated annotations remain available. */ -}}
+{{- $ingressAnnotations := .Values.ingress.annotations | default dict -}}
+{{- range $prefix := (list "nginx.ingress.kubernetes.io/" "ingress.kubernetes.io/") -}}
+{{- range $name := (list "rewrite-target" "use-regex" "app-root" "configuration-snippet" "server-snippet") -}}
+{{- $annotation := printf "%s%s" $prefix $name -}}
+{{- if hasKey $ingressAnnotations $annotation -}}
+{{- $problems = append $problems (printf "ingress.annotations contains %q: production refuses ingress-nginx routing-control annotations because they can change controller matching or upstream URI after Helm validates the literal host/path; remove the annotation, or set ingress.enabled=false and enforce routing outside this chart" $annotation) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- if not .Values.ingress.hosts -}}
 {{- $problems = append $problems "ingress.enabled=true with no ingress.hosts: the rendered Ingress would carry no rules and route nothing" -}}
 {{- end -}}

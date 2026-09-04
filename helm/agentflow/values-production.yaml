@@ -88,6 +88,10 @@ secrets:
   apiKeys:
     keys: []
 
+# production-contract.yaml: production must keep the API on a ClusterIP Service
+service:
+  type: ClusterIP
+
 # TLS terminates here by default. If your platform terminates it in a gateway
 # ahead of the chart, set ingress.enabled=false and record that decision --
 # the contract then stops asking for `tls` and for trustedProxies.

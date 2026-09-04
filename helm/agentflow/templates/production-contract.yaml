@@ -105,6 +105,15 @@ Deliberately NOT checked here:
 {{- $problems = append $problems "secrets.apiKeys.keys is non-empty: inline API key material is dev-only" -}}
 {{- end -}}
 
+{{- /* Outside the ingress.enabled block: NodePort/LoadBalancer publish the
+     service port (/metrics included) with no Ingress rule involved, and
+     ExternalName voids the routing contract. ingress.enabled=false stays a
+     sanctioned external-gateway shape and does not relax this clause. */ -}}
+{{- $serviceType := .Values.service.type | default "" | toString -}}
+{{- if ne $serviceType "ClusterIP" -}}
+{{- $problems = append $problems (printf "service.type=%s: production must keep the API on a ClusterIP Service — NodePort/LoadBalancer publish the service port (/metrics included) without any Ingress rule, ExternalName turns the Service into a CNAME and voids the routing contract" $serviceType) -}}
+{{- end -}}
+
 {{- if .Values.ingress.enabled -}}
 {{- if not .Values.ingress.hosts -}}
 {{- $problems = append $problems "ingress.enabled=true with no ingress.hosts: the rendered Ingress would carry no rules and route nothing" -}}

@@ -4,6 +4,16 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — production must keep the API on a ClusterIP Service (T-34, F-T-32-22)
+
+The production contract refuses `service.type` other than `ClusterIP`.
+`NodePort`/`LoadBalancer` publish the service port (`/metrics` included)
+without any Ingress rule; `ExternalName` turns the Service into a CNAME
+and voids the routing contract. `values-production.yaml` pins
+`service.type: ClusterIP`. `ingress.enabled=false` remains the sanctioned
+external-gateway shape and moves routing (and the `/metrics` exposure
+question) outside the chart.
+
 ### Security — production NetworkPolicy must name the Prometheus scrape namespace (T-33, F-T-32-4)
 
 The production contract refuses `networkPolicy.ingressFromNamespaces` when
@@ -58,11 +68,10 @@ The 2026-09-02 audit's F-10 acceptance criteria are only partially met:
   `use-regex`, `configuration-snippet`/`server-snippet`) can still re-route a
   contract-compliant path to `/metrics` at the controller level (recorded as a
   follow-up);
-- the contract constrains only the Ingress this chart renders — `service.type`
-  is unchecked, so `NodePort`/`LoadBalancer` publishes the service port
-  (`/metrics` included) on a green production render, and
-  `ingress.enabled=false` skips the ingress clauses and moves routing outside
-  the chart (recorded as a follow-up).
+- production binds `service.type` to `ClusterIP`, so `NodePort`/`LoadBalancer`
+  no longer publish the service port (`/metrics` included) on a green render;
+  `ingress.enabled=false` remains the sanctioned external-gateway shape and
+  moves routing (and the `/metrics` exposure question) outside the chart.
 
 ### Security — Safety ignores are scoped per requirements bucket
 

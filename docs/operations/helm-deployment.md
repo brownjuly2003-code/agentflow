@@ -158,6 +158,7 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | `image.digest=sha256:...` | Every API-derived workload consumes one immutable artifact; a tag cannot prove staging/release identity |
 | `networkPolicy.enabled=true` | Default-deny baseline; needs a NetworkPolicy controller in the cluster |
 | `networkPolicy.ingressFromNamespaces` not empty; not every `kubernetes.io/metadata.name` equal to `ingress-nginx` | `/metrics` is unauthenticated for in-cluster scrape; the NetworkPolicy is the allow-list. An empty list renders `ingress: []` (deny all), so neither the ingress controller nor Prometheus can reach the service port. An empty-map entry (`{}`) matches every namespace and is refused. A non-empty list is refused when every entry that carries `kubernetes.io/metadata.name` equals `ingress-nginx` and no non-empty entry lacks that key (a non-empty entry selecting by another label counts as other and passes), unless `networkPolicy.scrapeFromIngressNamespace=true` records that Prometheus deliberately runs in the ingress-controller namespace |
+| `service.type=ClusterIP` | NodePort/LoadBalancer publish the service port (`/metrics` included) without any Ingress rule; ExternalName turns the Service into a CNAME and voids the routing contract |
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
@@ -177,7 +178,8 @@ considered decision -- in-cluster traffic behind a NetworkPolicy, say -- is
 named per store in `AGENTFLOW_INSECURE_TRANSPORT_OK` through `extraEnv`, the
 same greppable opt-out the runtime honours at boot. And terminating TLS in a
 gateway ahead of the chart is a legitimate topology: set `ingress.enabled=false`
-and the TLS and trusted-proxy clauses stop applying.
+and the TLS and trusted-proxy clauses stop applying. That move puts the routing
+decision, and the `/metrics` exposure question, outside this chart.
 
 Enforced elsewhere, so the contract does not repeat it: Kafka SASL/TLS for
 every Kafka workload (`templates/_kafka.tpl`), plaintext external stores at boot

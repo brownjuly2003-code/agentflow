@@ -10,7 +10,7 @@ measured engineering status, which lives in [STATUS.md](../STATUS.md).
 
 **Audience:** repository owner / AWS account owner performing the optional OIDC bootstrap
 
-**Prerequisites:** AWS administrator credentials for the initial bootstrap only, the existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`, GitHub repository admin access, and Terraform CLI or an equivalent container image; see [Prerequisites](#prerequisites)
+**Prerequisites:** AWS administrator credentials for the initial bootstrap only, the existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`, GitHub repository admin access, and Terraform CLI 1.15.4 or an equivalent container image of that version; see [Prerequisites](#prerequisites)
 
 ## Purpose
 
@@ -33,7 +33,16 @@ Confirmed local/repository evidence:
 - `.github/workflows/terraform-apply.yml` remains disabled with `if: false`.
 - Real `infrastructure/terraform/environments/staging.tfvars` and `prod.tfvars` files are absent.
 - No AWS credentials are configured on the verification workstation.
-- Terraform config sanity has passed through `hashicorp/terraform:1.13.5` with `init -backend=false` and `validate`; this is not evidence of a real apply.
+- The `hashicorp/terraform:1.13.5` container evidence for config sanity
+  (`init -backend=false` and `validate`) is superseded by the
+  `required_version = "= 1.15.4"` pin and can no longer be reproduced:
+  `terraform init` on 1.13.5 evaluates the constraint and fails with
+  `Unsupported Terraform Core version`. Config sanity was re-verified on 2026-09-05 with a local
+  Terraform CLI 1.15.4 running `terraform init -backend=false` and
+  `terraform validate` from `infrastructure/terraform` (both succeeded;
+  `validate` reported `Success! The configuration is valid.`). This is
+  still not evidence of a real apply, and a container-image run at
+  `hashicorp/terraform:1.15.4` has not been performed.
 - `.github/workflows/terraform-apply.yml` includes a manual `PREFLIGHT`
   path that validates required variables, real tfvars presence, and
   `terraform init -backend=false` / `terraform validate` without running
@@ -113,7 +122,64 @@ the missing input list back to the operator.
 - AWS account with administrator credentials available for the initial bootstrap only.
 - Existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`.
 - GitHub repository admin access for repository variables and environment protection rules.
-- Terraform CLI or an equivalent container image available on the bootstrap machine.
+- Terraform CLI 1.15.4 (matching `required_version` in `infrastructure/terraform/main.tf` and the `hashicorp/setup-terraform` pins in `.github/workflows/terraform-apply.yml` and `.github/workflows/ci.yml`), or an equivalent container image of that version, available on the bootstrap machine.
+
+## State-key and role scope
+
+The GitHub Actions role's S3 object read/write is limited to `env/staging/*`
+and `env/production/*`. Those names are exactly the `workflow_dispatch`
+`environment` options in `.github/workflows/terraform-apply.yml`.
+`env/dev/*` is used only by `make deploy-dev` with an operator's own
+credentials; those objects are not readable or writable by the CI role.
+`s3:ListBucket` is bucket-wide, so the role can see other environments'
+state key names, sizes and timestamps. Narrowing `s3:ListBucket` with an
+`s3:prefix` condition is a follow-up that needs verification against a
+real backend init.
+
+### Shared CI role and account-global OIDC provider
+
+No bootstrap apply has been performed, so no role exists yet and
+`AWS_TERRAFORM_ROLE_ARN` is unset — see [Current readiness handoff](#current-readiness-handoff).
+The scope below is what the tracked configuration would produce.
+
+The workflow reads exactly one `AWS_TERRAFORM_ROLE_ARN` repository variable
+for both `workflow_dispatch` environments, so a single role serves both.
+Because that role is shared, it holds `s3:PutObject`/`s3:DeleteObject` on
+every environment listed in `state_environments`, so the per-environment
+state keys separate *state objects*, not *credentials*. A per-environment
+role would need a per-environment role variable in the workflow, which this
+repository does not have.
+
+`aws_iam_openid_connect_provider.github_actions` is account-global and is
+owned by the state the bootstrap was run from
+(`env/staging/terraform.tfstate`). A second environment applied from an
+empty state would fail with `EntityAlreadyExists`; that state must first
+import the existing provider. `terraform import` loads the configuration, so
+it needs both the production backend key and the root variables
+(`environment`, `vpc_id` and `private_subnet_ids` have no defaults):
+
+```bash
+terraform init -reconfigure -backend-config="key=env/production/terraform.tfstate"
+terraform import -var-file=environments/prod.tfvars \
+  module.github_oidc.aws_iam_openid_connect_provider.github_actions \
+  arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com
+```
+
+Run this from a working directory inited against the **production** key. An
+operator who has just followed [Bootstrap the role](#bootstrap-the-role) is
+inited against `env/staging/terraform.tfstate`, where the provider is already
+managed; importing there does nothing useful.
+
+After this import both states own the same account-global provider: a
+`terraform destroy` or removal from either state deletes the trust
+anchor for both, and a thumbprint change applied from one state leaves
+the other drifted. Rotate the thumbprint from the staging state only.
+The import covers only `aws_iam_openid_connect_provider`. A production
+apply also creates `agentflow-terraform-production` plus its own
+`-boundary` policy, and `AWS_TERRAFORM_ROLE_ARN` must continue to name
+the single role the workflows use — the operator decides which of the two ARNs that variable keeps.
+
+These are facts about the current repository, not a recommended design.
 
 ## Bootstrap the role
 
@@ -124,10 +190,14 @@ the missing input list back to the operator.
 5. Run:
 
 ```bash
-terraform init
+terraform init -backend-config="key=env/staging/terraform.tfstate"
 terraform plan -var-file=environments/staging.tfvars
 terraform apply -var-file=environments/staging.tfvars
 ```
+
+The OIDC provider is account-global and lives in this staging state. A later
+apply against `env/production/terraform.tfstate` from an empty state must
+import it first (see [Shared CI role and account-global OIDC provider](#shared-ci-role-and-account-global-oidc-provider)) or it will fail with `EntityAlreadyExists`.
 
 6. Capture the resulting role ARN from `terraform state show module.github_oidc.aws_iam_role.github_actions`.
 
@@ -149,9 +219,11 @@ The workflow maps the GitHub `production` environment to `environments/prod.tfva
 Before enabling the disabled plan/apply jobs, an operator can run the manual
 workflow with `confirm=PREFLIGHT`. That path does not call `terraform apply`;
 it only checks repository variables, real tfvars presence, and Terraform local
-validation.
+validation. Steps 1, 2 and 4 are static inspections of the tracked workflow
+file and hold today. Step 3 needs a real federated run, so it can only be
+satisfied once the `if: false` guards on `plan`/`apply` are lifted.
 
-1. Open the `Terraform (streaming-infrastructure-reference)` workflow (`terraform-apply.yml`) and confirm the run includes `aws-actions/configure-aws-credentials@v4`.
+1. In `terraform-apply.yml`, confirm the `plan` and `apply` jobs use the SHA-pinned `aws-actions/configure-aws-credentials` (`e6de054…` / v6.2.3).
 2. Confirm the workflow uses repository variables `AWS_TERRAFORM_ROLE_ARN` and `AWS_REGION`, not AWS access key secrets.
 3. Inspect the AWS CloudTrail event for `AssumeRoleWithWebIdentity` and confirm the federated principal is `token.actions.githubusercontent.com`.
 4. Confirm the job has `permissions.id-token: write`.
@@ -171,7 +243,12 @@ To refresh it:
 1. Follow the AWS IAM procedure for obtaining the top intermediate CA thumbprint for an OIDC provider.
 2. Re-check the certificate chain for `token.actions.githubusercontent.com`.
 3. Update `infrastructure/terraform/modules/github-oidc/main.tf`.
-4. Run `terraform plan` and apply the change with trusted credentials.
+4. Run `terraform plan` and apply the change with trusted credentials from
+   the staging state (`env/staging/terraform.tfstate`) only. After a
+   production import both states own the same account-global provider:
+   applying the thumbprint change from one state leaves the other drifted
+   on `thumbprint_list`, and a `terraform destroy` or removal from either
+   state deletes the trust anchor for both.
 
 Example PowerShell check used for this repository:
 

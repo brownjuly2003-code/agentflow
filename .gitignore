@@ -35,7 +35,6 @@ logs/
 .terraform/
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
 
 data/
 checkpoints/

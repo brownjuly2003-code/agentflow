@@ -47,3 +47,18 @@ variable "allowed_environments" {
     error_message = "allowed_environments must contain at least one environment."
   }
 }
+
+variable "state_environments" {
+  description = "Environment names whose env/<name> Terraform state keys the role may access"
+  type        = list(string)
+
+  validation {
+    condition = (
+      length(var.state_environments) > 0 &&
+      length(distinct(var.state_environments)) == length(var.state_environments) &&
+      alltrue([for environment in var.state_environments : trimspace(environment) != ""]) &&
+      alltrue([for environment in var.state_environments : can(regex("^[a-z0-9][a-z0-9-]*$", environment))])
+    )
+    error_message = "state_environments must contain unique, non-empty names matching ^[a-z0-9][a-z0-9-]*$ (no slashes or parent-path segments)."
+  }
+}

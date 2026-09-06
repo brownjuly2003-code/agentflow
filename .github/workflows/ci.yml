@@ -545,7 +545,7 @@ jobs:
 
   terraform-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
@@ -561,6 +561,18 @@ jobs:
         run: |
           cd infrastructure/terraform
           terraform validate
+      # h1: hashes in the lock file carry no platform label. This step is the
+      # guard that linux_amd64 (ubuntu-latest) is actually covered; it uses the
+      # same three-platform command the module README documents (re-run
+      # 2026-09-05: no lock rewrite). Three provider zips (~0.7 GB) plus
+      # terraform init is why this job's timeout-minutes is 20, not 10.
+      # It has not been observed on a GitHub runner until the owner pushes.
+      - name: Provider lock covers linux_amd64
+        run: |
+          cd infrastructure/terraform
+          terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=windows_amd64
+          git ls-files --error-unmatch .terraform.lock.hcl
+          git diff --exit-code .terraform.lock.hcl
 
   sdk-ts:
     # Audit P1-5: typecheck/tests/build for the TypeScript SDK previously ran

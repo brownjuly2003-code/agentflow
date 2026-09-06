@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.unit.test_terraform_lock_retention import (
+    _assert_linux_amd64_lock_guard,
+    _is_lock_guard_step,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "terraform-apply.yml"
 MAKEFILE_PATH = PROJECT_ROOT / "Makefile"
@@ -375,12 +380,25 @@ def test_workflow_cli_and_provider_versions_are_reproducibly_pinned() -> None:
     h1_hashes = set(re.findall(r'"h1:([^"]+)"', lock_body))
     zh_hashes = set(re.findall(r'"zh:[0-9a-f]+"', lock_body))
     assert len(h1_hashes) >= 3, (
-        "provider lock must carry several h1: hashes plus registry zh: hashes "
-        f"(minimum-coverage smoke check; found {len(h1_hashes)} h1 hashes). "
-        "Platform coverage is guaranteed by the regeneration command documented "
-        "in the github-oidc module README, not by this assertion."
+        ">=3 h1: hashes is a shape smoke check only; h1: hashes carry no "
+        f"platform label (found {len(h1_hashes)} h1 hashes). Coverage of "
+        "linux_amd64, darwin_arm64 and windows_amd64 is guarded by the "
+        "terraform-validate provider-lock step in .github/workflows/ci.yml, "
+        "which regenerates the lock and fails on a non-empty git diff."
     )
     assert zh_hashes, "provider lock must carry registry zh: hashes"
+
+    ci_workflow = yaml.safe_load((WORKFLOWS_DIR / "ci.yml").read_text(encoding="utf-8"))
+    terraform_validate = ci_workflow["jobs"]["terraform-validate"]
+    _assert_linux_amd64_lock_guard(ci_workflow)
+    lock_guard_steps = [
+        step for step in terraform_validate.get("steps", []) if _is_lock_guard_step(step)
+    ]
+    assert lock_guard_steps, (
+        "linux_amd64 coverage is guarded by wiring terraform providers lock and "
+        "git diff --exit-code .terraform.lock.hcl into ci.yml terraform-validate, "
+        "not by this hash count"
+    )
 
     ignore_check = subprocess.run(
         [
@@ -394,6 +412,17 @@ def test_workflow_cli_and_provider_versions_are_reproducibly_pinned() -> None:
         check=False,
     )
     assert ignore_check.returncode == 1, ".terraform.lock.hcl must not be ignored"
+    tracked_check = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--error-unmatch",
+            LOCK_PATH.relative_to(PROJECT_ROOT).as_posix(),
+        ],
+        cwd=PROJECT_ROOT,
+        check=False,
+    )
+    assert tracked_check.returncode == 0, ".terraform.lock.hcl must be tracked"
 
 
 def test_state_environments_variable_rejects_path_shaped_names() -> None:

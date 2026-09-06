@@ -124,6 +124,34 @@ the missing input list back to the operator.
 - GitHub repository admin access for repository variables and environment protection rules.
 - Terraform CLI 1.15.4 (matching `required_version` in `infrastructure/terraform/main.tf` and the `hashicorp/setup-terraform` pins in `.github/workflows/terraform-apply.yml` and `.github/workflows/ci.yml`), or an equivalent container image of that version, available on the bootstrap machine.
 
+## State locking
+
+The tracked S3 backend keeps `dynamodb_table = "agentflow-terraform-locks"`
+on purpose, together with the `TerraformStateLockTableDescribe` /
+`TerraformStateLockItems` statements and the `dynamodb:LeadingKeys`
+condition in `infrastructure/terraform/modules/github-oidc/main.tf`. The
+parameter is deprecated as of Terraform 1.15.4 and `terraform init` emits
+`Warning: Deprecated Parameter`. The replacement is S3 native locking
+(`use_lockfile = true`). Migration is deferred because it changes the
+locking mechanism of a live backend and needs AWS access plus a
+lock-migration step. Revisit on the next Terraform major bump, or the first
+time the backend is recreated from scratch — whichever comes first.
+
+Remaining assumptions (same class as the apply-guard retention: the tracked
+contract is honest, the live delivery path is not claimed):
+
+- **ASSUMPTION-T-36-BACKEND**: this page does not claim that `terraform init`,
+  `plan`, or `apply` ran against the real S3 backend. DynamoDB locking is
+  retained on the tracked configuration; a live-backend migration to
+  `use_lockfile` still needs AWS access.
+- **ASSUMPTION-T-36-CI-LOCK**: the provider-lock step in
+  `.github/workflows/ci.yml` `terraform-validate` runs
+  `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
+  -platform=windows_amd64` and `git diff --exit-code .terraform.lock.hcl`.
+  It is a tracked guard for `linux_amd64` on `ubuntu-latest` (and the other
+  two documented platforms), not observed evidence. It cannot have passed
+  on a GitHub runner until the owner pushes.
+
 ## State-key and role scope
 
 The GitHub Actions role's S3 object read/write is limited to `env/staging/*`

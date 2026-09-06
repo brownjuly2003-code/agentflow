@@ -4,10 +4,12 @@
 count of hashes cannot prove platform coverage. The honest local assertion is
 that `.github/workflows/ci.yml` `terraform-validate` runs
 `terraform providers lock` with `-platform=linux_amd64` and fails on a
-non-empty `git diff --exit-code .terraform.lock.hcl`. Additional `-platform=`
-values are accepted by this assertion, but any platform named must also be
-present in the tracked lock or the git diff guard will fail. The documented
-three-platform command satisfies the claim and is what CI actually runs.
+non-empty `git diff --exit-code .terraform.lock.hcl`. The guard step `run`
+body is validated against a closed allowlist of effective lines. Additional
+`-platform=` values are accepted by this assertion, but any platform named
+must also be present in the tracked lock or the git diff guard will fail. The
+documented three-platform command satisfies the claim and is what CI actually
+runs.
 
 The S3 backend keeps `dynamodb_table` on purpose under Terraform 1.15.4.
 This file does not claim a real-backend init/plan/apply, and it does not
@@ -37,8 +39,14 @@ LOCK_PATH = PROJECT_ROOT / "infrastructure" / "terraform" / ".terraform.lock.hcl
 
 LOCK_COMMAND = "terraform providers lock"
 LOCK_DIFF_COMMAND = "git diff --exit-code .terraform.lock.hcl"
+LOCK_CD_LINE = "cd infrastructure/terraform"
+LOCK_LS_FILES_COMMAND = "git ls-files --error-unmatch .terraform.lock.hcl"
+LOCK_LINE_PATTERN = re.compile(r"^terraform providers lock(?:\s+-platform=[a-z0-9_]+)+$")
+LOCK_LS_FILES_PATTERN = re.compile(
+    r"git ls-files --error-unmatch(?:\s+--)?\s+\.terraform\.lock\.hcl"
+)
+LOCK_DIFF_PATTERN = re.compile(r"git diff --exit-code(?:\s+--)?\s+\.terraform\.lock\.hcl")
 BACKEND_TABLE = 'dynamodb_table = "agentflow-terraform-locks"'
-LOCK_PATH_NAME = ".terraform.lock.hcl"
 
 REQUIRED_RETENTION_PHRASES = (
     "Warning: Deprecated Parameter",
@@ -53,6 +61,23 @@ def _load_ci_workflow() -> dict:
     return yaml.safe_load(CI_WORKFLOW_PATH.read_text(encoding="utf-8"))
 
 
+def _effective_run_setting(workflow: dict, job: dict, step: dict, key: str):
+    """Resolve a GitHub Actions run setting: step, then job defaults, then workflow defaults."""
+    return (
+        step.get(key)
+        or ((job.get("defaults") or {}).get("run") or {}).get(key)
+        or ((workflow.get("defaults") or {}).get("run") or {}).get(key)
+    )
+
+
+def _is_lock_ls_files_line(line: str) -> bool:
+    return LOCK_LS_FILES_PATTERN.fullmatch(line) is not None
+
+
+def _is_lock_diff_line(line: str) -> bool:
+    return LOCK_DIFF_PATTERN.fullmatch(line) is not None
+
+
 def _backend_body(terraform_main: str) -> str:
     match = re.search(r'backend "s3" \{(?P<body>.*?)\n  \}', terraform_main, re.DOTALL)
     assert match is not None, "s3 backend block not found"
@@ -60,40 +85,82 @@ def _backend_body(terraform_main: str) -> str:
 
 
 def _effective_run_lines(run: str) -> list[str]:
-    """Non-blank, non-comment lines of a step `run` block, stripped."""
-    lines: list[str] = []
+    """Non-blank, non-comment lines of a step `run` block, stripped.
+
+    Shell backslash continuations are folded into one effective line (trailing
+    ``\\`` stripped, pieces joined with a single space) so a wrapped
+    ``terraform providers lock`` still has to match the closed allowlist whole.
+    """
+    unfolded: list[str] = []
     for raw in str(run).splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        lines.append(stripped)
+        unfolded.append(stripped)
+
+    lines: list[str] = []
+    pending = ""
+    for stripped in unfolded:
+        piece = stripped[:-1].rstrip() if stripped.endswith("\\") else stripped
+        if pending:
+            pending = f"{pending} {piece}"
+        else:
+            pending = piece
+        if not stripped.endswith("\\"):
+            lines.append(pending)
+            pending = ""
+    if pending:
+        lines.append(pending)
     return lines
 
 
-def _is_lock_guard_step(step: dict) -> bool:
+def _is_lock_guard_step(step: dict, *, working_directory: str | None = None) -> bool:
     """Recognise the provider-lock drift guard by line, not substring.
 
     After dropping blank and `#` comment lines, the body must contain one
-    remaining line that starts with `terraform providers lock` and one whose
-    stripped form is exactly `git diff --exit-code .terraform.lock.hcl`, and
-    the step must run in `infrastructure/terraform`.
+    remaining line that starts with `terraform providers lock` and one git-diff
+    lock line (optional ``--`` pathspec separator and extra whitespace allowed),
+    and the step must run in `infrastructure/terraform`. `working_directory` is
+    the already-resolved GitHub value (step, then job defaults, then workflow
+    defaults); when omitted, only the step key is read.
     """
     run = str(step.get("run", ""))
-    working = str(step.get("working-directory", "")).replace("\\", "/")
+    if working_directory is None:
+        working = str(step.get("working-directory", "")).replace("\\", "/")
+    else:
+        working = str(working_directory).replace("\\", "/")
     lines = _effective_run_lines(run)
     in_terraform_dir = working == "infrastructure/terraform" or any(
         line == "cd infrastructure/terraform" or line.startswith("cd infrastructure/terraform ")
         for line in lines
     )
     has_lock = any(line.startswith(LOCK_COMMAND) for line in lines)
-    has_diff = any(line == LOCK_DIFF_COMMAND for line in lines)
+    has_diff = any(_is_lock_diff_line(line) for line in lines)
     return has_lock and has_diff and in_terraform_dir
 
 
-def _assert_lock_guard_run_not_neutered(run: str) -> None:
+def _assert_lock_guard_run_not_neutered(run: str, *, working_directory: str = "") -> None:
+    """Closed allowlist of effective `run` lines for the provider-lock guard.
+
+    After `_effective_run_lines` (blank/`#` dropped, backslash continuations
+    folded), every remaining line must be one of, in this order:
+
+    1. ``cd infrastructure/terraform`` — optional, first line only; required
+       unless the step sets ``working-directory: infrastructure/terraform``
+    2. ``terraform providers lock`` with one or more ``-platform=`` values —
+       required, exactly one; extra whitespace before each flag is allowed
+    3. ``git ls-files --error-unmatch .terraform.lock.hcl`` — optional, at most
+       one; optional ``--`` pathspec separator and extra whitespace are allowed
+    4. ``git diff --exit-code .terraform.lock.hcl`` — required, exactly one,
+       last effective line; optional ``--`` and extra whitespace are allowed
+
+    ``_is_lock_guard_step`` stays a loose recogniser on purpose so a neutered
+    body is still found and this helper can raise the specific allowlist
+    message instead of the generic missing-step assert.
+    """
     lines = _effective_run_lines(run)
     lock_lines = [line for line in lines if line.startswith(LOCK_COMMAND)]
-    diff_lines = [line for line in lines if line == LOCK_DIFF_COMMAND]
+    diff_lines = [line for line in lines if _is_lock_diff_line(line)]
     assert lock_lines, "lock guard must contain a terraform providers lock line"
     assert diff_lines, f"lock guard must contain exactly `{LOCK_DIFF_COMMAND}`"
     for line in (*lock_lines, *diff_lines):
@@ -104,16 +171,55 @@ def _assert_lock_guard_run_not_neutered(run: str) -> None:
     joined = "\n".join(lines)
     assert "set +e" not in joined, "lock guard must not disable errexit"
     assert "exit 0" not in joined, "lock guard must not force a successful exit"
+
+    kinds: list[int] = []
     for line in lines:
-        if re.search(r"\bgit\s+(checkout|restore|stash)\b", line):
-            assert LOCK_PATH_NAME not in line, (
-                "lock guard must not git checkout/restore/stash the lock path"
+        if line == LOCK_CD_LINE:
+            kinds.append(1)
+        elif LOCK_LINE_PATTERN.fullmatch(line):
+            kinds.append(2)
+        elif _is_lock_ls_files_line(line):
+            kinds.append(3)
+        elif _is_lock_diff_line(line):
+            kinds.append(4)
+        else:
+            raise AssertionError(
+                f"lock guard effective line is outside the closed allowlist: {line!r}"
             )
+
+    uses_working_dir = working_directory.replace("\\", "/") == "infrastructure/terraform"
+    cd_count = kinds.count(1)
+    assert cd_count <= 1, f"lock guard may contain at most one `{LOCK_CD_LINE}`"
+    if not uses_working_dir:
+        assert cd_count == 1, (
+            f"lock guard must start with `{LOCK_CD_LINE}` unless "
+            "working-directory: infrastructure/terraform is set"
+        )
+    if cd_count:
+        assert kinds[0] == 1, f"`{LOCK_CD_LINE}` must be the first effective line"
+    assert kinds.count(2) == 1, (
+        "lock guard must contain exactly one `terraform providers lock -platform=...` line"
+    )
+    assert kinds.count(3) <= 1, f"lock guard may contain at most one `{LOCK_LS_FILES_COMMAND}`"
+    assert kinds.count(4) == 1, f"lock guard must contain exactly one `{LOCK_DIFF_COMMAND}`"
+    assert kinds[-1] == 4, f"`{LOCK_DIFF_COMMAND}` must be the last effective line"
+    assert kinds == sorted(kinds), (
+        "lock guard lines must appear in order: "
+        f"`{LOCK_CD_LINE}`, terraform providers lock, "
+        f"optional `{LOCK_LS_FILES_COMMAND}`, `{LOCK_DIFF_COMMAND}`"
+    )
 
 
 def _assert_linux_amd64_lock_guard(workflow: dict) -> None:
+    triggers = workflow.get("on") or workflow.get(True)
+    assert "pull_request" in triggers, (
+        "ci.yml must still run on pull_request or the lock guard never gates a PR"
+    )
     job = workflow["jobs"]["terraform-validate"]
     assert "if" not in job
+    assert job.get("continue-on-error") in (None, False), (
+        "terraform-validate must not be continue-on-error"
+    )
     assert job["runs-on"] == "ubuntu-latest"
     timeout = job.get("timeout-minutes")
     assert isinstance(timeout, int)
@@ -129,7 +235,16 @@ def _assert_linux_amd64_lock_guard(workflow: dict) -> None:
     }
     assert setup_versions == {"1.15.4"}
 
-    matching = [step for step in job.get("steps", []) if _is_lock_guard_step(step)]
+    matching = [
+        step
+        for step in job.get("steps", [])
+        if _is_lock_guard_step(
+            step,
+            working_directory=str(
+                _effective_run_setting(workflow, job, step, "working-directory") or ""
+            ),
+        )
+    ]
     assert matching, (
         "ci.yml terraform-validate must run "
         f"`{LOCK_COMMAND}` with `-platform=linux_amd64` in "
@@ -139,8 +254,17 @@ def _assert_linux_amd64_lock_guard(workflow: dict) -> None:
     for step in matching:
         assert step.get("continue-on-error") in (None, False)
         assert "if" not in step
+        effective_shell = _effective_run_setting(workflow, job, step, "shell")
+        assert effective_shell in (None, "bash"), (
+            "lock guard must not override the default errexit shell"
+        )
         run = str(step.get("run", ""))
-        _assert_lock_guard_run_not_neutered(run)
+        _assert_lock_guard_run_not_neutered(
+            run,
+            working_directory=str(
+                _effective_run_setting(workflow, job, step, "working-directory") or ""
+            ),
+        )
         assert re.search(r"-platform=linux_amd64\b", run), (
             "lock guard must cover linux_amd64 (ubuntu-latest); "
             "additional -platform= values are accepted by this assertion, "
@@ -220,6 +344,20 @@ def test_linux_amd64_lock_guard_allows_additional_platforms() -> None:
     _assert_linux_amd64_lock_guard(workflow)
 
 
+def test_linux_amd64_lock_guard_accepts_backslash_continuation() -> None:
+    """FALSE-REJECT CONTROL: wrapping the lock command with ``\\`` is still valid."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _mutate_lock_guard_run(
+        workflow,
+        "cd infrastructure/terraform\n"
+        "terraform providers lock -platform=linux_amd64 \\\n"
+        "  -platform=darwin_arm64 -platform=windows_amd64\n"
+        f"{LOCK_LS_FILES_COMMAND}\n"
+        f"{LOCK_DIFF_COMMAND}\n",
+    )
+    _assert_linux_amd64_lock_guard(workflow)
+
+
 def test_linux_amd64_lock_guard_accepts_working_directory() -> None:
     workflow = copy.deepcopy(_load_ci_workflow())
     for step in workflow["jobs"]["terraform-validate"]["steps"]:
@@ -234,6 +372,39 @@ def test_linux_amd64_lock_guard_accepts_working_directory() -> None:
             break
     else:
         raise AssertionError("no lock-guard step to mutate")
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_job_defaults_working_directory() -> None:
+    """FALSE-REJECT CONTROL: job defaults.run.working-directory is a valid hoist of `cd`."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    job = workflow["jobs"]["terraform-validate"]
+    job["defaults"] = {"run": {"working-directory": "infrastructure/terraform"}}
+    for step in job["steps"]:
+        if _is_lock_guard_step(step):
+            step.pop("working-directory", None)
+            step["run"] = (
+                "terraform providers lock -platform=linux_amd64 "
+                "-platform=linux_amd64\n"
+                f"{LOCK_DIFF_COMMAND}\n"
+            )
+            break
+    else:
+        raise AssertionError("no lock-guard step to mutate")
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_git_pathspec_separator() -> None:
+    """FALSE-REJECT CONTROL: optional `--` before the lock path is still valid."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _mutate_lock_guard_run(
+        workflow,
+        "cd infrastructure/terraform\n"
+        "terraform providers lock  -platform=linux_amd64 "
+        "-platform=darwin_arm64 -platform=windows_amd64\n"
+        "git ls-files --error-unmatch -- .terraform.lock.hcl\n"
+        "git diff --exit-code -- .terraform.lock.hcl\n",
+    )
     _assert_linux_amd64_lock_guard(workflow)
 
 
@@ -300,6 +471,20 @@ def test_lock_guard_job_if_is_rejected() -> None:
         _assert_linux_amd64_lock_guard(workflow)
 
 
+def test_lock_guard_job_continue_on_error_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    workflow["jobs"]["terraform-validate"]["continue-on-error"] = True
+    with pytest.raises(AssertionError, match="must not be continue-on-error"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_without_pull_request_trigger_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    workflow["on"] = {"workflow_dispatch": None}
+    with pytest.raises(AssertionError, match="must still run on pull_request"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
 def test_lock_guard_timeout_below_20_is_rejected() -> None:
     workflow = copy.deepcopy(_load_ci_workflow())
     workflow["jobs"]["terraform-validate"]["timeout-minutes"] = 10
@@ -317,6 +502,73 @@ def test_lock_guard_or_true_is_rejected() -> None:
         f"{LOCK_DIFF_COMMAND} || true\n",
     )
     with pytest.raises(AssertionError):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_diff_before_lock_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _mutate_lock_guard_run(
+        workflow,
+        "cd infrastructure/terraform\n"
+        f"{LOCK_DIFF_COMMAND}\n"
+        "terraform providers lock -platform=linux_amd64 "
+        "-platform=darwin_arm64 -platform=windows_amd64\n",
+    )
+    with pytest.raises(AssertionError, match="must be the last effective line"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_cd_workspace_between_lock_and_diff_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _mutate_lock_guard_run(
+        workflow,
+        "cd infrastructure/terraform\n"
+        "terraform providers lock -platform=linux_amd64 "
+        "-platform=darwin_arm64 -platform=windows_amd64\n"
+        "cd $GITHUB_WORKSPACE\n"
+        f"{LOCK_DIFF_COMMAND}\n",
+    )
+    with pytest.raises(AssertionError, match="outside the closed allowlist"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_pathless_git_checkout_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _mutate_lock_guard_run(
+        workflow,
+        "cd infrastructure/terraform\n"
+        "terraform providers lock -platform=linux_amd64 "
+        "-platform=darwin_arm64 -platform=windows_amd64\n"
+        "git checkout .\n"
+        f"{LOCK_DIFF_COMMAND}\n",
+    )
+    with pytest.raises(AssertionError, match="outside the closed allowlist"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_shell_bash_file_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    for step in workflow["jobs"]["terraform-validate"]["steps"]:
+        if _is_lock_guard_step(step):
+            step["shell"] = "bash {0}"
+            break
+    else:
+        raise AssertionError("no lock-guard step to mutate")
+    with pytest.raises(AssertionError, match="must not override the default errexit shell"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_job_defaults_shell_bash_file_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    workflow["jobs"]["terraform-validate"]["defaults"] = {"run": {"shell": "bash {0}"}}
+    with pytest.raises(AssertionError, match="must not override the default errexit shell"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_workflow_defaults_shell_bash_file_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    workflow["defaults"] = {"run": {"shell": "bash {0}"}}
+    with pytest.raises(AssertionError, match="must not override the default errexit shell"):
         _assert_linux_amd64_lock_guard(workflow)
 
 

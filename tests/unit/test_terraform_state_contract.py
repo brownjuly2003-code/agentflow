@@ -5,11 +5,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.unit.test_terraform_lock_retention import (
-    _assert_linux_amd64_lock_guard,
-    _is_lock_guard_step,
-)
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "terraform-apply.yml"
 MAKEFILE_PATH = PROJECT_ROOT / "Makefile"
@@ -387,18 +382,6 @@ def test_workflow_cli_and_provider_versions_are_reproducibly_pinned() -> None:
         "which regenerates the lock and fails on a non-empty git diff."
     )
     assert zh_hashes, "provider lock must carry registry zh: hashes"
-
-    ci_workflow = yaml.safe_load((WORKFLOWS_DIR / "ci.yml").read_text(encoding="utf-8"))
-    terraform_validate = ci_workflow["jobs"]["terraform-validate"]
-    _assert_linux_amd64_lock_guard(ci_workflow)
-    lock_guard_steps = [
-        step for step in terraform_validate.get("steps", []) if _is_lock_guard_step(step)
-    ]
-    assert lock_guard_steps, (
-        "linux_amd64 coverage is guarded by wiring terraform providers lock and "
-        "git diff --exit-code .terraform.lock.hcl into ci.yml terraform-validate, "
-        "not by this hash count"
-    )
 
     ignore_check = subprocess.run(
         [

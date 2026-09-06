@@ -56,18 +56,106 @@ REQUIRED_RETENTION_PHRASES = (
     "recreated from scratch",
 )
 
+# A terraform-only PR that must still start CI, or the lock guard never runs.
+# Probe both the provider bump site and the lock file: a filter that only
+# keeps `.terraform.lock.hcl` still hides the PR the guard exists for.
+_TERRAFORM_PR_PROBES = (
+    "infrastructure/terraform/main.tf",
+    "infrastructure/terraform/.terraform.lock.hcl",
+)
+_DEFAULT_PR_BRANCH = "main"
+
 
 def _load_ci_workflow() -> dict:
     return yaml.safe_load(CI_WORKFLOW_PATH.read_text(encoding="utf-8"))
 
 
-def _effective_run_setting(workflow: dict, job: dict, step: dict, key: str):
+def _effective_run_setting(workflow: dict, job: dict, step: dict, key: str) -> str | None:
     """Resolve a GitHub Actions run setting: step, then job defaults, then workflow defaults."""
     return (
         step.get(key)
         or ((job.get("defaults") or {}).get("run") or {}).get(key)
         or ((workflow.get("defaults") or {}).get("run") or {}).get(key)
     )
+
+
+def _as_path_patterns(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        if not all(isinstance(item, str) for item in value):
+            raise AssertionError(f"unsupported ci.yml filter value: {value!r}")
+        return list(value)
+    raise AssertionError(f"unsupported ci.yml filter value: {value!r}")
+
+
+def _normalize_github_path(value: str) -> str:
+    path = str(value).replace("\\", "/").strip()
+    if path.startswith("./"):
+        path = path[2:]
+    return path
+
+
+def _github_path_filter_matches(pattern: str, path: str) -> bool:
+    """Match a GitHub Actions ``paths`` / ``paths-ignore`` glob against a POSIX path."""
+    pattern = _normalize_github_path(pattern)
+    path = _normalize_github_path(path)
+    if not pattern:
+        return False
+    parts: list[str] = []
+    index = 0
+    while index < len(pattern):
+        if pattern.startswith("**", index):
+            parts.append(".*")
+            index += 2
+            if index < len(pattern) and pattern[index] == "/":
+                index += 1
+            continue
+        char = pattern[index]
+        if char == "*":
+            parts.append("[^/]*")
+        elif char in "?+[]":
+            raise AssertionError(f"unsupported ci.yml filter pattern: {pattern!r}")
+        else:
+            parts.append(re.escape(char))
+        index += 1
+    return re.fullmatch("".join(parts), path) is not None
+
+
+def _github_filter_includes(patterns: list[str], probe: str) -> bool:
+    """GitHub last-match-wins glob filter, including ``!`` negation.
+
+    Starts excluded. Each pattern whose body matches ``probe`` sets the
+    result to included unless the pattern starts with ``!``.
+    """
+    included = False
+    for raw in patterns:
+        pattern = str(raw).replace("\\", "/").strip()
+        negated = pattern.startswith("!")
+        body = pattern[1:] if negated else pattern
+        if _github_path_filter_matches(body, probe):
+            included = not negated
+    return included
+
+
+def _clear_workflow_triggers(workflow: dict) -> None:
+    for key in ("on", True):
+        workflow.pop(key, None)
+
+
+def _set_pull_request_mapping(workflow: dict, *, replace: bool = False, **filters: object) -> None:
+    triggers = workflow.get("on", workflow.get(True))
+    assert isinstance(triggers, dict)
+    pull_request = triggers.get("pull_request")
+    if replace or not isinstance(pull_request, dict):
+        pull_request = {}
+        triggers["pull_request"] = pull_request
+    for left, right in (("paths", "paths-ignore"), ("branches", "branches-ignore")):
+        if left in filters:
+            pull_request.pop(right, None)
+        if right in filters:
+            pull_request.pop(left, None)
+    pull_request.update(filters)
 
 
 def _is_lock_ls_files_line(line: str) -> bool:
@@ -154,9 +242,16 @@ def _assert_lock_guard_run_not_neutered(run: str, *, working_directory: str = ""
     4. ``git diff --exit-code .terraform.lock.hcl`` — required, exactly one,
        last effective line; optional ``--`` and extra whitespace are allowed
 
-    ``_is_lock_guard_step`` stays a loose recogniser on purpose so a neutered
-    body is still found and this helper can raise the specific allowlist
-    message instead of the generic missing-step assert.
+    ``_is_lock_guard_step`` is loose about the flags on the ``terraform
+    providers lock`` line and accepts either ``cd infrastructure/terraform``
+    or ``working-directory``, so a body that keeps a lock line, a git-diff
+    line that still fullmatches ``LOCK_DIFF_PATTERN`` and the terraform
+    directory is still recognised and gets the specific allowlist message; a
+    body that drops the git-diff line or alters it so it no longer matches
+    ``git diff --exit-code [--] .terraform.lock.hcl`` falls out of
+    recognition and is rejected by the generic missing-step assert; a body
+    that only alters the lock line stays recognised and gets the specific
+    allowlist message.
     """
     lines = _effective_run_lines(run)
     lock_lines = [line for line in lines if line.startswith(LOCK_COMMAND)]
@@ -211,10 +306,54 @@ def _assert_lock_guard_run_not_neutered(run: str, *, working_directory: str = ""
 
 
 def _assert_linux_amd64_lock_guard(workflow: dict) -> None:
-    triggers = workflow.get("on") or workflow.get(True)
-    assert "pull_request" in triggers, (
+    triggers = workflow.get("on", workflow.get(True))
+    assert triggers, "ci.yml must declare workflow triggers"
+    if isinstance(triggers, dict):
+        events = set(triggers)
+    elif isinstance(triggers, str):
+        events = {triggers}
+    else:
+        events = set(triggers)
+    assert "pull_request" in events, (
         "ci.yml must still run on pull_request or the lock guard never gates a PR"
     )
+    if isinstance(triggers, dict):
+        pull_request = triggers["pull_request"]
+        if isinstance(pull_request, dict):
+            if "paths" in pull_request:
+                patterns = _as_path_patterns(pull_request["paths"])
+                assert all(
+                    _github_filter_includes(patterns, probe) for probe in _TERRAFORM_PR_PROBES
+                ), (
+                    "ci.yml pull_request.paths must still match "
+                    "infrastructure/terraform/** or the lock guard never gates a PR"
+                )
+            if "paths-ignore" in pull_request:
+                ignored = _as_path_patterns(pull_request["paths-ignore"])
+                assert not any(
+                    _github_filter_includes(ignored, probe) for probe in _TERRAFORM_PR_PROBES
+                ), (
+                    "ci.yml pull_request.paths-ignore must not exclude "
+                    "infrastructure/terraform/** or the lock guard never gates a PR"
+                )
+            if "branches" in pull_request:
+                patterns = _as_path_patterns(pull_request["branches"])
+                assert _github_filter_includes(patterns, _DEFAULT_PR_BRANCH), (
+                    "ci.yml pull_request.branches must still match main "
+                    "or the lock guard never gates a PR"
+                )
+            if "branches-ignore" in pull_request:
+                ignored = _as_path_patterns(pull_request["branches-ignore"])
+                assert not _github_filter_includes(ignored, _DEFAULT_PR_BRANCH), (
+                    "ci.yml pull_request.branches-ignore must not exclude main "
+                    "or the lock guard never gates a PR"
+                )
+            if "types" in pull_request:
+                types = set(_as_path_patterns(pull_request["types"]))
+                assert {"opened", "synchronize"}.issubset(types), (
+                    "ci.yml pull_request.types must still include opened and "
+                    "synchronize or the lock guard never gates a PR"
+                )
     job = workflow["jobs"]["terraform-validate"]
     assert "if" not in job
     assert job.get("continue-on-error") in (None, False), (
@@ -478,10 +617,146 @@ def test_lock_guard_job_continue_on_error_is_rejected() -> None:
         _assert_linux_amd64_lock_guard(workflow)
 
 
-def test_lock_guard_without_pull_request_trigger_is_rejected() -> None:
+@pytest.mark.parametrize("trigger_key", ["on", True])
+def test_lock_guard_without_pull_request_trigger_is_rejected(trigger_key: object) -> None:
     workflow = copy.deepcopy(_load_ci_workflow())
-    workflow["on"] = {"workflow_dispatch": None}
+    _clear_workflow_triggers(workflow)
+    workflow[trigger_key] = {"workflow_dispatch": None}
     with pytest.raises(AssertionError, match="must still run on pull_request"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_without_trigger_key_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _clear_workflow_triggers(workflow)
+    with pytest.raises(AssertionError, match="must declare workflow triggers"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+@pytest.mark.parametrize(
+    ("trigger_key", "pull_request"),
+    [
+        ("on", {"paths": ["src/**"]}),
+        (True, {"paths": ["src/**"]}),
+        ("on", {"paths-ignore": ["**"]}),
+        (True, {"paths-ignore": ["**"]}),
+        ("on", {"paths": ["**", "!infrastructure/terraform/**"]}),
+        (True, {"paths": ["**", "!infrastructure/terraform/**"]}),
+        ("on", {"branches": ["release-only"]}),
+        (True, {"branches": ["release-only"]}),
+        ("on", {"branches-ignore": ["main"]}),
+        (True, {"branches-ignore": ["main"]}),
+        ("on", {"types": ["labeled"]}),
+        (True, {"types": ["labeled"]}),
+        ("on", {"paths-ignore": ["**/*.tf"]}),
+        (True, {"paths-ignore": ["**/*.tf"]}),
+        ("on", {"paths-ignore": ["infrastructure/terraform/*.tf"]}),
+        (True, {"paths-ignore": ["infrastructure/terraform/*.tf"]}),
+        ("on", {"paths": ["**/.terraform.lock.hcl"]}),
+        (True, {"paths": ["**/.terraform.lock.hcl"]}),
+        ("on", {"paths": ["infrastructure/terraform/.terraform.lock.hcl"]}),
+        (True, {"paths": ["infrastructure/terraform/.terraform.lock.hcl"]}),
+    ],
+)
+def test_lock_guard_pull_request_path_filter_excluding_terraform_is_rejected(
+    trigger_key: object, pull_request: dict
+) -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _clear_workflow_triggers(workflow)
+    workflow[trigger_key] = {"pull_request": pull_request}
+    with pytest.raises(AssertionError, match="never gates a PR"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        ["infrastructure/**"],
+        ["infrastructure/terraform/**"],
+    ],
+)
+def test_linux_amd64_lock_guard_accepts_pull_request_paths_covering_terraform(
+    paths: list[str],
+) -> None:
+    """FALSE-REJECT CONTROL: a paths filter that still reaches terraform is valid."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(workflow, paths=paths)
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_paths_ignore_with_terraform_negation() -> None:
+    """FALSE-REJECT CONTROL: GitHub re-includes terraform after a broader ignore."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(
+        workflow,
+        **{"paths-ignore": ["infrastructure/**", "!infrastructure/terraform/**"]},
+    )
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_pull_request_branches_including_main() -> None:
+    """FALSE-REJECT CONTROL: a branches filter that still includes main is valid."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(workflow, branches=["main"])
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_branches_ignore_other_than_main() -> None:
+    """FALSE-REJECT CONTROL: ignoring non-main branches still gates PRs into main."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(workflow, replace=True, **{"branches-ignore": ["release-only"]})
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_default_pull_request_types() -> None:
+    """FALSE-REJECT CONTROL: explicit default PR types still gate ordinary PR pushes."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(workflow, types=["opened", "synchronize", "reopened"])
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_linux_amd64_lock_guard_accepts_scalar_pull_request_trigger() -> None:
+    """FALSE-REJECT CONTROL: on: pull_request (scalar) still starts CI on PRs."""
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _clear_workflow_triggers(workflow)
+    workflow[True] = "pull_request"
+    _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_scalar_pull_request_substring_event_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _clear_workflow_triggers(workflow)
+    workflow[True] = "pull_request_review"
+    with pytest.raises(AssertionError, match="must still run on pull_request"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_github_character_class_path_filter_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(workflow, **{"paths-ignore": ["infrastructure/[t]erraform/**"]})
+    with pytest.raises(AssertionError, match="unsupported ci.yml filter pattern"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_github_path_filter_matches_root_dotfile_exactly() -> None:
+    """Prefix-strip must not mangle a leading-dot filename into a different path."""
+    assert _github_path_filter_matches(".terraform.lock.hcl", ".terraform.lock.hcl")
+    assert not _github_path_filter_matches("terraform.lock.hcl", ".terraform.lock.hcl")
+    assert all(
+        _github_path_filter_matches("./infrastructure/terraform/**", probe)
+        for probe in _TERRAFORM_PR_PROBES
+    )
+
+
+@pytest.mark.parametrize(
+    "filter_key",
+    ["paths", "paths-ignore", "branches", "branches-ignore", "types"],
+)
+@pytest.mark.parametrize("bad_value", [{}, {"a": 1}, None, [{"a": 1}], [None], [123]])
+def test_lock_guard_unparseable_path_filter_is_rejected(filter_key: str, bad_value: object) -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _set_pull_request_mapping(workflow, **{filter_key: bad_value})
+    with pytest.raises(AssertionError, match="unsupported ci.yml filter value"):
         _assert_linux_amd64_lock_guard(workflow)
 
 
@@ -515,6 +790,20 @@ def test_lock_guard_diff_before_lock_is_rejected() -> None:
         "-platform=darwin_arm64 -platform=windows_amd64\n",
     )
     with pytest.raises(AssertionError, match="must be the last effective line"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_lock_guard_ls_files_before_lock_is_rejected() -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _mutate_lock_guard_run(
+        workflow,
+        "cd infrastructure/terraform\n"
+        f"{LOCK_LS_FILES_COMMAND}\n"
+        "terraform providers lock -platform=linux_amd64 "
+        "-platform=darwin_arm64 -platform=windows_amd64\n"
+        f"{LOCK_DIFF_COMMAND}\n",
+    )
+    with pytest.raises(AssertionError, match="must appear in order"):
         _assert_linux_amd64_lock_guard(workflow)
 
 

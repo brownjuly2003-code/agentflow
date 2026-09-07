@@ -131,10 +131,12 @@ Push, PR mutations and release actions require explicit owner authorization.
   savepoint restore linkage, exact-once E1/E2 counts across Kafka, Iceberg,
   ClickHouse, and API, DLQ `0`, and source lag `0` — see
   [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md).
-- Repository-owned coverage gates are green and remain blocking. Codecov OIDC
-  currently returns `Repository not found`; its upload is non-blocking
-  reporting until the one-time external activation in
-  [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
+- Repository-owned coverage gates are green and remain blocking. There is no
+  Codecov upload: audit F-06 removed it, and the README badge with it, after
+  the external service returned `Repository not found` for a repository that
+  had never been enabled there. What the tracked `codecov.yml` still does, and
+  what a reintroduction would take, is in
+  [operations/codecov-setup.md](operations/codecov-setup.md).
 - Production status remains `candidate`; remaining production gates are:
   full soak plus rollback after traffic (**`BLOCKED_HOST_CAPACITY`** —
   [ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md);

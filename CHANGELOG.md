@@ -4,6 +4,36 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — S3 lifecycle no longer puts an age clock on Iceberg objects (FB-11)
+
+The reference Terraform for the lake bucket shipped two lifecycle rules that
+deleted by age under `warehouse/`: `raw-data-lifecycle` (GLACIER after 90 days,
+expiration after 365, on `warehouse/raw/`) and `iceberg-metadata` (expiration
+after 30 days on `warehouse/metadata/`, under a comment claiming it kept 30 days
+of snapshots).
+
+Neither prefix matched anything — Iceberg lays tables out as
+`<warehouse>/<namespace>/<table>/{metadata,data}/…` and the configured namespace
+is `agentflow` — so both were no-ops wearing the language of a retention policy.
+That is the trap rather than the bug: the next person to notice they delete
+nothing reaches for the prefix the Flink sink actually writes (`warehouse/`), and
+the no-op becomes a job that removes manifest lists and data files that current
+snapshots still reference. `terraform-apply.yml` has been disabled since
+2026-04-23, so nothing was ever destroyed; this is reference topology someone is
+expected to switch on.
+
+Both rules are gone. What is left is what S3 alone owns — scratch state under
+`checkpoints/`, and a new `noncurrent-version-cleanup` rule for the noncurrent
+versions this versioned bucket accrues, which no snapshot can reference. Table
+retention belongs to the catalog (`iceberg_snapshot_expiry` in
+`orchestration/dags/daily_batch.py`, `docs/runbook.md` monthly maintenance).
+
+The retired knobs `storage_glacier_after_days` and `storage_expire_after_days`
+are replaced by `storage_noncurrent_version_expire_days` (default 30) in
+`variables.tf` and all three tfvars files.
+`tests/unit/test_terraform_lake_lifecycle.py` fails if an `expiration` or
+`transition` block ever reappears under `warehouse/`.
+
 ### Security — the failed-auth throttle stops being a denial-of-service tool (FB-06)
 
 The per-address throttle for repeated failed authentication rejected with 429

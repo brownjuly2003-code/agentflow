@@ -402,3 +402,11 @@ For restore drills, backup verification, or host loss scenarios, use
 - Review and rotate API keys
 - Run `pytest tests/chaos/ -v --tb=short` against the current compose stack
 - Cost review: compare actual vs projected spend
+
+The two Iceberg lines above are the *only* retention for table data. S3
+lifecycle in `infrastructure/terraform/modules/storage/main.tf` deliberately
+expires nothing under the warehouse prefix: object age says nothing about
+which manifests still reference a file, so an S3 rule there deletes files out
+from under live snapshots instead of cleaning the table. If table storage is
+growing, the answer is `expire_snapshots` and `rewrite_data_files`, never a
+new lifecycle rule.

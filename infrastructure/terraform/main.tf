@@ -69,10 +69,9 @@ module "flink" {
 module "storage" {
   source = "./modules/storage"
 
-  environment            = var.environment
-  lake_bucket_name       = "${var.project_name}-lake-${var.environment}"
-  lifecycle_glacier_days = var.storage_glacier_after_days
-  lifecycle_expire_days  = var.storage_expire_after_days
+  environment                    = var.environment
+  lake_bucket_name               = "${var.project_name}-lake-${var.environment}"
+  noncurrent_version_expire_days = var.storage_noncurrent_version_expire_days
 }
 
 module "monitoring" {

@@ -70,6 +70,7 @@ REPO_ROOT_MARKDOWN_ALLOWLIST = frozenset(
         "CHANGELOG.md",
         "CONTRIBUTING.md",
         "SECURITY.md",
+        "AGENTS.md",
     }
 )
 

@@ -154,5 +154,5 @@ Push, PR mutations and release actions require explicit owner authorization.
 
 ## Сохранённые локальные артефакты
 
-Root `AGENTS.md` and `plan_sol_23_07_26` remain untracked and unchanged. They do
-not enter the public closing commit.
+Root `AGENTS.md` is now a tracked repository-root document. `plan_sol_23_07_26`
+is unchanged and stays untracked.

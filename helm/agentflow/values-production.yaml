@@ -85,6 +85,34 @@ networkPolicy:
     - kubernetes.io/metadata.name: ingress-nginx
     # - kubernetes.io/metadata.name: monitoring   # <- replace with the namespace that runs Prometheus
 
+  # REQUIRED for every rule the policy renders. A Kubernetes egress rule with
+  # `ports:` and no `to:` allows that port to EVERY address, in the cluster and
+  # on the internet -- so the baseline was denying nothing on
+  # 6379/9092/8123/4317/5432 (audit FB-09). Left empty here because only the
+  # environment knows where its stores live; the contract names each missing
+  # one. Which rules render follows what is configured, so a DuckDB install
+  # with no Redis is asked for `kafka` alone:
+  #
+  #   egressTo:
+  #     kafka:
+  #       - namespaceSelector:
+  #           matchLabels:
+  #             kubernetes.io/metadata.name: data
+  #         podSelector:
+  #           matchLabels:
+  #             app.kubernetes.io/name: kafka
+  #     postgres:
+  #       - ipBlock:
+  #           cidr: 10.30.4.0/24     # managed PostgreSQL outside the cluster
+  egressTo:
+    redis: []
+    kafka: []
+    clickhouse: []
+    otlp: []
+    postgres: []
+    icebergCatalog: []
+    objectStore: []
+
 # The API owns query-analytics storage; this job only calls its authenticated
 # admin endpoint. Production must execute the final prune and forbid overlap.
 analyticsRetention:

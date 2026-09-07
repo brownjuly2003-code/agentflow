@@ -4,6 +4,27 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — the NetworkPolicy egress rules now say where they may go (FB-09)
+
+* **A rule with `ports:` and no `to:` allows that port to every address.** The
+  chart rendered exactly that for Redis, Kafka, Iceberg, the object store,
+  ClickHouse, OTLP and PostgreSQL — DNS was the only rule carrying a selector.
+  So `policyTypes: [Ingress, Egress]` bought a default-deny baseline that denied
+  nothing on 6379/9092/8181/9000/8123/4317/5432, and a compromised pod could
+  dial any of them anywhere, cluster or internet.
+* **Each rule now takes its peers from `networkPolicy.egressTo.<service>`** as
+  raw `NetworkPolicyPeer` entries (podSelector / namespaceSelector / ipBlock),
+  and `templates/production-contract.yaml` refuses a `profile=production` render
+  that leaves one empty, naming the service and the port it would have opened.
+* **Rules render only when their feature is configured.** Redis follows
+  `config.redisUrl`, ClickHouse follows `serving.backend`, OTLP follows
+  `config.otlpEndpoint`; PostgreSQL and the Iceberg/object-store pair were
+  already gated. A DuckDB install with no Redis previously still opened 6379 and
+  8123 to every address for a topology it did not have — and the contract asks
+  only for the rules that render, so on the chart defaults that is Kafka alone.
+* DNS stays the chart-owned exception: it selects kube-dns by label, in whichever
+  namespace kube-dns runs.
+
 ### Security — the key-lookup pepper is no longer allowed to be the public one (FB-07)
 
 * **`AGENTFLOW_PROFILE=production` now refuses to boot without

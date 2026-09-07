@@ -101,6 +101,11 @@ _PRODUCTION_POSTURE: tuple[str, ...] = (
     "extraEnv[1].valueFrom.secretKeyRef.name=agentflow-prod-secret",
     "--set",
     "extraEnv[1].valueFrom.secretKeyRef.key=query-fingerprint-pepper",
+    # Part of the posture since FB-09: an egress rule with no `to:` allows its
+    # port to every address, so production names peers for each rule that
+    # renders. Tests that switch on ClickHouse or PostgreSQL add their own.
+    "--set",
+    "networkPolicy.egressTo.kafka[0].ipBlock.cidr=10.30.0.0/16",
 )
 
 
@@ -700,6 +705,8 @@ def test_serving_clickhouse_tls_render_is_first_class():
         "serving.clickhouse.tls.caSecret=agentflow-clickhouse-ca",
         "--set",
         "config.profile=production",
+        "--set",
+        "networkPolicy.egressTo.clickhouse[0].ipBlock.cidr=10.30.1.0/24",
         *_PRODUCTION_POSTURE,
     )
     output = _combined_output(rendered)
@@ -964,6 +971,10 @@ def test_production_materializer_requires_kafka_auth():
         "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
         "--set",
         "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "networkPolicy.egressTo.icebergCatalog[0].ipBlock.cidr=10.30.3.0/24",
+        "--set",
+        "networkPolicy.egressTo.objectStore[0].ipBlock.cidr=10.30.3.0/24",
     )
     output = _combined_output(result)
 
@@ -990,6 +1001,10 @@ def test_kafka_auth_credentials_are_secret_references():
         "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
         "--set",
         "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "networkPolicy.egressTo.icebergCatalog[0].ipBlock.cidr=10.30.3.0/24",
+        "--set",
+        "networkPolicy.egressTo.objectStore[0].ipBlock.cidr=10.30.3.0/24",
     )
     output = _combined_output(result)
 

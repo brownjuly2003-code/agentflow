@@ -1286,6 +1286,19 @@
         "scrapeFromIngressNamespace": {
           "type": "boolean"
         },
+        "egressTo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "redis": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "kafka": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "clickhouse": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "otlp": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "postgres": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "icebergCatalog": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "objectStore": { "type": "array", "items": { "type": "object", "minProperties": 1 } }
+          }
+        },
         "egressPorts": {
           "type": "object"
         }

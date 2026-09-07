@@ -133,6 +133,33 @@ networkPolicy:
   # so an ingress-nginx-only ingressFromNamespaces list is deliberate.
   # Production contract accepts that list only when this is true.
   scrapeFromIngressNamespace: false
+  # Destinations for each egress rule, as raw NetworkPolicyPeer entries
+  # (podSelector / namespaceSelector / ipBlock). A Kubernetes egress rule with
+  # `ports:` and no `to:` allows those ports to EVERY address, in the cluster
+  # and out of it -- so an empty list here is the widest policy, not the
+  # narrowest (audit FB-09). The dev default leaves them empty because
+  # networkPolicy.enabled is false on a laptop install and nothing renders;
+  # production is refused until every rendered rule names its peers.
+  #
+  #   egressTo:
+  #     postgres:
+  #       - namespaceSelector:
+  #           matchLabels:
+  #             kubernetes.io/metadata.name: data
+  #         podSelector:
+  #           matchLabels:
+  #             app.kubernetes.io/name: postgresql
+  #     objectStore:
+  #       - ipBlock:
+  #           cidr: 10.20.0.0/16
+  egressTo:
+    redis: []
+    kafka: []
+    clickhouse: []
+    otlp: []
+    postgres: []
+    icebergCatalog: []
+    objectStore: []
   egressPorts:
     redis: 6379
     kafka: 9092

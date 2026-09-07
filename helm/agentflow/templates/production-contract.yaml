@@ -138,6 +138,40 @@ Deliberately NOT checked here:
 {{- end -}}
 {{- end -}}
 
+{{- /* Egress destinations (audit FB-09). A Kubernetes egress rule with
+     `ports:` and no `to:` allows those ports to every address, cluster and
+     internet alike -- so the default-deny baseline was denying nothing on
+     6379/9092/8123/4317/5432. Each rule this chart renders must name its
+     peers. The condition list mirrors networkpolicy.yaml exactly: a rule that
+     does not render is not asked for, which is why turning a feature off is
+     also a way to answer this. */ -}}
+{{- if .Values.networkPolicy.enabled -}}
+{{- $egressTo := .Values.networkPolicy.egressTo | default dict -}}
+{{- $required := list (dict "key" "kafka" "what" "the Kafka brokers") -}}
+{{- if .Values.config.redisUrl -}}
+{{- $required = append $required (dict "key" "redis" "what" "Redis") -}}
+{{- end -}}
+{{- if eq .Values.serving.backend "clickhouse" -}}
+{{- $required = append $required (dict "key" "clickhouse" "what" "the ClickHouse serving backend") -}}
+{{- end -}}
+{{- if .Values.config.otlpEndpoint -}}
+{{- $required = append $required (dict "key" "otlp" "what" "the OTLP collector") -}}
+{{- end -}}
+{{- if eq .Values.controlPlane.store "postgres" -}}
+{{- $required = append $required (dict "key" "postgres" "what" "the control-plane PostgreSQL") -}}
+{{- end -}}
+{{- if .Values.lakeMaterializer.enabled -}}
+{{- $required = append $required (dict "key" "icebergCatalog" "what" "the Iceberg REST catalog") -}}
+{{- $required = append $required (dict "key" "objectStore" "what" "the S3-compatible object store") -}}
+{{- end -}}
+{{- range $required -}}
+{{- $peers := index $egressTo .key | default list -}}
+{{- if not $peers -}}
+{{- $problems = append $problems (printf "networkPolicy.egressTo.%s is empty while the policy opens port %v for %s: an egress rule with no `to:` allows that port to every address in the cluster and on the internet, so the default-deny baseline denies nothing there. Name the peers (podSelector / namespaceSelector / ipBlock)" .key (index $.Values.networkPolicy.egressPorts .key) .what) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- if .Values.serviceAccount.name -}}
 {{- $problems = append $problems (printf "serviceAccount.name=%q: that legacy escape hatch collapses the API/worker/provision/Flink identities back onto one privileged account (audit F-05). Leave it empty and use serviceAccount.apiName/workerName/provisionName" .Values.serviceAccount.name) -}}
 {{- end -}}

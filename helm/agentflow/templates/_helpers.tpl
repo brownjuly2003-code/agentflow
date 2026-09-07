@@ -58,3 +58,26 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "agentflow.serviceAccountName" -}}
 {{- include "agentflow.apiServiceAccountName" . -}}
 {{- end -}}
+
+{{/*
+One egress rule: a port, and the destinations reachable on it.
+Caller: include "agentflow.egressRule" (dict "to" $destinations "port" $port)
+
+A Kubernetes egress rule with `ports:` and no `to:` allows those ports to
+EVERY address -- in the cluster and on the internet (audit FB-09). So an empty
+destination list is not a narrower policy, it is the widest one, and the
+production contract refuses it for every rule this chart renders.
+*/}}
+{{- define "agentflow.egressRule" -}}
+{{- if .to }}
+- to:
+{{ toYaml .to | indent 4 }}
+  ports:
+    - protocol: TCP
+      port: {{ .port }}
+{{- else }}
+- ports:
+    - protocol: TCP
+      port: {{ .port }}
+{{- end }}
+{{- end -}}

@@ -145,8 +145,8 @@ helm upgrade --install agentflow ./helm/agentflow   -f helm/agentflow/values-pro
 
 The overlay leaves empty exactly the values only your environment can supply
 (the verified API image digest, the Secret name, the origins, the ingress
-class/hosts/TLS, the trusted proxies, the Prometheus scrape namespace, and the
-two pepper `extraEnv` entries described below).
+class/hosts/TLS, the trusted proxies, the Prometheus scrape namespace, the two
+pepper `extraEnv` entries and the egress destinations described below).
 Helm replaces lists instead of merging them — an environment file that
 names only the scrape namespace removes the ingress-controller entry and
 blocks the production Ingress. Repeat both selectors in the environment
@@ -173,6 +173,7 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
 | `extraEnv` sets `AGENTFLOW_KEY_LOOKUP_PEPPER` and `AGENTFLOW_QUERY_FINGERPRINT_PEPPER`, each via `valueFrom.secretKeyRef` | Both peppers fall back to constants committed to this repository, and the app refuses to boot on production without them. A literal `value:` is refused for the same reason `secrets.create=true` is |
+| `networkPolicy.egressTo.<service>` non-empty for every egress rule that renders | An egress rule with `ports:` and no `to:` allows that port to every address, in the cluster and on the internet, so the default-deny baseline denies nothing there |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
 | Every `ingress.hosts[]` entry has a non-empty `paths` list | An Ingress rule with no HTTP paths is invalid and routes nothing |
 | `ingress.tls` non-empty when ingress is enabled | TLS terminates somewhere you can point at |
@@ -322,6 +323,41 @@ in-cluster traffic already constrained by the chart's NetworkPolicy — must be
 named explicitly via `extraEnv`:
 `AGENTFLOW_INSECURE_TRANSPORT_OK="clickhouse,redis"`. A wildcard
 `config.corsOrigins` is likewise refused outside demo mode.
+
+### Egress destinations
+
+`policyTypes: [Ingress, Egress]` makes the NetworkPolicy an allow-list in both
+directions, but a Kubernetes egress rule with `ports:` and no `to:` allows that
+port to **every** address — other namespaces, the node network, the internet.
+The chart used to render exactly that for Redis, Kafka, Iceberg, the object
+store, ClickHouse, OTLP and PostgreSQL, so the baseline denied nothing on
+6379/9092/8181/9000/8123/4317/5432 (audit FB-09).
+
+Each rule now takes its peers from `networkPolicy.egressTo.<service>`, as raw
+`NetworkPolicyPeer` entries — `podSelector`, `namespaceSelector`, `ipBlock`, or
+a combination:
+
+```yaml
+networkPolicy:
+  egressTo:
+    kafka:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: data
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: kafka
+    postgres:
+      - ipBlock:
+          cidr: 10.30.4.0/24     # managed PostgreSQL outside the cluster
+```
+
+A rule only renders when its feature is configured, and the contract asks only
+for the rules that render. On the chart defaults — DuckDB, no `config.redisUrl`,
+no `config.otlpEndpoint`, the embedded control plane, `lakeMaterializer` off —
+that is Kafka alone; switching on ClickHouse, Redis, OTLP, PostgreSQL or the
+lake materializer adds its own. DNS is the one rule the chart owns outright: it
+selects kube-dns by label in whichever namespace it runs.
 
 ### Pepper material
 

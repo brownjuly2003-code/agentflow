@@ -51,6 +51,12 @@ _ENVIRONMENT_VALUES = {
             {"kubernetes.io/metadata.name": "ingress-nginx"},
             {"kubernetes.io/metadata.name": "monitoring"},
         ],
+        # An egress rule with `ports:` and no `to:` allows that port to every
+        # address (audit FB-09), so production must name peers for every rule
+        # that renders. Only `kafka` renders under these values: the backend is
+        # DuckDB, there is no Redis or OTLP endpoint, the control plane is
+        # embedded and the lake materializer is off.
+        "egressTo": {"kafka": [{"ipBlock": {"cidr": "10.30.0.0/16"}}]},
     },
     "ingress": {
         "className": "nginx",
@@ -93,6 +99,19 @@ _ENVIRONMENT_VALUES = {
         },
     ],
 }
+
+
+def _egress_to(**extra: list) -> dict:
+    """Baseline egress destinations plus the ones a switched-on feature needs.
+
+    Turning a feature on adds an egress rule, and a rule with no `to:` allows
+    its port to every address -- so production asks for peers (audit FB-09).
+    Without this, a test about ClickHouse TLS would fail on the egress clause
+    instead, which is the opposite of one clause at a time.
+    """
+    destinations = dict(_ENVIRONMENT_VALUES["networkPolicy"]["egressTo"])
+    destinations.update(extra)
+    return destinations
 
 
 def _load_yaml(path: Path) -> dict:
@@ -429,6 +448,9 @@ def test_production_render_accepts_a_named_plaintext_exemption(tmp_path: Path):
                 *_ENVIRONMENT_VALUES["extraEnv"],
                 {"name": "AGENTFLOW_INSECURE_TRANSPORT_OK", "value": "clickhouse"},
             ],
+            "networkPolicy": {
+                "egressTo": _egress_to(clickhouse=[{"ipBlock": {"cidr": "10.30.1.0/24"}}])
+            },
         },
     )
     output = _output(result)
@@ -445,7 +467,15 @@ def test_production_render_refuses_plaintext_redis(tmp_path: Path):
 
 
 def test_production_render_accepts_tls_redis(tmp_path: Path):
-    result = _render(tmp_path, {"config": {"redisUrl": "rediss://redis.data.svc:6380/0"}})
+    result = _render(
+        tmp_path,
+        {
+            "config": {"redisUrl": "rediss://redis.data.svc:6380/0"},
+            "networkPolicy": {
+                "egressTo": _egress_to(redis=[{"ipBlock": {"cidr": "10.30.2.0/24"}}])
+            },
+        },
+    )
     output = _output(result)
 
     assert result.returncode == 0, output

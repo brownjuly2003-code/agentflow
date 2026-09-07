@@ -17,16 +17,23 @@ WORKDIR /build
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Track main by default; pin to a tag/sha with --build-arg AGENTFLOW_REF=v1.5.0
-ARG AGENTFLOW_REF=main
+# Audit FB-13: the default is a published release tag, so a Factory rebuild
+# reproduces a known code line instead of whatever `main` happened to be that
+# minute. Track the branch explicitly with --build-arg AGENTFLOW_REF=main, or
+# name any tag/sha the same way. Bump this with the release tag (a unit test
+# refuses a moving branch as the default).
+ARG AGENTFLOW_REF=v2.0.0
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch "${AGENTFLOW_REF}" \
         https://github.com/brownjuly2003-code/agentflow.git /src
 WORKDIR /src
-RUN pip install --no-cache-dir --upgrade pip build hatchling \
-    && python -m build --wheel --outdir /tmp/dist
+# Mirrors Dockerfile.api: pinned build backend, and --no-isolation so the pin is
+# what builds the wheel instead of a fresh PyPI download inside build's venv.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir build==1.5.1 hatchling==1.31.0 \
+    && python -m build --wheel --no-isolation --outdir /tmp/dist
 
 FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad5a0412fd5bfc7
 

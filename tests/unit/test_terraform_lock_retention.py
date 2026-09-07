@@ -56,13 +56,31 @@ REQUIRED_RETENTION_PHRASES = (
     "recreated from scratch",
 )
 
+
+def _tracked_terraform_tf_paths(terraform_root: Path) -> tuple[str, ...]:
+    """Tracked ``*.tf`` paths under ``terraform_root``, relative to it.
+
+    Skip any path with a ``.``-prefixed segment so gitignored trees
+    (``.terraform/``, ``.tmp/``) cannot enter the lock-guard probe set.
+    """
+    return tuple(
+        sorted(
+            path.relative_to(terraform_root).as_posix()
+            for path in terraform_root.rglob("*.tf")
+            if path.is_file()
+            and not any(part.startswith(".") for part in path.relative_to(terraform_root).parts)
+        )
+    )
+
+
 # A terraform-only PR that must still start CI, or the lock guard never runs.
-# Probe both the provider bump site and the lock file: a filter that only
-# keeps `.terraform.lock.hcl` still hides the PR the guard exists for.
-_TERRAFORM_PR_PROBES = (
-    "infrastructure/terraform/main.tf",
-    "infrastructure/terraform/.terraform.lock.hcl",
-)
+# Probe every tracked *.tf plus the lock file: terraform providers lock reads
+# the whole configuration, so a filter that hides any of those files still
+# hides the PR the guard exists for.
+_TERRAFORM_PR_PROBES = tuple(
+    (TERRAFORM_MAIN_PATH.parent / relative).relative_to(PROJECT_ROOT).as_posix()
+    for relative in _tracked_terraform_tf_paths(TERRAFORM_MAIN_PATH.parent)
+) + (LOCK_PATH.relative_to(PROJECT_ROOT).as_posix(),)
 _DEFAULT_PR_BRANCH = "main"
 
 
@@ -143,11 +161,11 @@ def _clear_workflow_triggers(workflow: dict) -> None:
         workflow.pop(key, None)
 
 
-def _set_pull_request_mapping(workflow: dict, *, replace: bool = False, **filters: object) -> None:
+def _set_pull_request_mapping(workflow: dict, **filters: object) -> None:
     triggers = workflow.get("on", workflow.get(True))
     assert isinstance(triggers, dict)
     pull_request = triggers.get("pull_request")
-    if replace or not isinstance(pull_request, dict):
+    if not isinstance(pull_request, dict):
         pull_request = {}
         triggers["pull_request"] = pull_request
     for left, right in (("paths", "paths-ignore"), ("branches", "branches-ignore")):
@@ -308,12 +326,10 @@ def _assert_lock_guard_run_not_neutered(run: str, *, working_directory: str = ""
 def _assert_linux_amd64_lock_guard(workflow: dict) -> None:
     triggers = workflow.get("on", workflow.get(True))
     assert triggers, "ci.yml must declare workflow triggers"
-    if isinstance(triggers, dict):
-        events = set(triggers)
-    elif isinstance(triggers, str):
-        events = {triggers}
-    else:
-        events = set(triggers)
+    assert isinstance(triggers, (dict, list, tuple, str)), (
+        f"unsupported ci.yml workflow trigger: {triggers!r}"
+    )
+    events = {triggers} if isinstance(triggers, str) else set(triggers)
     assert "pull_request" in events, (
         "ci.yml must still run on pull_request or the lock guard never gates a PR"
     )
@@ -633,6 +649,15 @@ def test_lock_guard_without_trigger_key_is_rejected() -> None:
         _assert_linux_amd64_lock_guard(workflow)
 
 
+@pytest.mark.parametrize("trigger_key", ["on", True])
+def test_lock_guard_scalar_non_string_trigger_is_rejected(trigger_key: object) -> None:
+    workflow = copy.deepcopy(_load_ci_workflow())
+    _clear_workflow_triggers(workflow)
+    workflow[trigger_key] = 5
+    with pytest.raises(AssertionError, match="unsupported ci.yml workflow trigger"):
+        _assert_linux_amd64_lock_guard(workflow)
+
+
 @pytest.mark.parametrize(
     ("trigger_key", "pull_request"),
     [
@@ -656,6 +681,46 @@ def test_lock_guard_without_trigger_key_is_rejected() -> None:
         (True, {"paths": ["**/.terraform.lock.hcl"]}),
         ("on", {"paths": ["infrastructure/terraform/.terraform.lock.hcl"]}),
         (True, {"paths": ["infrastructure/terraform/.terraform.lock.hcl"]}),
+        ("on", {"paths": ["infrastructure/terraform/*"]}),
+        (True, {"paths": ["infrastructure/terraform/*"]}),
+        ("on", {"paths-ignore": ["infrastructure/terraform/modules/**"]}),
+        (True, {"paths-ignore": ["infrastructure/terraform/modules/**"]}),
+        ("on", {"paths-ignore": ["infrastructure/terraform/oidc.tf"]}),
+        (True, {"paths-ignore": ["infrastructure/terraform/oidc.tf"]}),
+        (
+            "on",
+            {
+                "paths": [
+                    "infrastructure/terraform/main.tf",
+                    "infrastructure/terraform/oidc.tf",
+                    "infrastructure/terraform/modules/github-oidc/main.tf",
+                    "infrastructure/terraform/.terraform.lock.hcl",
+                ]
+            },
+        ),
+        (
+            True,
+            {
+                "paths": [
+                    "infrastructure/terraform/main.tf",
+                    "infrastructure/terraform/oidc.tf",
+                    "infrastructure/terraform/modules/github-oidc/main.tf",
+                    "infrastructure/terraform/.terraform.lock.hcl",
+                ]
+            },
+        ),
+        ("on", {"paths-ignore": ["infrastructure/terraform/outputs.tf"]}),
+        (True, {"paths-ignore": ["infrastructure/terraform/outputs.tf"]}),
+        ("on", {"paths-ignore": ["infrastructure/terraform/modules/flink/**"]}),
+        (True, {"paths-ignore": ["infrastructure/terraform/modules/flink/**"]}),
+        (
+            "on",
+            {"paths-ignore": ["infrastructure/terraform/modules/github-oidc/outputs.tf"]},
+        ),
+        (
+            True,
+            {"paths-ignore": ["infrastructure/terraform/modules/github-oidc/outputs.tf"]},
+        ),
     ],
 )
 def test_lock_guard_pull_request_path_filter_excluding_terraform_is_rejected(
@@ -704,7 +769,7 @@ def test_linux_amd64_lock_guard_accepts_pull_request_branches_including_main() -
 def test_linux_amd64_lock_guard_accepts_branches_ignore_other_than_main() -> None:
     """FALSE-REJECT CONTROL: ignoring non-main branches still gates PRs into main."""
     workflow = copy.deepcopy(_load_ci_workflow())
-    _set_pull_request_mapping(workflow, replace=True, **{"branches-ignore": ["release-only"]})
+    _set_pull_request_mapping(workflow, **{"branches-ignore": ["release-only"]})
     _assert_linux_amd64_lock_guard(workflow)
 
 
@@ -736,6 +801,57 @@ def test_lock_guard_github_character_class_path_filter_is_rejected() -> None:
     _set_pull_request_mapping(workflow, **{"paths-ignore": ["infrastructure/[t]erraform/**"]})
     with pytest.raises(AssertionError, match="unsupported ci.yml filter pattern"):
         _assert_linux_amd64_lock_guard(workflow)
+
+
+def test_terraform_pr_probes_exist_under_project_root() -> None:
+    """A rename of a probed path must redden this file, not silently skip the filter."""
+    assert TERRAFORM_MAIN_PATH.relative_to(PROJECT_ROOT).as_posix() in _TERRAFORM_PR_PROBES
+    assert LOCK_PATH.relative_to(PROJECT_ROOT).as_posix() in _TERRAFORM_PR_PROBES
+    blessed = {
+        TERRAFORM_MAIN_PATH.relative_to(PROJECT_ROOT).as_posix(),
+        "infrastructure/terraform/oidc.tf",
+        OIDC_MODULE_PATH.relative_to(PROJECT_ROOT).as_posix(),
+        LOCK_PATH.relative_to(PROJECT_ROOT).as_posix(),
+    }
+    assert blessed.issubset(_TERRAFORM_PR_PROBES), (
+        f"lock-guard PR probes shrank below T-39 coverage: missing {sorted(blessed - set(_TERRAFORM_PR_PROBES))}"
+    )
+    expected = blessed | {
+        "infrastructure/terraform/outputs.tf",
+        "infrastructure/terraform/variables.tf",
+        "infrastructure/terraform/modules/flink/main.tf",
+        "infrastructure/terraform/modules/flink/variables.tf",
+        "infrastructure/terraform/modules/github-oidc/outputs.tf",
+        "infrastructure/terraform/modules/github-oidc/variables.tf",
+        "infrastructure/terraform/modules/kafka/main.tf",
+        "infrastructure/terraform/modules/monitoring/main.tf",
+        "infrastructure/terraform/modules/storage/main.tf",
+    }
+    assert set(_TERRAFORM_PR_PROBES) == expected, (
+        "lock-guard PR probes must be every tracked *.tf plus the lock file; "
+        f"extra={sorted(set(_TERRAFORM_PR_PROBES) - expected)} "
+        f"missing={sorted(expected - set(_TERRAFORM_PR_PROBES))}"
+    )
+    missing = [probe for probe in _TERRAFORM_PR_PROBES if not (PROJECT_ROOT / probe).is_file()]
+    assert not missing, f"lock-guard PR probes missing under PROJECT_ROOT: {missing}"
+
+
+def test_tracked_terraform_tf_paths_skip_dot_directories(tmp_path: Path) -> None:
+    """Gitignored .terraform/ and .tmp/ trees must not enter the probe walk."""
+    (tmp_path / "main.tf").write_text("", encoding="utf-8")
+    module_dir = tmp_path / "modules" / "github-oidc"
+    module_dir.mkdir(parents=True)
+    (module_dir / "outputs.tf").write_text("", encoding="utf-8")
+    ignored = tmp_path / ".terraform" / "modules" / "x"
+    ignored.mkdir(parents=True)
+    (ignored / "main.tf").write_text("", encoding="utf-8")
+    tmp_ignored = tmp_path / ".tmp"
+    tmp_ignored.mkdir()
+    (tmp_ignored / "fixture.tf").write_text("", encoding="utf-8")
+    probes = _tracked_terraform_tf_paths(tmp_path)
+    assert probes == ("main.tf", "modules/github-oidc/outputs.tf")
+    assert ".terraform/modules/x/main.tf" not in probes
+    assert ".tmp/fixture.tf" not in probes
 
 
 def test_github_path_filter_matches_root_dotfile_exactly() -> None:

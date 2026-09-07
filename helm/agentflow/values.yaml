@@ -4,8 +4,18 @@ fullnameOverride: ""
 replicaCount: 1
 
 image:
-  repository: agentflow/api
-  tag: "2.0.0"
+  # The project's own registry, and that is the point. The previous default,
+  # `agentflow/api`, is an unclaimed Docker Hub namespace (audit FB-08): with
+  # pullPolicy IfNotPresent, any dev or staging install without a pre-loaded
+  # image would pull whatever a third party had since pushed there. A default
+  # that resolves to a stranger's image is worse than one that does not
+  # resolve at all.
+  repository: ghcr.io/brownjuly2003-code/agentflow-api
+  # Tracks Chart.appVersion. GHCR carries commit-SHA and `audit-<run-id>` tags,
+  # not semver ones, so this tag is a shape rather than a pullable reference:
+  # a dev install loads a local image or overrides repository/tag, and a
+  # production install sets `digest`, which wins outright.
+  tag: "2.1.0"
   # When set, the digest is authoritative and tag is ignored. Keep the empty
   # default for the laptop/dev install; profile=production requires a digest.
   digest: ""

@@ -26,6 +26,13 @@ CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
 PRODUCTION_VALUES = CHART_PATH / "values-production.yaml"
 CANONICAL_SECURITY = PROJECT_ROOT / "config" / "security.yaml"
 _API_IMAGE_DIGEST = "sha256:" + "b" * 64
+# Read from the chart rather than repeated here: the default moved off the
+# unclaimed Docker Hub namespace `agentflow/api` (audit FB-08), and a test
+# that hardcodes a registry has to be edited every time that judgement is
+# revisited.
+_DEFAULT_API_REPOSITORY = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))[
+    "image"
+]["repository"]
 
 # What an environment file owes the production overlay. The overlay itself
 # leaves these empty on purpose -- they are the values only the environment
@@ -220,7 +227,7 @@ def test_compliant_production_render_carries_the_declared_posture(tmp_path: Path
     assert "name: AGENTFLOW_TRUSTED_PROXIES" in output
     assert 'value: "10.0.0.0/8"' in output
     assert "secretName: agentflow-tls" in output
-    assert f'image: "agentflow/api@{_API_IMAGE_DIGEST}"' in output
+    assert f'image: "{_DEFAULT_API_REPOSITORY}@{_API_IMAGE_DIGEST}"' in output
 
 
 def test_production_render_requires_an_immutable_api_image_digest(tmp_path: Path):

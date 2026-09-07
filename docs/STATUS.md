@@ -1,6 +1,6 @@
 # Engineering Status
 
-**Updated:** 2026-08-26
+**Updated:** 2026-09-07
 
 > The golden topology remains a production candidate, not
 > production accepted. Published release line **`v2.0.0`**; unpublished lockstep
@@ -17,7 +17,12 @@ claims: [`config/project_claims.toml`](../config/project_claims.toml).
 
 **Latest delivery boundary:** digest-only staging promotion passed for exact
 image identity and the offline production-promotion evidence verifier is
-complete. No production workflow or deploy has been implemented or authorized;
+complete. Since 2026-08-26 the work has been security-contract repair rather
+than new capability: the failed-auth throttle no longer denies service to valid
+keys and reads `X-Forwarded-For` right to left (FB-06), the reference Terraform
+no longer puts an S3 age clock on Iceberg objects (FB-11), and the `pip-audit`
+gate can now waive an advisory upstream has not fixed under the same expiring,
+self-revoking rules as Trivy and Safety (FB-02). No production workflow or deploy has been implemented or authorized;
 target-dependent work is `BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT` pending
 the owner packet described in
 [`f19d-production-rollout-acceptance.md`](evidence/records/f19d-production-rollout-acceptance.md).
@@ -121,10 +126,13 @@ separately authorized acceptance, deployment, or breaking-release program.
 4. **P2-6 Phase 3** — drop the deprecated `src` shim in the next **major**
    release ([plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md);
    consumer notes: [migration/v2.1.md](migration/v2.1.md)).
-5. **Flink-runtime dependency bump** — pinned `apache-flink==2.3.0` holds a
-   `safety` ignore for a non-fixable transitive `pyarrow` advisory (isolated to
-   the Flink image). Retire the ignore when the upstream flink/beam chain allows
-   it.
+5. **Non-fixable transitive advisories** — two waivers in
+   [`security/trivy-waivers.json`](../security/trivy-waivers.json) stand on
+   unreachability, not on a pending upgrade: the pinned `apache-flink==2.3.0`
+   chain holds `httplib2`/`pyarrow` advisories inside the Flink image, and
+   `nltk 3.10.3` carries `PYSEC-2026-3740`, which upstream has not fixed at all.
+   Each expires on its own date and fails its gate the day the premise stops
+   holding ([security-audit.md](security-audit.md) §8.1).
 
 ---
 

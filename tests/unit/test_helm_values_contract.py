@@ -14,6 +14,13 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
 _API_IMAGE_DIGEST = "sha256:" + "a" * 64
+# Read from the chart rather than repeated here: the default moved off the
+# unclaimed Docker Hub namespace `agentflow/api` (audit FB-08), and a test
+# that hardcodes a registry has to be edited every time that judgement is
+# revisited.
+_DEFAULT_API_REPOSITORY = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))[
+    "image"
+]["repository"]
 
 
 def _load_yaml(path: Path) -> dict:
@@ -177,7 +184,7 @@ def test_api_image_digest_overrides_the_dev_tag_for_every_runtime_workload():
     output = _combined_output(result)
 
     assert result.returncode == 0, output
-    expected = f"agentflow/api@{_API_IMAGE_DIGEST}"
+    expected = f"{_DEFAULT_API_REPOSITORY}@{_API_IMAGE_DIGEST}"
     runtime_images: list[str] = []
     for document in yaml.safe_load_all(result.stdout):
         if not document or document.get("kind") not in {"Deployment", "Job"}:
@@ -185,12 +192,16 @@ def test_api_image_digest_overrides_the_dev_tag_for_every_runtime_workload():
         runtime_images.extend(
             container["image"]
             for container in document["spec"]["template"]["spec"]["containers"]
-            if container["image"].startswith("agentflow/api")
+            if container["image"].startswith(_DEFAULT_API_REPOSITORY)
         )
 
     assert len(runtime_images) == 5
     assert set(runtime_images) == {expected}
-    assert "agentflow/api:2.0.0" not in result.stdout
+    # The tag is never rendered once a digest is set, whatever the tag says.
+    default_tag = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))["image"][
+        "tag"
+    ]
+    assert f"{_DEFAULT_API_REPOSITORY}:{default_tag}" not in result.stdout
 
 
 def test_api_image_digest_schema_rejects_non_sha256_values():

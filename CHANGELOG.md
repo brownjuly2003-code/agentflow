@@ -4,6 +4,39 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — the version numbers now mean the same thing (FB-05, FB-08, FB-14)
+
+* **The Helm default image no longer points at a namespace nobody owns.**
+  `image.repository` was `agentflow/api` — an unclaimed Docker Hub namespace —
+  with `pullPolicy: IfNotPresent`, so any dev or staging install without a
+  pre-loaded image would have pulled whatever a third party had since pushed
+  there. The default is now `ghcr.io/brownjuly2003-code/agentflow-api`, the
+  registry this project actually publishes to. Note that GHCR carries
+  commit-SHA and `audit-<run-id>` tags rather than semver ones, so the default
+  tag is a shape: a dev install loads a local image or overrides
+  repository/tag, and production sets `image.digest`, which wins outright.
+* **`image.tag` tracks `Chart.appVersion`** instead of naming 2.0.0 beside an
+  appVersion of 2.1.0, and **`Chart.yaml version` leaves the `helm create`
+  default of 0.1.0**, which had not moved across any app release — two charts
+  were indistinguishable to a consumer. It now tracks the app's major.minor,
+  leaving the patch digit free for chart-only fixes.
+* **`## [2.1.0] - 2026-08-23` said released.** No `v2.1.0` tag exists; that
+  date is when the release script staged the section. The heading now says
+  unreleased and carries the note, matching what `docs/STATUS.md` has said all
+  along.
+* **`agentflow-integrations` stays at 2.0.0, and now says why.** It is not in
+  the `scripts/release.py` lockstep and is published to no index, so its
+  version moving separately is intent rather than drift. The invariant the
+  number was standing in for is the dependency range, and that is what is now
+  tested: `agentflow-client>=2,<3` must admit the client version the lockstep
+  ships.
+* `docs/STATUS.md` carries a current stamp and says what landed since
+  2026-08-26; its open-items entry for the non-fixable Flink advisories now
+  covers the nltk waiver too.
+
+`tests/unit/test_release_version_coherence.py` pins the shape rather than the
+numbers; four of its six tests fail against the tree as it stood this morning.
+
 ### Security — an advisory upstream has not fixed can now be waived (FB-02)
 
 `nltk 3.10.3` carries `PYSEC-2026-3740` (`GHSA-8mgp-746c-j5xp`) and upstream has
@@ -368,7 +401,12 @@ gains a purpose paragraph. `PENDING_OPERATOR_PAGES` is empty, and
 Plan item 7 is closed; `docs/glossary.md` and `docs/PROJECT_CLOSURE.md` language
 and historical wording were left untouched.
 
-## [2.1.0] - 2026-08-23
+## [2.1.0] - unreleased (prepared 2026-08-23)
+
+> No `v2.1.0` tag exists and nothing under this heading has been published.
+> The date is when the release script staged the section, not a release date
+> (audit FB-05). `docs/STATUS.md` says the same thing, and a test keeps the two
+> from drifting apart.
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)
 

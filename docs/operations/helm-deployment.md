@@ -44,17 +44,27 @@ The chart deploys the API only. Redis, Kafka, Prometheus, Grafana, Jaeger, and o
 
 ## Prepare an image
 
-The default chart values expect an image named `agentflow/api:2.0.0`.
-
-If you are using Minikube, build or load an image before the install:
+The default `image.repository` is `ghcr.io/brownjuly2003-code/agentflow-api`,
+the registry this project actually publishes to, with `image.tag` tracking
+`Chart.appVersion`. That tag is a shape, not a pullable reference: the container
+workflow pushes commit-SHA and `audit-<run-id>` tags, never semver ones. So a
+dev install does one of two things — build locally and load the image, or
+override `image.repository` and `image.tag` to wherever your image lives.
 
 ```bash
-minikube image load agentflow/api:2.0.0
+# Build locally, then load it under whatever name you set image.repository to:
+minikube image load agentflow-api:dev
+helm install agentflow helm/agentflow \
+  --set image.repository=agentflow-api --set image.tag=dev
 ```
 
-For a dev install, override `image.repository` and `image.tag`. Production
-renders require `image.digest`; when present, every API-derived Deployment and
-provision Job uses `repository@digest` and ignores the tag.
+The default deliberately does not point at a bare Docker Hub namespace. It used
+to name `agentflow/api`, which nobody owns: with `pullPolicy: IfNotPresent`, an
+install without a pre-loaded image would have pulled whatever a third party had
+pushed there.
+
+Production renders require `image.digest`; when present, every API-derived
+Deployment and provision Job uses `repository@digest` and ignores the tag.
 
 ## Install
 

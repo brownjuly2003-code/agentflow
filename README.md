@@ -199,6 +199,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 | Test suites | `tests/` |
 | Design decisions | `docs/decisions/` (ADRs) |
 | Public site | `site/` |
+| OpsLab benchmark | `opslab/` — separate dormant distribution, outside this build ([README](opslab/README.md)) |
 | IaC | `infrastructure/terraform/`, `infrastructure/dv2/`, `helm/`, `k8s/` |
 | DV2.0 warehouse | `warehouse/agentflow/dv2/` (hubs / links / satellites + real-dataset loader) |
 

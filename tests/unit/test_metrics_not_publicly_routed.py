@@ -556,7 +556,13 @@ def test_production_render_refuses_omitted_path_type(tmp_path: Path) -> None:
     helm = shutil.which("helm")
     assert helm is not None
 
-    values: dict = {key: dict(value) for key, value in _ENVIRONMENT_VALUES.items()}
+    # `dict(value)` on the list-shaped extraEnv silently yields the map
+    # {'name': 'valueFrom'} -- dict() reads each entry's keys as a pair --
+    # and the render then fails on the wrong clause entirely.
+    values: dict = {
+        key: dict(value) if isinstance(value, dict) else list(value)
+        for key, value in _ENVIRONMENT_VALUES.items()
+    }
     values["ingress"] = dict(values["ingress"])
     values["ingress"]["hosts"] = [
         {"host": "api.example.com", "paths": [{"path": "/"}]},

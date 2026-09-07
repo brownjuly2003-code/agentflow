@@ -145,7 +145,8 @@ helm upgrade --install agentflow ./helm/agentflow   -f helm/agentflow/values-pro
 
 The overlay leaves empty exactly the values only your environment can supply
 (the verified API image digest, the Secret name, the origins, the ingress
-class/hosts/TLS, the trusted proxies, and the Prometheus scrape namespace).
+class/hosts/TLS, the trusted proxies, the Prometheus scrape namespace, and the
+two pepper `extraEnv` entries described below).
 Helm replaces lists instead of merging them — an environment file that
 names only the scrape namespace removes the ingress-controller entry and
 blocks the production Ingress. Repeat both selectors in the environment
@@ -171,6 +172,7 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | `service.type=ClusterIP` | NodePort/LoadBalancer publish the service port (`/metrics` included) without any Ingress rule; ExternalName turns the Service into a CNAME and voids the routing contract |
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
+| `extraEnv` sets `AGENTFLOW_KEY_LOOKUP_PEPPER` and `AGENTFLOW_QUERY_FINGERPRINT_PEPPER`, each via `valueFrom.secretKeyRef` | Both peppers fall back to constants committed to this repository, and the app refuses to boot on production without them. A literal `value:` is refused for the same reason `secrets.create=true` is |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
 | Every `ingress.hosts[]` entry has a non-empty `paths` list | An Ingress rule with no HTTP paths is invalid and routes nothing |
 | `ingress.tls` non-empty when ingress is enabled | TLS terminates somewhere you can point at |
@@ -320,6 +322,44 @@ in-cluster traffic already constrained by the chart's NetworkPolicy — must be
 named explicitly via `extraEnv`:
 `AGENTFLOW_INSECURE_TRANSPORT_OK="clickhouse,redis"`. A wildcard
 `config.corsOrigins` is likewise refused outside demo mode.
+
+### Pepper material
+
+Two environment variables domain-separate digests the API stores, and both fall
+back to constants committed to this repository:
+
+| Variable | Peppers | Left at the default |
+| --- | --- | --- |
+| `AGENTFLOW_KEY_LOOKUP_PEPPER` | `key_lookup`, an HMAC-SHA256 of the API key itself, stored beside the argon2id hash so authentication resolves the candidate in O(1) | A leaked `api_keys.yaml` lets a guessed key be confirmed against the stored digest with one HMAC and no argon2id verify, and lets two deployments' digests be joined into one identity (audit FB-07) |
+| `AGENTFLOW_QUERY_FINGERPRINT_PEPPER` | Query-analytics fingerprints | A leaked analytics table can be joined against question digests computed anywhere else (audit AF-13) |
+
+`config.profile=production` refuses to boot with either unset or left at its
+default, and the production contract refuses the render before that. Both are
+supplied through `extraEnv`, projected from the Secret your secrets operator or
+CSI driver manages — never as a literal `value:`, which would park the pepper in
+Helm release metadata and in the shell history of whoever ran the upgrade:
+
+```yaml
+extraEnv:
+  - name: AGENTFLOW_KEY_LOOKUP_PEPPER
+    valueFrom:
+      secretKeyRef:
+        name: agentflow-production-secret   # your secrets.existingSecret
+        key: key-lookup-pepper
+  - name: AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+    valueFrom:
+      secretKeyRef:
+        name: agentflow-production-secret
+        key: query-fingerprint-pepper
+```
+
+Helm replaces lists rather than merging them, so this block must carry every
+`extraEnv` entry the release needs, `AGENTFLOW_INSECURE_TRANSPORT_OK` included.
+
+Rotating the lookup pepper is not free: it invalidates every stored
+`key_lookup`, and authentication falls back to the O(n) verify scan until the
+keys are re-issued. See
+[`docs/runbooks/auth-401-spike.md`](../runbooks/auth-401-spike.md).
 
 `k8s/staging/values-staging-scale.yaml.example` is a ready overlay:
 

@@ -4,6 +4,37 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — the key-lookup pepper is no longer allowed to be the public one (FB-07)
+
+* **`AGENTFLOW_PROFILE=production` now refuses to boot without
+  `AGENTFLOW_KEY_LOOKUP_PEPPER`,** or with it set to the built-in
+  `agentflow-key-lookup-v1`. That constant lives in `security.py`, and it
+  peppers `key_lookup` — an HMAC-SHA256 of the API key itself, stored beside
+  the argon2id hash so authentication resolves a key in O(1). Left at the
+  default, the digest is reproducible by anyone: hold a leaked
+  `api_keys.yaml`, HMAC a guessed key with the published pepper, and a match
+  confirms the guess without paying for a single argon2id verify. The same
+  constant also makes two deployments' digests joinable into one identity.
+  The query-analytics fingerprint pepper has had this gate since AF-13; the
+  more sensitive of the two peppers did not.
+* **The AF-13 fingerprint-pepper check moved to the same boot gate.** It lived
+  in `QueryAnalyticsPolicy.from_env`, which nothing called at startup, so a
+  production pod came up and only failed once a request reached the analytics
+  path. Both refusals now happen in the API lifespan, next to the transport
+  gate.
+* **Neither pepper was wired into the Helm chart at all.** Production values
+  must now supply both through `extraEnv` as `valueFrom.secretKeyRef`, and
+  `templates/production-contract.yaml` refuses a `profile=production` render
+  that omits either — or that writes one as a literal `value:`, which would
+  park pepper material in Helm release metadata and shell history for the
+  same reason `secrets.create=true` is refused.
+* Dev and demo boots keep the built-in defaults, so a fresh checkout still
+  starts with no configuration. An operator-supplied pepper is used byte for
+  byte: whitespace decides only whether the variable counts as set, because
+  normalising the value would change digests a padded pepper had already
+  produced. A pepper that is empty or only whitespace now falls back to the
+  default on dev instead of being used as an empty HMAC key.
+
 ### Fixed — the version numbers now mean the same thing (FB-05, FB-08, FB-14)
 
 * **The Helm default image no longer points at a namespace nobody owns.**

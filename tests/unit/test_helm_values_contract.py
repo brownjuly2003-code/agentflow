@@ -85,6 +85,22 @@ _PRODUCTION_POSTURE: tuple[str, ...] = (
     "analyticsRetention.dryRun=false",
     "--set",
     "analyticsRetention.concurrencyPolicy=Forbid",
+    # Part of the posture since FB-07: both peppers fall back to constants
+    # committed to this repository, so production must project real ones from
+    # the operator-managed Secret. A literal `value:` is refused -- that would
+    # park the pepper in Helm release metadata.
+    "--set",
+    "extraEnv[0].name=AGENTFLOW_KEY_LOOKUP_PEPPER",
+    "--set",
+    "extraEnv[0].valueFrom.secretKeyRef.name=agentflow-prod-secret",
+    "--set",
+    "extraEnv[0].valueFrom.secretKeyRef.key=key-lookup-pepper",
+    "--set",
+    "extraEnv[1].name=AGENTFLOW_QUERY_FINGERPRINT_PEPPER",
+    "--set",
+    "extraEnv[1].valueFrom.secretKeyRef.name=agentflow-prod-secret",
+    "--set",
+    "extraEnv[1].valueFrom.secretKeyRef.key=query-fingerprint-pepper",
 )
 
 

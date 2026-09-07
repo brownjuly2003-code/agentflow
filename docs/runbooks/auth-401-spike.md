@@ -180,6 +180,16 @@ Operational notes:
   every stored `key_lookup` — affected keys silently fall back to the O(n)
   scan (still authenticate, slower cold). Re-issue or re-rotate keys after a
   pepper change to restore O(1).
+- **The default pepper is public** (audit FB-07). `agentflow-key-lookup-v1`
+  is a constant in `src/agentflow_runtime/serving/api/security.py`, so a
+  deployment that never set the variable stores digests anyone can recompute:
+  hold a leaked `api_keys.yaml`, HMAC a guessed key with the published pepper,
+  and a match confirms the guess without paying for a single argon2id verify.
+  `AGENTFLOW_PROFILE=production` therefore refuses to boot with the variable
+  unset or equal to that constant, and the Helm production contract refuses the
+  render before the pod is ever created
+  ([helm-deployment.md](../operations/helm-deployment.md#pepper-material)).
+  A dev or demo boot keeps the default so a fresh checkout still starts.
 - The historical bcrypt numbers (N=5 hit-last ≈ 1.9 s, N=20 ≈ 8.1 s at
   `bcrypt_rounds=12`) remain in
   [`docs/perf/auth-bench-2026-05-26.md`](../perf/auth-bench-2026-05-26.md)

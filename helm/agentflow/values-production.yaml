@@ -102,6 +102,48 @@ secrets:
   apiKeys:
     keys: []
 
+# REQUIRED. Two peppers domain-separate the digests the API stores, and both
+# fall back to constants committed to this repository:
+#
+#   AGENTFLOW_KEY_LOOKUP_PEPPER        peppers `key_lookup`, an HMAC of the API
+#                                      key itself. With the public default, a
+#                                      leaked api_keys.yaml lets a guessed key
+#                                      be confirmed against the stored digest
+#                                      without paying for an argon2id verify,
+#                                      and lets two deployments' digests be
+#                                      joined into one identity (audit FB-07).
+#   AGENTFLOW_QUERY_FINGERPRINT_PEPPER peppers query-analytics fingerprints, so
+#                                      a leaked analytics table cannot be joined
+#                                      against question digests computed
+#                                      elsewhere (audit AF-13).
+#
+# The API refuses to boot on profile=production with either unset or left at
+# its default, and the production contract refuses the render before that.
+#
+# They live in extraEnv rather than in a `secrets.*` value on purpose: values
+# persist in Helm release metadata and shell history, which is the same reason
+# secrets.create=true is refused above. Project them from the Secret your
+# secrets operator or CSI driver manages -- a literal `value:` here is refused.
+#
+# Rotation is not free: changing the lookup pepper invalidates every stored
+# `key_lookup`, and authentication falls back to the O(n) verify scan until the
+# keys are re-issued. See docs/runbooks/auth-401-spike.md.
+# Left empty here because only the environment knows the Secret's name; supply
+# the whole list in my-environment.yaml, which replaces this one:
+#
+#   extraEnv:
+#     - name: AGENTFLOW_KEY_LOOKUP_PEPPER
+#       valueFrom:
+#         secretKeyRef:
+#           name: agentflow-production-secret   # <- your secrets.existingSecret
+#           key: key-lookup-pepper
+#     - name: AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+#       valueFrom:
+#         secretKeyRef:
+#           name: agentflow-production-secret
+#           key: query-fingerprint-pepper
+extraEnv: []
+
 # production-contract.yaml: production must keep the API on a ClusterIP Service
 service:
   type: ClusterIP

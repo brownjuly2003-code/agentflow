@@ -71,7 +71,10 @@ def _render_set(
     if helm is None:
         raise AssertionError("helm is required for Helm render policy tests")
 
-    values: dict = {key: dict(value) for key, value in _ENVIRONMENT_VALUES.items()}
+    values: dict = {
+        key: dict(value) if isinstance(value, dict) else list(value)
+        for key, value in _ENVIRONMENT_VALUES.items()
+    }
     for section, patch in (overrides or {}).items():
         if not isinstance(patch, dict):
             values[section] = patch

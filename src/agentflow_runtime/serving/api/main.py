@@ -37,6 +37,7 @@ from agentflow_runtime.serving.api.analytics import (
 from agentflow_runtime.serving.api.auth import AuthManager, TenantKey, build_auth_middleware
 from agentflow_runtime.serving.api.middleware.logging import build_correlation_middleware
 from agentflow_runtime.serving.api.middleware.metrics import build_metrics_middleware
+from agentflow_runtime.serving.api.query_analytics_policy import QueryAnalyticsPolicy
 from agentflow_runtime.serving.api.routers.admin import router as admin_router
 from agentflow_runtime.serving.api.routers.admin_ui import router as admin_ui_router
 from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
@@ -50,7 +51,10 @@ from agentflow_runtime.serving.api.routers.search import router as search_router
 from agentflow_runtime.serving.api.routers.slo import router as slo_router
 from agentflow_runtime.serving.api.routers.stream import router as stream_router
 from agentflow_runtime.serving.api.routers.webhooks import router as webhook_router
-from agentflow_runtime.serving.api.security import build_security_headers_middleware
+from agentflow_runtime.serving.api.security import (
+    build_security_headers_middleware,
+    resolve_key_lookup_pepper,
+)
 
 # Imported outright, with no ModuleNotFoundError fallback (audit F-13). The
 # fallback substituted a no-op, but OpenTelemetry is a mandatory runtime
@@ -156,6 +160,15 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
             else ""
         ),
     )
+    # Same refusal, one layer in (audit FB-07). `key_lookup` is an HMAC of the
+    # API key; peppered with the constant committed to this repository it is a
+    # digest anyone can recompute. The query-analytics fingerprint pepper has
+    # been gated since AF-13 -- but only where analytics runs, so an operator
+    # could learn about it from a request-time 500. Resolving both here means a
+    # production process that would compute a publicly reproducible digest
+    # never reaches the point of issuing or matching one.
+    resolve_key_lookup_pepper()
+    QueryAnalyticsPolicy.from_env()
     # Three-node demo topology (ADR 0012): resolve role/branch/token once here
     # and fail fast on a misconfigured node. Unset role == standalone, which is
     # byte-identical to today's single-node demo (N1). The center ingest

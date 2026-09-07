@@ -19,6 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -65,6 +66,32 @@ _ENVIRONMENT_VALUES = {
         "tls": [{"secretName": "agentflow-tls", "hosts": ["api.example.com"]}],
     },
     "secrets": {"existingSecret": "agentflow-production-secret"},
+    # Pepper material (audit FB-07, AF-13). Both env vars fall back to
+    # constants committed to this repository, and the API refuses to boot on
+    # profile=production with either unset -- so a render that omits them
+    # installs a workload that cannot start. Projected from the Secret, never
+    # written as a literal `value`, for the same reason secrets.create=true is
+    # refused: Helm values persist in release metadata and shell history.
+    "extraEnv": [
+        {
+            "name": "AGENTFLOW_KEY_LOOKUP_PEPPER",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "agentflow-production-secret",
+                    "key": "key-lookup-pepper",
+                }
+            },
+        },
+        {
+            "name": "AGENTFLOW_QUERY_FINGERPRINT_PEPPER",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "agentflow-production-secret",
+                    "key": "query-fingerprint-pepper",
+                }
+            },
+        },
+    ],
 }
 
 
@@ -82,7 +109,10 @@ def _render(tmp_path: Path, overrides: dict | None = None) -> subprocess.Complet
     if helm is None:
         raise AssertionError("helm is required for Helm render policy tests")
 
-    values: dict = {key: dict(value) for key, value in _ENVIRONMENT_VALUES.items()}
+    values: dict = {
+        key: dict(value) if isinstance(value, dict) else list(value)
+        for key, value in _ENVIRONMENT_VALUES.items()
+    }
     for section, patch in (overrides or {}).items():
         if not isinstance(patch, dict):
             values[section] = patch
@@ -393,7 +423,12 @@ def test_production_render_accepts_a_named_plaintext_exemption(tmp_path: Path):
                 "backend": "clickhouse",
                 "clickhouse": {"host": "clickhouse.data.svc", "secure": False},
             },
-            "extraEnv": [{"name": "AGENTFLOW_INSECURE_TRANSPORT_OK", "value": "clickhouse"}],
+            # Appended, not substituted: extraEnv is one list, and the
+            # production contract also reads the two pepper entries out of it.
+            "extraEnv": [
+                *_ENVIRONMENT_VALUES["extraEnv"],
+                {"name": "AGENTFLOW_INSECURE_TRANSPORT_OK", "value": "clickhouse"},
+            ],
         },
     )
     output = _output(result)
@@ -450,3 +485,94 @@ def test_production_render_refuses_a_weakened_security_policy(tmp_path: Path):
     assert "key_hashing" in output
     assert "X-Admin-Key" in output
     assert "Set-Cookie" in output
+
+
+def _extra_env_without(name: str) -> list[dict]:
+    return [item for item in _ENVIRONMENT_VALUES["extraEnv"] if item["name"] != name]
+
+
+@pytest.mark.parametrize(
+    "pepper",
+    ["AGENTFLOW_KEY_LOOKUP_PEPPER", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER"],
+)
+def test_production_render_requires_both_peppers(tmp_path: Path, pepper: str):
+    """Neither pepper was wired into the chart at all, while the app-side gate
+    refuses to boot without them (audit FB-07). A render that omits one is a
+    release that installs a workload which cannot start, so the refusal belongs
+    where the operator can read it -- at render time, with the name in it."""
+    result = _render(tmp_path, {"extraEnv": _extra_env_without(pepper)})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert pepper in output
+    assert "secretKeyRef" in output
+
+
+@pytest.mark.parametrize(
+    "pepper",
+    ["AGENTFLOW_KEY_LOOKUP_PEPPER", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER"],
+)
+def test_production_render_refuses_pepper_material_written_into_values(tmp_path: Path, pepper: str):
+    """A literal `value:` satisfies the app-side gate and defeats the reason
+    secrets.create=true is refused: the pepper then lives in Helm release
+    metadata and in whatever shell ran the upgrade."""
+    extra_env = [*_extra_env_without(pepper), {"name": pepper, "value": "a-real-secret"}]
+    result = _render(tmp_path, {"extraEnv": extra_env})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert pepper in output
+    assert "release metadata" in output
+
+
+def test_production_render_refuses_a_pepper_from_a_configmap(tmp_path: Path):
+    """`valueFrom` is not the point; the Secret is. A ConfigMap is a plaintext
+    object every namespace reader can list."""
+    extra_env = [
+        *_extra_env_without("AGENTFLOW_KEY_LOOKUP_PEPPER"),
+        {
+            "name": "AGENTFLOW_KEY_LOOKUP_PEPPER",
+            "valueFrom": {"configMapKeyRef": {"name": "agentflow-cm", "key": "pepper"}},
+        },
+    ]
+    result = _render(tmp_path, {"extraEnv": extra_env})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert "configMapKeyRef" in output
+
+
+def test_the_compliant_render_projects_both_peppers_into_the_api_container(tmp_path: Path):
+    """The clause is only worth having if the values it demands actually reach
+    the process the gate runs in."""
+    result = _render(tmp_path)
+    output = _output(result)
+    assert result.returncode == 0, output
+
+    api = next(
+        doc
+        for doc in yaml.safe_load_all(output)
+        if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"].endswith("agentflow")
+    )
+    env = {item["name"]: item for item in api["spec"]["template"]["spec"]["containers"][0]["env"]}
+
+    for pepper in ("AGENTFLOW_KEY_LOOKUP_PEPPER", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER"):
+        assert "value" not in env[pepper]
+        assert env[pepper]["valueFrom"]["secretKeyRef"]["name"] == "agentflow-production-secret"
+
+
+def test_the_dev_defaults_do_not_ask_for_a_pepper(tmp_path: Path):
+    """The gate is production-only on both sides. `helm install` with the chart
+    defaults must stay a five-second demo."""
+    helm = shutil.which("helm")
+    assert helm is not None
+    result = subprocess.run(
+        [helm, "template", "agentflow", str(CHART_PATH)],
+        cwd=PROJECT_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, _output(result)
+    assert "AGENTFLOW_KEY_LOOKUP_PEPPER" not in result.stdout

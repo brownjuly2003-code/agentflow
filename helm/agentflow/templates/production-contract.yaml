@@ -54,6 +54,45 @@ Deliberately NOT checked here:
 {{- end -}}
 {{- end -}}
 
+{{- /* Pepper material (audit FB-07, AF-13). Two env vars domain-separate
+     digests the API stores: AGENTFLOW_KEY_LOOKUP_PEPPER peppers `key_lookup`,
+     an HMAC of the API key itself, and AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+     peppers query-analytics fingerprints. Both fall back to constants
+     committed to this repository, which makes those digests reproducible by
+     anyone -- a leaked api_keys.yaml then confirms a guessed key without
+     paying for an argon2id verify. The API refuses to boot on
+     profile=production with either unset or left at its default, so a render
+     that omits them installs a workload that cannot start. Checking it here
+     turns that into a render error with a name on it.
+
+     The chart deliberately grows no `secrets.keyLookupPepper` value: pepper
+     material in Helm values persists in release metadata and shell history,
+     which is exactly why secrets.create=true is refused above. extraEnv is
+     where this chart already takes operator-supplied env, and a literal
+     `value:` there is refused for the same reason. */ -}}
+{{- $peppers := dict "AGENTFLOW_KEY_LOOKUP_PEPPER" "stored key_lookup digests (an HMAC of the API key itself)" "AGENTFLOW_QUERY_FINGERPRINT_PEPPER" "query-analytics fingerprints" -}}
+{{- range $pepperName, $protects := $peppers -}}
+{{- $entry := dict -}}
+{{- range $.Values.extraEnv -}}
+{{- if eq (.name | default "") $pepperName -}}
+{{- $entry = . -}}
+{{- end -}}
+{{- end -}}
+{{- if not $entry -}}
+{{- $problems = append $problems (printf "extraEnv does not set %s: without it the API peppers %s with a constant committed to this repository, and refuses to boot on profile=production. Supply it as a valueFrom.secretKeyRef into the Secret named by secrets.existingSecret" $pepperName $protects) -}}
+{{- else if hasKey $entry "value" -}}
+{{- $problems = append $problems (printf "extraEnv sets %s with a literal `value`: pepper material written into Helm values persists in release metadata and shell history, which is why secrets.create=true is refused. Use valueFrom.secretKeyRef" $pepperName) -}}
+{{- else -}}
+{{- $valueFrom := dict -}}
+{{- if hasKey $entry "valueFrom" -}}
+{{- $valueFrom = (index $entry "valueFrom") -}}
+{{- end -}}
+{{- if not (and (kindIs "map" $valueFrom) (hasKey $valueFrom "secretKeyRef")) -}}
+{{- $problems = append $problems (printf "extraEnv sets %s without a valueFrom.secretKeyRef: production pepper material must be projected from the operator-managed Secret, not from a fieldRef, configMapKeyRef or an empty valueFrom" $pepperName) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- if not .Values.networkPolicy.enabled -}}
 {{- $problems = append $problems "networkPolicy.enabled=false: production requires the default-deny baseline (set networkPolicy.enabled=true; the cluster needs a NetworkPolicy controller)" -}}
 {{- else -}}

@@ -39,10 +39,17 @@ config:
   # responses.
   corsOrigins: ""
 
-  # REQUIRED when ingress.enabled=true. Comma-separated peers allowed to set
-  # X-Forwarded-For. Behind an ingress controller every caller otherwise shares
-  # one source address, which is what the failed-auth limiter keys on.
+  # REQUIRED behind any proxy, this chart's ingress or a gateway outside it.
+  # Comma-separated peers allowed to set X-Forwarded-For. Behind a proxy every
+  # caller otherwise shares one source address, which is what the failed-auth
+  # limiter keys on and what every client_ip in the logs reports.
   trustedProxies: ""
+  gateway:
+    # The alternative answer, for a path that preserves the caller's source
+    # address (L4 passthrough, externalTrafficPolicy: Local). Production refuses
+    # a release that leaves both this and trustedProxies empty -- silence used to
+    # pass as long as ingress.enabled was false (audit FB-06).
+    preservesClientIp: false
 
   # Mirrors canonical config/security.yaml. Spelled out rather than inherited
   # so a drift in the chart defaults cannot quietly weaken a production
@@ -101,7 +108,9 @@ service:
 
 # TLS terminates here by default. If your platform terminates it in a gateway
 # ahead of the chart, set ingress.enabled=false and record that decision --
-# the contract then stops asking for `tls` and for trustedProxies.
+# the contract then stops asking for `tls`. It keeps asking whose address the
+# pod will observe: answer with config.trustedProxies or with
+# config.gateway.preservesClientIp.
 #
 # Production ingress must not route /metrics (audit F-10). That endpoint is
 # unauthenticated by design so in-cluster Prometheus can scrape the ClusterIP

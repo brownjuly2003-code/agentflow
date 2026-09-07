@@ -124,6 +124,22 @@ Deliberately NOT checked here:
 {{- $problems = append $problems (printf "service.type=%s: production must keep the API on a ClusterIP Service — NodePort/LoadBalancer publish the service port (/metrics included) without any Ingress rule, ExternalName turns the Service into a CNAME and voids the routing contract" $serviceType) -}}
 {{- end -}}
 
+{{- /* The failed-auth throttle, and every client_ip the API logs, are only as
+     truthful as the address the pod observes. Behind ANY proxy -- this chart's
+     Ingress or a gateway outside it -- that address belongs to the proxy unless
+     the deployment names its proxy peers. ingress.enabled=false used to make
+     this clause disappear rather than answer it, which is how the sanctioned
+     external-gateway shape ended up with a throttle keyed on one shared
+     address (audit FB-06). Production must answer one of the two questions. */ -}}
+{{- $gateway := .Values.config.gateway | default dict -}}
+{{- if and (not .Values.config.trustedProxies) (not $gateway.preservesClientIp) -}}
+{{- if .Values.ingress.enabled -}}
+{{- $problems = append $problems "config.trustedProxies is empty while ingress is enabled: behind the controller every caller shares its address, so the failed-auth limiter keys on it. Name the proxy peers allowed to set X-Forwarded-For" -}}
+{{- else -}}
+{{- $problems = append $problems "config.trustedProxies is empty and config.gateway.preservesClientIp is not set: with ingress.enabled=false the API is reached through a gateway this chart cannot see, and the release says nothing about whose address the pod will observe. Either name the gateway peers in config.trustedProxies, or declare config.gateway.preservesClientIp=true if the path preserves the caller source address" -}}
+{{- end -}}
+{{- end -}}
+
 {{- if .Values.ingress.enabled -}}
 {{- /* ingress-nginx interprets these annotations after Helm has checked the
      literal host/path. Refuse exact routing-control keys for this chart's
@@ -142,9 +158,6 @@ Deliberately NOT checked here:
 {{- end -}}
 {{- if not .Values.ingress.tls -}}
 {{- $problems = append $problems "ingress.enabled=true with an empty ingress.tls: production must terminate TLS (or expose the API through a gateway outside this chart and set ingress.enabled=false)" -}}
-{{- end -}}
-{{- if not .Values.config.trustedProxies -}}
-{{- $problems = append $problems "config.trustedProxies is empty while ingress is enabled: behind a proxy every caller shares the controller's address, so the failed-auth limiter keys on it. Name the proxy peers allowed to set X-Forwarded-For" -}}
 {{- end -}}
 {{- $ingressIdentityPattern := "^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$" }}
 {{- $className := .Values.ingress.className | default "" | toString }}

@@ -3,7 +3,7 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
-**Updated:** 2026-09-04 (production chart Ingress refuses nginx routing-control annotations; NetworkPolicy must enumerate the scrape namespace; production Service type is ClusterIP)
+**Updated:** 2026-09-07 (failed-auth throttle: client identity taken from the right of X-Forwarded-For, admin window separated, a valid key always served; production chart must declare whose address the pod observes)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
@@ -129,9 +129,19 @@ Rate limiting exists at two levels:
 
 `RateLimiter` uses Redis when available and falls back to an in-memory sliding window when Redis is unavailable or intentionally disabled. The auth middleware returns `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers, so clients can adapt to the policy rather than blindly retrying.
 
+### 6.1 What the failed-auth throttle is, and what it is not
+
+The threshold is `security.max_failed_auth_per_ip_per_hour` (default 10, canonical `config/security.yaml`) over a one-hour sliding window held per process. It exists to blunt scanning and log-flooding, **not** to stop brute force: API keys are 256-bit random values, so guessing was never the thing it was holding back. Three properties follow from that, and each of them is a deliberate limit rather than an oversight (audit FB-06):
+
+- **A valid key is always served.** The middleware resolves the presented key before it consults the window; only a failed attempt is counted, and only a failed attempt is answered with 429. The earlier order — reject on the window, then look at the key — meant eleven requests with any junk key took every caller sharing that address offline for an hour. Under throttle the resolution is capped to the constant-work paths (runtime cache and the O(1) peppered lookup), so a key issued since M-C4 still authenticates for exactly one hash while a scanner cannot buy N bcrypt verifications per guess. A pre-M-C4 bcrypt entry with no `key_lookup` is **not** resolvable while its address is throttled; rotate it onto an argon2id entry.
+- **The admin surface has its own window.** Failures on `X-Admin-Key` are counted separately from failures on `X-API-Key`, so a scan against `/v1` cannot throttle `/v1/admin` — the surface an operator needs while the scan is running — and vice versa.
+- **The client address is only as truthful as the deployment makes it.** `X-Forwarded-For` is honoured solely when the immediate peer is listed in `AGENTFLOW_TRUSTED_PROXIES`, and the chain is then read **right to left**, skipping hops that are themselves trusted proxies and stopping at the first hop no proxy vouches for. The leftmost element is client-supplied and is never used. With no trusted proxies configured behind a gateway, every caller shares one address: the throttle is then best-effort — it will not lock anyone out, but any legitimate request from that address clears the window. Naming the proxies (or declaring `config.gateway.preservesClientIp`) is what makes it meaningful, and `profile=production` refuses a release that answers neither.
+
+The window is per process by design: on N replicas an attacker spreading guesses gets N times the budget, which is accepted while key entropy is what it is. It is bounded, too — once a window is over the limit it stops accumulating, so a scanner cannot grow it by one entry per request.
+
 The SDKs also include resilience primitives, specifically retry policy handling and a circuit breaker. This is not a server-side abuse control by itself, but it does reduce retry storms and repeated hammering of degraded endpoints by well-behaved clients.
 
-Evidence: `src/agentflow_runtime/serving/api/rate_limiter.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `sdk/agentflow/client.py`, `sdk-ts/src/client.ts`, `tests/unit/test_sdk_circuit_breaker.py`
+Evidence: `src/agentflow_runtime/serving/api/rate_limiter.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `sdk/agentflow/client.py`, `sdk-ts/src/client.ts`, `tests/unit/test_sdk_circuit_breaker.py`, `tests/unit/test_auth_throttle_identity.py`
 
 ## 7. Data Protection and Privacy Controls
 

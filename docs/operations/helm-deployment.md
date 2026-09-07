@@ -168,7 +168,7 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | `ingress.hosts[].paths[]` must not route `/metrics` | `/metrics` is unauthenticated for in-cluster scrape; enumerate the public prefixes instead of Prefix `/` ([Production ingress and `/metrics`](../deployment.md#production-ingress-and-metrics)) |
 | `pathType` is `Prefix` or `Exact` | Controller-defined matching cannot be proven at render time, so ImplementationSpecific cannot be shown to keep `/metrics` off Ingress |
 | `path` matches `^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$`; `host` and `className` match `^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$` | Canonical single-line routing values exclude whitespace, YAML injection, and controller-ambiguous spellings that could expose unmatched `/metrics` |
-| `config.trustedProxies` set when ingress is enabled | Behind a proxy every caller otherwise shares the controller's address, which is what the failed-auth limiter keys on |
+| `config.trustedProxies` non-empty, or `config.gateway.preservesClientIp=true` | Behind any proxy -- this chart's ingress or a gateway outside it -- every caller otherwise shares that proxy's address, which is what the failed-auth limiter keys on and what every logged `client_ip` reports. `ingress.enabled=false` no longer makes the question disappear: name the peers, or declare that the path preserves the caller's source address |
 | Explicit `config.corsOrigins` | CORS runs with credentials; a wildcard lets any site read authenticated responses, and the chart's `localhost` default is not an answer |
 | `serving.clickhouse.secure=true` | No plaintext hop to an external ClickHouse |
 | `config.redisUrl` on `rediss://` | Same, for Redis |

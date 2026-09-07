@@ -31,13 +31,13 @@ class _AdminManager:
         self.admin_key = "admin-secret"
         self.store = store
 
-    def is_failed_auth_limited(self, _client_ip: str) -> bool:
+    def is_failed_auth_limited(self, _client_ip: str, _scope: str = "api") -> bool:
         return False
 
-    def record_failed_auth(self, _client_ip: str) -> None:
-        return None
+    def record_failed_auth(self, _client_ip: str, scope: str = "api") -> bool:
+        return False
 
-    def clear_failed_auth(self, _client_ip: str) -> None:
+    def clear_failed_auth(self, _client_ip: str, scope: str = "api") -> None:
         return None
 
 

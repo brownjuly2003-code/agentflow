@@ -4,6 +4,39 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — the failed-auth throttle stops being a denial-of-service tool (FB-06)
+
+The per-address throttle for repeated failed authentication rejected with 429
+*before* the presented key was looked at. Behind a proxy without
+`AGENTFLOW_TRUSTED_PROXIES` every caller shares one address, and
+`values-production.yaml` sanctions exactly that shape (`ingress.enabled=false`,
+gateway outside the chart) — so eleven requests per hour carrying any junk key
+took every tenant, and the admin API, off that pod for an hour.
+
+* The middleware now resolves the key first. A valid key is always served; only
+  a failed attempt is counted and only a failed attempt is answered with 429.
+  While an address is throttled the resolution is capped to the constant-work
+  paths (runtime cache, O(1) peppered lookup), so a scanner still cannot buy N
+  bcrypt verifications per guess. **A pre-M-C4 bcrypt entry carrying no
+  `key_lookup` is not resolvable while its address is throttled** — rotate it
+  onto an argon2id entry.
+* `X-Forwarded-For` is read right to left, skipping hops that are themselves
+  trusted proxies and stopping at the first hop no proxy vouches for. The
+  leftmost element is written by the client, and reading it let an attacker
+  rotate the window on every request.
+* Admin-key failures count in their own window, so a scan against `/v1` can no
+  longer throttle `/v1/admin`, and a wrong admin key is refused rather than
+  raising on a non-ASCII header value.
+* `profile=production` now refuses a release that says nothing about whose
+  address the pod observes: set `config.trustedProxies`, or declare
+  `config.gateway.preservesClientIp=true` when the path preserves the caller's
+  source address. `ingress.enabled=false` used to make the clause disappear
+  rather than answer it.
+
+Behaviour to expect on a shared address: the throttle is best-effort there — it
+will not lock anyone out, but any legitimate request clears the window. Naming
+the proxies is what makes it meaningful (`docs/security-audit.md` §6.1).
+
 ### Security — production must keep the API on a ClusterIP Service (T-34, F-T-32-22)
 
 The production contract refuses `service.type` other than `ClusterIP`.

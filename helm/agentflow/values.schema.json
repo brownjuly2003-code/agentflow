@@ -1012,7 +1012,17 @@
         },
         "trustedProxies": {
           "type": "string",
-          "description": "Comma-separated peer addresses permitted to set X-Forwarded-For (AGENTFLOW_TRUSTED_PROXIES). Required behind an ingress on profile=production."
+          "description": "Comma-separated peer addresses permitted to set X-Forwarded-For (AGENTFLOW_TRUSTED_PROXIES). Required on profile=production behind any proxy unless config.gateway.preservesClientIp declares the source address survives."
+        },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preservesClientIp": {
+              "type": "boolean",
+              "description": "Declares that the path in front of the API preserves the caller's source address, so the failed-auth throttle keys on the client rather than on a shared proxy address. profile=production requires either this or a non-empty config.trustedProxies."
+            }
+          }
         },
         "redisUrl": {
           "type": "string"

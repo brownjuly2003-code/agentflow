@@ -68,6 +68,10 @@ _PRODUCTION_POSTURE: tuple[str, ...] = (
     "secrets.existingSecret=agentflow-prod-secret",
     "--set",
     "config.corsOrigins=https://app.example.com",
+    # Part of the posture since FB-06: a production release has to say whose
+    # address the pod observes, ingress or no ingress.
+    "--set",
+    "config.trustedProxies=10.0.0.0/8",
     "--set",
     "analyticsRetention.enabled=true",
     "--set",

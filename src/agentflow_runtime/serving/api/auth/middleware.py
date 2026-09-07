@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from agentflow_runtime.constants import (
     DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+    FAILED_AUTH_SCOPE_ADMIN,
     FAILED_AUTH_WINDOW_SECONDS,
 )
 from agentflow_runtime.serving.api.metrics import AUTH_FAILURES
@@ -62,23 +63,16 @@ class AuthMiddleware:
             dict(request.headers),
             manager.security_policy.sensitive_headers_to_redact,
         )
-        if manager.is_failed_auth_limited(client_ip):
-            from agentflow_runtime.serving.api import auth as auth_package
-
-            auth_package.logger.warning(
-                "api_auth_ip_throttled",
-                client_ip=client_ip,
-                path=path,
-                headers=request_headers,
-            )
-            AUTH_FAILURES.labels(reason="rate_limited").inc()
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Too many failed authentication attempts from this IP."},
-                headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)},
-            )
-
-        tenant_key = manager.authenticate(api_key)
+        # The throttle used to answer 429 before the key was looked at, which
+        # made it a denial-of-service tool: behind a gateway without
+        # AGENTFLOW_TRUSTED_PROXIES every caller shares one address, so eleven
+        # requests with any junk key took the whole pod offline for an hour --
+        # tenants and admins alike (audit FB-06). Resolve the key first; a
+        # valid one always serves, and only a failure consults the window.
+        # Under throttle the resolution is capped to the constant-work paths so
+        # a scanner still cannot buy N bcrypt verifications per guess.
+        throttled = manager.is_failed_auth_limited(client_ip)
+        tenant_key = manager.authenticate(api_key, allow_legacy_scan=not throttled)
         if tenant_key is None:
             from agentflow_runtime.serving.api import auth as auth_package
 
@@ -179,21 +173,26 @@ def require_admin_key(
 ) -> None:
     manager = get_auth_manager(request)
     client_ip = _client_ip(request)
-    if manager.is_failed_auth_limited(client_ip):
-        AUTH_FAILURES.labels(reason="rate_limited").inc()
-        raise HTTPException(
-            status_code=429,
-            detail="Too many failed authentication attempts from this IP.",
-            headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)},
-        )
     if not manager.admin_key:
         AUTH_FAILURES.labels(reason="admin_unconfigured").inc()
         raise HTTPException(status_code=503, detail="Admin key is not configured.")
-    if x_admin_key is None or not secrets.compare_digest(x_admin_key, manager.admin_key):
-        manager.record_failed_auth(client_ip)
+    # Checking the admin key is one constant-time comparison, so -- unlike the
+    # tenant path -- there is no expensive work an early gate would be saving.
+    # Check it first so a valid operator is never locked out by someone else's
+    # guesses, and count failures in the admin scope so a scan against /v1
+    # cannot throttle the surface used to answer it (audit FB-06).
+    if x_admin_key is None or not _constant_time_equals(x_admin_key, manager.admin_key):
+        is_throttled = manager.record_failed_auth(client_ip, scope=FAILED_AUTH_SCOPE_ADMIN)
+        if is_throttled:
+            AUTH_FAILURES.labels(reason="rate_limited").inc()
+            raise HTTPException(
+                status_code=429,
+                detail="Too many failed authentication attempts from this IP.",
+                headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)},
+            )
         AUTH_FAILURES.labels(reason="admin_invalid").inc()
         raise HTTPException(status_code=401, detail="Invalid or missing admin key.")
-    manager.clear_failed_auth(client_ip)
+    manager.clear_failed_auth(client_ip, scope=FAILED_AUTH_SCOPE_ADMIN)
 
 
 def require_auth(request: Request) -> TenantKey:
@@ -251,8 +250,35 @@ def _client_ip(request: Request) -> str:
     if trusted and peer_host in trusted:
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            return forwarded_for.split(",", 1)[0].strip()
+            hops = [hop.strip() for hop in forwarded_for.split(",")]
+            hops = [hop for hop in hops if hop]
+            if hops:
+                return _first_untrusted_hop(hops, trusted)
     return peer_host or "unknown"
+
+
+def _first_untrusted_hop(hops: list[str], trusted: frozenset[str]) -> str:
+    # X-Forwarded-For is append-only and each proxy writes the peer it actually
+    # saw, so accountability decreases left to right: the LEFTMOST element is
+    # whatever the first client sent, which a client may invent. Reading it was
+    # how an attacker rotated the failed-auth window once per request while the
+    # trusted-proxy gate was satisfied (audit FB-06). Walk from the right and
+    # stop at the first hop that no configured proxy vouches for.
+    for hop in reversed(hops):
+        if hop not in trusted:
+            return hop
+    # Every hop is a trusted proxy: the request never crossed a boundary this
+    # deployment can name, so key it on the outermost trusted address rather
+    # than on client-supplied text.
+    return hops[0]
+
+
+def _constant_time_equals(presented: str, expected: str) -> bool:
+    # Header values reach us latin-1 decoded, so a single non-ASCII byte in
+    # X-Admin-Key makes secrets.compare_digest raise TypeError and turns a
+    # failed authentication into a 500. Compare the encoded forms: the same
+    # constant-time guarantee, and junk is merely wrong instead of fatal.
+    return secrets.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
 
 
 def _trusted_proxies() -> frozenset[str]:

@@ -296,17 +296,51 @@ def test_production_render_requires_trusted_proxies_behind_ingress(tmp_path: Pat
     assert "config.trustedProxies is empty while ingress is enabled" in output
 
 
-def test_production_render_drops_the_proxy_clause_without_ingress(tmp_path: Path):
+def test_production_render_drops_the_tls_clause_without_ingress(tmp_path: Path):
     """TLS in a gateway ahead of the chart is a legitimate shape: with ingress
-    off, neither the TLS nor the trusted-proxy clause has anything to say."""
+    off the TLS clause has nothing to say. The client-address clause still does
+    -- see the two tests below -- so this render answers it."""
+    result = _render(
+        tmp_path,
+        {
+            "ingress": {"enabled": False, "tls": []},
+            "config": {"trustedProxies": "", "gateway": {"preservesClientIp": True}},
+        },
+    )
+    output = _output(result)
+
+    assert result.returncode == 0, output
+    assert "kind: Ingress" not in output
+
+
+def test_production_render_refuses_an_unanswered_external_gateway(tmp_path: Path):
+    """`ingress.enabled=false` used to make the trusted-proxy clause vanish
+    rather than answer it. That is the sanctioned production shape, and it is
+    exactly the one where every caller reaches the pod through a gateway the
+    chart cannot see: the failed-auth throttle and every logged client_ip then
+    key on one shared address (audit FB-06). Silence is no longer an answer."""
     result = _render(
         tmp_path,
         {"ingress": {"enabled": False, "tls": []}, "config": {"trustedProxies": ""}},
     )
     output = _output(result)
 
-    assert result.returncode == 0, output
-    assert "kind: Ingress" not in output
+    assert result.returncode != 0
+    assert "config.gateway.preservesClientIp is not set" in output
+
+
+def test_production_render_accepts_named_gateway_peers(tmp_path: Path):
+    """The other way to answer it: name the peers instead of declaring that the
+    source address survives."""
+    result = _render(
+        tmp_path,
+        {
+            "ingress": {"enabled": False, "tls": []},
+            "config": {"trustedProxies": "10.0.0.0/8"},
+        },
+    )
+
+    assert result.returncode == 0, _output(result)
 
 
 def test_production_render_refuses_a_cors_wildcard(tmp_path: Path):

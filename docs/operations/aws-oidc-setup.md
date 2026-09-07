@@ -137,6 +137,59 @@ locking mechanism of a live backend and needs AWS access plus a
 lock-migration step. Revisit on the next Terraform major bump, or the first
 time the backend is recreated from scratch — whichever comes first.
 
+### Migration to S3 native locking (planned, not executed)
+
+The trigger above says *when*; this says *what to run*, so the person who hits
+that day is not designing the migration under time pressure. Nothing here has
+been executed: there is no AWS access on the development hosts, and `plan` /
+`apply` in `.github/workflows/terraform-apply.yml` remain `if: false`.
+
+**Before starting**
+
+- Every client that runs `terraform init` against `env/staging` or
+  `env/production` must be on a Terraform that supports `use_lockfile` (1.10 or
+  newer). `required_version = "= 1.15.4"` and the `hashicorp/setup-terraform`
+  pins already hold CI to one version; an operator's local CLI is the only
+  unpinned client.
+- No `plan` or `apply` may be in flight. The dual-lock phase below exists so
+  that migrated and unmigrated clients still block each other; starting it
+  mid-run defeats that.
+- **No IAM change is needed to begin.** `TerraformStateObject` already allows
+  `s3:GetObject`, `s3:PutObject` and `s3:DeleteObject` on `env/<environment>/*`
+  (`state_prefix_arns` in
+  [`infrastructure/terraform/modules/github-oidc/main.tf`](../../infrastructure/terraform/modules/github-oidc/main.tf)),
+  and the native lock is the object
+  `env/<environment>/terraform.tfstate.tflock` under exactly that prefix.
+
+**Steps**
+
+1. **Take both locks.** Add `use_lockfile = true` to the `backend "s3"` block in
+   `infrastructure/terraform/main.tf`, *keeping* `dynamodb_table`, then run
+   `terraform init -reconfigure` from `infrastructure/terraform/`. Terraform
+   acquires the DynamoDB item and the `.tflock` object, so a client still on the
+   old configuration cannot run concurrently with a migrated one.
+2. **Observe both mechanisms once.** With AWS access, run `terraform plan` and
+   confirm the `.tflock` object exists under the state key for the duration of
+   the run and is gone afterwards, and that the DynamoDB item is still written.
+   Record it as dated evidence: this is the only step that proves native locking
+   works on this backend rather than in the documentation.
+3. **Drop DynamoDB from the backend** once every client has completed step 1:
+   remove `dynamodb_table` and run `terraform init -reconfigure` again.
+4. **Remove the IAM grants, then the table.** Delete the
+   `TerraformStateLockTableDescribe` and `TerraformStateLockItems` statements
+   with the `state_table_arn` and `state_lock_ids` locals, apply, and only then
+   delete the `agentflow-terraform-locks` table. Deleting the table first leaves
+   a role granting DynamoDB access to nothing and hides the mistake.
+5. **Update the record.** This section, the same section in
+   [`infrastructure/terraform/modules/github-oidc/README.md`](../../infrastructure/terraform/modules/github-oidc/README.md),
+   and `ASSUMPTION-T-36-BACKEND` below all describe DynamoDB retention as
+   deliberate. They stop being true at step 3 and must change in that commit.
+
+**Rollback.** Before step 3, remove `use_lockfile` and re-run `terraform init
+-reconfigure`; a leftover `.tflock` object is removed with `aws s3 rm`. After
+step 3 the reverse of step 1 restores DynamoDB locking — but only while the
+table still exists, which is why step 4 deletes it last.
+
 Remaining assumptions (same class as the apply-guard retention: the tracked
 contract is honest, the live delivery path is not claimed):
 

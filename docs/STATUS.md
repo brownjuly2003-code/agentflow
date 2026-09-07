@@ -18,11 +18,20 @@ claims: [`config/project_claims.toml`](../config/project_claims.toml).
 **Latest delivery boundary:** digest-only staging promotion passed for exact
 image identity and the offline production-promotion evidence verifier is
 complete. Since 2026-08-26 the work has been security-contract repair rather
-than new capability: the failed-auth throttle no longer denies service to valid
+than new capability. The failed-auth throttle no longer denies service to valid
 keys and reads `X-Forwarded-For` right to left (FB-06), the reference Terraform
-no longer puts an S3 age clock on Iceberg objects (FB-11), and the `pip-audit`
+no longer puts an S3 age clock on Iceberg objects (FB-11), the `pip-audit`
 gate can now waive an advisory upstream has not fixed under the same expiring,
-self-revoking rules as Trivy and Safety (FB-02). No production workflow or deploy has been implemented or authorized;
+self-revoking rules as Trivy and Safety (FB-02), and the release version numbers
+mean the same thing across the runtime, the SDKs and the chart (FB-05, FB-08,
+FB-14). Three contracts that were fail-open are now fail-closed:
+`AGENTFLOW_PROFILE=production` refuses to boot while either digest pepper is
+left at the public constant committed to this repository (FB-07), every
+NetworkPolicy egress rule names its destinations and renders only for a feature
+the install actually configures (FB-09), and every refusal on the admin surface
+leaves a structured `admin_auth_failed` line rather than only a counter, with
+the rotation procedure for that shared credential now owned by
+[operations/admin-key-rotation.md](operations/admin-key-rotation.md) (FB-10). No production workflow or deploy has been implemented or authorized;
 target-dependent work is `BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT` pending
 the owner packet described in
 [`f19d-production-rollout-acceptance.md`](evidence/records/f19d-production-rollout-acceptance.md).

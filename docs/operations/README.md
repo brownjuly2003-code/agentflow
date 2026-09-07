@@ -24,6 +24,7 @@ a procedure, not an authorization to run it.
 | Run or triage controlled fault injection | [Chaos runbook](chaos-runbook.md) | Preserve the severity and exit criteria |
 | Resume CI-soak work | [CI-soak next-session runbook](ci-soak-next-session-runbook.md) | Live repository facts override copied handoff text; external actions still need authority |
 | Connect coverage reporting | [Codecov setup](codecov-setup.md) | Distinguishes repository wiring from external service state |
+| Limit delegated agent retries after a failed atomic item | [Cycle guard](cycle-guard.md) | Two attempts per named atomic item; one read-only diagnostic after FAIL; no raw retry of the same workload; preflight is mandatory before delegating |
 | Back up, restore, or rehearse host loss | [Disaster recovery runbook](disaster-recovery.md) | Follow the data-preservation and drill boundaries |
 | Recover dependencies after the recorded Colima lifecycle gap | [External dependency recovery gate](external-dependency-recovery-gate.md) | The recorded pass does not establish workload or production readiness |
 | Operate Flink jobs | [Flink operator reference](flink-operators.md) | Detailed job and checkpoint guidance; general service triage stays in the operational runbook |

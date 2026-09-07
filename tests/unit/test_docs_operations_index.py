@@ -17,6 +17,7 @@ CURRENT_PROCEDURES = {
     "docs/operations/chaos-runbook.md",
     "docs/operations/ci-soak-next-session-runbook.md",
     "docs/operations/codecov-setup.md",
+    "docs/operations/cycle-guard.md",
     "docs/operations/disaster-recovery.md",
     "docs/operations/external-dependency-recovery-gate.md",
     "docs/operations/flink-operators.md",

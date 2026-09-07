@@ -6,6 +6,9 @@ site_dir: .tmp/mkdocs-site
 
 theme:
   name: material
+  # overrides/main.html carries the Mermaid <script> so it can declare
+  # Subresource Integrity; `extra_javascript` cannot (audit FB-16).
+  custom_dir: overrides
   features:
     - content.code.copy
     - navigation.sections
@@ -32,9 +35,6 @@ exclude_docs: |
   !deployment.md
   !observability.md
   !troubleshooting.md
-
-extra_javascript:
-  - https://unpkg.com/mermaid@10.9.3/dist/mermaid.min.js
 
 markdown_extensions:
   - admonition

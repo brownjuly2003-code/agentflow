@@ -57,11 +57,11 @@ REQUIRED_RETENTION_PHRASES = (
 )
 
 
-def _tracked_terraform_tf_paths(terraform_root: Path) -> tuple[str, ...]:
-    """Tracked ``*.tf`` paths under ``terraform_root``, relative to it.
+def _terraform_tf_paths_on_disk(terraform_root: Path) -> tuple[str, ...]:
+    """Every ``*.tf`` file under ``terraform_root``, relative to it.
 
-    Skip any path with a ``.``-prefixed segment so gitignored trees
-    (``.terraform/``, ``.tmp/``) cannot enter the lock-guard probe set.
+    Skip any path with a ``.``-prefixed segment. That is what keeps
+    ``.terraform/`` and ``.tmp/`` out of the lock-guard probe set today.
     """
     return tuple(
         sorted(
@@ -74,12 +74,12 @@ def _tracked_terraform_tf_paths(terraform_root: Path) -> tuple[str, ...]:
 
 
 # A terraform-only PR that must still start CI, or the lock guard never runs.
-# Probe every tracked *.tf plus the lock file: terraform providers lock reads
+# Probe every on-disk *.tf plus the lock file: terraform providers lock reads
 # the whole configuration, so a filter that hides any of those files still
 # hides the PR the guard exists for.
 _TERRAFORM_PR_PROBES = tuple(
     (TERRAFORM_MAIN_PATH.parent / relative).relative_to(PROJECT_ROOT).as_posix()
-    for relative in _tracked_terraform_tf_paths(TERRAFORM_MAIN_PATH.parent)
+    for relative in _terraform_tf_paths_on_disk(TERRAFORM_MAIN_PATH.parent)
 ) + (LOCK_PATH.relative_to(PROJECT_ROOT).as_posix(),)
 _DEFAULT_PR_BRANCH = "main"
 
@@ -828,7 +828,7 @@ def test_terraform_pr_probes_exist_under_project_root() -> None:
         "infrastructure/terraform/modules/storage/main.tf",
     }
     assert set(_TERRAFORM_PR_PROBES) == expected, (
-        "lock-guard PR probes must be every tracked *.tf plus the lock file; "
+        "lock-guard PR probes must be every on-disk *.tf plus the lock file; "
         f"extra={sorted(set(_TERRAFORM_PR_PROBES) - expected)} "
         f"missing={sorted(expected - set(_TERRAFORM_PR_PROBES))}"
     )
@@ -836,8 +836,8 @@ def test_terraform_pr_probes_exist_under_project_root() -> None:
     assert not missing, f"lock-guard PR probes missing under PROJECT_ROOT: {missing}"
 
 
-def test_tracked_terraform_tf_paths_skip_dot_directories(tmp_path: Path) -> None:
-    """Gitignored .terraform/ and .tmp/ trees must not enter the probe walk."""
+def test_terraform_tf_paths_on_disk_skip_dot_directories(tmp_path: Path) -> None:
+    """Dot-prefixed .terraform/ and .tmp/ trees must not enter the probe walk."""
     (tmp_path / "main.tf").write_text("", encoding="utf-8")
     module_dir = tmp_path / "modules" / "github-oidc"
     module_dir.mkdir(parents=True)
@@ -848,7 +848,7 @@ def test_tracked_terraform_tf_paths_skip_dot_directories(tmp_path: Path) -> None
     tmp_ignored = tmp_path / ".tmp"
     tmp_ignored.mkdir()
     (tmp_ignored / "fixture.tf").write_text("", encoding="utf-8")
-    probes = _tracked_terraform_tf_paths(tmp_path)
+    probes = _terraform_tf_paths_on_disk(tmp_path)
     assert probes == ("main.tf", "modules/github-oidc/outputs.tf")
     assert ".terraform/modules/x/main.tf" not in probes
     assert ".tmp/fixture.tf" not in probes

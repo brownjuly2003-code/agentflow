@@ -206,6 +206,41 @@ working files, not reviewed evidence or production acceptance; promotion
 requires a new date-stamped identity with source SHA, workflow run, scanner
 versions, exact command/configuration, outcome, and hash provenance.
 
+### 8.1 Waiving an advisory upstream has not fixed
+
+A version bump closes most findings. `PYSEC-2026-3740` in `nltk 3.10.3` closes
+nothing: the advisory itself says "Patched versions: Not yet patched", so there
+is no release to move to. Until 2026-09-07 the repository had nowhere to put
+that. `validate_waiver` required a `fixed_version`, which meant an unfixed
+finding was unwaivable by construction — its key ends in an empty fix version
+and no valid waiver key could — and the pip-audit job had no waiver mechanism
+at all, so it simply stayed red.
+
+Three changes, none of which loosen the gate:
+
+- `fixed_version: null` is now a statable claim — "upstream has published no
+  fix" — and the key must still be present, so silence stays a typo rather than
+  a claim.
+- `scripts/run_pip_audit_scan.py` runs pip-audit with **no** `--ignore-vuln`
+  and evaluates the JSON report against `security/trivy-waivers.json` itself,
+  scope `python-profiles`. Unwaived findings, expired waivers, and waivers that
+  match nothing each fail the job, exactly as the Trivy path does.
+- The fix state is part of the match. The nltk waiver's premise is that no fix
+  exists; the day pip-audit reports one, the waiver stops matching, the finding
+  returns to unwaived, and the gate goes red on the release that is now
+  available. Nobody has to remember to revisit it.
+
+The argument for this particular waiver is narrow. The affected APIs are nltk's
+model-persistence helpers, and the bypass only matters to a caller that enables
+nltk's `pathsec` sandbox and lets untrusted input choose model paths. AgentFlow
+does neither: nltk arrives only as a transitive dependency of `llama-index-core`
+under the `integrations` extra, no source file references `nltk` or `pathsec`
+(a test asserts this), and the package is absent from `requirements-docker.lock`,
+so it does not ship in the API image. The waiver expires 2026-11-01.
+
+`requirements-docker.lock` is deliberately excluded from this mechanism. The one
+inventory that ships is audited bare, with no waiver path reachable at all.
+
 On 2026-07-30, a Trivy scan of the API image identified vulnerable packages
 vendored by runtime `pip`, not dependencies from the application lock. The
 final stage now removes `pip`, `setuptools`, and `wheel` after the hash-locked
@@ -229,8 +264,10 @@ Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
 `docs/operations/helm-deployment.md`,
 `docs/evidence/security-runtime-image-trivy-2026-07-30.md`,
 `scripts/evaluate_trivy_policy.py`, `security/trivy-waivers.json`,
-`Makefile`, `tests/unit/test_security_image_scan_policy.py`,
-`tests/unit/test_security_workflow.py`
+`scripts/run_pip_audit_scan.py`, `Makefile`,
+`tests/unit/test_security_image_scan_policy.py`,
+`tests/unit/test_security_workflow.py`,
+`tests/unit/test_run_pip_audit_scan.py`
 
 ## 9. Operational Security and Auditability
 

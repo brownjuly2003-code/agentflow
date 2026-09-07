@@ -65,7 +65,6 @@ def validate_waiver(item: Waiver) -> None:
         "id",
         "package",
         "installed_version",
-        "fixed_version",
         "expires_on",
         "disposition",
         "rationale",
@@ -74,9 +73,32 @@ def validate_waiver(item: Waiver) -> None:
     missing = [field for field in required if not item.get(field)]
     if missing:
         raise ValueError(f"waiver is missing required fields {missing}: {item}")
+    _validate_fixed_version(item)
     if item["disposition"] != "not_affected":
         raise ValueError(f"unsupported waiver disposition: {item['disposition']}")
     date.fromisoformat(str(item["expires_on"]))
+
+
+def _validate_fixed_version(item: Waiver) -> None:
+    """``fixed_version`` carries a state the other required fields do not.
+
+    An advisory upstream has not fixed yet has no version to name, and the
+    scanners report exactly that: Trivy leaves ``FixedVersion`` empty. While
+    this field had to be truthy no such finding could ever be waived -- its
+    key ends in ``""`` and no valid waiver key could -- so an unfixed high was
+    unwaivable by construction (audit FB-02). ``null`` now means "upstream has
+    published no fix". The key must still be present: absence is a typo, not a
+    claim, and it must not silently buy the same suppression.
+    """
+    if "fixed_version" not in item:
+        raise ValueError(f"waiver must state fixed_version (null when unfixed): {item}")
+    fixed_version = item["fixed_version"]
+    if fixed_version is None:
+        return
+    if not isinstance(fixed_version, str) or not fixed_version.strip():
+        raise ValueError(
+            f"fixed_version must be a version string or null, not {fixed_version!r}: {item}"
+        )
 
 
 def evaluate_report(

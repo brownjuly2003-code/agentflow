@@ -329,6 +329,9 @@ jobs:
           python-version: "3.11"
       - name: Install pip-audit
         run: python -m pip install --upgrade pip "pip-audit>=2.7,<3" uv==0.8.23
+      # Deliberately bare: the production image lock is the one inventory with
+      # no waiver mechanism reachable at all. A finding here is a release
+      # blocker, not something to argue about in security/trivy-waivers.json.
       - name: Audit the locked production dependency set
         run: pip-audit --no-deps -r requirements-docker.lock
       # Audit F-03: the production lock alone left uv.lock's dev/test chain
@@ -344,7 +347,17 @@ jobs:
           mkdir -p .artifacts/security/pip-audit
           uv export --frozen --format requirements-txt --all-extras \
             --no-emit-project -o .artifacts/security/pip-audit/requirements-all-profiles.txt
-          pip-audit --no-deps -r .artifacts/security/pip-audit/requirements-all-profiles.txt
+          # Audit FB-02: nltk 3.10.3 carries PYSEC-2026-3740 and upstream has
+          # published no fix, so no bump can close it and this job stayed red
+          # with nowhere to record why. The suppression lives in
+          # security/trivy-waivers.json (scope python-profiles), where it is
+          # validated, expires on 2026-11-01, and fails this job the moment it
+          # stops matching -- including the day nltk ships a fix. Do not pass
+          # --ignore-vuln here: a flag in YAML has none of those properties.
+          python scripts/run_pip_audit_scan.py \
+            --waivers security/trivy-waivers.json \
+            --scope python-profiles \
+            -r .artifacts/security/pip-audit/requirements-all-profiles.txt
 
   npm-audit:
     runs-on: ubuntu-latest

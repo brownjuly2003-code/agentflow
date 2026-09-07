@@ -4,6 +4,41 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — an advisory upstream has not fixed can now be waived (FB-02)
+
+`nltk 3.10.3` carries `PYSEC-2026-3740` (`GHSA-8mgp-746c-j5xp`) and upstream has
+published no fix, so no version bump can close it. The repository had nowhere to
+record that: `validate_waiver` required a `fixed_version`, which made an unfixed
+finding unwaivable by construction, and the `pip-audit` job had no waiver
+mechanism at all — it simply stayed red on a scheduled scan with no place to
+argue.
+
+* `fixed_version: null` is now a statable claim, "upstream has published no fix".
+  The key must still be present, so silence stays a typo rather than a claim.
+* `scripts/run_pip_audit_scan.py` audits the full locked profile export with
+  **no** `--ignore-vuln` and evaluates pip-audit's JSON against
+  `security/trivy-waivers.json` (new scope `python-profiles`) itself. Unwaived
+  findings, expired waivers, and waivers matching nothing each fail the job, the
+  same three properties the Trivy and Safety gates already have. pip-audit's own
+  exit code is not consulted; the verdict comes from the report.
+* The fix state is part of the match, so the waiver revokes itself: the day
+  pip-audit reports a fix version, the "no fix exists" premise is false, the
+  finding returns to unwaived, and the gate goes red on the release that is now
+  available.
+* `requirements-docker.lock` is deliberately excluded. The one inventory that
+  ships is audited bare, with no waiver path reachable at all.
+
+The nltk waiver expires 2026-11-01. Its argument is narrow: the affected APIs
+are nltk's model-persistence helpers, exploitable only by a caller that enables
+nltk's `pathsec` sandbox and lets untrusted input choose model paths. AgentFlow
+does neither — nltk arrives only through `llama-index-core` under the
+`integrations` extra, no source file references `nltk` or `pathsec` (asserted by
+a test), and it is absent from the API image lock.
+
+`scripts/run_pip_audit_scan.py` and `security/trivy-waivers.json` join
+`scripts/evaluate_trivy_policy.py` as owner-reviewed surfaces in `CODEOWNERS`:
+they decide what a suppression covers.
+
 ### Fixed — S3 lifecycle no longer puts an age clock on Iceberg objects (FB-11)
 
 The reference Terraform for the lake bucket shipped two lifecycle rules that
@@ -160,6 +195,7 @@ performance archive.
 ### Security — nltk 3.10.0 -> 3.10.3 in uv.lock (Dependabot GHSA-m4rf-3fr8-xwx3, GHSA-6hwm-xvph-95vm)
 
 - `uv lock --upgrade-package nltk` only; nltk is a transitive dependency of `llama-index-core` and is not part of the `cloud`/`postgres` export, so `requirements-docker.lock` is unchanged. Closes the critical (JVM argument injection in the Stanford wrappers) and high (uncontrolled `dot` search path) advisories GitHub reported on the default branch on 2026-09-01.
+- **This did not leave nltk clean.** On 2026-09-02 GitHub opened `GHSA-8mgp-746c-j5xp` / `PYSEC-2026-3740` against 3.10.3 itself, and upstream has published no fix, so no bump can close it. The advisory is unreachable from AgentFlow and is waived under `security/trivy-waivers.json` scope `python-profiles` until 2026-11-01 — see the FB-02 entry under Unreleased and `docs/security-audit.md` §8.1. Read this bump as preventive, not as a closure.
 
 ### Security — production boot requires a query-fingerprint pepper (AF-13)
 

@@ -15,6 +15,8 @@ PROTECTED_SURFACES = (
     "src/agentflow_runtime/serving/api/middleware/**",
     "scripts/release.py",
     "scripts/evaluate_trivy_policy.py",
+    "scripts/run_pip_audit_scan.py",
+    "security/trivy-waivers.json",
     "config/project_claims.toml",
     "SECURITY.md",
     "docs/release-*.md",

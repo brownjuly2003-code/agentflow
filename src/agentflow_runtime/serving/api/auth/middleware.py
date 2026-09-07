@@ -18,7 +18,7 @@ from agentflow_runtime.constants import (
 from agentflow_runtime.serving.api.metrics import AUTH_FAILURES
 from agentflow_runtime.serving.api.security import redact_sensitive_headers
 
-from .manager import _CURRENT_TENANT_ID, TenantKey, get_auth_manager
+from .manager import _CURRENT_TENANT_ID, AuthManager, TenantKey, get_auth_manager
 
 
 class AuthMiddleware:
@@ -167,14 +167,63 @@ class AuthMiddleware:
         return response
 
 
+def _log_admin_auth_failed(
+    request: Request,
+    manager: AuthManager,
+    *,
+    reason: str,
+    client_ip: str,
+    path: str,
+) -> None:
+    """Record an admin-surface refusal, never the credential that was tried.
+
+    Headers go through the operator's redaction policy and then lose
+    ``X-Admin-Key`` unconditionally. That policy list is operator-configurable
+    (``config/security.yaml``) and audit F-11 already had to repair a built-in
+    default that omitted the header; on the one credential every operator
+    shares -- the one that issues, rotates and revokes every tenant key -- an
+    audit line must not depend on that list still being right.
+    """
+    from agentflow_runtime.serving.api import auth as auth_package
+
+    headers = redact_sensitive_headers(
+        dict(request.headers),
+        manager.security_policy.sensitive_headers_to_redact,
+    )
+    auth_package.logger.warning(
+        "admin_auth_failed",
+        reason=reason,
+        client_ip=client_ip,
+        path=path,
+        headers={
+            name: ("[REDACTED]" if name.lower() == "x-admin-key" else value)
+            for name, value in headers.items()
+        },
+    )
+
+
 def require_admin_key(
     request: Request,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ) -> None:
     manager = get_auth_manager(request)
     client_ip = _client_ip(request)
+    path = request.url.path
+    # Every refusal on this surface leaves a structured line, not only a
+    # counter (audit FB-10). `AUTH_FAILURES{reason=...}` says an admin refusal
+    # happened somewhere in the deployment; it cannot say from which address,
+    # against which route, or whether the 503 that woke someone at 03:00 was a
+    # rotated Secret the Deployment never picked up. The tenant path has
+    # logged `api_auth_failed` since F-11, which left the highest-privilege
+    # credential in the system as the one surface with no audit trail.
+    # `admin_auth_failed` is a separate event from `api_auth_failed` on
+    # purpose: a scan against /v1 and someone guessing the operator key are
+    # different incidents and want different detection rules.
     if not manager.admin_key:
         AUTH_FAILURES.labels(reason="admin_unconfigured").inc()
+        _log_admin_auth_failed(
+            request, manager, reason="admin_unconfigured", client_ip=client_ip, path=path
+        )
         raise HTTPException(status_code=503, detail="Admin key is not configured.")
     # Checking the admin key is one constant-time comparison, so -- unlike the
     # tenant path -- there is no expensive work an early gate would be saving.
@@ -185,12 +234,18 @@ def require_admin_key(
         is_throttled = manager.record_failed_auth(client_ip, scope=FAILED_AUTH_SCOPE_ADMIN)
         if is_throttled:
             AUTH_FAILURES.labels(reason="rate_limited").inc()
+            _log_admin_auth_failed(
+                request, manager, reason="rate_limited", client_ip=client_ip, path=path
+            )
             raise HTTPException(
                 status_code=429,
                 detail="Too many failed authentication attempts from this IP.",
                 headers={"Retry-After": str(FAILED_AUTH_WINDOW_SECONDS)},
             )
         AUTH_FAILURES.labels(reason="admin_invalid").inc()
+        _log_admin_auth_failed(
+            request, manager, reason="admin_invalid", client_ip=client_ip, path=path
+        )
         raise HTTPException(status_code=401, detail="Invalid or missing admin key.")
     manager.clear_failed_auth(client_ip, scope=FAILED_AUTH_SCOPE_ADMIN)
 

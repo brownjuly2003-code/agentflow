@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 INDEX = ROOT / "docs" / "operations" / "README.md"
 
 CURRENT_PROCEDURES = {
+    "docs/operations/admin-key-rotation.md",
     "docs/operations/api-duckdb-non-target-scratch-rehearsal-runbook.md",
     "docs/operations/aws-oidc-setup.md",
     "docs/operations/cdc-production-onboarding.md",

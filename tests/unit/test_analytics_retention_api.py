@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agentflow_runtime.serving.api.routers import admin as admin_module
+from agentflow_runtime.serving.api.security import SecurityPolicy
 
 
 class _RetentionStore:
@@ -30,6 +31,10 @@ class _AdminManager:
     def __init__(self, store: _RetentionStore) -> None:
         self.admin_key = "admin-secret"
         self.store = store
+        # `require_admin_key` audits every refusal through the manager's
+        # header-redaction policy (audit FB-10), so the double carries the
+        # same defaults `AuthManager` uses when no security.yaml is present.
+        self.security_policy = SecurityPolicy()
 
     def is_failed_auth_limited(self, _client_ip: str, _scope: str = "api") -> bool:
         return False

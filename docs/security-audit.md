@@ -280,6 +280,10 @@ Operationally, the repo shows several useful security-facing controls:
 
 This provides a credible audit and incident-response starting point for a small team. It is notably better than a pure demo API with no usage telemetry.
 
+Refusals on the admin surface leave a record and not only a counter (audit FB-10). `require_admin_key` guards the routes that issue, rotate and revoke every tenant API key, and each of its three refusals — `admin_invalid`, `rate_limited` and `admin_unconfigured` — increments `agentflow_auth_failures_total` **and** emits a structured `admin_auth_failed` line carrying `reason`, `client_ip`, `path` and the redacted request headers. It is a separate event from the tenant path's `api_auth_failed` so that a scan against `/v1` and someone guessing the operator credential stay distinguishable at query time. The line never carries key material: headers pass through `security.sensitive_headers_to_redact` and then lose `X-Admin-Key` unconditionally, because that list is operator-configurable and audit F-11 had already found a built-in default that omitted it. The label vocabulary in `docs/runbooks/auth-401-spike.md` § Detection is pinned against the labels the code actually emits, in both directions — it had been carrying one name nothing emitted and neither admin name.
+
+The admin key itself is one shared value with no dual-key window: a pod validates against the single value it resolved at startup, so rotation is a Secret change plus a rolling restart during which admin calls are unreliable. `docs/operations/admin-key-rotation.md` owns that procedure — trigger conditions, the ordering that keeps the analytics-retention CronJob from failing mid-run, and how to confirm the old value is dead.
+
 What is not evidenced in this repository snapshot:
 - generalized secrets management through AWS Secrets Manager or another external vault
 - automated rotation for non-API-key secrets
@@ -289,7 +293,7 @@ The API usage path can optionally publish hash-chained JSONL records through `AG
 
 Because the external controls are not provable from the checked-in code, they should not be claimed in customer-facing security questionnaires without additional infrastructure evidence.
 
-Evidence: `src/agentflow_runtime/serving/api/auth/middleware.py`, `src/agentflow_runtime/serving/api/analytics.py`, `docs/runbook.md`
+Evidence: `src/agentflow_runtime/serving/api/auth/middleware.py`, `src/agentflow_runtime/serving/api/analytics.py`, `docs/runbook.md`, `docs/runbooks/auth-401-spike.md`, `docs/operations/admin-key-rotation.md`, `tests/unit/test_admin_auth_audit_log.py`
 
 ## 10. Known Limitations
 
@@ -302,6 +306,7 @@ The current implementation has several material limitations:
 5. The demo-data initialization path is convenient for development, but it increases the importance of strict environment separation between demo and production deployments.
 6. Browser-oriented security headers exist, and request body size enforcement is applied from `SecurityPolicy.request_size_limit_bytes`.
 7. `/metrics` remains unauthenticated to anything that can already reach the pod port; no monitoring identity (mTLS, auth proxy, or IP allowlist) is implemented. Production Ingress rules that would send `/metrics` to the API are refused at `helm template` time, as are the exact ingress-nginx routing-control annotations `rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, and `server-snippet` under the current and legacy prefixes. That values-contract check does not authenticate the endpoint or bind the chart's dev/demo defaults, and its annotation denylist covers only the Ingress object rendered by this chart — not the ingress-nginx controller ConfigMap or separately managed Ingress objects. Production binds `service.type` to `ClusterIP`; `ingress.enabled=false` remains the sanctioned external-gateway shape and moves routing (and the `/metrics` exposure question) outside the chart. Production NetworkPolicy must name a scrape namespace in `networkPolicy.ingressFromNamespaces` (`values-production.yaml` ships no guessed namespace; the unedited overlay is refused). An empty list renders `ingress: []` (deny all) and is refused because neither the ingress controller nor Prometheus can reach the service port. A list whose every `kubernetes.io/metadata.name` is `ingress-nginx` is refused unless `networkPolicy.scrapeFromIngressNamespace=true` records that Prometheus shares the ingress-controller namespace. Egress is an allow-list only where a rule names destinations: a rule with `ports:` and no `to:` permits that port to every address, in the cluster and on the internet, which is how the baseline came to allow 6379/9092/8181/9000/8123/4317/5432 anywhere (audit FB-09). Each rule now takes peers from `networkPolicy.egressTo.<service>`, renders only when its feature is configured, and production refuses an empty peer list for every rule that renders. DNS remains the chart-owned exception, selecting kube-dns by label.
+8. The admin key is a single shared credential. Every operator presents the same `X-Admin-Key`, so an admin action is attributable to "someone holding the key" and nothing finer, and revoking one person's access means rotating it for everyone. There is no dual-key window during that rotation. Per-operator admin credentials, hashed the way tenant keys already are, would remove both properties and are not implemented; `docs/operations/admin-key-rotation.md` is what stands in for them today.
 
 ## 11. Compliance Readiness
 

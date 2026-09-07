@@ -4,6 +4,33 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — the admin surface now leaves an audit trail (FB-10)
+
+* **`require_admin_key` counted its refusals and wrote nothing else.** It
+  guards the routes that issue, rotate and revoke every tenant API key, so
+  the highest-privilege credential in the system was the one surface with no
+  audit line — the tenant path has logged `api_auth_failed` since F-11. A
+  counter cannot say from which address, against which route, or whether the
+  503 that woke someone at 03:00 was a Secret the Deployment never picked up.
+* **All three refusals now emit `admin_auth_failed`** with `reason`
+  (`admin_invalid`, `rate_limited`, `admin_unconfigured`), `client_ip`, `path`
+  and the redacted headers. It is a separate event from `api_auth_failed` so a
+  scan against `/v1` and someone guessing the operator key stay
+  distinguishable at query time.
+* **The line never carries the key that was tried.** Headers go through
+  `security.sensitive_headers_to_redact` and then lose `X-Admin-Key`
+  unconditionally — that list belongs to the operator, and F-11 already had to
+  repair a built-in default that omitted it.
+* **`docs/runbooks/auth-401-spike.md` § Detection was wrong in both
+  directions**: it listed `disabled_key`, which no call site emits, and
+  neither admin reason. `metrics.py` points at that section for the label
+  vocabulary, so it is now pinned against the emitted labels by test.
+* **New: `docs/operations/admin-key-rotation.md`.** The admin key is one
+  shared value with no dual-key window, so rotation is a Secret change plus a
+  rolling restart during which admin calls are unreliable. The page owns the
+  triggers, the ordering that keeps the analytics-retention CronJob from
+  failing mid-run, and how to confirm the old value is dead.
+
 ### Security — the NetworkPolicy egress rules now say where they may go (FB-09)
 
 * **A rule with `ports:` and no `to:` allows that port to every address.** The

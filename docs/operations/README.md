@@ -18,6 +18,7 @@ a procedure, not an authorization to run it.
 
 | Need | Owning document | Boundary |
 | --- | --- | --- |
+| Rotate the shared admin credential | [Admin key rotation](admin-key-rotation.md) | Requires write access to the externally managed Secret; admin calls fail while the rollout runs |
 | Prepare a fresh non-target DuckDB capability rehearsal | [Current non-target scratch rehearsal](api-duckdb-non-target-scratch-rehearsal-runbook.md) | `READY_NOT_AUTHORIZED`; identity preparation is local, while execution needs separate exact authorization |
 | Configure Terraform's AWS identity | [AWS OIDC setup](aws-oidc-setup.md) | Repository and AWS owner inputs must already exist |
 | Attach a production CDC source | [Production CDC source onboarding](cdc-production-onboarding.md) | Complete the decision record and no-go checks before rollout |

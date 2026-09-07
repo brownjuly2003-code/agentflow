@@ -36,14 +36,30 @@ rotation or secret-mount change rather than a deploy.
 ## Detection
 
 1. Grafana → AgentFlow / Auth panel:
-   - `agentflow_auth_failures_total` by `reason` label
-     (`missing_key`, `invalid_key`, `disabled_key`, `rate_limited`, `key_file_empty`)
+   - `agentflow_auth_failures_total` by `reason` label. The tenant surface
+     emits `missing_key`, `invalid_key`, `rate_limited` and `key_file_empty`;
+     the admin surface emits `admin_invalid`, `admin_unconfigured` and its own
+     `rate_limited`, counted in a separate throttle window since audit FB-06 so
+     that a scan against `/v1` cannot lock an operator out of `/v1/admin`.
    - 401/403 rate by route
 2. Logs:
    ```
    {app="agentflow-api"} |= "AuthenticationError" or "PermissionDeniedError"
    {app="agentflow-api"} |= "auth" |= "fail-closed"
    ```
+   Every refusal also emits a structured line — `api_auth_failed` on `/v1/*`,
+   `admin_auth_failed` on `/v1/admin/*` — carrying `reason`, `client_ip`,
+   `path` and the redacted request headers. Neither line ever carries key
+   material; on the admin line `X-Admin-Key` is dropped regardless of the
+   `sensitive_headers_to_redact` policy (audit FB-10):
+   ```
+   {app="agentflow-api"} | json | event="admin_auth_failed"
+   ```
+   Read the `reason`: a burst of `admin_invalid` from one address is someone
+   guessing the credential that issues every tenant key, and
+   `admin_unconfigured` means the pod started with no `AGENTFLOW_ADMIN_KEY` at
+   all — see [Admin key revoked or rotated incorrectly](#admin-key-revoked-or-rotated-incorrectly)
+   below.
 3. Verify the key file is actually present and non-empty inside a running pod:
    ```
    kubectl -n <ns> exec deployment/agentflow-api -- \
@@ -112,7 +128,13 @@ equivalent) should not contain `AGENTFLOW_AUTH_DISABLED` at all.
 ### Admin key revoked or rotated incorrectly
 
 If admin operations themselves are returning 503, the admin key secret was
-rotated without the deployment picking it up:
+rotated without the deployment picking it up. `admin_auth_failed` with
+`reason="admin_unconfigured"` is the confirming signal: the pod resolved no
+`AGENTFLOW_ADMIN_KEY`, so no value the caller sends can succeed. For the
+planned procedure — including why a rolling restart makes some admin calls
+fail while it runs — see
+[admin key rotation](../operations/admin-key-rotation.md).
+
 
 ```
 kubectl -n <ns> rollout restart deployment/agentflow-api

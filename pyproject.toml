@@ -48,7 +48,7 @@ cloud = [
     # environments below rule out. (0.9+ restored 3.13 but sits outside
     # PyIceberg's declared window; nothing in that window is installable.)
     # The ceiling moves when PyIceberg raises its own, not before.
-    "pyiceberg-core>=0.7,<0.8",
+    "pyiceberg-core>=0.7,<0.11",
 ]
 postgres = [
     # ADR 0010 slice 5: PostgresControlPlaneStore (scale profile). Optional

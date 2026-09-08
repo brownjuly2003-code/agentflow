@@ -121,7 +121,7 @@ def test_python_publish_checks_artifacts_with_pinned_tooling_before_upload():
     names = [step.get("name") for step in steps if isinstance(step, dict)]
     commands = _step_commands(workflow)
 
-    assert "python -m pip install --upgrade build==1.5.1 twine==6.2.0" in commands
+    assert "python -m pip install --upgrade build==1.6.0 twine==6.2.0" in commands
     assert "python scripts/check_release_artifacts.py dist/* sdk/dist/*" in commands
     assert names.index("Reject unsafe release artifacts") < names.index(
         "Dry-run build and twine check"

@@ -4,6 +4,20 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Supply chain — releases were being built by a yanked builder
+
+* **`build` 1.5.1 is yanked upstream** ("considers breaking changes, will
+  discuss re-releasing as a new major version"), and it was pinned in two
+  places: `uv.lock`, which builds the wheels CI smoke-tests in
+  `python-compat`, and `.github/workflows/publish-pypi.yml`, which builds the
+  artifacts that go to PyPI. A yanked release still installs when pinned
+  exactly, so nothing failed — every `uv lock` just printed the warning and
+  every release came out of a withdrawn builder.
+* **Both now use 1.6.0**, the supported successor. `requirements-docker.lock`
+  is unchanged (`build` is a `dev` dependency, not part of the
+  cloud/postgres export), and `tests/unit/test_publish_workflows.py` pins the
+  new command so the two cannot drift apart.
+
 ### Dependencies — the two version ceilings that keep coming back are now explained
 
 * **`mcp<2` is load-bearing.** mcp 2.x's lowlevel `Server` no longer defines

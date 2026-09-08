@@ -49,13 +49,21 @@ test_sql_guard_mutation.py (see fable_handoff.md cont.16-19):
    scored it ``n/a``, and the weekly mutation gate went red on 2026-07-12 and
    stayed red. Anything added to sql_builder's imports belongs here too.
 
-Reproduced at 96.0% (killed 167, survived 7) via the WSL/mutmut harness (py3.10);
-the CI gate (mutation.yml on py3.11) is the source of truth. The 7 survivors are
-genuine equivalent mutants, not gaps: four mutate the *string* inside
-``cast("dict[...]", value)`` -- the runtime ``typing.cast`` ignores its first
-argument, so any text change there is a no-op -- and three flip
-``parse_one(..., dialect="duckdb")`` / ``parsed.sql(dialect=...)`` to
-``dialect=None``, which renders the plain SELECTs this builder handles identically.
+A note on the score, because the number here was wrong for two months. This
+docstring used to record "96.0% (killed 167, survived 7), the 7 are equivalent
+mutants, not gaps", measured on a WSL/py3.10 harness. ``1096e2e`` then broke the
+import shim above, the module scored ``n/a`` for nine weeks, and nobody could
+have noticed the figure going stale. The first run after the shim was repaired
+(``3820a2f``) measured 80.3% -- killed 106, survived 26, against a 90% threshold
+-- and 14 of those 26 were in ``_holds_foreign_tenant_rows``, a method this file
+did not test at all. So the old paragraph was not merely out of date: it was
+describing a mutant population that no longer existed, and it read as
+reassurance while a tenant-isolation guard sat unpinned.
+
+The CI gate (mutation.yml on py3.11) is the only source of truth for this score;
+mutant *counts* differ per interpreter, because ``mutate_only_covered_lines``
+makes the population depend on coverage attribution. Do not restate a number
+here that was not read off a mutation.yml run, and record the run id with it.
 """
 
 from __future__ import annotations
@@ -201,6 +209,27 @@ class _TenantRouter:
         return _TenantsConfig(self._tenants)
 
 
+class _Backend:
+    """Answers the one question `_holds_foreign_tenant_rows` asks a store.
+
+    It records the SQL rather than only replaying a verdict: the probe text *is*
+    the check. A mutant that widens `<>` to `=`, drops the `LIMIT 1`, or asks
+    about some tenant other than the default still returns a truthy row and
+    would pass a test that only looked at the boolean.
+    """
+
+    def __init__(self, rows: object = (), error: BaseException | None = None) -> None:
+        self._rows = rows
+        self._error = error
+        self.queries: list[str] = []
+
+    def execute(self, sql: str) -> object:
+        self.queries.append(sql)
+        if self._error is not None:
+            raise self._error
+        return self._rows
+
+
 class _Host(SQLBuilderMixin):
     def __init__(
         self,
@@ -209,12 +238,22 @@ class _Host(SQLBuilderMixin):
         tenant_router: _TenantRouter,
         table_columns: dict[str, set[str]] | None = None,
         cache: dict | None = None,
+        backend: _Backend | None = None,
+        foreign_tenant_cache: dict[str, bool] | None = None,
     ) -> None:
         self.catalog = catalog
         self._tenant_router = tenant_router
         self._table_columns_map = dict(table_columns or {})
         if cache is not None:
             self._qualified_table_cache = cache
+        # Absent, not None, when no store is supplied: the production host always
+        # has `_backend`, and `_holds_foreign_tenant_rows` reads both attributes
+        # through `getattr(..., None)`, so a double that never sets them exercises
+        # the same defaulted reads the mixin performs.
+        if backend is not None:
+            self._backend = backend
+        if foreign_tenant_cache is not None:
+            self._foreign_tenant_cache = foreign_tenant_cache
 
     def _table_columns(self, table_name: str) -> set[str]:
         return self._table_columns_map.get(table_name, set())
@@ -380,6 +419,102 @@ def test_quote_literal_string_is_quoted_and_escaped():
 
 
 # --------------------------------------------------------------------------- #
+# _holds_foreign_tenant_rows: the fail-closed probe behind an unscoped read.
+# A request that carries no tenant context is answered only when the table has
+# nothing to leak — every row in it belongs to DEFAULT_TENANT. Both directions
+# have teeth: a false negative hands an anonymous caller every tenant's rows, a
+# false positive 503s the single-tenant demo that never sets a tenant at all.
+# (audit p2_1 #5)
+#
+# The method had no tests. Its only exercised path was the `_backend is None`
+# early return the host doubles fell into, so the probe, the cache and the
+# fail-closed branch it feeds were all unpinned — 14 of the 26 mutants that
+# survived the 2026-09-08 gate run (score 80.3%, threshold 90%) live here.
+# --------------------------------------------------------------------------- #
+
+FOREIGN_TENANT_PROBE = "SELECT 1 FROM orders WHERE tenant_id <> 'default' LIMIT 1"
+
+
+def test_holds_foreign_tenant_rows_is_true_when_the_store_returns_a_row():
+    host = _host(backend=_Backend(rows=[(1,)]))
+    assert host._holds_foreign_tenant_rows("orders") is True
+
+
+def test_holds_foreign_tenant_rows_is_false_when_the_store_returns_nothing():
+    host = _host(backend=_Backend(rows=[]))
+    assert host._holds_foreign_tenant_rows("orders") is False
+
+
+def test_holds_foreign_tenant_rows_asks_only_about_non_default_tenants():
+    # The probe text *is* the check, so it is pinned whole. A mutant that widens
+    # `<>` to `=`, drops the `LIMIT 1`, or names a tenant other than the default
+    # still returns a truthy row, and a test that only read the boolean would
+    # call every one of those correct.
+    backend = _Backend(rows=[])
+    host = _host(backend=backend)
+    host._holds_foreign_tenant_rows("orders")
+    assert backend.queries == [FOREIGN_TENANT_PROBE]
+
+
+def test_holds_foreign_tenant_rows_probes_the_table_it_was_given():
+    backend = _Backend(rows=[])
+    host = _host(backend=backend)
+    host._holds_foreign_tenant_rows("customers")
+    assert backend.queries == ["SELECT 1 FROM customers WHERE tenant_id <> 'default' LIMIT 1"]
+
+
+def test_holds_foreign_tenant_rows_treats_an_unreadable_table_as_empty():
+    # Not materialized yet, or no tenant column: there are no foreign rows in it
+    # to leak, so the unscoped read stays allowed.
+    error = sql_builder_module.BackendExecutionError("no such table: orders")
+    host = _host(backend=_Backend(error=error))
+    assert host._holds_foreign_tenant_rows("orders") is False
+
+
+def test_holds_foreign_tenant_rows_lets_an_unexpected_failure_through():
+    # Only the store's own "cannot read that" is benign. A connection fault is
+    # not evidence of an empty table, and must not be laundered into permission.
+    host = _host(backend=_Backend(error=RuntimeError("connection reset")))
+    with pytest.raises(RuntimeError):
+        host._holds_foreign_tenant_rows("orders")
+
+
+def test_holds_foreign_tenant_rows_serves_a_cached_verdict_without_probing():
+    backend = _Backend(rows=[(1,)])
+    host = _host(backend=backend, foreign_tenant_cache={"orders": False})
+    assert host._holds_foreign_tenant_rows("orders") is False
+    assert backend.queries == []
+
+
+def test_holds_foreign_tenant_rows_caches_what_it_learned():
+    # One probe per table per process, not one per read.
+    backend = _Backend(rows=[(1,)])
+    cache: dict[str, bool] = {}
+    host = _host(backend=backend, foreign_tenant_cache=cache)
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert cache == {"orders": True}
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert len(backend.queries) == 1
+
+
+def test_holds_foreign_tenant_rows_caches_per_table():
+    # Keyed by table: one table's emptiness must never vouch for another's.
+    backend = _Backend(rows=[(1,)])
+    host = _host(backend=backend, foreign_tenant_cache={"orders": False})
+    assert host._holds_foreign_tenant_rows("customers") is True
+    assert backend.queries == ["SELECT 1 FROM customers WHERE tenant_id <> 'default' LIMIT 1"]
+
+
+def test_holds_foreign_tenant_rows_still_answers_without_a_cache():
+    # The cache is an optimisation the host may not offer; the verdict is not.
+    backend = _Backend(rows=[(1,)])
+    host = _host(backend=backend)
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert len(backend.queries) == 2
+
+
+# --------------------------------------------------------------------------- #
 # _qualify_table: the scoped relation every entity read goes through, plus its
 # cache. This is the chokepoint — a surviving mutant here is a cross-tenant read.
 # --------------------------------------------------------------------------- #
@@ -453,6 +588,37 @@ def test_qualify_table_propagates_an_invalid_tenant_id():
     host = _host(tenant_router=_TenantRouter(has_config=True))
     with pytest.raises(ValueError, match="Invalid tenant id"):
         host._qualify_table("orders", "acme'; DROP TABLE orders--")
+
+
+def test_qualify_table_refuses_an_unscoped_read_of_a_multi_tenant_table(monkeypatch):
+    # No tenant context *and* the table holds somebody else's rows: the caller
+    # gets a refusal, not everyone's data. This is the branch the probe exists
+    # to feed, and until now nothing reached it — the host doubles had no store,
+    # so `_holds_foreign_tenant_rows` always short-circuited to False and the
+    # guard was never taken in a test.
+    monkeypatch.setattr(sql_builder_module, "get_current_tenant_id", lambda default=None: None)
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=_Backend(rows=[(1,)]))
+    with pytest.raises(ValueError, match="Tenant context is required"):
+        host._qualify_table("orders", None)
+
+
+def test_qualify_table_allows_an_unscoped_read_of_a_single_tenant_table(monkeypatch):
+    # The other half of the same branch: a store whose rows all belong to the
+    # default tenant has nothing to leak, so the deployment that never sets a
+    # tenant keeps reading.
+    monkeypatch.setattr(sql_builder_module, "get_current_tenant_id", lambda default=None: None)
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=_Backend(rows=[]))
+    assert host._qualify_table("orders", None) == SCOPED_ORDERS_UNSCOPED
+
+
+def test_qualify_table_does_not_probe_when_a_tenant_is_in_context():
+    # The probe only means anything for an unscoped read. Running it on the
+    # scoped path would add a query per table per request, and a mutant that
+    # loosens the `predicate is None` guard into `or` does exactly that.
+    backend = _Backend(rows=[(1,)])
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=backend)
+    assert host._qualify_table("orders", "acme") == SCOPED_ORDERS_ACME
+    assert backend.queries == []
 
 
 # --------------------------------------------------------------------------- #

@@ -32,7 +32,7 @@ WORKDIR /src
 # Mirrors Dockerfile.api: pinned build backend, and --no-isolation so the pin is
 # what builds the wheel instead of a fresh PyPI download inside build's venv.
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir build==1.5.1 hatchling==1.31.0 \
+    && pip install --no-cache-dir build==1.6.0 hatchling==1.31.0 \
     && python -m build --wheel --no-isolation --outdir /tmp/dist
 
 FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad5a0412fd5bfc7

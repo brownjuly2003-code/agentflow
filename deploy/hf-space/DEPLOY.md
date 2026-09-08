@@ -47,5 +47,12 @@ curl -fsS -H "X-API-Key: demo-key" \
 
 ## Refresh after a repo change
 
-The Space tracks `main` (`ARG AGENTFLOW_REF=main`). Trigger a rebuild from the
-Space UI ("Factory rebuild"), or bump `AGENTFLOW_REF` to a tag for a pinned demo.
+The Space builds a pinned ref, not a moving branch: `ARG AGENTFLOW_REF=v2.0.0`
+(audit FB-13). A "Factory rebuild" from the Space UI therefore reproduces the
+same code line every time instead of whatever `main` held that minute.
+
+To publish newer work, bump `AGENTFLOW_REF` in `deploy/hf-space/Dockerfile` to
+the new tag, re-push the file with the copy step above, then Factory rebuild.
+The Space UI passes no build arguments, so the `ARG` default is the only knob
+that reaches it; `--build-arg AGENTFLOW_REF=main` still works for a local
+`docker build` when you want to smoke-test unreleased work.

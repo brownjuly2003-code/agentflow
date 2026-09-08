@@ -63,10 +63,37 @@ fails boot instead of silently degrading to no tracing (audit F-13).
 
 Query analytics keeps a peppered fingerprint of each query question, not the
 question, unless an operator opts in to a redacted copy. Retention defaults to
-30 days and is enforced by `scripts/prune_query_analytics.py`; no scheduler
-runs the script automatically. See the
+30 days. The Helm chart provides a disabled-by-default CronJob that calls the
+authenticated API; it never opens DuckDB directly or mounts the API PVC. Enable
+it with an operator-managed Secret containing `admin-key`:
+
+```yaml
+analyticsRetention:
+  enabled: true
+  schedule: "0 3 * * *"
+  retentionDays: ""  # use AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS, default 30
+  dryRun: false
+  concurrencyPolicy: Forbid
+```
+
+The production values contract requires the job to be enabled with
+`dryRun: false` and `concurrencyPolicy: Forbid`. Validate a new schedule in a
+non-production values file with `dryRun: true`, then switch to the final mode.
+For a manual preview, call the same API; a dry run does not call the store's
+prune operation:
+
+```bash
+curl -X POST \
+  -H "X-Admin-Key: <admin-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"retention_days":30,"dry_run":true}' \
+  http://localhost:8000/v1/admin/analytics/retention
+```
+
+`scripts/prune_query_analytics.py` is retained for offline maintenance only;
+do not schedule it beside a live API process against the same DuckDB/PVC. See the
 [security policy](https://github.com/brownjuly2003-code/agentflow/blob/main/SECURITY.md)
-before scheduling retention or tenant-erasure work.
+before retention or tenant-erasure work.
 
 ## Local Pipeline Operations
 
@@ -375,3 +402,11 @@ For restore drills, backup verification, or host loss scenarios, use
 - Review and rotate API keys
 - Run `pytest tests/chaos/ -v --tb=short` against the current compose stack
 - Cost review: compare actual vs projected spend
+
+The two Iceberg lines above are the *only* retention for table data. S3
+lifecycle in `infrastructure/terraform/modules/storage/main.tf` deliberately
+expires nothing under the warehouse prefix: object age says nothing about
+which manifests still reference a file, so an S3 rule there deletes files out
+from under live snapshots instead of cleaning the table. If table storage is
+growing, the answer is `expire_snapshots` and `rewrite_data_files`, never a
+new lifecycle rule.

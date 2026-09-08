@@ -2,5 +2,8 @@ apiVersion: v2
 name: agentflow
 description: Helm chart for deploying the AgentFlow API on Kubernetes
 type: application
-version: 0.1.0
+# Chart packaging version. It sat at 0.1.0 across every app release, so a
+# consumer had no way to tell two charts apart (audit FB-05). It now tracks
+# the app's major.minor; the patch digit is free for chart-only fixes.
+version: 2.1.0
 appVersion: "2.1.0"

@@ -59,7 +59,9 @@ a single H1 and a purpose paragraph, and every operator page to carry
 | Area | Contents | Current replacement |
 | --- | --- | --- |
 | [`release-history-v1-v2.md`](release-history-v1-v2.md) | README release narrative for v1.1.0 through v2.0.0 | [`CHANGELOG.md`](../../CHANGELOG.md) and [`STATUS.md`](../STATUS.md) |
-| [`plans/`](plans/) | Superseded planning interpretations | Active root plan or current status document named in each archived file |
+| [`plans/`](plans/) | Completed and superseded implementation plans | Current documentation or status owner named in each archived file |
+| [`plans/plan-26-opslab-first-draft.md`](plans/plan-26-opslab-first-draft.md) | First OpsLab-transfer reading of the 2026-08-26 plan | [Completed documentation-optimization plan](plans/documentation-optimization-2026-08-26.md) |
+| [`plans/documentation-optimization-2026-08-26.md`](plans/documentation-optimization-2026-08-26.md) | Completed eight-item documentation and root-hygiene plan | [Documentation hub](../README.md) and its verification commands |
 | [`performance/`](performance/README.md) | Historical generated benchmarks, non-canonical reports, and superseded performance follow-ups | [Full-load](../perf/load-benchmark-latest.md), [demo freshness](../perf/freshness-benchmark.md), [S8 real-path freshness](../perf/freshness-e2e-realpath.md), and [real-path throughput](../perf/throughput-realpath.md) lifecycles plus [`perf/entity-benchmark-contract.md`](../perf/entity-benchmark-contract.md) |
 | [`product/`](product/README.md) | Point-in-time market and cost analyses moved from the `docs/` root | [`product.md`](../product.md) and [`STATUS.md`](../STATUS.md) |
 | [`operations/`](operations/README.md) | Consumed operational execution contracts whose identities and commands must not be reused | [`operations/README.md`](../operations/README.md) and the current guide named by each archived file |

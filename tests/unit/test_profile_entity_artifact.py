@@ -112,7 +112,11 @@ def test_entity_profile_docs_name_runtime_owner_and_promotion_boundary() -> None
     evidence_index = " ".join(
         (ROOT / "docs" / "evidence" / "INDEX.md").read_text(encoding="utf-8").split()
     )
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     for current_doc in (contract, perf_hub, docs_hub, contributing, evidence_index):
         assert ".artifacts/perf-smoke/entity-profile.json" in current_doc

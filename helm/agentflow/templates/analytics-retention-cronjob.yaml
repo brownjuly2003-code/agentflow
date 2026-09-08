@@ -1,0 +1,65 @@
+{{- if .Values.analyticsRetention.enabled }}
+{{- $secretName := .Values.secrets.existingSecret | default (include "agentflow.fullname" .) }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agentflow.fullname" . }}-analytics-retention
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics-retention
+spec:
+  schedule: {{ .Values.analyticsRetention.schedule | quote }}
+  concurrencyPolicy: {{ .Values.analyticsRetention.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.analyticsRetention.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.analyticsRetention.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.analyticsRetention.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.analyticsRetention.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "agentflow.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: analytics-retention
+        spec:
+          serviceAccountName: {{ include "agentflow.workerServiceAccountName" . }}
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: analytics-retention
+              image: {{ include "agentflow.imageReference" .Values.image | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              {{- with .Values.containerSecurityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              command:
+                - python
+                - -m
+                - agentflow_runtime.serving.api.analytics_retention_client
+                - --url
+                - {{ printf "http://%s:%v/v1/admin/analytics/retention" (include "agentflow.fullname" .) .Values.service.port | quote }}
+                {{- with .Values.analyticsRetention.retentionDays }}
+                - --retention-days
+                - {{ . | quote }}
+                {{- end }}
+                {{- if .Values.analyticsRetention.dryRun }}
+                - --dry-run
+                {{- end }}
+              env:
+                - name: AGENTFLOW_ADMIN_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $secretName }}
+                      key: admin-key
+              resources:
+                {{- toYaml .Values.analyticsRetention.resources | nindent 16 }}
+{{- end }}

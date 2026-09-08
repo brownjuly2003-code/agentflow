@@ -57,7 +57,11 @@ def test_quality_reference_docs_name_owners_and_snapshot_lifecycle() -> None:
     archive_map = " ".join(
         (ROOT / "docs" / "archive" / "README.md").read_text(encoding="utf-8").split()
     )
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "| Quality gates | `docs/quality.md`" in docs_hub
     assert "`python scripts/export_quality_reference.py`" in docs_hub

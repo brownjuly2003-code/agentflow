@@ -40,12 +40,26 @@ cancellation. The [machine-readable capability matrix](../config/project_claims.
 is checked against the actual public methods and renders the
 [SDK capability contract](sdk-capabilities.md).
 
-Auth exemptions:
-- `GET /v1/health`
-- `GET /docs`
-- `GET /redoc`
-- `GET /openapi.json`
-- `GET /metrics`
+X-API-Key middleware exemptions:
+
+- `GET /v1/health` is the public pipeline-health endpoint.
+- `GET /health/live` and `GET /health/ready` are internal orchestrator probes.
+- `GET /docs` and `GET /openapi.json` are available without a key in demo and
+  development profiles only.
+- `GET /metrics` is the in-cluster Prometheus scrape endpoint.
+- `POST /v1/node/events` uses its own bearer node token instead of an API key.
+
+Admin routes bypass the X-API-Key middleware but require `X-Admin-Key`; the
+node-ingest route likewise remains authenticated by its bearer token. `GET /redoc`
+is not exempt from the X-API-Key middleware outside production. In the
+production profile, the application returns `404` for `/docs`, `/redoc`, and
+`/openapi*`, so none is a production publication surface. `/health` without a
+suffix is not a registered endpoint.
+
+`/metrics` is exempt because Prometheus scrapes it in-cluster through the
+ClusterIP Service. A production Ingress must not route it; the chart's
+production contract (`config.profile=production`) rejects a values file that
+would.
 
 ## Query and Pagination Model
 
@@ -120,7 +134,7 @@ Typical paginated response:
 | `POST` | `/v1/alerts/{alert_id}/test` | Send a synthetic alert notification | Path param only |
 | `GET` | `/v1/alerts/{alert_id}/history` | Alert evaluation and delivery history | Path param only |
 | `GET` | `/v1/slo` | SLIs (share of good units per window), error budget, multi-window burn rates; `unknown` when the window holds no data | None |
-| `GET` | `/metrics` | Prometheus scrape endpoint | No auth required |
+| `GET` | `/metrics` | Prometheus scrape endpoint | No auth required; in-cluster scrape only — production ingress must not route it |
 
 ## Admin API
 
@@ -140,11 +154,17 @@ All admin endpoints require `X-Admin-Key`.
 | `GET` | `/v1/admin/analytics/top-entities` | Most requested entities | `limit`, `window` |
 | `GET` | `/v1/admin/analytics/latency` | Latency analytics | `window` |
 | `GET` | `/v1/admin/analytics/anomalies` | Usage anomalies | `window` |
+| `POST` | `/v1/admin/analytics/retention` | Prune expired query analytics through the API-owned store | Body: optional `retention_days` (>=1), `dry_run` (default `false`) |
 
 `top-queries` items carry `{"query": ..., "fingerprint": ..., "count": ...}`.
 `query` is `null` unless the deployment opted into storing question text; the
 peppered `fingerprint` is what groups repeats either way, and the counts are the
 same. See [what query analytics keeps](../SECURITY.md#what-query-analytics-keeps).
+
+When `retention_days` is omitted, the retention endpoint uses
+`AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS` (30 by default). A dry run returns
+`deleted_rows: null` without calling the store; a final run returns the deleted
+row count.
 
 ## Examples
 
@@ -747,12 +767,16 @@ All admin routes require `X-Admin-Key` and are intended for platform owners, not
 - `GET /v1/admin/analytics/top-entities`
 - `GET /v1/admin/analytics/latency`
 - `GET /v1/admin/analytics/anomalies`
+- `POST /v1/admin/analytics/retention`
 
 **Representative curl**
 
 ```bash
 curl -H "X-Admin-Key: admin-secret" http://localhost:8000/v1/admin/keys
 curl -H "X-Admin-Key: admin-secret" http://localhost:8000/v1/admin/usage
+curl -X POST -H "X-Admin-Key: admin-secret" -H "Content-Type: application/json" \
+  -d '{"retention_days":30,"dry_run":true}' \
+  http://localhost:8000/v1/admin/analytics/retention
 ```
 
 **Representative Python (HTTP)**

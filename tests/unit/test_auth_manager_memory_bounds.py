@@ -35,9 +35,9 @@ class TestFailedAuthWindowSweep:
         self, manager: AuthManager
     ) -> None:
         now = manager.time_source()
-        manager._failed_auth_windows["1.2.3.4"] = [now - FAILED_AUTH_WINDOW_SECONDS - 1]
-        manager._failed_auth_windows["5.6.7.8"] = [now - FAILED_AUTH_WINDOW_SECONDS - 5]
-        manager._failed_auth_windows["9.9.9.9"] = [now - 10]  # still inside cutoff
+        manager._failed_auth_windows["api", "1.2.3.4"] = [now - FAILED_AUTH_WINDOW_SECONDS - 1]
+        manager._failed_auth_windows["api", "5.6.7.8"] = [now - FAILED_AUTH_WINDOW_SECONDS - 5]
+        manager._failed_auth_windows["api", "9.9.9.9"] = [now - 10]  # still inside cutoff
 
         # clear_failed_auth pops its own IP, plus the opportunistic sweep
         # must reap every IP whose entire window has aged out.
@@ -48,9 +48,9 @@ class TestFailedAuthWindowSweep:
         self, manager: AuthManager
     ) -> None:
         now = manager.time_source()
-        manager._failed_auth_windows["1.2.3.4"] = [now - 5, now - 1]
+        manager._failed_auth_windows["api", "1.2.3.4"] = [now - 5, now - 1]
         manager.clear_failed_auth("not-tracked")
-        assert "1.2.3.4" in manager._failed_auth_windows
+        assert ("api", "1.2.3.4") in manager._failed_auth_windows
 
 
 class TestRateWindowSweepOnLoad:

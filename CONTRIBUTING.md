@@ -46,6 +46,30 @@ The root `integrations` extra is intentionally not the repo test profile. Use `.
 
 After the package-identity split, `pip show agentflow` refers to the Python SDK and `pip show agentflow-runtime` refers to the root runtime repo metadata.
 
+## Review governance
+
+Changes reach `main` through a pull request. Routine direct pushes to `main`
+are prohibited. A pull request must have at least one approval, and changes to
+the security, release, CI/CD, Helm, and infrastructure surfaces listed in
+`.github/CODEOWNERS` must also have Code Owner approval. The 15 required
+machine checks remain mandatory in addition to human review; they do not
+replace it.
+
+This is the intended policy, not the current GitHub enforcement state. Adding
+`CODEOWNERS` does not activate branch protection by itself. The repository
+owner must update the protection rule or ruleset for `main` to:
+
+1. require a pull request before merging with at least one approving review;
+2. require review from Code Owners;
+3. keep all 15 existing required status checks enabled;
+4. prevent direct pushes and apply the rule to administrators; or restrict the
+   only bypass to a named break-glass role whose use is recorded in the
+   organization audit log, linked to an incident or change ticket, and reviewed
+   after the event.
+
+Until those settings are enabled, review governance remains open and must not
+be reported as enforced.
+
 ## Before submitting a PR
 
 1. Tests pass:

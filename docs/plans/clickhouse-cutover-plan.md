@@ -247,7 +247,7 @@ two-real-pods topology layer on top.
       mutation-policy test passed in the full unit lane. The canonical commit
       mapping, disclosed failed attempts, postflight identities, and exact
       next-session boundary are recorded in
-      [`clickhouse-aggregate-verification-closure.md`](../../clickhouse-aggregate-verification-closure.md).
+      [`clickhouse-aggregate-verification-closure.md`](../evidence/records/clickhouse-aggregate-verification-closure.md).
 
 ## Rollback
 

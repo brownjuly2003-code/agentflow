@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # docs/evidence/INDEX.md is the living catalogue and remains checked below.
 HISTORICAL_DIRECTORIES = (
     "docs/perf",
-    "docs/evidence",
+    # Immutable digest-pinned records relocated from the repository root;
+    # their internal links are historical and must not be rewritten.
+    "docs/evidence/records",
     "docs/migration",
     "docs/codex-tasks",
 )
@@ -24,7 +26,14 @@ HISTORICAL_DIRECTORIES = (
 # Named immutable documents outside those directories.
 # - docs/SESSION_HANDOFF.md: gitignored (.gitignore:174), reachable via rglob
 #   on a workstation that still has it.
-HISTORICAL_FILES = ("docs/SESSION_HANDOFF.md",)
+# - the three dated files next to INDEX.md are digest-pinned catalogue
+#   identities; their internal links are historical.
+HISTORICAL_FILES = (
+    "docs/SESSION_HANDOFF.md",
+    "docs/evidence/dependency-compatibility-2026-07-30.md",
+    "docs/evidence/security-runtime-image-trivy-2026-07-30.md",
+    "docs/evidence/security-s12-2026-07-09.md",
+)
 
 # Paths a living doc may legitimately name although they are never committed:
 # - environment tfvars are generated from *.tfvars.example (docs/operations/aws-oidc-setup.md)
@@ -297,7 +306,7 @@ def _link_problems(
     line: str,
     tracked: set[str] | None,
 ) -> Iterable[str]:
-    for target in MARKDOWN_LINK_RE.findall(line):
+    for target in MARKDOWN_LINK_RE.findall(BACKTICK_RE.sub("", line)):
         if target.startswith(("http://", "https://", "mailto:", "#")):
             continue
         path_part = target.split("#", 1)[0]

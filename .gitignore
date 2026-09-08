@@ -35,7 +35,6 @@ logs/
 .terraform/
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
 
 data/
 checkpoints/
@@ -135,10 +134,12 @@ agentflow_demo_api.duckdb*
 # Claude Code config/session state and any *_local/ scratch dir are kitchen, never
 # product — untracked-but-unignored is one `git add -A` from a public repo. (N-6/P5.2)
 /.claude/
+/.myflow/
 /*_local/
 /AGENT_STATE.md
 /AUTOPILOT.md
 /BACKLOG.md
+/SESSION_LOG*.md
 /help.md
 /res.md
 /all-open-questions-closure-plan.md

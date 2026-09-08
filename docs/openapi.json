@@ -1010,6 +1010,65 @@
         }
       }
     },
+    "/v1/admin/analytics/retention": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Prune Analytics Retention",
+        "operationId": "prune_analytics_retention_v1_admin_analytics_retention_post",
+        "parameters": [
+          {
+            "name": "X-Admin-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsRetentionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsRetentionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/alerts": {
       "get": {
         "tags": [
@@ -2689,6 +2748,59 @@
         },
         "type": "object",
         "title": "AlertUpdateRequest"
+      },
+      "AnalyticsRetentionRequest": {
+        "properties": {
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "AnalyticsRetentionRequest"
+      },
+      "AnalyticsRetentionResponse": {
+        "properties": {
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "deleted_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "retention_days",
+          "dry_run",
+          "deleted_rows"
+        ],
+        "title": "AnalyticsRetentionResponse"
       },
       "BatchItem": {
         "properties": {

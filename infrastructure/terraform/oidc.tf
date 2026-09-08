@@ -6,4 +6,5 @@ module "github_oidc" {
   role_name            = "agentflow-terraform-${var.environment}"
   allowed_branches     = ["main"]
   allowed_environments = ["production", "staging"]
+  state_environments   = ["staging", "production"]
 }

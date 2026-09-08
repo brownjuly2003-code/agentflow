@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+<!--
+  Audit FB-16: the docs build loaded Mermaid from unpkg through
+  `extra_javascript`, which MkDocs renders as a bare <script src>. There is no
+  way to attach Subresource Integrity to those entries, so nothing would have
+  noticed a substituted CDN artifact.
+
+  Scope, measured rather than assumed: this site is not published. `mkdocs
+  build --strict` is a CI check and `mkdocs serve` is a local preview, while
+  GitHub Pages serves the self-contained `site/` landing page. The script
+  therefore ran in maintainers' browsers, not readers'. It is pinned by version
+  and by hash here so that publishing the docs later cannot quietly turn that
+  into a reader-facing exposure.
+
+  `integrity` is the SHA-384 of the exact bytes unpkg serves for
+  mermaid@10.9.3 (3 336 760 bytes). Recompute it whenever the version moves:
+
+      curl -sSL https://unpkg.com/mermaid@<version>/dist/mermaid.min.js \
+        | openssl dgst -sha384 -binary | openssl base64 -A
+
+  `crossorigin` is required for the browser to check integrity on a
+  cross-origin response at all; without it the attribute is silently inert.
+
+  Placement matches what `extra_javascript` produced -- the end of the scripts
+  block, after the theme bundle -- so load order and Mermaid's own
+  `startOnLoad` rendering are unchanged.
+-->
+{% block scripts %}
+  {{ super() }}
+  <script
+    src="https://unpkg.com/mermaid@10.9.3/dist/mermaid.min.js"
+    integrity="sha384-R63zfMfSwJF4xCR11wXii+QUsbiBIdiDzDbtxia72oGWfkT7WHJfmD/I/eeHPJyT"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+{% endblock %}

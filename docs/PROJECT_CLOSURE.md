@@ -59,9 +59,9 @@ kind residual canary later **PASS**; latest soak identity `-05` producer
 verify could PASS — see
 [perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md);
 corrected rollback mechanics **PASS**
-([corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md));
+([corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md));
 full soak plus rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
-([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md))),
+([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md))),
 and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
@@ -131,19 +131,21 @@ Push, PR mutations and release actions require explicit owner authorization.
   savepoint restore linkage, exact-once E1/E2 counts across Kafka, Iceberg,
   ClickHouse, and API, DLQ `0`, and source lag `0` — see
   [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md).
-- Repository-owned coverage gates are green and remain blocking. Codecov OIDC
-  currently returns `Repository not found`; its upload is non-blocking
-  reporting until the one-time external activation in
-  [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
+- Repository-owned coverage gates are green and remain blocking. There is no
+  Codecov upload: audit F-06 removed it, and the README badge with it, after
+  the external service returned `Repository not found` for a repository that
+  had never been enabled there. What the tracked `codecov.yml` still does, and
+  what a reintroduction would take, is in
+  [operations/codecov-setup.md](operations/codecov-setup.md).
 - Production status remains `candidate`; remaining production gates are:
   full soak plus rollback after traffic (**`BLOCKED_HOST_CAPACITY`** —
-  [ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md);
+  [ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md);
   historical canary1 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; readiness-baselined
   hold **`RUNTIME_HOLD_PASS`**
   ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md));
   kind residual canary **PASS**; latest soak `-05` **`SOAK_FAIL`**;
   corrected rollback mechanics **PASS**
-  ([corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md))),
+  ([corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md))),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
@@ -154,5 +156,5 @@ Push, PR mutations and release actions require explicit owner authorization.
 
 ## Сохранённые локальные артефакты
 
-Root `AGENTS.md` and `plan_sol_23_07_26` remain untracked and unchanged. They do
-not enter the public closing commit.
+Root `AGENTS.md` is now a tracked repository-root document. `plan_sol_23_07_26`
+is unchanged and stays untracked.

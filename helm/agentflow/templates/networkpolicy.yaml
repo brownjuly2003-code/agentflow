@@ -9,9 +9,15 @@ spec:
   podSelector:
     matchLabels:
       {{- include "agentflow.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values:
+          - analytics-retention
   policyTypes:
     - Ingress
     - Egress
+  {{- if .Values.networkPolicy.ingressFromNamespaces }}
   ingress:
     - from:
         {{- range .Values.networkPolicy.ingressFromNamespaces }}
@@ -22,6 +28,9 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.service.port }}
+  {{- else }}
+  ingress: []
+  {{- end }}
   egress:
     # DNS — required for any service-name resolution.
     - to:
@@ -34,37 +43,101 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    {{- /* Every rule below names its destinations through
+         networkPolicy.egressTo.<service>. Left empty the rule still renders,
+         and Kubernetes reads a rule with no `to:` as "any address" -- which is
+         how a default-deny baseline came to allow 6379/9092/8123/4317/5432 to
+         the whole internet (audit FB-09). The production contract refuses an
+         empty list for every rule that renders.
+
+         The rules are also gated on the feature being configured. A chart that
+         opens the ClickHouse port on a DuckDB install is not being permissive,
+         it is describing a topology that does not exist. */ -}}
+    {{- if .Values.config.redisUrl }}
     # Redis (rate limiting + cache).
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.redis }}
-    # Kafka brokers.
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.kafka }}
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.redis "port" .Values.networkPolicy.egressPorts.redis) | nindent 4 }}
+    {{- end }}
+    # Kafka brokers. Unconditional: the API produces, and the lake materializer
+    # and serving bridge consume, so no single value gates it.
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.kafka "port" .Values.networkPolicy.egressPorts.kafka) | nindent 4 }}
     {{- if .Values.lakeMaterializer.enabled }}
     # Iceberg REST catalog and S3-compatible object store.
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.icebergCatalog }}
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.objectStore }}
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.icebergCatalog "port" .Values.networkPolicy.egressPorts.icebergCatalog) | nindent 4 }}
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.objectStore "port" .Values.networkPolicy.egressPorts.objectStore) | nindent 4 }}
     {{- end }}
-    # ClickHouse HTTP backend (when SERVING_BACKEND=clickhouse).
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.clickhouse }}
-    # OTLP gRPC collector (when OTEL_EXPORTER_OTLP_ENDPOINT set).
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.otlp }}
+    {{- if eq .Values.serving.backend "clickhouse" }}
+    # ClickHouse HTTP backend.
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.clickhouse "port" .Values.networkPolicy.egressPorts.clickhouse) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.config.otlpEndpoint }}
+    # OTLP gRPC collector.
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.otlp "port" .Values.networkPolicy.egressPorts.otlp) | nindent 4 }}
+    {{- end }}
     {{- if eq .Values.controlPlane.store "postgres" }}
-    # PostgreSQL control-plane store (when controlPlane.store=postgres): the
-    # shared webhook/alert/outbox/usage pool. Without this rule every API and
-    # worker pod's connect to PG:5432 is denied and the pool never opens.
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.egressPorts.postgres }}
+    # PostgreSQL control-plane store: the shared webhook/alert/outbox/usage
+    # pool. Without this rule every API and worker pod's connect to PG:5432 is
+    # denied and the pool never opens.
+    {{- include "agentflow.egressRule" (dict "to" .Values.networkPolicy.egressTo.postgres "port" .Values.networkPolicy.egressPorts.postgres) | nindent 4 }}
     {{- end }}
 {{- end }}
+{{ if and .Values.networkPolicy.enabled .Values.analyticsRetention.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentflow.fullname" . }}-analytics-retention-egress
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: analytics-retention
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # DNS is required before the API Service name can be resolved.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "agentflow.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentflow.fullname" . }}-analytics-retention-api-ingress
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "agentflow.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: analytics-retention
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+{{ end }}

@@ -21,6 +21,17 @@ is needed.
 | Use a client library | [SDK guide](sdk.md) |
 | Operate or troubleshoot it | [Operations index](operations/README.md), [operational runbook](runbook.md), and [on-call runbooks](runbooks/README.md) |
 | Review closure boundaries | [Project closure](PROJECT_CLOSURE.md) |
+| Review measured evidence | [Evidence hub](evidence/INDEX.md) and [performance evidence](perf/README.md) |
+| Follow ADRs or the archive | [Decisions](decisions/), [documentation archive](archive/README.md) |
+| Inspect the DV2 extension | [DV2 multi-branch](dv2-multi-branch/) |
+| Read the full HTTP contract | [API reference](api-reference.md) |
+| Understand platform ideas and component roles | [Concepts](concepts.md) and [components](components.md) |
+| Choose a local or production-shaped path | [Deployment walkthrough](deployment.md) |
+| Inspect metrics, traces, and logs | [Observability walkthrough](observability.md) |
+| Narrow a first failing boundary | [Troubleshooting](troubleshooting.md) |
+| Verify a code or documentation change | [Contributor guide](contributing.md) |
+| View the static data-path drawing | [Dataflow](dataflow.html) |
+| Resume a local agent session | `SESSION_HANDOFF.md` (gitignored continuity; do not force-add) |
 
 ## Documentation sets
 
@@ -33,9 +44,24 @@ is needed.
 | Plans | [`clickhouse-cutover-plan.md`](plans/clickhouse-cutover-plan.md) and [`2026-04-debezium-kafka-connect-deployment-plan.md`](plans/2026-04-debezium-kafka-connect-deployment-plan.md) | Preserve executed cutover and CDC onboarding plans; they are not current status |
 | Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
 | Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
+| Evidence records | [`evidence/records/`](evidence/records/) | Immutable dated records relocated from the repository root; never edit, never delete; add new records under `docs/evidence/` or `docs/perf/` instead |
 | DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
 | Generated/reference artifacts | [Generated-reference ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [full-load benchmark lifecycle](perf/load-benchmark-latest.md) | Regenerate deterministic families; keep mutable measurements in ignored artifacts |
 | Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |
+| Agent tool schemas | [`agent-tools/`](agent-tools/) | Generated Claude/OpenAI tool JSON; regenerate with the OpenAPI family, never hand-edit |
+| API walkthrough | [`api/`](api/index.md) | Curated HTTP integration path; keep runnable with the MkDocs walkthrough |
+| Architecture walkthrough | [`architecture/`](architecture/index.md) | Curated system walkthrough; keep aligned with `architecture.md` |
+| Benchmark baseline archive | [`archive/performance/benchmark-baseline-2026-04-17-local.json`](archive/performance/benchmark-baseline-2026-04-17-local.json) | Immutable copy of a retired gate baseline; do not refresh in place |
+| Benchmarks directory | `benchmarks/` | Reserved empty directory; do not dump host-specific reports here |
+| Codex task captures | `codex-tasks/` (gitignored) | Local session captures; not a living entrypoint |
+| Entity contract how-to | [`contracts/`](contracts/how-to-add-entity.md) | How to add an entity; keep with `config/contracts/` and the generator |
+| Version migration notes | [`migration/`](migration/v1.1.md) | Point-in-time Helm/version migration notes; not current status |
+| Screenshots | [`screenshots/`](screenshots/) | Static walkthrough images; replace only with the matching page update |
+| Curated walkthrough pages | [`concepts.md`](concepts.md), [`components.md`](components.md), [`deployment.md`](deployment.md), [`observability.md`](observability.md), [`troubleshooting.md`](troubleshooting.md) | MkDocs nav pages beside [`index.md`](index.md); keep concise and runnable; `mkdocs build --strict` must pass |
+| Full API reference | [`api-reference.md`](api-reference.md) | Detailed authentication, endpoint, and admin surface; keep aligned with `openapi.json` and the API walkthrough |
+| Contributor loop | [`contributing.md`](contributing.md) | Change verification and local documentation tooling; keep aligned with the repository `CONTRIBUTING.md` and the quickstart |
+| Dataflow drawing | [`dataflow.html`](dataflow.html) | Static HTML picture of the data path; measured numbers are claims gated with `config/project_claims.toml` |
+| Local session continuity | `SESSION_HANDOFF.md` | Gitignored workstation handoff; never force-add; resume from `AGENT_STATE.md` when they disagree |
 
 ## Generated-reference ownership
 
@@ -154,12 +180,14 @@ Run the proportional documentation gate after edits:
 
 ```powershell
 python scripts/check_docs_links.py
+python scripts/check_docs_orphans.py
 python scripts/check_docs_root_placement.py
 python scripts/check_docs_anchors.py
 python scripts/check_docs_updated_stamps.py
 python scripts/check_docs_page_openings.py
+python scripts/check_archive_provenance.py
 python scripts/validate_project_claims.py
-python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_anchors.py tests/unit/test_docs_updated_stamps.py tests/unit/test_docs_page_openings.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
+python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_orphans.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_anchors.py tests/unit/test_docs_updated_stamps.py tests/unit/test_docs_page_openings.py tests/unit/test_archive_provenance.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
 python -m mkdocs build --strict
 ```
 

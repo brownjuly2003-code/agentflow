@@ -114,7 +114,11 @@ def test_auth_benchmark_docs_name_owner_output_and_promotion_boundary() -> None:
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     perf_hub = " ".join((ROOT / "docs" / "perf" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "python scripts/perf/auth_bench.py" in lifecycle
     assert ".artifacts/perf/auth-bench-current.md" in lifecycle

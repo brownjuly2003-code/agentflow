@@ -12,6 +12,13 @@ repository-wide one.
 
 **Prerequisites:** pytest, `scripts/check_control_plane_coverage.py`, and for the live suite a disposable PostgreSQL reachable at `AGENTFLOW_TEST_PG_DSN`
 
+Before treating a control-plane run as pre-release or pre-audit evidence, run
+`python scripts/check_env_matches_lock.py` with the same active interpreter as
+the tests. The check is offline and read-only; fix every reported lock or
+editable-metadata drift first. A stale shared virtual environment's successful
+`pip check` is not release evidence because it does not prove agreement with
+`uv.lock` or current workspace metadata.
+
 ## Why unit-only coverage misleads here
 
 Audit F-12 measured nine modules at 18–46% and correctly declined to read that

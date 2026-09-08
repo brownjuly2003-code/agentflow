@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_on": "2026-07-27",
+  "reviewed_on": "2026-09-07",
   "scopes": {
     "api-runtime": {
       "image": "agentflow-api",
@@ -19,6 +19,7 @@
       "waivers": [
         {
           "id": "CVE-2026-59939",
+          "safety_id": "SFTY-20260724-05622",
           "package": "httplib2",
           "installed_version": "0.22.0",
           "fixed_version": "0.32.0",
@@ -33,6 +34,7 @@
         },
         {
           "id": "CVE-2026-25087",
+          "safety_id": "SFTY-20260217-93940",
           "package": "pyarrow",
           "installed_version": "16.1.0",
           "fixed_version": "23.0.1",
@@ -43,6 +45,30 @@
           "references": [
             "https://pypi.org/pypi/apache-flink/2.3.0/json",
             "https://pypi.org/pypi/apache-beam/2.61.0/json"
+          ]
+        }
+      ]
+    },
+    "python-profiles": {
+      "inventory": "uv export --frozen --all-extras --no-emit-project (runtime, every declared extra, dev)",
+      "owner": "security",
+      "upstream_constraints": [
+        "llama-index-core==0.14.23 requires nltk>=3.9.3"
+      ],
+      "waivers": [
+        {
+          "id": "PYSEC-2026-3740",
+          "package": "nltk",
+          "installed_version": "3.10.3",
+          "fixed_version": null,
+          "expires_on": "2026-11-01",
+          "disposition": "not_affected",
+          "rationale": "Upstream has published no fix (`fixed_in: []`; the advisory itself says \"Patched versions: Not yet patched\"), so this is a waiver of an open advisory rather than a deferred upgrade. The affected APIs are the nltk model-persistence helpers -- TransitionParser.train/parse, AveragedPerceptron.save/load, PerceptronTagger.save_to_json, save_maxent_params -- and the bypass only means anything to a caller that enables nltk's pathsec sandbox and lets untrusted input choose model paths. AgentFlow imports neither: nltk arrives only as a transitive dependency of llama-index-core under the `integrations` extra, `git grep` finds no `nltk` or `pathsec` reference in src/, sdk/, integrations/ or scripts/, and the package is absent from requirements-docker.lock, so it does not ship in the API image.",
+          "removal_condition": "Remove this waiver when nltk publishes a fixed release and the lock takes it -- pip-audit will report a fix version, the waiver will stop matching, and this gate will go red on its own. Remove it immediately if AgentFlow ever imports nltk or enables nltk.pathsec.",
+          "references": [
+            "https://osv.dev/vulnerability/GHSA-8mgp-746c-j5xp",
+            "https://pypi.org/pypi/nltk/3.10.3/json",
+            "https://pypi.org/pypi/llama-index-core/0.14.23/json"
           ]
         }
       ]

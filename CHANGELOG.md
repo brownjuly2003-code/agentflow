@@ -4,9 +4,388 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Quality — the key-rotation coverage gate was passing on a rounding margin
+
+* **89.6% rounds to 90.** The gate on `serving/api/auth/key_rotation.py` ran
+  `tests/unit/test_key_rotation.py` alone and compared against
+  `--fail-under=90`; coverage rounds before it compares, so the module was one
+  defensive line away from turning the gate red without anyone touching its
+  behaviour. It now measures **100%**.
+* **What the happy-path file never reached.** `test_key_rotation.py` pins the
+  create/rotate/revoke lifecycle. The new
+  `tests/unit/test_key_rotation_revoke_and_failures.py` covers the rest:
+  `revoke_key_by_id` — the only revoke path the admin router has called since
+  F-02 A stopped accepting a plaintext key in a URL, and until now named by no
+  test in the repo — plus the three failures the rotator has to tell apart
+  instead of crashing on.
+* **A read-only store is not a broken store.** `write_config` maps
+  `PermissionError` to `KeyStoreReadOnlyError` and downgrades
+  `key_store_writable` so the next admin mutation answers 409 instead of
+  probing the mount again; any other `OSError` re-raises with the flag
+  untouched, because a failing disk must not be reported as a read-only
+  Secret mount. Both directions are now pinned.
+* **A grace-period cleanup failure leaves a record.** `expire_previous_key`
+  runs on a timer thread with no caller left to catch anything: a `KeyError`
+  is the expected race (the key was revoked before its timer fired) and stays
+  silent, while any other failure logs `api_key_rotation_cleanup_failed`
+  rather than being swallowed by `threading`.
+
+### Security — the Flink image stops shipping pip's vendored packages
+
+* **pip's vendored dependency set was the image's last two unwaived HIGH
+  findings.** Trivy reads `pip/_vendor/vendor.txt` as installed packages, so
+  msgpack 1.1.2 (GHSA-6v7p-g79w-8964) and setuptools 70.3.0 (CVE-2025-47273)
+  were reported against `agentflow-flink` even though no code imports either.
+  Neither is fixable in place: no pin changes what pip vendors, and both
+  advisories are fixed upstream, so neither qualifies for a waiver — the rule
+  `security/trivy-waivers.json` enforces is *upstream has published no fix*
+  (FB-02).
+* **Nothing installs at runtime, so the build removes pip** once the venv is
+  complete; the API image has shipped without it since P1-3. The job's
+  dependencies are the hash-locked `flink-requirements.lock` set, and PyFlink
+  shells out to pip only when `python.requirements` is configured, which no
+  job here sets.
+* **The removal is proven, not assumed.** It runs in the same layer that
+  installed the requirements — a later `RUN` would leave pip's files in an
+  earlier layer, where an image pulled at that layer still carries them — and
+  an `apache_beam`/`pyflink` import immediately after it fails the *build* if
+  the venv no longer starts, instead of failing the smoke job or production.
+* **A shell in the container now has no `pip install`.**
+  `docs/operations/flink-operators.md` says so, and says what to do instead:
+  change the lock and rebuild.
+
+### Quality — the auth-manager coverage gate was measuring 82%, not 94%
+
+* **The file list *is* the gate.** `Run auth manager coverage gate` runs the
+  unit files it names, so a dedicated file that is not named buys the module
+  nothing. `tests/unit/test_key_store_readonly.py` arrived with the read-only
+  Secret mount work (F-02 B, 2026-08-23) and was never added to the list, so
+  the ~50 statements of write-probe logic that landed with it counted as
+  uncovered: the module measured 82% against its 90% gate, not the 94% the
+  step's own comment claimed.
+* **It stayed invisible for two weeks** because an earlier step in the same
+  job was failing, and a job step that fails means every later step never
+  runs. One red gate hides every gate behind it — this one only surfaced once
+  the earlier failure was fixed.
+* **The uncovered branches were the fail-closed ones.** Whether an `OSError`
+  means "read-only mount" decides between a 409 and a propagated error, and a
+  non-permission failure must propagate — answering 409 tells an operator
+  whose disk is broken that their key store is merely read-only. Also
+  untested: the parent-directory probe for a key store that does not exist
+  yet (a first-boot Secret mount), and the `load()` path that downgrades the
+  store in place when the write is denied between probe and write instead of
+  crashing the pod at startup.
+* **Two new unit files cover them** — `test_auth_key_store_probe.py` and
+  `test_auth_manager_key_resolution.py`, both free of TestClient and Redis so
+  the gate can run them — together with the legacy rotation-grace scan, the
+  batch rate-limit debit, and the `_rate_limit_key` fallbacks that keep a
+  plaintext key out of a Redis key name. The module is at 97%; the remaining
+  gap is the platform-divergent SIGHUP handler and thin delegations.
+
+### Security — the admin surface now leaves an audit trail (FB-10)
+
+* **`require_admin_key` counted its refusals and wrote nothing else.** It
+  guards the routes that issue, rotate and revoke every tenant API key, so
+  the highest-privilege credential in the system was the one surface with no
+  audit line — the tenant path has logged `api_auth_failed` since F-11. A
+  counter cannot say from which address, against which route, or whether the
+  503 that woke someone at 03:00 was a Secret the Deployment never picked up.
+* **All three refusals now emit `admin_auth_failed`** with `reason`
+  (`admin_invalid`, `rate_limited`, `admin_unconfigured`), `client_ip`, `path`
+  and the redacted headers. It is a separate event from `api_auth_failed` so a
+  scan against `/v1` and someone guessing the operator key stay
+  distinguishable at query time.
+* **The line never carries the key that was tried.** Headers go through
+  `security.sensitive_headers_to_redact` and then lose `X-Admin-Key`
+  unconditionally — that list belongs to the operator, and F-11 already had to
+  repair a built-in default that omitted it.
+* **`docs/runbooks/auth-401-spike.md` § Detection was wrong in both
+  directions**: it listed `disabled_key`, which no call site emits, and
+  neither admin reason. `metrics.py` points at that section for the label
+  vocabulary, so it is now pinned against the emitted labels by test.
+* **New: `docs/operations/admin-key-rotation.md`.** The admin key is one
+  shared value with no dual-key window, so rotation is a Secret change plus a
+  rolling restart during which admin calls are unreliable. The page owns the
+  triggers, the ordering that keeps the analytics-retention CronJob from
+  failing mid-run, and how to confirm the old value is dead.
+
+### Security — the NetworkPolicy egress rules now say where they may go (FB-09)
+
+* **A rule with `ports:` and no `to:` allows that port to every address.** The
+  chart rendered exactly that for Redis, Kafka, Iceberg, the object store,
+  ClickHouse, OTLP and PostgreSQL — DNS was the only rule carrying a selector.
+  So `policyTypes: [Ingress, Egress]` bought a default-deny baseline that denied
+  nothing on 6379/9092/8181/9000/8123/4317/5432, and a compromised pod could
+  dial any of them anywhere, cluster or internet.
+* **Each rule now takes its peers from `networkPolicy.egressTo.<service>`** as
+  raw `NetworkPolicyPeer` entries (podSelector / namespaceSelector / ipBlock),
+  and `templates/production-contract.yaml` refuses a `profile=production` render
+  that leaves one empty, naming the service and the port it would have opened.
+* **Rules render only when their feature is configured.** Redis follows
+  `config.redisUrl`, ClickHouse follows `serving.backend`, OTLP follows
+  `config.otlpEndpoint`; PostgreSQL and the Iceberg/object-store pair were
+  already gated. A DuckDB install with no Redis previously still opened 6379 and
+  8123 to every address for a topology it did not have — and the contract asks
+  only for the rules that render, so on the chart defaults that is Kafka alone.
+* DNS stays the chart-owned exception: it selects kube-dns by label, in whichever
+  namespace kube-dns runs.
+
+### Security — the key-lookup pepper is no longer allowed to be the public one (FB-07)
+
+* **`AGENTFLOW_PROFILE=production` now refuses to boot without
+  `AGENTFLOW_KEY_LOOKUP_PEPPER`,** or with it set to the built-in
+  `agentflow-key-lookup-v1`. That constant lives in `security.py`, and it
+  peppers `key_lookup` — an HMAC-SHA256 of the API key itself, stored beside
+  the argon2id hash so authentication resolves a key in O(1). Left at the
+  default, the digest is reproducible by anyone: hold a leaked
+  `api_keys.yaml`, HMAC a guessed key with the published pepper, and a match
+  confirms the guess without paying for a single argon2id verify. The same
+  constant also makes two deployments' digests joinable into one identity.
+  The query-analytics fingerprint pepper has had this gate since AF-13; the
+  more sensitive of the two peppers did not.
+* **The AF-13 fingerprint-pepper check moved to the same boot gate.** It lived
+  in `QueryAnalyticsPolicy.from_env`, which nothing called at startup, so a
+  production pod came up and only failed once a request reached the analytics
+  path. Both refusals now happen in the API lifespan, next to the transport
+  gate.
+* **Neither pepper was wired into the Helm chart at all.** Production values
+  must now supply both through `extraEnv` as `valueFrom.secretKeyRef`, and
+  `templates/production-contract.yaml` refuses a `profile=production` render
+  that omits either — or that writes one as a literal `value:`, which would
+  park pepper material in Helm release metadata and shell history for the
+  same reason `secrets.create=true` is refused.
+* Dev and demo boots keep the built-in defaults, so a fresh checkout still
+  starts with no configuration. An operator-supplied pepper is used byte for
+  byte: whitespace decides only whether the variable counts as set, because
+  normalising the value would change digests a padded pepper had already
+  produced. A pepper that is empty or only whitespace now falls back to the
+  default on dev instead of being used as an empty HMAC key.
+
+### Fixed — the version numbers now mean the same thing (FB-05, FB-08, FB-14)
+
+* **The Helm default image no longer points at a namespace nobody owns.**
+  `image.repository` was `agentflow/api` — an unclaimed Docker Hub namespace —
+  with `pullPolicy: IfNotPresent`, so any dev or staging install without a
+  pre-loaded image would have pulled whatever a third party had since pushed
+  there. The default is now `ghcr.io/brownjuly2003-code/agentflow-api`, the
+  registry this project actually publishes to. Note that GHCR carries
+  commit-SHA and `audit-<run-id>` tags rather than semver ones, so the default
+  tag is a shape: a dev install loads a local image or overrides
+  repository/tag, and production sets `image.digest`, which wins outright.
+* **`image.tag` tracks `Chart.appVersion`** instead of naming 2.0.0 beside an
+  appVersion of 2.1.0, and **`Chart.yaml version` leaves the `helm create`
+  default of 0.1.0**, which had not moved across any app release — two charts
+  were indistinguishable to a consumer. It now tracks the app's major.minor,
+  leaving the patch digit free for chart-only fixes.
+* **`## [2.1.0] - 2026-08-23` said released.** No `v2.1.0` tag exists; that
+  date is when the release script staged the section. The heading now says
+  unreleased and carries the note, matching what `docs/STATUS.md` has said all
+  along.
+* **`agentflow-integrations` stays at 2.0.0, and now says why.** It is not in
+  the `scripts/release.py` lockstep and is published to no index, so its
+  version moving separately is intent rather than drift. The invariant the
+  number was standing in for is the dependency range, and that is what is now
+  tested: `agentflow-client>=2,<3` must admit the client version the lockstep
+  ships.
+* `docs/STATUS.md` carries a current stamp and says what landed since
+  2026-08-26; its open-items entry for the non-fixable Flink advisories now
+  covers the nltk waiver too.
+
+`tests/unit/test_release_version_coherence.py` pins the shape rather than the
+numbers; four of its six tests fail against the tree as it stood this morning.
+
+### Security — an advisory upstream has not fixed can now be waived (FB-02)
+
+`nltk 3.10.3` carries `PYSEC-2026-3740` (`GHSA-8mgp-746c-j5xp`) and upstream has
+published no fix, so no version bump can close it. The repository had nowhere to
+record that: `validate_waiver` required a `fixed_version`, which made an unfixed
+finding unwaivable by construction, and the `pip-audit` job had no waiver
+mechanism at all — it simply stayed red on a scheduled scan with no place to
+argue.
+
+* `fixed_version: null` is now a statable claim, "upstream has published no fix".
+  The key must still be present, so silence stays a typo rather than a claim.
+* `scripts/run_pip_audit_scan.py` audits the full locked profile export with
+  **no** `--ignore-vuln` and evaluates pip-audit's JSON against
+  `security/trivy-waivers.json` (new scope `python-profiles`) itself. Unwaived
+  findings, expired waivers, and waivers matching nothing each fail the job, the
+  same three properties the Trivy and Safety gates already have. pip-audit's own
+  exit code is not consulted; the verdict comes from the report.
+* The fix state is part of the match, so the waiver revokes itself: the day
+  pip-audit reports a fix version, the "no fix exists" premise is false, the
+  finding returns to unwaived, and the gate goes red on the release that is now
+  available.
+* `requirements-docker.lock` is deliberately excluded. The one inventory that
+  ships is audited bare, with no waiver path reachable at all.
+
+The nltk waiver expires 2026-11-01. Its argument is narrow: the affected APIs
+are nltk's model-persistence helpers, exploitable only by a caller that enables
+nltk's `pathsec` sandbox and lets untrusted input choose model paths. AgentFlow
+does neither — nltk arrives only through `llama-index-core` under the
+`integrations` extra, no source file references `nltk` or `pathsec` (asserted by
+a test), and it is absent from the API image lock.
+
+`scripts/run_pip_audit_scan.py` and `security/trivy-waivers.json` join
+`scripts/evaluate_trivy_policy.py` as owner-reviewed surfaces in `CODEOWNERS`:
+they decide what a suppression covers.
+
+### Fixed — S3 lifecycle no longer puts an age clock on Iceberg objects (FB-11)
+
+The reference Terraform for the lake bucket shipped two lifecycle rules that
+deleted by age under `warehouse/`: `raw-data-lifecycle` (GLACIER after 90 days,
+expiration after 365, on `warehouse/raw/`) and `iceberg-metadata` (expiration
+after 30 days on `warehouse/metadata/`, under a comment claiming it kept 30 days
+of snapshots).
+
+Neither prefix matched anything — Iceberg lays tables out as
+`<warehouse>/<namespace>/<table>/{metadata,data}/…` and the configured namespace
+is `agentflow` — so both were no-ops wearing the language of a retention policy.
+That is the trap rather than the bug: the next person to notice they delete
+nothing reaches for the prefix the Flink sink actually writes (`warehouse/`), and
+the no-op becomes a job that removes manifest lists and data files that current
+snapshots still reference. `terraform-apply.yml` has been disabled since
+2026-04-23, so nothing was ever destroyed; this is reference topology someone is
+expected to switch on.
+
+Both rules are gone. What is left is what S3 alone owns — scratch state under
+`checkpoints/`, and a new `noncurrent-version-cleanup` rule for the noncurrent
+versions this versioned bucket accrues, which no snapshot can reference. Table
+retention belongs to the catalog (`iceberg_snapshot_expiry` in
+`orchestration/dags/daily_batch.py`, `docs/runbook.md` monthly maintenance).
+
+The retired knobs `storage_glacier_after_days` and `storage_expire_after_days`
+are replaced by `storage_noncurrent_version_expire_days` (default 30) in
+`variables.tf` and all three tfvars files.
+`tests/unit/test_terraform_lake_lifecycle.py` fails if an `expiration` or
+`transition` block ever reappears under `warehouse/`.
+
+### Security — the failed-auth throttle stops being a denial-of-service tool (FB-06)
+
+The per-address throttle for repeated failed authentication rejected with 429
+*before* the presented key was looked at. Behind a proxy without
+`AGENTFLOW_TRUSTED_PROXIES` every caller shares one address, and
+`values-production.yaml` sanctions exactly that shape (`ingress.enabled=false`,
+gateway outside the chart) — so eleven requests per hour carrying any junk key
+took every tenant, and the admin API, off that pod for an hour.
+
+* The middleware now resolves the key first. A valid key is always served; only
+  a failed attempt is counted and only a failed attempt is answered with 429.
+  While an address is throttled the resolution is capped to the constant-work
+  paths (runtime cache, O(1) peppered lookup), so a scanner still cannot buy N
+  bcrypt verifications per guess. **A pre-M-C4 bcrypt entry carrying no
+  `key_lookup` is not resolvable while its address is throttled** — rotate it
+  onto an argon2id entry.
+* `X-Forwarded-For` is read right to left, skipping hops that are themselves
+  trusted proxies and stopping at the first hop no proxy vouches for. The
+  leftmost element is written by the client, and reading it let an attacker
+  rotate the window on every request.
+* Admin-key failures count in their own window, so a scan against `/v1` can no
+  longer throttle `/v1/admin`, and a wrong admin key is refused rather than
+  raising on a non-ASCII header value.
+* `profile=production` now refuses a release that says nothing about whose
+  address the pod observes: set `config.trustedProxies`, or declare
+  `config.gateway.preservesClientIp=true` when the path preserves the caller's
+  source address. `ingress.enabled=false` used to make the clause disappear
+  rather than answer it.
+
+Behaviour to expect on a shared address: the throttle is best-effort there — it
+will not lock anyone out, but any legitimate request clears the window. Naming
+the proxies is what makes it meaningful (`docs/security-audit.md` §6.1).
+
+### Security — production must keep the API on a ClusterIP Service (T-34, F-T-32-22)
+
+The production contract refuses `service.type` other than `ClusterIP`.
+`NodePort`/`LoadBalancer` publish the service port (`/metrics` included)
+without any Ingress rule; `ExternalName` turns the Service into a CNAME
+and voids the routing contract. `values-production.yaml` pins
+`service.type: ClusterIP`. `ingress.enabled=false` remains the sanctioned
+external-gateway shape and moves routing (and the `/metrics` exposure
+question) outside the chart.
+
+### Security — production NetworkPolicy must name the Prometheus scrape namespace (T-33, F-T-32-4)
+
+The production contract refuses `networkPolicy.ingressFromNamespaces` when
+the list is empty or every `kubernetes.io/metadata.name` selector is
+`ingress-nginx`, unless `networkPolicy.scrapeFromIngressNamespace=true`
+records that Prometheus shares the ingress-controller namespace. An empty
+list renders `ingress: []` (deny all) on every profile. An empty-map
+selector (`{}`) matches every namespace and is refused by the schema
+(`minProperties: 1`) and by the production contract.
+`values-production.yaml` ships no guessed scrape namespace.
+`values.schema.json` requires each `ingressFromNamespaces` item to be a
+non-empty string-to-string label map; a string, null, or empty-map
+element is refused. Environment values must repeat both the
+ingress-controller selector and the scrape namespace: Helm replaces lists
+instead of merging them.
+
+### Security — production chart Ingress rejects /metrics routes and nginx routing-control annotations (T-35, audit 2026-09-02 F-10)
+
+`/metrics` is mounted without API-key auth so Prometheus can scrape it
+in-cluster through the ClusterIP Service; the liveness and readiness probe
+paths are exempt for the same reason. A production values file whose Ingress
+rules would send `/metrics` to the API no longer renders. The production
+contract refuses a `/` Prefix path, `/metrics` under Prefix or Exact, a
+`path` that is not a canonical single-line absolute path (unquoted, a CR, LF
+or tab used to inject a second Ingress rule for `/metrics`), a
+`className` that is not a canonical single line (unquoted, it used to inject
+`spec.defaultBackend` and send unmatched requests, `/metrics` included, to
+the API), a `host` that is not a canonical single line (`.host` has always
+been quoted, but a multi-line host makes the rendered Ingress unprovable, so
+the contract refuses it defensively), or a `pathType` other than
+`Prefix`/`Exact`. It also refuses the exact `ingress.annotations` keys
+`rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, and
+`server-snippet` under both `nginx.ingress.kubernetes.io/` and the legacy
+`ingress.kubernetes.io/` prefix because ingress-nginx interprets them after
+Helm checks the literal host/path. The path clauses are a denylist: a
+production host with an empty `paths` list satisfies them vacuously — the
+render then carries a rule with no paths, which routes nothing and is rejected
+on apply. `helm/agentflow/templates/ingress.yaml` quotes or
+`toYaml`-serialises every user-controlled interpolation so an injected value
+stays a scalar.
+Production already requires `networkPolicy.enabled=true`, and the
+NetworkPolicy limits pod ingress to the namespaces in
+`networkPolicy.ingressFromNamespaces` on the service port. The production
+contract refuses an empty or ingress-controller-only list unless
+`networkPolicy.scrapeFromIngressNamespace=true`, and an empty list renders
+`ingress: []` (deny all).
+
+The 2026-09-02 audit's F-10 acceptance criteria are only partially met:
+
+- this is a values-contract check at `helm template` time, not a runtime
+  network control, and it binds the production profile only — a `/` path still
+  renders green on the chart's deliberately dev-shaped defaults;
+- the endpoint remains unauthenticated to anything that can already reach the
+  pod port; no monitoring identity (mTLS, auth proxy, or IP allowlist) is
+  implemented;
+- the exact annotation denylist binds only the Ingress object rendered by this
+  chart; it cannot constrain the ingress-nginx controller ConfigMap or
+  separately managed Ingress objects, which remain platform routing inputs;
+- production binds `service.type` to `ClusterIP`, so `NodePort`/`LoadBalancer`
+  no longer publish the service port (`/metrics` included) on a green render;
+  `ingress.enabled=false` remains the sanctioned external-gateway shape and
+  moves routing (and the `/metrics` exposure question) outside the chart.
+
+### Security — Safety ignores are scoped per requirements bucket
+
+`scripts/run_safety_scan.py` runs `safety check` once per inventory bucket and
+applies `--ignore` only for `safety_id` values whose waiver scope matches that
+bucket. Expired waivers stop suppressing findings. A waiver whose scope is not
+scanned, or a duplicate `safety_id`, fails closed.
+
+### Documentation — root records archived (2026-09-02–2026-09-04)
+
+Twenty-one immutable tracked Markdown records moved from the repository root
+to `docs/evidence/records/` with unchanged filenames and SHA-256 digests.
+Living citations now use those paths. After all eight documentation-cleanup
+items closed, `plan_26_08_2026.md` moved to `docs/archive/plans/` with its
+closure evidence intact. The retired local 2026-04-17 benchmark baseline moved
+from the standalone `docs/benchmark-baseline-archive/` directory into the
+performance archive.
+
 ### Security — nltk 3.10.0 -> 3.10.3 in uv.lock (Dependabot GHSA-m4rf-3fr8-xwx3, GHSA-6hwm-xvph-95vm)
 
 - `uv lock --upgrade-package nltk` only; nltk is a transitive dependency of `llama-index-core` and is not part of the `cloud`/`postgres` export, so `requirements-docker.lock` is unchanged. Closes the critical (JVM argument injection in the Stanford wrappers) and high (uncontrolled `dot` search path) advisories GitHub reported on the default branch on 2026-09-01.
+- **This did not leave nltk clean.** On 2026-09-02 GitHub opened `GHSA-8mgp-746c-j5xp` / `PYSEC-2026-3740` against 3.10.3 itself, and upstream has published no fix, so no bump can close it. The advisory is unreachable from AgentFlow and is waived under `security/trivy-waivers.json` scope `python-profiles` until 2026-11-01 — see the FB-02 entry under Unreleased and `docs/security-audit.md` §8.1. Read this bump as preventive, not as a closure.
 
 ### Security — production boot requires a query-fingerprint pepper (AF-13)
 
@@ -179,7 +558,12 @@ gains a purpose paragraph. `PENDING_OPERATOR_PAGES` is empty, and
 Plan item 7 is closed; `docs/glossary.md` and `docs/PROJECT_CLOSURE.md` language
 and historical wording were left untouched.
 
-## [2.1.0] - 2026-08-23
+## [2.1.0] - unreleased (prepared 2026-08-23)
+
+> No `v2.1.0` tag exists and nothing under this heading has been published.
+> The date is when the release script staged the section, not a release date
+> (audit FB-05). `docs/STATUS.md` says the same thing, and a test keeps the two
+> from drifting apart.
 
 ### Deployment — staging promotes the verified workflow digest (audit F-19c)
 
@@ -355,13 +739,13 @@ omitting the key logged session cookies and the admin key in the header map
 recorded on failed authentication. New `config.trustedProxies` value wires
 `AGENTFLOW_TRUSTED_PROXIES` from the chart instead of `extraEnv`.
 
-### Docs — living claims, rollback/soak gate split, docs-link checker (audit F-10)
+### Docs — living claims, rollback/soak gate split, docs-link checker (audit 2026-08-23 F-10)
 
 Living STATUS/CLOSURE and `config/project_claims.toml` now match the 2026-08-23
 evidence: corrected rollback mechanics **PASS**
-(`corrected-rollback-pair-runtime-20260823-01.md`); the full 4h soak plus
+(`docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md`); the full 4h soak plus
 rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
-(`ci-soak-f02-capacity-decision-20260823-01.md`). The consumer string in
+(`docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md`). The consumer string in
 `pending_acceptance` is unchanged. Namespace-migration dead `src/...` paths
 and broken glossary links are repaired. `scripts/check_docs_links.py` fails
 closed on missing local Markdown targets and backticked repo paths in living

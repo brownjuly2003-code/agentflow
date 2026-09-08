@@ -61,7 +61,11 @@ def test_streaming_hop_docs_name_owner_output_and_promotion_boundary() -> None:
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     perf_hub = " ".join((ROOT / "docs" / "perf" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "| Streaming-hop freshness benchmark |" in docs_hub
     assert "scripts/benchmark_freshness_realpath.py" in perf_hub

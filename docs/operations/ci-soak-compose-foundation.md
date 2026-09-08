@@ -3,8 +3,8 @@
 > **Superseded runtime-status notice (2026-08-20):** The runtime status and
 > recommended next sequence below are historical through the earlier rehearsal
 > stages and must not be used as current resume state. Current authority is
-> `ci-soak-r1-r7-architecture-audit.md` together with the final completion
-> section of `ci-soak-runtime-harness.md`. This document remains a topology and
+> `../evidence/records/ci-soak-r1-r7-architecture-audit.md` together with the final completion
+> section of `../evidence/records/ci-soak-runtime-harness.md`. This document remains a topology and
 > historical implementation reference only; do not execute its older
 > recommended rehearsal sequence.
 
@@ -549,5 +549,5 @@ green focused gate ends each turn.
 - `scripts/golden_soak/pack/` — immutable eight-file source reference.
 - `tests/unit/test_ci_soak_foundation.py` — executable foundation contract.
 - `tests/unit/test_ci_soak_runtime.py` — executable runtime/shim contract.
-- `ci-soak-runtime-harness.md` — completed implementation checklist and scope boundary.
+- `../evidence/records/ci-soak-runtime-harness.md` — completed implementation checklist and scope boundary.
 - `docs/operations/ci-soak-compose-foundation.md` — this canonical handoff.

@@ -156,7 +156,9 @@ def test_docs_contributing_and_plan_name_scorecard_runtime_owner():
     posture = (PROJECT_ROOT / "docs" / "operations" / "openssf-security-posture.md").read_text(
         encoding="utf-8"
     )
-    plan = (PROJECT_ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8")
+    plan = (PROJECT_ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "| Scorecard SARIF |" in docs_hub
     assert SCORECARD_SARIF in docs_hub

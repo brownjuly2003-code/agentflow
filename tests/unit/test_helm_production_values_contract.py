@@ -19,6 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -26,23 +27,91 @@ CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
 PRODUCTION_VALUES = CHART_PATH / "values-production.yaml"
 CANONICAL_SECURITY = PROJECT_ROOT / "config" / "security.yaml"
 _API_IMAGE_DIGEST = "sha256:" + "b" * 64
+# Read from the chart rather than repeated here: the default moved off the
+# unclaimed Docker Hub namespace `agentflow/api` (audit FB-08), and a test
+# that hardcodes a registry has to be edited every time that judgement is
+# revisited.
+_DEFAULT_API_REPOSITORY = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))[
+    "image"
+]["repository"]
 
 # What an environment file owes the production overlay. The overlay itself
 # leaves these empty on purpose -- they are the values only the environment
 # knows -- so every render here supplies them and then breaks one clause.
+# The scrape namespace is one of those: values-production.yaml does not guess
+# it, and a render that still has only ingress-nginx is refused.
 _ENVIRONMENT_VALUES = {
     "image": {"digest": _API_IMAGE_DIGEST},
     "config": {
         "corsOrigins": "https://app.example.com",
         "trustedProxies": "10.0.0.0/8",
     },
+    "networkPolicy": {
+        "ingressFromNamespaces": [
+            {"kubernetes.io/metadata.name": "ingress-nginx"},
+            {"kubernetes.io/metadata.name": "monitoring"},
+        ],
+        # An egress rule with `ports:` and no `to:` allows that port to every
+        # address (audit FB-09), so production must name peers for every rule
+        # that renders. Only `kafka` renders under these values: the backend is
+        # DuckDB, there is no Redis or OTLP endpoint, the control plane is
+        # embedded and the lake materializer is off.
+        "egressTo": {"kafka": [{"ipBlock": {"cidr": "10.30.0.0/16"}}]},
+    },
     "ingress": {
         "className": "nginx",
-        "hosts": [{"host": "api.example.com", "paths": [{"path": "/", "pathType": "Prefix"}]}],
+        "hosts": [
+            {
+                "host": "api.example.com",
+                "paths": [
+                    {"path": "/v1", "pathType": "Prefix"},
+                    {"path": "/admin", "pathType": "Prefix"},
+                ],
+            }
+        ],
         "tls": [{"secretName": "agentflow-tls", "hosts": ["api.example.com"]}],
     },
     "secrets": {"existingSecret": "agentflow-production-secret"},
+    # Pepper material (audit FB-07, AF-13). Both env vars fall back to
+    # constants committed to this repository, and the API refuses to boot on
+    # profile=production with either unset -- so a render that omits them
+    # installs a workload that cannot start. Projected from the Secret, never
+    # written as a literal `value`, for the same reason secrets.create=true is
+    # refused: Helm values persist in release metadata and shell history.
+    "extraEnv": [
+        {
+            "name": "AGENTFLOW_KEY_LOOKUP_PEPPER",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "agentflow-production-secret",
+                    "key": "key-lookup-pepper",
+                }
+            },
+        },
+        {
+            "name": "AGENTFLOW_QUERY_FINGERPRINT_PEPPER",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "agentflow-production-secret",
+                    "key": "query-fingerprint-pepper",
+                }
+            },
+        },
+    ],
 }
+
+
+def _egress_to(**extra: list) -> dict:
+    """Baseline egress destinations plus the ones a switched-on feature needs.
+
+    Turning a feature on adds an egress rule, and a rule with no `to:` allows
+    its port to every address -- so production asks for peers (audit FB-09).
+    Without this, a test about ClickHouse TLS would fail on the egress clause
+    instead, which is the opposite of one clause at a time.
+    """
+    destinations = dict(_ENVIRONMENT_VALUES["networkPolicy"]["egressTo"])
+    destinations.update(extra)
+    return destinations
 
 
 def _load_yaml(path: Path) -> dict:
@@ -59,7 +128,10 @@ def _render(tmp_path: Path, overrides: dict | None = None) -> subprocess.Complet
     if helm is None:
         raise AssertionError("helm is required for Helm render policy tests")
 
-    values: dict = {key: dict(value) for key, value in _ENVIRONMENT_VALUES.items()}
+    values: dict = {
+        key: dict(value) if isinstance(value, dict) else list(value)
+        for key, value in _ENVIRONMENT_VALUES.items()
+    }
     for section, patch in (overrides or {}).items():
         if not isinstance(patch, dict):
             values[section] = patch
@@ -90,6 +162,16 @@ def _render(tmp_path: Path, overrides: dict | None = None) -> subprocess.Complet
 
 def _output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
+
+
+def _schema_path_reported(output: str, *segments: str) -> bool:
+    """Helm's JSON Schema printer names a values path as dotted (`a.b`) or as a
+    JSON pointer (`/a/b`), depending on the Helm release. CI installs unpinned
+    Helm; both forms are live.
+    """
+    dotted = ".".join(segments)
+    pointer = "/" + "/".join(segments)
+    return dotted in output or pointer in output
 
 
 def test_chart_defaults_match_the_canonical_security_policy():
@@ -135,6 +217,12 @@ def test_production_overlay_ships_no_inline_key_material():
     assert values["image"]["digest"] == ""
     assert values["config"]["profile"] == "production"
     assert values["networkPolicy"]["enabled"] is True
+    from_ns = values["networkPolicy"]["ingressFromNamespaces"]
+    ns_names = [
+        item.get("kubernetes.io/metadata.name") for item in from_ns if isinstance(item, dict)
+    ]
+    assert "ingress-nginx" in ns_names
+    assert ns_names == ["ingress-nginx"]
     assert values["secrets"]["create"] is False
     assert values["secrets"]["existingSecret"] == ""
     assert values["secrets"]["adminKey"] == ""
@@ -162,7 +250,16 @@ def test_production_overlay_alone_refuses_to_render():
     output = _output(result)
 
     assert result.returncode != 0
-    assert "secrets.existingSecret" in output
+    assert _schema_path_reported(output, "secrets", "existingSecret")
+
+
+def test_schema_path_reported_accepts_both_printers_and_rejects_unrelated_output():
+    """Negative control: the helper must not match an unrelated refusal string."""
+    pointer = "- at '/secrets/existingSecret': minLength: got 0, want 1"
+    dotted = "secrets.existingSecret: minLength: got 0, want 1"
+    assert _schema_path_reported(pointer, "secrets", "existingSecret")
+    assert _schema_path_reported(dotted, "secrets", "existingSecret")
+    assert not _schema_path_reported("nothing here", "secrets", "existingSecret")
 
 
 def test_compliant_production_render_carries_the_declared_posture(tmp_path: Path):
@@ -179,7 +276,7 @@ def test_compliant_production_render_carries_the_declared_posture(tmp_path: Path
     assert "name: AGENTFLOW_TRUSTED_PROXIES" in output
     assert 'value: "10.0.0.0/8"' in output
     assert "secretName: agentflow-tls" in output
-    assert f'image: "agentflow/api@{_API_IMAGE_DIGEST}"' in output
+    assert f'image: "{_DEFAULT_API_REPOSITORY}@{_API_IMAGE_DIGEST}"' in output
 
 
 def test_production_render_requires_an_immutable_api_image_digest(tmp_path: Path):
@@ -255,17 +352,51 @@ def test_production_render_requires_trusted_proxies_behind_ingress(tmp_path: Pat
     assert "config.trustedProxies is empty while ingress is enabled" in output
 
 
-def test_production_render_drops_the_proxy_clause_without_ingress(tmp_path: Path):
+def test_production_render_drops_the_tls_clause_without_ingress(tmp_path: Path):
     """TLS in a gateway ahead of the chart is a legitimate shape: with ingress
-    off, neither the TLS nor the trusted-proxy clause has anything to say."""
+    off the TLS clause has nothing to say. The client-address clause still does
+    -- see the two tests below -- so this render answers it."""
+    result = _render(
+        tmp_path,
+        {
+            "ingress": {"enabled": False, "tls": []},
+            "config": {"trustedProxies": "", "gateway": {"preservesClientIp": True}},
+        },
+    )
+    output = _output(result)
+
+    assert result.returncode == 0, output
+    assert "kind: Ingress" not in output
+
+
+def test_production_render_refuses_an_unanswered_external_gateway(tmp_path: Path):
+    """`ingress.enabled=false` used to make the trusted-proxy clause vanish
+    rather than answer it. That is the sanctioned production shape, and it is
+    exactly the one where every caller reaches the pod through a gateway the
+    chart cannot see: the failed-auth throttle and every logged client_ip then
+    key on one shared address (audit FB-06). Silence is no longer an answer."""
     result = _render(
         tmp_path,
         {"ingress": {"enabled": False, "tls": []}, "config": {"trustedProxies": ""}},
     )
     output = _output(result)
 
-    assert result.returncode == 0, output
-    assert "kind: Ingress" not in output
+    assert result.returncode != 0
+    assert "config.gateway.preservesClientIp is not set" in output
+
+
+def test_production_render_accepts_named_gateway_peers(tmp_path: Path):
+    """The other way to answer it: name the peers instead of declaring that the
+    source address survives."""
+    result = _render(
+        tmp_path,
+        {
+            "ingress": {"enabled": False, "tls": []},
+            "config": {"trustedProxies": "10.0.0.0/8"},
+        },
+    )
+
+    assert result.returncode == 0, _output(result)
 
 
 def test_production_render_refuses_a_cors_wildcard(tmp_path: Path):
@@ -311,7 +442,15 @@ def test_production_render_accepts_a_named_plaintext_exemption(tmp_path: Path):
                 "backend": "clickhouse",
                 "clickhouse": {"host": "clickhouse.data.svc", "secure": False},
             },
-            "extraEnv": [{"name": "AGENTFLOW_INSECURE_TRANSPORT_OK", "value": "clickhouse"}],
+            # Appended, not substituted: extraEnv is one list, and the
+            # production contract also reads the two pepper entries out of it.
+            "extraEnv": [
+                *_ENVIRONMENT_VALUES["extraEnv"],
+                {"name": "AGENTFLOW_INSECURE_TRANSPORT_OK", "value": "clickhouse"},
+            ],
+            "networkPolicy": {
+                "egressTo": _egress_to(clickhouse=[{"ipBlock": {"cidr": "10.30.1.0/24"}}])
+            },
         },
     )
     output = _output(result)
@@ -328,7 +467,15 @@ def test_production_render_refuses_plaintext_redis(tmp_path: Path):
 
 
 def test_production_render_accepts_tls_redis(tmp_path: Path):
-    result = _render(tmp_path, {"config": {"redisUrl": "rediss://redis.data.svc:6380/0"}})
+    result = _render(
+        tmp_path,
+        {
+            "config": {"redisUrl": "rediss://redis.data.svc:6380/0"},
+            "networkPolicy": {
+                "egressTo": _egress_to(redis=[{"ipBlock": {"cidr": "10.30.2.0/24"}}])
+            },
+        },
+    )
     output = _output(result)
 
     assert result.returncode == 0, output
@@ -368,3 +515,94 @@ def test_production_render_refuses_a_weakened_security_policy(tmp_path: Path):
     assert "key_hashing" in output
     assert "X-Admin-Key" in output
     assert "Set-Cookie" in output
+
+
+def _extra_env_without(name: str) -> list[dict]:
+    return [item for item in _ENVIRONMENT_VALUES["extraEnv"] if item["name"] != name]
+
+
+@pytest.mark.parametrize(
+    "pepper",
+    ["AGENTFLOW_KEY_LOOKUP_PEPPER", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER"],
+)
+def test_production_render_requires_both_peppers(tmp_path: Path, pepper: str):
+    """Neither pepper was wired into the chart at all, while the app-side gate
+    refuses to boot without them (audit FB-07). A render that omits one is a
+    release that installs a workload which cannot start, so the refusal belongs
+    where the operator can read it -- at render time, with the name in it."""
+    result = _render(tmp_path, {"extraEnv": _extra_env_without(pepper)})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert pepper in output
+    assert "secretKeyRef" in output
+
+
+@pytest.mark.parametrize(
+    "pepper",
+    ["AGENTFLOW_KEY_LOOKUP_PEPPER", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER"],
+)
+def test_production_render_refuses_pepper_material_written_into_values(tmp_path: Path, pepper: str):
+    """A literal `value:` satisfies the app-side gate and defeats the reason
+    secrets.create=true is refused: the pepper then lives in Helm release
+    metadata and in whatever shell ran the upgrade."""
+    extra_env = [*_extra_env_without(pepper), {"name": pepper, "value": "a-real-secret"}]
+    result = _render(tmp_path, {"extraEnv": extra_env})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert pepper in output
+    assert "release metadata" in output
+
+
+def test_production_render_refuses_a_pepper_from_a_configmap(tmp_path: Path):
+    """`valueFrom` is not the point; the Secret is. A ConfigMap is a plaintext
+    object every namespace reader can list."""
+    extra_env = [
+        *_extra_env_without("AGENTFLOW_KEY_LOOKUP_PEPPER"),
+        {
+            "name": "AGENTFLOW_KEY_LOOKUP_PEPPER",
+            "valueFrom": {"configMapKeyRef": {"name": "agentflow-cm", "key": "pepper"}},
+        },
+    ]
+    result = _render(tmp_path, {"extraEnv": extra_env})
+    output = _output(result)
+
+    assert result.returncode != 0
+    assert "configMapKeyRef" in output
+
+
+def test_the_compliant_render_projects_both_peppers_into_the_api_container(tmp_path: Path):
+    """The clause is only worth having if the values it demands actually reach
+    the process the gate runs in."""
+    result = _render(tmp_path)
+    output = _output(result)
+    assert result.returncode == 0, output
+
+    api = next(
+        doc
+        for doc in yaml.safe_load_all(output)
+        if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"].endswith("agentflow")
+    )
+    env = {item["name"]: item for item in api["spec"]["template"]["spec"]["containers"][0]["env"]}
+
+    for pepper in ("AGENTFLOW_KEY_LOOKUP_PEPPER", "AGENTFLOW_QUERY_FINGERPRINT_PEPPER"):
+        assert "value" not in env[pepper]
+        assert env[pepper]["valueFrom"]["secretKeyRef"]["name"] == "agentflow-production-secret"
+
+
+def test_the_dev_defaults_do_not_ask_for_a_pepper(tmp_path: Path):
+    """The gate is production-only on both sides. `helm install` with the chart
+    defaults must stay a five-second demo."""
+    helm = shutil.which("helm")
+    assert helm is not None
+    result = subprocess.run(
+        [helm, "template", "agentflow", str(CHART_PATH)],
+        cwd=PROJECT_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, _output(result)
+    assert "AGENTFLOW_KEY_LOOKUP_PEPPER" not in result.stdout

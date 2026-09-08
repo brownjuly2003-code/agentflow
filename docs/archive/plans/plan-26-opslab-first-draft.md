@@ -4,7 +4,7 @@
 - Archived: 2026-08-26
 - Reason: the first interpretation treated OpsLab as the main roadmap instead
   of optimizing the real AgentFlow Runtime documentation corpus
-- Replacement: [`plan_26_08_2026.md`](../../../plan_26_08_2026.md)
+- Replacement: [completed documentation-optimization plan](documentation-optimization-2026-08-26.md)
 - Content type: superseded planning narrative
 
 The text below is preserved as committed in `fff2dd3`.

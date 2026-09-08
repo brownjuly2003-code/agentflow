@@ -144,7 +144,11 @@ def test_demo_freshness_docs_name_owner_and_snapshot_lifecycle():
     )
     docs_hub = " ".join((ROOT / "docs" / "README.md").read_text(encoding="utf-8").split())
     contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "Demo freshness benchmark artifact lifecycle" in current
     assert "`python scripts/benchmark_freshness.py`" in current

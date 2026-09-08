@@ -14,7 +14,7 @@ class ChartCase:
     chart_path: Path
     base_values: Path | None
     invalid_values: Path
-    expected_errors: tuple[str, ...]
+    expected_error_tokens: tuple[tuple[str, ...], ...]
 
 
 AGENTFLOW_CHART = ChartCase(
@@ -24,10 +24,10 @@ AGENTFLOW_CHART = ChartCase(
     invalid_values=(
         PROJECT_ROOT / "tests" / "integration" / "fixtures" / "helm-values-invalid.yaml"
     ),
-    expected_errors=(
-        "additional properties 'unexpectedTopLevel' not allowed",
-        "/replicaCount': got string, want integer",
-        "/service/port': minimum: got 0, want 1",
+    expected_error_tokens=(
+        ("unexpectedTopLevel", "additional propert", "not allowed"),
+        ("replicaCount", "integer", "string"),
+        ("service.port", "minimum", "1"),
     ),
 )
 
@@ -45,10 +45,10 @@ KAFKA_CONNECT_CHART = ChartCase(
         / "fixtures"
         / "helm-values-kafka-connect-invalid.yaml"
     ),
-    expected_errors=(
-        "additional properties 'unexpectedTopLevel' not allowed",
-        "/replicaCount': got string, want integer",
-        "/service/port': minimum: got 0, want 1",
+    expected_error_tokens=(
+        ("unexpectedTopLevel", "additional propert", "not allowed"),
+        ("replicaCount", "integer", "string"),
+        ("service.port", "minimum", "1"),
     ),
 )
 
@@ -82,14 +82,48 @@ def _values_args(case: ChartCase, *extra: Path) -> list[str]:
 
 
 def _assert_schema_validation_failed(
-    result: subprocess.CompletedProcess[str], expected: tuple[str, ...]
+    result: subprocess.CompletedProcess[str], expected: tuple[tuple[str, ...], ...]
 ) -> None:
     output = _combined_output(result)
+    normalized_lines = [
+        line.lower().replace("/", ".").replace("must be greater than or equal to", "minimum")
+        for line in output.splitlines()
+    ]
 
     assert result.returncode != 0, output
-    assert "values don't meet the specifications of the schema" in output
-    for needle in expected:
-        assert needle in output, f"missing expected error '{needle}' in:\n{output}"
+    assert "values don't meet the specifications of the schema" in output.lower()
+    for tokens in expected:
+        normalized_tokens = tuple(token.lower() for token in tokens)
+        assert any(
+            all(token in line for token in normalized_tokens) for line in normalized_lines
+        ), f"missing schema error tokens {tokens!r} in:\n{output}"
+
+
+@pytest.mark.parametrize(
+    "schema_output",
+    [
+        """values don't meet the specifications of the schema(s):
+- (root): Additional property unexpectedTopLevel is not allowed
+- replicaCount: Invalid type. Expected: integer, given: string
+- service.port: Must be greater than or equal to 1
+""",
+        """values don't meet the specifications of the schema(s):
+- additional properties 'unexpectedTopLevel' not allowed
+- /replicaCount': got string, want integer
+- /service/port': minimum: got 0, want 1
+""",
+    ],
+    ids=("helm-3", "helm-4"),
+)
+def test_schema_failure_assertion_accepts_supported_helm_wording(schema_output: str):
+    result = subprocess.CompletedProcess(
+        args=["helm", "lint"],
+        returncode=1,
+        stdout="",
+        stderr=schema_output,
+    )
+
+    _assert_schema_validation_failed(result, AGENTFLOW_CHART.expected_error_tokens)
 
 
 @pytest.mark.parametrize("case", CHART_CASES, ids=lambda c: c.chart_id)
@@ -107,7 +141,7 @@ def test_helm_lint_rejects_invalid_values(case: ChartCase, kind_cluster):
         *_values_args(case, case.invalid_values),
     )
 
-    _assert_schema_validation_failed(result, case.expected_errors)
+    _assert_schema_validation_failed(result, case.expected_error_tokens)
 
 
 @pytest.mark.parametrize("case", CHART_CASES, ids=lambda c: c.chart_id)
@@ -121,7 +155,7 @@ def test_helm_install_dry_run_rejects_invalid_values(case: ChartCase, kind_clust
         "--dry-run",
     )
 
-    _assert_schema_validation_failed(result, case.expected_errors)
+    _assert_schema_validation_failed(result, case.expected_error_tokens)
 
 
 def test_remote_cluster_mode_documented():

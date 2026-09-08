@@ -47,6 +47,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import shutil
           import subprocess
           import sys
           import tempfile
@@ -83,6 +84,22 @@ jobs:
           def write_requirements(target: Path, entries: list[str]) -> None:
               deduped = list(dict.fromkeys(entries))
               target.write_text("\n".join(deduped) + "\n", encoding="utf-8")
+
+          def copy_locked_requirements(source: Path, target: Path) -> int:
+              if not source.exists():
+                  raise SystemExit(f"Required dependency lock is missing: {source}")
+              locked = [
+                  line.strip()
+                  for line in source.read_text(encoding="utf-8").splitlines()
+                  if line and not line[0].isspace() and not line.startswith("#")
+              ]
+              if not locked:
+                  raise SystemExit(f"Required dependency lock resolved to zero packages: {source}")
+              if any("==" not in requirement or not requirement.endswith("\\") for requirement in locked):
+                  raise SystemExit(f"Required dependency lock is not fully hash-pinned: {source}")
+              shutil.copyfile(source, target)
+              print(f"Copied {len(locked)} locked packages -> {target}")
+              return len(locked)
 
           def resolve_requirements(name: str, entries: list[str], target: Path) -> int:
               if not entries:
@@ -172,13 +189,13 @@ jobs:
               )
 
           # The Flink runtime is not an extra (its beam chain can never
-          # co-install with core pyarrow>=17) — its manifest lives next to
-          # the Flink image Dockerfile. Scan it as its own bucket.
-          flink_count = resolve_requirements(
-              "flink-runtime",
-              load_requirements(
-                  root / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "requirements.txt"
-              ),
+          # co-install with core pyarrow>=17). Keep validating its human-owned
+          # manifest, but scan the image's hash lock without resolving it again.
+          load_requirements(
+              root / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "requirements.txt"
+          )
+          flink_count = copy_locked_requirements(
+              root / "src/agentflow_runtime/processing/flink_jobs/flink-requirements.lock",
               output_dir / "requirements-flink-runtime.txt",
           )
 
@@ -254,14 +271,39 @@ jobs:
           # `from apache_beam.io.parquetio import *`, and parquetio's class
           # bodies evaluate `pa.Table` annotations with pa=None ->
           # AttributeError). The dependency is load-bearing at import time
-          # even though our jobs never use it.
+          # even though our jobs never use it. Expires 2026-10-27 (same as
+          # the Trivy waiver). Disposition is recorded in
+          # security/trivy-waivers.json (flink-runtime, CVE-2026-25087).
+          #
+          # SFTY-20260724-05622 (CVE-2026-59939): unbounded decompression of
+          # HTTP response bodies encoded with Content-Encoding: gzip or
+          # deflate in _decompressContent (httplib2/__init__.py), fixed in
+          # 0.32.0. A malicious or compromised HTTP server can return a
+          # small compressed payload that expands to an arbitrarily large
+          # size in memory (MemoryError / OOM-kill). Only the flink-runtime
+          # bucket resolves an affected httplib2 (apache-flink's beam chain
+          # caps httplib2<0.23). Why the risk is negligible here:
+          #   1. The Flink DataStream job has no httplib2 import or HTTP
+          #      client path. Its ingress is Kafka, and it never processes
+          #      attacker-controlled compressed HTTP response bodies.
+          # Blocked upstream, not by our pin: apache-flink==2.3.0 requires
+          # apache-beam>=2.54.0,<=2.61.0; apache-beam==2.61.0 requires
+          # httplib2>=0.8,<0.23.0. Installing httplib2 0.32 into this graph
+          # is impossible without breaking Beam. Dependabot watches the
+          # Flink manifest (src/agentflow_runtime/processing/flink_jobs),
+          # so the next apache-flink release opens a PR — re-check this
+          # ignore there. Remove this ignore when a supported apache-flink/
+          # apache-beam dependency set accepts httplib2>=0.32.0, or
+          # immediately if an httplib2 call path is added. Expires 2026-10-27
+          # (same as the Trivy waiver).
+          # Disposition is recorded in security/trivy-waivers.json
+          # (flink-runtime, CVE-2026-59939).
           #
           # 88512 (langchain cross-ecosystem false positive) was ignored here
           # until 2026-07-20; PyUp corrected the entry (verified: safety
           # 2.3.5 reports 0 findings on the pinned langchain stack), so the
           # ignore is gone. If it ever resurfaces, it fails this job loudly.
-          safety check \
-            --ignore SFTY-20260217-93940 \
+          python scripts/run_safety_scan.py --waivers security/trivy-waivers.json \
             -r .artifacts/security/safety/requirements-main.txt \
             -r .artifacts/security/safety/requirements-sdk.txt \
             -r .artifacts/security/safety/requirements-integrations.txt \
@@ -287,6 +329,9 @@ jobs:
           python-version: "3.11"
       - name: Install pip-audit
         run: python -m pip install --upgrade pip "pip-audit>=2.7,<3" uv==0.8.23
+      # Deliberately bare: the production image lock is the one inventory with
+      # no waiver mechanism reachable at all. A finding here is a release
+      # blocker, not something to argue about in security/trivy-waivers.json.
       - name: Audit the locked production dependency set
         run: pip-audit --no-deps -r requirements-docker.lock
       # Audit F-03: the production lock alone left uv.lock's dev/test chain
@@ -302,7 +347,17 @@ jobs:
           mkdir -p .artifacts/security/pip-audit
           uv export --frozen --format requirements-txt --all-extras \
             --no-emit-project -o .artifacts/security/pip-audit/requirements-all-profiles.txt
-          pip-audit --no-deps -r .artifacts/security/pip-audit/requirements-all-profiles.txt
+          # Audit FB-02: nltk 3.10.3 carries PYSEC-2026-3740 and upstream has
+          # published no fix, so no bump can close it and this job stayed red
+          # with nowhere to record why. The suppression lives in
+          # security/trivy-waivers.json (scope python-profiles), where it is
+          # validated, expires on 2026-11-01, and fails this job the moment it
+          # stops matching -- including the day nltk ships a fix. Do not pass
+          # --ignore-vuln here: a flag in YAML has none of those properties.
+          python scripts/run_pip_audit_scan.py \
+            --waivers security/trivy-waivers.json \
+            --scope python-profiles \
+            -r .artifacts/security/pip-audit/requirements-all-profiles.txt
 
   npm-audit:
     runs-on: ubuntu-latest

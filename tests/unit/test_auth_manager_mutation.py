@@ -162,6 +162,24 @@ class _FullRemainingLimiter:
         return True, rpm, 0
 
 
+class _RecordingUsageWriter:
+    """Stands in for the off-path UsageWriter. Records the timeout each
+    delegation forwards and returns a caller-chosen flush result, so a mutant
+    of either default or of the forwarded value shows up as a changed record."""
+
+    def __init__(self, flush_result: bool = True) -> None:
+        self.flush_calls: list[float] = []
+        self.close_calls: list[float] = []
+        self._flush_result = flush_result
+
+    def flush(self, timeout: float) -> bool:
+        self.flush_calls.append(timeout)
+        return self._flush_result
+
+    def close(self, timeout: float) -> None:
+        self.close_calls.append(timeout)
+
+
 # --------------------------------------------------------------------------- #
 # Tenant isolation: tenant_key_allowed_tables.
 # --------------------------------------------------------------------------- #
@@ -1104,3 +1122,53 @@ class TestRateLimitBoundary:
         m = _build_manager()
         m.shutdown()
         m.shutdown()
+
+
+# --------------------------------------------------------------------------- #
+# Usage-writer delegations: the timeout defaults are the only logic they own.
+# --------------------------------------------------------------------------- #
+
+
+class TestUsageWriterDelegation:
+    """`flush_usage` and `close_usage_writer` are one-line forwards whose only
+    decision is the 5.0-second default. No test called either, so mutmut had no
+    test to run against their mutants and scored both "no tests" -- a problem
+    status that fails the gate exactly like a survivor would
+    (scripts/mutation_report.py PROBLEM_STATUSES), which is what kept manager.py
+    red from 2026-07-12 on even at a 91% score. Calling them directly attributes
+    the mutants to these tests; pinning the forwarded value is what kills them.
+
+    The writer is swapped for a double rather than driven for real: the genuine
+    UsageWriter starts a background thread on first use and would put a duckdb
+    write on the other end of `flush`, and neither belongs in a mutation lane
+    that has to stay duckdb-free (rule 1) and fast."""
+
+    def test_flush_usage_forwards_the_default_timeout(self) -> None:
+        m = _build_manager()
+        writer = _RecordingUsageWriter(flush_result=True)
+        m._usage_writer = writer  # type: ignore[assignment]
+        assert m.flush_usage() is True
+        assert writer.flush_calls == [5.0]
+
+    def test_flush_usage_forwards_an_explicit_timeout_and_propagates_failure(self) -> None:
+        m = _build_manager()
+        writer = _RecordingUsageWriter(flush_result=False)
+        m._usage_writer = writer  # type: ignore[assignment]
+        # A timed-out flush is reported, not swallowed: usage_by_tenant() calls
+        # this for read-your-writes and a False here means the read may be stale.
+        assert m.flush_usage(0.25) is False
+        assert writer.flush_calls == [0.25]
+
+    def test_close_usage_writer_forwards_the_default_timeout(self) -> None:
+        m = _build_manager()
+        writer = _RecordingUsageWriter()
+        m._usage_writer = writer  # type: ignore[assignment]
+        m.close_usage_writer()
+        assert writer.close_calls == [5.0]
+
+    def test_close_usage_writer_forwards_an_explicit_timeout(self) -> None:
+        m = _build_manager()
+        writer = _RecordingUsageWriter()
+        m._usage_writer = writer  # type: ignore[assignment]
+        m.close_usage_writer(0.5)
+        assert writer.close_calls == [0.5]

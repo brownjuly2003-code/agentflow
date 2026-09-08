@@ -24,16 +24,30 @@ test_sql_guard_mutation.py (see fable_handoff.md cont.16-19):
    ``_qualify_table`` / ``_quote_literal`` directly attributes every method line.
 
 3. **Import shims.** The mutation harness copies ``src/agentflow_runtime/serving`` to a top-level
-   ``serving`` package *without* ``src`` (copying ``src`` would shadow it). Three
-   things on sql_builder's import path would otherwise fail or drag duckdb in:
-   ``from agentflow_runtime.serving.api.auth import get_current_tenant_id`` (no ``src``), the
-   ``serving.semantic_layer.query`` package ``__init__`` (``from .engine import
-   QueryEngine`` -> duckdb) and ``.contracts`` (imports the duckdb backend for
-   type hints). We register stand-ins for all three before importing the module.
-   They are only used as a default-arg helper and as runtime-unused type hints
-   (``from __future__ import annotations`` keeps the annotations as strings), so
-   the stand-ins change no executed logic. Under ordinary pytest the real ``src``
-   package is importable, so no shim is installed and the real modules load.
+   ``serving`` package *without* ``src`` (copying ``src`` would shadow it), so
+   every ``agentflow_runtime.*`` name on sql_builder's import path has to be
+   arranged before the module loads. Two of them would drag duckdb in and are
+   replaced: ``serving.semantic_layer.query``'s package ``__init__``
+   (``from .engine import QueryEngine``) and ``.contracts`` (imports the duckdb
+   backend for type hints). ``agentflow_runtime.serving.api.auth`` is replaced
+   for the same reason, with a passthrough for ``get_current_tenant_id`` -- the
+   host controls the tenant here. The rest are *aliased to the real objects*,
+   not replaced: ``BackendExecutionError`` and ``quote_sql_literal`` come from
+   the workspace's own ``serving`` copy (neither module imports duckdb at
+   runtime), and ``agentflow_runtime`` itself stays the real package so
+   ``agentflow_runtime.tenancy.DEFAULT_TENANT`` resolves. That distinction is
+   the point: a stand-in for ``quote_sql_literal`` or a made-up
+   ``DEFAULT_TENANT`` would change the very SQL strings this test asserts on,
+   and mutants of the quoting and scoping logic would stop meaning anything.
+   Under ordinary pytest there is no top-level ``serving``, so no shim is
+   installed and the real modules load.
+
+   The shim went stale once already: ``1096e2e`` renamed the runtime from
+   ``src.*`` to ``agentflow_runtime.*``, which moved ``BackendExecutionError``,
+   ``quote_sql_literal`` and ``DEFAULT_TENANT`` onto import paths this function
+   did not cover. The module then failed to import inside the workspace, mutmut
+   scored it ``n/a``, and the weekly mutation gate went red on 2026-07-12 and
+   stayed red. Anything added to sql_builder's imports belongs here too.
 
 Reproduced at 96.0% (killed 167, survived 7) via the WSL/mutmut harness (py3.10);
 the CI gate (mutation.yml on py3.11) is the source of truth. The 7 survivors are
@@ -77,9 +91,18 @@ def _ensure_module(name: str) -> types.ModuleType:
 
 
 def _install_harness_stubs() -> None:
+    import importlib
+
+    # `agentflow_runtime` stays the REAL package: sql_builder reads
+    # DEFAULT_TENANT from agentflow_runtime.tenancy, which lives outside the
+    # `serving` subtree the workspace copies, and a bare stub here would hide
+    # the installed package and make that import unresolvable.
+    runtime_pkg = importlib.import_module("agentflow_runtime")
+
     # agentflow_runtime.serving.api.auth.get_current_tenant_id: a contextvar reader in
     # production; here a default-arg passthrough (the host controls the tenant).
-    _ensure_module("agentflow_runtime")
+    # Registering the dotted names in sys.modules is what keeps the real,
+    # duckdb-importing `serving.api` package from ever loading.
     serving_pkg = _ensure_module("agentflow_runtime.serving")
     api_pkg = _ensure_module("agentflow_runtime.serving.api")
     auth_pkg = _ensure_module("agentflow_runtime.serving.api.auth")
@@ -90,6 +113,24 @@ def _install_harness_stubs() -> None:
     auth_pkg.get_current_tenant_id = get_current_tenant_id
     api_pkg.auth = auth_pkg
     serving_pkg.api = api_pkg
+    runtime_pkg.serving = serving_pkg
+
+    # The other two runtime imports are aliases onto the workspace's own copy,
+    # not stand-ins: `serving.backends` names duckdb only under TYPE_CHECKING
+    # and `serving.semantic_layer.sql_literals` is a leaf that imports nothing
+    # but datetime, so both load here exactly as they do in production.
+    from serving.backends import BackendExecutionError
+    from serving.semantic_layer.sql_literals import quote_sql_literal
+
+    backends_mod = _ensure_module("agentflow_runtime.serving.backends")
+    backends_mod.BackendExecutionError = BackendExecutionError
+    serving_pkg.backends = backends_mod
+
+    semantic_pkg = _ensure_module("agentflow_runtime.serving.semantic_layer")
+    literals_mod = _ensure_module("agentflow_runtime.serving.semantic_layer.sql_literals")
+    literals_mod.quote_sql_literal = quote_sql_literal
+    semantic_pkg.sql_literals = literals_mod
+    serving_pkg.semantic_layer = semantic_pkg
 
     # Neuter the query package __init__ (`from .engine import QueryEngine`) and
     # the contracts module; both pull duckdb via the QueryEngine import chain and

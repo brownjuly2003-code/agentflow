@@ -4,6 +4,36 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Mutation gate — nine weeks red from a rename ripple and two untested one-liners
+
+* **The weekly Mutation Testing workflow last passed on 2026-07-05** and failed
+  every Sunday since (2026-07-12 through 2026-09-06). Nothing watched it: it is
+  a scheduled workflow, not a required check, so no pull request ever went red
+  and the failure was only visible in the Actions tab.
+* **`sql_builder.py` scored `n/a` because its harness shim went stale.**
+  `1096e2e` renamed the runtime from `src.*` to `agentflow_runtime.*`, which
+  moved `BackendExecutionError`, `quote_sql_literal` and `DEFAULT_TENANT` onto
+  import paths `_install_harness_stubs` did not cover. Inside mutmut's
+  workspace — which copies `src/agentflow_runtime/serving` to a *top-level*
+  `serving` package and deliberately omits `src` — the module stopped importing
+  (`No module named 'agentflow_runtime.serving.semantic_layer'`), mutmut exited
+  1, and the run reported "no scored mutants found". The shim now aliases the
+  workspace's real `BackendExecutionError` and `quote_sql_literal` rather than
+  standing in for them: a fake quoter would change the very SQL strings the
+  mutants are supposed to be judged against.
+* **`manager.py` failed at a 91.8% score** because two mutants came back "no
+  tests" (`flush_usage` and `close_usage_writer`), and a problem status fails
+  the gate exactly like a survivor does. Both are one-line forwards to the
+  off-path usage writer whose only decision is the 5.0-second timeout default,
+  and no test had ever called either. Four direct tests now pin the forwarded
+  value against a recording double — no thread, no duckdb, so the lane stays
+  duckdb-free.
+* **Verified in a rebuilt mutmut workspace, not just under pytest.** Both
+  targets' tests were re-run through the same `prepare_workspace` the gate
+  builds: `sql_builder` 41 passed, `manager` 96 passed, where the first had been
+  failing at import. The stale-shim hazard is now written into the test's own
+  design rules, since the next rename will ripple the same way.
+
 ### Terraform — an exact core pin took the provider update channel down with it
 
 * **`required_version = "= 1.15.4"` broke Dependabot's terraform ecosystem the

@@ -25,7 +25,7 @@ WORKFLOWS_DIR = PROJECT_ROOT / ".github" / "workflows"
 WORKFLOW_FILES = sorted([*WORKFLOWS_DIR.glob("*.yml"), *WORKFLOWS_DIR.glob("*.yaml")])
 
 TERRAFORM_VERSION = "1.15.4"
-AWS_PROVIDER_VERSION = "6.46.0"
+AWS_PROVIDER_VERSION = "6.63.0"
 WORKFLOW_ENVIRONMENT_EXPRESSION = "${{ inputs.environment }}"
 STATE_KEY_INIT_LINE = re.compile(r'^terraform init -backend-config="key=(?P<key>[^"]+)"$')
 STATE_KEY_SHAPE = re.compile(r"^env/[^/]+/terraform\.tfstate$")

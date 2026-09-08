@@ -247,6 +247,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
+        id: install
         run: |
           bash scripts/ci_sync.sh test-integrations
       - name: Verify SDK/integrations joint installability
@@ -264,15 +265,19 @@ jobs:
       - name: Enforce changed-code coverage
         run: diff-cover .artifacts/coverage/coverage.xml --compare-branch=origin/main --fail-under=80
       - name: Run quality validators coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           python -m pytest tests/unit/test_validators.py -v --tb=short --cov=agentflow_runtime.quality.validators --cov-report=term-missing --cov-fail-under=90
       - name: Run freshness monitor coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           python -m pytest tests/unit/test_freshness_monitor.py -v --tb=short --cov=agentflow_runtime.quality.monitors.freshness_monitor --cov-report=term-missing --cov-fail-under=90
       - name: Run event producer coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           python -m pytest tests/unit/test_event_producer.py -v --tb=short --cov=agentflow_runtime.ingestion.producers.event_producer --cov-report=term-missing --cov-fail-under=90
       - name: Run SQL guard coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           # Security-critical NL->SQL guard: validate_nl_sql (SELECT-only, no DML,
           # tenant table allow-list, recursive-CTE shadow reject). test_sql_guard
@@ -280,6 +285,7 @@ jobs:
           # the 90% gate keeps a 10pp regression cushion.
           python -m pytest tests/unit/test_sql_guard.py tests/unit/test_sql_guard_mutation.py -v --tb=short --cov=agentflow_runtime.serving.semantic_layer.sql_guard --cov-report=term-missing --cov-fail-under=90
       - name: Run rate limiter coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           # Security-critical sliding-window rate limiter (Redis + in-memory
           # fail-closed fallback); local module coverage is 98% (only the optional
@@ -297,6 +303,7 @@ jobs:
             -k "not auth_middleware" -v --tb=short -p no:schemathesis -p no:cov
           python -m coverage report --include="*/serving/api/rate_limiter.py" --show-missing --fail-under=90
       - name: Run auth manager coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           # Security-critical auth manager (key match/verify, tenant isolation,
           # rate-limit/failed-auth windows, rotation grace) and a mutmut target;
@@ -331,6 +338,7 @@ jobs:
             -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/manager.py" --show-missing --fail-under=90
       - name: Run key rotation coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           # Security-critical key-rotation lifecycle (create/rotate/revoke,
           # grace-period scheduling, rotation status) and a mutmut target. Like
@@ -353,6 +361,7 @@ jobs:
             -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/key_rotation.py" --show-missing --fail-under=90
       - name: Run outbox coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           # Security/reliability-critical at-least-once outbox dispatch loop
           # (delivery, retry/backoff, poison-to-failed, mark-sent transactions)
@@ -362,6 +371,7 @@ jobs:
           python -m coverage run -m pytest tests/unit/test_outbox_processor.py tests/unit/test_outbox_connection_guard.py -p no:schemathesis
           python -m coverage report --include="*/processing/outbox.py" --show-missing --fail-under=90
       - name: Run query package coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           # The NL->SQL orchestration surface (engine, entity/metric/NL query
           # mixins, SQL builder) and a mutmut target set; the old single-file

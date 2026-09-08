@@ -4,6 +4,25 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### CI — a red coverage gate no longer hides the gates behind it
+
+* **Steps in a job stop at the first failure**, and `test-unit` runs nine
+  per-module coverage gates in a row. While an earlier step was failing, the
+  auth-manager gate never ran at all — which is how that module drifted from
+  94% to 82% for two weeks with a gate supposedly holding it at 90%, and how
+  the key-rotation gate reached 89.6% (passing only because coverage rounds
+  before it compares). Both were found by running the gates by hand.
+* **Each gate now runs whenever the environment installed**
+  (`if: !cancelled() && steps.install.outcome == 'success'`). They measure
+  different modules and share nothing but the venv, so there was never a
+  reason for one to gate the next. Every gate still fails the job on its own;
+  the difference is that one run now reports all nine verdicts instead of
+  stopping at the first.
+* **A ratchet keeps it that way.**
+  `test_coverage_policy.py::test_every_coverage_gate_runs_even_after_an_earlier_one_fails`
+  fails if a gate is added without the condition, or if the install step
+  loses the `id` the condition refers to.
+
 ### Supply chain — releases were being built by a yanked builder
 
 * **`build` 1.5.1 is yanked upstream** ("considers breaking changes, will

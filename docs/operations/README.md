@@ -44,6 +44,7 @@ are inputs to later work, not general-purpose procedures.
 | [API DuckDB persistence and recovery design](api-duckdb-persistence-recovery-design.md) | Current preservation/recovery authorization-boundary owner | Status is `CAPABILITY_REHEARSAL_REQUIRED`; it is not an approved operator runbook |
 | [CI-soak Compose foundation](ci-soak-compose-foundation.md) | Topology and historical implementation reference | Its runtime-status sequence is superseded; resume from the current CI-soak runbook above |
 | [OpenSSF security posture](openssf-security-posture.md) | Scope and interpretation of free supply-chain posture signals | Neither Scorecard nor self-certification is a penetration test or attestation |
+| [Windows verification memory](windows-verification.md) | What the sharded Windows suite's per-process budget is spent on, measured | Describes the test host; pinning the same variables in the API image is an owner decision that page does not take |
 
 ## Consumed and dated records
 

@@ -226,6 +226,7 @@ python -m pytest tests/unit tests/integration tests/sdk -q
 # broad Windows no-Docker suite (audit F-07): sequential per-process shards
 # with a per-shard peak-memory budget under the host's 1 GiB process guard.
 # Do not run the monolithic pytest command above for this purpose on Windows.
+# What that budget is spent on: docs/operations/windows-verification.md
 python scripts/run_windows_unit_shards.py tests/unit
 
 # benchmark and regression gate

@@ -32,6 +32,7 @@ ACTIVE_REFERENCES = {
     "docs/operations/api-duckdb-persistence-recovery-design.md",
     "docs/operations/ci-soak-compose-foundation.md",
     "docs/operations/openssf-security-posture.md",
+    "docs/operations/windows-verification.md",
 }
 
 CONSUMED_OR_DATED_RECORDS = {

@@ -10,5 +10,6 @@
 ## Verification Hosts
 - Keep local Windows Python processes below 1 GiB. Use narrow checks and rely on `D:\SystemState\PythonMemoryGuard\python-memory-guard.ps1`.
 - Run Docker-heavy verification, jobs likely to exceed 1 GiB, and macOS diagnostics through SSH alias `deproject-mac`; the Mac checkout is `/Users/julia/agentflow-docker-check`.
+- The sharded Windows suite pins `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` in every child process; unpinned, OpenBLAS alone accounts for ~550 MiB of the 1 GiB budget. Measurements and the production caveat: `docs/operations/windows-verification.md`.
 - Non-secret Mac context belongs in `AGENT_STATE.md`, `docs/SESSION_HANDOFF.md`, and `docs/operations/local-verification-matrix.md`.
 - Never print, commit, or copy SSH keys, passwords, tokens, recovery codes, or other secrets into project files, logs, PRs, or chat.

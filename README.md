@@ -199,6 +199,7 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 | Test suites | `tests/` |
 | Design decisions | `docs/decisions/` (ADRs) |
 | Public site | `site/` |
+| OpsLab benchmark | `opslab/` — separate dormant distribution, outside this build ([README](opslab/README.md)) |
 | IaC | `infrastructure/terraform/`, `infrastructure/dv2/`, `helm/`, `k8s/` |
 | DV2.0 warehouse | `warehouse/agentflow/dv2/` (hubs / links / satellites + real-dataset loader) |
 
@@ -225,6 +226,7 @@ python -m pytest tests/unit tests/integration tests/sdk -q
 # broad Windows no-Docker suite (audit F-07): sequential per-process shards
 # with a per-shard peak-memory budget under the host's 1 GiB process guard.
 # Do not run the monolithic pytest command above for this purpose on Windows.
+# What that budget is spent on: docs/operations/windows-verification.md
 python scripts/run_windows_unit_shards.py tests/unit
 
 # benchmark and regression gate

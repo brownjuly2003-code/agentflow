@@ -1,6 +1,6 @@
 # Engineering Status
 
-**Updated:** 2026-08-26
+**Updated:** 2026-09-07
 
 > The golden topology remains a production candidate, not
 > production accepted. Published release line **`v2.0.0`**; unpublished lockstep
@@ -17,10 +17,24 @@ claims: [`config/project_claims.toml`](../config/project_claims.toml).
 
 **Latest delivery boundary:** digest-only staging promotion passed for exact
 image identity and the offline production-promotion evidence verifier is
-complete. No production workflow or deploy has been implemented or authorized;
+complete. Since 2026-08-26 the work has been security-contract repair rather
+than new capability. The failed-auth throttle no longer denies service to valid
+keys and reads `X-Forwarded-For` right to left (FB-06), the reference Terraform
+no longer puts an S3 age clock on Iceberg objects (FB-11), the `pip-audit`
+gate can now waive an advisory upstream has not fixed under the same expiring,
+self-revoking rules as Trivy and Safety (FB-02), and the release version numbers
+mean the same thing across the runtime, the SDKs and the chart (FB-05, FB-08,
+FB-14). Three contracts that were fail-open are now fail-closed:
+`AGENTFLOW_PROFILE=production` refuses to boot while either digest pepper is
+left at the public constant committed to this repository (FB-07), every
+NetworkPolicy egress rule names its destinations and renders only for a feature
+the install actually configures (FB-09), and every refusal on the admin surface
+leaves a structured `admin_auth_failed` line rather than only a counter, with
+the rotation procedure for that shared credential now owned by
+[operations/admin-key-rotation.md](operations/admin-key-rotation.md) (FB-10). No production workflow or deploy has been implemented or authorized;
 target-dependent work is `BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT` pending
 the owner packet described in
-[`f19d-production-rollout-acceptance.md`](../f19d-production-rollout-acceptance.md).
+[`f19d-production-rollout-acceptance.md`](evidence/records/f19d-production-rollout-acceptance.md).
 
 ## Current gates
 
@@ -34,12 +48,12 @@ the owner packet described in
 | Readiness-baselined checkpoint hold | **`RUNTIME_HOLD_PASS`** (930 s, completed `7675→8614`, failed `1→1`; read-only, no traffic) | [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md) |
 | Kind residual canary | PASS | [perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md](perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md) |
 | Latest 4h soak identity `-05` | **`SOAK_FAIL`** (producer PASS; dual-mean ABORT) | [perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md) |
-| Corrected rollback mechanics | **PASS** (rev5 probe → rev6 = byte-identical rev3; no traffic) | [corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md) |
-| Full 4h soak + rollback after traffic | **`BLOCKED_HOST_CAPACITY`** | [ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md) |
+| Corrected rollback mechanics | **PASS** (rev5 probe → rev6 = byte-identical rev3; no traffic) | [corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md) |
+| Full 4h soak + rollback after traffic | **`BLOCKED_HOST_CAPACITY`** | [ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md) |
 | GitHub Environment `npm` approval | PASS (one required reviewer; not a four-eyes claim) | [operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md) |
-| Digest-only staging promotion | **PASS**; authorized run `33005146264`, exact staging-accepted digest, smoke/E2E and bounded artifact | [f19c-staging-digest-promotion.md](../f19c-staging-digest-promotion.md) |
-| Offline production-promotion verifier | **PASS**; focused `32/32`, retained staging artifact validates, tampering fails closed | [f19d-production-rollout-acceptance.md](../f19d-production-rollout-acceptance.md) |
-| Production rollout target | **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**; no production workflow/deploy or acceptance claim | [f19d-production-rollout-acceptance.md](../f19d-production-rollout-acceptance.md) |
+| Digest-only staging promotion | **PASS**; authorized run `33005146264`, exact staging-accepted digest, smoke/E2E and bounded artifact | [f19c-staging-digest-promotion.md](evidence/records/f19c-staging-digest-promotion.md) |
+| Offline production-promotion verifier | **PASS**; focused `32/32`, retained staging artifact validates, tampering fails closed | [f19d-production-rollout-acceptance.md](evidence/records/f19d-production-rollout-acceptance.md) |
+| Production rollout target | **`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`**; no production workflow/deploy or acceptance claim | [f19d-production-rollout-acceptance.md](evidence/records/f19d-production-rollout-acceptance.md) |
 | External pentest | **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** | [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md) |
 
 Historical soak chronology (canary1 catch-up fail, resource blockers, kind residual) lives in those evidence files — it is not retold here. None of the rows above is production acceptance.
@@ -108,12 +122,12 @@ separately authorized acceptance, deployment, or breaking-release program.
    ingress/TLS/proxy, smoke, monitoring, maintenance-window, and exact rollback
    identities are not supplied. Do not create or dispatch a production workflow
    until the packet passes the read-only preflight in
-   [f19d-production-rollout-acceptance.md](../f19d-production-rollout-acceptance.md).
+   [f19d-production-rollout-acceptance.md](evidence/records/f19d-production-rollout-acceptance.md).
 2. **Full 4h soak + rollback after traffic** —
    **`BLOCKED_HOST_CAPACITY`** on the current host
-   ([ci-soak-f02-capacity-decision-20260823-01.md](../ci-soak-f02-capacity-decision-20260823-01.md)).
+   ([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md)).
    Rollback *mechanics* are a separate **PASS**
-   ([corrected-rollback-pair-runtime-20260823-01.md](../corrected-rollback-pair-runtime-20260823-01.md))
+   ([corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md))
    and do not close this gate. Historical Helm revisions 1, 2, 4, and 5 are not
    rollback targets.
 3. **External pentest** — **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`**. Do not
@@ -121,10 +135,13 @@ separately authorized acceptance, deployment, or breaking-release program.
 4. **P2-6 Phase 3** — drop the deprecated `src` shim in the next **major**
    release ([plans/p2-6-runtime-namespace-migration.md](plans/p2-6-runtime-namespace-migration.md);
    consumer notes: [migration/v2.1.md](migration/v2.1.md)).
-5. **Flink-runtime dependency bump** — pinned `apache-flink==2.3.0` holds a
-   `safety` ignore for a non-fixable transitive `pyarrow` advisory (isolated to
-   the Flink image). Retire the ignore when the upstream flink/beam chain allows
-   it.
+5. **Non-fixable transitive advisories** — two waivers in
+   [`security/trivy-waivers.json`](../security/trivy-waivers.json) stand on
+   unreachability, not on a pending upgrade: the pinned `apache-flink==2.3.0`
+   chain holds `httplib2`/`pyarrow` advisories inside the Flink image, and
+   `nltk 3.10.3` carries `PYSEC-2026-3740`, which upstream has not fixed at all.
+   Each expires on its own date and fails its gate the day the premise stops
+   holding ([security-audit.md](security-audit.md) §8.1).
 
 ---
 

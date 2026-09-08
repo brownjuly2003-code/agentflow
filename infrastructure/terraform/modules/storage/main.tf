@@ -1,7 +1,6 @@
 variable "environment" { type = string }
 variable "lake_bucket_name" { type = string }
-variable "lifecycle_glacier_days" { type = number }
-variable "lifecycle_expire_days" { type = number }
+variable "noncurrent_version_expire_days" { type = number }
 
 # Customer-managed key so key rotation, usage audit and revocation stay in
 # project control instead of the AWS-managed aws/s3 key.
@@ -38,29 +37,36 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "lake" {
   }
 }
 
+# Nothing under `warehouse/` is on an S3 clock, and that is the whole rule.
+#
+# An Iceberg table is a set of manifests naming the data files a snapshot needs.
+# A file's age says nothing about whether some live snapshot still points at it,
+# so S3 expiration under the warehouse does not clean a table -- it makes the
+# table unreadable. Two rules here deleted on age anyway (audit FB-11):
+#
+#   * "raw-data-lifecycle" -- GLACIER after 90 days and expiration after 365 on
+#     prefix `warehouse/raw/`;
+#   * "iceberg-metadata" -- expiration after 30 days on `warehouse/metadata/`,
+#     under a comment claiming it "keeps snapshots for 30 days".
+#
+# Neither prefix matched anything. Iceberg lays tables out as
+# `<warehouse>/<namespace>/<table>/{metadata,data}/...` and the configured
+# namespace is `agentflow` (config/iceberg.yaml), so both rules were no-ops
+# wearing the language of a retention policy -- which is the trap. The next
+# person to notice they delete nothing reaches for the prefix the Flink sink
+# actually writes (`warehouse/`, modules/flink/main.tf), and the no-op becomes
+# a job that removes manifest lists and data files current snapshots reference.
+#
+# Snapshot expiry and orphan-file removal belong to the catalog, which knows
+# what is still referenced: `iceberg_snapshot_expiry` in
+# `src/agentflow_runtime/orchestration/dags/daily_batch.py`, and
+# `docs/runbook.md` (`system.expire_snapshots`). What is left below is what S3
+# alone owns: scratch state under `checkpoints/`, and the noncurrent versions
+# this bucket accrues because versioning is enabled.
 resource "aws_s3_bucket_lifecycle_configuration" "lake" {
   bucket = aws_s3_bucket.lake.id
 
-  # Raw data: move to Glacier after N days, expire after M days
-  rule {
-    id     = "raw-data-lifecycle"
-    status = "Enabled"
-
-    filter {
-      prefix = "warehouse/raw/"
-    }
-
-    transition {
-      days          = var.lifecycle_glacier_days
-      storage_class = "GLACIER"
-    }
-
-    expiration {
-      days = var.lifecycle_expire_days
-    }
-  }
-
-  # Checkpoints: expire after 7 days
+  # Checkpoints: Flink rewrites them constantly and never reads an old one.
   rule {
     id     = "checkpoint-cleanup"
     status = "Enabled"
@@ -74,17 +80,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "lake" {
     }
   }
 
-  # Iceberg metadata compaction: keep snapshots for 30 days
+  # Versioning is enabled on this bucket, so every overwrite and delete
+  # leaves a noncurrent version behind forever. Expiring those touches no
+  # object any snapshot can reference: a current object stays current.
   rule {
-    id     = "iceberg-metadata"
+    id     = "noncurrent-version-cleanup"
     status = "Enabled"
 
-    filter {
-      prefix = "warehouse/metadata/"
-    }
+    filter {}
 
-    expiration {
-      days = 30
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_version_expire_days
     }
   }
 }

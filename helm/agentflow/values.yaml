@@ -4,8 +4,18 @@ fullnameOverride: ""
 replicaCount: 1
 
 image:
-  repository: agentflow/api
-  tag: "2.0.0"
+  # The project's own registry, and that is the point. The previous default,
+  # `agentflow/api`, is an unclaimed Docker Hub namespace (audit FB-08): with
+  # pullPolicy IfNotPresent, any dev or staging install without a pre-loaded
+  # image would pull whatever a third party had since pushed there. A default
+  # that resolves to a stranger's image is worse than one that does not
+  # resolve at all.
+  repository: ghcr.io/brownjuly2003-code/agentflow-api
+  # Tracks Chart.appVersion. GHCR carries commit-SHA and `audit-<run-id>` tags,
+  # not semver ones, so this tag is a shape rather than a pullable reference:
+  # a dev install loads a local image or overrides repository/tag, and a
+  # production install sets `digest`, which wins outright.
+  tag: "2.1.0"
   # When set, the digest is authoritative and tag is ignored. Keep the empty
   # default for the laptop/dev install; profile=production requires a digest.
   digest: ""
@@ -119,6 +129,37 @@ networkPolicy:
   enabled: false
   ingressFromNamespaces:
     - kubernetes.io/metadata.name: ingress-nginx
+  # Set true only when Prometheus runs in the ingress-controller namespace,
+  # so an ingress-nginx-only ingressFromNamespaces list is deliberate.
+  # Production contract accepts that list only when this is true.
+  scrapeFromIngressNamespace: false
+  # Destinations for each egress rule, as raw NetworkPolicyPeer entries
+  # (podSelector / namespaceSelector / ipBlock). A Kubernetes egress rule with
+  # `ports:` and no `to:` allows those ports to EVERY address, in the cluster
+  # and out of it -- so an empty list here is the widest policy, not the
+  # narrowest (audit FB-09). The dev default leaves them empty because
+  # networkPolicy.enabled is false on a laptop install and nothing renders;
+  # production is refused until every rendered rule names its peers.
+  #
+  #   egressTo:
+  #     postgres:
+  #       - namespaceSelector:
+  #           matchLabels:
+  #             kubernetes.io/metadata.name: data
+  #         podSelector:
+  #           matchLabels:
+  #             app.kubernetes.io/name: postgresql
+  #     objectStore:
+  #       - ipBlock:
+  #           cidr: 10.20.0.0/16
+  egressTo:
+    redis: []
+    kafka: []
+    clickhouse: []
+    otlp: []
+    postgres: []
+    icebergCatalog: []
+    objectStore: []
   egressPorts:
     redis: 6379
     kafka: 9092
@@ -127,6 +168,21 @@ networkPolicy:
     postgres: 5432
     icebergCatalog: 8181
     objectStore: 9000
+
+# Scheduled pruning runs through the authenticated API so the API process
+# remains the sole owner of its DuckDB/PVC. retentionDays="" delegates the
+# window to QueryAnalyticsPolicy (30 days by default).
+analyticsRetention:
+  enabled: false
+  schedule: "0 3 * * *"
+  retentionDays: ""
+  dryRun: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  backoffLimit: 1
+  resources: {}
 
 # Kafka clients use the same fail-closed SASL/TLS contract. Credentials are
 # always read from an operator-managed Secret.
@@ -357,9 +413,18 @@ config:
   corsOrigins: http://localhost:3000
   # Comma-separated peers allowed to set X-Forwarded-For
   # (AGENTFLOW_TRUSTED_PROXIES). Empty means the failed-auth limiter keys on the
-  # immediate peer only. Required behind an ingress on profile=production, where
-  # the immediate peer is the ingress controller for every caller.
+  # immediate peer only. Required on profile=production behind any proxy --
+  # this chart's ingress or a gateway outside it -- because the immediate peer
+  # is then that proxy for every caller.
   trustedProxies: ""
+  gateway:
+    # Only meaningful when trustedProxies is empty. Declare true when the path
+    # in front of the API preserves the caller's source address (L4 passthrough,
+    # externalTrafficPolicy: Local, proxy protocol terminated below the app), so
+    # request.client.host really is the client. profile=production refuses a
+    # release that answers neither question: the failed-auth throttle and every
+    # client_ip in the logs are only as truthful as this answer (audit FB-06).
+    preservesClientIp: false
   redisUrl: ""
   otlpEndpoint: ""
   otlpServiceName: agentflow-api

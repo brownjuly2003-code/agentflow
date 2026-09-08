@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from agentflow_runtime.serving.api.analytics import (
@@ -18,6 +19,7 @@ from agentflow_runtime.serving.api.auth.manager import (
     KeyStoreReadOnlyError,
     is_permission_denied,
 )
+from agentflow_runtime.serving.api.query_analytics_policy import QueryAnalyticsPolicy
 
 router = APIRouter(
     prefix="/admin",
@@ -26,6 +28,17 @@ router = APIRouter(
 )
 
 _T = TypeVar("_T")
+
+
+class AnalyticsRetentionRequest(BaseModel):
+    retention_days: int | None = Field(default=None, ge=1)
+    dry_run: bool = False
+
+
+class AnalyticsRetentionResponse(BaseModel):
+    retention_days: int
+    dry_run: bool
+    deleted_rows: int | None
 
 
 def _key_store_conflict() -> HTTPException:
@@ -187,3 +200,30 @@ async def get_analytics_anomalies(
         return get_anomalies(manager.store, window=window)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/analytics/retention",
+    response_model=AnalyticsRetentionResponse,
+)
+async def prune_analytics_retention(
+    payload: AnalyticsRetentionRequest,
+    request: Request,
+) -> AnalyticsRetentionResponse:
+    manager = get_auth_manager(request)
+    retention_days = payload.retention_days
+    if retention_days is None:
+        retention_days = QueryAnalyticsPolicy.from_env().retention_days
+
+    deleted_rows: int | None = None
+    if not payload.dry_run:
+        deleted_rows = await run_in_threadpool(
+            manager.store.prune_api_sessions,
+            older_than_days=retention_days,
+        )
+
+    return AnalyticsRetentionResponse(
+        retention_days=retention_days,
+        dry_run=payload.dry_run,
+        deleted_rows=deleted_rows,
+    )

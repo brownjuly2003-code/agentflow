@@ -23,7 +23,7 @@ from scripts.golden_soak.gen_attempt_bundle import (
 
 R12_HEAD = "bfb82ecb6c66e5490db2d99bbdaf8b9da55f2082"
 # The exact values the r12 evidence recorded
-# (ci-soak-r12-preflight-fail-20260821-01.md).
+# (docs/evidence/records/ci-soak-r12-preflight-fail-20260821-01.md).
 R12_MARKER_TEXT = "ci-soak-output-bfb82ec-r12"
 R12_MARKER_SHA256 = "9853a9344b1378f968eb4f5c808c6541275746d6f5682a507b6d3294d4bfb6f2"
 

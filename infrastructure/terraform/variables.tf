@@ -65,16 +65,13 @@ variable "flink_parallelism_per_kpu" {
 
 # ── Storage ─────────────────────────────────────────────────────
 
-variable "storage_glacier_after_days" {
-  description = "Days before transitioning to Glacier"
+# Table retention is not an S3 setting: snapshot expiry and orphan removal
+# run through the Iceberg catalog, which knows what is still referenced
+# (audit FB-11). The bucket only ages out what it owns by itself.
+variable "storage_noncurrent_version_expire_days" {
+  description = "Days before expiring noncurrent object versions in the lake bucket"
   type        = number
-  default     = 90
-}
-
-variable "storage_expire_after_days" {
-  description = "Days before expiring objects"
-  type        = number
-  default     = 365
+  default     = 30
 }
 
 # ── Monitoring ──────────────────────────────────────────────────

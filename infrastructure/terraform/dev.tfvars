@@ -10,8 +10,7 @@ kafka_ebs_volume_size_gb = 100
 flink_parallelism         = 2
 flink_parallelism_per_kpu = 1
 
-storage_glacier_after_days = 90
-storage_expire_after_days  = 365
+storage_noncurrent_version_expire_days = 30
 
 sns_alert_topic_arn   = "arn:aws:sns:us-east-1:123456789012:agentflow-dev-alerts"
 freshness_sla_seconds = 30

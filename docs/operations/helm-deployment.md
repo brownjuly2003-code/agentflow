@@ -44,17 +44,27 @@ The chart deploys the API only. Redis, Kafka, Prometheus, Grafana, Jaeger, and o
 
 ## Prepare an image
 
-The default chart values expect an image named `agentflow/api:2.0.0`.
-
-If you are using Minikube, build or load an image before the install:
+The default `image.repository` is `ghcr.io/brownjuly2003-code/agentflow-api`,
+the registry this project actually publishes to, with `image.tag` tracking
+`Chart.appVersion`. That tag is a shape, not a pullable reference: the container
+workflow pushes commit-SHA and `audit-<run-id>` tags, never semver ones. So a
+dev install does one of two things — build locally and load the image, or
+override `image.repository` and `image.tag` to wherever your image lives.
 
 ```bash
-minikube image load agentflow/api:2.0.0
+# Build locally, then load it under whatever name you set image.repository to:
+minikube image load agentflow-api:dev
+helm install agentflow helm/agentflow \
+  --set image.repository=agentflow-api --set image.tag=dev
 ```
 
-For a dev install, override `image.repository` and `image.tag`. Production
-renders require `image.digest`; when present, every API-derived Deployment and
-provision Job uses `repository@digest` and ignores the tag.
+The default deliberately does not point at a bare Docker Hub namespace. It used
+to name `agentflow/api`, which nobody owns: with `pullPolicy: IfNotPresent`, an
+install without a pre-loaded image would have pulled whatever a third party had
+pushed there.
+
+Production renders require `image.digest`; when present, every API-derived
+Deployment and provision Job uses `repository@digest` and ignores the tag.
 
 ## Install
 
@@ -135,7 +145,21 @@ helm upgrade --install agentflow ./helm/agentflow   -f helm/agentflow/values-pro
 
 The overlay leaves empty exactly the values only your environment can supply
 (the verified API image digest, the Secret name, the origins, the ingress
-class/hosts/TLS, the trusted proxies). Render is fail-closed:
+class/hosts/TLS, the trusted proxies, the Prometheus scrape namespace, the two
+pepper `extraEnv` entries and the egress destinations described below).
+Helm replaces lists instead of merging them — an environment file that
+names only the scrape namespace removes the ingress-controller entry and
+blocks the production Ingress. Repeat both selectors in the environment
+file:
+
+```yaml
+networkPolicy:
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: ingress-nginx
+    - kubernetes.io/metadata.name: monitoring
+```
+
+Render is fail-closed:
 `templates/production-contract.yaml` refuses a
 `profile=production` render that still violates the contract and reports every
 violation in one message, so you fix the whole set in one pass. It checks:
@@ -144,11 +168,20 @@ violation in one message, so you fix the whole set in one pass. It checks:
 | --- | --- |
 | `image.digest=sha256:...` | Every API-derived workload consumes one immutable artifact; a tag cannot prove staging/release identity |
 | `networkPolicy.enabled=true` | Default-deny baseline; needs a NetworkPolicy controller in the cluster |
+| `networkPolicy.ingressFromNamespaces` not empty; not every `kubernetes.io/metadata.name` equal to `ingress-nginx` | `/metrics` is unauthenticated for in-cluster scrape; the NetworkPolicy is the allow-list. An empty list renders `ingress: []` (deny all), so neither the ingress controller nor Prometheus can reach the service port. An empty-map entry (`{}`) matches every namespace and is refused. A non-empty list is refused when every entry that carries `kubernetes.io/metadata.name` equals `ingress-nginx` and no non-empty entry lacks that key (a non-empty entry selecting by another label counts as other and passes), unless `networkPolicy.scrapeFromIngressNamespace=true` records that Prometheus deliberately runs in the ingress-controller namespace |
+| `service.type=ClusterIP` | NodePort/LoadBalancer publish the service port (`/metrics` included) without any Ingress rule; ExternalName turns the Service into a CNAME and voids the routing contract |
 | `secrets.create=false` + `existingSecret` | Values persist in Helm release metadata and shell history |
 | Empty `secrets.adminKey` / `apiKeys.keys` | Inline key material is dev-only |
+| `extraEnv` sets `AGENTFLOW_KEY_LOOKUP_PEPPER` and `AGENTFLOW_QUERY_FINGERPRINT_PEPPER`, each via `valueFrom.secretKeyRef` | Both peppers fall back to constants committed to this repository, and the app refuses to boot on production without them. A literal `value:` is refused for the same reason `secrets.create=true` is |
+| `networkPolicy.egressTo.<service>` non-empty for every egress rule that renders | An egress rule with `ports:` and no `to:` allows that port to every address, in the cluster and on the internet, so the default-deny baseline denies nothing there |
 | `ingress.hosts` non-empty when ingress is enabled | An Ingress with no rules routes nothing |
+| Every `ingress.hosts[]` entry has a non-empty `paths` list | An Ingress rule with no HTTP paths is invalid and routes nothing |
 | `ingress.tls` non-empty when ingress is enabled | TLS terminates somewhere you can point at |
-| `config.trustedProxies` set when ingress is enabled | Behind a proxy every caller otherwise shares the controller's address, which is what the failed-auth limiter keys on |
+| `ingress.annotations` has none of `rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, or `server-snippet` under `nginx.ingress.kubernetes.io/` or legacy `ingress.kubernetes.io/` | ingress-nginx interprets these routing-control annotations after Helm checks the literal host/path, so they can change matching or the upstream URI and reach `/metrics` |
+| `ingress.hosts[].paths[]` must not route `/metrics` | `/metrics` is unauthenticated for in-cluster scrape; enumerate the public prefixes instead of Prefix `/` ([Production ingress and `/metrics`](../deployment.md#production-ingress-and-metrics)) |
+| `pathType` is `Prefix` or `Exact` | Controller-defined matching cannot be proven at render time, so ImplementationSpecific cannot be shown to keep `/metrics` off Ingress |
+| `path` matches `^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$`; `host` and `className` match `^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$` | Canonical single-line routing values exclude whitespace, YAML injection, and controller-ambiguous spellings that could expose unmatched `/metrics` |
+| `config.trustedProxies` non-empty, or `config.gateway.preservesClientIp=true` | Behind any proxy -- this chart's ingress or a gateway outside it -- every caller otherwise shares that proxy's address, which is what the failed-auth limiter keys on and what every logged `client_ip` reports. `ingress.enabled=false` no longer makes the question disappear: name the peers, or declare that the path preserves the caller's source address |
 | Explicit `config.corsOrigins` | CORS runs with credentials; a wildcard lets any site read authenticated responses, and the chart's `localhost` default is not an answer |
 | `serving.clickhouse.secure=true` | No plaintext hop to an external ClickHouse |
 | `config.redisUrl` on `rediss://` | Same, for Redis |
@@ -160,7 +193,15 @@ considered decision -- in-cluster traffic behind a NetworkPolicy, say -- is
 named per store in `AGENTFLOW_INSECURE_TRANSPORT_OK` through `extraEnv`, the
 same greppable opt-out the runtime honours at boot. And terminating TLS in a
 gateway ahead of the chart is a legitimate topology: set `ingress.enabled=false`
-and the TLS and trusted-proxy clauses stop applying.
+and the TLS and trusted-proxy clauses stop applying. That move puts the routing
+decision, and the `/metrics` exposure question, outside this chart.
+
+The annotation clause is an exact denylist on the Ingress object rendered by
+this chart. It does not constrain the ingress-nginx controller ConfigMap or
+separately managed Ingress objects; review those cluster-level inputs as part
+of the platform routing policy. Unrelated annotations such as
+`cert-manager.io/cluster-issuer`, `nginx.ingress.kubernetes.io/ssl-redirect`,
+and `nginx.ingress.kubernetes.io/proxy-body-size` remain available.
 
 Enforced elsewhere, so the contract does not repeat it: Kafka SASL/TLS for
 every Kafka workload (`templates/_kafka.tpl`), plaintext external stores at boot
@@ -282,6 +323,79 @@ in-cluster traffic already constrained by the chart's NetworkPolicy — must be
 named explicitly via `extraEnv`:
 `AGENTFLOW_INSECURE_TRANSPORT_OK="clickhouse,redis"`. A wildcard
 `config.corsOrigins` is likewise refused outside demo mode.
+
+### Egress destinations
+
+`policyTypes: [Ingress, Egress]` makes the NetworkPolicy an allow-list in both
+directions, but a Kubernetes egress rule with `ports:` and no `to:` allows that
+port to **every** address — other namespaces, the node network, the internet.
+The chart used to render exactly that for Redis, Kafka, Iceberg, the object
+store, ClickHouse, OTLP and PostgreSQL, so the baseline denied nothing on
+6379/9092/8181/9000/8123/4317/5432 (audit FB-09).
+
+Each rule now takes its peers from `networkPolicy.egressTo.<service>`, as raw
+`NetworkPolicyPeer` entries — `podSelector`, `namespaceSelector`, `ipBlock`, or
+a combination:
+
+```yaml
+networkPolicy:
+  egressTo:
+    kafka:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: data
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: kafka
+    postgres:
+      - ipBlock:
+          cidr: 10.30.4.0/24     # managed PostgreSQL outside the cluster
+```
+
+A rule only renders when its feature is configured, and the contract asks only
+for the rules that render. On the chart defaults — DuckDB, no `config.redisUrl`,
+no `config.otlpEndpoint`, the embedded control plane, `lakeMaterializer` off —
+that is Kafka alone; switching on ClickHouse, Redis, OTLP, PostgreSQL or the
+lake materializer adds its own. DNS is the one rule the chart owns outright: it
+selects kube-dns by label in whichever namespace it runs.
+
+### Pepper material
+
+Two environment variables domain-separate digests the API stores, and both fall
+back to constants committed to this repository:
+
+| Variable | Peppers | Left at the default |
+| --- | --- | --- |
+| `AGENTFLOW_KEY_LOOKUP_PEPPER` | `key_lookup`, an HMAC-SHA256 of the API key itself, stored beside the argon2id hash so authentication resolves the candidate in O(1) | A leaked `api_keys.yaml` lets a guessed key be confirmed against the stored digest with one HMAC and no argon2id verify, and lets two deployments' digests be joined into one identity (audit FB-07) |
+| `AGENTFLOW_QUERY_FINGERPRINT_PEPPER` | Query-analytics fingerprints | A leaked analytics table can be joined against question digests computed anywhere else (audit AF-13) |
+
+`config.profile=production` refuses to boot with either unset or left at its
+default, and the production contract refuses the render before that. Both are
+supplied through `extraEnv`, projected from the Secret your secrets operator or
+CSI driver manages — never as a literal `value:`, which would park the pepper in
+Helm release metadata and in the shell history of whoever ran the upgrade:
+
+```yaml
+extraEnv:
+  - name: AGENTFLOW_KEY_LOOKUP_PEPPER
+    valueFrom:
+      secretKeyRef:
+        name: agentflow-production-secret   # your secrets.existingSecret
+        key: key-lookup-pepper
+  - name: AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+    valueFrom:
+      secretKeyRef:
+        name: agentflow-production-secret
+        key: query-fingerprint-pepper
+```
+
+Helm replaces lists rather than merging them, so this block must carry every
+`extraEnv` entry the release needs, `AGENTFLOW_INSECURE_TRANSPORT_OK` included.
+
+Rotating the lookup pepper is not free: it invalidates every stored
+`key_lookup`, and authentication falls back to the O(n) verify scan until the
+keys are re-issued. See
+[`docs/runbooks/auth-401-spike.md`](../runbooks/auth-401-spike.md).
 
 `k8s/staging/values-staging-scale.yaml.example` is a ready overlay:
 

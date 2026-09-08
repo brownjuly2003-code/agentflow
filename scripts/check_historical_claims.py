@@ -8,8 +8,10 @@ Pages under ``docs/archive``, ``docs/decisions``, ``docs/evidence``,
 may quote a dated fact, but they must never restate that living vocabulary in
 their own voice, because nobody updates them when the truth moves. Every
 tracked Markdown page under those directories is checked, except ``README.md``
-index pages (matched by basename) and the living indexes in
-``LIVING_INDEX_PAGES``.
+index pages (matched by basename), the living indexes in
+``LIVING_INDEX_PAGES``, digest-pinned records under
+``IMMUTABLE_RECORD_DIRECTORIES``, and byte-preserved records in
+``IMMUTABLE_RECORD_PAGES``.
 
 Matching is a plain case-insensitive substring test per line: no regex, no word
 boundaries, so what fails is exactly what a reader can grep. This module
@@ -39,6 +41,17 @@ HISTORICAL_DIRECTORIES = (
 # Living pages that sit inside a historical directory. ``README.md`` index
 # pages are exempt everywhere by basename and need no entry here.
 LIVING_INDEX_PAGES = frozenset({"docs/evidence/INDEX.md"})
+
+# Immutable digest-pinned records relocated from the repository root on
+# 2026-09-02 (T-23). Their bytes are pinned by tests/unit/test_docs_evidence_index.py,
+# so a historical "Updated:" stamp inside them can never be rewritten; the
+# ratchet skips the directory instead of asking for an impossible edit.
+IMMUTABLE_RECORD_DIRECTORIES = ("docs/evidence/records",)
+
+# Completed implementation plan retained byte-for-byte as closure evidence.
+# Its historical body documents the vocabulary enforced by this checker, so
+# rewriting those lines would weaken the preserved audit trail.
+IMMUTABLE_RECORD_PAGES = frozenset({"docs/archive/plans/documentation-optimization-2026-08-26.md"})
 
 CLAIM_OWNERS = (
     "docs/STATUS.md",
@@ -90,11 +103,19 @@ def is_historical_page(path: str) -> bool:
         return False
     if relative in LIVING_INDEX_PAGES:
         return False
+    if relative in IMMUTABLE_RECORD_PAGES:
+        return False
     posix = PurePosixPath(relative)
     if posix.name == "README.md":
         return False
+    parent = str(posix.parent)
+    if any(
+        parent == directory or parent.startswith(f"{directory}/")
+        for directory in IMMUTABLE_RECORD_DIRECTORIES
+    ):
+        return False
     return any(
-        directory == str(posix.parent) or str(posix.parent).startswith(f"{directory}/")
+        directory == parent or parent.startswith(f"{directory}/")
         for directory in HISTORICAL_DIRECTORIES
     )
 

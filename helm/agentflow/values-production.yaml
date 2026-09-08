@@ -39,10 +39,17 @@ config:
   # responses.
   corsOrigins: ""
 
-  # REQUIRED when ingress.enabled=true. Comma-separated peers allowed to set
-  # X-Forwarded-For. Behind an ingress controller every caller otherwise shares
-  # one source address, which is what the failed-auth limiter keys on.
+  # REQUIRED behind any proxy, this chart's ingress or a gateway outside it.
+  # Comma-separated peers allowed to set X-Forwarded-For. Behind a proxy every
+  # caller otherwise shares one source address, which is what the failed-auth
+  # limiter keys on and what every client_ip in the logs reports.
   trustedProxies: ""
+  gateway:
+    # The alternative answer, for a path that preserves the caller's source
+    # address (L4 passthrough, externalTrafficPolicy: Local). Production refuses
+    # a release that leaves both this and trustedProxies empty -- silence used to
+    # pass as long as ingress.enabled was false (audit FB-06).
+    preservesClientIp: false
 
   # Mirrors canonical config/security.yaml. Spelled out rather than inherited
   # so a drift in the chart defaults cannot quietly weaken a production
@@ -63,8 +70,55 @@ config:
 
 # Default-deny baseline with explicit ingress/egress. The cluster needs a
 # NetworkPolicy controller for this to mean anything -- verify, do not assume.
+#
+# /metrics is unauthenticated so in-cluster Prometheus can scrape the ClusterIP
+# Service. The NetworkPolicy is the allow-list. This overlay keeps the chart
+# default (ingress-controller namespace only) and does not guess a scrape
+# namespace. The production contract refuses that unedited list until the
+# operator names the namespace that runs Prometheus, or sets
+# networkPolicy.scrapeFromIngressNamespace: true when Prometheus is
+# co-located in the ingress-controller namespace. Same pattern as
+# image.digest and secrets.existingSecret.
 networkPolicy:
   enabled: true
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: ingress-nginx
+    # - kubernetes.io/metadata.name: monitoring   # <- replace with the namespace that runs Prometheus
+
+  # REQUIRED for every rule the policy renders. A Kubernetes egress rule with
+  # `ports:` and no `to:` allows that port to EVERY address, in the cluster and
+  # on the internet -- so the baseline was denying nothing on
+  # 6379/9092/8123/4317/5432 (audit FB-09). Left empty here because only the
+  # environment knows where its stores live; the contract names each missing
+  # one. Which rules render follows what is configured, so a DuckDB install
+  # with no Redis is asked for `kafka` alone:
+  #
+  #   egressTo:
+  #     kafka:
+  #       - namespaceSelector:
+  #           matchLabels:
+  #             kubernetes.io/metadata.name: data
+  #         podSelector:
+  #           matchLabels:
+  #             app.kubernetes.io/name: kafka
+  #     postgres:
+  #       - ipBlock:
+  #           cidr: 10.30.4.0/24     # managed PostgreSQL outside the cluster
+  egressTo:
+    redis: []
+    kafka: []
+    clickhouse: []
+    otlp: []
+    postgres: []
+    icebergCatalog: []
+    objectStore: []
+
+# The API owns query-analytics storage; this job only calls its authenticated
+# admin endpoint. Production must execute the final prune and forbid overlap.
+analyticsRetention:
+  enabled: true
+  dryRun: false
+  concurrencyPolicy: Forbid
 
 # Key material stays outside Helm: values land in release metadata and shell
 # history. Point existingSecret at the Secret your secrets operator or CSI
@@ -76,9 +130,87 @@ secrets:
   apiKeys:
     keys: []
 
+# REQUIRED. Two peppers domain-separate the digests the API stores, and both
+# fall back to constants committed to this repository:
+#
+#   AGENTFLOW_KEY_LOOKUP_PEPPER        peppers `key_lookup`, an HMAC of the API
+#                                      key itself. With the public default, a
+#                                      leaked api_keys.yaml lets a guessed key
+#                                      be confirmed against the stored digest
+#                                      without paying for an argon2id verify,
+#                                      and lets two deployments' digests be
+#                                      joined into one identity (audit FB-07).
+#   AGENTFLOW_QUERY_FINGERPRINT_PEPPER peppers query-analytics fingerprints, so
+#                                      a leaked analytics table cannot be joined
+#                                      against question digests computed
+#                                      elsewhere (audit AF-13).
+#
+# The API refuses to boot on profile=production with either unset or left at
+# its default, and the production contract refuses the render before that.
+#
+# They live in extraEnv rather than in a `secrets.*` value on purpose: values
+# persist in Helm release metadata and shell history, which is the same reason
+# secrets.create=true is refused above. Project them from the Secret your
+# secrets operator or CSI driver manages -- a literal `value:` here is refused.
+#
+# Rotation is not free: changing the lookup pepper invalidates every stored
+# `key_lookup`, and authentication falls back to the O(n) verify scan until the
+# keys are re-issued. See docs/runbooks/auth-401-spike.md.
+# Left empty here because only the environment knows the Secret's name; supply
+# the whole list in my-environment.yaml, which replaces this one:
+#
+#   extraEnv:
+#     - name: AGENTFLOW_KEY_LOOKUP_PEPPER
+#       valueFrom:
+#         secretKeyRef:
+#           name: agentflow-production-secret   # <- your secrets.existingSecret
+#           key: key-lookup-pepper
+#     - name: AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+#       valueFrom:
+#         secretKeyRef:
+#           name: agentflow-production-secret
+#           key: query-fingerprint-pepper
+extraEnv: []
+
+# production-contract.yaml: production must keep the API on a ClusterIP Service
+service:
+  type: ClusterIP
+
 # TLS terminates here by default. If your platform terminates it in a gateway
 # ahead of the chart, set ingress.enabled=false and record that decision --
-# the contract then stops asking for `tls` and for trustedProxies.
+# the contract then stops asking for `tls`. It keeps asking whose address the
+# pod will observe: answer with config.trustedProxies or with
+# config.gateway.preservesClientIp.
+#
+# Production ingress must not route /metrics (audit F-10). That endpoint is
+# unauthenticated by design so in-cluster Prometheus can scrape the ClusterIP
+# Service. A Prefix path of `/` or `/metrics` is refused, as is Exact `/metrics`
+# (Exact `/` matches only `/` and cannot reach the mount). pathType
+# ImplementationSpecific is refused (controller-defined matching cannot be
+# proven). The exact ingress-nginx routing-control annotations rewrite-target,
+# use-regex, app-root, configuration-snippet and server-snippet are also
+# refused under both `nginx.ingress.kubernetes.io/` and the legacy
+# `ingress.kubernetes.io/` prefix: the controller applies them after Helm has
+# checked the literal paths. Other annotations remain available. This binds
+# only the Ingress rendered by this chart, not the controller ConfigMap or
+# separately managed Ingress objects.
+#
+# Enumerate the public prefixes instead of Prefix `/`, for example:
+#
+#   hosts:
+#     - host: api.example.com
+#       paths:
+#         - path: /v1
+#           pathType: Prefix
+#         - path: /admin
+#           pathType: Prefix
+#
+# Interactive docs and the OpenAPI schema are demo/development surfaces. The
+# application returns 404 for /docs, /redoc, and /openapi* in production; do
+# not add them to the production Ingress.
+#
+# Or route metrics on a separate internal-only host/ingress. Dev defaults in
+# values.yaml stay `path: /` -- the guard is production-only.
 ingress:
   enabled: true
   className: ""  # empty selects the cluster's default IngressClass -- name it

@@ -11,12 +11,14 @@ ROOT = Path(__file__).resolve().parents[2]
 INDEX = ROOT / "docs" / "operations" / "README.md"
 
 CURRENT_PROCEDURES = {
+    "docs/operations/admin-key-rotation.md",
     "docs/operations/api-duckdb-non-target-scratch-rehearsal-runbook.md",
     "docs/operations/aws-oidc-setup.md",
     "docs/operations/cdc-production-onboarding.md",
     "docs/operations/chaos-runbook.md",
     "docs/operations/ci-soak-next-session-runbook.md",
     "docs/operations/codecov-setup.md",
+    "docs/operations/cycle-guard.md",
     "docs/operations/disaster-recovery.md",
     "docs/operations/external-dependency-recovery-gate.md",
     "docs/operations/flink-operators.md",
@@ -30,6 +32,7 @@ ACTIVE_REFERENCES = {
     "docs/operations/api-duckdb-persistence-recovery-design.md",
     "docs/operations/ci-soak-compose-foundation.md",
     "docs/operations/openssf-security-posture.md",
+    "docs/operations/windows-verification.md",
 }
 
 CONSUMED_OR_DATED_RECORDS = {

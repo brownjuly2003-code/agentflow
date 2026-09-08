@@ -18,12 +18,14 @@ a procedure, not an authorization to run it.
 
 | Need | Owning document | Boundary |
 | --- | --- | --- |
+| Rotate the shared admin credential | [Admin key rotation](admin-key-rotation.md) | Requires write access to the externally managed Secret; admin calls fail while the rollout runs |
 | Prepare a fresh non-target DuckDB capability rehearsal | [Current non-target scratch rehearsal](api-duckdb-non-target-scratch-rehearsal-runbook.md) | `READY_NOT_AUTHORIZED`; identity preparation is local, while execution needs separate exact authorization |
 | Configure Terraform's AWS identity | [AWS OIDC setup](aws-oidc-setup.md) | Repository and AWS owner inputs must already exist |
 | Attach a production CDC source | [Production CDC source onboarding](cdc-production-onboarding.md) | Complete the decision record and no-go checks before rollout |
 | Run or triage controlled fault injection | [Chaos runbook](chaos-runbook.md) | Preserve the severity and exit criteria |
 | Resume CI-soak work | [CI-soak next-session runbook](ci-soak-next-session-runbook.md) | Live repository facts override copied handoff text; external actions still need authority |
-| Connect coverage reporting | [Codecov setup](codecov-setup.md) | Distinguishes repository wiring from external service state |
+| Decide on external coverage reporting | [Codecov setup](codecov-setup.md) | No workflow uploads coverage; the tracked config is policy the claims validator pins |
+| Limit delegated agent retries after a failed atomic item | [Cycle guard](cycle-guard.md) | Two attempts per named atomic item; one read-only diagnostic after FAIL; no raw retry of the same workload; preflight is mandatory before delegating |
 | Back up, restore, or rehearse host loss | [Disaster recovery runbook](disaster-recovery.md) | Follow the data-preservation and drill boundaries |
 | Recover dependencies after the recorded Colima lifecycle gap | [External dependency recovery gate](external-dependency-recovery-gate.md) | The recorded pass does not establish workload or production readiness |
 | Operate Flink jobs | [Flink operator reference](flink-operators.md) | Detailed job and checkpoint guidance; general service triage stays in the operational runbook |
@@ -42,6 +44,7 @@ are inputs to later work, not general-purpose procedures.
 | [API DuckDB persistence and recovery design](api-duckdb-persistence-recovery-design.md) | Current preservation/recovery authorization-boundary owner | Status is `CAPABILITY_REHEARSAL_REQUIRED`; it is not an approved operator runbook |
 | [CI-soak Compose foundation](ci-soak-compose-foundation.md) | Topology and historical implementation reference | Its runtime-status sequence is superseded; resume from the current CI-soak runbook above |
 | [OpenSSF security posture](openssf-security-posture.md) | Scope and interpretation of free supply-chain posture signals | Neither Scorecard nor self-certification is a penetration test or attestation |
+| [Windows verification memory](windows-verification.md) | What the sharded Windows suite's per-process budget is spent on, measured | Describes the test host; pinning the same variables in the API image is an owner decision that page does not take |
 
 ## Consumed and dated records
 

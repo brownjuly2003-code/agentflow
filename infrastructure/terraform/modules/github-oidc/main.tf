@@ -13,12 +13,26 @@ locals {
   environment_subjects = [for environment in var.allowed_environments : "repo:${var.github_org}/${var.github_repo}:environment:${environment}"]
   allowed_subjects     = concat(local.branch_subjects, local.environment_subjects)
   lake_bucket_arn      = "arn:${data.aws_partition.current.partition}:s3:::${local.project_prefix}-lake-*"
-  state_bucket_arn     = "arn:${data.aws_partition.current.partition}:s3:::agentflow-terraform-state"
-  state_object_arn     = "${local.state_bucket_arn}/infrastructure/terraform.tfstate"
-  state_prefix_arn     = "${local.state_bucket_arn}/infrastructure/*"
-  state_table_arn      = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/agentflow-terraform-locks"
-  oidc_provider_arn    = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.oidc_provider_host}"
-  terraform_role_arn   = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.project_prefix}-terraform-*"
+  state_bucket_name    = "agentflow-terraform-state"
+  state_bucket_arn     = "arn:${data.aws_partition.current.partition}:s3:::${local.state_bucket_name}"
+  state_object_arns = [
+    for environment in var.state_environments :
+    "${local.state_bucket_arn}/env/${environment}/terraform.tfstate"
+  ]
+  state_prefix_arns = [
+    for environment in var.state_environments :
+    "${local.state_bucket_arn}/env/${environment}/*"
+  ]
+  state_table_arn = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/agentflow-terraform-locks"
+  # S3 backend LockID is <bucket>/<key>; Terraform also writes a <key>-md5 digest item.
+  state_lock_ids = flatten([
+    for environment in var.state_environments : [
+      "${local.state_bucket_name}/env/${environment}/terraform.tfstate",
+      "${local.state_bucket_name}/env/${environment}/terraform.tfstate-md5",
+    ]
+  ])
+  oidc_provider_arn  = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.oidc_provider_host}"
+  terraform_role_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.project_prefix}-terraform-*"
   service_role_arns = [
     "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.project_prefix}-flink-*",
     "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.project_prefix}-grafana-*",
@@ -83,23 +97,32 @@ data "aws_iam_policy_document" "terraform" {
       "s3:GetObject",
       "s3:PutObject",
     ]
-    resources = [
-      local.state_object_arn,
-      local.state_prefix_arn,
-    ]
+    resources = concat(local.state_object_arns, local.state_prefix_arns)
   }
 
   statement {
-    sid    = "TerraformStateLockTable"
+    sid       = "TerraformStateLockTableDescribe"
+    effect    = "Allow"
+    actions   = ["dynamodb:DescribeTable"]
+    resources = [local.state_table_arn]
+  }
+
+  statement {
+    sid    = "TerraformStateLockItems"
     effect = "Allow"
     actions = [
       "dynamodb:DeleteItem",
-      "dynamodb:DescribeTable",
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
     ]
     resources = [local.state_table_arn]
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "dynamodb:LeadingKeys"
+      values   = local.state_lock_ids
+    }
   }
 
   # List cannot be resource-scoped; every mutating OIDC-provider verb below is

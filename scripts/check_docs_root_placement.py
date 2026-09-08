@@ -1,4 +1,4 @@
-"""Enforce the tracked Markdown allowlist directly under ``docs/``."""
+"""Enforce tracked Markdown allowlists under ``docs/`` and the repository root."""
 
 from __future__ import annotations
 
@@ -63,6 +63,17 @@ ROOT_MARKDOWN_ALLOWLIST = frozenset().union(
     GENERATED_REFERENCE_ROOT,
 )
 
+# Permanent project-facing Markdown that may sit directly under the repository root.
+REPO_ROOT_MARKDOWN_ALLOWLIST = frozenset(
+    {
+        "README.md",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "AGENTS.md",
+    }
+)
+
 
 def load_tracked_paths(root: Path) -> set[str] | None:
     """Return Git-tracked paths, or ``None`` when the inventory is unavailable."""
@@ -106,25 +117,55 @@ def check_root_markdown_placement(tracked_paths: Iterable[str]) -> list[str]:
     ]
 
 
+def _tracked_repo_root_markdown(tracked_paths: Iterable[str]) -> set[str]:
+    root_docs: set[str] = set()
+    for raw_path in tracked_paths:
+        relative = raw_path.replace("\\", "/")
+        path = PurePosixPath(relative)
+        if path.parent == PurePosixPath(".") and path.suffix.lower() == ".md":
+            root_docs.add(relative)
+    return root_docs
+
+
+def check_repo_root_markdown_placement(tracked_paths: Iterable[str]) -> list[str]:
+    """Report missing allowlisted pages and unexpected tracked repo-root pages."""
+
+    actual = _tracked_repo_root_markdown(tracked_paths)
+    missing = sorted(REPO_ROOT_MARKDOWN_ALLOWLIST - actual)
+    unexpected = sorted(actual - REPO_ROOT_MARKDOWN_ALLOWLIST)
+    return [
+        *(f"missing allowed repository-root Markdown: {path}" for path in missing),
+        *(f"unexpected tracked repository-root Markdown: {path}" for path in unexpected),
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     args = parser.parse_args(argv)
 
-    tracked = load_tracked_paths(args.root.resolve())
+    root = args.root.resolve()
+    tracked = load_tracked_paths(root)
     if tracked is None:
         print("docs root placement: FAIL")
         print("git ls-files inventory unavailable")
         return 1
 
-    problems = check_root_markdown_placement(tracked)
+    problems = [
+        *check_root_markdown_placement(tracked),
+        *check_repo_root_markdown_placement(tracked),
+    ]
     if problems:
         print("docs root placement: FAIL")
         for problem in problems:
             print(problem)
         return 1
 
-    print(f"docs root placement: OK ({len(ROOT_MARKDOWN_ALLOWLIST)} allowed files)")
+    print(
+        "docs root placement: OK "
+        f"({len(ROOT_MARKDOWN_ALLOWLIST)} docs/ files, "
+        f"{len(REPO_ROOT_MARKDOWN_ALLOWLIST)} repository-root files)"
+    )
     return 0
 
 

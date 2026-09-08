@@ -1,0 +1,13 @@
+# Repository-side ownership for review-sensitive surfaces.
+/.github/** @brownjuly2003-code
+/infrastructure/** @brownjuly2003-code
+/helm/** @brownjuly2003-code
+/src/agentflow_runtime/serving/api/auth/** @brownjuly2003-code
+/src/agentflow_runtime/serving/api/middleware/** @brownjuly2003-code
+/scripts/release.py @brownjuly2003-code
+/scripts/evaluate_trivy_policy.py @brownjuly2003-code
+/scripts/run_pip_audit_scan.py @brownjuly2003-code
+/security/trivy-waivers.json @brownjuly2003-code
+/config/project_claims.toml @brownjuly2003-code
+/SECURITY.md @brownjuly2003-code
+/docs/release-*.md @brownjuly2003-code

@@ -84,9 +84,13 @@ posture -- plaintext Kafka, Redis and ClickHouse on loopback, dev credentials,
 no TLS. The API runs with `AGENTFLOW_DEMO_MODE=true`, which the runtime refuses
 to combine with `AGENTFLOW_PROFILE=production`, so this stack cannot be
 relabelled into a production one by flipping a variable.
-The same profile also refuses to boot without an operator-supplied
-`AGENTFLOW_QUERY_FINGERPRINT_PEPPER` (audit AF-13): the built-in query
-fingerprint pepper is a public constant and is accepted on demo and dev only.
+The same profile also refuses to boot without operator-supplied values for
+`AGENTFLOW_QUERY_FINGERPRINT_PEPPER` (audit AF-13) and
+`AGENTFLOW_KEY_LOOKUP_PEPPER` (audit FB-07): both built-in peppers are public
+constants and are accepted on demo and dev only. Under Helm they are projected
+from the operator-managed Secret through `extraEnv`, and the production values
+contract refuses a render that omits either
+([helm-deployment.md](operations/helm-deployment.md#pepper-material)).
 
 The local auth contract is explicit: the API loads `config/api_keys.yaml` and
 demo mode adds the published `demo-key`, so `/v1` routes answer 401 without a
@@ -115,8 +119,34 @@ The repository includes Helm and Kubernetes assets for staging-shaped workflow
 rehearsal. They are intended to help operators render manifests, test chart
 defaults, and prepare rollout work. A real environment still needs
 operator-owned image promotion, secrets, ingress and TLS, capacity, monitoring,
-rollback, and network isolation. Exact values and fail-closed checks stay in
-the operator reference.
+rollback, and network isolation. This page carries that boundary and the
+canonical public-prefix list below; the production contract's clause table
+lives in the [Helm operator reference](operations/helm-deployment.md).
+
+## Production ingress and `/metrics`
+
+Prometheus scrapes `/metrics` in-cluster through the ClusterIP Service; the
+endpoint is unauthenticated by design. A production Ingress
+(`config.profile=production`) must not route it: the chart's production
+contract rejects a values file whose host paths would send `/metrics` to the
+API. Enumerate only the production path prefixes below instead of `path: /`
+(or expose metrics on a separate internal-only host/ingress). Dev chart
+defaults keep `path: /` and are unchanged.
+
+```
+/v1
+/admin
+```
+
+The interactive documentation and schema paths are development surfaces, not
+production ingress prefixes. With `config.profile=production`, the application
+returns `404` for `/docs`, `/redoc`, and `/openapi*`; do not publish them through
+the production Ingress. `/docs` and `/openapi.json` are auth-exempt outside
+production, while `/redoc` follows the normal X-API-Key middleware.
+
+`/health/live` and `/health/ready` are in-cluster-only for the same reason as
+`/metrics`: kubelet probes dial the Pod IP and never traverse Ingress.
+`/v1/health` is the public pipeline-health endpoint and is covered by `/v1`.
 
 ## Terraform overview
 

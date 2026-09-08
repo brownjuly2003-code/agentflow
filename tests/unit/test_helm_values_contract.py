@@ -14,6 +14,13 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
 _API_IMAGE_DIGEST = "sha256:" + "a" * 64
+# Read from the chart rather than repeated here: the default moved off the
+# unclaimed Docker Hub namespace `agentflow/api` (audit FB-08), and a test
+# that hardcodes a registry has to be edited every time that judgement is
+# revisited.
+_DEFAULT_API_REPOSITORY = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))[
+    "image"
+]["repository"]
 
 
 def _load_yaml(path: Path) -> dict:
@@ -37,6 +44,16 @@ def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
 
 
+def _schema_path_reported(output: str, *segments: str) -> bool:
+    """Helm's JSON Schema printer names a values path as dotted (`a.b`) or as a
+    JSON pointer (`/a/b`), depending on the Helm release. CI installs unpinned
+    Helm; both forms are live.
+    """
+    dotted = ".".join(segments)
+    pointer = "/" + "/".join(segments)
+    return dotted in output or pointer in output
+
+
 # The chart's defaults are dev posture, and `config.profile=production` now
 # refuses to render on them (audit F-11, templates/production-contract.yaml).
 # Tests that need the production *profile* for something else -- the Kafka
@@ -49,11 +66,46 @@ _PRODUCTION_POSTURE: tuple[str, ...] = (
     "--set",
     "networkPolicy.enabled=true",
     "--set",
+    r"networkPolicy.ingressFromNamespaces[0].kubernetes\.io/metadata\.name=ingress-nginx",
+    "--set",
+    r"networkPolicy.ingressFromNamespaces[1].kubernetes\.io/metadata\.name=monitoring",
+    "--set",
     "secrets.create=false",
     "--set",
     "secrets.existingSecret=agentflow-prod-secret",
     "--set",
     "config.corsOrigins=https://app.example.com",
+    # Part of the posture since FB-06: a production release has to say whose
+    # address the pod observes, ingress or no ingress.
+    "--set",
+    "config.trustedProxies=10.0.0.0/8",
+    "--set",
+    "analyticsRetention.enabled=true",
+    "--set",
+    "analyticsRetention.dryRun=false",
+    "--set",
+    "analyticsRetention.concurrencyPolicy=Forbid",
+    # Part of the posture since FB-07: both peppers fall back to constants
+    # committed to this repository, so production must project real ones from
+    # the operator-managed Secret. A literal `value:` is refused -- that would
+    # park the pepper in Helm release metadata.
+    "--set",
+    "extraEnv[0].name=AGENTFLOW_KEY_LOOKUP_PEPPER",
+    "--set",
+    "extraEnv[0].valueFrom.secretKeyRef.name=agentflow-prod-secret",
+    "--set",
+    "extraEnv[0].valueFrom.secretKeyRef.key=key-lookup-pepper",
+    "--set",
+    "extraEnv[1].name=AGENTFLOW_QUERY_FINGERPRINT_PEPPER",
+    "--set",
+    "extraEnv[1].valueFrom.secretKeyRef.name=agentflow-prod-secret",
+    "--set",
+    "extraEnv[1].valueFrom.secretKeyRef.key=query-fingerprint-pepper",
+    # Part of the posture since FB-09: an egress rule with no `to:` allows its
+    # port to every address, so production names peers for each rule that
+    # renders. Tests that switch on ClickHouse or PostgreSQL add their own.
+    "--set",
+    "networkPolicy.egressTo.kafka[0].ipBlock.cidr=10.30.0.0/16",
 )
 
 
@@ -153,7 +205,7 @@ def test_api_image_digest_overrides_the_dev_tag_for_every_runtime_workload():
     output = _combined_output(result)
 
     assert result.returncode == 0, output
-    expected = f"agentflow/api@{_API_IMAGE_DIGEST}"
+    expected = f"{_DEFAULT_API_REPOSITORY}@{_API_IMAGE_DIGEST}"
     runtime_images: list[str] = []
     for document in yaml.safe_load_all(result.stdout):
         if not document or document.get("kind") not in {"Deployment", "Job"}:
@@ -161,12 +213,16 @@ def test_api_image_digest_overrides_the_dev_tag_for_every_runtime_workload():
         runtime_images.extend(
             container["image"]
             for container in document["spec"]["template"]["spec"]["containers"]
-            if container["image"].startswith("agentflow/api")
+            if container["image"].startswith(_DEFAULT_API_REPOSITORY)
         )
 
     assert len(runtime_images) == 5
     assert set(runtime_images) == {expected}
-    assert "agentflow/api:2.0.0" not in result.stdout
+    # The tag is never rendered once a digest is set, whatever the tag says.
+    default_tag = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))["image"][
+        "tag"
+    ]
+    assert f"{_DEFAULT_API_REPOSITORY}:{default_tag}" not in result.stdout
 
 
 def test_api_image_digest_schema_rejects_non_sha256_values():
@@ -174,8 +230,17 @@ def test_api_image_digest_schema_rejects_non_sha256_values():
     output = _combined_output(result)
 
     assert result.returncode != 0
-    assert "image.digest" in output
+    assert _schema_path_reported(output, "image", "digest")
     assert "sha256" in output
+
+
+def test_schema_path_reported_accepts_both_printers_and_rejects_unrelated_output():
+    """Negative control: the helper must not match an unrelated refusal string."""
+    pointer = "- at '/image/digest': 'latest' does not match pattern '^(sha256:[0-9a-f]{64})?$'"
+    dotted = "image.digest: 'latest' does not match pattern '^(sha256:[0-9a-f]{64})?$'"
+    assert _schema_path_reported(pointer, "image", "digest")
+    assert _schema_path_reported(dotted, "image", "digest")
+    assert not _schema_path_reported("nothing here", "image", "digest")
 
 
 def test_chart_defaults_do_not_embed_production_shaped_api_key_hashes():
@@ -640,6 +705,8 @@ def test_serving_clickhouse_tls_render_is_first_class():
         "serving.clickhouse.tls.caSecret=agentflow-clickhouse-ca",
         "--set",
         "config.profile=production",
+        "--set",
+        "networkPolicy.egressTo.clickhouse[0].ipBlock.cidr=10.30.1.0/24",
         *_PRODUCTION_POSTURE,
     )
     output = _combined_output(rendered)
@@ -904,6 +971,10 @@ def test_production_materializer_requires_kafka_auth():
         "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
         "--set",
         "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "networkPolicy.egressTo.icebergCatalog[0].ipBlock.cidr=10.30.3.0/24",
+        "--set",
+        "networkPolicy.egressTo.objectStore[0].ipBlock.cidr=10.30.3.0/24",
     )
     output = _combined_output(result)
 
@@ -930,6 +1001,10 @@ def test_kafka_auth_credentials_are_secret_references():
         "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
         "--set",
         "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "networkPolicy.egressTo.icebergCatalog[0].ipBlock.cidr=10.30.3.0/24",
+        "--set",
+        "networkPolicy.egressTo.objectStore[0].ipBlock.cidr=10.30.3.0/24",
     )
     output = _combined_output(result)
 

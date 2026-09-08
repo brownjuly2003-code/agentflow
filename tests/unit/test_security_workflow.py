@@ -199,7 +199,7 @@ def test_safety_job_keeps_working_files_under_canonical_directory() -> None:
 
     # Every bucket the inventory writes is exactly what Safety reads.
     assert _requirement_inputs(run) == {f"{SAFETY_WORK_DIR}/{bucket}" for bucket in SAFETY_BUCKETS}
-    assert run["run"].count("--ignore SFTY-20260217-93940") == 1
+    assert "--ignore" not in run["run"]
 
 
 def test_pip_audit_job_exports_all_profiles_under_canonical_directory() -> None:
@@ -215,7 +215,15 @@ def test_pip_audit_job_exports_all_profiles_under_canonical_directory() -> None:
         "uv export --frozen --format requirements-txt --all-extras "
         f"--no-emit-project -o {PIP_AUDIT_EXPORT}"
     ) in joined
-    assert f"pip-audit --no-deps -r {PIP_AUDIT_EXPORT}" in joined
+    # Audit FB-02: the full-profile audit runs through the waiver-aware runner,
+    # not bare pip-audit. nltk 3.10.3 carries an advisory upstream has not
+    # fixed, so this job had no way to be green and no place to record why.
+    assert (
+        "python scripts/run_pip_audit_scan.py "
+        "--waivers security/trivy-waivers.json "
+        "--scope python-profiles "
+        f"-r {PIP_AUDIT_EXPORT}"
+    ) in joined
     assert _requirement_inputs(all_profiles) == {PIP_AUDIT_EXPORT}
 
 

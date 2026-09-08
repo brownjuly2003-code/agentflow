@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, model_validator
 from agentflow_runtime.constants import (
     DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
     DEFAULT_ROTATION_GRACE_PERIOD_SECONDS,
+    FAILED_AUTH_SCOPE_API,
     FAILED_AUTH_WINDOW_SECONDS,
     HASHED_KEY_SOFT_LIMIT,
 )
@@ -236,7 +237,8 @@ class AuthManager:
         self._loaded_keys: list[TenantKey] = []
         self._runtime_plaintext_by_hash: dict[str, str] = {}
         self._rate_windows: dict[str, list[float]] = defaultdict(list)
-        self._failed_auth_windows: dict[str, list[float]] = defaultdict(list)
+        # Keyed by (scope, client address) -- see FAILED_AUTH_SCOPE_* (FB-06).
+        self._failed_auth_windows: dict[tuple[str, str], list[float]] = defaultdict(list)
         self._config_lock = threading.RLock()
         self._rotation_cleanup_timers: dict[str, threading.Timer] = {}
         self._key_store_writable: bool | None = None
@@ -383,13 +385,13 @@ class AuthManager:
             else:
                 self._rate_windows.pop(key, None)
         failed_cutoff = now - FAILED_AUTH_WINDOW_SECONDS
-        for client_ip in list(self._failed_auth_windows):
-            stamps = self._failed_auth_windows[client_ip]
+        for window_key in list(self._failed_auth_windows):
+            stamps = self._failed_auth_windows[window_key]
             window = [stamp for stamp in stamps if stamp > failed_cutoff]
             if window:
-                self._failed_auth_windows[client_ip] = window
+                self._failed_auth_windows[window_key] = window
             else:
-                self._failed_auth_windows.pop(client_ip, None)
+                self._failed_auth_windows.pop(window_key, None)
 
     def reload(self, *_: object) -> None:
         self.load()
@@ -416,7 +418,19 @@ class AuthManager:
 
         ensure_usage_table(self)
 
-    def authenticate(self, api_key: str) -> TenantKey | None:
+    def authenticate(self, api_key: str, *, allow_legacy_scan: bool = True) -> TenantKey | None:
+        """Resolve a presented key to its tenant, or return ``None``.
+
+        ``allow_legacy_scan=False`` keeps the constant-work paths -- the runtime
+        plaintext cache and the O(1) peppered-lookup resolution of the current
+        and previous slots -- and skips the two O(n) verify scans that exist only
+        for pre-M-C4 entries carrying no ``key_lookup``. The middleware passes it
+        when the caller's address is already throttled: a key issued since M-C4
+        still authenticates for exactly one hash, while a scanner cannot make the
+        pod spend N bcrypt verifications per guess (audit FB-06). A legacy
+        bcrypt-only key is not resolvable under throttle -- rotating it onto an
+        argon2id+lookup entry is the documented fix.
+        """
         for item in self.keys_by_value.values():
             runtime_key = item.key
             if runtime_key is None:
@@ -435,13 +449,14 @@ class AuthManager:
                 return matched
         # Legacy fallback: only entries WITHOUT a lookup digest (pre-M-C4
         # bcrypt config) still pay the O(n) verify scan.
-        for item in self._hashed_keys:
-            if item.key_hash is None or item.key_lookup is not None:
-                continue
-            if verify_api_key(api_key, item.key_hash):
-                matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
-                self._remember_runtime_key(api_key, matched)
-                return matched
+        if allow_legacy_scan:
+            for item in self._hashed_keys:
+                if item.key_hash is None or item.key_lookup is not None:
+                    continue
+                if verify_api_key(api_key, item.key_hash):
+                    matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
+                    self._remember_runtime_key(api_key, matched)
+                    return matched
         indexed_previous = self._previous_keys_by_lookup.get(lookup)
         if (
             indexed_previous is not None
@@ -450,13 +465,17 @@ class AuthManager:
             and verify_api_key(api_key, indexed_previous.previous_key_hash)
         ):
             return indexed_previous.model_copy(update={"key": api_key, "matched_slot": "previous"})
-        for item in self._loaded_keys:
-            if not self._key_rotator.is_previous_key_active(item) or item.previous_key_hash is None:
-                continue
-            if item.previous_key_lookup is not None:
-                continue
-            if verify_api_key(api_key, item.previous_key_hash):
-                return item.model_copy(update={"key": api_key, "matched_slot": "previous"})
+        if allow_legacy_scan:
+            for item in self._loaded_keys:
+                if (
+                    not self._key_rotator.is_previous_key_active(item)
+                    or item.previous_key_hash is None
+                ):
+                    continue
+                if item.previous_key_lookup is not None:
+                    continue
+                if verify_api_key(api_key, item.previous_key_hash):
+                    return item.model_copy(update={"key": api_key, "matched_slot": "previous"})
         return None
 
     def _remember_runtime_key(self, api_key: str, matched: TenantKey) -> None:
@@ -550,7 +569,7 @@ class AuthManager:
             allowed = allowed and ok
         return allowed
 
-    def is_failed_auth_limited(self, client_ip: str) -> bool:
+    def is_failed_auth_limited(self, client_ip: str, scope: str = FAILED_AUTH_SCOPE_API) -> bool:
         # Per-process on purpose (unlike the Redis-shared request rate limiter):
         # on N replicas an attacker spreading guesses gets N x the failed-auth
         # budget, which is an accepted risk while API keys are 256-bit random
@@ -560,20 +579,28 @@ class AuthManager:
         # failed-auth alerting starts keying off this counter. (audit S-7)
         now = self.time_source()
         cutoff = now - FAILED_AUTH_WINDOW_SECONDS
-        window = [stamp for stamp in self._failed_auth_windows[client_ip] if stamp > cutoff]
-        self._failed_auth_windows[client_ip] = window
+        window_key = (scope, client_ip)
+        window = [stamp for stamp in self._failed_auth_windows[window_key] if stamp > cutoff]
+        self._failed_auth_windows[window_key] = window
         return len(window) > self.security_policy.max_failed_auth_per_ip_per_hour
 
-    def record_failed_auth(self, client_ip: str) -> bool:
+    def record_failed_auth(self, client_ip: str, scope: str = FAILED_AUTH_SCOPE_API) -> bool:
         now = self.time_source()
         cutoff = now - FAILED_AUTH_WINDOW_SECONDS
-        window = [stamp for stamp in self._failed_auth_windows[client_ip] if stamp > cutoff]
-        window.append(now)
-        self._failed_auth_windows[client_ip] = window
+        window_key = (scope, client_ip)
+        window = [stamp for stamp in self._failed_auth_windows[window_key] if stamp > cutoff]
+        # Stop recording once the window is already over the limit. The
+        # middleware now records every failed attempt, including the ones it
+        # answers with 429, so an unbounded list would let a scanner turn one
+        # address into a stamp per request for an hour. Capping at limit + 1
+        # keeps the verdict identical and the memory constant (FB-06).
+        if len(window) <= self.security_policy.max_failed_auth_per_ip_per_hour:
+            window.append(now)
+        self._failed_auth_windows[window_key] = window
         return len(window) > self.security_policy.max_failed_auth_per_ip_per_hour
 
-    def clear_failed_auth(self, client_ip: str) -> None:
-        self._failed_auth_windows.pop(client_ip, None)
+    def clear_failed_auth(self, client_ip: str, scope: str = FAILED_AUTH_SCOPE_API) -> None:
+        self._failed_auth_windows.pop((scope, client_ip), None)
         # H-C4: piggy-back an opportunistic sweep on every successful auth.
         # Successful auth is on the hot path but cheap, and it bounds growth
         # of the per-IP dict between explicit reloads.

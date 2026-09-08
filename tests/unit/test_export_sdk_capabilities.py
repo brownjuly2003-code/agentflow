@@ -49,7 +49,11 @@ def test_sdk_generated_reference_docs_name_owner_commands_and_lifecycle() -> Non
     generated = " ".join(
         (ROOT / "docs" / "sdk-capabilities.md").read_text(encoding="utf-8").split()
     )
-    plan = " ".join((ROOT / "plan_26_08_2026.md").read_text(encoding="utf-8").split())
+    plan = " ".join(
+        (ROOT / "docs/archive/plans/documentation-optimization-2026-08-26.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
 
     assert "| SDK capabilities | `docs/sdk-capabilities.md`" in docs_hub
     assert "`python scripts/export_sdk_capabilities.py`" in docs_hub

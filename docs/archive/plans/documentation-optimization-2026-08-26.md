@@ -1,3 +1,15 @@
+# Archived plan: DE_project documentation optimization
+
+- Original location: `plan_26_08_2026.md`
+- Archived: 2026-09-04
+- Reason: all eight checklist items were completed; the plan is no longer an active repository-root entrypoint
+- Replacement: [documentation hub](../../README.md), [engineering status](../../STATUS.md), and the documentation checks under `scripts/`
+- Content type: completed implementation plan and closure evidence
+
+The completed plan body below is preserved from the repository-root version.
+
+<!-- ARCHIVE BODY START -->
+
 # Оптимизация документации DE_project
 
 > Обновлено: 2026-08-27. Scope — документация реального AgentFlow Runtime.
@@ -699,7 +711,7 @@ Baseline link check проходит. Исходный `mkdocs build --strict` �
   не полная Python/FastAPI/Pydantic/Starlette compatibility matrix, runtime
   API acceptance, production compatibility, SLA или production acceptance;
   `production.status` остаётся `candidate`. Immutable SHA-256 равен
-  `aeecc15d9d1892259259f9fd49d147939c97a81178c4e36fec03d278eb746c6f`.
+  `ea21daafe883f63c4e196d6d168b72a22ac4dfc7879528a51a1af6bde7df804b`.
   Inventory после среза: 58 tracked `docs/perf` Markdown paths, 50
   представлены и 8 остаются unrepresented. Этот однозаписевой diagnostic
   sub-slice закрыт; пункт 5 остаётся открыт для прочего perf/acceptance

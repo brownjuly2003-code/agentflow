@@ -1,5 +1,18 @@
 terraform {
-  required_version = "= 1.15.4"
+  # Pessimistic, not exact: >= 1.15.4 and < 1.16.0 (verified against the
+  # 1.15.4 CLI -- "~> 1.14.4" and "~> 1.15.9" are both rejected by it). The
+  # floor is the version CI pins in hashicorp/setup-terraform, so no client
+  # runs older than what CI tests, and the ceiling still excludes an untested
+  # minor, which is where Terraform's state format can move.
+  #
+  # It is not "= 1.15.4" because that constraint is also evaluated by clients
+  # whose Terraform version nobody here controls. Dependabot's terraform
+  # updater is one: its image shipped 1.15.9, so from the moment the exact pin
+  # reached origin every weekly run died on "Unsupported Terraform Core
+  # version" before it could look at the AWS provider, and the ecosystem
+  # stopped delivering provider updates -- security ones included -- with no
+  # signal beyond a failed job nobody watches.
+  required_version = "~> 1.15.4"
 
   required_providers {
     aws = {

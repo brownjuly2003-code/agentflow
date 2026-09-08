@@ -232,6 +232,17 @@ updates:
           - "version-update:semver-major"
 
   # ── Terraform: infrastructure modules ──────────────────────────────
+  # This ecosystem only works while `required_version` in
+  # infrastructure/terraform/main.tf admits the Terraform version Dependabot's
+  # updater image happens to ship: it runs `terraform init` and
+  # `terraform providers lock` itself, and an unsatisfied core constraint kills
+  # the run before it reads a single provider version. An exact `= 1.15.4` pin
+  # did exactly that from 2026-09-08 -- the image was on 1.15.9 -- so the
+  # constraint is pessimistic (`~> 1.15.4`). Keep it that way, or provider
+  # updates, security ones included, silently stop arriving. The symptom is a
+  # failed "terraform in /infrastructure/terraform" job under Dependabot
+  # Updates reading `Unsupported Terraform Core version`; the fix is a
+  # deliberate toolchain bump, not a wider constraint.
   - package-ecosystem: terraform
     directory: "/infrastructure/terraform"
     schedule:

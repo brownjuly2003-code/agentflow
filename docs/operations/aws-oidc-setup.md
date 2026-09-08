@@ -35,7 +35,7 @@ Confirmed local/repository evidence:
 - No AWS credentials are configured on the verification workstation.
 - The `hashicorp/terraform:1.13.5` container evidence for config sanity
   (`init -backend=false` and `validate`) is superseded by the
-  `required_version = "= 1.15.4"` pin and can no longer be reproduced:
+  `required_version = "~> 1.15.4"` pin and can no longer be reproduced:
   `terraform init` on 1.13.5 evaluates the constraint and fails with
   `Unsupported Terraform Core version`. Config sanity was re-verified on 2026-09-05 with a local
   Terraform CLI 1.15.4 running `terraform init -backend=false` and
@@ -122,7 +122,7 @@ the missing input list back to the operator.
 - AWS account with administrator credentials available for the initial bootstrap only.
 - Existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`.
 - GitHub repository admin access for repository variables and environment protection rules.
-- Terraform CLI 1.15.4 (matching `required_version` in `infrastructure/terraform/main.tf` and the `hashicorp/setup-terraform` pins in `.github/workflows/terraform-apply.yml` and `.github/workflows/ci.yml`), or an equivalent container image of that version, available on the bootstrap machine.
+- Terraform CLI 1.15.4 (the floor of `required_version` in `infrastructure/terraform/main.tf` and the exact version the `hashicorp/setup-terraform` pins in `.github/workflows/terraform-apply.yml` and `.github/workflows/ci.yml` install), or an equivalent container image of that version, available on the bootstrap machine. `~> 1.15.4` also admits later 1.15 patch releases; 1.16 and newer are refused.
 
 ## State locking
 
@@ -148,9 +148,9 @@ been executed: there is no AWS access on the development hosts, and `plan` /
 
 - Every client that runs `terraform init` against `env/staging` or
   `env/production` must be on a Terraform that supports `use_lockfile` (1.10 or
-  newer). `required_version = "= 1.15.4"` and the `hashicorp/setup-terraform`
-  pins already hold CI to one version; an operator's local CLI is the only
-  unpinned client.
+  newer). `required_version = "~> 1.15.4"` holds every client to the 1.15
+  patch line, and the `hashicorp/setup-terraform` pins hold CI to exactly
+  1.15.4; an operator's local CLI may be any 1.15.x at or above that.
 - No `plan` or `apply` may be in flight. The dual-lock phase below exists so
   that migrated and unmigrated clients still block each other; starting it
   mid-run defeats that.

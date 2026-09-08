@@ -4,6 +4,34 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Quality — the auth-manager coverage gate was measuring 82%, not 94%
+
+* **The file list *is* the gate.** `Run auth manager coverage gate` runs the
+  unit files it names, so a dedicated file that is not named buys the module
+  nothing. `tests/unit/test_key_store_readonly.py` arrived with the read-only
+  Secret mount work (F-02 B, 2026-08-23) and was never added to the list, so
+  the ~50 statements of write-probe logic that landed with it counted as
+  uncovered: the module measured 82% against its 90% gate, not the 94% the
+  step's own comment claimed.
+* **It stayed invisible for two weeks** because an earlier step in the same
+  job was failing, and a job step that fails means every later step never
+  runs. One red gate hides every gate behind it — this one only surfaced once
+  the earlier failure was fixed.
+* **The uncovered branches were the fail-closed ones.** Whether an `OSError`
+  means "read-only mount" decides between a 409 and a propagated error, and a
+  non-permission failure must propagate — answering 409 tells an operator
+  whose disk is broken that their key store is merely read-only. Also
+  untested: the parent-directory probe for a key store that does not exist
+  yet (a first-boot Secret mount), and the `load()` path that downgrades the
+  store in place when the write is denied between probe and write instead of
+  crashing the pod at startup.
+* **Two new unit files cover them** — `test_auth_key_store_probe.py` and
+  `test_auth_manager_key_resolution.py`, both free of TestClient and Redis so
+  the gate can run them — together with the legacy rotation-grace scan, the
+  batch rate-limit debit, and the `_rate_limit_key` fallbacks that keep a
+  plaintext key out of a Redis key name. The module is at 97%; the remaining
+  gap is the platform-divergent SIGHUP handler and thin delegations.
+
 ### Security — the admin surface now leaves an audit trail (FB-10)
 
 * **`require_admin_key` counted its refusals and wrote nothing else.** It

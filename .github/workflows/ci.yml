@@ -300,10 +300,18 @@ jobs:
         run: |
           # Security-critical auth manager (key match/verify, tenant isolation,
           # rate-limit/failed-auth windows, rotation grace) and a mutmut target;
-          # the gate runs its dedicated unit files. Module coverage is 94% so the
+          # the gate runs its dedicated unit files. Module coverage is 97% so the
           # 90% gate keeps a cushion; the remaining gap is the platform-divergent
-          # SIGHUP handler and bcrypt rotation paths the integration/e2e auth
-          # suites cover.
+          # SIGHUP handler, the two read-only-store branches load() reaches only
+          # when the store flips between probe and write, and the thin
+          # KeyRotator/usage-table delegations the integration/e2e auth suites
+          # cover.
+          #
+          # This list IS the gate: a dedicated unit file that is not named here
+          # buys the module nothing. test_key_store_readonly.py arrived with the
+          # read-only Secret mount work (F-02 B, 2026-08-23) and was never added,
+          # which by itself took the module from 94% to 82% -- unnoticed, because
+          # an earlier step in this job was failing and this one never ran.
           #
           # NOTE: unlike the other per-module gates this uses `coverage run` +
           # `coverage report --include`, NOT `pytest --cov=<module>`. The auth
@@ -311,7 +319,16 @@ jobs:
           # instrumentation of a duckdb-importing module trips duckdb's lazy
           # `_duckdb._sqltypes` import at COLLECTION time, both locally and on CI
           # runners. `coverage run` imports duckdb normally and avoids the break.
-          python -m coverage run -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py tests/unit/test_auth_argon2_lookup.py -p no:schemathesis
+          python -m coverage run -m pytest \
+            tests/unit/test_auth.py \
+            tests/unit/test_auth_manager_pure_logic.py \
+            tests/unit/test_auth_manager_memory_bounds.py \
+            tests/unit/test_auth_hashed_key_guidance.py \
+            tests/unit/test_auth_argon2_lookup.py \
+            tests/unit/test_auth_key_store_probe.py \
+            tests/unit/test_auth_manager_key_resolution.py \
+            tests/unit/test_key_store_readonly.py \
+            -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/manager.py" --show-missing --fail-under=90
       - name: Run key rotation coverage gate
         run: |

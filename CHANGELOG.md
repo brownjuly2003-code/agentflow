@@ -4,6 +4,32 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Quality — the key-rotation coverage gate was passing on a rounding margin
+
+* **89.6% rounds to 90.** The gate on `serving/api/auth/key_rotation.py` ran
+  `tests/unit/test_key_rotation.py` alone and compared against
+  `--fail-under=90`; coverage rounds before it compares, so the module was one
+  defensive line away from turning the gate red without anyone touching its
+  behaviour. It now measures **100%**.
+* **What the happy-path file never reached.** `test_key_rotation.py` pins the
+  create/rotate/revoke lifecycle. The new
+  `tests/unit/test_key_rotation_revoke_and_failures.py` covers the rest:
+  `revoke_key_by_id` — the only revoke path the admin router has called since
+  F-02 A stopped accepting a plaintext key in a URL, and until now named by no
+  test in the repo — plus the three failures the rotator has to tell apart
+  instead of crashing on.
+* **A read-only store is not a broken store.** `write_config` maps
+  `PermissionError` to `KeyStoreReadOnlyError` and downgrades
+  `key_store_writable` so the next admin mutation answers 409 instead of
+  probing the mount again; any other `OSError` re-raises with the flag
+  untouched, because a failing disk must not be reported as a read-only
+  Secret mount. Both directions are now pinned.
+* **A grace-period cleanup failure leaves a record.** `expire_previous_key`
+  runs on a timer thread with no caller left to catch anything: a `KeyError`
+  is the expected race (the key was revoked before its timer fired) and stays
+  silent, while any other failure logs `api_key_rotation_cleanup_failed`
+  rather than being swallowed by `threading`.
+
 ### Security — the Flink image stops shipping pip's vendored packages
 
 * **pip's vendored dependency set was the image's last two unwaived HIGH

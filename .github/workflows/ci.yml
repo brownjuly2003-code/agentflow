@@ -336,8 +336,21 @@ jobs:
           # grace-period scheduling, rotation status) and a mutmut target. Like
           # the auth manager gate it pulls in duckdb, so it uses coverage run +
           # coverage report --include (not pytest --cov) to avoid the
-          # duckdb _duckdb._sqltypes collection break. Module coverage is 93%.
-          python -m coverage run -m pytest tests/unit/test_key_rotation.py -p no:schemathesis
+          # duckdb _duckdb._sqltypes collection break.
+          #
+          # Module coverage is 100%. It was 89.6% on test_key_rotation.py alone
+          # -- passing only because coverage rounds to 90 before comparing, so
+          # one more defensive line would have turned this gate red without
+          # anyone changing its behaviour. test_key_rotation.py pins the happy
+          # lifecycle; the revoke_and_failures file adds what it never reached:
+          # revoke_key_by_id (the only revoke path the admin router calls since
+          # F-02 A), the read-only vs merely-broken key-store split, and the
+          # grace-period cleanup failure that runs on a timer thread with no
+          # caller left to see it.
+          python -m coverage run -m pytest \
+            tests/unit/test_key_rotation.py \
+            tests/unit/test_key_rotation_revoke_and_failures.py \
+            -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/key_rotation.py" --show-missing --fail-under=90
       - name: Run outbox coverage gate
         run: |

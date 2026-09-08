@@ -4,6 +4,26 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Docs — the pre-push hedges outlived the push
+
+* **Several notes described work the owner "still has to do" that has since
+  been done**, and a hedge that has stopped being true reads as a live task.
+  The provider-lock guard in `terraform-validate` was annotated "has not been
+  observed on a GitHub runner"; it has, on `ubuntu-latest`, regenerating all
+  three platforms to an empty diff. `ASSUMPTION-T-36-CI-LOCK` in the OIDC
+  runbook is marked discharged with that evidence, and narrowed to what is
+  still genuinely unobserved: the macOS and Windows entries are regenerated
+  identically, never actually consumed, because CI has no runner on either.
+* **`sdk-ts` is a required status check now**, not a wiring change waiting to
+  happen, so the comment above the job says what that costs: renaming the job
+  silently removes a gate, because a required context that never reports blocks
+  merges rather than failing them. Rename it and branch protection together.
+* **Two closure documents called a pushed evidence commit local-only.**
+  `cf247ba` has been in `origin/main` since the 2026-09-08 push;
+  `PROJECT_CLOSURE.md` and `release-readiness.md` say so now. Dated evidence
+  records under `docs/evidence/` and `docs/perf/` keep their original wording —
+  they are chronology of a moment, not claims about the present.
+
 ### Mutation gate — nine weeks red from a rename ripple and two untested one-liners
 
 * **The weekly Mutation Testing workflow last passed on 2026-07-05** and failed

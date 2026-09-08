@@ -92,8 +92,8 @@ Read-only GitHub Environment `npm` verification recorded at
 `2026-08-03T03:18:11Z` is **PASS**: the Environment exists and its non-empty
 `required_reviewers` rule names user `brownjuly2003-code` — see
 [operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md).
-Tracked full-smoke evidence is recorded in local evidence commit `cf247ba`
-(local-only, unpushed).
+Tracked full-smoke evidence is recorded in evidence commit `cf247ba`, which
+reached `origin/main` in the 2026-09-08 push.
 
 ## Summary
 

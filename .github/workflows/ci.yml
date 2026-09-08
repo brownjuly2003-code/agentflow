@@ -606,7 +606,9 @@ jobs:
       # same three-platform command the module README documents (re-run
       # 2026-09-05: no lock rewrite). Three provider zips (~0.7 GB) plus
       # terraform init is why this job's timeout-minutes is 20, not 10.
-      # It has not been observed on a GitHub runner until the owner pushes.
+      # Observed green on ubuntu-latest 2026-09-08 (run 34213482386): the step
+      # regenerates all three platforms and the diff comes back empty, so the
+      # tracked lock genuinely covers the runner it is used on.
       - name: Provider lock covers linux_amd64
         run: |
           cd infrastructure/terraform
@@ -619,8 +621,11 @@ jobs:
     # only in publish-npm.yml (tag pushes) and mutation.yml; every PR only got
     # `npm audit` (security.yml). This job gives PRs the same build-shaped
     # gate the publish workflow already trusts, so a broken SDK cannot merge.
-    # Branch protection required-context wiring is a repo-settings change the
-    # owner still has to make (gh api repos/{owner}/{repo}/branches/main/protection).
+    # `sdk-ts` is one of the 15 required status checks on `main` (confirmed
+    # 2026-09-08 via gh api repos/{owner}/{repo}/branches/main/protection), so
+    # renaming this job silently removes a gate: the context stops reporting,
+    # and a required check that never reports blocks merges instead of failing
+    # them. Rename here and in branch protection together, or not at all.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:

@@ -197,13 +197,17 @@ contract is honest, the live delivery path is not claimed):
   `plan`, or `apply` ran against the real S3 backend. DynamoDB locking is
   retained on the tracked configuration; a live-backend migration to
   `use_lockfile` still needs AWS access.
-- **ASSUMPTION-T-36-CI-LOCK**: the provider-lock step in
-  `.github/workflows/ci.yml` `terraform-validate` runs
+- **ASSUMPTION-T-36-CI-LOCK** — discharged 2026-09-08. The provider-lock
+  step in `.github/workflows/ci.yml` `terraform-validate` runs
   `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
-  -platform=windows_amd64` and `git diff --exit-code .terraform.lock.hcl`.
-  It is a tracked guard for `linux_amd64` on `ubuntu-latest` (and the other
-  two documented platforms), not observed evidence. It cannot have passed
-  on a GitHub runner until the owner pushes.
+  -platform=windows_amd64` followed by `git diff --exit-code
+  .terraform.lock.hcl`. It was a tracked guard with no runner behind it until
+  the work reached `origin`; it has since passed on `ubuntu-latest` (run
+  34213482386, `terraform-validate` success, step "Provider lock covers
+  linux_amd64"), which is the evidence that the tracked lock covers the
+  platform CI actually runs on. What remains unobserved is only the
+  `darwin_arm64` / `windows_amd64` halves being *used*, as opposed to being
+  regenerated identically — CI has no runner on either.
 
 ## State-key and role scope
 

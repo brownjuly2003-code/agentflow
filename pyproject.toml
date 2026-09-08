@@ -40,8 +40,14 @@ dependencies = [
 cloud = [
     "boto3>=1.35,<2",
     "pyiceberg>=0.7,<1",
-    # PyIceberg 0.11 write paths require native transforms. Core 0.8 excludes
-    # Python 3.13, while 0.7 provides a stable-ABI wheel across Python 3.11-3.13.
+    # PyIceberg 0.11 write paths require native transforms, and 0.7 is the
+    # only core release that can serve them here. PyIceberg 0.11.1 declares
+    # pyiceberg-core>=0.5.1,<0.9.0, so 0.8.0 is the only step up inside the
+    # pairing upstream supports -- and 0.8.0 is the one release in the line
+    # published as requires-python <3.13, which the 3.11-3.13 resolution
+    # environments below rule out. (0.9+ restored 3.13 but sits outside
+    # PyIceberg's declared window; nothing in that window is installable.)
+    # The ceiling moves when PyIceberg raises its own, not before.
     "pyiceberg-core>=0.7,<0.8",
 ]
 postgres = [
@@ -77,8 +83,11 @@ integrations = [
     "llama-index-core>=0.12,<1",
     # Mirrors integrations/pyproject.toml [mcp]: locking it here lets CI
     # install the editable integrations package with --no-deps from the
-    # frozen root resolution (audit F-05). MCP 2 removes the low-level
-    # Server decorators the integration uses.
+    # frozen root resolution (audit F-05). The ceiling is load-bearing:
+    # mcp 2.x's lowlevel Server no longer defines list_tools or call_tool
+    # (checked against 2.2.0), and integrations/.../mcp/server.py builds its
+    # whole surface out of @server.list_tools() and @server.call_tool().
+    # Taking mcp 2 means porting that module first, not moving this pin.
     "mcp>=1.0,<2",
 ]
 contract = [

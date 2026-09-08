@@ -177,3 +177,36 @@ def test_ci_has_scoped_query_package_coverage_gate() -> None:
     assert "coverage run" in gate_step["run"]
     assert "*/serving/semantic_layer/query/*" in gate_step["run"]
     assert "--fail-under=90" in gate_step["run"]
+
+
+def test_every_coverage_gate_runs_even_after_an_earlier_one_fails() -> None:
+    """A red gate must not hide the gates behind it.
+
+    Steps in a job stop at the first failure, so for two weeks the
+    auth-manager gate never ran: an earlier step in test-unit was failing, and
+    the module drifted from 94% to 82% with nothing to report it. Each gate
+    measures a different module and depends on nothing the others produce, so
+    each one runs whenever the environment installed -- and still fails the
+    job on its own.
+    """
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["test-unit"]["steps"]
+
+    install = next(step for step in steps if step.get("name") == "Install dependencies")
+    assert install.get("id") == "install", "the gate condition references steps.install"
+
+    gates = [
+        step
+        for step in steps
+        if str(step.get("name", "")).startswith("Run ")
+        and str(step.get("name", "")).endswith(" coverage gate")
+    ]
+    assert len(gates) >= 9, f"expected the per-module gates, found {len(gates)}"
+
+    for gate in gates:
+        condition = gate.get("if")
+        assert condition is not None, f"{gate['name']} has no if: condition"
+        assert "!cancelled()" in condition, gate["name"]
+        assert "steps.install.outcome == 'success'" in condition, gate["name"]

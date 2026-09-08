@@ -64,6 +64,23 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "dagster"
         update-types: ["version-update:semver-major"]
+      # mcp 2.x's lowlevel Server drops the list_tools/call_tool decorators
+      # integrations/agentflow_integrations/mcp/server.py is built on (checked
+      # against 2.2.0), so a major bump is a port, not an update. PR #244
+      # proposed <3 and was closed on that basis; the ignore stops it coming
+      # back weekly. Same NOTE above applies: the safety/pip-audit jobs still
+      # scan mcp and fail on a CVE that only a major fixes.
+      - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
+      # pyiceberg-core is pinned to the release PyIceberg pairs with, not to
+      # the newest one. PyIceberg 0.11.1 declares pyiceberg-core>=0.5.1,<0.9.0;
+      # the only step up inside that window is 0.8.0, published as
+      # requires-python <3.13, which the 3.11-3.13 resolution environments in
+      # pyproject.toml rule out. Bumps only make sense when PyIceberg raises
+      # its own range, and that arrives as a pyiceberg PR. PR #245 proposed
+      # <0.11 and was closed on that basis.
+      - dependency-name: "pyiceberg-core"
+        update-types: ["version-update:semver-minor"]
 
   # ── Python: Flink runtime image manifest ───────────────────────────
   # Not an extra of the root project (its beam chain can never co-install
@@ -120,6 +137,12 @@ updates:
       - dependencies
       - python
       - integrations
+    ignore:
+      # The other half of the mirrored mcp pin (see the root pip entry): the
+      # ceiling is what the integration's decorators need, so leaving this
+      # ecosystem unignored just reopens the same PR from the other directory.
+      - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
 
   # ── npm: TypeScript SDK ────────────────────────────────────────────
   - package-ecosystem: npm

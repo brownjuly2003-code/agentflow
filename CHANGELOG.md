@@ -4,6 +4,28 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Dependencies — the two version ceilings that keep coming back are now explained
+
+* **`mcp<2` is load-bearing.** mcp 2.x's lowlevel `Server` no longer defines
+  `list_tools` or `call_tool` (checked against 2.2.0), and
+  `integrations/agentflow_integrations/mcp/server.py` builds its whole surface
+  out of `@server.list_tools()` and `@server.call_tool()`. Taking mcp 2 means
+  porting that module first. Both halves of the mirrored pin
+  (`pyproject.toml` and `integrations/pyproject.toml`) now say so.
+* **`pyiceberg-core<0.8` is not a stale ceiling.** PyIceberg 0.11.1 declares
+  `pyiceberg-core>=0.5.1,<0.9.0`, so 0.8.0 is the only step up inside the
+  pairing upstream supports — and 0.8.0 is the one release in the line
+  published as `requires-python <3.13`, which the 3.11–3.13 resolution
+  `environments` rule out. 0.9+ restored 3.13 but sits outside PyIceberg's
+  declared window. Nothing in that window is installable, so the ceiling
+  moves when PyIceberg raises its own.
+* **Dependabot stops re-proposing both.** `.github/dependabot.yml` ignores
+  `mcp` majors (in the root *and* integrations ecosystems, which own the two
+  halves of the same pin) and `pyiceberg-core` minors, each with the reason
+  and the exit condition. The existing NOTE about `ignore` also suppressing
+  security updates still applies: `safety` and `pip-audit` scan both
+  packages and fail on a CVE that only a blocked bump would fix.
+
 ### Quality — the key-rotation coverage gate was passing on a rounding margin
 
 * **89.6% rounds to 90.** The gate on `serving/api/auth/key_rotation.py` ran

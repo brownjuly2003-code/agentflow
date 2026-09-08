@@ -26,7 +26,9 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = [
-    # MCP 2 removes the low-level Server decorators used by this integration.
+    # mcp 2.x's lowlevel Server drops the list_tools/call_tool decorators
+    # server.py is built on (checked against 2.2.0). Port the module before
+    # moving this pin; the root pyproject mirrors it.
     "mcp>=1.0,<2",
 ]
 

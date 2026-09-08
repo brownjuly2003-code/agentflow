@@ -4,6 +4,31 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### SDK — the required Node lane was testing on a runtime its own toolchain rejects
+
+* **Vitest 5 declares `engines.node` `^22.12.0 || ^24.0.0 || >=26.0.0`** and the
+  required `sdk-ts` job installed Node 20. Dependabot's PR #252 went fully green
+  on that pairing: npm prints `EBADENGINE` as a warning, the 50 tests ran, and
+  every check reported success. Node 20 itself reached end-of-life on
+  2026-04-30, so the floor the package published (`>=20`) had stopped being a
+  version anyone should be handed.
+* **The floor moves to `>=22`** — the same move the `>=18` → `>=20` raise made
+  three weeks earlier, for the same reason: a declared floor has to be one the
+  toolchain can execute. The required `sdk-ts` job now pins 22, `sdk-ts-compat`
+  covers the next LTS (24), and security.yml's `npm-audit`, which also runs
+  `npm ci` from `sdk-ts/`, moves off 20 with them.
+* **`sdk-ts/.npmrc` sets `engine-strict=true`**, so npm fails the install
+  instead of warning past it. Measured, not assumed: with the floor mutated to
+  `>=99`, `npm ci` exits 1 on `EBADENGINE`; restored, the whole gate — `npm ci`,
+  typecheck, 50 tests, build, `npm pack --dry-run` — passes on Node 22.20.0.
+* **`test_sdk_ts_node_floor.py` holds the declared floor, the four lanes that
+  run `npm ci`, and the lockfile's own `engines` copy in step.** That last one
+  had already drifted: `0988a0d` raised package.json to `>=20` and left the
+  lockfile claiming `>=18` until a Dependabot bump happened to rewrite it. Five
+  mutants — required lane back on 20, compat lane duplicating the floor,
+  `npm-audit` back on 20, stale lockfile engines, `.npmrc` neutered — each fail
+  the new tests.
+
 ### CI — a red coverage gate no longer hides the gates behind it
 
 * **Steps in a job stop at the first failure**, and `test-unit` runs nine

@@ -93,9 +93,16 @@ dev = [
     "jsonschema>=4,<5",
     "mkdocs>=1.6,<2",
     "mkdocs-material>=9.6,<10",
-    # NumPy 2.4+ bundles PEP 695 syntax in its stubs; mypy targeting the
-    # supported Python 3.11 floor cannot parse those stubs. This is a dev/type
-    # checking constraint, not an application runtime dependency.
+    # NumPy 2.5.0 requires Python >=3.12; 3.11 is a supported floor here, so
+    # the ceiling is what keeps the lock resolvable across 3.11-3.13 rather
+    # than a preference. (The ceiling was <2.4 from 2026-07-23, recorded as
+    # "NumPy 2.4+ bundles PEP 695 syntax in its stubs" -- the released 2.4.0
+    # and 2.4.6 wheels ship 264 stub files with no PEP 695 syntax in any of
+    # them, so that reason does not hold for the 2.4 line. The mypy half is
+    # still true and still worth watching: mypy 2.2.0 at --python-version 3.11
+    # rejects a `type` statement outright, so a future stub release that uses
+    # one turns lint red rather than degrading.) This is a dev/type-checking
+    # constraint, not an application runtime dependency.
     "numpy>=2,<2.5",
     "pandas>=2.2,<4",
     "pytest>=8.3,<10",

@@ -176,11 +176,14 @@ environments = [
     "python_version == '3.12'",
     "python_version == '3.13'",
 ]
-# schemathesis 4.24.x declares jsonschema-rs>=0.49.0 but calls
-# CanonicalSchema.is_satisfiable, which jsonschema-rs 0.50.0 removed —
-# tests/contract fails with AttributeError on 0.50.x. Constrain the
-# transitive resolution until schemathesis fixes its range upstream.
-constraint-dependencies = ["jsonschema-rs<0.50"]
+# A `constraint-dependencies = ["jsonschema-rs<0.50"]` pin lived here from
+# schemathesis 4.24.x, which declared jsonschema-rs>=0.49.0 with no ceiling
+# while calling CanonicalSchema.is_satisfiable — removed in jsonschema-rs
+# 0.50.0, so tests/contract failed with AttributeError on 0.50.x. It was
+# written to last "until schemathesis fixes its range upstream", and 4.25.0
+# does: it declares jsonschema-rs>=0.51.0,<0.52.0, a pairing upstream tests.
+# Keeping the old ceiling now makes the two ranges disjoint, which is what
+# blocked the 4.25.2 bump. Do not re-add it without a new reason.
 
 [tool.ruff]
 target-version = "py311"

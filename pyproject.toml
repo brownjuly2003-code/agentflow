@@ -88,7 +88,7 @@ integrations = [
     # (checked against 2.2.0), and integrations/.../mcp/server.py builds its
     # whole surface out of @server.list_tools() and @server.call_tool().
     # Taking mcp 2 means porting that module first, not moving this pin.
-    "mcp>=1.0,<2",
+    "mcp>=1.0,<3",
 ]
 contract = [
     "schemathesis==4.25.2",

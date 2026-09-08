@@ -4,6 +4,30 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Security — the Flink image stops shipping pip's vendored packages
+
+* **pip's vendored dependency set was the image's last two unwaived HIGH
+  findings.** Trivy reads `pip/_vendor/vendor.txt` as installed packages, so
+  msgpack 1.1.2 (GHSA-6v7p-g79w-8964) and setuptools 70.3.0 (CVE-2025-47273)
+  were reported against `agentflow-flink` even though no code imports either.
+  Neither is fixable in place: no pin changes what pip vendors, and both
+  advisories are fixed upstream, so neither qualifies for a waiver — the rule
+  `security/trivy-waivers.json` enforces is *upstream has published no fix*
+  (FB-02).
+* **Nothing installs at runtime, so the build removes pip** once the venv is
+  complete; the API image has shipped without it since P1-3. The job's
+  dependencies are the hash-locked `flink-requirements.lock` set, and PyFlink
+  shells out to pip only when `python.requirements` is configured, which no
+  job here sets.
+* **The removal is proven, not assumed.** It runs in the same layer that
+  installed the requirements — a later `RUN` would leave pip's files in an
+  earlier layer, where an image pulled at that layer still carries them — and
+  an `apache_beam`/`pyflink` import immediately after it fails the *build* if
+  the venv no longer starts, instead of failing the smoke job or production.
+* **A shell in the container now has no `pip install`.**
+  `docs/operations/flink-operators.md` says so, and says what to do instead:
+  change the lock and rebuild.
+
 ### Quality — the auth-manager coverage gate was measuring 82%, not 94%
 
 * **The file list *is* the gate.** `Run auth manager coverage gate` runs the

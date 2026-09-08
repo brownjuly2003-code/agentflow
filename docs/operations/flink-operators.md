@@ -120,6 +120,13 @@ standard `/docker-entrypoint.sh`. PyFlink and job dependencies live in
 `/opt/pyflink-venv`; both rendered jobs pass that interpreter through
 `-pyclientexec`.
 
+That venv ships no `pip`. pip carries vendored copies of its own
+dependencies (`pip/_vendor`), and those copies were the image's last two
+unwaived HIGH findings -- unfixable in place, because no pin changes what pip
+vendors. Nothing installs at runtime, so the build removes pip once the venv
+is complete. A shell in the container therefore has no `pip install`: change
+`flink-requirements.lock` and rebuild the image instead.
+
 ## Kubernetes Operator 1.15 compatibility
 
 Install the pinned Apache Flink Kubernetes Operator 1.15.0 chart before the

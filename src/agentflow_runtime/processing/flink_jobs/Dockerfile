@@ -21,6 +21,17 @@ ARG CURL_GUARDS="--connect-timeout 30 --speed-limit 65536 --speed-time 60 --retr
 USER root
 # BuildKit cache reuses a verified JAR across CI's same-runner build retry.
 # Cache hits skip the network; corrupt/partial entries are discarded.
+#
+# pip is removed once the venv is built. pip vendors its own dependency set
+# (pip/_vendor/vendor.txt), which Trivy reports as installed packages: msgpack
+# 1.1.2 (GHSA-6v7p-g79w-8964) and setuptools 70.3.0 (CVE-2025-47273) were the
+# image's last two unwaived HIGH findings, and both are unfixable in place --
+# no pin can change what pip vendors, and both advisories are fixed upstream,
+# so neither qualifies for a waiver under security/trivy-waivers.json. Nothing
+# installs at runtime: the job's dependencies are the hash-locked set above,
+# and PyFlink only shells out to pip when python.requirements is configured,
+# which no job here sets. The API image drops pip for the same reason. The
+# import check after the removal proves the venv still runs the job's stack.
 RUN --mount=type=cache,id=flink-sql-connector-kafka-5.0.0-2.2,target=/var/cache/flink-connectors \
     apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl python3 python3-pip python3-venv \
@@ -63,6 +74,8 @@ RUN --mount=type=cache,id=flink-sql-connector-kafka-5.0.0-2.2,target=/var/cache/
     && /opt/pyflink-venv/bin/python -m pip install --no-cache-dir --upgrade pip \
     && /opt/pyflink-venv/bin/python -m pip install --no-cache-dir --require-hashes -r /tmp/flink-requirements.lock \
     && /opt/pyflink-venv/bin/python -c "from importlib.metadata import version; v = version('apache-flink'); assert v == '${FLINK_VERSION}', f'flink-requirements.lock installed apache-flink {v}, ARG FLINK_VERSION is ${FLINK_VERSION}'" \
+    && /opt/pyflink-venv/bin/python -m pip uninstall --yes pip \
+    && /opt/pyflink-venv/bin/python -c "import apache_beam, pyflink; from pyflink.datastream import StreamExecutionEnvironment" \
     && rm -rf /var/lib/apt/lists/* /tmp/flink-requirements.lock
 
 WORKDIR /opt/agentflow

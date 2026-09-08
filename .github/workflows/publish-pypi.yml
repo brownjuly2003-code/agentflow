@@ -79,8 +79,14 @@ jobs:
               env.write(f"IS_RC={str('-rc' in release_version).lower()}\n")
           PY
 
+      # build 1.5.1 was yanked upstream ("considers breaking changes, will
+      # discuss re-releasing as a new major version"). A yanked release still
+      # installs when pinned exactly, so this kept working -- it just meant
+      # every published artifact came out of a withdrawn builder. 1.6.0 is the
+      # supported successor; uv.lock carries the same version for the wheels
+      # CI builds in python-compat.
       - name: Install build tooling
-        run: python -m pip install --upgrade build==1.5.1 twine==6.2.0
+        run: python -m pip install --upgrade build==1.6.0 twine==6.2.0
 
       - name: Clean previous distributions
         run: rm -rf dist sdk/dist

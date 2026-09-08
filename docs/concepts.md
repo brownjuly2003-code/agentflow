@@ -1,5 +1,11 @@
 # Concepts
 
+This walkthrough explains stable platform ideas. Business entity and metric
+meanings belong to the [detailed domain model](domain.md), runtime and backend
+choices to the [detailed architecture reference](architecture.md), exact routes
+and parameters to the [full API reference](api-reference.md), and current
+evidence and gates to [engineering status](STATUS.md).
+
 ## Streaming-first
 
 AgentFlow treats fresh operational context as the default. Batch jobs can still
@@ -12,46 +18,31 @@ resolved incident, or recommending inventory that has just changed.
 
 ## Semantic layer
 
-Agents do not call DuckDB or Iceberg tables directly. They use stable concepts:
-
-- entities such as `order`, `user`, `product`, and `session`
-- metrics such as `revenue` or `error_rate`
-- natural-language questions translated into constrained SQL
-- search, lineage, and contracts for discovery and auditability
-
-The semantic layer owns the mapping from those concepts to backing storage. That
-keeps client code small and lets the storage path evolve behind the API.
+Agents use stable business entities, metrics, constrained questions, search,
+lineage, and contracts instead of calling storage tables directly. The detailed
+domain model owns their names and business interpretation. The semantic layer
+maps those concepts to backing storage so client code stays small while the
+runtime can evolve behind the API.
 
 ## Contracts
 
 AgentFlow keeps schema contracts explicit so callers can reason about response
-shape and compatibility. The API exposes contract listing, version lookup,
-diffing, and candidate validation routes under `/v1/contracts`.
+shape and compatibility. The full API reference owns the exact listing,
+version, diff, and candidate-validation routes.
 
 Contracts are also a boundary against accidental data drift: a new field can be
 additive, while a removed or type-changed field needs a migration path.
 
 ## Local versus production-shaped paths
 
-The local path is optimized for fast developer feedback:
+The local path optimizes developer feedback; a production-shaped path exercises
+external processing, storage, deployment, and observability boundaries. Both
+preserve the same validation and semantic contracts. Architecture owns the
+component choices; the [deployment walkthrough](deployment.md) selects a
+runnable path.
 
-- synthetic events
-- DuckDB serving database
-- local Redis for cache/rate-limit behavior
-- FastAPI running on `localhost:8000`
-
-The production-shaped path documents how the same concepts map onto:
-
-- Kafka and Debezium/Kafka Connect
-- Flink validation and enrichment jobs
-- Iceberg storage
-- Helm/Kubernetes manifests
-- Terraform reference modules
-- Prometheus, OpenTelemetry, Jaeger, and Grafana
-
-Production operation still requires owner-owned environment decisions:
-hostnames, secrets, cloud account wiring, retention policy, monitoring ownership,
-and rollback ownership.
+Production operation still requires owner-owned hostnames, secrets, cloud
+account wiring, retention policy, monitoring, and rollback decisions.
 
 ## Query safety
 
@@ -61,7 +52,6 @@ Entity and metric lookup paths use parameterized queries for untrusted values.
 
 ## Evidence boundary
 
-Local gates and checked-in evidence show a strong application baseline. They do
-not prove external infrastructure controls. Treat cloud apply, third-party
-security assessment, object-lock retention, and formal compliance status as
-separate owner-evidence workflows.
+Checked-in gates and local evidence establish only the claims recorded in
+engineering status. External infrastructure, security assessment, retention,
+and compliance controls require separate owner evidence.

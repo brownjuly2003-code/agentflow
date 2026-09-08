@@ -1,0 +1,230 @@
+# Production values contract for the agentflow chart (audit F-11).
+#
+# The chart defaults are dev-shaped on purpose: they install on a laptop
+# cluster with no NetworkPolicy controller, no ingress TLS and an inline
+# Secret. This file is the counterpart -- the posture a production release is
+# expected to hold -- and it is versioned with the chart so a change to the
+# contract is a reviewable diff rather than a paragraph in a runbook.
+#
+# Layer it under your environment values:
+#
+#   helm upgrade --install agentflow ./helm/agentflow \
+#     -f helm/agentflow/values-production.yaml \
+#     -f my-environment.yaml
+#
+# Every value left empty here is one only the environment can supply. The
+# render is fail-closed: templates/production-contract.yaml refuses any
+# `config.profile=production` render that still violates the contract, and
+# lists every violation at once. So this file on its own does not render -- it
+# tells you exactly what my-environment.yaml owes it.
+#
+# Enforced elsewhere, not repeated here:
+#   - Kafka SASL/TLS for every Kafka workload (templates/_kafka.tpl);
+#   - plaintext ClickHouse/Redis/PostgreSQL at boot
+#     (agentflow_runtime.serving.transport_policy);
+#   - multi-replica gating on an external serving engine plus an external
+#     control plane (templates/deployment.yaml, ADR 0010).
+
+image:
+  # REQUIRED. Supply the sha256 digest produced and verified by the release
+  # pipeline. The repository remains in values.yaml; tag is ignored when this
+  # is set, so every API-derived workload consumes the identical artifact.
+  digest: ""
+
+config:
+  profile: production
+
+  # REQUIRED. Explicit origins, comma separated. A wildcard is refused: CORS
+  # runs with credentials, so "*" would let any site read authenticated
+  # responses.
+  corsOrigins: ""
+
+  # REQUIRED behind any proxy, this chart's ingress or a gateway outside it.
+  # Comma-separated peers allowed to set X-Forwarded-For. Behind a proxy every
+  # caller otherwise shares one source address, which is what the failed-auth
+  # limiter keys on and what every client_ip in the logs reports.
+  trustedProxies: ""
+  gateway:
+    # The alternative answer, for a path that preserves the caller's source
+    # address (L4 passthrough, externalTrafficPolicy: Local). Production refuses
+    # a release that leaves both this and trustedProxies empty -- silence used to
+    # pass as long as ingress.enabled was false (audit FB-06).
+    preservesClientIp: false
+
+  # Mirrors canonical config/security.yaml. Spelled out rather than inherited
+  # so a drift in the chart defaults cannot quietly weaken a production
+  # install; the contract check compares against these same five headers.
+  security: |
+    security:
+      key_hashing: argon2id
+      bcrypt_rounds: 12
+      min_key_length: 32
+      max_failed_auth_per_ip_per_hour: 10
+      sensitive_headers_to_redact:
+        - Authorization
+        - X-API-Key
+        - X-Admin-Key
+        - Cookie
+        - Set-Cookie
+      request_size_limit_bytes: 1048576
+
+# Default-deny baseline with explicit ingress/egress. The cluster needs a
+# NetworkPolicy controller for this to mean anything -- verify, do not assume.
+#
+# /metrics is unauthenticated so in-cluster Prometheus can scrape the ClusterIP
+# Service. The NetworkPolicy is the allow-list. This overlay keeps the chart
+# default (ingress-controller namespace only) and does not guess a scrape
+# namespace. The production contract refuses that unedited list until the
+# operator names the namespace that runs Prometheus, or sets
+# networkPolicy.scrapeFromIngressNamespace: true when Prometheus is
+# co-located in the ingress-controller namespace. Same pattern as
+# image.digest and secrets.existingSecret.
+networkPolicy:
+  enabled: true
+  ingressFromNamespaces:
+    - kubernetes.io/metadata.name: ingress-nginx
+    # - kubernetes.io/metadata.name: monitoring   # <- replace with the namespace that runs Prometheus
+
+  # REQUIRED for every rule the policy renders. A Kubernetes egress rule with
+  # `ports:` and no `to:` allows that port to EVERY address, in the cluster and
+  # on the internet -- so the baseline was denying nothing on
+  # 6379/9092/8123/4317/5432 (audit FB-09). Left empty here because only the
+  # environment knows where its stores live; the contract names each missing
+  # one. Which rules render follows what is configured, so a DuckDB install
+  # with no Redis is asked for `kafka` alone:
+  #
+  #   egressTo:
+  #     kafka:
+  #       - namespaceSelector:
+  #           matchLabels:
+  #             kubernetes.io/metadata.name: data
+  #         podSelector:
+  #           matchLabels:
+  #             app.kubernetes.io/name: kafka
+  #     postgres:
+  #       - ipBlock:
+  #           cidr: 10.30.4.0/24     # managed PostgreSQL outside the cluster
+  egressTo:
+    redis: []
+    kafka: []
+    clickhouse: []
+    otlp: []
+    postgres: []
+    icebergCatalog: []
+    objectStore: []
+
+# The API owns query-analytics storage; this job only calls its authenticated
+# admin endpoint. Production must execute the final prune and forbid overlap.
+analyticsRetention:
+  enabled: true
+  dryRun: false
+  concurrencyPolicy: Forbid
+
+# Key material stays outside Helm: values land in release metadata and shell
+# history. Point existingSecret at the Secret your secrets operator or CSI
+# driver projects, holding `admin-key` and `api_keys.yaml`.
+secrets:
+  create: false
+  existingSecret: ""  # REQUIRED
+  adminKey: ""
+  apiKeys:
+    keys: []
+
+# REQUIRED. Two peppers domain-separate the digests the API stores, and both
+# fall back to constants committed to this repository:
+#
+#   AGENTFLOW_KEY_LOOKUP_PEPPER        peppers `key_lookup`, an HMAC of the API
+#                                      key itself. With the public default, a
+#                                      leaked api_keys.yaml lets a guessed key
+#                                      be confirmed against the stored digest
+#                                      without paying for an argon2id verify,
+#                                      and lets two deployments' digests be
+#                                      joined into one identity (audit FB-07).
+#   AGENTFLOW_QUERY_FINGERPRINT_PEPPER peppers query-analytics fingerprints, so
+#                                      a leaked analytics table cannot be joined
+#                                      against question digests computed
+#                                      elsewhere (audit AF-13).
+#
+# The API refuses to boot on profile=production with either unset or left at
+# its default, and the production contract refuses the render before that.
+#
+# They live in extraEnv rather than in a `secrets.*` value on purpose: values
+# persist in Helm release metadata and shell history, which is the same reason
+# secrets.create=true is refused above. Project them from the Secret your
+# secrets operator or CSI driver manages -- a literal `value:` here is refused.
+#
+# Rotation is not free: changing the lookup pepper invalidates every stored
+# `key_lookup`, and authentication falls back to the O(n) verify scan until the
+# keys are re-issued. See docs/runbooks/auth-401-spike.md.
+# Left empty here because only the environment knows the Secret's name; supply
+# the whole list in my-environment.yaml, which replaces this one:
+#
+#   extraEnv:
+#     - name: AGENTFLOW_KEY_LOOKUP_PEPPER
+#       valueFrom:
+#         secretKeyRef:
+#           name: agentflow-production-secret   # <- your secrets.existingSecret
+#           key: key-lookup-pepper
+#     - name: AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+#       valueFrom:
+#         secretKeyRef:
+#           name: agentflow-production-secret
+#           key: query-fingerprint-pepper
+extraEnv: []
+
+# production-contract.yaml: production must keep the API on a ClusterIP Service
+service:
+  type: ClusterIP
+
+# TLS terminates here by default. If your platform terminates it in a gateway
+# ahead of the chart, set ingress.enabled=false and record that decision --
+# the contract then stops asking for `tls`. It keeps asking whose address the
+# pod will observe: answer with config.trustedProxies or with
+# config.gateway.preservesClientIp.
+#
+# Production ingress must not route /metrics (audit F-10). That endpoint is
+# unauthenticated by design so in-cluster Prometheus can scrape the ClusterIP
+# Service. A Prefix path of `/` or `/metrics` is refused, as is Exact `/metrics`
+# (Exact `/` matches only `/` and cannot reach the mount). pathType
+# ImplementationSpecific is refused (controller-defined matching cannot be
+# proven). The exact ingress-nginx routing-control annotations rewrite-target,
+# use-regex, app-root, configuration-snippet and server-snippet are also
+# refused under both `nginx.ingress.kubernetes.io/` and the legacy
+# `ingress.kubernetes.io/` prefix: the controller applies them after Helm has
+# checked the literal paths. Other annotations remain available. This binds
+# only the Ingress rendered by this chart, not the controller ConfigMap or
+# separately managed Ingress objects.
+#
+# Enumerate the public prefixes instead of Prefix `/`, for example:
+#
+#   hosts:
+#     - host: api.example.com
+#       paths:
+#         - path: /v1
+#           pathType: Prefix
+#         - path: /admin
+#           pathType: Prefix
+#
+# Interactive docs and the OpenAPI schema are demo/development surfaces. The
+# application returns 404 for /docs, /redoc, and /openapi* in production; do
+# not add them to the production Ingress.
+#
+# Or route metrics on a separate internal-only host/ingress. Dev defaults in
+# values.yaml stay `path: /` -- the guard is production-only.
+ingress:
+  enabled: true
+  className: ""  # empty selects the cluster's default IngressClass -- name it
+  hosts: []      # REQUIRED
+  tls: []        # REQUIRED
+
+# One identity per workload (audit F-05). `name` is the legacy shared-account
+# escape hatch; setting it collapses the split and disables RBAC isolation.
+serviceAccount:
+  create: true
+  name: ""
+
+serving:
+  clickhouse:
+    # Applies when serving.backend=clickhouse: HTTPS with certificate AND
+    # hostname verification. For a private CA also set tls.caSecret.
+    secure: true

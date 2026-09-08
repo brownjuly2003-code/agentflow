@@ -1,6 +1,14 @@
 # API 5xx Spike
 
-**Last updated:** 2026-05-24
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for a `/v1/*` 5xx rate spike or a failing `/v1/health` probe. Use it
+when Grafana or a synthetic probe shows 5xx on those routes. It does not
+define on-call scope or the severity ladder; those live in
+[README.md](README.md).
+
+**Audience:** Platform / API on-call
+
+**Prerequisites:** kubectl access to the cluster namespace, Grafana AgentFlow API panels, Jaeger, and API log queries
 
 ## Symptom
 
@@ -10,8 +18,8 @@ or one or more of:
 - `agentflow_http_requests_total{status=~"5.."}` rises sharply.
 - `/v1/entity/*`, `/v1/metrics/*`, `/v1/query`, or `/v1/batch` returns 500/502/503
   to a customer who is not posting malformed input.
-- Synthetic probe (`scripts/healthcheck.py` / external uptime monitor) fails on
-  `/v1/health` twice in a row.
+- Synthetic probe (external uptime monitor, or `tests/e2e/test_smoke.py` in
+  CI) fails on `/v1/health` twice in a row.
 
 ## Severity
 
@@ -134,6 +142,6 @@ DB pool gauges at 100%.
 
 - Mandatory for Sev 1 of any duration.
 - Mandatory for Sev 2 lasting > 4 hours or affecting > 1 tenant.
-- Postmortem template: copy `docs/lessons/ci-repair-sprint-2026-04.md` as a
-  structural starting point (Lesson / Apply / Concrete-trace SHA format works
-  here too).
+- Postmortem structure: one section per lesson, each written as
+  Lesson / Apply / concrete-trace SHA so every claim points at the commit or
+  run that proves it.

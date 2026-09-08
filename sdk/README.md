@@ -5,6 +5,10 @@
 > the v1.x line). See [CHANGELOG](https://github.com/brownjuly2003-code/agentflow/blob/main/CHANGELOG.md)
 > for the current release.
 
+Start with the curated [SDK walkthrough](../docs/sdk.md). This package
+reference owns Python installation, sync and async usage, and resilience
+configuration.
+
 Install from PyPI:
 
 ```bash

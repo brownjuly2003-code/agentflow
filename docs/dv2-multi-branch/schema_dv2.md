@@ -184,7 +184,7 @@ Idempotent re-loading через `hash_diff` — если satellite-payload не
 |---|---|---|
 | `hub_customer` + `sat_customer_personal__*` | Синтетический demo seed (customers) | `synthetic_seed.sql` |
 | `hub_product` + `sat_product_catalog__*` | Синтетический demo seed (catalog) | `synthetic_seed.sql` |
-| `lnk_order_customer` + `sat_lnk_order_product__*` | Консолидированный marketplace-фид (`mp__`) + per-branch order feed (`1c__`) | `satellite_seed_all_branches.sql` + kitchen live generator (`src/ingestion/`) |
+| `lnk_order_customer` + `sat_lnk_order_product__*` | Консолидированный marketplace-фид (`mp__`) + per-branch order feed (`1c__`) | `satellite_seed_all_branches.sql` + kitchen live generator (`src/agentflow_runtime/ingestion/`) |
 | `sat_customer_loyalty__*` | Синтетический seed (dealer retro-bonus state, легенда) | `satellite_seed_all_branches.sql` |
 | `sat_order_marketplace__wb__*` | Synthesize from public ВБ API docs | Wildberries |
 | `hub_marking_code` | Честный Знак GS1 examples | crpt.ru |
@@ -192,6 +192,6 @@ Idempotent re-loading через `hash_diff` — если satellite-payload не
 Демо-объём фиксирован на масштабе легенды (docs/generator-spec.md §1): ~10K
 заказов / 2 500 клиентов / 160 SKU, без внешних bulk-датасетов. Raw vault
 загружается синтетическим seed (`synthetic_seed.sql` + `satellite_seed_all_branches.sql`),
-живым kitchen-генератором (`src/ingestion/`) и `reference/load_postgres.py`;
+живым kitchen-генератором (`src/agentflow_runtime/ingestion/`) и `reference/load_postgres.py`;
 маппинг в DV2.0 hub/link/sat остаётся тем же (per-branch satellites, синтетические
 branches по 5 локациям).

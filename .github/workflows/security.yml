@@ -28,8 +28,12 @@ jobs:
         run: python -m pip install --upgrade pip bandit
       - name: Run Bandit
         run: |
-          bandit -r src sdk --ini .bandit --severity-level medium -f json -o /tmp/bandit-current.json || true
-          python scripts/bandit_diff.py .bandit-baseline.json /tmp/bandit-current.json
+          # Runtime-artifact ownership: the raw report is a replaceable per-run
+          # working file under ignored .artifacts/security/; the diff against the
+          # tracked .bandit-baseline.json is what decides the outcome.
+          mkdir -p .artifacts/security
+          bandit -r src sdk --ini .bandit --severity-level medium -f json -o .artifacts/security/bandit-current.json || true
+          python scripts/bandit_diff.py .bandit-baseline.json .artifacts/security/bandit-current.json
 
   safety:
     runs-on: ubuntu-latest
@@ -43,6 +47,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import shutil
           import subprocess
           import sys
           import tempfile
@@ -50,18 +55,24 @@ jobs:
           import tomllib
 
           root = Path(".")
-          output_dir = root / ".tmp-security"
-          output_dir.mkdir(exist_ok=True)
+          # Runtime-artifact ownership: requirement buckets and resolver venvs
+          # are replaceable per-run files under ignored .artifacts/security/safety/.
+          output_dir = root / ".artifacts" / "security" / "safety"
+          output_dir.mkdir(parents=True, exist_ok=True)
 
           def load_project_dependencies(pyproject_path: Path) -> list[str]:
               if not pyproject_path.exists():
-                  return []
+                  raise SystemExit(
+                      f"Required dependency manifest is missing: {pyproject_path}"
+                  )
               data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
               return list(data.get("project", {}).get("dependencies", []))
 
           def load_requirements(requirements_path: Path) -> list[str]:
               if not requirements_path.exists():
-                  return []
+                  raise SystemExit(
+                      f"Required dependency manifest is missing: {requirements_path}"
+                  )
               requirements: list[str] = []
               for line in requirements_path.read_text(encoding="utf-8").splitlines():
                   stripped = line.strip()
@@ -74,7 +85,27 @@ jobs:
               deduped = list(dict.fromkeys(entries))
               target.write_text("\n".join(deduped) + "\n", encoding="utf-8")
 
+          def copy_locked_requirements(source: Path, target: Path) -> int:
+              if not source.exists():
+                  raise SystemExit(f"Required dependency lock is missing: {source}")
+              locked = [
+                  line.strip()
+                  for line in source.read_text(encoding="utf-8").splitlines()
+                  if line and not line[0].isspace() and not line.startswith("#")
+              ]
+              if not locked:
+                  raise SystemExit(f"Required dependency lock resolved to zero packages: {source}")
+              if any("==" not in requirement or not requirement.endswith("\\") for requirement in locked):
+                  raise SystemExit(f"Required dependency lock is not fully hash-pinned: {source}")
+              shutil.copyfile(source, target)
+              print(f"Copied {len(locked)} locked packages -> {target}")
+              return len(locked)
+
           def resolve_requirements(name: str, entries: list[str], target: Path) -> int:
+              if not entries:
+                  raise SystemExit(
+                      f"Required dependency bucket {name!r} resolved to zero packages"
+                  )
               temp_input = output_dir / f"{name}.in"
               write_requirements(temp_input, entries)
 
@@ -93,6 +124,10 @@ jobs:
                   )
 
               resolved = [line for line in freeze.stdout.splitlines() if line.strip()]
+              if not resolved:
+                  raise SystemExit(
+                      f"Required dependency bucket {name!r} resolved to zero packages"
+                  )
               if any("==" not in line for line in resolved):
                   raise SystemExit(f"{name} requirements were not fully resolved")
               target.write_text("\n".join(resolved) + "\n", encoding="utf-8")
@@ -125,9 +160,16 @@ jobs:
 
           def load_optional_dependencies(pyproject_path: Path, extra: str) -> list[str]:
               if not pyproject_path.exists():
-                  return []
+                  raise SystemExit(
+                      f"Required dependency manifest is missing: {pyproject_path}"
+                  )
               data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-              return list(data.get("project", {}).get("optional-dependencies", {}).get(extra, []))
+              extras = data.get("project", {}).get("optional-dependencies", {})
+              if extra not in extras:
+                  raise SystemExit(
+                      f"Required extra {extra!r} is missing from {pyproject_path}"
+                  )
+              return list(extras[extra])
 
           # Audit P1-3: scan every published/deployed extra, not just the
           # unconditional core dependencies — cloud, postgres, the root
@@ -147,13 +189,13 @@ jobs:
               )
 
           # The Flink runtime is not an extra (its beam chain can never
-          # co-install with core pyarrow>=17) — its manifest lives next to
-          # the Flink image Dockerfile. Scan it as its own bucket.
-          flink_count = resolve_requirements(
-              "flink-runtime",
-              load_requirements(
-                  root / "src" / "processing" / "flink_jobs" / "requirements.txt"
-              ),
+          # co-install with core pyarrow>=17). Keep validating its human-owned
+          # manifest, but scan the image's hash lock without resolving it again.
+          load_requirements(
+              root / "src" / "agentflow_runtime" / "processing" / "flink_jobs" / "requirements.txt"
+          )
+          flink_count = copy_locked_requirements(
+              root / "src/agentflow_runtime/processing/flink_jobs/flink-requirements.lock",
               output_dir / "requirements-flink-runtime.txt",
           )
 
@@ -184,14 +226,15 @@ jobs:
         run: python -m pip install --upgrade pip "safety<3"
       - name: Verify Safety fails on a known vulnerable pin
         run: |
-          printf 'urllib3==1.24.1\n' > .tmp-security/requirements-regression.txt
-          if safety check -r .tmp-security/requirements-regression.txt > .tmp-security/safety-regression.log 2>&1; then
-            cat .tmp-security/safety-regression.log
+          mkdir -p .artifacts/security/safety
+          printf 'urllib3==1.24.1\n' > .artifacts/security/safety/requirements-regression.txt
+          if safety check -r .artifacts/security/safety/requirements-regression.txt > .artifacts/security/safety/safety-regression.log 2>&1; then
+            cat .artifacts/security/safety/safety-regression.log
             echo "Safety unexpectedly passed the vulnerable regression probe"
             exit 1
           fi
-          if ! grep -q "urllib3" .tmp-security/safety-regression.log; then
-            cat .tmp-security/safety-regression.log
+          if ! grep -q "urllib3" .artifacts/security/safety/safety-regression.log; then
+            cat .artifacts/security/safety/safety-regression.log
             echo "Safety failed the regression probe for an unexpected reason"
             exit 1
           fi
@@ -228,23 +271,48 @@ jobs:
           # `from apache_beam.io.parquetio import *`, and parquetio's class
           # bodies evaluate `pa.Table` annotations with pa=None ->
           # AttributeError). The dependency is load-bearing at import time
-          # even though our jobs never use it.
+          # even though our jobs never use it. Expires 2026-10-27 (same as
+          # the Trivy waiver). Disposition is recorded in
+          # security/trivy-waivers.json (flink-runtime, CVE-2026-25087).
+          #
+          # SFTY-20260724-05622 (CVE-2026-59939): unbounded decompression of
+          # HTTP response bodies encoded with Content-Encoding: gzip or
+          # deflate in _decompressContent (httplib2/__init__.py), fixed in
+          # 0.32.0. A malicious or compromised HTTP server can return a
+          # small compressed payload that expands to an arbitrarily large
+          # size in memory (MemoryError / OOM-kill). Only the flink-runtime
+          # bucket resolves an affected httplib2 (apache-flink's beam chain
+          # caps httplib2<0.23). Why the risk is negligible here:
+          #   1. The Flink DataStream job has no httplib2 import or HTTP
+          #      client path. Its ingress is Kafka, and it never processes
+          #      attacker-controlled compressed HTTP response bodies.
+          # Blocked upstream, not by our pin: apache-flink==2.3.0 requires
+          # apache-beam>=2.54.0,<=2.61.0; apache-beam==2.61.0 requires
+          # httplib2>=0.8,<0.23.0. Installing httplib2 0.32 into this graph
+          # is impossible without breaking Beam. Dependabot watches the
+          # Flink manifest (src/agentflow_runtime/processing/flink_jobs),
+          # so the next apache-flink release opens a PR — re-check this
+          # ignore there. Remove this ignore when a supported apache-flink/
+          # apache-beam dependency set accepts httplib2>=0.32.0, or
+          # immediately if an httplib2 call path is added. Expires 2026-10-27
+          # (same as the Trivy waiver).
+          # Disposition is recorded in security/trivy-waivers.json
+          # (flink-runtime, CVE-2026-59939).
           #
           # 88512 (langchain cross-ecosystem false positive) was ignored here
           # until 2026-07-20; PyUp corrected the entry (verified: safety
           # 2.3.5 reports 0 findings on the pinned langchain stack), so the
           # ignore is gone. If it ever resurfaces, it fails this job loudly.
-          safety check \
-            --ignore SFTY-20260217-93940 \
-            -r .tmp-security/requirements-main.txt \
-            -r .tmp-security/requirements-sdk.txt \
-            -r .tmp-security/requirements-integrations.txt \
-            -r .tmp-security/requirements-extra-cloud.txt \
-            -r .tmp-security/requirements-extra-postgres.txt \
-            -r .tmp-security/requirements-extra-integrations.txt \
-            -r .tmp-security/requirements-flink-runtime.txt \
-            -r .tmp-security/requirements-extra-load.txt \
-            -r .tmp-security/requirements-extra-contract.txt
+          python scripts/run_safety_scan.py --waivers security/trivy-waivers.json \
+            -r .artifacts/security/safety/requirements-main.txt \
+            -r .artifacts/security/safety/requirements-sdk.txt \
+            -r .artifacts/security/safety/requirements-integrations.txt \
+            -r .artifacts/security/safety/requirements-extra-cloud.txt \
+            -r .artifacts/security/safety/requirements-extra-postgres.txt \
+            -r .artifacts/security/safety/requirements-extra-integrations.txt \
+            -r .artifacts/security/safety/requirements-flink-runtime.txt \
+            -r .artifacts/security/safety/requirements-extra-load.txt \
+            -r .artifacts/security/safety/requirements-extra-contract.txt
 
   # Audit P1-3: pip-audit against the hash-pinned export of uv.lock. The
   # unlocked run could not even finish resolving in three minutes; with the
@@ -261,6 +329,9 @@ jobs:
           python-version: "3.11"
       - name: Install pip-audit
         run: python -m pip install --upgrade pip "pip-audit>=2.7,<3" uv==0.8.23
+      # Deliberately bare: the production image lock is the one inventory with
+      # no waiver mechanism reachable at all. A finding here is a release
+      # blocker, not something to argue about in security/trivy-waivers.json.
       - name: Audit the locked production dependency set
         run: pip-audit --no-deps -r requirements-docker.lock
       # Audit F-03: the production lock alone left uv.lock's dev/test chain
@@ -271,9 +342,22 @@ jobs:
       # actually sync.
       - name: Audit the full locked profile set (all extras, dev included)
         run: |
+          # Runtime-artifact ownership: the export is a replaceable per-run
+          # working file under ignored .artifacts/security/pip-audit/.
+          mkdir -p .artifacts/security/pip-audit
           uv export --frozen --format requirements-txt --all-extras \
-            --no-emit-project -o .tmp-security-all-profiles.txt
-          pip-audit --no-deps -r .tmp-security-all-profiles.txt
+            --no-emit-project -o .artifacts/security/pip-audit/requirements-all-profiles.txt
+          # Audit FB-02: nltk 3.10.3 carries PYSEC-2026-3740 and upstream has
+          # published no fix, so no bump can close it and this job stayed red
+          # with nowhere to record why. The suppression lives in
+          # security/trivy-waivers.json (scope python-profiles), where it is
+          # validated, expires on 2026-11-01, and fails this job the moment it
+          # stops matching -- including the day nltk ships a fix. Do not pass
+          # --ignore-vuln here: a flag in YAML has none of those properties.
+          python scripts/run_pip_audit_scan.py \
+            --waivers security/trivy-waivers.json \
+            --scope python-profiles \
+            -r .artifacts/security/pip-audit/requirements-all-profiles.txt
 
   npm-audit:
     runs-on: ubuntu-latest
@@ -292,12 +376,16 @@ jobs:
 
   trivy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Two shipping-image builds plus JSON/SARIF/SBOM scans exceed the previous
+    # 20-minute bound; keep this finite (no retries).
+    timeout-minutes: 45
     permissions:
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare Trivy artifact directory
+        run: mkdir -p .artifacts/trivy
       - name: Build API image
         env:
           COMPOSE_PROJECT_NAME: agentflow-security
@@ -314,6 +402,11 @@ jobs:
           }
           docker tag agentflow-security-agentflow-api:latest agentflow-api:security-scan
         shell: pwsh
+      - name: Build Flink image
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.flink.yml build flink-job-runner
+          docker image inspect agentflow-flink-local:latest
+          docker tag agentflow-flink-local:latest agentflow-flink:security-scan
       - name: Generate CycloneDX SBOM
         # Pinned to release tag (audit p9 #3); update by bumping the
         # tag, never re-pin to @master (allows upstream to alter scanner).
@@ -321,22 +414,52 @@ jobs:
         with:
           image-ref: agentflow-api:security-scan
           format: cyclonedx
-          output: agentflow-api.cdx.json
+          output: .artifacts/trivy/agentflow-api.cdx.json
       - name: Upload CycloneDX SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agentflow-api-sbom-cyclonedx
-          path: agentflow-api.cdx.json
+          path: .artifacts/trivy/agentflow-api.cdx.json
           if-no-files-found: error
-      - name: Run Trivy scan
+      - name: Generate Flink CycloneDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: agentflow-flink:security-scan
+          format: cyclonedx
+          output: .artifacts/trivy/agentflow-flink.cdx.json
+      - name: Upload Flink CycloneDX SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentflow-flink-sbom-cyclonedx
+          path: .artifacts/trivy/agentflow-flink.cdx.json
+          if-no-files-found: error
+      - name: Run Trivy JSON scan (API)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: agentflow-api:security-scan
+          format: json
+          output: .artifacts/trivy/trivy-api.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+      - name: Run Trivy JSON scan (Flink)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: agentflow-flink:security-scan
+          format: json
+          output: .artifacts/trivy/trivy-flink.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+      - name: Run Trivy SARIF scan (API)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: agentflow-api:security-scan
           format: sarif
-          output: trivy-results.sarif
+          output: .artifacts/trivy/trivy-api.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
           # Without this, trivy-action builds the SARIF "with all severities"
           # and drops BOTH filters above from the scan the exit code comes
           # from — an unfixable MEDIUM in the base image (e.g. liblzma5
@@ -344,11 +467,32 @@ jobs:
           # declares itself HIGH,CRITICAL-only. This makes the declared
           # filters real for the SARIF scan too.
           limit-severities-for-sarif: true
-      - name: Upload Trivy scan results
+      - name: Run Trivy SARIF scan (Flink)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: agentflow-flink:security-scan
+          format: sarif
+          output: .artifacts/trivy/trivy-flink.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          limit-severities-for-sarif: true
+      - name: Upload Trivy API SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
-          sarif_file: trivy-results.sarif
+          sarif_file: .artifacts/trivy/trivy-api.sarif
+          category: trivy-api-image
+      - name: Upload Trivy Flink SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: .artifacts/trivy/trivy-flink.sarif
+          category: trivy-flink-image
+      - name: Evaluate API Trivy policy
+        run: python3 scripts/evaluate_trivy_policy.py --report .artifacts/trivy/trivy-api.json --waivers security/trivy-waivers.json --scope api-runtime --output .artifacts/trivy/trivy-api-policy.json
+      - name: Evaluate Flink Trivy policy
+        run: python3 scripts/evaluate_trivy_policy.py --report .artifacts/trivy/trivy-flink.json --waivers security/trivy-waivers.json --scope flink-runtime --output .artifacts/trivy/trivy-flink-policy.json
 
   iac:
     runs-on: ubuntu-latest
@@ -358,13 +502,15 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare Trivy artifact directory
+        run: mkdir -p .artifacts/trivy
       - name: Run Trivy IaC misconfiguration scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: infrastructure/terraform
           format: sarif
-          output: trivy-iac.sarif
+          output: .artifacts/trivy/trivy-iac.sarif
           severity: MEDIUM,HIGH,CRITICAL
           exit-code: "1"
           limit-severities-for-sarif: true
@@ -372,7 +518,7 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
-          sarif_file: trivy-iac.sarif
+          sarif_file: .artifacts/trivy/trivy-iac.sarif
           # Distinct category so these alerts do not collide with the image
           # scan's SARIF upload in the trivy job.
           category: trivy-iac

@@ -1,12 +1,36 @@
 # AgentFlow Release Readiness
 
-**Release line**: `v2.1.0`
+**Release line**: `v2.1.0` (prepared; not tagged or published)
 
-**Package status**: published to PyPI (`agentflow-runtime`, `agentflow-client`) and npm
+**Published package line**: `v2.0.0` on PyPI (`agentflow-runtime`, `agentflow-client`) and npm
 (`@yuliaedomskikh/agentflow-client`) via OIDC Trusted Publishers with SLSA
 provenance attestations — see
 [dv2-multi-branch/RELEASE_STATUS.md](dv2-multi-branch/RELEASE_STATUS.md) for
 registry links and upload evidence.
+
+## Release version policy
+
+AgentFlow runtime, the Python SDK, and the TypeScript SDK release in lockstep.
+Before a release tag is created, `pyproject.toml`, `sdk/pyproject.toml`,
+`sdk/agentflow/__init__.py`, `sdk-ts/package.json`, and both root version fields
+in `sdk-ts/package-lock.json` must describe the same release. Python metadata
+uses PEP 440 form for candidates (`2.1.0rc1`); npm metadata and the tag use
+SemVer form (`2.1.0-rc1`). The source-only `integrations/` package is outside
+this lockstep and retains its independent version.
+
+| Tag class | Python artifacts | TypeScript artifact | Registry behavior |
+|-----------|------------------|---------------------|-------------------|
+| `sdk-vX.Y.Z` | runtime + Python SDK | TypeScript SDK | production publish |
+| `vX.Y.Z` | runtime + Python SDK | TypeScript SDK | production publish |
+| `vX.Y.Z-rcN` | runtime + Python SDK | dry-run only | TestPyPI when its token is configured; no npm upload |
+
+The prepared `2.1.0` line includes the F-02 security carve-out: admin-key
+revocation now accepts `key_id` rather than placing plaintext credentials in a
+request path. Although this is an intentional breaking correction, it belongs
+to the prepared, unpublished `2.1.0` release. The deprecated runtime `src`
+namespace shim remains available for one published release as documented in
+the migration policy; the security carve-out does not shorten that window.
+Creating or pushing a tag and publishing remain owner-authorized operations.
 
 **Golden-topology status (2026-08-09)**: production candidate, not production
 accepted. Repository implementation and local contract gates are complete;
@@ -50,9 +74,16 @@ A later kind residual canary **PASS** unlocked soak traffic
 Multiple soak identities were attempted; latest
 `golden-4h-soak-rv-20260807-05` producer **PASS**ed (`1_440_000` delivered,
 failures `0`) but overall soak **`SOAK_FAIL`**ed on terminal Flink health
-before dual-mean verify could PASS; corrected Helm rollback was **not
-started**
+before dual-mean verify could PASS; in that 2026-08-08 attempt the
+corrected Helm rollback was **not started**
 ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+Corrected rollback *mechanics* were later exercised separately and
+**PASS**ed on 2026-08-23 without traffic (probe revision 5, rollback to
+revision 6, byte-identical to revision 3;
+[corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md));
+that does not close this gate, because rollback **after** sustained soak
+traffic remains **`BLOCKED_HOST_CAPACITY`**
+([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md)).
 External security evidence remains pending as listed below. Read-only
 external-pentest evidence/readiness audit at `2026-08-01T17:11:58Z` returned
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** — see
@@ -153,9 +184,9 @@ write transforms; the optional MCP integration is capped below the breaking
 selected contract/MCP/Iceberg tests.
 Independent Mac validation with Trivy 0.70.0 reported zero HIGH/CRITICAL
 findings; details and evidence limits are in
-[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md)
+[security-runtime-image-trivy-2026-07-30.md](evidence/security-runtime-image-trivy-2026-07-30.md)
 and
-[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+[dependency-compatibility-2026-07-30.md](evidence/dependency-compatibility-2026-07-30.md).
 All required GitHub checks must still be green on the exact final pushed SHA.
 
 ## Scope
@@ -221,8 +252,16 @@ untracked prompts.
    Latest soak identity `golden-4h-soak-rv-20260807-05` completed the
    producer (**PASS**, `1_440_000` delivered, failures `0`) but failed the
    soak gate with **`SOAK_FAIL`** on terminal Flink health before dual-mean
-   verify could PASS; corrected rollback was **not started**
+   verify could PASS; in that 2026-08-08 attempt the corrected rollback
+   was **not started**
    ([perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)).
+   Corrected rollback *mechanics* were later exercised separately and
+   **PASS**ed on 2026-08-23 without traffic (probe revision 5, rollback to
+   revision 6, byte-identical to revision 3;
+   [corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md));
+   that does not close this gate, because rollback **after** sustained
+   soak traffic remains **`BLOCKED_HOST_CAPACITY`**
+   ([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md)).
    The combined soak/rollback acceptance gate remains open. A future newly
    identified soak run should retain JobManager/TaskManager logs and Flink
    exception-history evidence before retry.

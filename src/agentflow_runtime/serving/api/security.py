@@ -13,6 +13,8 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from agentflow_runtime.serving.transport_policy import resolve_profile
+
 try:
     import yaml
 except ImportError:  # pragma: no cover
@@ -50,8 +52,18 @@ class SecurityPolicy(BaseModel):
     bcrypt_rounds: int = Field(default=12, ge=4)
     min_key_length: int = Field(default=32, ge=1)
     max_failed_auth_per_ip_per_hour: int = Field(default=10, ge=1)
+    # Canonical config/security.yaml redacts five headers; this default used to
+    # name two, so a policy file that omitted the key -- or any caller that let
+    # `redact_sensitive_headers` fall back -- logged session cookies and the
+    # admin key in the header map recorded on failed auth (audit F-11).
     sensitive_headers_to_redact: list[str] = Field(
-        default_factory=lambda: ["Authorization", "X-API-Key"]
+        default_factory=lambda: [
+            "Authorization",
+            "X-API-Key",
+            "X-Admin-Key",
+            "Cookie",
+            "Set-Cookie",
+        ]
     )
     request_size_limit_bytes: int = Field(default=1_048_576, ge=1)
 
@@ -72,18 +84,63 @@ _ARGON2_HASHER = PasswordHasher(time_cost=2, memory_cost=19_456, parallelism=1)
 
 # Deterministic lookup digests are domain-separated by an HMAC pepper so a
 # leaked api_keys.yaml cannot be joined against digests of the same key
-# material computed elsewhere. Production may override the pepper via env;
+# material computed elsewhere. Production MUST override the pepper via env;
 # changing it invalidates stored `key_lookup` values (keys then fall back to
 # the O(n) verify scan until re-issued — see docs/runbooks/auth-401-spike.md).
+KEY_LOOKUP_PEPPER_ENV = "AGENTFLOW_KEY_LOOKUP_PEPPER"
 DEFAULT_KEY_LOOKUP_PEPPER = "agentflow-key-lookup-v1"
 
 
+class KeyLookupPepperError(RuntimeError):
+    """The configured key-lookup pepper is not usable on this profile."""
+
+
+def resolve_key_lookup_pepper(env: Mapping[str, str] | None = None) -> str:
+    """Pick the key-lookup pepper, refusing the public default in production.
+
+    The query-analytics fingerprint pepper has had this gate since AF-13. The
+    lookup pepper did not, though it guards the more sensitive digest of the
+    two (audit FB-07): `key_lookup` is an HMAC of the API key itself. Peppered
+    with a constant committed to this repository, that digest is reproducible
+    by anyone — so a leaked `api_keys.yaml` lets a guessed key be confirmed
+    against the stored digest without ever paying for an argon2id verify, and
+    lets digests from two deployments be joined into one identity.
+
+    Demo and dev keep the built-in default so a fresh checkout still starts.
+
+    The value is returned exactly as the environment gave it. Whitespace is
+    stripped only to decide whether the variable is *set* and whether it is the
+    default; normalising the returned value would change every digest a padded
+    pepper had already produced, which is the one thing this gate must not do.
+    """
+    env = os.environ if env is None else env
+    raw = env.get(KEY_LOOKUP_PEPPER_ENV) or ""
+    pepper = raw.strip()
+    if resolve_profile(env) != "production":
+        return raw if pepper else DEFAULT_KEY_LOOKUP_PEPPER
+    if not pepper:
+        raise KeyLookupPepperError(
+            f"AGENTFLOW_PROFILE=production requires {KEY_LOOKUP_PEPPER_ENV} to be set: "
+            "the built-in pepper is a public constant, so every stored key_lookup "
+            "digest would be reproducible by anyone who can read this repository."
+        )
+    if pepper == DEFAULT_KEY_LOOKUP_PEPPER:
+        raise KeyLookupPepperError(
+            f"{KEY_LOOKUP_PEPPER_ENV} equals the built-in default pepper; "
+            "production must use a value that is not committed to the repository."
+        )
+    return raw
+
+
 def compute_key_lookup(value: str, pepper: str | None = None) -> str:
-    resolved = (
-        pepper
-        if pepper is not None
-        else os.getenv("AGENTFLOW_KEY_LOOKUP_PEPPER", DEFAULT_KEY_LOOKUP_PEPPER)
-    )
+    """Deterministic lookup digest for an API key.
+
+    An explicit `pepper` is used as given — callers that pass one are
+    computing a digest for a pepper they already resolved. `None` goes through
+    `resolve_key_lookup_pepper`, so a production process can neither issue nor
+    match a digest computed with the public default.
+    """
+    resolved = pepper if pepper is not None else resolve_key_lookup_pepper()
     return hmac.new(resolved.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()
 
 

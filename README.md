@@ -15,7 +15,7 @@ gates are recorded in [docs/PROJECT_CLOSURE.md](docs/PROJECT_CLOSURE.md).
 
 BI on a replica answers yesterday's questions. Support, ops, and merch workflows need *current* orders, metrics, and health signals at the moment of decision — not a stale warehouse snapshot, not a pile of one-off service adapters, and not a cache that quietly serves 30-second-old numbers.
 
-AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([docs/freshness-benchmark.md](docs/freshness-benchmark.md), [real-path S8](docs/perf/freshness-e2e-realpath.md)). One serving boundary on top of that axis:
+AgentFlow's axis is **event → live metric**: every metric declares which events move it (a contract-tested lineage graph), and the serving layer keeps reads fresh by invalidating its cache when events arrive — a measured behavior, not a slogan ([demo snapshot](docs/archive/performance/freshness-benchmark-2026-06-06.md), [real-path S8 snapshot](docs/archive/performance/freshness-e2e-realpath-2026-07-09.md)). One serving boundary on top of that axis:
 
 - streaming ingestion for operational events (validated, enriched, journaled)
 - a semantic layer that exposes entities, metrics, lineage, and query endpoints
@@ -28,8 +28,8 @@ Consumers are whoever needs the number now: humans, dashboards, downstream servi
 ## Highlights
 
 - **Measured event-to-metric freshness** — two measured arms, not one number:
-  - **Real path** (Kafka → Flink 2.3.0 → serving bridge → ClickHouse → `GET /v1/metrics/*` with Redis push invalidation): **3.02 s p50 / 5.70 s p95** (n=20, Mac/Colima) — [S8 e2e](docs/perf/freshness-e2e-realpath.md), `python scripts/benchmark_freshness_e2e.py`
-  - **In-process demo shortcut** (`local_pipeline` → DuckDB, no Kafka/Flink): **1.06 s p50 / 1.99 s p95**, tunable to **238 ms p50**; TTL-only ~15 s — [demo benchmark](docs/freshness-benchmark.md), `python scripts/benchmark_freshness.py`
+  - **Real path** (Kafka → Flink 2.3.0 → serving bridge → ClickHouse → `GET /v1/metrics/*` with Redis push invalidation): **3.02 s p50 / 5.70 s p95** (n=20, Mac/Colima) — [S8 e2e snapshot](docs/archive/performance/freshness-e2e-realpath-2026-07-09.md); current output ownership: [benchmark lifecycle](docs/perf/freshness-e2e-realpath.md), `python scripts/benchmark_freshness_e2e.py`
+  - **In-process demo shortcut** (`local_pipeline` → DuckDB, no Kafka/Flink): **1.06 s p50 / 1.99 s p95**, tunable to **238 ms p50**; TTL-only ~15 s — [2026-06-06 demo snapshot](docs/archive/performance/freshness-benchmark-2026-06-06.md); current output ownership: [benchmark lifecycle](docs/perf/freshness-benchmark.md), `python scripts/benchmark_freshness.py`
   Do not present the 1.06 s figure as the production streaming path.
 - **Measured write-path throughput** — bridge apply **87.4 events/s** on a 400-event burst (catch-up 4.6 s, peak lag 0) after three measured optimization steps (8 → 11.4 → 22.9 → 87.4), and a **4 h endurance soak** at the delivered ~47 eps with bounded lag, flat bridge RSS/FDs, one live fault replayed exactly-once, and zero cache drift — [q14 report](docs/perf/throughput-realpath-q14-2026-07-10.md), [S11 soak](docs/perf/soak-s11-2026-07-10.md)
 - **At scale on its own data** — 4 years of the synthetic legend's history (**51.2 M rows, 2.87 M orders, 10.66 M Chestny Znak marking codes**) generated deterministically into the real raw-vault DDL; analyst queries answer in 20–730 ms and all 17 at-scale correctness checks pass — 10 row reconciliations, the 5 SQL-checkable generator-spec §12 invariants (channel and revenue mix, AOV bimodality, msk revenue share, GTIN validity), and 2 distribution checks, including a full-scan GS1 check-digit validation; the §12 spec's 12 invariants are pinned in full by 15 unit tests — [S13 report](docs/perf/scale-own-data-2026-07-11.md), `python scripts/benchmark_scale_own_data.py`
@@ -166,9 +166,12 @@ Local demo   -> local_pipeline -------------------------------> ClickHouse ----+
 ```
 
 The containerized PyFlink 2.3 topology is a production candidate, not a
-production-acceptance claim. The currently verified streaming path ends at
-Kafka → PyFlink → `events.validated` → bridge → ClickHouse → API; live Iceberg,
-clean-cluster deployment, recovery, and soak evidence remain pending.
+production-acceptance claim. The verified boundaries now include the streaming
+path Kafka → PyFlink → `events.validated` → bridge → ClickHouse → API, a clean
+Operator/Helm acceptance scaffold, direct live Iceberg materialization,
+checkpoint restore/replay, and digest-only staging promotion. Production
+rollout is not implemented or authorized; current gates and exact evidence live
+in [docs/STATUS.md](docs/STATUS.md).
 
 Stack:
 
@@ -196,25 +199,23 @@ CDC source capture is standardized on Debezium/Kafka Connect; downstream consume
 | Test suites | `tests/` |
 | Design decisions | `docs/decisions/` (ADRs) |
 | Public site | `site/` |
+| OpsLab benchmark | `opslab/` — separate dormant distribution, outside this build ([README](opslab/README.md)) |
 | IaC | `infrastructure/terraform/`, `infrastructure/dv2/`, `helm/`, `k8s/` |
 | DV2.0 warehouse | `warehouse/agentflow/dv2/` (hubs / links / satellites + real-dataset loader) |
 
 ## Documentation
 
-**Core**
-- [Architecture](docs/architecture.md) — system context, data flow, failure modes
-- [API Reference](docs/api-reference.md) — endpoint-by-endpoint curl / Python / TypeScript examples
-- [Operational Runbook](docs/runbook.md) + [On-Call Runbooks](docs/runbooks/README.md) — local stack, CDC capture, and production-incident playbooks
-- [Security Audit](docs/security-audit.md) — threat model, controls, and evidence
-- [Glossary](docs/glossary.md) — interview-ready explanations of the core technical terms
-- [Interactive Technical Walkthrough](docs/index.md) — MkDocs Material guide (Mermaid architecture, SDK, deployment, observability)
+Use the [documentation hub](docs/README.md) as the map for the complete corpus.
+The shortest paths are:
 
-**Deep dives**
-- [DV2.0 Multi-Branch Extension](docs/dv2-multi-branch/architecture.md) — Data Vault 2.0 model for mid-market e-com (5 locations / 3 jurisdictions): [schema](docs/dv2-multi-branch/schema_dv2.md), [end-to-end flow](docs/dv2-multi-branch/architecture.md), [demo evidence](docs/dv2-multi-branch/demo_evidence.md)
-- [CDC Deployment Plan](docs/plans/2026-04-debezium-kafka-connect-deployment-plan.md) — Debezium/Kafka Connect rollout
-- [Competitive Analysis](docs/competitive-analysis.md) · [Release Readiness](docs/release-readiness.md) · [Cost Analysis](docs/cost-analysis.md)
-- [Fly.io Demo Deploy](deploy/fly/README.md) — minimal hosted demo
-- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+- learn: [Quickstart](docs/quickstart.md) → [Architecture walkthrough](docs/architecture/index.md) → [API](docs/api/index.md) or [SDKs](docs/sdk.md);
+- verify current truth: [Engineering status](docs/STATUS.md), [machine-readable claims](config/project_claims.toml), and [project closure](docs/PROJECT_CLOSURE.md);
+- operate: [Operational runbook](docs/runbook.md), [on-call runbooks](docs/runbooks/README.md), and [troubleshooting](docs/troubleshooting.md);
+- review design/evidence: [architecture reference](docs/architecture.md), [ADRs](docs/decisions/), [performance evidence](docs/perf/), and [immutable evidence index](docs/evidence/INDEX.md).
+
+The [interactive walkthrough](docs/index.md) is the curated MkDocs site.
+Historical or superseded narrative is preserved under
+[`docs/archive/`](docs/archive/) rather than deleted.
 
 ## Development
 
@@ -225,20 +226,34 @@ python -m pytest tests/unit tests/integration tests/sdk -q
 # broad Windows no-Docker suite (audit F-07): sequential per-process shards
 # with a per-shard peak-memory budget under the host's 1 GiB process guard.
 # Do not run the monolithic pytest command above for this purpose on Windows.
+# What that budget is spent on: docs/operations/windows-verification.md
 python scripts/run_windows_unit_shards.py tests/unit
 
 # benchmark and regression gate
 python scripts/run_benchmark.py
-python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
+python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20
 
-# benchmark trend: [.github/perf-history.json](.github/perf-history.json) is appended on every main push;
-# render the history locally with `make perf-plot` (writes docs/perf/history.html).
+# legacy authentication-path reproducibility diagnostic (run on deproject-mac; no Docker)
+# writes the ignored .artifacts/perf/auth-bench-current.md runtime report
+python scripts/perf/auth_bench.py
+
+# local benchmark trend (ignored runtime state; not retained across CI runners)
+python scripts/record_perf_history.py --results .artifacts/benchmark/current.json
+make perf-plot
+# writes .artifacts/perf-history/history.json, history.html, and optional history.png
 
 # contracts and security
 python scripts/generate_contracts.py --check
-bandit -r src sdk --ini .bandit --severity-level medium -f json -o .tmp/bandit-current.json
-python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
+mkdir -p .artifacts/security
+bandit -r src sdk --ini .bandit --severity-level medium -f json -o .artifacts/security/bandit-current.json
+python scripts/bandit_diff.py .bandit-baseline.json .artifacts/security/bandit-current.json
 ```
+
+The authentication microbenchmark intentionally reproduces the legacy bcrypt
+O(n) lookup that motivated the current O(1) `key_lookup` path. It is not a
+current production-path benchmark or an SLA; see the
+[artifact lifecycle](docs/perf/auth-bench.md) and immutable
+[2026-05-26 baseline](docs/perf/auth-bench-2026-05-26.md).
 
 ## Status
 
@@ -251,58 +266,16 @@ at [the checks page](https://github.com/brownjuly2003-code/agentflow/actions)
 engineering status — what is proven, what is in progress, what is next —
 is tracked in [docs/STATUS.md](docs/STATUS.md).
 
-The `v1.1.0` → `v2.0.0` arc landed in seven increments on top of a security
-audit-closure sprint:
+The registries remain on published line `v2.0.0`; `main` is prepared for the
+unpublished lockstep `v2.1.0` release and is intentionally ahead of that tag.
+The former long-form README narrative for `v1.1.0` through `v2.0.0` is
+[preserved in the documentation archive](docs/archive/release-history-v1-v2.md);
+the [changelog](CHANGELOG.md) remains the complete release source.
 
-- **`v1.1.0`** — audit closure: tenant isolation across every read
-  surface, SQL guard centralized on `sqlglot`, entity allowlist
-  enforcement, fail-closed auth, secret rotation, Helm hardening,
-  OpenAPI drift gate, and the required status checks.
-- **`v1.2.0`** — DV2 multi-branch warehouse: 55 Data Vault 2.0 tables
-  (8 hubs / 8 links / 39 satellites; 64 tables / 48 satellites today), an Argo Workflows `dv2-refresh`
-  template, a dbt project (3 mart models + 12 tests), and per-branch CDC
-  fan-out via ClickHouse `MaterializedPostgreSQL`.
-- **`v1.3.0`** — `helm/kafka-connect` hardening matched to `helm/agentflow`
-  (NetworkPolicy + PDB + securityContext), live Helm validation across both
-  charts, and the narrated DV2 demo (terminal + web-UI + dbt docs).
-- **`v1.4.0`** — maintenance: on-call runbooks, `SECURITY.md`, issue/PR
-  templates, contract/DORA CI hardening, repo hygiene, and a dependency
-  wave (`mypy`, Terraform AWS provider, TypeScript, GitHub Actions,
-  Vitest). No runtime API changes from `v1.3.0`.
-- **`v1.5.0`** — security & correctness hardening: argon2id key hashing
-  with an O(1) peppered lookup index (M-C4), an NL→SQL guard bypass fix
-  (typed `read_csv` / `read_parquet` scan functions now denied in
-  projection position), `sqlglot` control-byte and mutation-target
-  repairs, and a strict-`mypy` expansion across the orchestration and
-  freshness slices. No public API changes.
-- **`v1.6.0`** — the architecture-fixing release: ClickHouse becomes the
-  shipped serving engine (pipeline sink, `ReplacingMergeTree` row versions,
-  backend-routed event scan, a dedicated CI E2E lane against a real
-  ClickHouse), PII protection moves from the removed app-level string-parse
-  gate to engine-enforced vault governance (fail-closed column grants,
-  per-jurisdiction officer roles, row policies, `SQL SECURITY DEFINER`
-  views — every live adversarial probe green), plus the vendored NL→SQL
-  generation engine (LangGraph, routed through GraceKelly), the DV2 raw
-  vault on PostgreSQL with `LISTEN`/`NOTIFY` freshness, the MinIO-backed
-  PyIceberg catalog, and the OpenSSF Scorecard channel (5.8 → 7.0).
-- **`v2.0.0`** — the demo universe re-founded and the scale path shipped:
-  the business legend re-pinned end-to-end to an own-brand
-  kitchen-appliance importer in ₽ (breaking for the retired
-  fashion-retail/USD surfaces), the external real-retailer dataset removed
-  outright (breaking: loader deleted, its at-scale benchmark retired as
-  historical), the control plane externalized to PostgreSQL behind the
-  `ControlPlaneStore` port (ADR 0010, six slices incl. the Helm scale
-  profile), three operational read surfaces split out of the agent catalog
-  (ADR 0011: Order 360, stuck-orders worklist, exception inbox), and the
-  three-node demo topology (ADR 0012) implemented and deployed to Hugging
-  Face Spaces (the `center` hub and the `spb` edge answer live; `ekb` and
-  the standalone demo Space are paused — the free tier caps how many
-  `cpu-basic` Spaces one account runs at once, and other projects hold the
-  rest) — plus the G2 audit closure (spec/seed
-  consistency, journal-scan hardening, live evidence re-captures).
-
-The tagged line and `main` are in sync as of `v2.0.0`. See the
-[changelog](CHANGELOG.md) for full detail.
+The latest bounded delivery evidence is F-19 staging digest promotion plus its
+offline production-promotion verifier. Production deployment remains
+`BLOCKED_EXTERNAL_PRODUCTION_TARGET_CONTRACT`, and `production.status` remains
+`candidate`; see [engineering status](docs/STATUS.md).
 
 ### Scope
 
@@ -325,7 +298,8 @@ attestation.
 |--------------|---------------|
 | <img src="docs/screenshots/landing-page.png" alt="AgentFlow landing page" width="420"> | <img src="docs/screenshots/benchmark-terminal.png" alt="AgentFlow benchmark terminal" width="420"> |
 
-Capture notes and publish-time checks are listed in [docs/publication-checklist.md](docs/publication-checklist.md).
+Capture notes and publish-time checks are listed in
+[docs/operations/publication-checklist.md](docs/operations/publication-checklist.md).
 
 ## License
 
@@ -334,6 +308,7 @@ MIT. See [LICENSE](LICENSE).
 ## Credits
 
 Built as a data-engineering reference project. Initial release cycle
-`2026-04-10` → `2026-04-20`, with post-audit hardening and the DV2
-extension landing through `v1.4.0`. Architecture decisions are recorded as
-ADRs in [docs/decisions/](docs/decisions/).
+`2026-04-10` → `2026-04-20`, followed by post-audit hardening, the DV2
+extension, and the published `v2.0.0` line. Architecture decisions are
+recorded as ADRs in [docs/decisions/](docs/decisions/); the complete release
+timeline is in the [changelog](CHANGELOG.md).

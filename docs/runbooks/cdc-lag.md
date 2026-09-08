@@ -1,6 +1,16 @@
 # CDC Lag / Stuck Connectors
 
-**Last updated:** 2026-05-24
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for CDC lag, a FAILED Kafka Connect connector or task, dead-letter
+growth, or stale entity reads. Use it when Grafana CDC lag, the Connect REST
+API, or downstream freshness shows the capture path is stuck. It does not
+define on-call scope or the severity ladder — those live in
+[README.md](README.md) — and it does not replace
+[Production CDC source onboarding](../operations/cdc-production-onboarding.md).
+
+**Audience:** Data on-call
+
+**Prerequisites:** kubectl access to the Kafka Connect namespace, Grafana CDC lag panel, helm for `helm/kafka-connect`, and source-DB `psql` for Postgres slots
 
 ## Symptom
 
@@ -79,7 +89,7 @@ if the symptom is upstream of Kafka Connect.
    disk — this is its own Sev 1 if the source DB is in danger.
 5. **DV2 demo cluster?** If the alert came from the Lima/iMac demo cluster,
    the connector is `MaterializedPostgreSQL` (ClickHouse-side), not Kafka
-   Connect. See `infrastructure/dv2/clickhouse/cdc_setup.sql` and the
+   Connect. See `warehouse/agentflow/dv2/postgres_oltp/cdc_setup.sql` and the
    per-branch CDC fan-out notes in `docs/dv2-multi-branch/`.
    That cluster does **not** have on-call — escalate to demo owner instead of
    following the production mitigation steps below.

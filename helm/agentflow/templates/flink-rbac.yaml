@@ -50,5 +50,5 @@ roleRef:
   name: {{ include "agentflow.fullname" . }}-flink
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.flinkJob.serviceAccount | default (include "agentflow.serviceAccountName" .) }}
+    name: {{ include "agentflow.flinkServiceAccountName" . }}
 {{- end }}

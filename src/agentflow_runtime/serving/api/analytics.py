@@ -13,6 +13,7 @@ from starlette.background import BackgroundTasks
 from starlette.responses import Response
 from starlette.types import Message
 
+from agentflow_runtime.serving.api.query_analytics_policy import QueryAnalyticsPolicy
 from agentflow_runtime.serving.control_plane import EmbeddedControlPlaneStore, UsageAuditRepository
 from agentflow_runtime.serving.duckdb_connection import connect_duckdb
 
@@ -35,10 +36,6 @@ AnalyticsMiddleware = Callable[
     [Request, Callable[[Request], Awaitable[Response]]],
     Awaitable[Response],
 ]
-
-# Analytics runs before the route's Pydantic validation, so cap the persisted
-# query text defensively at the same bound /v1/query enforces (1000 chars).
-_MAX_QUERY_TEXT_CHARS = 1000
 
 # Auth/throttle outcomes whose requests must never be recorded: the analytics
 # middleware sits OUTSIDE AuthMiddleware, so recording these would let
@@ -81,6 +78,9 @@ def ensure_analytics_table(db_path: Path | str) -> None:
             for column_name, column_type in (
                 ("entity_id", "TEXT"),
                 ("query_text", "TEXT"),
+                # Peppered digest of the question (audit F-18). Default
+                # analytics keeps this and not the question itself.
+                ("query_fingerprint", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     conn.execute(f"ALTER TABLE api_sessions ADD COLUMN {column_name} {column_type}")
@@ -93,7 +93,13 @@ def ensure_analytics_table(db_path: Path | str) -> None:
             conn.close()
 
 
-def build_analytics_middleware() -> AnalyticsMiddleware:
+def build_analytics_middleware(
+    policy: QueryAnalyticsPolicy | None = None,
+) -> AnalyticsMiddleware:
+    # Resolved once, at boot: an unusable retention window should fail the
+    # start-up, not the first /v1/query of the day (audit F-18).
+    resolved_policy = QueryAnalyticsPolicy.from_env() if policy is None else policy
+
     async def analytics_middleware(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
@@ -134,6 +140,7 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
                         duration_ms=(time.perf_counter() - started_at) * 1000,
                         cache_hit=False,
                         body=body,
+                        policy=resolved_policy,
                     ),
                 )
             raise
@@ -165,6 +172,7 @@ def build_analytics_middleware() -> AnalyticsMiddleware:
                 duration_ms=(time.perf_counter() - started_at) * 1000,
                 cache_hit=response.headers.get("X-Cache") == "HIT",
                 body=body,
+                policy=resolved_policy,
             ),
         )
         response.background = background
@@ -241,7 +249,9 @@ def _build_session_record(
     duration_ms: float,
     cache_hit: bool,
     body: bytes,
+    policy: QueryAnalyticsPolicy | None = None,
 ) -> dict:
+    policy = QueryAnalyticsPolicy.from_env() if policy is None else policy
     tenant_key = getattr(request.state, "tenant_key", None)
     endpoint = request.url.path
     entity_type = None
@@ -249,6 +259,7 @@ def _build_session_record(
     metric_name = None
     query_engine = None
     query_text = None
+    query_fingerprint = None
     parts = request.url.path.strip("/").split("/")
 
     if len(parts) >= 4 and parts[0] == "v1" and parts[1] == "entity":
@@ -267,9 +278,12 @@ def _build_session_record(
                 payload = {}
             question = payload.get("question")
             if isinstance(question, str):
-                # Truncate: analytics runs before the route validates the body,
-                # so an oversized question would otherwise be persisted verbatim.
-                query_text = question[:_MAX_QUERY_TEXT_CHARS]
+                # The policy decides what survives (audit F-18): a fingerprint
+                # always, the question itself only when an operator opted in,
+                # and then redacted and truncated. Analytics runs before the
+                # route validates the body, so an oversized or secret-bearing
+                # question would otherwise be persisted verbatim.
+                query_text, query_fingerprint = policy.capture(question)
 
     return {
         "request_id": request_id,
@@ -285,4 +299,5 @@ def _build_session_record(
         "metric_name": metric_name,
         "query_engine": query_engine,
         "query_text": query_text,
+        "query_fingerprint": query_fingerprint,
     }

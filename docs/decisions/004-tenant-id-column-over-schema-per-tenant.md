@@ -2,7 +2,7 @@
 
 ## Status
 Accepted (2026-07-11). Supersedes the implicit schema-per-tenant model that
-`src/tenancy.py` and `SQLBuilderMixin` carried until now.
+`src/agentflow_runtime/tenancy.py` and `SQLBuilderMixin` carried until now.
 
 ## Context
 
@@ -89,8 +89,8 @@ of this table physically exist?"). It could not be kept verbatim: in the column
 model *every* table is tenant-scoped, so a guard keyed on the config alone would
 fail-closed on the single-tenant demo too.
 
-`DEFAULT_TENANT` lives in `src/tenancy.py` — the one module both the write path
-(`src/processing/event_tenant.py`) and the read path (`SQLBuilderMixin`) can reach
+`DEFAULT_TENANT` lives in `src/agentflow_runtime/tenancy.py` — the one module both the write path
+(`src/agentflow_runtime/processing/event_tenant.py`) and the read path (`SQLBuilderMixin`) can reach
 without importing each other.
 
 ## Comparison

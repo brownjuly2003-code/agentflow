@@ -626,7 +626,23 @@ class ControlPlaneStore(ABC):
 
     @abstractmethod
     def get_top_queries(self, *, limit: int = 10, window: str = "24h") -> dict:
-        """Most frequent ``/v1/query`` question texts over ``window``."""
+        """Most frequent ``/v1/query`` questions over ``window``.
+
+        Each item carries ``fingerprint`` always and ``query`` only when the
+        operator opted into storing question text (audit F-18)."""
+
+    @abstractmethod
+    def prune_api_sessions(self, *, older_than_days: int) -> int:
+        """Delete analytics rows older than the retention window; return the
+        number deleted (audit F-18)."""
+
+    @abstractmethod
+    def delete_tenant_api_sessions(self, *, tenant: str) -> int:
+        """Delete every analytics row belonging to ``tenant``; return the
+        number deleted.
+
+        Erasure, not retention: a tenant asking for their data to go does not
+        wait out the window, so this ignores ``ts`` entirely (audit F-18)."""
 
     @abstractmethod
     def get_top_entities(self, *, limit: int = 10, window: str = "24h") -> dict:

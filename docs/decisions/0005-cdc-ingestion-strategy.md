@@ -6,7 +6,7 @@ Accepted - 2026-04-23
 
 ## Context
 
-AgentFlow already ships a Debezium-based PostgreSQL connector configuration in `src/ingestion/connectors/postgres_cdc.py`, but an earlier v1.1 backlog task had drifted toward a separate Python-native WAL/binlog implementation.
+AgentFlow already ships a Debezium-based PostgreSQL connector configuration in `src/agentflow_runtime/ingestion/connectors/postgres_cdc.py`, but an earlier v1.1 backlog task had drifted toward a separate Python-native WAL/binlog implementation.
 
 Leaving both directions open creates architectural debt:
 
@@ -125,7 +125,7 @@ Contract rules:
 
 ### Postgres
 
-- keep `src/ingestion/connectors/postgres_cdc.py` as the Debezium/Kafka Connect path
+- keep `src/agentflow_runtime/ingestion/connectors/postgres_cdc.py` as the Debezium/Kafka Connect path
 - follow-up work should extend it toward canonical topic naming, secrets handling, and normalization inputs
 - do not add a separate Python logical-replication consumer
 

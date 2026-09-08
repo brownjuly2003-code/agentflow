@@ -14,6 +14,10 @@ project can produce to document its supply-chain security posture.
 > distinct from third-party attestation, in the same discipline the audit doc
 > already uses.
 
+**Audience:** maintainer keeping the OpenSSF posture artifacts current
+
+**Prerequisites:** GitHub access to `.github/workflows/scorecard.yml` and Code scanning, and `curl` for the public Scorecard JSON named on this page
+
 ## 1. OpenSSF Scorecard (automated, live)
 
 - **Channel:** `.github/workflows/scorecard.yml` (shape-pinned by
@@ -25,6 +29,12 @@ project can produce to document its supply-chain security posture.
   Pinned-Dependencies, Dangerous-Workflow, Code-Review, Maintained,
   Vulnerabilities, and SAST.
 - **Artifacts produced:**
+  - A replaceable per-run SARIF working copy at
+    `.artifacts/scorecard/results.sarif` (ignored). The local/uploaded SARIF
+    is not reviewed evidence, a penetration-test attestation, or production
+    acceptance. A reviewed repository snapshot would require a new
+    date-stamped identity with source SHA, workflow run, tool/action version,
+    exact configuration, and hash provenance.
   - A SARIF result uploaded to the repository's **Code scanning** dashboard
     (`security-events: write`).
   - A **public, citable result** published to the OpenSSF registry
@@ -32,6 +42,7 @@ project can produce to document its supply-chain security posture.
     `https://api.securityscorecards.dev/projects/github.com/<owner>/<repo>`
     and badge-able via `api.securityscorecards.dev` /
     `scorecard.dev` shields.
+  Code scanning and the public OpenSSF registry remain the channel outputs.
 - **How to read it after the first run:**
   1. Open the repo → **Security → Code scanning** to see per-check findings.
   2. Fetch the public JSON:
@@ -95,7 +106,7 @@ Passing-level criteria, grouped:
   CONFIRM on submission.
 - **Good cryptographic practices:** API-key hashing argon2id (default) with
   bcrypt legacy fallback; TLS for CDC/transport — MET
-  (`src/serving/api/auth/`, `docs/security-audit.md` §2).
+  (`src/agentflow_runtime/serving/api/auth/`, `docs/security-audit.md` §2).
 - **Secured delivery against MITM:** HTTPS everywhere (GitHub, PyPI, npm);
   PyPI Trusted Publishing + npm Trusted Publishing (OIDC); CycloneDX SBOM +
   build provenance attestation (`security.yml`, `container-attestation.yml`) —

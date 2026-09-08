@@ -7,6 +7,7 @@ import structlog
 from fastapi import Request
 from starlette.responses import Response
 
+from agentflow_runtime.serving.api.middleware.redaction import redact_sensitive_path
 from agentflow_runtime.serving.api.middleware.tracing import annotate_current_request_span
 
 CORRELATION_HEADER = "X-Correlation-ID"
@@ -29,7 +30,7 @@ def build_correlation_middleware() -> Callable[
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             correlation_id=correlation_id,
-            path=request.url.path,
+            path=redact_sensitive_path(request.url.path),
         )
         annotate_current_request_span(request)
         try:

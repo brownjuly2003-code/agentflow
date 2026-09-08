@@ -33,7 +33,10 @@ from agentflow_runtime.serving.control_plane.postgres import (  # noqa: E402
     _SCHEMA_STATEMENTS,
     PostgresControlPlaneStore,
 )
-from agentflow_runtime.serving.control_plane.store import UsageRow  # noqa: E402
+from agentflow_runtime.serving.control_plane.store import (  # noqa: E402
+    AUTO_RESOLVE_NOTE,
+    UsageRow,
+)
 
 PG_DSN = os.getenv("AGENTFLOW_TEST_PG_DSN", "")
 
@@ -52,6 +55,7 @@ _TABLES = (
     "dead_letter_events",
     "api_usage",
     "api_sessions",
+    "ops_exception_triage",
 )
 
 
@@ -776,6 +780,10 @@ def _session_record(**overrides: object) -> dict:
         "metric_name": None,
         "query_engine": "duckdb",
         "query_text": "revenue today",
+        # Audit F-18: the middleware always computes a fingerprint; the text is
+        # here because this helper predates the policy and pins the opted-in
+        # shape.
+        "query_fingerprint": "f" * 64,
     }
     record.update(overrides)
     return record
@@ -819,7 +827,11 @@ def test_session_analytics_windows_and_shapes(store: PostgresControlPlaneStore) 
     assert [item["tenant"] for item in scoped["tenants"]] == ["beta"]
 
     top_queries = store.get_top_queries(window="1h")
-    assert top_queries["queries"][0] == {"query": "revenue today", "count": 2}
+    assert top_queries["queries"][0] == {
+        "query": "revenue today",
+        "fingerprint": "f" * 64,
+        "count": 2,
+    }
 
     top_entities = store.get_top_entities(window="1h")
     assert top_entities["entities"][0] == {
@@ -837,6 +849,70 @@ def test_session_analytics_windows_and_shapes(store: PostgresControlPlaneStore) 
     assert anomalies["anomalies"] == []  # no history to spike against
 
     assert store.get_queries_per_second_last_minute() == pytest.approx(3 / 60.0, abs=0.01)
+
+
+def test_top_queries_counts_repeats_by_fingerprint_when_no_text_is_stored(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """The default policy stores no question text (audit F-18). Grouping must
+    still report how often a question repeats, which the fingerprint carries --
+    a NULL text column would otherwise report "no queries" for a busy API."""
+    digest = "a" * 64
+    store.record_api_session("q1", _session_record(query_text=None, query_fingerprint=digest))
+    store.record_api_session("q2", _session_record(query_text=None, query_fingerprint=digest))
+    store.record_api_session("q3", _session_record(query_text=None, query_fingerprint="b" * 64))
+
+    top_queries = store.get_top_queries(window="1h")
+
+    assert top_queries["queries"][0] == {"query": None, "fingerprint": digest, "count": 2}
+    assert {item["fingerprint"] for item in top_queries["queries"]} == {digest, "b" * 64}
+
+
+def test_prune_deletes_sessions_past_the_retention_window_only(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """Retention is a promise about the oldest row, so the prune deletes by
+    `ts` and leaves everything inside the window alone (audit F-18)."""
+    store.record_api_session("old", _session_record())
+    store.record_api_session("fresh", _session_record())
+    with psycopg.connect(PG_DSN) as conn:
+        conn.execute(
+            "UPDATE api_sessions SET ts = now() - INTERVAL '90 days' WHERE request_id = 'old'"
+        )
+
+    deleted = store.prune_api_sessions(older_than_days=30)
+
+    with psycopg.connect(PG_DSN) as conn:
+        remaining = [row[0] for row in conn.execute("SELECT request_id FROM api_sessions")]
+    assert deleted == 1
+    assert remaining == ["fresh"]
+    # Idempotent: a scheduled job that runs twice deletes nothing the second time.
+    assert store.prune_api_sessions(older_than_days=30) == 0
+
+
+def test_erasing_a_tenant_ignores_the_window_and_spares_other_tenants(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """A tenant asking for their analytics to go does not wait out the
+    retention window, and their neighbour's rows are not collateral."""
+    store.record_api_session("acme-old", _session_record())
+    store.record_api_session("acme-fresh", _session_record())
+    store.record_api_session("beta-fresh", _session_record(tenant="beta"))
+    with psycopg.connect(PG_DSN) as conn:
+        conn.execute(
+            "UPDATE api_sessions SET ts = now() - INTERVAL '90 days' WHERE request_id = 'acme-old'"
+        )
+
+    deleted = store.delete_tenant_api_sessions(tenant="acme")
+
+    with psycopg.connect(PG_DSN) as conn:
+        remaining = [row[0] for row in conn.execute("SELECT request_id FROM api_sessions")]
+        usage_rows = conn.execute("SELECT COUNT(*) FROM api_usage").fetchone()
+    assert deleted == 2
+    assert remaining == ["beta-fresh"]
+    # Erasure stops at api_sessions: usage counters carry no user content and
+    # answer a billing/abuse question with its own lifetime.
+    assert usage_rows is not None
 
     with pytest.raises(ValueError, match="Invalid window"):
         store.get_usage_analytics(window="fortnight")
@@ -1100,3 +1176,274 @@ def test_process_roles_split_serving_from_delivery_loops(
         assert app.state.alert_dispatcher._task is not None
         assert app.state.search_index_rebuild_task is None  # nobody asks it questions
         assert app.state.search_index is None
+
+
+# --- exception inbox + triage overlay (parity) --------------------------------------
+#
+# Audit F-12: this surface -- the dead-letter inbox reads and the triage overlay
+# behind /v1/ops -- was the least covered part of the PostgreSQL adapter (67% of
+# postgres_outbox_replay.py), and it is the one an on-call engineer actually
+# drives. The expectations below mirror the embedded adapter's unit tests in
+# tests/unit/test_control_plane_store.py one for one, so the two adapters cannot
+# drift apart on the semantics that decide whether a finding is open, resolved,
+# or quietly lost.
+
+
+def _seed_dead_letter_at(
+    event_id: str,
+    *,
+    tenant_id: str = "acme",
+    status: str = "failed",
+    received_at: datetime | None = None,
+    last_retried_at: datetime | None = None,
+) -> None:
+    _seed_dead_letter(event_id, tenant_id=tenant_id, status=status)
+    if received_at is None and last_retried_at is None:
+        return
+    with psycopg.connect(PG_DSN) as conn:
+        if received_at is not None:
+            conn.execute(
+                "UPDATE dead_letter_events SET received_at = %s WHERE event_id = %s",
+                (received_at, event_id),
+            )
+        if last_retried_at is not None:
+            conn.execute(
+                "UPDATE dead_letter_events SET last_retried_at = %s WHERE event_id = %s",
+                (last_retried_at, event_id),
+            )
+
+
+def test_inbox_listing_returns_every_status_for_the_tenant(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """The inbox shows dismissed and replayed items too -- an operator needs to
+    see what was already handled, not only what still burns."""
+    _seed_dead_letter("evt-failed", status="failed")
+    _seed_dead_letter("evt-dismissed", status="dismissed")
+    _seed_dead_letter("evt-other-tenant", tenant_id="beta", status="failed")
+
+    rows = store.list_dead_letter_events_for_inbox("acme")
+
+    assert {row["event_id"] for row in rows} == {"evt-failed", "evt-dismissed"}
+    assert {row["status"] for row in rows} == {"failed", "dismissed"}
+
+
+def test_inbox_listing_limit_keeps_the_newest_rows(store: PostgresControlPlaneStore) -> None:
+    # The inbox probes with cap+1 to tell "exactly N" from "more than N", so the
+    # bound has to be the newest N; taking the oldest would make truncation lie.
+    base = datetime.now(UTC)
+    for index in range(3):
+        _seed_dead_letter_at(f"evt-{index}", received_at=base - timedelta(minutes=3 - index))
+
+    rows = store.list_dead_letter_events_for_inbox("acme", limit=2)
+
+    assert [row["event_id"] for row in rows] == ["evt-2", "evt-1"]
+
+
+def test_stuck_replay_listing_filters_by_age_and_status(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """A replay that was requested and never landed is the failure this read
+    exists to surface: replay_pending, last retried longer ago than the
+    threshold. A fresh pending replay is still in flight, and a failed row was
+    never replayed at all."""
+    now = datetime.now(UTC)
+    _seed_dead_letter_at(
+        "evt-stuck", status="replay_pending", last_retried_at=now - timedelta(seconds=600)
+    )
+    _seed_dead_letter_at(
+        "evt-fresh", status="replay_pending", last_retried_at=now - timedelta(seconds=5)
+    )
+    _seed_dead_letter("evt-failed", status="failed")
+
+    stuck = store.list_stuck_replay_dead_letter_events("acme", older_than_seconds=300)
+
+    assert [row["event_id"] for row in stuck] == ["evt-stuck"]
+
+
+def test_count_dead_letter_manual_actions_counts_replayed_and_dismissed_only(
+    store: PostgresControlPlaneStore,
+) -> None:
+    _seed_dead_letter("evt-1", status="replayed")
+    _seed_dead_letter("evt-2", status="dismissed")
+    _seed_dead_letter("evt-3", status="failed")
+    _seed_dead_letter("evt-4", tenant_id="beta", status="replayed")
+
+    assert store.count_dead_letter_manual_actions("acme") == 2
+
+
+def test_triage_finding_opens_on_first_sight(store: PostgresControlPlaneStore) -> None:
+    seen_at = datetime.now(UTC)
+
+    store.upsert_triage_finding(
+        item_id="rc:r1:ORD-1:shipped",
+        tenant_id="acme",
+        source="reconciliation",
+        seen_at=seen_at,
+    )
+
+    (state,) = store.list_triage_states(tenant_id="acme")
+    assert state.item_id == "rc:r1:ORD-1:shipped"
+    assert state.status == "open"
+    assert state.first_seen_at == seen_at
+    assert state.last_seen_at == seen_at
+    assert state.resolved_at is None
+    assert state.note is None
+
+
+def test_triage_finding_refreshes_last_seen_while_open(
+    store: PostgresControlPlaneStore,
+) -> None:
+    first = datetime.now(UTC) - timedelta(minutes=5)
+    later = datetime.now(UTC)
+    store.upsert_triage_finding(
+        item_id="rc:r1", tenant_id="acme", source="reconciliation", seen_at=first
+    )
+
+    store.upsert_triage_finding(
+        item_id="rc:r1", tenant_id="acme", source="reconciliation", seen_at=later
+    )
+
+    (state,) = store.list_triage_states(tenant_id="acme")
+    assert state.first_seen_at == first
+    assert state.last_seen_at == later
+    assert state.status == "open"
+
+
+def test_triage_finding_stays_resolved_for_the_same_occurrence(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """Re-seeing an occurrence that predates the resolution must not reopen it:
+    a scan replaying its own backlog would otherwise undo every decision an
+    operator made."""
+    seen_at = datetime.now(UTC) - timedelta(minutes=10)
+    store.upsert_triage_finding(
+        item_id="rc:r1", tenant_id="acme", source="reconciliation", seen_at=seen_at
+    )
+    assert store.set_triage_state(item_id="rc:r1", tenant_id="acme", status="resolved") is True
+
+    store.upsert_triage_finding(
+        item_id="rc:r1", tenant_id="acme", source="reconciliation", seen_at=seen_at
+    )
+
+    (state,) = store.list_triage_states(tenant_id="acme")
+    assert state.status == "resolved"
+
+
+def test_triage_finding_reopens_when_it_reproduces_after_resolution(
+    store: PostgresControlPlaneStore,
+) -> None:
+    store.upsert_triage_finding(
+        item_id="rc:r1",
+        tenant_id="acme",
+        source="reconciliation",
+        seen_at=datetime.now(UTC) - timedelta(minutes=10),
+    )
+    store.set_triage_state(
+        item_id="rc:r1", tenant_id="acme", status="resolved", note="fixed upstream"
+    )
+
+    store.upsert_triage_finding(
+        item_id="rc:r1",
+        tenant_id="acme",
+        source="reconciliation",
+        seen_at=datetime.now(UTC) + timedelta(minutes=1),
+    )
+
+    (state,) = store.list_triage_states(tenant_id="acme")
+    assert state.status == "open"
+    assert state.resolved_at is None
+    assert state.note is None
+
+
+def test_auto_resolve_touches_only_the_absent_findings(
+    store: PostgresControlPlaneStore,
+) -> None:
+    now = datetime.now(UTC)
+    for item_id in ("rc:still-here", "rc:gone"):
+        store.upsert_triage_finding(
+            item_id=item_id, tenant_id="acme", source="reconciliation", seen_at=now
+        )
+    store.upsert_triage_finding(
+        item_id="wh:other-source", tenant_id="acme", source="webhook_delivery", seen_at=now
+    )
+
+    store.auto_resolve_missing_triage_findings(
+        tenant_id="acme",
+        source="reconciliation",
+        seen_item_ids=["rc:still-here"],
+        resolved_at=now,
+    )
+
+    states = {state.item_id: state for state in store.list_triage_states(tenant_id="acme")}
+    assert states["rc:still-here"].status == "open"
+    assert states["rc:gone"].status == "resolved"
+    assert states["rc:gone"].note == AUTO_RESOLVE_NOTE
+    # A different source's finding is not this scan's business.
+    assert states["wh:other-source"].status == "open"
+
+
+def test_set_triage_state_refuses_an_unknown_item(store: PostgresControlPlaneStore) -> None:
+    assert store.set_triage_state(item_id="ghost", tenant_id="acme", status="resolved") is False
+
+
+def test_set_triage_state_acknowledge_then_resolve_keeps_the_note(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """note = COALESCE(new, old): resolving without a note must keep the one the
+    acknowledgement left, not blank the operator's own words."""
+    store.upsert_triage_finding(
+        item_id="rc:r1", tenant_id="acme", source="reconciliation", seen_at=datetime.now(UTC)
+    )
+
+    assert (
+        store.set_triage_state(
+            item_id="rc:r1", tenant_id="acme", status="acknowledged", note="waiting on vendor"
+        )
+        is True
+    )
+    assert store.set_triage_state(item_id="rc:r1", tenant_id="acme", status="resolved") is True
+
+    (state,) = store.list_triage_states(tenant_id="acme")
+    assert state.status == "resolved"
+    assert state.note == "waiting on vendor"
+    assert state.resolved_at is not None
+
+
+def test_triage_manual_action_count_excludes_auto_resolved_rows(
+    store: PostgresControlPlaneStore,
+) -> None:
+    """The KPI counts human decisions. A row the scan resolved because it
+    stopped reproducing is not one."""
+    now = datetime.now(UTC)
+    for item_id in ("rc:human", "rc:auto"):
+        store.upsert_triage_finding(
+            item_id=item_id, tenant_id="acme", source="reconciliation", seen_at=now
+        )
+    store.set_triage_state(item_id="rc:human", tenant_id="acme", status="acknowledged")
+    store.auto_resolve_missing_triage_findings(
+        tenant_id="acme", source="reconciliation", seen_item_ids=["rc:human"], resolved_at=now
+    )
+
+    assert store.count_triage_manual_actions("acme") == 1
+
+
+def test_list_triage_states_filters_by_source_and_tenant(
+    store: PostgresControlPlaneStore,
+) -> None:
+    now = datetime.now(UTC)
+    store.upsert_triage_finding(
+        item_id="rc:r1", tenant_id="acme", source="reconciliation", seen_at=now
+    )
+    store.upsert_triage_finding(
+        item_id="wh:w1", tenant_id="acme", source="webhook_delivery", seen_at=now
+    )
+    store.upsert_triage_finding(
+        item_id="rc:beta", tenant_id="beta", source="reconciliation", seen_at=now
+    )
+
+    reconciliation = store.list_triage_states(tenant_id="acme", source="reconciliation")
+    everything = store.list_triage_states(tenant_id="acme")
+
+    assert [state.item_id for state in reconciliation] == ["rc:r1"]
+    assert {state.item_id for state in everything} == {"rc:r1", "wh:w1"}

@@ -14,10 +14,10 @@ API process also hosts a control plane whose state is an **embedded, per-pod
 DuckDB store** reached directly through `query_engine._conn`:
 
 - webhook delivery queue and deliveries log
-  (`src/serving/api/webhook_dispatcher.py`)
-- alert history and escalation state (`src/serving/api/alerts/`)
-- replay outbox (`src/processing/outbox.py`, wired in `main.py`)
-- dead-letter read/write paths (`src/serving/api/routers/deadletter.py`)
+  (`src/agentflow_runtime/serving/api/webhook_dispatcher.py`)
+- alert history and escalation state (`src/agentflow_runtime/serving/api/alerts/`)
+- replay outbox (`src/agentflow_runtime/processing/outbox.py`, wired in `main.py`)
+- dead-letter read/write paths (`src/agentflow_runtime/serving/api/routers/deadletter.py`)
 - usage/analytics accounting (`AuthManager` usage table, `analytics.py`)
 
 With `replicaCount > 1`, each pod would run its **own** WebhookDispatcher and
@@ -33,7 +33,7 @@ Two things *were* fixed as part of executing ADR 0006 (this change set):
   event→metric axis survives the engine flip;
 - the local pipeline writes the serving tables and the `pipeline_events`
   journal to ClickHouse when it is the configured backend
-  (`src/processing/clickhouse_sink.py`), so an out-of-process writer drives
+  (`src/agentflow_runtime/processing/clickhouse_sink.py`), so an out-of-process writer drives
   live freshness across process boundaries.
 
 What is *not* fixed — and is the subject of this ADR — is where the

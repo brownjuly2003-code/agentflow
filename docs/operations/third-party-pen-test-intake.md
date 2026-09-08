@@ -1,5 +1,16 @@
 # Third-Party Pen-Test Intake
 
+This page owns the intake packet for third-party penetration-test evidence:
+the decision record, required evidence sections, repository intake steps,
+no-go conditions, and acceptance checklist. Use it when the security owner
+is receiving that evidence. It does not replace the
+[security audit](../security-audit.md), and it does not inventory other
+operations procedures — those live in [README.md](README.md).
+
+**Audience:** security owner receiving the evidence of a third-party engagement
+
+**Prerequisites:** the decision record and the third-party evidence sections listed on this page
+
 ## Status
 
 Current status: not present / unclaimed.

@@ -235,7 +235,8 @@ jobs:
     # removed, so the job that executes repository-owned test code no longer
     # carries an OIDC capability it cannot use. Coverage floors below remain
     # the blocking gates. Reintroduce upload in a separate job consuming a
-    # coverage.xml artifact if external reporting is ever enabled.
+    # .artifacts/coverage/coverage.xml artifact if external reporting is ever
+    # enabled.
     permissions:
       contents: read
     steps:
@@ -248,6 +249,8 @@ jobs:
       - name: Install dependencies
         run: |
           bash scripts/ci_sync.sh test-integrations
+      - name: Verify SDK/integrations joint installability
+        run: python scripts/check_cross_package_install.py
       - name: Prepare pytest temp directory
         run: mkdir -p .tmp
       - name: Run unit and property tests with coverage
@@ -256,9 +259,10 @@ jobs:
           # --cov-branch turns the floor into a combined line+branch metric — local baseline
           # 2026-05-25 is 62% (7716 lines / 2010 branches measured on HEAD `22b1be9`), so the
           # 60% gate stays passing with a 2pp cushion. Raise the gate once that cushion grows.
-          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-branch --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+          mkdir -p .artifacts/coverage
+          python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-branch --cov-report=xml:.artifacts/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=60
       - name: Enforce changed-code coverage
-        run: diff-cover coverage.xml --compare-branch=origin/main --fail-under=80
+        run: diff-cover .artifacts/coverage/coverage.xml --compare-branch=origin/main --fail-under=80
       - name: Run quality validators coverage gate
         run: |
           python -m pytest tests/unit/test_validators.py -v --tb=short --cov=agentflow_runtime.quality.validators --cov-report=term-missing --cov-fail-under=90
@@ -296,10 +300,18 @@ jobs:
         run: |
           # Security-critical auth manager (key match/verify, tenant isolation,
           # rate-limit/failed-auth windows, rotation grace) and a mutmut target;
-          # the gate runs its dedicated unit files. Module coverage is 94% so the
+          # the gate runs its dedicated unit files. Module coverage is 97% so the
           # 90% gate keeps a cushion; the remaining gap is the platform-divergent
-          # SIGHUP handler and bcrypt rotation paths the integration/e2e auth
-          # suites cover.
+          # SIGHUP handler, the two read-only-store branches load() reaches only
+          # when the store flips between probe and write, and the thin
+          # KeyRotator/usage-table delegations the integration/e2e auth suites
+          # cover.
+          #
+          # This list IS the gate: a dedicated unit file that is not named here
+          # buys the module nothing. test_key_store_readonly.py arrived with the
+          # read-only Secret mount work (F-02 B, 2026-08-23) and was never added,
+          # which by itself took the module from 94% to 82% -- unnoticed, because
+          # an earlier step in this job was failing and this one never ran.
           #
           # NOTE: unlike the other per-module gates this uses `coverage run` +
           # `coverage report --include`, NOT `pytest --cov=<module>`. The auth
@@ -307,7 +319,16 @@ jobs:
           # instrumentation of a duckdb-importing module trips duckdb's lazy
           # `_duckdb._sqltypes` import at COLLECTION time, both locally and on CI
           # runners. `coverage run` imports duckdb normally and avoids the break.
-          python -m coverage run -m pytest tests/unit/test_auth.py tests/unit/test_auth_manager_pure_logic.py tests/unit/test_auth_manager_memory_bounds.py tests/unit/test_auth_hashed_key_guidance.py tests/unit/test_auth_argon2_lookup.py -p no:schemathesis
+          python -m coverage run -m pytest \
+            tests/unit/test_auth.py \
+            tests/unit/test_auth_manager_pure_logic.py \
+            tests/unit/test_auth_manager_memory_bounds.py \
+            tests/unit/test_auth_hashed_key_guidance.py \
+            tests/unit/test_auth_argon2_lookup.py \
+            tests/unit/test_auth_key_store_probe.py \
+            tests/unit/test_auth_manager_key_resolution.py \
+            tests/unit/test_key_store_readonly.py \
+            -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/manager.py" --show-missing --fail-under=90
       - name: Run key rotation coverage gate
         run: |
@@ -315,8 +336,21 @@ jobs:
           # grace-period scheduling, rotation status) and a mutmut target. Like
           # the auth manager gate it pulls in duckdb, so it uses coverage run +
           # coverage report --include (not pytest --cov) to avoid the
-          # duckdb _duckdb._sqltypes collection break. Module coverage is 93%.
-          python -m coverage run -m pytest tests/unit/test_key_rotation.py -p no:schemathesis
+          # duckdb _duckdb._sqltypes collection break.
+          #
+          # Module coverage is 100%. It was 89.6% on test_key_rotation.py alone
+          # -- passing only because coverage rounds to 90 before comparing, so
+          # one more defensive line would have turned this gate red without
+          # anyone changing its behaviour. test_key_rotation.py pins the happy
+          # lifecycle; the revoke_and_failures file adds what it never reached:
+          # revoke_key_by_id (the only revoke path the admin router calls since
+          # F-02 A), the read-only vs merely-broken key-store split, and the
+          # grace-period cleanup failure that runs on a timer thread with no
+          # caller left to see it.
+          python -m coverage run -m pytest \
+            tests/unit/test_key_rotation.py \
+            tests/unit/test_key_rotation_revoke_and_failures.py \
+            -p no:schemathesis
           python -m coverage report --include="*/serving/api/auth/key_rotation.py" --show-missing --fail-under=90
       - name: Run outbox coverage gate
         run: |
@@ -411,6 +445,38 @@ jobs:
           CLICKHOUSE_LIVE_DATABASE: agentflow
           AGENTFLOW_TEST_PG_DSN: postgresql://agentflow:agentflow@localhost:5432/agentflow
         run: pytest tests/integration/ -v --tb=short
+      - name: Control-plane critical-set coverage gate (audit F-12)
+        # The repository floor is one number over hundreds of files, so a
+        # surface can sit at 21% while the aggregate reads 78%. These adapters
+        # carry the lease / SKIP LOCKED / one-transaction semantics whose
+        # regressions are silent in production, so they get their own floors
+        # (scripts/check_control_plane_coverage.py holds the table).
+        #
+        # Unit and live coverage go into ONE data file on purpose: most
+        # branches in these modules only execute against a real server, so a
+        # unit-only number measures the absence of a database rather than the
+        # absence of tests. -p no:cov keeps pytest-cov from double-instrumenting
+        # the `coverage run` (the auth/outbox gate pattern).
+        env:
+          AGENTFLOW_TEST_PG_DSN: postgresql://agentflow:agentflow@localhost:5432/agentflow
+        run: |
+          coverage erase
+          coverage run --append -m pytest -q -p no:cov tests/unit/test_control_plane_store.py tests/unit/test_control_plane_capabilities.py tests/unit/test_postgres_enqueue_lease_contract.py tests/unit/test_query_analytics_retention.py tests/unit/test_analytics_middleware.py tests/unit/test_embedded_usage_analytics.py tests/unit/test_audit_publisher.py tests/unit/test_usage_db_connection_reuse.py tests/unit/test_usage_write_off_request_path.py tests/unit/test_node_ingest.py
+          coverage run --append -m pytest -q -p no:cov tests/integration/test_control_plane_postgres_live.py tests/integration/test_exceptions_inbox.py tests/integration/test_stuck_orders.py tests/integration/test_tenant_isolation.py tests/integration/test_node_topology.py
+          mkdir -p .artifacts/coverage
+          coverage xml -o .artifacts/coverage/coverage-control-plane.xml --include="*/serving/control_plane/*,*/routers/ops.py,*/semantic_layer/reconciliation.py,*/serving/node/ingest.py"
+          python scripts/check_control_plane_coverage.py
+      - name: Publish control-plane coverage
+        # Separate from the repository-wide report on purpose (audit F-12 asks
+        # for integration coverage to be published without folding it into the
+        # general floor, which would raise the aggregate without covering
+        # anything new).
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-control-plane
+          path: .artifacts/coverage/coverage-control-plane.xml
+          if-no-files-found: warn
 
   helm-schema-live:
     runs-on: ubuntu-latest
@@ -424,6 +490,10 @@ jobs:
       - name: Install dependencies (frozen lock profile)
         run: bash scripts/ci_sync.sh dev-tools
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.3
+      - name: Report Helm version
+        run: helm version --short
       - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           install_only: true
@@ -459,11 +529,14 @@ jobs:
           import re
           from pathlib import Path
 
-          report_path = Path("docs/benchmark.md")
+          report_path = Path(".artifacts/benchmark/benchmark.md")
           report = report_path.read_text(encoding="utf-8")
           lines = [line.strip() for line in report.splitlines() if line.startswith("|")]
           if len(lines) < 3:
-              raise SystemExit("Benchmark results table not found in docs/benchmark.md")
+              raise SystemExit(
+                  "Benchmark results table not found in "
+                  ".artifacts/benchmark/benchmark.md"
+              )
 
           generated_at_match = re.search(r"Generated: `([^`]+)`", report)
           endpoints = {}
@@ -502,12 +575,12 @@ jobs:
 
   terraform-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          terraform_version: "1.8.0"
+          terraform_version: "1.15.4"
       - name: Terraform fmt check
         run: terraform fmt -check -recursive infrastructure/terraform/
       - name: Terraform init
@@ -518,6 +591,18 @@ jobs:
         run: |
           cd infrastructure/terraform
           terraform validate
+      # h1: hashes in the lock file carry no platform label. This step is the
+      # guard that linux_amd64 (ubuntu-latest) is actually covered; it uses the
+      # same three-platform command the module README documents (re-run
+      # 2026-09-05: no lock rewrite). Three provider zips (~0.7 GB) plus
+      # terraform init is why this job's timeout-minutes is 20, not 10.
+      # It has not been observed on a GitHub runner until the owner pushes.
+      - name: Provider lock covers linux_amd64
+        run: |
+          cd infrastructure/terraform
+          terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=windows_amd64
+          git ls-files --error-unmatch .terraform.lock.hcl
+          git diff --exit-code .terraform.lock.hcl
 
   sdk-ts:
     # Audit P1-5: typecheck/tests/build for the TypeScript SDK previously ran

@@ -131,7 +131,7 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
 
 ## Decision
 
-1. **A `ControlPlaneStore` port** (`src/serving/control_plane/`) owns all six
+1. **A `ControlPlaneStore` port** (`src/agentflow_runtime/serving/control_plane/`) owns all six
    state classes. Two adapters:
    - `EmbeddedControlPlaneStore` — extracts today's behavior (DuckDB tables
      via the serving connection, YAML files for registrations/rules),
@@ -219,7 +219,7 @@ ClickHouse is consumed), and `psycopg` joins the optional dependencies.
    spikes up to 80%, this cluster's own control plane crash-looping,
    `kube-apiserver` 10+ restarts) that stalled the `agentflow/api` image build
    itself at near-zero CPU progress across two attempts. See
-   `docs/clickhouse-cutover-plan.md` Phase 3 for the full honest account.
+   `docs/plans/clickhouse-cutover-plan.md` Phase 3 for the full honest account.
    `scripts/k8s_replica_correctness_verify.sh` remains ready to automate the
    pod-count and cross-pod registration-visibility checks whenever the live
    run can complete; the delivery/alert checks follow the recipe in the

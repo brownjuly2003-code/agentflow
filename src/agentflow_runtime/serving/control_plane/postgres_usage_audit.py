@@ -171,9 +171,9 @@ class PostgresUsageAuditRepository(PostgresControlPlaneBase):
                     INSERT INTO api_sessions (
                         request_id, tenant, key_name, endpoint, method, status_code,
                         duration_ms, cache_hit, entity_type, entity_id, metric_name,
-                        query_engine, query_text
+                        query_engine, query_text, query_fingerprint
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (request_id) DO UPDATE SET
                         tenant = EXCLUDED.tenant,
                         key_name = EXCLUDED.key_name,
@@ -186,7 +186,8 @@ class PostgresUsageAuditRepository(PostgresControlPlaneBase):
                         entity_id = EXCLUDED.entity_id,
                         metric_name = EXCLUDED.metric_name,
                         query_engine = EXCLUDED.query_engine,
-                        query_text = EXCLUDED.query_text
+                        query_text = EXCLUDED.query_text,
+                        query_fingerprint = EXCLUDED.query_fingerprint
                     """,
                     (
                         request_id,
@@ -202,6 +203,7 @@ class PostgresUsageAuditRepository(PostgresControlPlaneBase):
                         record["metric_name"],
                         record["query_engine"],
                         record["query_text"],
+                        record.get("query_fingerprint"),
                     ),
                 )
         except psycopg.Error as exc:
@@ -265,16 +267,19 @@ class PostgresUsageAuditRepository(PostgresControlPlaneBase):
         return {"window": window, "tenants": tenants}
 
     def get_top_queries(self, *, limit: int = 10, window: str = "24h") -> dict:
+        # Grouped by (text, fingerprint) rather than text alone (audit F-18):
+        # the default policy stores no text, and grouping by a column that is
+        # NULL for every row would report "no queries" for a busy API.
         interval = _window_to_interval(window)
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT query_text, COUNT(*) AS frequency
+                SELECT query_text, query_fingerprint, COUNT(*) AS frequency
                 FROM api_sessions
-                WHERE query_text IS NOT NULL
+                WHERE (query_text IS NOT NULL OR query_fingerprint IS NOT NULL)
                   AND ts >= now() - CAST(%s AS INTERVAL)
-                GROUP BY query_text
-                ORDER BY frequency DESC, query_text
+                GROUP BY query_text, query_fingerprint
+                ORDER BY frequency DESC, query_fingerprint, query_text
                 LIMIT %s
                 """,
                 (interval, limit),
@@ -282,9 +287,49 @@ class PostgresUsageAuditRepository(PostgresControlPlaneBase):
         return {
             "window": window,
             "queries": [
-                {"query": query_text, "count": int(frequency)} for query_text, frequency in rows
+                {
+                    "query": query_text,
+                    "fingerprint": query_fingerprint,
+                    "count": int(frequency),
+                }
+                for query_text, query_fingerprint, frequency in rows
             ],
         }
+
+    def prune_api_sessions(self, *, older_than_days: int) -> int:
+        """Delete analytics rows past the retention window; return the count.
+
+        Retention is a promise about the oldest row, so this deletes by `ts`
+        regardless of whether a row carries a question, a fingerprint or
+        neither.
+        """
+        if older_than_days < 1:
+            raise ValueError(f"older_than_days must be at least 1, got {older_than_days}")
+        interval = f"{older_than_days} days"
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM api_sessions WHERE ts < now() - CAST(%s AS INTERVAL)",
+                (interval,),
+            )
+            return int(cursor.rowcount or 0)
+
+    def delete_tenant_api_sessions(self, *, tenant: str) -> int:
+        """Delete every analytics row for one tenant; return the count.
+
+        An erasure request does not wait out the retention window, so this
+        ignores `ts`. It stops at `api_sessions`: `api_usage` counters carry
+        no user content and answer "how much did this tenant use", which a
+        billing or abuse investigation still needs after the questions are
+        gone (audit F-18).
+        """
+        if not tenant:
+            raise ValueError("tenant must be a non-empty identifier")
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM api_sessions WHERE tenant = %s",
+                (tenant,),
+            )
+            return int(cursor.rowcount or 0)
 
     def get_top_entities(self, *, limit: int = 10, window: str = "24h") -> dict:
         interval = _window_to_interval(window)

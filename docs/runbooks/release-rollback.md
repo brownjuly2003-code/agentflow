@@ -1,6 +1,15 @@
 # Release Rollback / Package Yank
 
-**Last updated:** 2026-05-24
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for yanking a published PyPI or npm version after a blocking bug,
+bundled secret, breaking change, or license issue. Use it when a version
+already on PyPI (`agentflow-runtime`, `agentflow-client`) or npm
+(`@yuliaedomskikh/agentflow-client`) must be pulled. It does not define
+on-call scope or the severity ladder; those live in [README.md](README.md).
+
+**Audience:** release manager who cut the tag; loop in Security on any secret-leak path
+
+**Prerequisites:** PyPI and npm maintainer rights, `gh` for a Security Advisory, and git tag push access
 
 ## Symptom
 
@@ -144,5 +153,6 @@ version when republishing.
 - `.github/workflows/publish-pypi.yml`, `.github/workflows/publish-npm.yml` —
   the workflows you may need to fix before republishing.
 - `scripts/release.py` — local helper for bumping versions and tagging.
-- `docs/lessons/ci-repair-sprint-2026-04.md` § "PyPI namespace pre-claim" —
-  why the SDK is called `agentflow-client`, not `agentflow`.
+- SDK distribution name: the Python SDK ships as `agentflow-client`, not
+  `agentflow`, because the shorter name was already taken on PyPI
+  (CHANGELOG, 2026-04).

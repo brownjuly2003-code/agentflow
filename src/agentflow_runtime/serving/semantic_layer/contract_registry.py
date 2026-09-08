@@ -75,7 +75,7 @@ class SchemaContract:
     breaking_changes: tuple[dict[str, Any], ...]
     source_path: Path | None = None
     # Metric contracts: event->metric lineage plus the staleness budget the
-    # serving layer promises (see docs/freshness-benchmark.md). Empty/None for
+    # serving layer promises (see docs/perf/freshness-benchmark.md). Empty/None for
     # entity contracts.
     source_events: tuple[str, ...] = ()
     source_table: str | None = None

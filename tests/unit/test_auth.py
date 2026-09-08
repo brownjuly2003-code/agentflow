@@ -228,9 +228,8 @@ def test_admin_can_create_list_and_revoke_keys(api_keys_path: Path, db_path: Pat
         },
     )
     listed = client.get("/v1/admin/keys", headers=headers)
-    new_key = created.json()["key"]
     new_key_id = created.json()["key_id"]
-    deleted = client.delete(f"/v1/admin/keys/{new_key}", headers=headers)
+    deleted = client.delete(f"/v1/admin/keys/{new_key_id}", headers=headers)
     relisted = client.get("/v1/admin/keys", headers=headers)
 
     assert created.status_code == 201
@@ -240,6 +239,64 @@ def test_admin_can_create_list_and_revoke_keys(api_keys_path: Path, db_path: Pat
     assert any(item["key_id"] == new_key_id for item in listed.json()["keys"])
     assert deleted.status_code == 204
     assert all(item["key_id"] != new_key_id for item in relisted.json()["keys"])
+
+
+def test_admin_revoke_rejects_plaintext_key_in_path(api_keys_path: Path, db_path: Path):
+    """F-02 A: DELETE /v1/admin/keys/{key_id} must not treat a secret as an id."""
+    client = TestClient(_build_app(api_keys_path, db_path))
+    headers = {"X-Admin-Key": "admin-secret"}
+
+    created = client.post(
+        "/v1/admin/keys",
+        headers=headers,
+        json={"name": "Support Agent", "tenant": "globex", "rate_limit_rpm": 7},
+    )
+    assert created.status_code == 201
+    plaintext = created.json()["key"]
+    key_id = created.json()["key_id"]
+
+    leaked = client.delete(f"/v1/admin/keys/{plaintext}", headers=headers)
+
+    assert leaked.status_code == 404
+    assert plaintext not in leaked.text
+    still_listed = client.get("/v1/admin/keys", headers=headers)
+    assert any(item["key_id"] == key_id for item in still_listed.json()["keys"])
+    still_authed = client.get("/v1/metrics/revenue", headers={"X-API-Key": plaintext})
+    assert still_authed.status_code == 200
+
+
+def test_admin_revoke_by_key_id_returns_204(api_keys_path: Path, db_path: Path):
+    client = TestClient(_build_app(api_keys_path, db_path))
+    headers = {"X-Admin-Key": "admin-secret"}
+
+    created = client.post(
+        "/v1/admin/keys",
+        headers=headers,
+        json={"name": "Support Agent", "tenant": "globex", "rate_limit_rpm": 7},
+    )
+    assert created.status_code == 201
+    plaintext = created.json()["key"]
+    key_id = created.json()["key_id"]
+
+    deleted = client.delete(f"/v1/admin/keys/{key_id}", headers=headers)
+
+    assert deleted.status_code == 204
+    relisted = client.get("/v1/admin/keys", headers=headers)
+    assert all(item["key_id"] != key_id for item in relisted.json()["keys"])
+    gone = client.get("/v1/metrics/revenue", headers={"X-API-Key": plaintext})
+    assert gone.status_code == 401
+
+
+def test_admin_revoke_404_does_not_echo_path_value(api_keys_path: Path, db_path: Path):
+    client = TestClient(_build_app(api_keys_path, db_path))
+    headers = {"X-Admin-Key": "admin-secret"}
+    missing = "missing-key-id-sentinel-xyz"
+
+    response = client.delete(f"/v1/admin/keys/{missing}", headers=headers)
+
+    assert response.status_code == 404
+    assert missing not in response.text
+    assert response.json()["detail"] == "API key not found."
 
 
 def test_admin_usage_returns_per_tenant_counts(api_keys_path: Path, db_path: Path):

@@ -1,7 +1,7 @@
 schema_version = 1
 
 required_evidence = [
-    "docs/perf/freshness-e2e-realpath.md",
+    "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md",
     "docs/decisions/0013-golden-production-topology.md",
     "src/agentflow_runtime/processing/flink_jobs/Dockerfile",
     "src/agentflow_runtime/processing/flink_jobs/requirements.txt",
@@ -18,6 +18,8 @@ required_evidence = [
     "docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md",
     "docs/perf/golden-4h-soak-start-2026-08-07.md",
     "docs/perf/golden-4h-soak-05-failure-2026-08-08.md",
+    "docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md",
+    "docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md",
 ]
 
 [production]
@@ -47,6 +49,13 @@ latest_soak_recovery_state = "ready-baselined-hold-pass"
 latest_soak_recovery_source = "78742d0a80206b31219c6d06b84952236235cd74"
 latest_soak_recovery_image = "agentflow-flink-local:78742d0-minpause0-groupoffsets-20260803-01"
 latest_soak_recovery_startup_mode = "group-offsets"
+# F-10: split the conflated soak+rollback pending item into two gates.
+# `pending_acceptance` keeps the historical consumer string (tests pin it);
+# the last *executed* soak identity remains soak-05. Honest split:
+rollback_mechanics = "PASS"
+rollback_mechanics_evidence = "docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md"
+full_soak_plus_rollback_after_traffic = "BLOCKED_HOST_CAPACITY"
+full_soak_plus_rollback_after_traffic_evidence = "docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md"
 pending_acceptance = [
     "4h soak and rollback rehearsal on the golden topology",
 ]
@@ -55,7 +64,7 @@ reference_only_infrastructure = ["infrastructure/terraform/modules/flink"]
 [latency.real_path]
 p50_seconds = 3.02
 p95_seconds = 5.70
-evidence = "docs/perf/freshness-e2e-realpath.md"
+evidence = "docs/archive/performance/freshness-e2e-realpath-2026-07-09.md"
 
 [python]
 declared_versions = ["3.11", "3.12", "3.13"]

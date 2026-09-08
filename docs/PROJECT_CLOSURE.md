@@ -56,8 +56,12 @@ checkpoints `7675→8614` and failed `1→1` — see
 [perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md);
 kind residual canary later **PASS**; latest soak identity `-05` producer
 **PASS** but overall **`SOAK_FAIL`** on terminal Flink health before dual-mean
-verify could PASS; corrected rollback **not started** — see
-[perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)),
+verify could PASS — see
+[perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md);
+corrected rollback mechanics **PASS**
+([corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md));
+full soak plus rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
+([ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md))),
 and third-party penetration test (read-only evidence audit
 **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
 pen-test; intake not present/unclaimed; see
@@ -112,10 +116,10 @@ Push, PR mutations and release actions require explicit owner authorization.
   candidate now resolves `pyiceberg-core==0.7.0` across Python 3.11–3.13 and
   constrains MCP to `<2`; `2170` local unit/property tests and all `39`
   selected clean-Mac dependency tests pass. See
-  [dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+  [dependency-compatibility-2026-07-30.md](evidence/dependency-compatibility-2026-07-30.md).
 - Independent Mac image validation reports zero HIGH/CRITICAL findings with
   Trivy 0.70.0; see
-  [security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+  [security-runtime-image-trivy-2026-07-30.md](evidence/security-runtime-image-trivy-2026-07-30.md).
 - On 2026-08-01 the owner explicitly re-enabled Grok as implementation
   executor; Codex orchestrates and verifies. Live Iceberg materialization from
   direct `events.validated` is **PASS** at the narrow boundary — see
@@ -127,28 +131,30 @@ Push, PR mutations and release actions require explicit owner authorization.
   savepoint restore linkage, exact-once E1/E2 counts across Kafka, Iceberg,
   ClickHouse, and API, DLQ `0`, and source lag `0` — see
   [perf/checkpoint-restore-replay-2026-08-02.md](perf/checkpoint-restore-replay-2026-08-02.md).
-- Repository-owned coverage gates are green and remain blocking. Codecov OIDC
-  currently returns `Repository not found`; its upload is non-blocking
-  reporting until the one-time external activation in
-  [operations/codecov-setup.md](operations/codecov-setup.md) is completed.
-- Production status remains `candidate`; exactly two production gates remain
-  open: fresh soak/rollback (historical canary1
-  **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; subsequent readiness-baselined hold
-  **`RUNTIME_HOLD_PASS`**; kind residual canary **PASS**; latest soak `-05`
-  **`SOAK_FAIL`** after producer PASS; corrected rollback **not started** —
-  [perf/golden-4h-soak-05-failure-2026-08-08.md](perf/golden-4h-soak-05-failure-2026-08-08.md)),
+- Repository-owned coverage gates are green and remain blocking. There is no
+  Codecov upload: audit F-06 removed it, and the README badge with it, after
+  the external service returned `Repository not found` for a repository that
+  had never been enabled there. What the tracked `codecov.yml` still does, and
+  what a reintroduction would take, is in
+  [operations/codecov-setup.md](operations/codecov-setup.md).
+- Production status remains `candidate`; remaining production gates are:
+  full soak plus rollback after traffic (**`BLOCKED_HOST_CAPACITY`** —
+  [ci-soak-f02-capacity-decision-20260823-01.md](evidence/records/ci-soak-f02-capacity-decision-20260823-01.md);
+  historical canary1 **`FAIL_CANARY_CATCHUP_RATE_FLOOR`**; readiness-baselined
+  hold **`RUNTIME_HOLD_PASS`**
+  ([perf/ready-baselined-checkpoint-hold-2026-08-03.md](perf/ready-baselined-checkpoint-hold-2026-08-03.md));
+  kind residual canary **PASS**; latest soak `-05` **`SOAK_FAIL`**;
+  corrected rollback mechanics **PASS**
+  ([corrected-rollback-pair-runtime-20260823-01.md](evidence/records/corrected-rollback-pair-runtime-20260823-01.md))),
   external pen-test (read-only evidence audit
   **`BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`** at `2026-08-01T17:11:58Z` — not a
   pen-test; intake not present/unclaimed; all seven criteria fail; see
   [operations/external-pentest-evidence-blocker-2026-08-01.md](operations/external-pentest-evidence-blocker-2026-08-01.md)).
   The npm approval gate is **PASS**
   ([operations/npm-environment-approval-2026-08-03.md](operations/npm-environment-approval-2026-08-03.md)).
-  Current tracked evidence leaves the two remaining gates dependent on a
-  newly identified soak/rollback run with retained Flink exception evidence,
-  or third-party pentest engagement/evidence.
   Do not procure, simulate, or perform a pen-test from docs work.
 
 ## Сохранённые локальные артефакты
 
-Root `AGENTS.md` and `plan_sol_23_07_26` remain untracked and unchanged. They do
-not enter the public closing commit.
+Root `AGENTS.md` is now a tracked repository-root document. `plan_sol_23_07_26`
+is unchanged and stays untracked.

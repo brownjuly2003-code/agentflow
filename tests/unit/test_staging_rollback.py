@@ -34,15 +34,34 @@ def test_staging_script_preflights_required_cluster_tools() -> None:
     assert preflight_start < first_cluster_command
 
 
-def test_staging_image_installs_postgres_extra_and_pyiceberg() -> None:
-    """E4 kind stand (2026-07-16): API CrashLoop without pyiceberg because
-    staging enables external Iceberg health checks that need it at runtime.
-    Staging inline Dockerfile must keep both the postgres extra and an
-    explicit pyiceberg install.
-    """
+def test_staging_requires_promotion_values_before_cluster_mutation() -> None:
     script = (PROJECT_ROOT / "scripts" / "k8s_staging_up.sh").read_text(encoding="utf-8")
-    assert 'pip install --no-cache-dir -e ".[postgres]"' in script
-    assert "pip install --no-cache-dir pyiceberg" in script
+
+    promotion_check = script.index('if [[ -z "$PROMOTION_VALUES_FILE" ]]')
+    first_cluster_mutation = min(
+        script.index("docker run"),
+        script.index("kind create cluster"),
+        script.index("kubectl create namespace"),
+        script.index("helm upgrade --install"),
+    )
+
+    assert (
+        "promotion values file is required"
+        in script[promotion_check:first_cluster_mutation].lower()
+    )
+    assert promotion_check < first_cluster_mutation
+
+
+def test_staging_promotes_without_building_or_loading_an_api_image() -> None:
+    script = (PROJECT_ROOT / "scripts" / "k8s_staging_up.sh").read_text(encoding="utf-8")
+
+    assert "docker build" not in script
+    assert "kind load" not in script
+    assert 'PROMOTION_VALUES_FILE="${PROMOTION_VALUES_FILE:-}"' in script
+    helm_upgrade_start = script.index('helm upgrade --install "$RELEASE_NAME"')
+    helm_upgrade_end = script.index('echo "==> Enabling host loopback relay', helm_upgrade_start)
+    helm_upgrade_block = script[helm_upgrade_start:helm_upgrade_end]
+    assert '-f "$PROMOTION_VALUES_FILE"' in helm_upgrade_block
 
 
 def test_staging_script_does_not_live_patch_api_command_or_args() -> None:

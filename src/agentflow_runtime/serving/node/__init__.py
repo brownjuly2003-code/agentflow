@@ -6,7 +6,7 @@ once at boot; the center ingest endpoint, the edge emitter, and the
 branch-scoped seed all read the resolved :class:`NodeConfig` from
 ``app.state`` rather than re-reading ``os.environ``.
 
-See ``docs/three-node-demo-topology.md`` for the build contract.
+See ``docs/architecture/three-node-demo-topology.md`` for the build contract.
 """
 
 from agentflow_runtime.serving.node.config import (

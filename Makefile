@@ -1,4 +1,4 @@
-.PHONY: up down stack-dev stack-prod produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot
+.PHONY: up down stack-dev stack-prod stack-prod-shaped-local stack-prod-shaped-local-smoke produce api tools test quality lint format build deploy-dev wait-healthy clean setup demo demo-local pipeline flink-local load-test benchmark bench perf-plot trivy-policy
 
 # ── Setup ─────────────────────────────────────────────────────────
 
@@ -22,9 +22,26 @@ stack-dev:
 	docker compose up -d
 	@echo "Dev stack is starting from docker-compose.yml"
 
-stack-prod:
+# Renamed from `stack-prod` (audit F-09): the old name read as "the production
+# stack" for a topology that has no production security posture. The stack is
+# unchanged; what it calls itself is not.
+stack-prod-shaped-local:
 	docker compose -f docker-compose.prod.yml up -d
-	@echo "Prod-like stack is starting from docker-compose.prod.yml"
+	@echo "Production-SHAPED LOCAL stack is starting from docker-compose.prod.yml."
+	@echo "It is a demo, not a production recipe - the production path is Helm"
+	@echo "with helm/agentflow/values-production.yaml (docs/deployment.md)."
+	@echo "Prove it works: make stack-prod-shaped-local-smoke"
+
+stack-prod-shaped-local-smoke:
+	python scripts/wait_for_http.py --url http://localhost:8000/health/ready --timeout 180 --interval 3 --label agentflow-api
+	python scripts/compose_prod_shaped_smoke.py
+
+stack-prod:
+	@echo "stack-prod was renamed to stack-prod-shaped-local: that stack is a"
+	@echo "production-shaped LOCAL demo, and the old name invited operators to"
+	@echo "read it as a production recipe (audit F-09). The production path is"
+	@echo "Helm with helm/agentflow/values-production.yaml - see docs/deployment.md."
+	@exit 1
 
 wait-healthy:
 	@echo "Waiting for services..."
@@ -99,7 +116,7 @@ quality:
 
 load-test:
 	@echo "Starting load test (50 users, 60s). API must be running on :8000"
-	locust -f tests/load/locustfile.py --host http://localhost:8000 --headless -u 50 -r 10 --run-time 60s
+	python tests/load/run_load_test.py --host http://localhost:8000
 
 benchmark:
 	python scripts/run_benchmark.py
@@ -109,7 +126,7 @@ bench:
 
 perf-plot:
 	python -m pip install --quiet "plotly>=5,<7"
-	python scripts/plot_perf_history.py --output docs/perf/
+	python scripts/plot_perf_history.py
 
 # ── Code Quality ──────────────────────────────────────────────────
 
@@ -148,3 +165,16 @@ clean:
 	python -c "import shutil, pathlib; [shutil.rmtree(p) for p in pathlib.Path('.').rglob('.pytest_cache')]" 2>/dev/null || true
 	python -c "import shutil; [shutil.rmtree(p, True) for p in ['.coverage', 'htmlcov', 'dist', 'build']]" 2>/dev/null || true
 	python -c "import pathlib; [p.unlink() for p in pathlib.Path('.').glob('*.duckdb*')]" 2>/dev/null || true
+
+# ── Image scan policy ─────────────────────────────────────────────
+# Evaluate locally generated Trivy JSON reports. This target does not
+# build or scan images; a missing report or nonzero evaluator exit fails.
+
+TRIVY_API_REPORT ?= .artifacts/trivy/trivy-api.json
+TRIVY_FLINK_REPORT ?= .artifacts/trivy/trivy-flink.json
+TRIVY_API_POLICY_SUMMARY ?= .artifacts/trivy/trivy-api-policy.json
+TRIVY_FLINK_POLICY_SUMMARY ?= .artifacts/trivy/trivy-flink-policy.json
+
+trivy-policy:
+	python scripts/evaluate_trivy_policy.py --report $(TRIVY_API_REPORT) --waivers security/trivy-waivers.json --scope api-runtime --output $(TRIVY_API_POLICY_SUMMARY)
+	python scripts/evaluate_trivy_policy.py --report $(TRIVY_FLINK_REPORT) --waivers security/trivy-waivers.json --scope flink-runtime --output $(TRIVY_FLINK_POLICY_SUMMARY)

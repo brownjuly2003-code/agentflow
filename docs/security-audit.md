@@ -3,7 +3,7 @@
 **Project:** AgentFlow
 **Document date:** 2026-04-18
 **Repository snapshot reviewed:** 2026-04-18
-**Last updated:** 2026-07-23 (authentication defaults and quality gates revalidated)
+**Updated:** 2026-09-07 (failed-auth throttle: client identity taken from the right of X-Forwarded-For, admin window separated, a valid key always served; production chart must declare whose address the pod observes)
 **Audience:** engineering, security review, enterprise due diligence
 
 ## 1. Executive Summary
@@ -36,13 +36,23 @@ The API uses tenant-bound API keys plus a separate admin secret for `/v1/admin/*
 
 Rotation support is implemented in the auth layer. Keys have `key_id`, `previous_key_hash`, `previous_key_active_until`, and explicit grace-period behavior. Admin rotation endpoints expose create, rotate, rotation-status, and revoke-old flows. The auth middleware also records endpoint usage per tenant/key, which gives the system a concrete audit trail for key activity and key-slot transitions.
 
+That lookup digest is only as private as its pepper, and the built-in one (`agentflow-key-lookup-v1`) is a constant in `security.py`. Left at the default, `key_lookup` is an HMAC anyone can recompute: a leaked `api_keys.yaml` then lets a guessed key be confirmed against the stored digest with one HMAC and no Argon2id verify, and lets two deployments' digests be joined into one identity. `AGENTFLOW_PROFILE=production` therefore refuses to boot when `AGENTFLOW_KEY_LOOKUP_PEPPER` is unset or equal to that constant (audit FB-07) — the same rule the query-analytics fingerprint pepper has had since AF-13, whose check moved to the same boot gate so a production pod can no longer come up and fail later on the analytics path. Both are supplied under Helm through `extraEnv` as `valueFrom.secretKeyRef`; `templates/production-contract.yaml` refuses a `profile=production` render that omits either or writes one as a literal `value`. Dev and demo keep the defaults so a fresh checkout still starts. Rotating the lookup pepper invalidates every stored `key_lookup` and drops those keys back to the O(n) verify scan until they are re-issued (`docs/runbooks/auth-401-spike.md`).
+
 Authorization is layered on top of authentication:
 - admin endpoints require `X-Admin-Key`
 - entity access can be restricted per key through `allowed_entity_types`
 - request context binds `tenant_id` to the authenticated tenant
 - serving paths use that tenant context when querying tenant-scoped data
 
-Evidence: `config/security.yaml`, `src/serving/api/security.py`, `src/serving/api/auth/manager.py`, `src/serving/api/auth/middleware.py`, `src/serving/api/auth/key_rotation.py`, `tests/unit/test_auth_argon2_lookup.py`, `tests/integration/test_rotation.py`
+Evidence: `config/security.yaml`, `src/agentflow_runtime/serving/api/security.py`, `src/agentflow_runtime/serving/api/auth/manager.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `src/agentflow_runtime/serving/api/auth/key_rotation.py`, `helm/agentflow/templates/production-contract.yaml`, `tests/unit/test_auth_argon2_lookup.py`, `tests/unit/test_key_lookup_pepper_gate.py`, `tests/unit/test_helm_production_values_contract.py`, `tests/integration/test_rotation.py`
+
+`/metrics` is mounted without API-key auth so Prometheus can scrape it in-cluster through the default ClusterIP Service. The liveness and readiness probe paths are exempt for the same reason: kubelet dials the Pod IP and never traverses Ingress. `/docs*` and `/openapi*` are also API-key-exempt in `_is_exempt_path`, but `production_docs_guard` (`src/agentflow_runtime/serving/api/main.py`) answers 404 for `/docs`, `/redoc` and `/openapi*` whenever `config.profile=production` (audit G-2), so Swagger UI (`/docs`) and the schema (`/openapi*`) are reachable without a key on the dev/demo profiles only; `/redoc` is not in `_is_exempt_path`, so it needs an `X-API-Key` on the dev/demo profiles; on production `production_docs_guard` runs ahead of the auth middleware and answers 404 to every caller, key or not. The `/docs`, `/redoc` and `/openapi.json` entries in the production ingress prefix list therefore route to that 404. `/v1/node/events` authenticates with its own node bearer token (ADR 0012).
+
+`helm/agentflow/templates/production-contract.yaml` refuses a production values file whose ingress rules would send `/metrics` to the API — a `/` Prefix path, `/metrics` under Prefix or Exact, a `path` that is not a canonical single-line absolute path (unquoted, a CR, LF or tab used to inject a second Ingress rule for `/metrics`), a `className` that is not a canonical single line (unquoted, it used to inject `spec.defaultBackend` and send unmatched requests, `/metrics` included, to the API), a `host` that is not a canonical single line (`.host` has always been quoted, but a multi-line host makes the rendered Ingress unprovable, so the contract refuses it defensively), or a `pathType` other than `Prefix`/`Exact`. It also refuses the exact `ingress.annotations` keys `rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, and `server-snippet` under both `nginx.ingress.kubernetes.io/` and legacy `ingress.kubernetes.io/`: ingress-nginx interprets them after Helm checks the literal host/path, so they can change controller matching or the upstream URI. The path clauses are a denylist: a production host with an empty `paths` list satisfies them vacuously — the render then carries a rule with no paths, which routes nothing and is rejected on apply. `helm/agentflow/templates/ingress.yaml` quotes or `toYaml`-serialises every user-controlled ingress interpolation, so an injected value stays a scalar. Production also requires `networkPolicy.enabled=true`, and `helm/agentflow/templates/networkpolicy.yaml` limits pod ingress to the namespaces in `networkPolicy.ingressFromNamespaces` on the service port. `/metrics` stays unauthenticated by design for that in-cluster scrape. The chart default for `networkPolicy.ingressFromNamespaces` (`helm/agentflow/values.yaml`) enumerates only `ingress-nginx`. `values-production.yaml` keeps that same single selector and does not ship a guessed scrape namespace; the operator must name the namespace that runs Prometheus, or set `networkPolicy.scrapeFromIngressNamespace=true` when Prometheus shares the ingress-controller namespace. An empty `ingressFromNamespaces` list renders `ingress: []` (deny all), so neither the ingress controller nor in-cluster Prometheus can reach the service port; the production contract refuses that empty list for that reason. A non-empty list whose every `kubernetes.io/metadata.name` selector is `ingress-nginx` (and no entry lacks that key — an entry selecting by another label counts as other and passes) is refused because it blocks scrape from a dedicated monitoring namespace, unless `networkPolicy.scrapeFromIngressNamespace=true` records the co-location as a deliberate decision. Production also requires `service.type=ClusterIP`: `NodePort`/`LoadBalancer` would publish the service port (`/metrics` included) without any Ingress rule, and `ExternalName` would void the routing contract.
+
+This is a values-contract check at `helm template` time for the production profile only; it does not authenticate `/metrics`, and it does not bind the chart's deliberately dev-shaped defaults (a `/` path still renders green there). The annotation denylist covers only the Ingress object rendered by this chart; it cannot constrain the ingress-nginx controller ConfigMap or separately managed Ingress objects. The 2026-09-02 audit's F-10 acceptance criteria are therefore only partially met: no monitoring identity (mTLS, auth proxy, or IP allowlist) is implemented, and those cluster-level routing inputs remain operator-controlled. Production binds `service.type` to `ClusterIP` so `NodePort`/`LoadBalancer` cannot publish the service port (`/metrics` included) on a green render; `ingress.enabled=false` remains the sanctioned external-gateway shape and moves routing (and the `/metrics` exposure question) outside the chart.
+
+Evidence: `src/agentflow_runtime/serving/api/main.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `helm/agentflow/templates/production-contract.yaml`, `helm/agentflow/templates/ingress.yaml`, `helm/agentflow/templates/networkpolicy.yaml`, `helm/agentflow/values-production.yaml`, `tests/unit/test_metrics_not_publicly_routed.py`, `tests/unit/test_helm_production_ingress_annotations.py`, `tests/unit/test_helm_production_scrape_networkpolicy.py`, `tests/unit/test_helm_production_service_type.py`, `tests/unit/test_docs_profile_gate.py`
 
 ## 3. Tenant Isolation
 
@@ -59,7 +69,7 @@ What the evidence supports today:
 
 It does not support broader claims such as end-to-end isolation across every external dependency.
 
-Evidence: `docs/decisions/004-tenant-id-column-over-schema-per-tenant.md`, `src/tenancy.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/backends/clickhouse_backend.py`, `tests/integration/test_tenant_isolation.py`, `tests/property/test_tenant_isolation_properties.py`, `tests/integration/test_clickhouse_tenant_isolation_live.py`
+Evidence: `docs/decisions/004-tenant-id-column-over-schema-per-tenant.md`, `src/agentflow_runtime/tenancy.py`, `src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py`, `src/agentflow_runtime/serving/backends/clickhouse_backend.py`, `tests/integration/test_tenant_isolation.py`, `tests/property/test_tenant_isolation_properties.py`, `tests/integration/test_clickhouse_tenant_isolation_live.py`
 
 ## 4. Input Validation and Contract Safety
 
@@ -69,7 +79,7 @@ The ingestion schemas add cross-field semantics beyond shape validation. `OrderE
 
 Schema contract evolution is implemented through a contract registry plus version-aware validation and diff endpoints. The API versioning layer also exposes deprecation metadata through headers and supports tenant-level version pins, which reduces the blast radius of backward-incompatible changes.
 
-Evidence: `src/ingestion/schemas/events.py`, `tests/unit/test_event_schemas.py`, `src/serving/semantic_layer/contract_registry.py`, `src/serving/api/routers/contracts.py`, `src/serving/api/versioning.py`
+Evidence: `src/agentflow_runtime/ingestion/schemas/events.py`, `tests/unit/test_event_schemas.py`, `src/agentflow_runtime/serving/semantic_layer/contract_registry.py`, `src/agentflow_runtime/serving/api/routers/contracts.py`, `src/agentflow_runtime/serving/api/versioning.py`
 
 ## 5. SQL Injection Protection and Query Safety
 
@@ -111,7 +121,7 @@ The number of suppressions per file is pinned by `test_interpolated_sql_nosec_su
 | `semantic_layer/search_index.py:152` | `entity.table` (identifier) | table name from the semantic catalog `EntityDefinition`, not request data |
 | `orchestration/dags/daily_batch.py:148` | `table` (identifier) | iterates a fixed in-code health-check list |
 
-Evidence: `src/serving/semantic_layer/sql_guard.py`, `src/serving/semantic_layer/query/sql_builder.py`, `src/serving/semantic_layer/nl_engine.py`, `tests/unit/test_query_engine_injection.py`, `tests/unit/test_sql_guard.py`, `tests/unit/test_nl_engine_injection.py`, `tests/unit/test_security_tooling_policy.py`
+Evidence: `src/agentflow_runtime/serving/semantic_layer/sql_guard.py`, `src/agentflow_runtime/serving/semantic_layer/query/sql_builder.py`, `src/agentflow_runtime/serving/semantic_layer/nl_engine.py`, `tests/unit/test_query_engine_injection.py`, `tests/unit/test_sql_guard.py`, `tests/unit/test_nl_engine_injection.py`, `tests/unit/test_security_tooling_policy.py`
 
 ## 6. Rate Limiting and Abuse Protection
 
@@ -121,9 +131,19 @@ Rate limiting exists at two levels:
 
 `RateLimiter` uses Redis when available and falls back to an in-memory sliding window when Redis is unavailable or intentionally disabled. The auth middleware returns `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers, so clients can adapt to the policy rather than blindly retrying.
 
+### 6.1 What the failed-auth throttle is, and what it is not
+
+The threshold is `security.max_failed_auth_per_ip_per_hour` (default 10, canonical `config/security.yaml`) over a one-hour sliding window held per process. It exists to blunt scanning and log-flooding, **not** to stop brute force: API keys are 256-bit random values, so guessing was never the thing it was holding back. Three properties follow from that, and each of them is a deliberate limit rather than an oversight (audit FB-06):
+
+- **A valid key is always served.** The middleware resolves the presented key before it consults the window; only a failed attempt is counted, and only a failed attempt is answered with 429. The earlier order — reject on the window, then look at the key — meant eleven requests with any junk key took every caller sharing that address offline for an hour. Under throttle the resolution is capped to the constant-work paths (runtime cache and the O(1) peppered lookup), so a key issued since M-C4 still authenticates for exactly one hash while a scanner cannot buy N bcrypt verifications per guess. A pre-M-C4 bcrypt entry with no `key_lookup` is **not** resolvable while its address is throttled; rotate it onto an argon2id entry.
+- **The admin surface has its own window.** Failures on `X-Admin-Key` are counted separately from failures on `X-API-Key`, so a scan against `/v1` cannot throttle `/v1/admin` — the surface an operator needs while the scan is running — and vice versa.
+- **The client address is only as truthful as the deployment makes it.** `X-Forwarded-For` is honoured solely when the immediate peer is listed in `AGENTFLOW_TRUSTED_PROXIES`, and the chain is then read **right to left**, skipping hops that are themselves trusted proxies and stopping at the first hop no proxy vouches for. The leftmost element is client-supplied and is never used. With no trusted proxies configured behind a gateway, every caller shares one address: the throttle is then best-effort — it will not lock anyone out, but any legitimate request from that address clears the window. Naming the proxies (or declaring `config.gateway.preservesClientIp`) is what makes it meaningful, and `profile=production` refuses a release that answers neither.
+
+The window is per process by design: on N replicas an attacker spreading guesses gets N times the budget, which is accepted while key entropy is what it is. It is bounded, too — once a window is over the limit it stops accumulating, so a scanner cannot grow it by one entry per request.
+
 The SDKs also include resilience primitives, specifically retry policy handling and a circuit breaker. This is not a server-side abuse control by itself, but it does reduce retry storms and repeated hammering of degraded endpoints by well-behaved clients.
 
-Evidence: `src/serving/api/rate_limiter.py`, `src/serving/api/auth/middleware.py`, `sdk/agentflow/client.py`, `sdk-ts/src/client.ts`, `tests/unit/test_sdk_circuit_breaker.py`
+Evidence: `src/agentflow_runtime/serving/api/rate_limiter.py`, `src/agentflow_runtime/serving/api/auth/middleware.py`, `sdk/agentflow/client.py`, `sdk-ts/src/client.ts`, `tests/unit/test_sdk_circuit_breaker.py`, `tests/unit/test_auth_throttle_identity.py`
 
 ## 7. Data Protection and Privacy Controls
 
@@ -145,7 +165,7 @@ Security headers are applied centrally and include:
 
 These controls improve baseline browser-facing hardening for docs/admin surfaces. TLS termination is intentionally delegated to an upstream edge or ingress layer; the FastAPI application applies HTTP-layer security controls behind that boundary.
 
-Evidence: `src/serving/api/security.py` (security headers, still current); the removed masker's history lives in the CHANGELOG (2026-07-01) and `docs/decisions/0006-fix-demo-serving-engine-on-clickhouse.md` Phase 2.
+Evidence: `src/agentflow_runtime/serving/api/security.py` (security headers, still current); the removed masker's history lives in the CHANGELOG (2026-07-01) and `docs/decisions/0006-fix-demo-serving-engine-on-clickhouse.md` Phase 2.
 
 ## 8. Supply Chain and CI Controls
 
@@ -154,28 +174,102 @@ The repository includes a dedicated security workflow in GitHub Actions:
 - Safety for dependency vulnerability scanning
 - Trivy for container image scanning and CycloneDX SBOM generation
 
+The security workflow now scans both shipping runtime images:
+`agentflow-api:security-scan` and `agentflow-flink:security-scan`.
+Each image produces distinct CycloneDX, JSON, and SARIF outputs.
+JSON and SARIF scans use HIGH,CRITICAL plus ignore-unfixed; report
+generation uses exit-code 0 so the waiver-aware evaluator, rather
+than the raw scanner, decides policy. `scripts/evaluate_trivy_policy.py`
+runs once for `api-runtime` and once for `flink-runtime` against
+`security/trivy-waivers.json` and fails for unwaived findings, expired
+waivers, or stale waivers. API and Flink SARIF uploads have distinct
+categories; SBOM artifacts also have distinct names. `make trivy-policy`
+evaluates already-generated JSON reports for both scopes; it does not
+build or scan images and does not suppress failures. JSON, SARIF, SBOM,
+policy-summary, and IaC working files live under ignored
+`.artifacts/trivy/`. They are replaceable runtime/CI artifacts, not
+reviewed evidence or production acceptance; promotion requires a new
+date-stamped identity with provenance. The `api-runtime`
+policy scope is empty, so every API finding is unwaived; the existing
+Flink scope retains its narrow expiring waivers.
+
+Dependency-scan working files follow the same ownership. The Bandit job
+writes its raw JSON report to ignored `.artifacts/security/bandit-current.json`
+and `scripts/bandit_diff.py` compares it against the tracked
+`.bandit-baseline.json`, which is the only reviewed input. The Safety job
+resolves its requirement buckets, resolver virtualenvs, and the
+vulnerable-pin regression probe under `.artifacts/security/safety/`.
+`scripts/run_safety_scan.py` runs `safety check` once per bucket and applies
+`--ignore` only for waiver `safety_id` values whose scope matches that
+bucket. The pip-audit job exports the full locked profile set to
+`.artifacts/security/pip-audit/`; the production pip-audit step reads the
+tracked `requirements-docker.lock` directly. These are replaceable per-run
+working files, not reviewed evidence or production acceptance; promotion
+requires a new date-stamped identity with source SHA, workflow run, scanner
+versions, exact command/configuration, outcome, and hash provenance.
+
+### 8.1 Waiving an advisory upstream has not fixed
+
+A version bump closes most findings. `PYSEC-2026-3740` in `nltk 3.10.3` closes
+nothing: the advisory itself says "Patched versions: Not yet patched", so there
+is no release to move to. Until 2026-09-07 the repository had nowhere to put
+that. `validate_waiver` required a `fixed_version`, which meant an unfixed
+finding was unwaivable by construction — its key ends in an empty fix version
+and no valid waiver key could — and the pip-audit job had no waiver mechanism
+at all, so it simply stayed red.
+
+Three changes, none of which loosen the gate:
+
+- `fixed_version: null` is now a statable claim — "upstream has published no
+  fix" — and the key must still be present, so silence stays a typo rather than
+  a claim.
+- `scripts/run_pip_audit_scan.py` runs pip-audit with **no** `--ignore-vuln`
+  and evaluates the JSON report against `security/trivy-waivers.json` itself,
+  scope `python-profiles`. Unwaived findings, expired waivers, and waivers that
+  match nothing each fail the job, exactly as the Trivy path does.
+- The fix state is part of the match. The nltk waiver's premise is that no fix
+  exists; the day pip-audit reports one, the waiver stops matching, the finding
+  returns to unwaived, and the gate goes red on the release that is now
+  available. Nobody has to remember to revisit it.
+
+The argument for this particular waiver is narrow. The affected APIs are nltk's
+model-persistence helpers, and the bypass only matters to a caller that enables
+nltk's `pathsec` sandbox and lets untrusted input choose model paths. AgentFlow
+does neither: nltk arrives only as a transitive dependency of `llama-index-core`
+under the `integrations` extra, no source file references `nltk` or `pathsec`
+(a test asserts this), and the package is absent from `requirements-docker.lock`,
+so it does not ship in the API image. The waiver expires 2026-11-01.
+
+`requirements-docker.lock` is deliberately excluded from this mechanism. The one
+inventory that ships is audited bare, with no waiver path reachable at all.
+
 On 2026-07-30, a Trivy scan of the API image identified vulnerable packages
 vendored by runtime `pip`, not dependencies from the application lock. The
 final stage now removes `pip`, `setuptools`, and `wheel` after the hash-locked
 install and `pip check`. An independent Mac rebuild and Trivy `0.70.0` scan
 reported zero HIGH/CRITICAL findings while the API import remained healthy.
 See
-[security-runtime-image-trivy-2026-07-30.md](security-runtime-image-trivy-2026-07-30.md).
+[security-runtime-image-trivy-2026-07-30.md](evidence/security-runtime-image-trivy-2026-07-30.md).
 
 The same closeout also converted two implicit dependency assumptions into
 tested supply-chain boundaries: MCP is constrained to its supported 1.x major
 API, and PyIceberg's write-time native core is explicitly locked to the
 Python 3.11–3.13-compatible 0.7 line. The regenerated hash lock, clean Mac
 environment, rebuilt image, OSV queries, and Trivy result are recorded in
-[dependency-compatibility-2026-07-30.md](dependency-compatibility-2026-07-30.md).
+[dependency-compatibility-2026-07-30.md](evidence/dependency-compatibility-2026-07-30.md).
 
-The Bandit baseline currently records a historical `B310` finding in `src/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
+The Bandit baseline currently records a historical `B310` finding in `src/agentflow_runtime/serving/backends/clickhouse_backend.py`. SQL construction findings are not globally suppressed; reviewed identifier construction is handled through narrow suppressions and tests.
 
 Helm defaults no longer embed production-shaped API-key verifier hashes. Operators can render a chart-managed Secret for local use or mount an existing Kubernetes Secret, which is friendlier to External Secrets Operator, Sealed Secrets, or equivalent workflows.
 
 Evidence: `.github/workflows/security.yml`, `.bandit`, `.bandit-baseline.json`,
-`docs/helm-deployment.md`,
-`docs/security-runtime-image-trivy-2026-07-30.md`
+`docs/operations/helm-deployment.md`,
+`docs/evidence/security-runtime-image-trivy-2026-07-30.md`,
+`scripts/evaluate_trivy_policy.py`, `security/trivy-waivers.json`,
+`scripts/run_pip_audit_scan.py`, `Makefile`,
+`tests/unit/test_security_image_scan_policy.py`,
+`tests/unit/test_security_workflow.py`,
+`tests/unit/test_run_pip_audit_scan.py`
 
 ## 9. Operational Security and Auditability
 
@@ -186,16 +280,20 @@ Operationally, the repo shows several useful security-facing controls:
 
 This provides a credible audit and incident-response starting point for a small team. It is notably better than a pure demo API with no usage telemetry.
 
+Refusals on the admin surface leave a record and not only a counter (audit FB-10). `require_admin_key` guards the routes that issue, rotate and revoke every tenant API key, and each of its three refusals — `admin_invalid`, `rate_limited` and `admin_unconfigured` — increments `agentflow_auth_failures_total` **and** emits a structured `admin_auth_failed` line carrying `reason`, `client_ip`, `path` and the redacted request headers. It is a separate event from the tenant path's `api_auth_failed` so that a scan against `/v1` and someone guessing the operator credential stay distinguishable at query time. The line never carries key material: headers pass through `security.sensitive_headers_to_redact` and then lose `X-Admin-Key` unconditionally, because that list is operator-configurable and audit F-11 had already found a built-in default that omitted it. The label vocabulary in `docs/runbooks/auth-401-spike.md` § Detection is pinned against the labels the code actually emits, in both directions — it had been carrying one name nothing emitted and neither admin name.
+
+The admin key itself is one shared value with no dual-key window: a pod validates against the single value it resolved at startup, so rotation is a Secret change plus a rolling restart during which admin calls are unreliable. `docs/operations/admin-key-rotation.md` owns that procedure — trigger conditions, the ordering that keeps the analytics-retention CronJob from failing mid-run, and how to confirm the old value is dead.
+
 What is not evidenced in this repository snapshot:
 - generalized secrets management through AWS Secrets Manager or another external vault
 - automated rotation for non-API-key secrets
 - externally immutable audit retention or SIEM export
 
-The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository. Use `docs/operations/immutable-retention-evidence-handoff.md` before making any external immutable-retention claim.
+The API usage path can optionally publish hash-chained JSONL records through `AGENTFLOW_AUDIT_LOG_PATH` in addition to DuckDB analytics. This is useful local evidence that DuckDB analytics are not the only audit path, but object-lock retention, SIEM delivery, and external immutability still need operator evidence outside the repository. Collect that operator evidence outside this repository before making any external immutable-retention claim.
 
 Because the external controls are not provable from the checked-in code, they should not be claimed in customer-facing security questionnaires without additional infrastructure evidence.
 
-Evidence: `src/serving/api/auth/middleware.py`, `src/serving/api/analytics.py`, `docs/runbook.md`
+Evidence: `src/agentflow_runtime/serving/api/auth/middleware.py`, `src/agentflow_runtime/serving/api/analytics.py`, `docs/runbook.md`, `docs/runbooks/auth-401-spike.md`, `docs/operations/admin-key-rotation.md`, `tests/unit/test_admin_auth_audit_log.py`
 
 ## 10. Known Limitations
 
@@ -207,6 +305,8 @@ The current implementation has several material limitations:
 4. The security pipeline is strong at code scanning and SBOM generation, but a real signed container-release run is still evidence-pending until CI signs a published image digest.
 5. The demo-data initialization path is convenient for development, but it increases the importance of strict environment separation between demo and production deployments.
 6. Browser-oriented security headers exist, and request body size enforcement is applied from `SecurityPolicy.request_size_limit_bytes`.
+7. `/metrics` remains unauthenticated to anything that can already reach the pod port; no monitoring identity (mTLS, auth proxy, or IP allowlist) is implemented. Production Ingress rules that would send `/metrics` to the API are refused at `helm template` time, as are the exact ingress-nginx routing-control annotations `rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, and `server-snippet` under the current and legacy prefixes. That values-contract check does not authenticate the endpoint or bind the chart's dev/demo defaults, and its annotation denylist covers only the Ingress object rendered by this chart — not the ingress-nginx controller ConfigMap or separately managed Ingress objects. Production binds `service.type` to `ClusterIP`; `ingress.enabled=false` remains the sanctioned external-gateway shape and moves routing (and the `/metrics` exposure question) outside the chart. Production NetworkPolicy must name a scrape namespace in `networkPolicy.ingressFromNamespaces` (`values-production.yaml` ships no guessed namespace; the unedited overlay is refused). An empty list renders `ingress: []` (deny all) and is refused because neither the ingress controller nor Prometheus can reach the service port. A list whose every `kubernetes.io/metadata.name` is `ingress-nginx` is refused unless `networkPolicy.scrapeFromIngressNamespace=true` records that Prometheus shares the ingress-controller namespace. Egress is an allow-list only where a rule names destinations: a rule with `ports:` and no `to:` permits that port to every address, in the cluster and on the internet, which is how the baseline came to allow 6379/9092/8181/9000/8123/4317/5432 anywhere (audit FB-09). Each rule now takes peers from `networkPolicy.egressTo.<service>`, renders only when its feature is configured, and production refuses an empty peer list for every rule that renders. DNS remains the chart-owned exception, selecting kube-dns by label.
+8. The admin key is a single shared credential. Every operator presents the same `X-Admin-Key`, so an admin action is attributable to "someone holding the key" and nothing finer, and revoking one person's access means rotating it for everyone. There is no dual-key window during that rotation. Per-operator admin credentials, hashed the way tenant keys already are, would remove both properties and are not implemented; `docs/operations/admin-key-rotation.md` is what stands in for them today.
 
 ## 11. Compliance Readiness
 

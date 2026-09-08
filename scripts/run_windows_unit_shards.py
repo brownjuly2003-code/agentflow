@@ -9,9 +9,11 @@ Windows verification honest:
   every file to exactly one shard (asserted — no silent gaps);
 - runs each shard sequentially in a fresh Python process, so no single
   process accumulates the whole suite's allocations;
-- records peak private memory per shard (Windows: ``PeakPagefileUsage`` via
-  ctypes; POSIX: best effort) and fails if a shard exceeds the budget
-  (default 900 MiB — headroom under the 1024 MiB guard);
+- pins each shard's BLAS thread pools to one thread (``SHARD_ENV``), which is
+  where this suite's memory actually went before audit FB-17;
+- records peak private memory per shard (Windows: ``PeakProcessMemoryUsed``
+  via ctypes; POSIX: best effort) and fails if a shard exceeds the budget
+  (``DEFAULT_MEMORY_BUDGET_MIB`` below — headroom under the 1024 MiB guard);
 - cross-checks each shard's executed-test count against its collected
   node-ID count, so a shard that silently drops tests fails the run.
 
@@ -21,12 +23,14 @@ total memory and can trip the guard this runner exists to respect.
 Usage:
     python scripts/run_windows_unit_shards.py                # tests/unit
     python scripts/run_windows_unit_shards.py tests/unit tests/sdk
-    python scripts/run_windows_unit_shards.py --shard-size 250 --memory-budget-mib 900
+    python scripts/run_windows_unit_shards.py --shard-size 250 --memory-budget-mib 800
+    python scripts/run_windows_unit_shards.py tests/unit/test_versioning.py  # one module's peak
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -34,12 +38,44 @@ from collections import Counter
 from pathlib import Path
 
 DEFAULT_SHARD_SIZE = 300
-# Measured on the supported Windows host (2026-08-21): per-shard peaks are
-# dominated by individual heavy test modules, not shard size — a 14-file
-# shard peaked at 830 MiB while its 147-test neighbour peaked at 94 MiB, and
-# the hottest shard reached 944 MiB. Splitting shards further cannot reduce a
-# single module's peak, so the budget sits just under the 1024 MiB guard.
-DEFAULT_MEMORY_BUDGET_MIB = 1000
+
+# Audit FB-17. Peaks were never about how many tests a shard held: a 14-file
+# shard peaked at 830 MiB next to a 147-test shard at 94 MiB, so the earlier
+# reading — "individual heavy test modules" — was measured but misattributed.
+# Bisecting one 797 MiB test down to its imports found a flat, per-process
+# cost that every shard paid once, on the supported Windows host (18 cores,
+# numpy 2.3.5 / pandas 3.0.3 / pyarrow 24.0.0 / duckdb 1.5.4, 2026-09-07):
+#
+#   import numpy                                    655.6 MiB
+#   import numpy, with OPENBLAS_NUM_THREADS=1       109.5 MiB
+#   numpy + pandas + pyarrow, both vars set         141.0 MiB
+#
+# OpenBLAS commits per-thread scratch buffers at load, one set per core, so
+# the arithmetic is ~30 MiB x 18 cores. No file under src/ or tests imports
+# numpy, so nothing here loses arithmetic by pinning; duckdb reaches it on
+# its own: passing
+# parameters to `execute()` imports pandas/pyarrow (and so numpy) to convert
+# them, which is why every module that writes to a DuckDB store looked heavy
+# while the same INSERT with literals stayed at 86 MiB.
+#
+# This is a development-environment cost only: duckdb imports pandas/numpy
+# when they happen to be installed, and requirements-docker.lock ships
+# neither. With both made unimportable — the shape of the API image — the
+# same INSERT writes its row and peaks at 87.6 MiB. See
+# docs/operations/windows-verification.md.
+SHARD_ENV = {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"}
+
+# With SHARD_ENV applied the full suite (3790 tests, 14 shards, 2026-09-07)
+# peaks at 400.4 MiB, down from 969.8 MiB. This budget is therefore a ratchet
+# against regressions again, not a near-miss of the 1024 MiB guard. Raise it
+# only with a measurement that says why.
+DEFAULT_MEMORY_BUDGET_MIB = 600
+
+BUDGET_FAILURE_HINT = (
+    "attribute it with `python scripts/run_windows_unit_shards.py <file>` per file "
+    "before changing this number — a smaller --shard-size cannot lower a per-process "
+    "import cost, and SHARD_ENV is what keeps that cost small"
+)
 
 # "== 12 passed, 3 skipped, 1 xfailed in 4.56s ==" -> {"passed": 12, ...}
 _SUMMARY_RE = re.compile(r"(\d+) (passed|failed|error(?:s)?|skipped|xfailed|xpassed|warnings?)")
@@ -52,6 +88,7 @@ def collect_node_ids(targets: list[str]) -> list[str]:
         capture_output=True,
         text=True,
         check=False,
+        env=shard_environment(),
     )
     if completed.returncode not in (0, 5):
         sys.stderr.write(completed.stdout + completed.stderr)
@@ -168,6 +205,16 @@ class _WindowsJob:
         return peak
 
 
+def shard_environment() -> dict[str, str]:
+    """The parent environment with SHARD_ENV forced on top.
+
+    Forced, not defaulted: an ``OMP_NUM_THREADS=8`` left in an operator's
+    shell would otherwise put back the ~550 MiB the pinning exists to avoid,
+    and it would do it silently.
+    """
+    return {**os.environ, **SHARD_ENV}
+
+
 def run_shard(files: list[str]) -> tuple[int, str, float | None]:
     job = _WindowsJob() if sys.platform == "win32" else None
     process = subprocess.Popen(  # noqa: S603
@@ -175,6 +222,7 @@ def run_shard(files: list[str]) -> tuple[int, str, float | None]:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        env=shard_environment(),
     )
     assigned = job.assign(process) if job is not None else False
     output, _ = process.communicate()
@@ -217,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         if peak_mib is not None and peak_mib > args.memory_budget_mib:
             failures.append(
                 f"shard {index} peaked at {peak_mib:.1f} MiB "
-                f"(budget {args.memory_budget_mib:.0f} MiB); split it further"
+                f"(budget {args.memory_budget_mib:.0f} MiB); {BUDGET_FAILURE_HINT}"
             )
 
     print(f"total executed: {executed_total}/{len(node_ids)}")

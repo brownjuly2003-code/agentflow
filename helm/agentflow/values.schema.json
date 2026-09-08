@@ -35,6 +35,7 @@
     "provision",
     "controlPlane",
     "worker",
+    "analyticsRetention",
     "lakeMaterializer",
     "servingBridge",
     "flinkJob"
@@ -115,6 +116,11 @@
           "type": "string",
           "minLength": 1
         },
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:[0-9a-f]{64})?$",
+          "description": "Optional immutable image digest. When set, templates render repository@digest and ignore tag."
+        },
         "pullPolicy": {
           "type": "string",
           "enum": [
@@ -137,7 +143,10 @@
       "required": [
         "create",
         "annotations",
-        "name"
+        "name",
+        "apiName",
+        "workerName",
+        "provisionName"
       ],
       "properties": {
         "create": {
@@ -150,6 +159,15 @@
           }
         },
         "name": {
+          "type": "string"
+        },
+        "apiName": {
+          "type": "string"
+        },
+        "workerName": {
+          "type": "string"
+        },
+        "provisionName": {
           "type": "string"
         }
       }
@@ -535,6 +553,63 @@
         }
       }
     },
+    "analyticsRetention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "schedule",
+        "retentionDays",
+        "dryRun",
+        "concurrencyPolicy",
+        "startingDeadlineSeconds",
+        "successfulJobsHistoryLimit",
+        "failedJobsHistoryLimit",
+        "backoffLimit",
+        "resources"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "schedule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retentionDays": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "string", "maxLength": 0}
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "concurrencyPolicy": {
+          "type": "string",
+          "enum": ["Allow", "Forbid", "Replace"]
+        },
+        "startingDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "successfulJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
+    },
     "lakeMaterializer": {
       "type": "object",
       "additionalProperties": false,
@@ -878,6 +953,7 @@
         "rateLimitRpm",
         "cacheTtlSeconds",
         "corsOrigins",
+        "trustedProxies",
         "redisUrl",
         "otlpEndpoint",
         "otlpServiceName",
@@ -933,6 +1009,20 @@
         },
         "corsOrigins": {
           "type": "string"
+        },
+        "trustedProxies": {
+          "type": "string",
+          "description": "Comma-separated peer addresses permitted to set X-Forwarded-For (AGENTFLOW_TRUSTED_PROXIES). Required on profile=production behind any proxy unless config.gateway.preservesClientIp declares the source address survives."
+        },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preservesClientIp": {
+              "type": "boolean",
+              "description": "Declares that the path in front of the API preserves the caller's source address, so the failed-auth throttle keys on the client rather than on a shared proxy address. profile=production requires either this or a non-empty config.trustedProxies."
+            }
+          }
         },
         "redisUrl": {
           "type": "string"
@@ -1186,7 +1276,28 @@
           "type": "boolean"
         },
         "ingressFromNamespaces": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "scrapeFromIngressNamespace": {
+          "type": "boolean"
+        },
+        "egressTo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "redis": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "kafka": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "clickhouse": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "otlp": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "postgres": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "icebergCatalog": { "type": "array", "items": { "type": "object", "minProperties": 1 } },
+            "objectStore": { "type": "array", "items": { "type": "object", "minProperties": 1 } }
+          }
         },
         "egressPorts": {
           "type": "object"

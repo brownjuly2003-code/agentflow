@@ -2,6 +2,12 @@ DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 FAILED_AUTH_WINDOW_SECONDS = 3_600
 DEFAULT_ROTATION_GRACE_PERIOD_SECONDS = 86_400
 
+# Failed-auth windows are kept per surface rather than once per address. A
+# scanner spraying `X-API-Key` at /v1 must not throttle /v1/admin, which is the
+# surface an operator reaches for while the scan is happening (FB-06).
+FAILED_AUTH_SCOPE_API = "api"
+FAILED_AUTH_SCOPE_ADMIN = "admin"
+
 # M-C4 (audit): every hashed API key adds one bcrypt verification to the
 # cold-cache worst case of authenticate(). docs/perf/auth-bench-2026-05-26.md
 # measured the p95 at bcrypt_rounds=12 crossing the 1100 ms POST load gate

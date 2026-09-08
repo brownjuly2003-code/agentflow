@@ -24,8 +24,7 @@ Exit code: 0 when every invariant passes, 2 otherwise.
 
 Example (stand):
     .venv/bin/python scripts/benchmark_scale_own_data.py \
-        --days 1460 --report-json /tmp/scale-report.json \
-        --report-md /tmp/scale-report.md
+        --days 1460
 """
 
 from __future__ import annotations
@@ -44,6 +43,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_VAULT = PROJECT_ROOT / "warehouse" / "agentflow" / "dv2" / "raw_vault"
+DEFAULT_JSON = PROJECT_ROOT / ".artifacts" / "scale" / "own-data-current.json"
+DEFAULT_REPORT = PROJECT_ROOT / ".artifacts" / "scale" / "own-data-current.md"
+S13_SCALE_RECORD_PATH = PROJECT_ROOT / "docs" / "perf" / "scale-own-data-2026-07-11.md"
+PROTECTED_REPORT_PATHS = (S13_SCALE_RECORD_PATH,)
 
 # Daily order rates by channel/branch — generator-spec.md §1 master matrix.
 DAILY_MP = 1750
@@ -92,6 +95,40 @@ DDL_FILES = [
     "satellites/sat_order_pricing__1c__ala.sql",
     "satellites/sat_marking_code_gs1__1c__global.sql",
 ]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8123)
+    parser.add_argument("--user", default="default")
+    parser.add_argument("--password", default="")
+    parser.add_argument("--database", default="rv_scale")
+    parser.add_argument("--days", type=int, default=365, help="days of history at legend rates")
+    parser.add_argument(
+        "--anchor",
+        default=None,
+        help="fixed timestamp the history window ends at (default: now, recorded in report)",
+    )
+    parser.add_argument("--chunk", type=int, default=1_000_000, help="numbers() rows per INSERT")
+    parser.add_argument("--query-repeats", type=int, default=5)
+    parser.add_argument("--skip-generate", action="store_true", help="measure an existing database")
+    parser.add_argument("--drop-after", action="store_true", help="drop the database at the end")
+    parser.add_argument("--report-json", default=str(DEFAULT_JSON))
+    parser.add_argument("--report-md", default=str(DEFAULT_REPORT))
+    return parser.parse_args()
+
+
+def resolve_report_path(report_path: str) -> Path:
+    candidate = Path(report_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    protected_paths = {path.resolve() for path in PROTECTED_REPORT_PATHS}
+    if resolved.resolve() in protected_paths:
+        raise ValueError(
+            "Tracked S13 scale evidence cannot be overwritten; write runtime artifacts "
+            "under .artifacts/scale/ instead."
+        )
+    return resolved
 
 
 @dataclass
@@ -830,6 +867,13 @@ def render_markdown(report: dict[str, object]) -> str:
         f"> Generated {report['generated_at']} · database `{report['database']}` · "
         f"anchor `{report['anchor']}` · ClickHouse `{report['clickhouse_version']}`",
         ">",
+        "> Runtime artifact: re-running replaces `.artifacts/scale/own-data-current.md`;",
+        "> machine-readable results are `.artifacts/scale/own-data-current.json`.",
+        "> Host/time-dependent single-node diagnostics are not a production SLA or",
+        "> acceptance record. Promote only under a new date-stamped evidence identity",
+        "> with exact source, host/runtime, command/configuration, volume/check results,",
+        "> and hashes.",
+        ">",
         "> Generator: docs/generator-spec.md legend rates scaled in-database "
         "(`numbers()` INSERT-SELECT, deterministic). Host class in the companion "
         "note — do not compare across hardware.",
@@ -894,25 +938,13 @@ def render_markdown(report: dict[str, object]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8123)
-    parser.add_argument("--user", default="default")
-    parser.add_argument("--password", default="")
-    parser.add_argument("--database", default="rv_scale")
-    parser.add_argument("--days", type=int, default=365, help="days of history at legend rates")
-    parser.add_argument(
-        "--anchor",
-        default=None,
-        help="fixed timestamp the history window ends at (default: now, recorded in report)",
-    )
-    parser.add_argument("--chunk", type=int, default=1_000_000, help="numbers() rows per INSERT")
-    parser.add_argument("--query-repeats", type=int, default=5)
-    parser.add_argument("--skip-generate", action="store_true", help="measure an existing database")
-    parser.add_argument("--drop-after", action="store_true", help="drop the database at the end")
-    parser.add_argument("--report-json", default=None)
-    parser.add_argument("--report-md", default=None)
-    args = parser.parse_args()
+    args = parse_args()
+    try:
+        json_path = resolve_report_path(args.report_json)
+        md_path = resolve_report_path(args.report_md)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
 
     if args.days < 1:
         print("--days must be >= 1", file=sys.stderr)
@@ -990,12 +1022,10 @@ def main() -> int:
     }
 
     markdown = render_markdown(report)
-    if args.report_json:
-        Path(args.report_json).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.report_json).write_text(json.dumps(report, indent=2), encoding="utf-8")
-    if args.report_md:
-        Path(args.report_md).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.report_md).write_text(markdown, encoding="utf-8")
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(markdown, encoding="utf-8")
     print(markdown)
 
     if args.drop_after:

@@ -1,5 +1,12 @@
 # ClickHouse Serving Guide (default engine) / DuckDB rollback
 
+This page owns the shipped ClickHouse serving path: backend selection, local
+bring-up, migration steps, and the configuration-only DuckDB rollback. Use it
+when you need to run, verify, or roll back the serving engine on a local or
+configured host. It does not replace the decision in
+[ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md) or the
+walkthrough in [deployment.md](deployment.md).
+
 ## Overview
 
 **ClickHouse is the shipped serving engine** ([ADR 0006](decisions/0006-fix-demo-serving-engine-on-clickhouse.md), executed 2026-07-02): `config/serving.yaml` defaults to `backend: clickhouse`, `make demo` and `docker-compose.prod.yml` bring the service up by default, and the local pipeline writes the serving tables + `pipeline_events` journal to it (`src/agentflow_runtime/processing/clickhouse_sink.py`). `DuckDB` remains the local-dev / test and compatibility store — `pytest` pins it (`tests/conftest.py`) and the control-plane state (webhooks, alerts, outbox, usage) stays on it per [ADR 0009](decisions/0009-control-plane-state-and-scaling-gate.md).

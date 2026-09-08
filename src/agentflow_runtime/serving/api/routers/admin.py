@@ -1,4 +1,8 @@
+from collections.abc import Callable
+from typing import TypeVar
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from agentflow_runtime.serving.api.analytics import (
@@ -9,6 +13,13 @@ from agentflow_runtime.serving.api.analytics import (
     get_usage_analytics,
 )
 from agentflow_runtime.serving.api.auth import KeyCreateRequest, get_auth_manager, require_admin_key
+from agentflow_runtime.serving.api.auth.manager import (
+    KEY_STORE_READONLY_DETAIL,
+    AuthManager,
+    KeyStoreReadOnlyError,
+    is_permission_denied,
+)
+from agentflow_runtime.serving.api.query_analytics_policy import QueryAnalyticsPolicy
 
 router = APIRouter(
     prefix="/admin",
@@ -16,11 +27,45 @@ router = APIRouter(
     dependencies=[Depends(require_admin_key)],
 )
 
+_T = TypeVar("_T")
+
+
+class AnalyticsRetentionRequest(BaseModel):
+    retention_days: int | None = Field(default=None, ge=1)
+    dry_run: bool = False
+
+
+class AnalyticsRetentionResponse(BaseModel):
+    retention_days: int
+    dry_run: bool
+    deleted_rows: int | None
+
+
+def _key_store_conflict() -> HTTPException:
+    # 409 not 501: the server implements the operation; the current store state conflicts.
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=KEY_STORE_READONLY_DETAIL,
+    )
+
+
+def _run_key_mutation(manager: AuthManager, op: Callable[[], _T]) -> _T:
+    if not manager.key_store_writable:
+        raise _key_store_conflict()
+    try:
+        return op()
+    except KeyStoreReadOnlyError as exc:
+        raise _key_store_conflict() from exc
+    except OSError as exc:
+        if is_permission_denied(exc):
+            raise _key_store_conflict() from exc
+        raise
+
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED, response_model=None)
 async def create_api_key(payload: KeyCreateRequest, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
-    item = manager.create_key(payload)
+    item = _run_key_mutation(manager, lambda: manager.create_key(payload))
     return {
         "key_id": item.key_id,
         "key": item.key,
@@ -43,7 +88,7 @@ async def list_api_keys(request: Request) -> dict[str, object]:
 async def rotate_api_key(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        item, expires_at = manager.rotate_key(key_id)
+        item, expires_at = _run_key_mutation(manager, lambda: manager.rotate_key(key_id))
     except KeyError:
         raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
     except ValueError as exc:
@@ -67,7 +112,7 @@ async def get_rotation_status(key_id: str, request: Request) -> dict[str, object
 async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]:
     manager = get_auth_manager(request)
     try:
-        revoked = manager.revoke_old_key(key_id)
+        revoked = _run_key_mutation(manager, lambda: manager.revoke_old_key(key_id))
     except KeyError:
         raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.") from None
     if not revoked:
@@ -76,14 +121,14 @@ async def revoke_old_api_key(key_id: str, request: Request) -> dict[str, object]
 
 
 @router.delete(
-    "/keys/{api_key}",
+    "/keys/{key_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
 )
-async def revoke_api_key(api_key: str, request: Request) -> Response:
+async def revoke_api_key(key_id: str, request: Request) -> Response:
     manager = get_auth_manager(request)
-    if not manager.revoke_key(api_key):
-        raise HTTPException(status_code=404, detail=f"API key '{api_key}' not found.")
+    if not _run_key_mutation(manager, lambda: manager.revoke_key_by_id(key_id)):
+        raise HTTPException(status_code=404, detail="API key not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -155,3 +200,30 @@ async def get_analytics_anomalies(
         return get_anomalies(manager.store, window=window)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/analytics/retention",
+    response_model=AnalyticsRetentionResponse,
+)
+async def prune_analytics_retention(
+    payload: AnalyticsRetentionRequest,
+    request: Request,
+) -> AnalyticsRetentionResponse:
+    manager = get_auth_manager(request)
+    retention_days = payload.retention_days
+    if retention_days is None:
+        retention_days = QueryAnalyticsPolicy.from_env().retention_days
+
+    deleted_rows: int | None = None
+    if not payload.dry_run:
+        deleted_rows = await run_in_threadpool(
+            manager.store.prune_api_sessions,
+            older_than_days=retention_days,
+        )
+
+    return AnalyticsRetentionResponse(
+        retention_days=retention_days,
+        dry_run=payload.dry_run,
+        deleted_rows=deleted_rows,
+    )

@@ -19,7 +19,7 @@ Those scripts create the quick demo environment (`.[dev]` plus `./sdk`). For wor
 | `perf` | `pip install -e ".[dev,load,cloud]"` | `perf-check`, `perf-baseline`, `perf-smoke` |
 | `contract` | `pip install -e ".[dev,cloud,contract]"` | `contract` workflow |
 
-For the fastest local loop, use `make demo`. For a production-shaped stack with observability, use `docker compose -f docker-compose.prod.yml up -d`.
+For the fastest local loop, use `make demo`. For a production-shaped local stack with observability, use `make stack-prod-shaped-local` (a demo, not a production recipe -- see docs/deployment.md).
 
 ## Running tests
 
@@ -46,6 +46,30 @@ The root `integrations` extra is intentionally not the repo test profile. Use `.
 
 After the package-identity split, `pip show agentflow` refers to the Python SDK and `pip show agentflow-runtime` refers to the root runtime repo metadata.
 
+## Review governance
+
+Changes reach `main` through a pull request. Routine direct pushes to `main`
+are prohibited. A pull request must have at least one approval, and changes to
+the security, release, CI/CD, Helm, and infrastructure surfaces listed in
+`.github/CODEOWNERS` must also have Code Owner approval. The 15 required
+machine checks remain mandatory in addition to human review; they do not
+replace it.
+
+This is the intended policy, not the current GitHub enforcement state. Adding
+`CODEOWNERS` does not activate branch protection by itself. The repository
+owner must update the protection rule or ruleset for `main` to:
+
+1. require a pull request before merging with at least one approving review;
+2. require review from Code Owners;
+3. keep all 15 existing required status checks enabled;
+4. prevent direct pushes and apply the rule to administrators; or restrict the
+   only bypass to a named break-glass role whose use is recorded in the
+   organization audit log, linked to an incident or change ticket, and reviewed
+   after the event.
+
+Until those settings are enabled, review governance remains open and must not
+be reported as enforced.
+
 ## Before submitting a PR
 
 1. Tests pass:
@@ -57,21 +81,220 @@ make test
 2. Security diff is clean:
 
 ```bash
-bandit -r src sdk --ini .bandit --severity-level medium -f json -o .tmp/bandit-current.json
-python scripts/bandit_diff.py .bandit-baseline.json .tmp/bandit-current.json
+mkdir -p .artifacts/security
+bandit -r src sdk --ini .bandit --severity-level medium -f json -o .artifacts/security/bandit-current.json
+python scripts/bandit_diff.py .bandit-baseline.json .artifacts/security/bandit-current.json
 ```
 
 3. Benchmark does not regress past the release gate:
 
 ```bash
-python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json --max-regress 20
+python scripts/run_benchmark.py
+python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/benchmark/current.json --max-regress 20
 ```
 
 4. Contracts are still in sync:
 
 ```bash
 python scripts/generate_contracts.py --check
+python scripts/export_openapi.py --check
+python scripts/export_sdk_capabilities.py --check
+python scripts/export_quality_reference.py --check
 ```
+
+After changing an API route or schema, run `python scripts/export_openapi.py`
+and commit all three outputs (`docs/openapi.json` plus both files under
+`docs/agent-tools/`). Do not edit one generated output independently.
+
+After changing `[sdk]` claims or either public SDK client surface, run
+`python scripts/export_sdk_capabilities.py` and commit
+`docs/sdk-capabilities.md`. The `--check` form reproduces the tracked output;
+the project-claims validator also checks that every declared method exists.
+
+After changing `[quality]` claims, run
+`python scripts/export_quality_reference.py` and commit `docs/quality.md`.
+Host-specific reports belong to the ignored default output of
+`python scripts/quality_report.py`; do not use that collector to overwrite the
+tracked current reference.
+
+`python scripts/dora_metrics.py --days 30` writes the host-, time-, and
+GitHub-history-dependent DORA JSON to ignored
+`.artifacts/dora/dora-report.json`. Relative outputs resolve from the project
+root. Do not leave `dora-report.json`, `dora-summary.md`, or `dora-comment.md`
+in the repository root; the weekly/PR workflow also keeps those working files
+under `.artifacts/dora/`. This is runtime evidence, not production acceptance
+or a byte-regenerated reference. Promote a reviewed snapshot only under a new
+date-stamped identity with source SHA, window/branch, data sources, exact
+command/configuration, host/runtime, and artifact hash provenance.
+
+`python scripts/chaos_report.py` reads ignored
+`.artifacts/chaos/chaos-report.json` by default and may write
+`.artifacts/chaos/chaos-summary.json` plus `.artifacts/chaos/chaos-summary.md`.
+Relative `--input`, `--output`, and `--markdown` paths resolve from the project
+root; optional output parents are created. Do not leave `chaos-report.json`,
+`chaos-summary.json`, or `chaos-summary.md` in the repository root; the chaos
+workflow already keeps those working files under `.artifacts/chaos/`. This is
+host/time/test-run-dependent runtime evidence, not production acceptance or a
+byte-regenerated reference. Promote a reviewed snapshot only under a new
+date-stamped identity with source SHA, scenario/configuration, host/runtime,
+exact command, result counts, and artifact hashes.
+
+`python scripts/mutation_report.py` writes ignored mutation JSON and work files
+under `.artifacts/mutation/` (`mutmut-cicd-stats.json` and per-module `.meta`
+files). Relative `--results-dir` resolves from the project root, not the caller
+CWD, and every destination under `docs/` is rejected before mutmut runs. The
+weekly mutation workflow uploads `.artifacts/mutation/`. These files are
+replaceable runtime artifacts, not reviewed evidence or production acceptance.
+Promote a reviewed snapshot only under a new date-stamped identity with
+provenance.
+
+`python scripts/evaluate_trivy_policy.py` writes ignored Trivy policy
+summaries under `.artifacts/trivy/`. Relative `--report`, `--waivers`, and
+`--output` paths resolve from the project root, not the caller CWD, and every
+destination under `docs/` is rejected before the report is read. The security
+workflow keeps SBOM, JSON, SARIF, policy-summary, and IaC working files under
+`.artifacts/trivy/`. These files are replaceable runtime/CI artifacts, not
+reviewed evidence or production acceptance. Promote a reviewed snapshot only
+under a new date-stamped identity with provenance.
+
+The Scorecard workflow writes one ignored per-run SARIF working copy to
+`.artifacts/scorecard/results.sarif`. That local/uploaded SARIF is not
+reviewed evidence, a penetration-test attestation, or production acceptance.
+The Code scanning upload and public OpenSSF registry result remain the
+channel outputs. Promote a reviewed snapshot only under a new date-stamped
+identity with source SHA, workflow run, tool/action version, exact
+configuration, and hash provenance.
+
+The security workflow keeps its dependency-scan working files under ignored
+`.artifacts/security/`. The Bandit job writes `bandit-current.json` there and
+diffs it against the tracked `.bandit-baseline.json`, which is the only
+reviewed input; the local Bandit command above uses the same path. The Safety
+job resolves its requirement buckets, resolver virtualenvs, and the
+vulnerable-pin regression probe under `.artifacts/security/safety/`. The
+pip-audit job exports the full locked profile set to
+`.artifacts/security/pip-audit/requirements-all-profiles.txt`; its production
+step still reads the tracked `requirements-docker.lock` directly. Do not leave
+scanner output in the repository root or `.tmp/`. These files are replaceable
+per-run working copies, not reviewed evidence, a dependency-compatibility
+attestation, or production acceptance. Promote a reviewed scan only under a
+new date-stamped identity with source SHA, workflow run, scanner versions,
+exact command and configuration, outcome, and hash provenance.
+
+The Terraform workflow keeps its `plan` and `apply` jobs disabled (`if: false`)
+until AWS is explicitly reintroduced, but their artifact contract is fixed now:
+the plan job writes the binary plan to ignored `.artifacts/terraform/tfplan`
+(addressed through `$GITHUB_WORKSPACE` because both steps run from
+`infrastructure/terraform/`), uploads it as `terraform-plan-<environment>`, and
+the apply job downloads the same path. Never write a plan file next to the
+configuration or commit one: plan files embed resolved variable values. The
+plan file is a replaceable per-run working copy, not reviewed evidence,
+OIDC/apply evidence, or production acceptance. Promote a reviewed plan only
+under a new date-stamped identity with source SHA, workflow run,
+Terraform/action versions, tfvars identity, exact command, outcome, and hash
+provenance.
+
+`python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes
+the quick entity-latency runtime result to ignored
+`.artifacts/perf-smoke/entity-profile.json`. Relative outputs resolve from the
+project root, and the harness refuses to write anywhere under `docs/perf/`.
+Promote only a reviewed run under a new date-stamped identity with its
+host/runtime, source SHA, exact command, sample counts, and profile write-up.
+
+`python scripts/run_benchmark.py` writes its host- and time-dependent report to
+`.artifacts/benchmark/benchmark.md` and its JSON metrics to
+`.artifacts/benchmark/current.json`. These runtime outputs have no byte-drift
+check and must not replace `docs/perf/load-benchmark-latest.md` or an archived
+snapshot. They also must not replace `docs/benchmark-baseline.json`, which is a
+reviewed gate-policy input rather than generated runtime output. CI compares
+the fresh JSON metrics with that tracked gate baseline; promote evidence only
+under a date-stamped name with its run provenance.
+
+The GitHub ARM workflow writes the same host-dependent pair plus host metadata
+to ignored `.artifacts/benchmark/arm-*`. Those runtime artifacts must not
+replace the four immutable 2026-06-05 files under `docs/perf/`. The harness
+rejects those reviewed tracked paths as runtime output. Promote a reviewed ARM
+run only under a new date-stamped identity with source, host/runtime, exact
+command/configuration, sample/threshold information, and artifact hashes.
+
+`python tests/load/run_load_test.py` writes the Locust p99 CI-smoke CSV prefix
+to `.artifacts/load/results` and JSON metrics to `.artifacts/load/results.json`.
+Relative outputs resolve from the project root, and the runner refuses
+destinations under `docs/perf/` or `tests/load/` before seed or Locust work.
+`make load-test` invokes this runner with the localhost default and the
+50 users / 10 spawn-rate / 60-second profile. Compare a run with
+`python scripts/check_performance.py --baseline docs/benchmark-baseline.json
+--current .artifacts/load/results.json`. This is host- and time-dependent
+CI-smoke runtime evidence, not a byte-regenerated tracked reference, production
+SLA, full-load benchmark, or acceptance. Promote a reviewed result only under
+a new date-stamped identity with provenance.
+
+To compare repeated local runs, append one results file with
+`python scripts/record_perf_history.py --results .artifacts/benchmark/current.json`,
+then run `python scripts/plot_perf_history.py`. The commands own
+`.artifacts/perf-history/history.json`, `history.html`, and optional
+`history.png`; they refuse to overwrite the retired tracked history or write
+plots under `docs/`. CI does not persist this history across runners, so do not
+cite the local trend as continuous CI or release evidence.
+
+`python scripts/benchmark_freshness.py` writes the in-process demo report to
+`.artifacts/freshness/freshness-benchmark.md` and machine-readable results to
+`.artifacts/freshness/current.json`. Do not overwrite the tracked
+`docs/perf/freshness-benchmark.md` lifecycle page or its archived snapshot.
+Promote a meaningful run only under a date-stamped name with its JSON companion
+and exact run, host, and source provenance.
+
+`python scripts/benchmark_freshness_realpath.py` writes the Kafka → Flink
+streaming-hop result to `.artifacts/freshness/realpath-current.json`. Run its
+Kafka/Flink prerequisites on `deproject-mac`, not the Windows host. The driver
+refuses to overwrite the immutable
+`docs/perf/freshness-realpath-2026-06-30.md` record; promote a reviewed run only
+under a new date-stamped evidence identity with exact source, host, runtime,
+command, configuration, sample count, miss count, and JSON hash.
+
+`python scripts/benchmark_freshness_e2e.py` writes the S8 real-path report to
+`.artifacts/freshness/e2e-realpath.md` and machine-readable results to
+`.artifacts/freshness/e2e-realpath-current.json`. Run its Kafka/Flink/bridge/
+ClickHouse/Redis/API prerequisites on `deproject-mac`, not the Windows host.
+Do not overwrite the tracked `docs/perf/freshness-e2e-realpath.md` lifecycle
+page or its archived 2026-07-09 snapshot; promote only date-stamped evidence
+with exact run, host, source, configuration, and JSON-companion provenance.
+
+`python scripts/benchmark_throughput_realpath.py` writes the real-path report
+to `.artifacts/throughput/realpath-current.md` and machine-readable results to
+`.artifacts/throughput/realpath-current.json`. Run its Kafka/Flink/bridge/
+ClickHouse prerequisites on `deproject-mac`, not the Windows development host.
+Do not overwrite the tracked `docs/perf/throughput-realpath.md` lifecycle page
+or its archived S10 baseline; promote only date-stamped evidence with exact
+run, host, source, and configuration provenance.
+
+`python scripts/benchmark_scale_own_data.py` writes the S13 own-data scale
+reports to `.artifacts/scale/own-data-current.md` and
+`.artifacts/scale/own-data-current.json`. Run its live ClickHouse workload on
+`deproject-mac`, not the Windows host. The driver refuses to overwrite
+`docs/perf/scale-own-data-2026-07-11.md`; promote a reviewed run only under a
+new date-stamped identity with exact source, host/runtime, command,
+configuration, volume/check results, and Markdown/JSON hashes.
+
+`python scripts/perf/auth_bench.py` writes its host-dependent legacy-path
+microbenchmark to `.artifacts/perf/auth-bench-current.md`. Run the full bcrypt
+workload on `deproject-mac`, not the Windows development host. The driver uses
+explicit legacy bcrypt semantics and refuses to overwrite
+`docs/perf/auth-bench.md` or the immutable 2026-05-26 record. Promote a reviewed
+run only under a new date-stamped identity with exact source, host/power,
+Python/dependency, command/configuration, sample-count, boundary, and report-hash
+provenance.
+
+`python -m scripts.run_nl_sql_eval` writes the direct-translator result to
+`.artifacts/nl-sql-eval/current.md`. Relative outputs resolve from the project
+root, and the command rejects every path under `docs/perf/` before running the
+evaluation. In particular, it cannot overwrite
+`docs/perf/nl-sql-eval-2026-07-01.md` or
+`docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`. The rule-based path uses the
+fixed in-memory DuckDB demo set; the opt-in LLM path is live and
+non-deterministic. Neither is the served `/query` path, a production benchmark,
+an SLA, or acceptance. Promote a reviewed result only under a new date-stamped
+identity with source, host/runtime, engine/model, exact command/configuration,
+and report-hash provenance.
 
 ## Dependabot pip PRs and `uv.lock`
 

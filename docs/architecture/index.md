@@ -1,9 +1,15 @@
 # Architecture
 
 AgentFlow separates source capture, stream processing, storage, semantic
-serving, and agent-facing clients. The local path uses the same validation and
-semantic concepts as the production-shaped path, but swaps managed
-infrastructure for local services and DuckDB.
+serving, and agent-facing clients. The local and production-shaped paths keep
+the same validation and semantic boundaries while using different runtime
+infrastructure.
+
+This walkthrough is for readers learning those stable boundaries and flows. It
+does not own component versions, storage-backend decisions, or acceptance
+state; use the [detailed architecture reference](../architecture.md) for exact
+runtime choices and [engineering status](../STATUS.md) for current evidence and
+gates.
 
 ## C4 level 1: system context
 
@@ -39,13 +45,18 @@ flowchart LR
         kafka["Kafka topics"]
         flink["Flink jobs"]
         quality["Schema and semantic validation"]
+        validated["Validated event stream"]
         dlq["Dead-letter topic"]
     end
 
+    subgraph Materialization
+        serving_materializer["Serving materializer"]
+        lake_materializer["Lake materializer"]
+    end
+
     subgraph Storage
-        duckdb["DuckDB serving store"]
-        iceberg["Iceberg lakehouse tables"]
-        clickhouse["Optional ClickHouse backend"]
+        serving_store["Configured serving store"]
+        lakehouse_store["Lakehouse store"]
     end
 
     subgraph Serving
@@ -65,12 +76,14 @@ flowchart LR
     local --> quality
     kafka --> flink
     flink --> quality
-    quality -->|"valid"| duckdb
-    quality -->|"valid"| iceberg
+    quality -->|"valid"| validated
     quality -->|"invalid"| dlq
-    iceberg -. "lakehouse storage" .-> semantic
-    duckdb --> semantic
-    clickhouse -. "configured serving backend" .-> semantic
+    validated --> serving_materializer
+    validated --> lake_materializer
+    serving_materializer --> serving_store
+    lake_materializer --> lakehouse_store
+    serving_store --> semantic
+    lakehouse_store -. "historical and analytical reads" .-> semantic
     semantic --> api
     background --> api
     api --> py
@@ -86,7 +99,8 @@ flowchart TD
     normalize --> schema["Schema validation"]
     schema --> semantic["Semantic validation"]
     semantic --> enrich["Enrichment"]
-    enrich --> store["Serving and lakehouse storage"]
+    enrich --> materialize["Serving and lakehouse materializers"]
+    materialize --> store["Configured stores"]
     store --> query["Semantic layer query"]
     query --> response["Agent-facing response"]
     schema -->|"invalid"| deadletter["Dead-letter record"]
@@ -103,7 +117,7 @@ sequenceDiagram
     participant API as FastAPI
     participant Auth as Auth and rate limit
     participant Semantic as Semantic layer
-    participant Store as DuckDB / backend
+    participant Store as Configured serving store
 
     Agent->>SDK: getOrder("ORD-20260404-1001")
     SDK->>API: GET /v1/entity/order/ORD-20260404-1001

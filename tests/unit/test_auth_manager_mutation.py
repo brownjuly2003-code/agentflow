@@ -421,7 +421,7 @@ class TestFailedAuthThrottle:
         clock.now = 1_000.0 + FAILED_AUTH_WINDOW_SECONDS + 1.0
         m.record_failed_auth("ip")
         # The stale stamp fell strictly outside the cutoff; only the new one left.
-        assert len(m._failed_auth_windows["ip"]) == 1
+        assert len(m._failed_auth_windows["api", "ip"]) == 1
 
     def test_stamp_exactly_at_cutoff_is_excluded(self) -> None:
         clock = FrozenClock(1_000.0)
@@ -431,7 +431,7 @@ class TestFailedAuthThrottle:
         clock.now = 1_000.0 + FAILED_AUTH_WINDOW_SECONDS  # cutoff == old stamp
         # window keeps stamp only if stamp > cutoff; 1000.0 > 1000.0 is False.
         m.record_failed_auth("ip")
-        assert len(m._failed_auth_windows["ip"]) == 1
+        assert len(m._failed_auth_windows["api", "ip"]) == 1
 
     def test_is_failed_auth_limited_drops_stamp_exactly_at_cutoff(self) -> None:
         clock = FrozenClock(1_000.0)
@@ -441,7 +441,7 @@ class TestFailedAuthThrottle:
         # filter keeps a stamp only if stamp > cutoff, so the cutoff stamp is
         # dropped -> empty window -> 0 > 0 is False. A `>=` mutant on that read-path
         # filter keeps it -> 1 > 0 -> True, so this pins the strict comparison.
-        m._failed_auth_windows["ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS]
+        m._failed_auth_windows["api", "ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS]
         assert m.is_failed_auth_limited("ip") is False
 
     def test_clear_failed_auth_removes_ip(self) -> None:
@@ -449,13 +449,13 @@ class TestFailedAuthThrottle:
         m.security_policy = _policy(5)
         m.record_failed_auth("ip")
         m.clear_failed_auth("ip")
-        assert "ip" not in m._failed_auth_windows
+        assert ("api", "ip") not in m._failed_auth_windows
 
     def test_clear_failed_auth_unknown_ip_is_noop(self) -> None:
         m = _build_manager(time_source=FrozenClock(1_000.0))
         m.security_policy = _policy(5)
         m.clear_failed_auth("never-seen")  # pop(..., None) must not raise
-        assert "never-seen" not in m._failed_auth_windows
+        assert ("api", "never-seen") not in m._failed_auth_windows
 
 
 # --------------------------------------------------------------------------- #
@@ -482,9 +482,9 @@ class TestSweepExpiredWindows:
     def test_drops_fully_expired_failed_auth_window(self) -> None:
         clock = FrozenClock(1_000.0)
         m = _build_manager(time_source=clock)
-        m._failed_auth_windows["ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS - 5.0]
+        m._failed_auth_windows["api", "ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS - 5.0]
         m._sweep_expired_windows()
-        assert "ip" not in m._failed_auth_windows
+        assert ("api", "ip") not in m._failed_auth_windows
 
 
 # --------------------------------------------------------------------------- #
@@ -1075,18 +1075,18 @@ class TestSweepBoundary:
         clock = FrozenClock(1_000.0)
         m = _build_manager(time_source=clock)
         inside = 1_000.0 - FAILED_AUTH_WINDOW_SECONDS + 1.0
-        m._failed_auth_windows["ip"] = [inside]
+        m._failed_auth_windows["api", "ip"] = [inside]
         m._sweep_expired_windows()
-        assert m._failed_auth_windows["ip"] == [inside]
+        assert m._failed_auth_windows["api", "ip"] == [inside]
 
     def test_failed_auth_stamp_exactly_at_cutoff_is_dropped(self) -> None:
         clock = FrozenClock(1_000.0)
         m = _build_manager(time_source=clock)
         # stamp == now - FAILED_AUTH_WINDOW == cutoff; kept only if > cutoff (not
         # >=) -> the failed-auth sweep drops it, pinning the strict comparison.
-        m._failed_auth_windows["ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS]
+        m._failed_auth_windows["api", "ip"] = [1_000.0 - FAILED_AUTH_WINDOW_SECONDS]
         m._sweep_expired_windows()
-        assert "ip" not in m._failed_auth_windows
+        assert ("api", "ip") not in m._failed_auth_windows
 
 
 class TestRateLimitBoundary:

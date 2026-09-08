@@ -73,6 +73,9 @@ def ensure_api_sessions_table(conn: duckdb.DuckDBPyConnection) -> None:
     for column_name, column_type in (
         ("entity_id", "TEXT"),
         ("query_text", "TEXT"),
+        # Peppered digest of the question (audit F-18): the default analytics
+        # record keeps this instead of the question itself.
+        ("query_fingerprint", "TEXT"),
     ):
         if column_name not in existing_columns:
             conn.execute(f"ALTER TABLE api_sessions ADD COLUMN {column_name} {column_type}")
@@ -340,9 +343,10 @@ class EmbeddedUsageAuditRepository(EmbeddedControlPlaneBase):
                         entity_id,
                         metric_name,
                         query_engine,
-                        query_text
+                        query_text,
+                        query_fingerprint
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
                         request_id,
@@ -358,6 +362,7 @@ class EmbeddedUsageAuditRepository(EmbeddedControlPlaneBase):
                         record["metric_name"],
                         record["query_engine"],
                         record["query_text"],
+                        record.get("query_fingerprint"),
                     ],
                 )
                 return
@@ -452,18 +457,24 @@ class EmbeddedUsageAuditRepository(EmbeddedControlPlaneBase):
             conn.close()
 
     def get_top_queries(self, *, limit: int = 10, window: str = "24h") -> dict:
+        # Grouped by (text, fingerprint) rather than text alone (audit F-18):
+        # the default policy stores no text, and grouping by a column that is
+        # NULL for every row would report "no queries" for a busy API. The
+        # fingerprint is deterministic per question, so the grouping is the
+        # same one either way -- what changes is whether the caller can read
+        # the question or only count its repeats.
         interval = _window_to_interval(window)
         conn = self._usage_cursor()
         try:
             ensure_api_sessions_table(conn)
             rows = conn.execute(
                 """
-                SELECT query_text, COUNT(*) AS frequency
+                SELECT query_text, query_fingerprint, COUNT(*) AS frequency
                 FROM api_sessions
-                WHERE query_text IS NOT NULL
+                WHERE (query_text IS NOT NULL OR query_fingerprint IS NOT NULL)
                   AND ts >= CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
-                GROUP BY query_text
-                ORDER BY frequency DESC, query_text
+                GROUP BY query_text, query_fingerprint
+                ORDER BY frequency DESC, query_fingerprint, query_text
                 LIMIT ?
                 """,
                 [interval, limit],
@@ -471,9 +482,73 @@ class EmbeddedUsageAuditRepository(EmbeddedControlPlaneBase):
             return {
                 "window": window,
                 "queries": [
-                    {"query": query_text, "count": frequency} for query_text, frequency in rows
+                    {
+                        "query": query_text,
+                        "fingerprint": query_fingerprint,
+                        "count": frequency,
+                    }
+                    for query_text, query_fingerprint, frequency in rows
                 ],
             }
+        finally:
+            conn.close()
+
+    def prune_api_sessions(self, *, older_than_days: int) -> int:
+        """Delete analytics rows past the retention window; return the count.
+
+        Retention is a promise about the *oldest* row, so this deletes by `ts`
+        and does not care whether a row carries a question, a fingerprint or
+        neither.
+        """
+        if older_than_days < 1:
+            raise ValueError(f"older_than_days must be at least 1, got {older_than_days}")
+        interval = f"{older_than_days} days"
+        conn = self._usage_cursor()
+        try:
+            ensure_api_sessions_table(conn)
+            row = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM api_sessions
+                WHERE ts < CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
+                """,
+                [interval],
+            ).fetchone()
+            expired = int(row[0]) if row else 0
+            if expired:
+                conn.execute(
+                    """
+                    DELETE FROM api_sessions
+                    WHERE ts < CURRENT_TIMESTAMP - CAST(? AS INTERVAL)
+                    """,
+                    [interval],
+                )
+            return int(expired)
+        finally:
+            conn.close()
+
+    def delete_tenant_api_sessions(self, *, tenant: str) -> int:
+        """Delete every analytics row for one tenant; return the count.
+
+        An erasure request does not wait out the retention window, so this
+        ignores `ts`. It stops at `api_sessions`: `api_usage` counters carry
+        no user content and answer "how much did this tenant use", which a
+        billing or abuse investigation still needs after the questions are
+        gone (audit F-18).
+        """
+        if not tenant:
+            raise ValueError("tenant must be a non-empty identifier")
+        conn = self._usage_cursor()
+        try:
+            ensure_api_sessions_table(conn)
+            row = conn.execute(
+                "SELECT COUNT(*) FROM api_sessions WHERE tenant = ?",
+                [tenant],
+            ).fetchone()
+            matched = int(row[0]) if row else 0
+            if matched:
+                conn.execute("DELETE FROM api_sessions WHERE tenant = ?", [tenant])
+            return matched
         finally:
             conn.close()
 

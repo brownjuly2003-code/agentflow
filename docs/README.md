@@ -1,0 +1,195 @@
+# AgentFlow documentation
+
+> This page is the navigation hub for the complete
+> documentation corpus. It does not replace engineering evidence or status.
+
+AgentFlow has documentation for several audiences: users evaluating the
+project, developers changing the runtime, operators running the data path, and
+reviewers validating historical evidence. Start from the smallest document
+that answers the question; follow evidence links only when the underlying proof
+is needed.
+
+## Start here
+
+| Need | Canonical entry |
+| --- | --- |
+| Understand the product | [Repository README](../README.md) |
+| Run it locally | [Quickstart](quickstart.md) |
+| Check what is proven now | [Engineering status](STATUS.md) |
+| Understand the system | [Architecture walkthrough](architecture/index.md) |
+| Integrate through HTTP | [API guide](api/index.md) |
+| Use a client library | [SDK guide](sdk.md) |
+| Operate or troubleshoot it | [Operations index](operations/README.md), [operational runbook](runbook.md), and [on-call runbooks](runbooks/README.md) |
+| Review closure boundaries | [Project closure](PROJECT_CLOSURE.md) |
+| Review measured evidence | [Evidence hub](evidence/INDEX.md) and [performance evidence](perf/README.md) |
+| Follow ADRs or the archive | [Decisions](decisions/), [documentation archive](archive/README.md) |
+| Inspect the DV2 extension | [DV2 multi-branch](dv2-multi-branch/) |
+| Read the full HTTP contract | [API reference](api-reference.md) |
+| Understand platform ideas and component roles | [Concepts](concepts.md) and [components](components.md) |
+| Choose a local or production-shaped path | [Deployment walkthrough](deployment.md) |
+| Inspect metrics, traces, and logs | [Observability walkthrough](observability.md) |
+| Narrow a first failing boundary | [Troubleshooting](troubleshooting.md) |
+| Verify a code or documentation change | [Contributor guide](contributing.md) |
+| View the static data-path drawing | [Dataflow](dataflow.html) |
+| Resume a local agent session | `SESSION_HANDOFF.md` (gitignored continuity; do not force-add) |
+
+## Documentation sets
+
+| Set | Purpose | Maintenance rule |
+| --- | --- | --- |
+| [MkDocs walkthrough](index.md) | Curated learning path: quickstart, architecture, API, SDK, deployment, observability, troubleshooting | Keep concise and runnable; `mkdocs build --strict` must pass |
+| Current-state references | `STATUS.md`, `architecture.md`, `release-readiness.md`, `security-audit.md`, `runbook.md`, [`engineering-standards.md`](engineering-standards.md), [`glossary.md`](glossary.md), [`integrations.md`](integrations.md), [`clickhouse-migration.md`](clickhouse-migration.md) | Update with code or operational truth; links and current versions are gated |
+| Product and domain specs | `product.md`, `domain.md`, `generator-spec.md`, `ops-surfaces-spec.md`, [`how-to-add-entity.md`](contracts/how-to-add-entity.md) | Explain stable behavior and invariants; do not carry live status |
+| Operations | [Operations index](operations/README.md) and [on-call runbooks](runbooks/README.md) | Current procedures stay actionable; superseded execution narratives move to the archive |
+| Plans | [`clickhouse-cutover-plan.md`](plans/clickhouse-cutover-plan.md) and [`2026-04-debezium-kafka-connect-deployment-plan.md`](plans/2026-04-debezium-kafka-connect-deployment-plan.md) | Preserve executed cutover and CDC onboarding plans; they are not current status |
+| Decisions | [`decisions/`](decisions/) | ADRs are immutable point-in-time decisions; supersede with a new ADR |
+| Evidence | [`perf/`](perf/), [`evidence/`](evidence/), dated security and acceptance reports | Preserve measured facts and exact identity; never rewrite history as current truth |
+| Evidence records | [`evidence/records/`](evidence/records/) | Immutable dated records relocated from the repository root; never edit, never delete; add new records under `docs/evidence/` or `docs/perf/` instead |
+| DV2 extension | [`dv2-multi-branch/`](dv2-multi-branch/) | Keep its architecture, schema, release record, and demo evidence together |
+| Generated/reference artifacts | [Generated-reference ownership](#generated-reference-ownership), [`sdk-capabilities.md`](sdk-capabilities.md), [`quality.md`](quality.md), and the [full-load benchmark lifecycle](perf/load-benchmark-latest.md) | Regenerate deterministic families; keep mutable measurements in ignored artifacts |
+| Archive | [`archive/`](archive/) | Preserve superseded or duplicate narrative with provenance; archived text is not current guidance |
+| Agent tool schemas | [`agent-tools/`](agent-tools/) | Generated Claude/OpenAI tool JSON; regenerate with the OpenAPI family, never hand-edit |
+| API walkthrough | [`api/`](api/index.md) | Curated HTTP integration path; keep runnable with the MkDocs walkthrough |
+| Architecture walkthrough | [`architecture/`](architecture/index.md) | Curated system walkthrough; keep aligned with `architecture.md` |
+| Benchmark baseline archive | [`archive/performance/benchmark-baseline-2026-04-17-local.json`](archive/performance/benchmark-baseline-2026-04-17-local.json) | Immutable copy of a retired gate baseline; do not refresh in place |
+| Benchmarks directory | `benchmarks/` | Reserved empty directory; do not dump host-specific reports here |
+| Codex task captures | `codex-tasks/` (gitignored) | Local session captures; not a living entrypoint |
+| Entity contract how-to | [`contracts/`](contracts/how-to-add-entity.md) | How to add an entity; keep with `config/contracts/` and the generator |
+| Version migration notes | [`migration/`](migration/v1.1.md) | Point-in-time Helm/version migration notes; not current status |
+| Screenshots | [`screenshots/`](screenshots/) | Static walkthrough images; replace only with the matching page update |
+| Curated walkthrough pages | [`concepts.md`](concepts.md), [`components.md`](components.md), [`deployment.md`](deployment.md), [`observability.md`](observability.md), [`troubleshooting.md`](troubleshooting.md) | MkDocs nav pages beside [`index.md`](index.md); keep concise and runnable; `mkdocs build --strict` must pass |
+| Full API reference | [`api-reference.md`](api-reference.md) | Detailed authentication, endpoint, and admin surface; keep aligned with `openapi.json` and the API walkthrough |
+| Contributor loop | [`contributing.md`](contributing.md) | Change verification and local documentation tooling; keep aligned with the repository `CONTRIBUTING.md` and the quickstart |
+| Dataflow drawing | [`dataflow.html`](dataflow.html) | Static HTML picture of the data path; measured numbers are claims gated with `config/project_claims.toml` |
+| Local session continuity | `SESSION_HANDOFF.md` | Gitignored workstation handoff; never force-add; resume from `AGENT_STATE.md` when they disagree |
+
+## Generated-reference ownership
+
+One writer owns each current generated family. For deterministic references,
+run the writer when its source changes, commit the complete output family, and
+run the drift check before review. Host- and time-dependent measurement outputs
+stay in ignored runtime artifacts; promote only immutable, date-stamped evidence.
+Do not hand-edit or update only part of the family.
+
+| Family | Tracked outputs | Write | Drift check | Lifecycle |
+| --- | --- | --- | --- | --- |
+| OpenAPI and agent tools | `docs/openapi.json`, `docs/agent-tools/claude-tools.json`, `docs/agent-tools/openai-tools.json` | `python scripts/export_openapi.py` | `python scripts/export_openapi.py --check` | Current generated references; all three outputs move together. The contract workflow runs the drift check. |
+| SDK capabilities | `docs/sdk-capabilities.md` | `python scripts/export_sdk_capabilities.py` | `python scripts/export_sdk_capabilities.py --check` | Current generated reference from `config/project_claims.toml`; the CI project-claims gate also checks SDK method parity and output drift. |
+| Quality gates | `docs/quality.md` | `python scripts/export_quality_reference.py` | `python scripts/export_quality_reference.py --check` | Deterministic current reference from `config/project_claims.toml`; the CI project-claims gate checks config alignment and output drift. |
+| Data contracts | `config/contracts/order.v1.yaml`, `config/contracts/order.v2.yaml`, and the six `config/contracts/metric.*.v1.yaml` files | `python scripts/generate_contracts.py` | `python scripts/generate_contracts.py --check` | Current generated references from the Pydantic models under `src/` and `sdk/`; `.github/workflows/contract.yml` and `tests/unit/test_contracts_in_sync.py` run the drift check; regenerate and commit all eight files together |
+| DORA metrics | None; ignored runtime only | `python scripts/dora_metrics.py` writes `.artifacts/dora/dora-report.json` | Runtime evidence review, not byte drift | Host/time/GitHub-history-dependent delivery metrics, not production acceptance or a byte-regenerated reference. Workflow report, summary, and PR-comment files also live under `.artifacts/dora/`. Promote only a new date-stamped identity with source SHA, window/branch, data sources, exact command/configuration, host/runtime, and artifact hash provenance. |
+| Chaos report | None; ignored runtime only | `python scripts/chaos_report.py` reads `.artifacts/chaos/chaos-report.json` and optionally writes `.artifacts/chaos/chaos-summary.json` and `.artifacts/chaos/chaos-summary.md` | Runtime evidence review, not byte drift | Host/time/test-run-dependent chaos pytest JSON summaries, not production acceptance or a byte-regenerated reference. Workflow and local CI-like reproduction keep working files under `.artifacts/chaos/`. Relative input/output resolve from the project root; optional JSON/Markdown parents are created. Promote only a new date-stamped identity with source SHA, scenario/configuration, host/runtime, exact command, result counts, and artifact hashes. |
+| Mutation report | None; ignored runtime only | `python scripts/mutation_report.py` writes `.artifacts/mutation/` (`mutmut-cicd-stats.json` and module `.meta` files) | Runtime evidence review, not byte drift | Host/time/mutmut-run-dependent JSON and work files, not reviewed evidence, production acceptance, or a byte-regenerated reference. Relative `--results-dir` resolves from the project root; destinations under `docs/` are rejected before mutmut runs. The weekly workflow uploads `.artifacts/mutation/`. Promote only a new date-stamped identity with provenance. |
+| Trivy scan policy | None; ignored runtime only | `python scripts/evaluate_trivy_policy.py` writes `.artifacts/trivy/` policy summaries; the security workflow also writes SBOM, JSON, SARIF, and IaC files there | Runtime evidence review, not byte drift | Replaceable Trivy/CI working files, not reviewed evidence, production acceptance, or a byte-regenerated reference. Relative `--report`, `--waivers`, and `--output` resolve from the project root; destinations under `docs/` are rejected before evaluation. `make trivy-policy` and both writing jobs use `.artifacts/trivy/`. Promote only a new date-stamped identity with provenance. |
+| Scorecard SARIF | None; ignored runtime only | `.github/workflows/scorecard.yml` writes `.artifacts/scorecard/results.sarif` | Runtime evidence review, not byte drift | Replaceable per-run Scorecard workflow working copy, not reviewed evidence, a penetration-test attestation, or production acceptance. The Code scanning upload and public OpenSSF registry result remain the channel outputs. Promote only a new date-stamped identity with source SHA, workflow run, tool/action version, exact configuration, and hash provenance. |
+| Security dependency scans | None; ignored runtime only | `.github/workflows/security.yml` writes `.artifacts/security/bandit-current.json`, Safety requirement buckets, resolver virtualenvs, and the regression probe under `.artifacts/security/safety/`, and the pip-audit export `.artifacts/security/pip-audit/requirements-all-profiles.txt` | Bandit: diff against tracked `.bandit-baseline.json`; Safety and pip-audit: runtime evidence review, not byte drift | Replaceable per-run scanner working files, not reviewed evidence, a dependency-compatibility attestation, or production acceptance. The production pip-audit step still reads tracked `requirements-docker.lock` directly. Promote only a new date-stamped identity with source SHA, workflow run, scanner versions, exact command/configuration, outcome, and hash provenance. |
+| Terraform plan file | None; ignored runtime only | `.github/workflows/terraform-apply.yml` (`plan` job, disabled with `if: false`) writes `.artifacts/terraform/tfplan` and uploads it as `terraform-plan-<environment>`; the disabled `apply` job downloads the same path | Runtime evidence review, not byte drift | Replaceable per-run binary plan that embeds resolved variable values and is never written next to the configuration; not reviewed evidence, OIDC/apply evidence, or production acceptance. Promote only a new date-stamped identity with source SHA, workflow run, Terraform/action versions, tfvars identity, exact command, outcome, and hash provenance. |
+| Entity quick profile | Existing date/hypothesis-labelled JSON, SVG, and write-ups are point-in-time evidence; no mutable current output | `python scripts/profile_entity.py --entity-type <type> --entity-id <id>` writes `.artifacts/perf-smoke/entity-profile.json` | Runtime evidence review, not byte drift | The harness rejects output under `docs/perf/`; promote only a new date-stamped identity with host/runtime, source, command, sample counts, and write-up provenance. |
+| Authentication legacy-path benchmark | Immutable `docs/perf/auth-bench-2026-05-26.md`; `docs/perf/auth-bench.md` is a lifecycle page | `python scripts/perf/auth_bench.py` writes `.artifacts/perf/auth-bench-current.md` | Runtime evidence review, not byte drift | Reproduces the explicit legacy bcrypt O(n) path, not current O(1) candidate selection. Run the host-dependent workload on the Mac and promote only a new date-stamped identity with provenance. |
+| Full-load benchmark | Read-only gate input `docs/benchmark-baseline.json`; `docs/perf/load-benchmark-latest.md` is a lifecycle page | `python scripts/run_benchmark.py` writes `.artifacts/benchmark/benchmark.md` and `.artifacts/benchmark/current.json` | Runtime metric comparison, not byte drift | Measurements vary by host and time. The harness cannot overwrite the reviewed gate baseline; CI consumes ignored artifacts, and reviewed results are promoted only as date-stamped evidence with provenance. |
+| ARM shared-runner benchmark | Immutable `docs/perf/arm-server-benchmark-2026-06-05.md` plus companions in `docs/perf/arm-benchmark-2026-06-05/`; no mutable tracked output | GitHub ARM workflow writes `.artifacts/benchmark/arm-host-metadata.md`, `.artifacts/benchmark/arm-benchmark.md`, and `.artifacts/benchmark/arm-current.json` | Runtime evidence review, not byte drift | Host/time-dependent shared-runner artifacts, not automatic `docs/perf/` writes. The harness cannot overwrite the four 2026-06-05 tracked files; promote only a new date-stamped identity with source, host/runtime, exact command/configuration, sample/threshold information, and artifact hashes. |
+| Locust p99 CI-smoke | None; ignored runtime only | `python tests/load/run_load_test.py` writes `.artifacts/load/results` and `.artifacts/load/results.json` | Runtime comparison with `python scripts/check_performance.py --baseline docs/benchmark-baseline.json --current .artifacts/load/results.json` | Host/time-dependent CI-smoke runtime evidence, not a byte-regenerated tracked reference, production SLA, full-load benchmark, or acceptance. Promote only a new date-stamped identity with provenance. |
+| Performance history | Immutable `docs/archive/performance/perf-history-2026-04-27.json`; no current tracked output | `python scripts/record_perf_history.py` appends `.artifacts/perf-history/history.json`; `python scripts/plot_perf_history.py` renders beside it | Runtime trend review, not byte drift | The local ignored file can span repeated runs on one checkout. CI no longer persists cross-run history after the bot push conflicted with branch protection. |
+| Demo freshness benchmark | None; `docs/perf/freshness-benchmark.md` is a lifecycle page | `python scripts/benchmark_freshness.py` writes `.artifacts/freshness/freshness-benchmark.md` and `.artifacts/freshness/current.json` | Runtime evidence review, not byte drift | Measurements vary by host and time. The 2026-06-06 snapshot is archived; promote only date-stamped evidence with provenance. |
+| Streaming-hop freshness benchmark | Immutable `docs/perf/freshness-realpath-2026-06-30.md`; no mutable tracked output | `python scripts/benchmark_freshness_realpath.py` writes `.artifacts/freshness/realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink stand. The driver protects the dated record; promote reviewed runs under new date-stamped identities with provenance. |
+| S8 real-path freshness benchmark | None; `docs/perf/freshness-e2e-realpath.md` is a lifecycle page | `python scripts/benchmark_freshness_e2e.py` writes `.artifacts/freshness/e2e-realpath.md` and `.artifacts/freshness/e2e-realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink/bridge/ClickHouse/Redis/API stand. The 2026-07-09 S8 snapshot is archived; promote only date-stamped evidence with provenance. |
+| Real-path throughput benchmark | None; `docs/perf/throughput-realpath.md` is a lifecycle page | `python scripts/benchmark_throughput_realpath.py` writes `.artifacts/throughput/realpath-current.md` and `.artifacts/throughput/realpath-current.json` | Runtime evidence review, not byte drift | Requires the Mac Kafka/Flink/bridge/ClickHouse stand. The pre-Q1.2 S10 baseline is archived; promote only date-stamped evidence with provenance. |
+| Own-data scale benchmark | Immutable `docs/perf/scale-own-data-2026-07-11.md`; no mutable tracked output | `python scripts/benchmark_scale_own_data.py` writes `.artifacts/scale/own-data-current.md` and `.artifacts/scale/own-data-current.json` | Runtime evidence review, not byte drift | Requires live ClickHouse on the Mac stand. The driver protects the dated S13 record; promote reviewed runs under new date-stamped identities with provenance. |
+| NL-to-SQL evaluation | Immutable `docs/perf/nl-sql-eval-2026-07-01.md` and `docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`; no mutable tracked output | `python -m scripts.run_nl_sql_eval` writes `.artifacts/nl-sql-eval/current.md` | Runtime evidence review, not byte drift | Measures the direct translator on a curated demo set, not the served `/query` path, a production benchmark, an SLA, or acceptance. The driver rejects output under `docs/perf/`; promote only a new date-stamped identity with full provenance. |
+
+Historical OpenAPI comparison captures `docs/perf/live_openapi_local.json` and
+`docs/perf/live_openapi_ci.json` are evidence, not current generated
+references. Preserve those captures under the evidence policy; do not replace
+them when refreshing the current OpenAPI family.
+
+The SDK capability family currently has one tracked output and no historical
+generated snapshots. If a dated capability snapshot is needed as evidence,
+preserve it under the evidence/archive policy instead of refreshing it as the
+current contract.
+
+`docs/quality.md` contains only reproducible quality-gate claims. The dynamic
+`scripts/quality_report.py` collector writes
+`.artifacts/quality/quality-report.md` by default because its timestamp and
+coverage, security, mutation, chaos, and load inputs are host-specific. The
+last tracked dynamic report is preserved as a
+[historical generated snapshot](archive/quality-report-2026-07-23.md); do not
+refresh it as the current reference.
+
+The full-load benchmark has the same dynamic boundary: its former mutable
+tracked report is preserved as a
+[2026-04-17 historical snapshot](archive/performance/load-benchmark-2026-04-17.md).
+The stable [artifact lifecycle page](perf/load-benchmark-latest.md) names the
+runtime outputs, CI comparison, promotion rule, and protected tracked paths.
+
+The Locust p99 CI-smoke family is separate. `python tests/load/run_load_test.py`
+writes ignored `.artifacts/load/results` and `.artifacts/load/results.json`.
+CI compares that JSON with `docs/benchmark-baseline.json`. The output is
+host/time-dependent CI-smoke runtime evidence, not a byte-regenerated tracked
+reference, production SLA, full-load benchmark, or acceptance.
+
+Performance-history aggregation is local runtime state. The recorder appends
+`.artifacts/perf-history/history.json`, and the plotter writes ignored HTML/PNG
+beside it. The former bot-managed tracked log is preserved as the immutable
+[2026-04-27 snapshot](archive/performance/perf-history-2026-04-27.json); current
+CI does not persist a cross-run trend.
+
+The demo freshness benchmark is also host- and time-dependent. Its
+[artifact lifecycle page](perf/freshness-benchmark.md) names the ignored
+runtime outputs and protects both tracked documentation paths; the last
+mutable report is preserved as a
+[2026-06-06 historical snapshot](archive/performance/freshness-benchmark-2026-06-06.md).
+
+The real-path throughput harness requires the Mac runtime stand. Its
+[artifact lifecycle page](perf/throughput-realpath.md) names the ignored
+Markdown/JSON outputs and keeps later date-stamped throughput records distinct;
+the former mutable pre-Q1.2 report is preserved as the
+[2026-07-09 S10 baseline](archive/performance/throughput-realpath-2026-07-09.md).
+
+## Sources of truth
+
+| Topic | Source of truth | Supporting or historical material |
+| --- | --- | --- |
+| Package version | [`pyproject.toml`](../pyproject.toml) | [Changelog](../CHANGELOG.md), release readiness |
+| Machine claims | [`config/project_claims.toml`](../config/project_claims.toml) | Status and evidence files linked by the manifest |
+| Current engineering gates | [Engineering status](STATUS.md) | Dated acceptance/evidence records |
+| Lifecycle and non-goals | [Project closure](PROJECT_CLOSURE.md) | Audit and planning records |
+| Runtime design | [Architecture reference](architecture.md) | [Walkthrough](architecture/index.md) and ADRs |
+| API contract | [`openapi.json`](openapi.json) and running FastAPI schema | API guide/reference and SDKs |
+| Security policy | [`SECURITY.md`](../SECURITY.md) | Security audit and dated remediation evidence |
+| Release history | [Changelog](../CHANGELOG.md) | [Archived narrative](archive/release-history-v1-v2.md) |
+
+## Placement rules
+
+- Keep `docs/` root for stable entrypoints and current references. Do not add a
+  new dated report there.
+- The exact tracked root allowlist is enforced by
+  `scripts/check_docs_root_placement.py`; update it only for an intentional
+  stable entrypoint or current reference.
+- Put immutable measurements in `perf/` or `evidence/`, operational procedures
+  in `operations/` or `runbooks/`, and decisions in `decisions/`.
+- Do not delete documentation. Move superseded or duplicate narrative to
+  `archive/` with its original path, archive date, reason, and replacement.
+- Update every inbound link in the same commit as a move. Use `git mv` so file
+  history remains discoverable.
+- Keep credentials, raw prompts, private payloads, databases, and local runtime
+  artifacts out of documentation.
+
+## Verification
+
+Run the proportional documentation gate after edits:
+
+```powershell
+python scripts/check_docs_links.py
+python scripts/check_docs_orphans.py
+python scripts/check_docs_root_placement.py
+python scripts/check_docs_anchors.py
+python scripts/check_docs_updated_stamps.py
+python scripts/check_docs_page_openings.py
+python scripts/check_archive_provenance.py
+python scripts/validate_project_claims.py
+python -m pytest tests/unit/test_docs_links.py tests/unit/test_docs_orphans.py tests/unit/test_docs_root_placement.py tests/unit/test_docs_anchors.py tests/unit/test_docs_updated_stamps.py tests/unit/test_docs_page_openings.py tests/unit/test_archive_provenance.py tests/unit/test_docs_single_source_of_truth.py tests/unit/test_project_claims.py -q
+python -m mkdocs build --strict
+```
+
+The link checker covers the tracked corpus, while MkDocs intentionally builds
+only the curated walkthrough listed in `mkdocs.yml`.

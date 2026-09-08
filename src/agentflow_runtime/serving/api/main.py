@@ -14,7 +14,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import date
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import structlog
 from fastapi import FastAPI, Request
@@ -37,6 +37,7 @@ from agentflow_runtime.serving.api.analytics import (
 from agentflow_runtime.serving.api.auth import AuthManager, TenantKey, build_auth_middleware
 from agentflow_runtime.serving.api.middleware.logging import build_correlation_middleware
 from agentflow_runtime.serving.api.middleware.metrics import build_metrics_middleware
+from agentflow_runtime.serving.api.query_analytics_policy import QueryAnalyticsPolicy
 from agentflow_runtime.serving.api.routers.admin import router as admin_router
 from agentflow_runtime.serving.api.routers.admin_ui import router as admin_ui_router
 from agentflow_runtime.serving.api.routers.agent_query import router as agent_router
@@ -50,7 +51,19 @@ from agentflow_runtime.serving.api.routers.search import router as search_router
 from agentflow_runtime.serving.api.routers.slo import router as slo_router
 from agentflow_runtime.serving.api.routers.stream import router as stream_router
 from agentflow_runtime.serving.api.routers.webhooks import router as webhook_router
-from agentflow_runtime.serving.api.security import build_security_headers_middleware
+from agentflow_runtime.serving.api.security import (
+    build_security_headers_middleware,
+    resolve_key_lookup_pepper,
+)
+
+# Imported outright, with no ModuleNotFoundError fallback (audit F-13). The
+# fallback substituted a no-op, but OpenTelemetry is a mandatory runtime
+# dependency, so a missing module here can only mean a packaging defect or a
+# broken transitive import -- and silently trading that for lost observability
+# is the worst available answer. Telemetry is switched off with
+# OTEL_SDK_DISABLED=true, which setup_telemetry honours; that is the supported
+# way to run without it.
+from agentflow_runtime.serving.api.telemetry import setup_telemetry
 from agentflow_runtime.serving.api.versioning import (
     ApiVersionRegistry,
     ResponseTransformer,
@@ -83,20 +96,6 @@ from agentflow_runtime.serving.transport_policy import (
     resolve_profile,
 )
 from agentflow_runtime.version import runtime_version
-
-if TYPE_CHECKING:
-    from opentelemetry.sdk.trace.export import SpanExporter
-
-try:
-    from agentflow_runtime.serving.api.telemetry import setup_telemetry
-except ModuleNotFoundError:
-
-    def setup_telemetry(
-        app: FastAPI,
-        span_exporter: "SpanExporter | None" = None,
-    ) -> None:
-        return None
-
 
 configure_logging()
 logger = structlog.get_logger()
@@ -161,6 +160,15 @@ async def _lifespan_body(app: FastAPI) -> AsyncIterator[None]:
             else ""
         ),
     )
+    # Same refusal, one layer in (audit FB-07). `key_lookup` is an HMAC of the
+    # API key; peppered with the constant committed to this repository it is a
+    # digest anyone can recompute. The query-analytics fingerprint pepper has
+    # been gated since AF-13 -- but only where analytics runs, so an operator
+    # could learn about it from a request-time 500. Resolving both here means a
+    # production process that would compute a publicly reproducible digest
+    # never reaches the point of issuing or matching one.
+    resolve_key_lookup_pepper()
+    QueryAnalyticsPolicy.from_env()
     # Three-node demo topology (ADR 0012): resolve role/branch/token once here
     # and fail fast on a misconfigured node. Unset role == standalone, which is
     # byte-identical to today's single-node demo (N1). The center ingest

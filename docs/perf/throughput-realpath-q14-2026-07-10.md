@@ -45,7 +45,8 @@ p50 ≫ 1 under load.
   (was: 2 HTTP round-trips per order with near-unique users).
 - Net effect: a batch costs a **constant ~5–7 ClickHouse round-trips**
   independent of batch size. Semantics pinned by unit + integration tests
-  (fold rules, idempotency, replay) — see `docs/serving-bridge.md`.
+  (fold rules, idempotency, replay) — see
+  `docs/architecture/serving-bridge.md`.
 
 ## Stand notes (for honest comparison)
 
@@ -75,7 +76,8 @@ p50 ≫ 1 under load.
   --bridge-metrics http://127.0.0.1:9108/metrics --latency-samples 0
 ```
 
-Gotchas that cost time this session (also in `docs/serving-bridge.md` /
+Gotchas that cost time this session (also in
+`docs/architecture/serving-bridge.md` /
 runbook): never `docker start` a stopped Flink container (its command appends
 to `config.yaml` on every start → duplicate keys → exit 1) — recreate with
 `rm -sf` + `up -d`; give MinIO its own healthcheck window on a cold VM before

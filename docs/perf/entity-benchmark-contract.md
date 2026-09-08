@@ -3,11 +3,22 @@
 **Version:** 1.0
 **Date:** 2026-04-24
 **Applies to:** `/v1/entity/{type}/{id}` hot path on current HEAD (`97a1902`)
-**Replaces:** ad-hoc benchmark files (`docs/benchmark*.md`) as canonical reference.
+**Replaces:** ad-hoc benchmark files formerly stored as `docs/benchmark*.md`;
+the non-canonical runs now live under `docs/archive/performance/`.
+
+> **Artifact lifecycle update (2026-08-30):** `scripts/profile_entity.py`
+> writes ignored `.artifacts/perf-smoke/entity-profile.json` by default and
+> refuses output anywhere under `docs/perf/`. Promote a reviewed run only as a
+> new date-stamped evidence identity with its write-up and exact provenance.
 
 ## 1. Purpose
 
-This document defines the **single repeatable way** to measure entity-endpoint latency before/after any perf change. Until this contract exists, conflicting benchmark artifacts (`benchmark_pool16.md`, `benchmark_pool16_60s.md`, etc.) produce non-comparable numbers and mislead optimization planning.
+This document defines the **single repeatable way** to measure entity-endpoint
+latency before/after any perf change. Before this contract, conflicting
+benchmark artifacts such as
+[`benchmark_pool16.md`](../archive/performance/benchmark_pool16.md) and
+[`benchmark_pool16_60s.md`](../archive/performance/benchmark_pool16_60s.md)
+produced non-comparable numbers and misled optimization planning.
 
 ## 2. Required Stack & Services
 
@@ -38,7 +49,7 @@ python scripts/profile_entity.py \
   --entity-id ORD-20260404-1001 \
   --iterations 2000 \
   --concurrency 16 \
-  --output docs/perf/entity-latency-<label>.json
+  --output .artifacts/perf-smoke/entity-profile.json
 ```
 
 ### Parameters (locked)
@@ -89,8 +100,13 @@ python scripts/run_benchmark.py \
 
 This auto-starts the API on port 8001, seeds data, runs Locust warmup + measured window, and produces:
 
-- `docs/benchmark.md` -- human-readable report
+- `.artifacts/benchmark/benchmark.md` -- human-readable runtime report
 - `.artifacts/benchmark/current.json` -- machine-readable results
+
+The report and JSON are ignored, host-specific runtime artifacts. The former
+mutable tracked report is preserved as a
+[2026-04-17 historical snapshot](../archive/performance/load-benchmark-2026-04-17.md);
+promote future evidence only under a date-stamped name with exact provenance.
 
 ### Full-benchmark load profile (locked)
 
@@ -128,11 +144,20 @@ Every baseline artifact must include:
 
 | Artifact type | Pattern | Location |
 |---------------|---------|----------|
-| Quick profile JSON | `entity-latency-<label>.json` | `docs/perf/` |
+| Runtime quick profile JSON | `entity-profile.json` (default) | `.artifacts/perf-smoke/` |
+| Promoted quick profile JSON | `entity-latency-<date-or-hypothesis>.json` | `docs/perf/` |
 | Full benchmark JSON | `benchmark-<label>.json` | `.artifacts/benchmark/` |
-| Flamegraph | `flamegraph-<label>.svg` | `docs/perf/` |
+| Runtime flamegraph | `flamegraph-<label>.svg` | `.artifacts/perf-smoke/` |
+| Promoted flamegraph | `flamegraph-<date-or-hypothesis>.svg` | `docs/perf/` |
 | Profile write-up | `entity-profile-<label>.md` | `docs/perf/` |
-| Release report | `benchmark.md` | `docs/` |
+| Full benchmark report | `benchmark.md` | `.artifacts/benchmark/` |
+
+Runtime files are ignored and replaceable. The harness resolves relative
+output paths from the project root and rejects `docs/perf/` before making an
+HTTP request. Copy only a reviewed result into `docs/perf/` under a new
+date-stamped name, together with host, runtime, source SHA, command, sample
+counts, and the companion profile write-up; never overwrite an existing
+evidence file.
 
 `<label>` conventions:
 

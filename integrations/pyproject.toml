@@ -1,12 +1,19 @@
 [project]
 name = "agentflow-integrations"
-version = "1.0.1"
+# Not in the release lockstep, and not by accident (audit FB-05).
+# `scripts/release.py` bumps the runtime, the Python SDK and the TS SDK
+# together; this package is not published to any index and is not in that set,
+# so its version moves only when this package changes. What has to stay true is
+# the dependency range below, which is what `tests/unit/test_release_version_
+# coherence.py` pins: it must admit the client version the lockstep currently
+# ships. Reading 2.0.0 next to the runtime's 2.1.0 is expected, not drift.
+version = "2.0.0"
 description = "LangChain, LlamaIndex, CrewAI, and MCP integrations for AgentFlow"
 requires-python = ">=3.11"
 dependencies = [
-    # Audit F-11: cap at the current major — a future breaking client
-    # release must not satisfy this range and produce an incompatible pair.
-    "agentflow-client>=1.0.1,<2",
+    # Integrations 2.x tracks the supported client major. A future breaking
+    # client release must not satisfy this range and produce an incompatible pair.
+    "agentflow-client>=2,<3",
     # See agentflow-runtime pyproject.toml for vulnerability rationale on
     # langchain-core / langchain-text-splitters / langsmith floors.
     "langchain>=0.3.30,<2",

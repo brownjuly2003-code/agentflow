@@ -95,7 +95,7 @@ single-node profile and flipped as part of executing ADR 0006, not independently
 
 ## Follow-up
 
-- As part of `docs/clickhouse-cutover-plan.md`: flip the Helm serving config to
+- As part of `docs/plans/clickhouse-cutover-plan.md`: flip the Helm serving config to
   ClickHouse, remove the request-path write PVC, and enable `autoscaling` with a
   sane `minReplicas`/`maxReplicas` and HPA target.
 - Add a values-schema note (or comment) that `autoscaling` requires an external

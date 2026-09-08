@@ -1,0 +1,1306 @@
+# Archived plan: DE_project documentation optimization
+
+- Original location: `plan_26_08_2026.md`
+- Archived: 2026-09-04
+- Reason: all eight checklist items were completed; the plan is no longer an active repository-root entrypoint
+- Replacement: [documentation hub](../../README.md), [engineering status](../../STATUS.md), and the documentation checks under `scripts/`
+- Content type: completed implementation plan and closure evidence
+
+The completed plan body below is preserved from the repository-root version.
+
+<!-- ARCHIVE BODY START -->
+
+# Оптимизация документации DE_project
+
+> Обновлено: 2026-08-27. Scope — документация реального AgentFlow Runtime.
+> Первая, OpsLab-ориентированная трактовка сохранена в
+> [архиве](docs/archive/plans/plan-26-opslab-first-draft.md) и не является
+> текущей дорожной картой.
+
+## Цель
+
+Сделать всю документацию обозримой, непротиворечивой и проверяемой без потери
+истории. Текущие инструкции должны быстро вести к действию, а ADR, perf,
+операционные и release evidence — сохранять точный point-in-time контекст, не
+выдавая его за нынешнее состояние проекта.
+
+## Измеренный baseline
+
+| Метрика | Значение |
+| --- | ---: |
+| Tracked assets в `docs/` | 186 |
+| Tracked Markdown | 152 |
+| Markdown непосредственно в `docs/` | 45 |
+| Nested Markdown | 107 |
+| Самый крупный документ | 115 888 bytes / 1 716 lines |
+| MkDocs curated pages | 10 |
+| Untracked docs, исключённые из работы | 1 (`docs/operations/cycle-guard.md`) |
+
+Baseline link check проходит. Исходный `mkdocs build --strict` падает на двух
+ссылках из curated pages: на файл вне `docs/` и на исключённый из build
+документ. Это дефект текущей документации, а не результат оптимизации.
+
+## Непереговорная политика
+
+- Документы и доказательная история не удаляются.
+- Актуальный текст редактируется на месте; superseded или duplicate narrative
+  переносится через `git mv` в `docs/archive/` с provenance header.
+- ADR и dated evidence не переписываются задним числом. Новая истина получает
+  новый документ или current-status summary со ссылкой на исходное evidence.
+- Перемещение всегда включает поиск downstream links и их обновление в том же
+  commit.
+- Секреты, databases, raw prompts/tool payloads и локальные runtime artifacts
+  в документацию не попадают.
+
+## Канонические источники
+
+| Тема | Источник |
+| --- | --- |
+| Навигация по corpus | [`docs/README.md`](docs/README.md) |
+| Обзор проекта | [`README.md`](README.md) |
+| Текущие gates | [`docs/STATUS.md`](docs/STATUS.md) |
+| Machine-readable claims | [`config/project_claims.toml`](config/project_claims.toml) |
+| Lifecycle/scope | [`docs/PROJECT_CLOSURE.md`](docs/PROJECT_CLOSURE.md) |
+| Полная release history | [`CHANGELOG.md`](CHANGELOG.md) |
+| Runtime architecture | [`docs/architecture.md`](docs/architecture.md) |
+| Curated walkthrough | [`docs/index.md`](docs/index.md) + `mkdocs.yml` |
+| Operations | [`docs/runbook.md`](docs/runbook.md), `docs/runbooks/`, `docs/operations/` |
+| Historical evidence | `docs/perf/`, `docs/evidence/`, `docs/decisions/`, `docs/archive/` |
+
+## План оптимизации всего corpus
+
+- [x] **1. Зафиксировать information architecture.** Создать общий docs hub и
+  archive policy; обновить README, MkDocs overview и `STATUS.md`; перенести
+  длинную release narrative из README в архив; исправить существующие strict
+  warnings. → Проверка: links, claims, focused docs tests и MkDocs strict.
+  **Завершено 2026-08-26:** тексты сохранены в архиве дословно, README короче
+  на 42 строки, текущие F-19 gates отражены в status.
+- [x] **2. Разгрузить корень `docs/`.** Пакетами переносить dated benchmark,
+  superseded plan и duplicate report files в тематические каталоги/архив,
+  начиная с четырёх `benchmark*.md`. Ничего не удалять. → Проверка: на каждый
+  batch есть inbound-link inventory, `git diff --check` и полный link gate.
+  **Пакет 1 завершён 2026-08-26:** текущий generated load report перенесён в
+  `docs/perf/`, три non-canonical отчёта — в `docs/archive/performance/` с
+  provenance; все семь downstream-владельцев путей обновлены. Число tracked
+  Markdown в корне `docs/` уменьшено с 46 до 42 (исходный baseline 45 плюс
+  созданный на шаге 1 `docs/README.md`); пункт остаётся открыт для следующих
+  тематических пакетов. **Пакет 2 завершён 2026-08-26:** три dated security и
+  dependency evidence records перенесены без изменения текста в
+  `docs/evidence/`; все tracked inbound links и path-contract tests обновлены,
+  а число root Markdown уменьшено с 42 до 39. Пункт остаётся открыт для
+  следующих тематических пакетов. **Пакет 3 завершён 2026-08-26:** orphan
+  `regression-report.md` с нулевым inbound-link inventory перенесён в
+  `docs/archive/performance/` с provenance и ссылками на заменившие его entity
+  benchmark contract и профиль 2026-04-24; root Markdown уменьшен с 39 до 38.
+  **Пакет 4 завершён 2026-08-26:** dated competitive snapshot и несourced cost
+  estimate перенесены без изменения тела в `docs/archive/product/`; landing
+  navigation теперь
+  ведёт на current product framework, а root Markdown уменьшен с 38 до 36.
+  **Пакет 5 завершён 2026-08-26:** generated demo freshness report перенесён в
+  `docs/perf/` вместе с default owner path; current links, future-report
+  templates и шесть generated metric contracts обновлены, а root Markdown
+  уменьшен с 36 до 35. Пункт остаётся открыт для следующих тематических
+  пакетов. **Пакет 6 завершён 2026-08-26:** текущий ClickHouse cutover
+  execution plan перенесён в `docs/plans/`; восемь tracked references в семи
+  владельцах и четыре относительные ссылки обновлены, а current operator guide
+  оставлен root-reference. Число root Markdown уменьшено с 35 до 34; пункт
+  остаётся открыт для следующих тематических пакетов. **Пакет 7 завершён
+  2026-08-26:** current release publication procedure перенесена в
+  `docs/operations/`, два downstream-владельца пути обновлены, а checklist
+  связан с current readiness и rollback runbook. `release-readiness.md`
+  оставлен root current-state reference; число root Markdown уменьшено с 34
+  до 33. Пункт остаётся открыт для следующих тематических пакетов. **Пакет 8
+  завершён 2026-08-26:** embedded/demo disaster-recovery runbook перенесён в
+  `docs/operations/`, четыре downstream-владельца пути обновлены, а runbook
+  связан с текущим API DuckDB recovery design. Число root Markdown уменьшено
+  с 33 до 32; пункт остаётся открыт для следующих тематических пакетов.
+  **Пакет 9 завершён 2026-08-26:** подробный Helm operator reference перенесён
+  в `docs/operations/`, пять downstream-владельцев и три относительные ссылки
+  обновлены, а root `deployment.md` сохранён как curated walkthrough. Число
+  root Markdown уменьшено с 32 до 31; пункт остаётся открыт для следующих
+  тематических пакетов.
+  **Пакет 10 завершён 2026-08-26:** подробный Flink operator reference перенесён
+  в `docs/operations/` и двунаправленно связан с operational runbook; перед
+  переносом tracked inbound-ссылок и hardcoded path contracts не было. Число
+  root Markdown уменьшено с 31 до 30; пункт остаётся открыт для следующих
+  тематических пакетов.
+  **Пакет 11 завершён 2026-08-26:** build contract трёхузловой demo-топологии
+  перенесён в `docs/architecture/`; шесть tracked path references в пяти
+  владельцах и относительная ссылка на ADR обновлены. Число root Markdown
+  уменьшено с 30 до 29; пункт остаётся открыт для следующих тематических
+  пакетов.
+  **Пакет 12 завершён 2026-08-26:** подробный serving-bridge reference
+  перенесён в `docs/architecture/`; 14 tracked reference lines в десяти
+  владельцах и 11 внутренних относительных ссылок обновлены. Число root
+  Markdown уменьшено с 29 до 28; пункт остаётся открыт для следующих
+  тематических пакетов.
+  **Пакет 13 завершён 2026-08-26:** current control-plane coverage и
+  live-testing procedure перенесена в `docs/operations/`; canonical script
+  owner и основной docs hub обновлены, внутренних относительных ссылок не
+  было. Число root Markdown уменьшено с 28 до 27; пункт остаётся открыт для
+  следующих тематических пакетов.
+  **Пакет 14 завершён 2026-08-26:** оставшиеся 27 tracked root Markdown
+  классифицированы как curated walkthrough, current reference, product/domain
+  spec или generated reference и закреплены fail-closed allowlist checker с
+  positive/missing/unexpected тестами. Пункт 2 закрыт; root-placement ratchet
+  покрывает только часть более широкого пункта 8, который остаётся открытым.
+- [x] **3. Развести overview и reference.** Оставить
+  `architecture/index.md`, `api/index.md` и другие MkDocs pages короткими
+  walkthrough; `architecture.md`, `api-reference.md`, domain/spec docs —
+  подробными references. Убрать повторяющиеся claims из walkthrough. →
+  Проверка: одна canonical source на claim, MkDocs strict и source-of-truth test.
+  **Pair 1 завершён 2026-08-26:** `architecture/index.md` теперь объясняет
+  устойчивые границы через generic materializer/store nodes и явно передаёт
+  runtime versions, backend decisions и acceptance claims подробному
+  `architecture.md` и `STATUS.md`. Reciprocal links и source-of-truth test
+  закрепляют разделение; пункт остаётся открыт для следующих pairs. **Pair 2
+  завершён 2026-08-26:** `api/index.md` теперь ведёт разработчика по короткому
+  core flow health → catalog → entity/query и передаёт точные headers, полный
+  endpoint inventory, parameters, limits, response/error contracts и
+  operational/admin surfaces подробному `api-reference.md`. Walkthrough
+  сокращён с 126 строк / 481 слова до 76 строк / 337 слов; удалены
+  дублирующие каталоги из 9 core endpoints, 6 contract/lineage routes и 6
+  operational areas. Reciprocal links и source-of-truth test закрепляют
+  разделение; пункт остаётся открыт для следующих pairs. **Pair 3 завершён
+  2026-08-26:** `deployment.md` сохраняет local demo/Compose entrypoints и
+  выбор deployment path, но передаёт точные Helm prerequisites, values,
+  security/scaling clauses, rollout procedures и current evidence подробному
+  `operations/helm-deployment.md` и `STATUS.md`. Walkthrough сокращён со 144
+  строк / 845 слов до 135 строк / 819 слов; пересечение backticked tokens с
+  Helm reference уменьшено с 4 до 1, причём оставшийся `config/api_keys.yaml`
+  относится к local Compose auth. Relative links, size-ratio и
+  source-of-truth test закрепляют разделение; пункт остаётся открыт для
+  следующих pairs. **Pair 4 завершён 2026-08-26:** `concepts.md` сохраняет
+  streaming-first, semantic-layer, contracts и query-safety walkthrough, но
+  передаёт business entity/metric meanings подробному `domain.md`, runtime и
+  backend choices — `architecture.md`, exact routes — `api-reference.md`, а
+  current evidence — `STATUS.md`. Walkthrough сокращён с 67 строк / 359 слов
+  до 57 строк / 342 слов; пересечение backticked domain identifiers уменьшено
+  с 6 до 0. Reciprocal links, размер ниже 1/7 domain reference и
+  source-of-truth test закрепляют разделение; пункт остаётся открыт для
+  следующих pairs. **Pair 5 завершён 2026-08-26:** `observability.md`
+  сохраняет короткий walkthrough по совместному чтению metrics, traces и
+  logs, но передаёт точные inspection commands, поддерживаемые OTEL settings
+  и query-retention procedure подробному `runbook.md`, exact operational
+  routes — `api-reference.md`, current evidence — `STATUS.md`, а runtime
+  topology — `architecture.md`. Walkthrough сокращён со 111 строк / 521 слова
+  до 79 строк / 385 слов; operator reference вырос с 279 строк / 1 519 слов
+  до 321 строки / 1 702 слов за счёт перенесённых точных procedures.
+  Reciprocal links, отсутствие mutable claims и размер walkthrough ниже одной
+  трети runbook закреплены source-of-truth test; пункт остаётся открыт для
+  следующих pairs. **Pair 6 завершён 2026-08-26:** `components.md` теперь
+  показывает стабильные request/event/operations responsibilities через
+  generic role map, но передаёт конкретные технологии, версии, backends и
+  deployment topology подробному `architecture.md`, current evidence —
+  `STATUS.md`, а точные HTTP contracts — `api-reference.md`. Walkthrough
+  изменён с 50 строк / 457 слов до 62 строк / 310 слов; удалены дублирующий
+  inventory из 16 технологий и устаревший Day 1 backlog. Reciprocal links,
+  отсутствие семи reference-owned runtime claims и размер walkthrough ниже
+  одной шестой architecture reference закреплены source-of-truth test; пункт
+  остаётся открыт для следующих pairs. **Pair 7 завершён 2026-08-26:**
+  `docs/index.md` теперь служит коротким landing-маршрутом по всем девяти
+  curated pages и передаёт product/release narrative корневому `README.md`,
+  runtime choices и topology — `architecture.md`, exact HTTP contract —
+  `api-reference.md`, current evidence и gates — `STATUS.md`, а corpus map —
+  `docs/README.md`. Landing сокращён с 88 строк / 521 слова до 50 строк / 292
+  слов; удалены дублирующие runtime-stack inventory и mutable gate/evidence
+  narrative. Reciprocal README link, полный curated navigation inventory,
+  отсутствие десяти runtime и трёх status claims и размер landing ниже одной
+  пятой README закреплены source-of-truth test; пункт остаётся открыт для
+  следующих pairs. **Pair 8 завершён 2026-08-26:** `troubleshooting.md`
+  теперь маршрутизирует symptoms к первой failing boundary и canonical owner,
+  но передаёт exact incident/maintenance procedures подробному `runbook.md`,
+  local first-run — `quickstart.md`, environment choices — `deployment.md`,
+  request/auth contracts — `api-reference.md`, а change verification —
+  `contributing.md`. Walkthrough сокращён со 128 строк / 424 слов до 37 строк /
+  291 слова. Runbook вырос с 321 строки / 1 702 слов до 366 строк / 1 844 слов,
+  поскольку уникальные engine, service, store и alternate-port diagnostics
+  перенесены туда вместе с guard перед удаляющим volumes reset. Reciprocal
+  links, пять incident owners, наличие exact procedures у их владельцев и
+  размер walkthrough ниже одной пятой runbook закреплены source-of-truth test;
+  пункт остаётся открыт для следующих pairs. **Pair 9 завершён 2026-08-26:**
+  `sdk.md` теперь сохраняет короткий runnable entity-read flow для Python и
+  TypeScript, но передаёт installation variants, async usage и resilience
+  configuration package references, точный inventory typed methods —
+  generated `sdk-capabilities.md`, а HTTP-only routes и contracts —
+  `api-reference.md`. Walkthrough сокращён со 104 строк / 252 слов до 53 строк
+  / 177 слов; три detailed owner references после reciprocal links составляют
+  104 строки / 398 слов. Owner links, отсутствие language/capability/route
+  details и размер walkthrough ниже половины combined references закреплены
+  source-of-truth test; пункт остаётся открыт для следующих pairs. **Pair 10
+  завершён 2026-08-27:** `quickstart.md` теперь сохраняет только cross-platform
+  clone/setup, запуск No-Docker runner и health smoke, но передаёт
+  prepare-only/container profiles подробному `deployment.md`, exact requests,
+  auth и response contracts — API walkthrough/reference, а MkDocs
+  install/serve/build и port-conflict procedure — `contributing.md`.
+  Walkthrough сокращён со 121 строки / 351 слова до 65 строк / 249 слов;
+  три procedure owners после reciprocal links, сохранения MkDocs procedure и
+  уточнения local auth выросли с 318 строк / 1 732 слов до 357 строк / 1 877
+  слов. Owner links, отсутствие дублирующих commands/contracts и размер
+  walkthrough ниже одной пятой combined owners закреплены source-of-truth
+  test. Пункт 3 закрыт: все 10 curated pages из `mkdocs.yml` теперь покрыты
+  отдельными overview/reference ownership contracts pairs 1-10.
+- [x] **4. Консолидировать operations.** Построить индекс current runbooks,
+  отделить procedures от execution chronicles, свернуть три DuckDB scratch
+  rehearsal runbook в current guide + архивные variants и вынести chronology из
+  1 716-line recovery design без потери текста. → Проверка: commands/paths
+  существуют, supersession links двунаправленны, все operational links проходят.
+  **Индекс завершён 2026-08-27:** новый `docs/operations/README.md`
+  классифицирует все 21 tracked operational-документа как 13 current procedures
+  и controlled gates, 3 active design/reference files и 5 consumed/dated
+  records; общий docs hub ведёт на индекс, а fail-closed unit contract не
+  допускает пропусков и двойной классификации. Пункт остаётся открыт для
+  DuckDB-консолидации и отделения chronology из recovery design.
+  **Scratch-консолидация завершена 2026-08-27:** E22, E24 и E26 перемещены
+  через `git mv` в `docs/archive/operations/` с provenance headers и
+  побайтовым SHA-256 ratchet для всех 441 исходных строк. Generic operational
+  path теперь содержит один identity-neutral current guide с отдельными
+  preparation и explicit-authorization phases; operations/archive indexes и
+  все live recovery-design links обновлены. **Отделение chronology завершено
+  2026-08-27:** current recovery design сокращён с 1 721 строк до 313;
+  полный исходный текст сохранён в
+  `docs/archive/operations/api-duckdb-persistence-recovery-chronology-2026-08-10-to-2026-08-23.md`
+  с archive body SHA-256
+  `44910a7e3cb720eed3e11fda86c1307b83a3ad4cea228df347d23e138c6c8387`;
+  взаимная навигация current design ↔ operations index ↔ archive index;
+  архив помечен historical only / not executable; fail-closed focused
+  contract в `tests/unit/test_docs_operations_index.py` закрепляет
+  разделение, инварианты и authorization boundary. Пункт 4 закрыт.
+- [x] **5. Упорядочить evidence.** Добавить machine-readable или Markdown index
+  для perf/security/acceptance evidence с полями identity, date, result,
+  supersedes/superseded-by и claim boundary. Сами evidence records остаются
+  неизменными. → Проверка: каждый status claim ведёт к существующему indexed
+  evidence, orphan/supersession audit зелёный.
+  **Security/dependency sub-slice завершён 2026-08-27:** Markdown-индекс для
+  измеренного набора из 3 записей в `docs/evidence/` теперь содержит поля
+  identity, date, result, supersedes, superseded by и claim boundary.
+  Fail-closed контракт: `tests/unit/test_docs_evidence_index.py`. Три
+  неизменяемые записи не изменены (SHA-256
+  `4b2223a35e5817214171aedf988b814e2bed97a08bfaa2f817c17d5e05e9108a`,
+  `6bbb2ebb5ff7f98db11e4f1ceb1af099116ccba806edac2ffc1221db60238d28`,
+  `79618c9eea6aa31c18a7d17558c995bd424abf620f4e901b2542d1cc3031635f`).
+  Пункт 5 остаётся открыт для perf/acceptance evidence.
+  **Acceptance pair sub-slice завершён 2026-08-27:** в `docs/evidence/INDEX.md`
+  добавлена секция golden-topology acceptance ровно для двух неизменяемых
+  записей `docs/perf/golden-flink-submission-2026-07-30.md` и
+  `docs/perf/golden-operator-acceptance-2026-07-30.md` (поля identity, date,
+  result, supersedes, superseded by, claim boundary; complementary, не
+  supersession). Fail-closed контракт расширен в
+  `tests/unit/test_docs_evidence_index.py`. Сами evidence records не изменены.
+  Этот двухзаписевой acceptance sub-slice закрыт; пункт 5 остаётся открыт для
+  оставшегося perf/acceptance evidence.
+  **Lake-to-serving pair sub-slice завершён 2026-08-27:** в ту же секцию
+  golden-topology acceptance добавлены complementary записи
+  `docs/perf/live-iceberg-materialization-2026-08-01.md` и
+  `docs/perf/full-lake-to-serving-e2e-2026-08-01.md` (четыре записи, поля
+  identity, date, result, supersedes, superseded by, claim boundary;
+  supersession = None). Fail-closed контракт расширен в
+  `tests/unit/test_docs_evidence_index.py`. Сами evidence records не изменены.
+  Этот двухзаписевой lake-to-serving acceptance sub-slice закрыт; пункт 5
+  остаётся открыт для оставшегося perf/acceptance evidence.
+  **Checkpoint/readiness sub-slice завершён 2026-08-27:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых записей `docs/perf/checkpoint-restore-replay-2026-08-02.md`
+  и `docs/perf/ready-baselined-checkpoint-hold-2026-08-03.md` (поля
+  identity, date, result, supersedes, superseded by, claim boundary).
+  Checkpoint PASS supersedes dated blocker
+  `docs/perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md`
+  только для restore/replay gate; readiness hold complementary и не
+  supersedes checkpoint, blocker или earlier canary. Fail-closed контракт
+  расширен в `tests/unit/test_docs_evidence_index.py`. Сами evidence
+  records не изменены. Этот двухзаписевой checkpoint/readiness sub-slice
+  закрыт; пункт 5 остаётся открыт для оставшегося perf/acceptance evidence.
+  **F-10 rollback/soak-capacity sub-slice завершён 2026-08-27:** существующая
+  секция `## F-10 rollback and soak-capacity records (2026-08-23)` в
+  `docs/evidence/INDEX.md` нормализована до шести полей (identity, date,
+  result, supersedes, superseded by, claim boundary) ровно для двух
+  неизменяемых записей `corrected-rollback-pair-runtime-20260823-01.md` и
+  `ci-soak-f02-capacity-decision-20260823-01.md`. Записи complementary, не
+  supersession (`None`/`None` в обеих строках): rollback mechanics PASS
+  без трафика не закрывает full soak, а capacity decision держит
+  fresh four-hour soak plus rollback-after-traffic как
+  `BLOCKED_HOST_CAPACITY`. Fail-closed контракт расширен в
+  `tests/unit/test_docs_evidence_index.py`. Обе immutable records не
+  изменены. Этот двухзаписевой F-10 rollback/soak-capacity normalization
+  sub-slice закрыт; пункт 5 остаётся открыт для оставшегося
+  perf/acceptance evidence.
+  **Kind-residual canary and latest soak sub-slice завершён 2026-08-27:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  текущих записей
+  `docs/perf/golden-4h-canary2-fix4-kind-residual-pass-2026-08-07.md` и
+  `docs/perf/golden-4h-soak-05-failure-2026-08-08.md` (поля identity, date,
+  result, supersedes, superseded by, claim boundary). Записи complementary,
+  не одна PASS-цепочка: kind-residual PASS — prerequisite; soak-05
+  `SOAK_FAIL` supersedes `docs/perf/golden-4h-soak-start-2026-08-07.md`
+  только как current soak outcome и не supersedes canary. Immutable records
+  не изменены. Этот двухзаписевой kind-residual/latest-soak sub-slice
+  закрыт; пункт 5 остаётся открыт для оставшегося perf/acceptance evidence.
+  **Historical canary-failure/soak-start predecessor sub-slice завершён
+  2026-08-27:** в `docs/evidence/INDEX.md` добавлена историческая секция
+  ровно для двух predecessor-записей
+  `docs/perf/golden-4h-soak-canary-failure-2026-08-02.md` и
+  `docs/perf/golden-4h-soak-start-2026-08-07.md` (поля identity, date,
+  result, supersedes, superseded by, claim boundary). Записи historical,
+  не current status owners и не PASS-цепочка. Canary failure supersedes
+  `docs/perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md` только
+  как latest attempt state; soak-05 supersedes start snapshot только как
+  current soak outcome. Immutable records не изменены. Этот двухзаписевой
+  historical predecessor sub-slice закрыт; пункт 5 остаётся открыт для
+  оставшегося perf/acceptance evidence.
+  **Historical capacity-blocker reciprocity sub-slice завершён 2026-08-28:**
+  в `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых predecessor-записей от 2026-08-01:
+  `docs/perf/checkpoint-restore-replay-capacity-blocker-2026-08-01.md` и
+  `docs/perf/golden-4h-soak-rollback-resource-blocker-2026-08-01.md`.
+  Обе строки теперь взаимно согласованы с уже индексированными later outcomes:
+  checkpoint PASS supersedes первый blocker только для restore/replay gate,
+  а canary failure supersedes второй только как latest attempt state; dated
+  preflight facts остаются валидными. Immutable SHA-256 равны
+  `b1288e175d29909f2599d1802a24968098e196851168ff9c032cd21697e0a944` и
+  `3504c46afc276d5725576bcc0a1caa2415cf02e6b6bb3febe8e9fc22a070b8d5`.
+  Этот двухзаписевой historical capacity-blocker sub-slice закрыт; пункт 5
+  остаётся открыт для оставшегося perf/acceptance evidence.
+  **Current freshness pair sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых generated records:
+  `docs/archive/performance/freshness-e2e-realpath-2026-07-09.md`
+  (S8, 2026-07-09) и
+  `docs/archive/performance/freshness-benchmark-2026-06-06.md` (demo shortcut,
+  2026-06-06). Они complementary, не supersession: первая запись владеет
+  текущими real-path значениями 3.02 s p50 / 5.70 s p95 в `docs/STATUS.md` и
+  `config/project_claims.toml`, вторая — отдельными pre-S7 in-process DuckDB
+  значениями 1.06 s p50 / 1.99 s p95 и не выдаётся за production wiring.
+  Immutable SHA-256 равны
+  `4c169f42610d2acab88f05f818feb0e8c7a808c24db19fd7013b63f5021bd523` и
+  `371f62ad7ecc64954ba42fe5ae24b2c30615429e2cf53bca6d88c402fd449f2d`.
+  Этот двухзаписевой freshness sub-slice закрыт; пункт 5 остаётся открыт для
+  оставшегося perf/acceptance evidence.
+  **E4 replica-correctness pair sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых current records: `docs/perf/e4-2pod-topology-2026-07-09.md` и
+  `docs/perf/e4-check4-alert-single-page-2026-07-17.md`. Записи complementary,
+  не supersession: поздний `agentflow-staging` run расширяет автоматизированные
+  проверки с Checks 1-2 до Checks 1-4, а ранний `hq-demo` snapshot сохраняет
+  отдельный explicit pod-A-to-pod-B proof. Обе identity остаются владельцами
+  своих строк в `docs/STATUS.md`; production acceptance не заявлена.
+  Immutable SHA-256 равны
+  `39bf695eb3e7346bfc18acdb1487dfd2e8bc394ebe045b4e7bf9df721b1959ae` и
+  `4af1aaf1963bd1747de678a28d6d08de6733f15ef7e44cb01216ab425cf76c3a`.
+  Этот двухзаписевой E4 sub-slice закрыт; пункт 5 остаётся открыт для
+  оставшегося perf/acceptance evidence.
+  **Historical E4 intermediate pair sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  исторических intermediate записей
+  `docs/perf/e4-replica-topology-2026-07-11.md` и
+  `docs/perf/e4-check3-exactly-one-delivery-2026-07-16.md`. Записи
+  historical/intermediate, не current status owners: 2026-07-11 закрывает
+  Checks 1-2 на kind `agentflow-staging` после blocked попытки 2026-07-06;
+  2026-07-16 расширяет automated coverage до Checks 1-3 (exactly-one
+  delivery). Это extension, не supersession; поздний Checks 1-4 current
+  record не supersede эти snapshots, и ни одна запись не supersede
+  unique `hq-demo` A-to-B proof. Immutable SHA-256 равны
+  `dcab8c990386afa3dff065fb07be2195cc40bb20d0328c0f1441b2d7c148a571` и
+  `6bf8d6773997e69d1634eddcb3a7fdf2aa881a404af360e7d762ed22ca283bf8`.
+  Этот двухзаписевой historical E4 intermediate sub-slice закрыт; пункт 5
+  остаётся открыт для оставшегося perf/acceptance evidence.
+  **Current endurance/scale pair sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых current records: `docs/perf/soak-s11-2026-07-10.md` (S11,
+  2026-07-10) и `docs/perf/scale-own-data-2026-07-11.md` (S13, 2026-07-11).
+  Записи complementary, не supersession: S11 владеет four-hour real-path
+  plus API-read endurance, S13 — generated own-data scale. Later
+  `docs/perf/rss-reverify-183-2026-07-11.md` — scoped partial supersession
+  только API RSS finding, не full-path endurance. Immutable SHA-256 равны
+  `040e3f2c473b1a52426f0d4e77cefa2dc26e35fe3db09d1c453697eb9f1eaf91` и
+  `cebea4fe43c31380f589cf7e5dcf8706ef20314f1f2d104cb6ed06c8c52c6e5b`.
+  Этот двухзаписевой endurance/scale sub-slice закрыт; пункт 5
+  остаётся открыт для оставшегося perf/acceptance evidence.
+  **Current S10 throughput pair sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых current STATUS-linked records:
+  `docs/archive/performance/throughput-realpath-2026-07-09.md` (pre-Q1.2
+  canonical S10 burst baseline, 2026-07-09) и
+  `docs/perf/throughput-realpath-paced100-4h-r4-2026-07-19.md` (r4
+  four-hour paced serving-path PASS, 2026-07-19). Записи complementary,
+  не direct supersession: burst baseline и r4 измеряют разные режимы.
+  r4 supersedes r1/r3 only as the current four-hour paced-gate outcome;
+  historical facts remain valid. F-02 preserves r4 as the already-closed
+  serving-path gate; golden full-soak plus rollback remains open.
+  Immutable SHA-256 равны
+  `f029493f3d6cf26c2ecaf527c27d47b17d0869af2e222da12a35e0f54e04292f` и
+  `08027f210934070053de3cdabd3065d7bb0a0dc8d5a9387b77880b45cd6adbda`.
+  Этот двухзаписевой S10 throughput sub-slice закрыт; пункт 5 остаётся
+  открыт для intermediate q13/q14/100eps/10m/1h и оставшегося
+  perf/acceptance evidence.
+  **Q1.3/Q1.4 intermediate S10 throughput sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых intermediate 400-event burst records
+  `docs/perf/throughput-realpath-q13-2026-07-09.md` (Q1.3, 2026-07-09) и
+  `docs/perf/throughput-realpath-q14-2026-07-10.md` (Q1.4, 2026-07-10).
+  Узкая цепочка q12 -> q13 -> q14 только как later 400-event apply-path
+  optimization outcomes: Q1.3 supersedes Q1.2 и superseded by Q1.4; Q1.4
+  supersedes Q1.3 и не superseded later drain/paced records. Historical
+  measurements remain valid; this chain must not be merged with the current
+  four-hour paced-gate chain. Q1.4 owns the STATUS/README 400-event burst
+  outcome but remains intermediate in the broader S10 series and does not
+  claim sustained >=100 eps, a multi-hour rate, production SLA, or
+  production acceptance. Immutable SHA-256 равны
+  `5671f60feac077d8fe9684f3c75e0a315edcb44676a97725af936db39ca0c96f` и
+  `6c131f1887c219e186e7f709f547935596091da4cfddffc2ad3d4237552a8f90`.
+  Этот двухзаписевой q13/q14 sub-slice закрыт; пункт 5 остаётся открыт для
+  100eps/10m/1h и оставшегося perf/acceptance evidence.
+  **Paced 10m/1h S10 throughput sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для двух
+  неизменяемых STATUS-linked paced-duration records:
+  `docs/perf/throughput-realpath-paced100-2026-07-17.md` (60 000 events,
+  10 min, 100.0 produce / 97.1 Flink / 96.5 apply, lag 0 -> 0) и
+  `docs/perf/throughput-realpath-paced100-1h-2026-07-17.md` (360 000 events,
+  one continuous hour, 100.0 produce / 99.5 Flink / 99.5 apply, lag 0 -> 0).
+  Это duration-extension milestones, не supersession chain; historical facts
+  remain valid. Первый record не утверждает all 60 000 applied из-за
+  source-recorded 59 654 applied delta; второй не называется multi-hour.
+  Separate 2000-event drain измеряет другой mode, а four-hour r4 остаётся
+  current paced-gate outcome. Оба records ограничены pre-materializer path и
+  не закрывают golden full-soak/rollback или production acceptance. Immutable
+  SHA-256 равны
+  `3d8ebc375f899b99b156dbfc57010eaade2a5c44516cbe5b693d2e7ac14d175f` и
+  `3b6db0774dc305d683b8fec256618f688e3d06a6a6e0fad3bfbce8b523b47361`.
+  Этот двухзаписевой paced 10m/1h sub-slice закрыт; пункт 5 остаётся открыт
+  для 100eps и оставшегося perf/acceptance evidence.
+  **Finite 100eps drain S10 sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для одной
+  неизменяемой STATUS-linked записи
+  `docs/perf/throughput-realpath-100eps-try-2026-07-17.md`: finite
+  2000-event produce + catch-up drain, Flink hop = bridge apply = 107.3 eps,
+  failures/duplicates 0/0, catch-up 18.65 s, peak lag 187. Это single drain
+  window, не sustained или paced-ingress результат, не multi-hour rate,
+  production SLA или production acceptance. Запись не supersedes Q1.4 либо
+  paced 10m/1h/r4: они измеряют разные windows/modes, historical facts remain
+  valid. Golden full-soak plus rollback остаётся `BLOCKED_HOST_CAPACITY`,
+  `production.status` остаётся `candidate`. Immutable SHA-256 равен
+  `6266c36fd694fc9b447f1cfbc2e177fb9c750f4aff6409102dc1ccdffb8172b7`.
+  Этот однозаписевой 100eps drain sub-slice закрыт; пункт 5 остаётся открыт
+  для оставшегося perf/acceptance evidence.
+  **API RSS fix re-verification sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для одной
+  неизменяемой STATUS-linked записи
+  `docs/perf/rss-reverify-183-2026-07-11.md`. Она фиксирует 97-минутную live
+  re-verification issue #183: API RSS 77.3 MB → 100.9 MB, slope +7.5 MB/h,
+  growth-phase slope +3.2 MB/h, plateaued quartiles, FDs 149–152 и 1 149 /
+  1 149 HTTP 200 reads. Запись reciprocal со S11 только как scoped partial
+  supersession его API RSS leak finding; full-path endurance остаётся
+  S11-owned, поскольку Flink hop в growth phase был обойдён. Это не
+  four-hour full-path soak, production SLA или production acceptance.
+  Immutable SHA-256 равен
+  `ad0b57d79eee5fdaf7b00f435647c4bacd5a7ee2ae2d1a147f43394e7e5b414b`.
+  Этот однозаписевой RSS reverify sub-slice закрыт; пункт 5 остаётся открыт
+  для оставшегося perf/acceptance evidence.
+  **Historical four-hour paced S10 predecessor sub-slice завершён
+  2026-08-28:** в `docs/evidence/INDEX.md` добавлена отдельная секция ровно
+  для двух неизменяемых записей
+  `docs/perf/throughput-realpath-paced100-4h-2026-07-18.md` (r1) и
+  `docs/perf/throughput-realpath-paced100-4h-r3-2026-07-19.md` (r3).
+  Это distinct historical failure modes, не supersession chain: r1 потерпел
+  FAIL из-за заполнения диска стенда и сохранил exact dedup при 292 145
+  replays; r3 формально FAIL из-за silent harness delivery loss, при этом
+  serving path exactly-once обработал все 1 031 462 доставленные события.
+  r4 reciprocal supersedes обе записи только как current four-hour paced-gate
+  outcome; их historical facts remain valid. Ни r1, ни r3 не закрывают
+  golden full-soak plus rollback или production acceptance. Immutable
+  SHA-256 равны
+  `c63ead23c4b9992459f8ec3f1f28abe36c68516847464f100d82df960f0b693f` и
+  `f56e80447eb315e93d1cfce60f5a9c1078b9595c8089d0fb18cce0ed21c02247`.
+  Этот двухзаписевой historical paced sub-slice закрыт; пункт 5 остаётся
+  открыт для Q1.2 и оставшегося perf/acceptance evidence.
+  **Q1.2 predecessor S10 throughput sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция ровно для одной
+  неизменяемой записи `docs/perf/throughput-realpath-q12-2026-07-09.md`.
+  Warm canonical 400-event результат фиксирует 217 eps produce,
+  Flink hop = bridge apply = 11.4 eps, applied/duplicates/failures 400/0/0,
+  catch-up 35.2 s, peak lag 213 и miss цели >=80. Запись является root узкой
+  цепочки Q1.2 -> Q1.3 -> Q1.4: она не supersede отдельно сохранённый
+  pre-Q1.2 baseline и reciprocal superseded by Q1.3 только как later
+  400-event apply-path outcome. Это не sustained throughput, production SLA
+  или production acceptance. Immutable SHA-256 равен
+  `a9d6ff046f678ec428ea437676d8007c1fa23de35e46147aac451aff4fcb54c3`.
+  Этот однозаписевой Q1.2 sub-slice закрыт; пункт 5 остаётся открыт для
+  оставшегося perf/acceptance evidence.
+  **ClickHouse PII-governance evidence sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция для двух неизменяемых
+  записей `docs/perf/vault-pii-governance-verify-2026-07-02.md` и
+  `docs/perf/vault-pii-governance-verify-2026-07-03.md`. Первый standalone
+  ClickHouse 26.7 capture фиксирует 32/32 PASS на synthetic vault из 2 000
+  customers; второй refresh на current seeds/script фиксирует 29/29 PASS,
+  0 FAIL / 0 WARN и 2 500 customers. Записи reciprocal только в узком смысле
+  latest ClickHouse live-verification outcome: historical findings первого
+  capture остаются валидны, а отдельная PostgreSQL-линейка не входит в эту
+  supersession chain. Ни одна запись не доказывает promoted CDC volume,
+  production identity split, external penetration test или production
+  acceptance. Immutable SHA-256 равны
+  `9febe54c7bd99b88afb0138e7d85e2a138c9b77a6b1e9f758f4ab2e4cdc294fe` и
+  `ad27d5ea81c02e363fce41dea460486b74690c7a6e581bc80064dcc3299eb8ac`.
+  Этот двухзаписевой ClickHouse PII-governance sub-slice закрыт; пункт 5
+  остаётся открыт для прочего perf/acceptance evidence.
+  **PostgreSQL PII-governance evidence sub-slice завершён 2026-08-28:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция для двух неизменяемых
+  записей `docs/perf/vault-pii-governance-pg-verify-2026-07-02.md` и
+  `docs/perf/vault-pii-governance-pg-verify-2026-07-03.md`. Оба standalone
+  PostgreSQL 17.5 capture фиксируют 33/33 PASS на deterministic demo seed из
+  10 строк (msk 8 / dxb 2); второй refresh дополнительно фиксирует 0 FAIL /
+  0 WARN и текущие `1c__msk`, `pg_ops__msk`, `mp__msk` prefixes. Записи
+  reciprocal только в узком смысле latest PostgreSQL live-verification
+  outcome; historical findings первого capture остаются валидны, а отдельная
+  ClickHouse-линейка не входит в эту supersession chain. Ни одна запись не
+  доказывает promoted CDC volume, production identity split,
+  cross-engine/Kubernetes deployment, external penetration test, production
+  SLA или production acceptance. Immutable SHA-256 равны
+  `1d6f3ebe183ce098d2ad49b519ad46171cb5d9f6bae9cc5edbdc1d85a428266b` и
+  `f4234235d1c28b37e72389e37521c0f46c13a428a7691d77544cf8f6d3dbc55e`.
+  Этот двухзаписевой PostgreSQL PII-governance sub-slice закрыт; пункт 5
+  остаётся открыт для прочего perf/acceptance evidence.
+  **PostgreSQL runtime verification evidence sub-slice завершён 2026-08-28:**
+  в `docs/evidence/INDEX.md` добавлена отдельная секция для двух неизменяемых
+  point-in-time записей `docs/perf/control-plane-pg-verify-2026-07-03.md` и
+  `docs/perf/bv-order-canonical-pg-smoke-2026-07-06.md`. Первая фиксирует
+  31/31 PASS на standalone PostgreSQL 17.5/Windows для control-plane
+  concurrency, atomicity, restart и shared-state contracts. Вторая фиксирует
+  17/17 PASS, 0 FAIL на PostgreSQL 16.14/Mac Colima для восьми deterministic
+  orders и `bv_order_canonical` reconstruction. Записи complementary, не
+  supersession chain: они проверяют разные runtime surfaces на разных версиях
+  PostgreSQL и hosts и не доказывают integrated deployment. Ни одна запись не
+  устанавливает promoted CDC volume, production SLA или production
+  acceptance. Immutable SHA-256 равны
+  `1fed01fd91d09548d44342a78d00093d0e3a41cf8c831ed91d8c9ce85e69260c` и
+  `4844cb202105780b4466e19f0fca15f2d71e6a64ed46dbd7cda071d1aa2dfd7a`.
+  Этот двухзаписевой PostgreSQL runtime verification sub-slice закрыт; пункт
+  5 остаётся открыт для прочего perf/acceptance evidence.
+  **NL→SQL evaluation evidence pair sub-slice завершён 2026-08-29:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция для двух неизменяемых
+  записей `docs/perf/nl-sql-eval-2026-07-01.md` и
+  `docs/perf/nl-sql-eval-sonnet5-2026-07-01.md`. На общем 18-question harness
+  первая фиксирует shipped-default rule-based результат 27.8% (5/18), а
+  вторая — opt-in Sonnet 5 via GraceKelly результат 100.0% (18/18). Записи
+  complementary, не supersession chain: они измеряют разные engine
+  configurations. Источники остаются immutable; index явно отмечает, что
+  baseline record содержит старую companion-ссылку на 88.9%, тогда как сам
+  companion record владеет финальным post-normalisation результатом 100.0%.
+  Это direct-translator eval с no-op time windows; Sonnet run live,
+  non-deterministic, not pinned in CI и ограничен 18 curated demo questions.
+  Ни одна запись не устанавливает production accuracy, SLA или acceptance.
+  Immutable SHA-256 равны
+  `c1de34750781650ed249c50feb66451cec031ab17e8837aebc66e67d644921a8` и
+  `472cb424b3866f675817fd8f3e1e7b1d887f98675926ff7472c2d97a2df23e8a`.
+  Этот двухзаписевой NL→SQL evaluation sub-slice закрыт; пункт 5 остаётся
+  открыт для прочего perf/acceptance evidence.
+  **Historical streaming-hop freshness sub-slice завершён 2026-08-29:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция для неизменяемой записи
+  `docs/perf/freshness-realpath-2026-06-30.md`. Она фиксирует отдельный
+  `orders.raw` → `events.validated` segment на `deproject-mac`: n=30,
+  0 misses, p50 2.50 s, p95 10.11 s, p99 15.42 s и mean 3.33 s на
+  Mac/Colima с Flink 2.2.1-java17. У строки `None`/`None`: S8 расширяет
+  измеренный путь через bridge/ClickHouse/Redis/API и остаётся владельцем
+  current full event-to-metric claim 3.02 s p50 / 5.70 s p95, но не отменяет
+  отдельно валидный streaming-hop outcome. Historical record не доказывает
+  event-to-metric freshness, cross-host benchmark, production SLA или
+  acceptance. Immutable SHA-256 равен
+  `8ee9d878e24012530ee654fd75cd1f6338e96d24fdedb5f60a1dca2e7cfb408b`.
+  Этот однозаписевой historical streaming-hop freshness sub-slice закрыт;
+  пункт 5 остаётся открыт для прочего perf/acceptance evidence.
+  **ClickHouse serving-path verification sub-slice завершён 2026-08-29:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция для неизменяемой записи
+  `docs/perf/clickhouse-serving-verify-2026-07-02.md`. Она фиксирует ADR 0006
+  Phase 1/1a behavior verification на standalone ClickHouse 26.7.1.368:
+  pipeline burst 60 дал 60/60 valid, `orders_v2`=13,
+  `pipeline_events`=73; API подтвердил entity/metric/NL/SSE paths,
+  cross-process revenue 2799.65 → 3279.57, exactly-one upsert dedup,
+  `api_ready`, 0 dispatcher/scan errors и отсутствие tenant-scope false
+  positives. Строка использует `None`/`None`: Phase 2 PII-governance проверяет
+  отдельный contract и не образует supersession. Это single-node,
+  single-writer demo profile с auth disabled; multi-writer ordering,
+  Kafka/Flink health, latency p50/p95, production SLA и acceptance не
+  доказаны. Immutable SHA-256 равен
+  `1cb01b6733b624fd6cc71baca714c4e6ff06a55ec2f676a152365a7edae9d530`.
+  Этот однозаписевой ClickHouse serving-path verification sub-slice закрыт;
+  пункт 5 остаётся открыт для прочего perf/acceptance evidence.
+  **Historical authentication performance baseline sub-slice завершён
+  2026-08-29:** в `docs/evidence/INDEX.md` добавлена отдельная секция для
+  неизменяемой записи `docs/perf/auth-bench-2026-05-26.md`. Она фиксирует
+  historical bcrypt-12 baseline на Intel Ultra 5 125H / Windows 11 /
+  Python 3.13: при N=20 и трёх trials hit-last p95 = 8146.6 ms, miss-all
+  p95 = 8221.9 ms; M-C5 rate-window trim при `rate_limit_rpm=120` и 5 000
+  calls дал p95 = 0.006 ms. Добавленный в тот же immutable record closure
+  notice от 2026-06-05 фиксирует текущий indexed Argon2id/O(1) outcome:
+  hit-last cold около 34 ms и miss около 0.1 ms. Это одна identity с
+  `None`/`None`, не document supersession chain. Старые bcrypt numbers
+  применимы только к legacy entries без `key_lookup`; это single-laptop
+  microbenchmark, не served/concurrent-load benchmark, production latency
+  SLA или acceptance. Immutable SHA-256 равен
+  `da2ba9f6e47da56bb3d982ed4b435e58c78b602ec20dea1e1e2cb3c272fec9ad`.
+  Этот однозаписевой historical authentication performance baseline
+  sub-slice закрыт; пункт 5 остаётся открыт для прочего perf/acceptance
+  evidence.
+  **CI performance interpretation evidence pair sub-slice завершён
+  2026-08-29:** в `docs/evidence/INDEX.md` добавлена отдельная секция для
+  двух неизменяемых записей `docs/perf/ci-hardware-gap-2026-05-24.md` и
+  `docs/perf/usage-write-bifurcation-2026-07-09.md`. Первая фиксирует
+  point-in-time A03 calibration: локальный entity p99 снизился с 936 ms до
+  167 ms, а для shared `ubuntu-latest` baseline были приняты 1.3x CI gates.
+  Вторая исправляет только позднюю трактовку finding N1 как «скорость
+  раннера»: три red-run дали 29.4/29.1/28.9 RPS, синхронный DuckDB
+  `api_usage` writer ограничивал API как `1/s`, а queue/background/batch fix
+  убрал усилитель. Записи complementary, не document supersession, поэтому
+  обе строки используют `None`/`None`: N1 correction не отменяет датированный
+  A03 decision, а A03 не объясняет любой поздний CI tail и не разрешает
+  дальнейшее ослабление gates без re-evaluation. Обе записи не являются
+  production latency/throughput SLA или acceptance; `production.status`
+  остаётся `candidate`. Immutable SHA-256 равны
+  `b259d746e4231cea11a974417bfdce88b29d55693889d2d943a4a6c6d4859761` и
+  `db324b94b1903d058a1eca9287a952566a21c629bfcb41980b776bc9f413526e`.
+  Этот двухзаписевой CI performance interpretation sub-slice закрыт; пункт 5
+  остаётся открыт для прочего perf/acceptance evidence.
+  **Golden soak cross-run RCA evidence sub-slice завершён 2026-08-29:** в
+  `docs/evidence/INDEX.md` добавлена отдельная секция для неизменяемой записи
+  `docs/perf/golden-4h-soak-failures-01-05-rca-2026-08-09.md`. Read-only RCA
+  фиксирует пять consumed identities `-01`…`-05`, отсутствие soak PASS и
+  `dual_mean_90` PASS JSON, незапущенный corrected Helm rollback, доказанные
+  readiness/infrastructure/recovery слои `-03`/`-04` и terminal `-05` после
+  producer PASS 1,440,000/1,440,000 при 99.99979 EPS. Запись complementary к
+  canonical `-05`, не supersession, поэтому использует `None`/`None`: exact
+  Flink exception остаётся unresolved, clock jump не объявлен sole cause, а
+  P0 Kafka exceptions остаются post-failure recovery evidence. Consumed IDs
+  нельзя переиспользовать; запись не авторизует rerun, live remediation,
+  rollback, push или production elevation; `production.status` остаётся
+  `candidate`. Immutable SHA-256 равен
+  `3f501d06bd85e6c1b38d34767089b57f5369bff8d6081f2bc90306868a4ac9c3`.
+  Inventory после среза: 58 tracked `docs/perf` Markdown paths, 46
+  представлены и 12 остаются unrepresented. Этот однозаписевой RCA sub-slice
+  закрыт; пункт 5 остаётся открыт для прочего perf/acceptance evidence.
+  **ARM shared-runner benchmark packet sub-slice завершён 2026-08-29:** в
+  `docs/evidence/INDEX.md` добавлена одна identity-строка для неизменяемого
+  summary `docs/perf/arm-server-benchmark-2026-06-05.md`. Date-stamped
+  generated report, host metadata и JSON из
+  `docs/perf/arm-benchmark-2026-06-05/` закреплены как companions той же
+  identity, не отдельные evidence identities. Dispatch-only run 27012731848
+  на commit `60e0f3d` использовал shared `ubuntu-24.04-arm` Neoverse-N2,
+  4 vCPU, 15.6 GB RAM и canonical DuckDB profile 50 users / 10/s / 60 s +
+  10 s warmup; 554 requests завершились с 0 failures, 37.41 RPS, aggregate
+  p50/p95/p99 6.0/44.0/150.0 ms, а все entity gates прошли. Строка использует
+  `None`/`None`: это point-in-time shared CI ARM evidence, не dedicated
+  16-vCPU `c8g.4xlarge`, не cross-host regression claim, production hardware
+  benchmark, latency SLA или acceptance; `production.status` остаётся
+  `candidate`. Immutable SHA-256 summary/report/host/JSON равны
+  `a88427346c891915652a3ba57fc9e018d28628ad58f1d36207f84e1b74a73452`,
+  `7b89d09404487c9dbf05eddf673c8a4c0721e1d3cdc1efd650769b3d9d67056b`,
+  `39693a4921e167284f8a4028ca22979c33c62d7438a4caf54d3316a2c13a320e` и
+  `68d3398350caf25083882074dc340f1e12b444751e712bac81865cbb04fbdd62`.
+  Inventory после среза: 58 tracked `docs/perf` Markdown paths, 49
+  представлены и 9 остаются unrepresented. Этот однозаписевой ARM packet
+  sub-slice закрыт; пункт 5 остаётся открыт для прочего perf/acceptance
+  evidence.
+  **Historical OpenAPI contract divergence diagnostic sub-slice завершён
+  2026-08-29:** в `docs/evidence/INDEX.md` добавлена одна identity-строка для
+  неизменяемой записи
+  `docs/perf/test_openapi_compliance-divergence-2026-04-25.md`. Датированный
+  diagnostic фиксирует локальное расхождение FastAPI-generated
+  `ValidationError`: Python 3.13.7 / FastAPI 0.128.0 добавлял поля `input` и
+  `ctx`, тогда как project `.venv` на том же Python 3.13.7 с FastAPI 0.135.3
+  проходил target test, а Docker CI-like line использовал FastAPI 0.136.1.
+  Это исключает сам Python 3.13 как root cause и ограничивает normalization
+  FastAPI-owned полями, сохраняя строгую проверку project-owned schemas и
+  paths. Строка использует `None`/`None`: это historical local diagnostic,
+  не полная Python/FastAPI/Pydantic/Starlette compatibility matrix, runtime
+  API acceptance, production compatibility, SLA или production acceptance;
+  `production.status` остаётся `candidate`. Immutable SHA-256 равен
+  `ea21daafe883f63c4e196d6d168b72a22ac4dfc7879528a51a1af6bde7df804b`.
+  Inventory после среза: 58 tracked `docs/perf` Markdown paths, 50
+  представлены и 8 остаются unrepresented. Этот однозаписевой diagnostic
+  sub-slice закрыт; пункт 5 остаётся открыт для прочего perf/acceptance
+  evidence.
+  **Historical entity hot-path optimization records sub-slice завершён
+  2026-08-29:** в `docs/evidence/INDEX.md` добавлена одна bounded-секция для
+  трёх human-authored identities: `docs/perf/entity-profile-2026-04-24.md`,
+  `docs/perf/entity-profile-after-pii-masker-cache.md` и
+  `docs/perf/entity-profile-after-tenant-qualification-cache.md`. JSON/SVG
+  artifacts остаются companions, не identity-строками. Все строки используют
+  `None`/`None`: это complementary stages, не document supersession chain и
+  не монотонная performance trajectory. Индекс сохраняет initial 936.34 ms
+  p99, point-in-time PII result 360.97 ms, поздний profiled refresh 962.22 ms
+  и noisy tenant best-of-3 288.85 -> 167.14 ms как разные измерительные окна.
+  Tenant record отдельно ограничен open auth, spread выше 10% и неполной
+  provenance: source называет measured HEAD `5b57cf4`, но cache implementation
+  и profile впервые вошли в tracked history в `aae27bf`, поэтому exact
+  after-run bytes не commit-bound. Historical src/serving line references не
+  объявлены current ownership; ни одна строка не является CI/cross-host,
+  current-code или production benchmark, SLA либо acceptance.
+  Immutable SHA-256 равны
+  `99904b66387dcd002095d9fe17458891099de81ff03d2719837038266f252c99`,
+  `27ba68bb1ef0541f72afe7055fec8f81d011c1688638b32f7f858fc4745667aa` и
+  `2728e47a30eab0cde0a175759c86e2de9ee3dfc61d7d5751b62f7c76517952fa`.
+  Inventory после среза: 58 tracked `docs/perf` Markdown paths, 53
+  представлены и 5 остаются unrepresented. Этот трёхзаписевой sub-slice
+  закрыт; пункт 5 остаётся открыт для прочего perf/acceptance evidence.
+  **Status/orphan/supersession closure audit завершён 2026-08-29:** пять
+  оставшихся путей классифицированы в `docs/evidence/INDEX.md` без создания
+  новых identity-строк: dated decision, implementation companion, current
+  benchmark reference, generated mutable report и operator plan. Baseline и
+  Q1.2 строки throughput в `docs/STATUS.md` теперь ведут к уже существующим
+  indexed identities; общий fail-closed контракт проверяет, что все status
+  links на `docs/perf` принадлежат каталогу, а все named supersession links
+  существуют и взаимны. После классификации auth benchmark lifecycle текущий
+  inventory: 59 tracked `docs/perf` Markdown paths, 59 явно представлены и 0
+  остаются unrepresented. Исходные пять
+  non-identity документов и все evidence records не изменены. Пункт 5 закрыт.
+- [x] **6. Отделить generated reference.** Пометить owning command для OpenAPI,
+  SDK capabilities, quality/benchmark artifacts; запретить ручной drift и
+  хранить старые generated snapshots в архиве. → Проверка: regeneration check
+  воспроизводит tracked output.
+  **OpenAPI generated-reference owner/drift sub-slice завершён 2026-08-29:**
+  `scripts/export_openapi.py` теперь раскрывает единый inventory из трёх
+  outputs (`docs/openapi.json` и двух `docs/agent-tools/*.json`) и использует
+  его для записи и `--check`. Docs hub и contributor guide называют точные
+  write/check команды, запрещают частичное ручное обновление семейства и
+  отделяют два historical `docs/perf/live_openapi_*.json` captures от current
+  generated references.
+  Существующий contract workflow проверяет весь output family; сами три JSON
+  outputs в этом срезе не изменены. Пункт 6 остаётся открыт для SDK
+  capabilities, quality и benchmark families.
+  **SDK capability generated-reference owner/drift sub-slice завершён
+  2026-08-29:** `scripts/export_sdk_capabilities.py` владеет явным inventory
+  из единственного current output `docs/sdk-capabilities.md`, детерминированно
+  пишет его из `config/project_claims.toml` и проверяет drift через `--check`.
+  Существующий project-claims validator использует тот же renderer/inventory,
+  продолжает проверять наличие объявленных Python/TypeScript methods и даёт
+  точную команду регенерации при drift. Docs hub, generated header и
+  contributor guide называют write/check commands и отделяют будущие dated
+  snapshots от current contract. Пункт 6 остаётся открыт для quality и
+  benchmark families.
+  **Quality generated-reference owner/snapshot sub-slice завершён 2026-08-29:**
+  host/time-dependent report 2026-07-23 перенесён через `git mv` в
+  `docs/archive/quality-report-2026-07-23.md` с provenance и неизменённым
+  body. Новый deterministic `docs/quality.md` генерируется из `[quality]` в
+  `config/project_claims.toml` командой `scripts/export_quality_reference.py`
+  и проверяется через `--check`; project-claims validator использует тот же
+  renderer/inventory. Dynamic `scripts/quality_report.py` теперь пишет по
+  умолчанию в ignored `.artifacts/quality/quality-report.md` и fail-closed
+  отклоняет попытку перезаписать current reference. Пункт 6 остаётся открыт
+  для benchmark families.
+  **Full-load benchmark snapshot/lifecycle sub-slice завершён 2026-08-29:**
+  mutable `docs/perf/load-benchmark-latest.md` report сохранён с provenance и
+  неизменённым body в
+  `docs/archive/performance/load-benchmark-2026-04-17.md`; прежний путь теперь
+  является стабильной lifecycle-страницей. `scripts/run_benchmark.py` по
+  умолчанию пишет Markdown/JSON в ignored `.artifacts/benchmark/`, fail-closed
+  отклоняет оба tracked documentation paths, а CI читает runtime report оттуда.
+  Host/time-dependent метрики не имеют ложного byte-drift check: свежий JSON
+  сравнивается с tracked gate baseline, а release evidence продвигается только
+  под date-stamped именем с provenance. Пункт 6 остаётся открыт для остальных
+  freshness/throughput и benchmark families.
+  **Demo freshness benchmark snapshot/lifecycle sub-slice завершён
+  2026-08-29:** mutable `docs/perf/freshness-benchmark.md` report сохранён с
+  provenance и неизменённым body в
+  `docs/archive/performance/freshness-benchmark-2026-06-06.md`; прежний путь
+  теперь является стабильной lifecycle-страницей.
+  `scripts/benchmark_freshness.py` по умолчанию пишет Markdown/JSON в ignored
+  `.artifacts/freshness/` и fail-closed отклоняет оба tracked documentation
+  paths. Исходный Git blob snapshot равен
+  `7b77d238d9a8e452adbf7e571323de4873513ff4`, archived SHA-256 —
+  `371f62ad7ecc64954ba42fe5ae24b2c30615429e2cf53bca6d88c402fd449f2d`.
+  Пункт 6 остаётся открыт для throughput и остальных benchmark families.
+  **Real-path throughput benchmark snapshot/lifecycle sub-slice завершён
+  2026-08-29:** mutable `docs/perf/throughput-realpath.md` S10 report сохранён
+  с provenance и неизменённым body в
+  `docs/archive/performance/throughput-realpath-2026-07-09.md`; прежний путь
+  теперь является стабильной lifecycle-страницей.
+  `scripts/benchmark_throughput_realpath.py` по умолчанию пишет Markdown/JSON
+  в ignored `.artifacts/throughput/`, fail-closed отклоняет оба tracked
+  documentation paths до обращения к runtime stand и направляет Kafka/Flink/
+  bridge/ClickHouse verification на `deproject-mac`. Исходный Git blob snapshot
+  равен `146a67379bc643b9f2207fc2f3a9c0cda7c9c635`, archived SHA-256 —
+  `f029493f3d6cf26c2ecaf527c27d47b17d0869af2e222da12a35e0f54e04292f`.
+  Пункт 6 остаётся открыт для остальных benchmark families.
+  **S8 real-path freshness benchmark snapshot/lifecycle sub-slice завершён
+  2026-08-29:** mutable `docs/perf/freshness-e2e-realpath.md` report сохранён
+  с provenance и неизменённым body в
+  `docs/archive/performance/freshness-e2e-realpath-2026-07-09.md`; прежний путь
+  теперь является стабильной lifecycle-страницей.
+  `scripts/benchmark_freshness_e2e.py` по умолчанию пишет Markdown/JSON в
+  ignored `.artifacts/freshness/`, fail-closed отклоняет lifecycle и archived
+  paths до API/Kafka access и направляет Kafka/Flink/bridge/ClickHouse/Redis/
+  API verification на `deproject-mac`. Исходный Git blob snapshot равен
+  `8332dc9d430c0c2e51d6756c21892d827b6f1ecf`, archived SHA-256 —
+  `4c169f42610d2acab88f05f818feb0e8c7a808c24db19fd7013b63f5021bd523`.
+  Пункт 6 остаётся открыт для остальных benchmark families.
+  **Streaming-hop freshness immutable-output sub-slice завершён 2026-08-30:**
+  `scripts/benchmark_freshness_realpath.py` по умолчанию пишет JSON в ignored
+  `.artifacts/freshness/realpath-current.json`, разрешает относительные output
+  paths только от project root и fail-closed отклоняет immutable
+  `docs/perf/freshness-realpath-2026-06-30.md` до создания Kafka producer или
+  consumer. Kafka/Flink runtime verification закреплена за `deproject-mac`, а
+  новый reviewed result требует отдельной date-stamped identity с source,
+  host/runtime, command/configuration, samples/misses и JSON hash provenance.
+  Существующая историческая запись и её SHA-256
+  `8ee9d878e24012530ee654fd75cd1f6338e96d24fdedb5f60a1dca2e7cfb408b`
+  не изменены. Пункт 6 остаётся открыт для остальных benchmark families.
+  **S13 own-data scale runtime-output sub-slice завершён 2026-08-30:**
+  `scripts/benchmark_scale_own_data.py` по умолчанию пишет Markdown/JSON в
+  ignored `.artifacts/scale/`, разрешает относительные output paths только от
+  project root и fail-closed отклоняет immutable
+  `docs/perf/scale-own-data-2026-07-11.md` обоими output-флагами до ClickHouse
+  access. Runtime Markdown явно отделяет single-node diagnostic от production
+  SLA/acceptance и требует новую date-stamped identity с полным provenance для
+  promotion; live ClickHouse verification закреплена за `deproject-mac`.
+  Существующая S13 identity и её SHA-256
+  `cebea4fe43c31380f589cf7e5dcf8706ef20314f1f2d104cb6ed06c8c52c6e5b`
+  не изменены. Пункт 6 остаётся открыт для остальных benchmark families.
+  **Auth legacy-path benchmark artifact sub-slice завершён 2026-08-30:**
+  `scripts/perf/auth_bench.py` теперь явно запрашивает `scheme="bcrypt"` для
+  воспроизведения legacy O(n) path вместо неявного перехода на текущий default
+  Argon2id. Команда пишет host/time-dependent Markdown в ignored
+  `.artifacts/perf/auth-bench-current.md`, разрешает относительный output от
+  project root и до bcrypt setup отклоняет lifecycle и immutable historical
+  paths. `docs/perf/auth-bench.md` отделяет это legacy-воспроизведение от
+  текущего O(1) `key_lookup`, закрепляет Mac runtime owner и date-stamped
+  promotion contract. Существующая запись 2026-05-26 и её SHA-256
+  `da2ba9f6e47da56bb3d982ed4b435e58c78b602ec20dea1e1e2cb3c272fec9ad`
+  не изменены. Пункт 6 остаётся открыт для performance-history и остальных
+  benchmark families.
+  **Performance-history runtime artifact sub-slice завершён 2026-08-30:**
+  четыре записи бывшего mutable `.github/perf-history.json` сохранены без
+  изменения bytes в
+  `docs/archive/performance/perf-history-2026-04-27.json`; tracked Git blob
+  равен `8ba12095aa0aefe43cff2cb78ecb9cbbb22edb65`, SHA-256 —
+  `3b522ea0e68159a3147538ec124bcec73fcebf06a762d9537db9b11aa37b9573`.
+  Recorder и plotter по умолчанию владеют ignored
+  `.artifacts/perf-history/history.json`, HTML и optional PNG; recorder
+  защищает legacy/archive paths, а plotter отклоняет output внутри `docs/`.
+  Текущие docs больше не обещают cross-run CI history: bot writer был удалён
+  в `b2c0bc0`, когда branch protection сделала его self-push недостижимым.
+  Пункт 6 остаётся открыт для остальных benchmark families.
+  **Entity perf-smoke runtime artifact sub-slice завершён 2026-08-30:**
+  `scripts/profile_entity.py` по умолчанию пишет JSON в ignored
+  `.artifacts/perf-smoke/entity-profile.json`, разрешает относительные output
+  paths только от project root и до HTTP access отклоняет весь `docs/perf/`.
+  PR perf-smoke читает и загружает тот же ignored artifact вместо бывшего
+  mutable `docs/perf/ci-smoke-latest.json`. Existing entity latency JSON,
+  flamegraphs и profile write-ups остаются point-in-time evidence; новый
+  reviewed result требует отдельной date-stamped identity с source SHA,
+  host/runtime, exact command, sample counts и write-up provenance.
+  Пункт 6 остаётся открыт для остальных benchmark families.
+  **Legacy p95 comparator retirement sub-slice завершён 2026-08-30:**
+  `scripts/benchmark_compare.py` удалён после repo/history-аудита, который не
+  нашёл ни одного current workflow, docs или test consumer. Его единственный
+  baseline перенесён без изменения bytes из `docs/benchmarks/baseline.json` в
+  `docs/archive/performance/benchmark-compare-baseline-2026-04-12.json`; Git
+  blob равен `ba43d81d20015121a2c0748b3fba95ae52ded374`, SHA-256 —
+  `df7183fa7fc42b6741bd369ebf9ff7b835df5f77bf17d7dda63dfaa038bc4916`.
+  Текущий full-load gate остаётся у `scripts/check_performance.py` и
+  `docs/benchmark-baseline.json`. Пункт 6 остаётся открыт для остальных
+  benchmark families.
+  **NL-to-SQL evaluation runtime-artifact ownership sub-slice завершён
+  2026-08-30:** `scripts/run_nl_sql_eval.py` теперь по умолчанию пишет Markdown
+  в ignored `.artifacts/nl-sql-eval/current.md`, разрешает относительный output
+  только от project root и до запуска eval отклоняет весь `docs/perf/`.
+  Runtime report отделяет direct-translator результат на curated demo set от
+  served `/query`, production benchmark, SLA и acceptance; reviewed promotion
+  требует новую date-stamped identity с source, host/runtime, engine/model,
+  exact command/configuration и report hash provenance. Две существующие
+  записи 2026-07-01 не изменены; их SHA-256 равны
+  `c1de34750781650ed249c50feb66451cec031ab17e8837aebc66e67d644921a8` и
+  `472cb424b3866f675817fd8f3e1e7b1d887f98675926ff7472c2d97a2df23e8`.
+  Пункт 6 остаётся открыт для остальных benchmark/evaluation families.
+  **Locust p99 CI-smoke runtime-artifact ownership sub-slice завершён
+  2026-08-30:** `tests/load/run_load_test.py` по умолчанию пишет CSV prefix и
+  JSON в ignored `.artifacts/load/results` и `.artifacts/load/results.json`,
+  разрешает относительные пути от project root и до seed/Locust отклоняет
+  destinations внутри `docs/perf/` и `tests/load/`. `make load-test` вызывает
+  этот runner; gate больше не падает на legacy `tests/load/results.json`.
+  Это host/time-dependent CI-smoke runtime evidence, не byte-regenerated
+  tracked reference, production SLA, full-load benchmark или acceptance.
+  Пункт 6 остаётся открыт для остальных benchmark/evaluation families.
+  **Canonical full-load gate baseline protection sub-slice завершён
+  2026-08-30:** `scripts/run_benchmark.py` теперь до Locust/runtime setup
+  отклоняет как relative, так и absolute output в
+  `docs/benchmark-baseline.json`. Этот tracked JSON остаётся reviewed,
+  read-only gate input, откалиброванным decision record от 2026-05-24, а не
+  runtime output или byte-regenerated reference. Его SHA-256
+  `1af2c512e37e1e6b48a9e5827eaced62c7afe44238444f404a59a766e7b8abe0`
+  не изменён. Пункт 6 остаётся открыт для остальных benchmark/evaluation
+  families.
+  **ARM shared-runner benchmark runtime-artifact ownership sub-slice завершён
+  2026-08-31:** `scripts/run_benchmark.py` теперь до Locust/runtime setup
+  отклоняет relative и absolute output в четыре immutable ARM evidence path
+  2026-06-05. GitHub ARM workflow пишет только ignored
+  `.artifacts/benchmark/arm-*`; uploaded `.artifacts/` остаются runtime
+  artifacts, а tracked evidence создаётся отдельным review/promotion с новой
+  date-stamped identity, source, host/runtime, exact command/configuration,
+  sample/threshold information и artifact hashes. Четыре существующих ARM
+  files и их SHA-256 не изменены. Пункт 6 остаётся открыт для остальных
+  benchmark/evaluation families.
+  **DORA metrics runtime-artifact ownership sub-slice завершён 2026-08-31:**
+  `scripts/dora_metrics.py` по умолчанию пишет JSON в ignored
+  `.artifacts/dora/dora-report.json`, разрешает относительный `--output` от
+  project root и создаёт parent directory перед UTF-8/LF записью.
+  `.github/workflows/dora.yml` держит report/summary/comment working files
+  под `.artifacts/dora/`, сохраняет schedule, workflow_dispatch, pull_request,
+  upload name `dora-report` и pinned PR-comment, и не оставляет корневые
+  `dora-report.json` / `dora-summary.md` / `dora-comment.md`. Это
+  host/time/GitHub-history-dependent runtime evidence, не production
+  acceptance и не byte-regenerated reference; reviewed promotion требует новую
+  date-stamped identity с source SHA, window/branch, data sources, exact
+  command/configuration, host/runtime и artifact hash provenance. Пункт 6
+  остаётся открыт для остальных benchmark/evaluation families.
+  **Chaos report runtime-artifact ownership sub-slice завершён 2026-08-31:**
+  `scripts/chaos_report.py` по умолчанию читает ignored
+  `.artifacts/chaos/chaos-report.json`, разрешает относительные `--input`,
+  `--output` и `--markdown` от project root и создаёт parent directory перед
+  UTF-8/LF записью JSON/Markdown. `.github/workflows/chaos.yml` уже держит
+  working files под `.artifacts/chaos/` и в этом срезе не изменялся. Это
+  host/time/test-run-dependent runtime evidence, не production acceptance и
+  не byte-regenerated reference; reviewed promotion требует новую
+  date-stamped identity с source SHA, scenario/configuration, host/runtime,
+  exact command, result counts и artifact hashes. Пункт 6 остаётся открыт
+  для остальных benchmark/evaluation families.
+  **Mutation report runtime-artifact ownership sub-slice завершён
+  2026-08-31:** `scripts/mutation_report.py` по умолчанию пишет JSON и `.meta`
+  work files в ignored `.artifacts/mutation/`, разрешает относительный
+  `--results-dir` только от project root и до `run_mutmut()` отклоняет любой
+  destination внутри tracked `docs/`. Host-neutral `--skip-run` использует тот
+  же resolved directory и пишет UTF-8/LF `mutmut-cicd-stats.json` без вызова
+  mutmut. `.github/workflows/mutation.yml` загружает `.artifacts/mutation/`,
+  сохраняя schedule, workflow_dispatch, timeout 60 и upload name
+  `mutmut-results`. `scripts/quality_report.py` читает mutation metrics из
+  того же canonical directory. Это replaceable runtime artifacts, не reviewed
+  evidence и не production acceptance; reviewed promotion требует новую
+  date-stamped identity с provenance. Внутренний mutmut workspace
+  `workspace / "mutants"` не изменён. Пункт 6 остаётся открыт для остальных
+  benchmark/evaluation families.
+  **Trivy scan-policy runtime-artifact ownership sub-slice завершён
+  2026-08-31:** `.github/workflows/security.yml` и `Makefile` defaults пишут
+  JSON/SARIF/SBOM/policy-summary/IaC working files в ignored
+  `.artifacts/trivy/`, сохраняя stable basenames, two-image two-scope
+  fail-closed semantics, action pins, severity filters, SARIF categories,
+  waiver policy, build behavior и artifact names. Оба writing jobs создают
+  parent directory перед Trivy. `scripts/evaluate_trivy_policy.py` разрешает
+  относительные `--report`, `--waivers` и `--output` от project root, до
+  чтения inputs отклоняет любой destination внутри tracked `docs/` и создаёт
+  parent directory перед UTF-8/LF JSON. Это replaceable runtime/CI artifacts,
+  не reviewed evidence и не production acceptance; reviewed promotion требует
+  новую date-stamped identity с provenance. Пункт 6 остаётся открыт для
+  остальных distinct families.
+  **Scorecard SARIF runtime-artifact ownership sub-slice завершён
+  2026-08-31:** `.github/workflows/scorecard.yml` пишет единственный ignored
+  working file `.artifacts/scorecard/results.sarif`, создаёт
+  `.artifacts/scorecard/` перед `ossf/scorecard-action` и направляет
+  `results_file`, `actions/upload-artifact` `path` и
+  `github/codeql-action/upload-sarif` `sarif_file` на тот же путь. Это
+  replaceable per-run workflow working copy, не reviewed evidence,
+  penetration-test attestation или production acceptance; Code scanning
+  upload и public OpenSSF registry result остаются channel outputs. Reviewed
+  promotion требует новую date-stamped identity с source SHA, workflow run,
+  tool/action version, exact configuration и hash provenance. Пункт 6
+  остаётся открыт для остальных distinct families.
+  **Control-plane coverage XML runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/ci.yml` пишет ignored
+  `.artifacts/coverage/coverage-control-plane.xml`, создаёт
+  `.artifacts/coverage/` перед `coverage xml` и загружает тот же путь.
+  Artifact name `coverage-control-plane`, `if: always()`,
+  `if-no-files-found: warn`, dedicated inventories, include patterns, floors,
+  PostgreSQL service и repository-wide `coverage.xml` не изменены. Это
+  replaceable per-run CI artifact, не reviewed evidence, production
+  acceptance или способ поднять общий floor; reviewed promotion требует новую
+  date-stamped identity с source SHA, run identity, host/runtime, exact
+  command/include/floors и artifact hash provenance. Пункт 6 остаётся открыт
+  для остальных distinct families.
+  **Repository-wide coverage XML runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/ci.yml` `test-unit` пишет ignored
+  `.artifacts/coverage/coverage.xml`, создаёт `.artifacts/coverage/` перед
+  pytest-cov `--cov-report=xml:.artifacts/coverage/coverage.xml` и подаёт
+  тот же путь в `diff-cover` с `--fail-under=80`.
+  `scripts/validate_project_claims.py` сверяет этот canonical fragment.
+  Inventories `tests/unit/` + `tests/property/`, `--cov-fail-under=60`,
+  `--cov-branch`, отсутствие Codecov/upload и
+  `.artifacts/coverage/coverage-control-plane.xml` не изменены. Это
+  replaceable per-run CI working copy, не reviewed evidence или production
+  acceptance; reviewed promotion требует новую date-stamped identity с
+  source SHA, run identity, host/runtime, exact command/configuration/floor
+  и artifact hash provenance. Пункт 6 остаётся открыт для остальных
+  distinct families.
+  **Flink smoke failure-log runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/flink-smoke.yml` пишет ignored
+  `.artifacts/flink-smoke/flink-smoke-logs.txt`, создаёт
+  `.artifacts/flink-smoke/` перед редиректом Compose logs и загружает тот же
+  путь. Artifact name `flink-smoke-logs`, `if: failure()` на collection и
+  upload, `if-no-files-found: warn`, `--tail=800`, best-effort `|| true` и
+  `if: always()` teardown с `down -v` не изменены. Это replaceable per-run
+  diagnostic output, не reviewed evidence, production acceptance или proof
+  that submission succeeded; reviewed promotion требует новую date-stamped
+  identity с source SHA, workflow run, compose/runtime versions, exact
+  configuration/command, outcome и artifact hash provenance. Пункт 6
+  остаётся открыт для остальных distinct families.
+  **E2E failure-log runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/e2e.yml` пишет ignored
+  `.artifacts/e2e/e2e-logs.txt`, создаёт `.artifacts/e2e/` перед
+  редиректом Compose logs и загружает тот же путь. Artifact name
+  `e2e-logs`, `if: failure()` на collection и upload, отсутствие
+  `if-no-files-found`, `--tail=500`, fail-closed collection без `|| true`
+  и `if: always()` teardown с `down -v` не изменены. Это replaceable
+  per-run diagnostic output, не reviewed evidence, production acceptance
+  или proof that the E2E suite or ClickHouse serving verification
+  succeeded; reviewed promotion требует новую date-stamped identity с
+  source SHA, workflow run, compose/runtime versions, exact
+  configuration/command, outcome и artifact hash provenance. Пункт 6
+  остаётся открыт для остальных distinct families.
+  **Backup/restore regression runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/backup.yml` пишет ignored
+  `.artifacts/backup-regression/` working archive, resolves
+  `.artifacts/backup-regression/*.tar.gz` and uploads the resolved path.
+  Artifact name `agentflow-backup-restore-regression-fixture`, 7-day
+  retention, verify, restore target и отсутствие `if-no-files-found` не
+  изменены. Это replaceable per-run diagnostic/regression output, не
+  reviewed evidence, a real environment backup, DR acceptance или
+  production acceptance; reviewed promotion требует новую date-stamped
+  identity с source SHA, workflow run, Python/DuckDB/runtime versions,
+  exact command/configuration, outcome и archive hash provenance. Пункт 6
+  остаётся открыт для остальных distinct families.
+  **Security dependency-scan runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/security.yml` держит working files
+  dependency-сканеров под ignored `.artifacts/security/`: Bandit пишет
+  `bandit-current.json` и diff-ит его против tracked `.bandit-baseline.json`
+  (единственный reviewed input); Safety resolves requirement buckets,
+  resolver venvs и vulnerable-pin regression probe под
+  `.artifacts/security/safety/`; pip-audit экспортирует full locked profile
+  set в `.artifacts/security/pip-audit/requirements-all-profiles.txt`.
+  Production pip-audit шаг по-прежнему читает tracked
+  `requirements-docker.lock`; tool pins (`safety<3`, `pip-audit>=2.7,<3`,
+  `uv==0.8.23`), `--ignore SFTY-20260217-93940`, bucket set и job timeouts
+  не изменены. README и CONTRIBUTING local Bandit команды переведены с
+  `.tmp/` на тот же путь; `.tmp-security/` остаётся в `.gitignore` как
+  legacy-запись. Это replaceable per-run scanner working files, не reviewed
+  evidence, dependency-compatibility attestation или production acceptance;
+  reviewed promotion требует новую date-stamped identity с source SHA,
+  workflow run, scanner versions, exact command/configuration, outcome и
+  hash provenance. Пункт 6 остаётся открыт для остальных distinct families.
+  **Terraform plan-file runtime-artifact ownership sub-slice завершён
+  2026-09-01:** `.github/workflows/terraform-apply.yml` (`plan`/`apply` jobs
+  остаются `if: false`) пишет binary plan в ignored
+  `.artifacts/terraform/tfplan` через `$GITHUB_WORKSPACE` (оба шага работают из
+  `infrastructure/terraform/`), создаёт каталог перед `terraform plan`,
+  загружает тот же путь как `terraform-plan-<environment>`, а `apply`
+  скачивает его в `.artifacts/terraform` и применяет тот же файл. Preflight
+  job, `if: false` на plan/apply, state-key init, tfvars resolution, action
+  pins, artifact name и timeouts не изменены. Plan-файл больше не лежит рядом
+  с конфигурацией (`infrastructure/terraform/tfplan` не был ignored и содержит
+  resolved variable values). Это replaceable per-run working copy, не reviewed
+  evidence, OIDC/apply (H4) evidence или production acceptance; reviewed
+  promotion требует новую date-stamped identity с source SHA, workflow run,
+  Terraform/action versions, tfvars identity, exact command, outcome и hash
+  provenance. Docs: `docs/README.md` ownership row, `CONTRIBUTING.md`,
+  `docs/operations/aws-oidc-setup.md`, `docs/glossary.md`; контракт закреплён в
+  `tests/unit/test_terraform_apply_workflow.py`.
+  **Runtime-artifact ownership closure sweep завершён 2026-09-01:** после 29
+  sub-slices пункта 6 выполнен sweep по всем `actions/upload-artifact`,
+  `actions/download-artifact` и `actions/upload-pages-artifact` шагам
+  `.github/workflows/*.yml` (22 шага в 18 workflow, включая multi-line `path:`
+  блоки с `!`-исключениями) и по argparse output defaults `scripts/*.py`
+  (`benchmark_freshness*.py`, `benchmark_scale_own_data.py`,
+  `benchmark_throughput_realpath.py`, `quality_report.py`, `run_benchmark.py`).
+  Все runtime outputs лежат под ignored `.artifacts/`; вне него остаются
+  только намеренные residuals: tracked landing source `site/` в `pages.yml`
+  (вход Pages-деплоя, не generated artifact), динамический
+  `${{ steps.backup.outputs.archive_path }}` в `backup.yml` (резолвится в
+  новейший архив под `.artifacts/backup-regression/`),
+  `/tmp/connect-secrets/neon.properties` в `cdc-production-capture.yml`
+  (секреты намеренно вне workspace), tracked generated
+  `requirements-docker.lock`, который `ci.yml` регенерирует и проверяет через
+  `git diff --exit-code`, и `--output json` в `staging-deploy.yml` (формат
+  вывода, не путь). Regeneration checks воспроизводят tracked outputs на
+  `3800b5b`: `python scripts/generate_contracts.py --check`,
+  `python scripts/export_openapi.py --check`,
+  `python scripts/export_sdk_capabilities.py --check` и
+  `python scripts/export_quality_reference.py --check` завершились с rc=0.
+  Ratchet закреплён в `tests/unit/test_runtime_artifact_ownership.py`: каждый
+  artifact `path` обязан быть объявлен и лежать под `.artifacts/`, кроме двух
+  задокументированных исключений (`site` и backup fixture, чья резолюция
+  пинится отдельно); там же пинятся чекбокс пункта 6 и этот абзац.
+  Дальнейшие CI hygiene ratchets относятся к пункту 8. Пункт 6 закрыт.
+- [x] **7. Унифицировать стиль и язык.** Для current docs закрепить короткое
+  назначение, audience, prerequisites, verified commands, failure boundary и
+  `Updated` только там, где дата действительно важна; исправить смешение
+  marketing/status/runbook текста. Historical wording не модернизировать. →
+  Проверка: heading/metadata/style audit без replacement characters и broken
+  anchors.
+  **Anchor/replacement-character ratchet завершён 2026-09-01:**
+  `scripts/check_docs_anchors.py` проверяет два механических факта: ни один
+  tracked `*.md` не содержит U+FFFD и каждый декодируется как strict UTF-8;
+  каждый anchor-link со living-страницы (`docs/**/*.md` вне
+  `docs/archive`, `docs/decisions`, `docs/dv2-multi-branch`, `docs/evidence`,
+  `docs/migration`, `docs/perf`; хабы — living sources) резолвится в heading
+  id целевой tracked Markdown-страницы. Slug — `markdown.extensions.toc`
+  (`slugify`/`unique`), тот же алгоритм, что MkDocs `toc`. Покрыто 25
+  anchor links, 227 Markdown files, 725 living headings. Контракт закреплён в
+  `tests/unit/test_docs_anchors.py`. Пункт 7 остаётся открыт для
+  content-срезов (purpose/audience/prerequisites/verified commands/failure
+  boundary/`Updated` policy).
+  **Updated-policy ratchet завершён 2026-09-01:** критерий — дата является
+  частью утверждения, которому читатель обязан верить: status snapshot, audit
+  result, rehearsal/resume boundary, запись с superseded notice. По нему 7
+  living-страниц dated (`docs/STATUS.md`, `docs/security-audit.md`,
+  `docs/operations/api-duckdb-non-target-scratch-rehearsal-runbook.md`,
+  `docs/operations/api-duckdb-persistence-recovery-design.md`,
+  `docs/operations/ci-soak-next-session-runbook.md`,
+  `docs/operations/chaos-runbook.md`,
+  `docs/operations/ci-soak-compose-foundation.md`) и 8 — undated: оба хаба
+  (`docs/README.md`, `docs/operations/README.md`) и шесть `docs/runbooks/*.md`,
+  чьи майские штампы старше большей части дерева. У undated-страниц штампа нет
+  вовсе — дата это история Git. Канонический вид для dated — одна строка
+  `**Updated:** YYYY-MM-DD` (опционально короткая заметка) после H1 и до первого
+  `##`; ни одно значение даты в этом срезе не менялось, переписан только вид
+  штампа. Конвенции записаны один раз в разделе `## Documentation Conventions`
+  файла `docs/engineering-standards.md`: определение living page, порядок
+  открытия страницы (H1 → назначение → audience/prerequisites → verified
+  commands → failure boundary) и сама `Updated` policy. Fail-closed проверка —
+  `scripts/check_docs_updated_stamps.py` (7 dated pages, 61 living pages),
+  контракт закреплён в `tests/unit/test_docs_updated_stamps.py`. Пункт 7
+  остаётся открыт для content-срезов по page header, purpose, audience,
+  prerequisites и failure boundary.
+  **Page openings (root + runbooks) завершены 2026-09-01:** правило из
+  раздела `## Documentation Conventions` в `docs/engineering-standards.md` —
+  страница открывается H1 и одним абзацем назначения; operator и runbook
+  страницы несут `**Audience:**` и `**Prerequisites:**`. Девять страниц:
+  `docs/product.md`, `docs/clickhouse-migration.md`,
+  `docs/engineering-standards.md`, `docs/runbook.md` и пять
+  `docs/runbooks/*.md` (`api-5xx-spike`, `auth-401-spike`, `cdc-lag`,
+  `load-test-regression`, `release-rollback`). На всех — абзац назначения;
+  на шести operator-страницах (`docs/runbook.md` и пять on-call) —
+  Audience/Prerequisites. `docs/archive/README.md` дописан предложениями про
+  `scripts/check_docs_anchors.py` и `scripts/check_docs_updated_stamps.py`.
+  Пункт 7 остаётся открыт: пять `docs/operations/` страниц и fail-closed
+  opening checker — следующие срезы.
+  **Page openings (operations) завершены 2026-09-01:** правило из
+  раздела `## Documentation Conventions` в `docs/engineering-standards.md` —
+  страница открывается H1 и одним абзацем назначения; operator и runbook
+  страницы несут `**Audience:**` и `**Prerequisites:**`. Пять страниц:
+  `docs/operations/aws-oidc-setup.md`,
+  `docs/operations/cdc-production-onboarding.md`,
+  `docs/operations/disaster-recovery.md`,
+  `docs/operations/helm-deployment.md`,
+  `docs/operations/third-party-pen-test-intake.md`. На всех — абзац
+  назначения и Audience/Prerequisites. По inspection каждая living-страница
+  теперь открывается по конвенции. Пункт 7 остаётся открыт: fail-closed
+  opening checker (scripts/check_docs_page_openings.py, следующий срез)
+  закроет пункт 7.
+  **Page-opening ratchet завершён 2026-09-01:**
+  `scripts/check_docs_page_openings.py` fail-closed проверяет, что каждая
+  living-страница открывается ровно одним H1 вне fenced-блоков и абзацем
+  назначения до первого `## `; operator-страницы (`docs/operations/`,
+  `docs/runbooks/`, плюс `docs/runbook.md`, без хабов `README.md`) вне
+  `PENDING_OPERATOR_PAGES` несут одну строку `**Audience:**` и одну
+  `**Prerequisites:**` в этом порядке. Покрыто 61 living pages, 25
+  operator pages, 14 pending. Четырнадцать страниц последнего
+  content-среза: `docs/operations/api-duckdb-non-target-scratch-rehearsal-runbook.md`,
+  `docs/operations/api-duckdb-persistence-recovery-design.md`,
+  `docs/operations/chaos-runbook.md`,
+  `docs/operations/ci-soak-compose-foundation.md`,
+  `docs/operations/ci-soak-next-session-runbook.md`,
+  `docs/operations/codecov-setup.md`,
+  `docs/operations/external-dependency-recovery-gate.md`,
+  `docs/operations/external-pentest-evidence-blocker-2026-08-01.md`,
+  `docs/operations/flink-operators.md`,
+  `docs/operations/npm-environment-approval-2026-08-03.md`,
+  `docs/operations/npm-environment-approval-blocker-2026-08-01.md`,
+  `docs/operations/openssf-security-posture.md`,
+  `docs/operations/publication-checklist.md`,
+  `docs/operations/testing-control-plane.md`.
+  Allowlist только сжимается; пункт 7 закрывается, когда
+  `PENDING_OPERATOR_PAGES` пуст. Контракт закреплён в
+  `tests/unit/test_docs_page_openings.py`. Пункт 7 остаётся открыт.
+  **Пункт 7 закрыт 2026-09-01:** на четырнадцати pending operator-страницах
+  появились строки `**Audience:**` / `**Prerequisites:**` (на
+  `docs/operations/chaos-runbook.md` также абзац назначения),
+  `PENDING_OPERATOR_PAGES` пуст, checker печатает
+  `docs page openings: OK (61 living pages, 25 operator pages, 0 pending)`.
+  Пункт 7 намеренно не трогал язык `docs/glossary.md` и
+  `docs/PROJECT_CLOSURE.md` и не модернизировал historical wording.
+- [x] **8. Автоматизировать гигиену.** Расширить CI проверками canonical-owner,
+  root-placement policy, archive provenance, orphan links и запретом current
+  claims в historical pages; сохранить существующие claims/link/MkDocs gates.
+  → Проверка: positive/negative fixtures для каждого ratchet.
+  **Archive-provenance ratchet завершён 2026-09-01:**
+  `scripts/check_archive_provenance.py` проверяет пять фактов provenance
+  (original path, archive date с ISO `YYYY-MM-DD`, reason, current
+  replacement/source of truth, content type) в первых 40 строках каждого
+  tracked `docs/archive/**/*.md`; индексные `README.md` освобождены по
+  basename, не по allowlist путей; факт replacement засчитывается и когда
+  `Original path` по-прежнему указывает на tracked living-файл (archived
+  dated snapshot mutable perf-записи). Покрыто 17 archived documents (21 tracked
+  Markdown минус 4 README). Контракт закреплён в
+  `tests/unit/test_archive_provenance.py`. Пункт 8 остаётся открыт для
+  canonical-owner, orphan-link и historical-claims ratchets.
+  **Historical-claims ratchet завершён 2026-09-01:**
+  `scripts/check_historical_claims.py` запрещает living-status лексику
+  (`updated:`, `production accepted`, `production-accepted`,
+  `closure candidate`, `release line`) в tracked point-in-time страницах пяти
+  директорий — `docs/archive`, `docs/decisions`, `docs/evidence`,
+  `docs/migration`, `docs/perf`; освобождены индексные `README.md` (по
+  basename, не по allowlist путей) и `docs/evidence/INDEX.md`. Владельцы этой
+  лексики — `docs/STATUS.md`, `docs/PROJECT_CLOSURE.md`, `README.md` и
+  `config/project_claims.toml`; матчинг — case-insensitive substring по строке,
+  rc=1 и на пустом наборе страниц. Покрыто 95 historical pages (101 tracked
+  Markdown минус 5 индексных `README.md` и `docs/evidence/INDEX.md`). Контракт
+  закреплён в `tests/unit/test_historical_claims.py`. Пункт 8 остаётся открыт
+  для canonical-owner и orphan-link ratchets.
+  **Orphan-link ratchet завершён 2026-09-01:**
+  `scripts/check_docs_orphans.py` проверяет living-страницы (`docs/**/*.md` вне
+  `docs/archive`, `docs/decisions`, `docs/dv2-multi-branch`, `docs/evidence`,
+  `docs/migration`, `docs/perf`; хабы `docs/README.md` и `docs/index.md` не
+  требуют inbound) и падает, если у страницы нет inbound-ссылки из tracked
+  Markdown или `mkdocs.yml` nav. Семь сирот возвращены ссылками из корпус-карты
+  `docs/README.md`: `integrations.md`, `engineering-standards.md`,
+  `glossary.md`, `contracts/how-to-add-entity.md`, `clickhouse-migration.md`,
+  `plans/clickhouse-cutover-plan.md`,
+  `plans/2026-04-debezium-kafka-connect-deployment-plan.md`. Покрыто 59 living
+  pages. Контракт закреплён в `tests/unit/test_docs_orphans.py`. Пункт 8
+  остаётся открыт для canonical-owner ratchet.
+  **Generated-owner ratchet завершён 2026-09-01:**
+  `scripts/check_generated_reference_owners.py` пиннит таблицу
+  `## Generated-reference ownership` в `docs/README.md`
+  (`Family | Tracked outputs | Write | Drift check | Lifecycle`) к дереву и
+  падает в пяти случаях: таблица отсутствует или сломана; backticked path из
+  любой из пяти колонок не tracked; `.artifacts/` runtime-путь оказался
+  tracked; строка объявляет `--check` drift check, но не называет ни одного
+  tracked output; tracked `scripts/**/*.py` объявляет `--check` через
+  `add_argument(` и не упомянут ни в одной строке. Регексп якорится на
+  `add_argument(`, поэтому `scripts/golden_soak/architecture_gate.py` со
+  строкой `"--check"` внутри ruff/git argv не считается генератором.
+  Ратчет вскрыл один реальный разрыв — `scripts/generate_contracts.py` не
+  имел строки, — и он закрыт новой строкой `Data contracts` (восемь tracked
+  `config/contracts/*.yaml`, write/drift-команды, `.github/workflows/contract.yml`
+  и `tests/unit/test_contracts_in_sync.py`). Покрыто 23 families, 4 `--check`
+  генератора и 86 названных путей (53 non-runtime tracked + 33 `.artifacts/`
+  runtime). Контракт закреплён в
+  `tests/unit/test_generated_reference_owners.py`. Пункт 8 закрыт: root
+  placement, archive provenance, historical claims, orphan pages и generated
+  owners — все пять CI ratchets с positive/negative fixtures.
+
+## Текущая project truth, которую нельзя размыть
+
+- Published release line — `v2.0.0`; локально подготовлена unpublished `2.1.0`.
+- Production status — `candidate`, не production accepted.
+- F-19 staging digest promotion и offline promotion verifier прошли; production
+  workflow/deploy заблокирован отсутствующим owner target packet и не
+  авторизован.
+- Fresh 4h soak + rollback-after-traffic остаётся `BLOCKED_HOST_CAPACITY`;
+  внешний pentest — `BLOCKED_NO_ENGAGEMENT_OR_EVIDENCE`.
+- OpsLab scaffold существует как отдельный эксперимент, но дальнейшая OpsLab
+  реализация отложена и не подменяет roadmap AgentFlow Runtime.
+
+## Готово, когда
+
+- Новый читатель находит quickstart, architecture, API, operations и current
+  status не более чем за два перехода от README или docs hub.
+- В корне `docs/` остаются только stable entrypoints/current references;
+  остальные файлы тематически размещены или архивированы с provenance.
+- Ни один документ не удалён, все старые пути либо сохранены, либо имеют
+  обновлённые inbound links и архивную запись.
+- `check_docs_links.py`, claims validation, focused docs tests и
+  `mkdocs build --strict` проходят после каждого batch.

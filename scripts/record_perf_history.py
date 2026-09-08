@@ -1,9 +1,10 @@
-"""Append a benchmark run to .github/perf-history.json.
+"""Append a benchmark run to ignored local performance history.
 
 Consumes the aggregate block of `results.json` produced by
 `tests/load/run_load_test.py` (or `scripts/run_benchmark.py`) and
 records one trend entry per invocation. History is kept append-only
-with a rolling cap so the file stays small.
+with a rolling cap so the file stays small. The runtime history lives
+under `.artifacts/perf-history/`; it is not persisted across CI runners.
 """
 
 from __future__ import annotations
@@ -11,12 +12,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_HISTORY_PATH = PROJECT_ROOT / ".github" / "perf-history.json"
+DEFAULT_HISTORY_PATH = PROJECT_ROOT / ".artifacts" / "perf-history" / "history.json"
 DEFAULT_RESULTS_PATH = PROJECT_ROOT / ".artifacts" / "load" / "results.json"
+LEGACY_TRACKED_HISTORY_PATH = PROJECT_ROOT / ".github" / "perf-history.json"
+ARCHIVED_HISTORY_PATH = (
+    PROJECT_ROOT / "docs" / "archive" / "performance" / "perf-history-2026-04-27.json"
+)
+PROTECTED_HISTORY_PATHS = (LEGACY_TRACKED_HISTORY_PATH, ARCHIVED_HISTORY_PATH)
 DEFAULT_MAX_ENTRIES = 500
 
 
@@ -32,7 +39,7 @@ def parse_args() -> argparse.Namespace:
         "--history",
         type=Path,
         default=DEFAULT_HISTORY_PATH,
-        help="Path to the rolling perf history file.",
+        help="Path to the rolling runtime history (defaults under .artifacts/perf-history/).",
     )
     parser.add_argument(
         "--commit-sha",
@@ -51,6 +58,18 @@ def parse_args() -> argparse.Namespace:
         help="Maximum number of entries retained in the history file.",
     )
     return parser.parse_args()
+
+
+def resolve_history_path(history_path: str | Path) -> Path:
+    candidate = Path(history_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    protected_paths = {path.resolve() for path in PROTECTED_HISTORY_PATHS}
+    if resolved.resolve() in protected_paths:
+        raise ValueError(
+            "Tracked performance history cannot be overwritten; write runtime history "
+            "under .artifacts/perf-history/ instead."
+        )
+    return resolved
 
 
 def load_history(path: Path) -> list[dict[str, object]]:
@@ -81,16 +100,23 @@ def build_entry(results_path: Path, commit_sha: str, branch: str) -> dict[str, o
 
 def main() -> int:
     args = parse_args()
-    history = load_history(args.history)
+    try:
+        history_path = resolve_history_path(args.history)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    history = load_history(history_path)
     entry = build_entry(args.results, args.commit_sha, args.branch)
     history.append(entry)
     if args.max_entries > 0 and len(history) > args.max_entries:
         history = history[-args.max_entries :]
 
-    args.history.parent.mkdir(parents=True, exist_ok=True)
-    args.history.write_text(
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    history_path.write_text(
         json.dumps(history, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(f"Recorded benchmark entry for {entry['commit_sha']} (history size: {len(history)})")
     return 0

@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DOCS_ROOT = ROOT / "docs"
+DEFAULT_RESULTS_DIR = ROOT / ".artifacts" / "mutation"
+SUMMARY_FILENAME = "mutmut-cicd-stats.json"
 MUTMUT_SECTION_RE = re.compile(r"(?ms)^\[tool\.mutmut\]\n.*?(?=^\[|\Z)")
 WORKSPACE_LINKS = ("src", "tests", "config", "sdk", "scripts")
 
@@ -164,8 +167,26 @@ class ModuleResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-run", action="store_true")
-    parser.add_argument("--results-dir", default="mutants")
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=DEFAULT_RESULTS_DIR,
+        help="Runtime mutation JSON directory (default: .artifacts/mutation/).",
+    )
     return parser.parse_args()
+
+
+def resolve_results_dir(results_dir: str | Path) -> Path:
+    candidate = Path(results_dir)
+    resolved = candidate if candidate.is_absolute() else ROOT / candidate
+    try:
+        resolved.resolve().relative_to(DOCS_ROOT.resolve())
+    except ValueError:
+        return resolved
+    raise ValueError(
+        "Mutation JSON and work files are replaceable runtime artifacts; write them "
+        "under .artifacts/mutation/ instead of docs/."
+    )
 
 
 def read_json(path: Path) -> dict:
@@ -174,7 +195,11 @@ def read_json(path: Path) -> dict:
 
 def write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def status_from_exit_code(exit_code: int | None) -> str:
@@ -263,7 +288,7 @@ def clear_previous_results(results_dir: Path) -> None:
         meta_path = meta_path_for(results_dir, module_path)
         if meta_path.exists():
             meta_path.unlink()
-    summary_path = results_dir / "mutmut-cicd-stats.json"
+    summary_path = results_dir / SUMMARY_FILENAME
     if summary_path.exists():
         summary_path.unlink()
 
@@ -366,7 +391,7 @@ def write_overall_summary(results_dir: Path, results: list[ModuleResult]) -> dic
         ),
         "segfault": sum(result.status_counts["segfault"] for result in results),
     }
-    write_json(results_dir / "mutmut-cicd-stats.json", summary)
+    write_json(results_dir / SUMMARY_FILENAME, summary)
     return summary
 
 
@@ -436,7 +461,11 @@ def collect_violations(results: list[ModuleResult], exit_codes: dict[Path, int])
 
 def main() -> int:
     args = parse_args()
-    results_dir = Path(args.results_dir)
+    try:
+        results_dir = resolve_results_dir(args.results_dir)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     exit_codes: dict[Path, int] = {}
     if not args.skip_run:
         exit_codes = run_mutmut(results_dir)

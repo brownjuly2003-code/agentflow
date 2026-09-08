@@ -6,6 +6,9 @@ site_dir: .tmp/mkdocs-site
 
 theme:
   name: material
+  # overrides/main.html carries the Mermaid <script> so it can declare
+  # Subresource Integrity; `extra_javascript` cannot (audit FB-16).
+  custom_dir: overrides
   features:
     - content.code.copy
     - navigation.sections
@@ -33,9 +36,6 @@ exclude_docs: |
   !observability.md
   !troubleshooting.md
 
-extra_javascript:
-  - https://unpkg.com/mermaid@10.9.3/dist/mermaid.min.js
-
 markdown_extensions:
   - admonition
   - attr_list
@@ -61,6 +61,8 @@ validation:
 
 nav:
   - Overview: index.md
+  - Documentation map: https://github.com/brownjuly2003-code/agentflow/blob/main/docs/README.md
+  - Engineering status: https://github.com/brownjuly2003-code/agentflow/blob/main/docs/STATUS.md
   - Quickstart: quickstart.md
   - Architecture: architecture/index.md
   - Concepts: concepts.md

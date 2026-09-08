@@ -1,6 +1,14 @@
 # Auth 401/403 Spike
 
-**Last updated:** 2026-05-26
+This page owns detection, triage, mitigation, resolution, and the postmortem
+trigger for a sudden 401/403 wave or fail-closed 503 on `/v1/*` while
+`/v1/health` may still return 200. Use it when known-good keys start failing
+or Grafana auth-failure counters spike. It does not define on-call scope or
+the severity ladder; those live in [README.md](README.md).
+
+**Audience:** Platform / API on-call, looping in Security on a key-rotation or secret-mount trigger
+
+**Prerequisites:** kubectl access to the namespace, Grafana Auth panel, and secret-store access for the API keys Secret
 
 ## Symptom
 
@@ -11,8 +19,9 @@ One of:
 - A wave of 403 `PermissionDeniedError` from clients that worked an hour ago.
 - `/v1/health` returns 200 but every other `/v1/*` route returns 503 with the
   body `"API key configuration is missing or empty"`.
-- Synthetic auth probe (`tests/e2e/test_auth_smoke`) starts failing in
-  scheduled CI.
+- Synthetic auth probe
+  (`tests/e2e/test_smoke.py::test_auth_rejects_request_without_api_key`) starts
+  failing in scheduled CI.
 
 ## Severity
 
@@ -27,14 +36,30 @@ rotation or secret-mount change rather than a deploy.
 ## Detection
 
 1. Grafana → AgentFlow / Auth panel:
-   - `agentflow_auth_failures_total` by `reason` label
-     (`missing_key`, `invalid_key`, `disabled_key`, `rate_limited`, `key_file_empty`)
+   - `agentflow_auth_failures_total` by `reason` label. The tenant surface
+     emits `missing_key`, `invalid_key`, `rate_limited` and `key_file_empty`;
+     the admin surface emits `admin_invalid`, `admin_unconfigured` and its own
+     `rate_limited`, counted in a separate throttle window since audit FB-06 so
+     that a scan against `/v1` cannot lock an operator out of `/v1/admin`.
    - 401/403 rate by route
 2. Logs:
    ```
    {app="agentflow-api"} |= "AuthenticationError" or "PermissionDeniedError"
    {app="agentflow-api"} |= "auth" |= "fail-closed"
    ```
+   Every refusal also emits a structured line — `api_auth_failed` on `/v1/*`,
+   `admin_auth_failed` on `/v1/admin/*` — carrying `reason`, `client_ip`,
+   `path` and the redacted request headers. Neither line ever carries key
+   material; on the admin line `X-Admin-Key` is dropped regardless of the
+   `sensitive_headers_to_redact` policy (audit FB-10):
+   ```
+   {app="agentflow-api"} | json | event="admin_auth_failed"
+   ```
+   Read the `reason`: a burst of `admin_invalid` from one address is someone
+   guessing the credential that issues every tenant key, and
+   `admin_unconfigured` means the pod started with no `AGENTFLOW_ADMIN_KEY` at
+   all — see [Admin key revoked or rotated incorrectly](#admin-key-revoked-or-rotated-incorrectly)
+   below.
 3. Verify the key file is actually present and non-empty inside a running pod:
    ```
    kubectl -n <ns> exec deployment/agentflow-api -- \
@@ -96,13 +121,20 @@ kubectl -n <staging-ns> set env deployment/agentflow-api AGENTFLOW_AUTH_DISABLED
 ```
 
 Set a 1-hour reminder to remove it. Production environments must reject this
-flag at deploy time — `helm/agentflow/values-prod.yaml` should not contain
-`AGENTFLOW_AUTH_DISABLED` at all.
+flag at deploy time — the production values file (no prod values file is
+tracked in this repo; `k8s/staging/values-staging.yaml` is the staging
+equivalent) should not contain `AGENTFLOW_AUTH_DISABLED` at all.
 
 ### Admin key revoked or rotated incorrectly
 
 If admin operations themselves are returning 503, the admin key secret was
-rotated without the deployment picking it up:
+rotated without the deployment picking it up. `admin_auth_failed` with
+`reason="admin_unconfigured"` is the confirming signal: the pod resolved no
+`AGENTFLOW_ADMIN_KEY`, so no value the caller sends can succeed. For the
+planned procedure — including why a rolling restart makes some admin calls
+fail while it runs — see
+[admin key rotation](../operations/admin-key-rotation.md).
+
 
 ```
 kubectl -n <ns> rollout restart deployment/agentflow-api
@@ -170,6 +202,16 @@ Operational notes:
   every stored `key_lookup` — affected keys silently fall back to the O(n)
   scan (still authenticate, slower cold). Re-issue or re-rotate keys after a
   pepper change to restore O(1).
+- **The default pepper is public** (audit FB-07). `agentflow-key-lookup-v1`
+  is a constant in `src/agentflow_runtime/serving/api/security.py`, so a
+  deployment that never set the variable stores digests anyone can recompute:
+  hold a leaked `api_keys.yaml`, HMAC a guessed key with the published pepper,
+  and a match confirms the guess without paying for a single argon2id verify.
+  `AGENTFLOW_PROFILE=production` therefore refuses to boot with the variable
+  unset or equal to that constant, and the Helm production contract refuses the
+  render before the pod is ever created
+  ([helm-deployment.md](../operations/helm-deployment.md#pepper-material)).
+  A dev or demo boot keeps the default so a fresh checkout still starts.
 - The historical bcrypt numbers (N=5 hit-last ≈ 1.9 s, N=20 ≈ 8.1 s at
   `bcrypt_rounds=12`) remain in
   [`docs/perf/auth-bench-2026-05-26.md`](../perf/auth-bench-2026-05-26.md)

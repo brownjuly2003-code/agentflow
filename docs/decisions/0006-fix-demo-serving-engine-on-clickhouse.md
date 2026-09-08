@@ -7,7 +7,7 @@ Accepted - 2026-07-01
 ## Context
 
 The serving layer is pluggable behind the `ServingBackend` ABC
-(`src/serving/backends/__init__.py`), with two real implementations: DuckDB
+(`src/agentflow_runtime/serving/backends/__init__.py`), with two real implementations: DuckDB
 (`duckdb_backend.py`) and ClickHouse (`clickhouse_backend.py`). The engine is
 selected at runtime by `SERVING_BACKEND` env → `config/serving.yaml: backend` →
 default `"duckdb"`.
@@ -141,7 +141,7 @@ Concretely:
 
 ## Follow-up
 
-- Execute `docs/clickhouse-cutover-plan.md` (config/compose/helm cutover, PII
+- Execute `docs/plans/clickhouse-cutover-plan.md` (config/compose/helm cutover, PII
   redesign, verification). *Status 2026-07-02: Phases 1, 1a and 2 executed;
   Phase 3 (K8s scaling, gated on ADR 0009) and Phase 5 doc sweep remain.*
 - See ADR 0007 for how this unblocks Kubernetes horizontal scaling.

@@ -1,9 +1,14 @@
 # Contributing
 
+Complete the [quickstart](quickstart.md) for the first executable local path.
+This guide owns change verification, specialist test selection, and local
+documentation tooling.
+
 ## Recommended Environments
 
-- Local demo: `make demo` for the fastest feedback loop on DuckDB + FastAPI.
-- Prod-like stack: `docker compose -f docker-compose.prod.yml up -d` when you need Redis, Jaeger, Prometheus, or Grafana.
+- Local demo: use the [quickstart](quickstart.md) for the fastest DuckDB +
+  FastAPI feedback loop.
+- Production-shaped local stack: `make stack-prod-shaped-local` when you need Redis, Jaeger, Prometheus, Alertmanager, or Grafana. `make stack-prod-shaped-local-smoke` proves an authenticated request works.
 - DevContainer: use `.devcontainer/` when you need one workspace for SDK work, chaos tests, and kind staging.
 
 ## Setup
@@ -26,6 +31,21 @@ After setup, install the TypeScript SDK dependencies if you touch `sdk-ts/`:
 cd sdk-ts && npm install && cd ..
 ```
 
+Before a pre-release or pre-audit run, verify that the active Python
+interpreter still matches the frozen dependency resolution and the metadata of
+local editable packages:
+
+```bash
+python scripts/check_env_matches_lock.py
+```
+
+The preflight is offline and read-only. It prints the exact lock or editable
+drift plus repair commands and exits non-zero when the environment is stale.
+A successful `pip check` from a stale shared virtual environment is not
+release evidence: `pip check` proves only that the packages currently present
+are internally compatible, not that they are the versions in `uv.lock` or the
+current workspace metadata.
+
 ## Daily Workflow
 
 1. Run the smallest relevant test slice first.
@@ -39,10 +59,17 @@ cd sdk-ts && npm install && cd ..
 |------|---------|-------|
 | Lint | `make lint` | Runs Ruff and mypy |
 | Unit | `pytest tests/unit/ -v --tb=short` | Fastest signal for Python-only changes |
-| CI unit + property coverage | `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml --cov-report=term-missing --cov-fail-under=60` | Full `src/` + `sdk/` baseline floor in CI; changed-line coverage stays at 80% via Codecov patch status |
+| CI unit + property coverage | `python -m pytest tests/unit/ tests/property/ -v --tb=short --cov=src/agentflow_runtime --cov=sdk --cov-report=xml:.artifacts/coverage/coverage.xml --cov-report=term-missing --cov-fail-under=60` | Full `src/` + `sdk/` baseline floor in CI; local `diff-cover` enforces 80% on changed lines against ignored `.artifacts/coverage/coverage.xml` |
 | Integration | `pytest tests/integration/ -v --tb=short -m integration` | Covers routers, persistence, and service integration without the full prod stack |
 | Full Python suite | `make test` | Runs `pytest tests/ -v --tb=short --ignore=tests/load` |
 | TypeScript SDK | `cd sdk-ts && npm test` | Runs the Vitest client checks |
+
+CI creates `.artifacts/coverage/` and writes the repository-wide XML to
+`.artifacts/coverage/coverage.xml` before `diff-cover` reads that same path.
+The file is a replaceable per-run CI working copy, not reviewed evidence or
+production acceptance. Reviewed promotion requires a new date-stamped identity
+with source SHA, run identity, host/runtime, exact command/configuration/floor,
+and artifact hash provenance.
 
 ## E2E Tests
 
@@ -64,6 +91,14 @@ export AGENTFLOW_E2E_BASE_URL=http://127.0.0.1:8000
 pytest tests/e2e/ -v --tb=short --timeout=60
 ```
 
+`.github/workflows/e2e.yml` writes failure logs to ignored
+`.artifacts/e2e/e2e-logs.txt` and uploads that path as artifact `e2e-logs`.
+The log is replaceable per-run diagnostic output, not reviewed evidence,
+production acceptance, or proof that the E2E suite or ClickHouse serving
+verification succeeded. Reviewed promotion requires a new date-stamped
+identity with source SHA, workflow run, Compose/runtime versions, exact
+configuration/command, outcome, and artifact hash provenance.
+
 ## Chaos Tests
 
 Use the chaos suite when a change touches Redis, Kafka behavior, outbox replay, rate limiting, dead-letter replay, or graceful degradation.
@@ -79,14 +114,46 @@ Notes:
 
 ## Staging Rehearsal
 
-For Helm, kind, or deployment changes, validate the staging flow before merging:
+For Helm, kind, or deployment changes, use an isolated Docker/kind host and a
+promotion packet from one explicit successful `Container Attestation` build.
+After validating the run, packet, cosign signature, and GitHub provenance, run:
 
 ```bash
-bash scripts/k8s_staging_up.sh
+PROMOTION_VALUES_FILE=/absolute/path/to/image-values.yaml bash scripts/k8s_staging_up.sh
 bash scripts/k8s_staging_down.sh
 ```
 
-This path exercises the Docker image build, kind image loading, Helm install, and smoke validation in one run.
+This path exercises registry pull by immutable digest, Helm install, and smoke
+validation. It deliberately does not rebuild or `kind load` the API image. The
+manual `Staging Deploy` workflow is the complete gate because it performs the
+pre-cluster checks and retains the existing E2E suite plus staging evidence.
+
+## Documentation Site
+
+Install the optional site tooling if it is not already available:
+
+```bash
+python -m pip install "mkdocs-material>=9.5,<10"
+```
+
+Preview the site locally:
+
+```bash
+mkdocs serve
+```
+
+The API and MkDocs both default to port `8000`. When the API is already using
+that port, bind the site to `8010`:
+
+```bash
+mkdocs serve -a 127.0.0.1:8010
+```
+
+Run the strict static build before submitting documentation changes:
+
+```bash
+mkdocs build --strict
+```
 
 ## Docs and API Changes
 

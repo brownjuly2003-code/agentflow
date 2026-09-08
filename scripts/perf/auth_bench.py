@@ -1,33 +1,83 @@
-"""M-C4 / M-C5 perf-baseline microbench for AuthManager hot path.
+"""M-C4 / M-C5 authentication microbenchmark artifact writer.
 
-Decides whether the deferred audit findings warrant a rewrite:
+The authentication phase intentionally reproduces the legacy pre-2026-06-05
+O(n) bcrypt lookup measured by ``docs/perf/auth-bench-2026-05-26.md``. The
+current ``AuthManager.authenticate()`` uses an Argon2id hash plus deterministic
+``key_lookup`` for O(1) candidate resolution; this script must not be described
+as a current production-path benchmark.
 
-* **M-C4** — `AuthManager.authenticate()` iterates `_hashed_keys` calling
-  `verify_api_key()` (bcrypt) on each. Worst case is N × bcrypt-verify.
-* **M-C5** — `AuthManager.is_rate_limited()` rebuilds the per-key window
-  with a list comprehension on every call. Cost is O(W) where W is the
-  number of in-window stamps.
+The rate-window phase still mirrors the current list-trim implementation. Both
+measurements are host- and time-dependent diagnostics, not production SLA or
+acceptance evidence. The command prints its result and writes an ignored
+runtime report under ``.artifacts/perf/`` by default.
 
-Runs both at realistic production scale and prints a verdict table.
-
-Run::
+Run from the project root::
 
     python scripts/perf/auth_bench.py
 """
 
 from __future__ import annotations
 
+import argparse
+import io
+import platform
 import secrets
 import statistics
+import sys
 import time
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Any
+from contextlib import redirect_stdout
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TextIO
 
 from agentflow_runtime.serving.api.security import hash_api_key, verify_api_key
 
 BCRYPT_ROUNDS_PROD = 12
 BCRYPT_ROUNDS_TEST = 4
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_REPORT = PROJECT_ROOT / ".artifacts" / "perf" / "auth-bench-current.md"
+LIFECYCLE_PATH = PROJECT_ROOT / "docs" / "perf" / "auth-bench.md"
+HISTORICAL_RECORD_PATH = PROJECT_ROOT / "docs" / "perf" / "auth-bench-2026-05-26.md"
+PROTECTED_REPORT_PATHS = (LIFECYCLE_PATH, HISTORICAL_RECORD_PATH)
+
+
+class _TeeWriter:
+    def __init__(self, *streams: TextIO) -> None:
+        self._streams = streams
+
+    def write(self, text: str) -> int:
+        for stream in self._streams:
+            stream.write(text)
+            stream.flush()
+        return len(text)
+
+    def flush(self) -> None:
+        for stream in self._streams:
+            stream.flush()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--report",
+        default=str(DEFAULT_REPORT),
+        help="Markdown runtime-report path (defaults under .artifacts/perf/).",
+    )
+    return parser.parse_args()
+
+
+def resolve_report_path(report_path: str) -> Path:
+    candidate = Path(report_path)
+    resolved = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    protected_paths = {path.resolve() for path in PROTECTED_REPORT_PATHS}
+    if resolved.resolve() in protected_paths:
+        raise ValueError(
+            "Tracked authentication benchmark documentation cannot be overwritten; "
+            "write runtime artifacts under .artifacts/perf/ instead."
+        )
+    return resolved
 
 
 def _percentile(samples: list[float], pct: float) -> float:
@@ -59,21 +109,22 @@ def _print_row(label: str, st: dict[str, Any]) -> None:
 
 
 def _bench_authenticate_o_n_lookup(rounds: int, n_keys: int, trials: int) -> None:
-    """Authenticate worst case = miss-then-hit-last-slot.
+    """Reproduce the legacy authenticate worst case = miss-then-hit-last-slot.
 
-    Mirrors the actual production iteration order in
-    `AuthManager.authenticate` (line 279). We measure two scenarios:
+    This mirrors the pre-2026-06-05 iteration order retained in the historical
+    evidence, not the current O(1) ``key_lookup`` candidate path. We measure:
 
     * **hit-first** — the matching hash is at index 0
     * **hit-last** — the matching hash is at index N-1 (worst case)
 
-    Both scenarios issue a single `verify_api_key` per non-matching hash
-    plus one final matching call. Bcrypt-12 is the production cost.
+    Both scenarios issue a single ``verify_api_key`` per non-matching legacy
+    hash plus one final matching call. The scheme is explicit so a future
+    default-hash change cannot silently alter the benchmark.
     """
-    print(f"\n== authenticate() O(n) hashed-key lookup (bcrypt rounds={rounds}) ==")
+    print(f"\n== legacy authenticate() O(n) lookup (bcrypt rounds={rounds}) ==")
     plaintexts = [secrets.token_urlsafe(24) for _ in range(n_keys)]
     setup_start = time.perf_counter()
-    hashes = [hash_api_key(pt, rounds=rounds) for pt in plaintexts]
+    hashes = [hash_api_key(pt, rounds=rounds, scheme="bcrypt") for pt in plaintexts]
     print(
         f"  hashing-setup-done  n_keys={n_keys} "
         f"(took {time.perf_counter() - setup_start:.1f}s wall)"
@@ -156,12 +207,12 @@ def _verdict(
     print(f"   {explain(breaches_slo)}")
 
 
-def main() -> None:
+def run_benchmark() -> None:
     print("=" * 80)
-    print("auth_bench.py — M-C4 / M-C5 perf-baseline microbench")
+    print("auth_bench.py — legacy bcrypt M-C4 reproduction / current M-C5 trim")
     print("=" * 80)
 
-    print("\n# Phase 1: bcrypt-12 (PRODUCTION cost factor) — small N")
+    print("\n# Phase 1: legacy bcrypt-12 cost factor — small N")
     print("# (bcrypt-12 setup for N=20 takes ~10s, so we cap N here)")
     _bench_authenticate_o_n_lookup(rounds=BCRYPT_ROUNDS_PROD, n_keys=5, trials=3)
     _bench_authenticate_o_n_lookup(rounds=BCRYPT_ROUNDS_PROD, n_keys=20, trials=3)
@@ -176,13 +227,52 @@ def main() -> None:
     _bench_rate_window_trim(window_size=10000, calls=2000)
 
     print("\n" + "=" * 80)
-    print("Use the numbers above to decide:")
-    print("  M-C4 rewrite (lookup-by-hash-prefix) is justified if hit-last p95")
-    print("       at bcrypt-12 / N=20 exceeds load-test gate (1100ms POST p99).")
+    print("Interpret the numbers within their benchmark boundary:")
+    print("  M-C4 reproduces the legacy bcrypt O(n) path that motivated the")
+    print("       shipped Argon2id + key_lookup O(1) replacement.")
     print("  M-C5 ring-buffer rewrite is justified if trim p95 at W=120 (default")
     print("       rate_limit_rpm) exceeds ~100us in steady-state.")
     print("=" * 80)
 
 
+def build_runtime_report(captured_output: str) -> str:
+    generated = datetime.now(UTC).isoformat()
+    return (
+        "# Auth benchmark runtime artifact\n\n"
+        f"> Generated `{generated}` on `{platform.platform()}` with Python "
+        f"`{platform.python_version()}`.\n\n"
+        "This host- and time-dependent diagnostic reproduces the explicit legacy bcrypt "
+        "O(n) lookup and the current rate-window list trim. It is not a production SLA, "
+        "a served-API load test, or production acceptance.\n\n"
+        "## Captured output\n\n"
+        "```text\n"
+        f"{captured_output.rstrip()}\n"
+        "```\n"
+    )
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        report_path = resolve_report_path(args.report)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    captured = io.StringIO()
+    with redirect_stdout(_TeeWriter(sys.stdout, captured)):
+        run_benchmark()
+    captured_output = captured.getvalue()
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        build_runtime_report(captured_output),
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"wrote {report_path}")
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

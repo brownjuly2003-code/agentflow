@@ -1,0 +1,319 @@
+{{/*
+Production values contract (audit F-11).
+
+The chart defaults are deliberately dev-shaped: no NetworkPolicy, no ingress
+TLS, plaintext ClickHouse, an inline Secret. That is a reasonable local
+install, but `config.profile=production` is the operator declaring this is a
+production release, and until now nothing checked that the values matched the
+declaration -- a formally successful render could ship dev posture.
+
+This file renders no object. It only evaluates, and on `profile=production`
+fails the render with every violation listed at once, so an operator fixes the
+whole set in one pass instead of one message per `helm template` round trip.
+
+`networkPolicy.ingressFromNamespaces` is checked when the policy is on: an
+empty list renders `ingress: []` (deny all), so neither the ingress
+controller nor Prometheus can reach the service port. An empty-map entry
+matches every namespace and is refused. A list whose every
+`kubernetes.io/metadata.name` is still `ingress-nginx` (and no non-empty
+entry lacks that key) blocks scrape from a dedicated monitoring namespace.
+Co-location (Prometheus in the ingress-controller namespace) is named via
+networkPolicy.scrapeFromIngressNamespace=true.
+
+Deliberately NOT checked here:
+
+- the control-plane PostgreSQL DSN, which the chart only ever sees as a Secret
+  reference -- `agentflow_runtime.serving.transport_policy` refuses a plaintext
+  DSN at boot instead;
+- Kafka SASL/TLS, already fail-closed for every Kafka workload in _kafka.tpl;
+- `controlPlane.store`, since single-replica production on the embedded store
+  is a supported (if limited) shape, not a misconfiguration.
+*/}}
+{{- if eq .Values.config.profile "production" -}}
+{{- $problems := list -}}
+
+{{- if not .Values.image.digest -}}
+{{- $problems = append $problems "image.digest is empty: production must deploy the immutable API artifact as repository@sha256:...; tags do not prove that staging and release use the same image (audit F-19)" -}}
+{{- end -}}
+
+{{- if not .Values.analyticsRetention.enabled -}}
+{{- $problems = append $problems "analyticsRetention.enabled=false: production must schedule finite query-analytics retention through the authenticated API" -}}
+{{- end -}}
+{{- if .Values.analyticsRetention.dryRun -}}
+{{- $problems = append $problems "analyticsRetention.dryRun=true: production retention must execute the final delete, not only preview it" -}}
+{{- end -}}
+{{- if ne .Values.analyticsRetention.concurrencyPolicy "Forbid" -}}
+{{- $problems = append $problems (printf "analyticsRetention.concurrencyPolicy=%s: production must use Forbid so retention jobs cannot overlap" .Values.analyticsRetention.concurrencyPolicy) -}}
+{{- end -}}
+
+{{- /* Operator-declared plaintext exemptions, mirroring the app-side gate. */ -}}
+{{- $insecureOk := "" -}}
+{{- range .Values.extraEnv -}}
+{{- if eq (.name | default "") "AGENTFLOW_INSECURE_TRANSPORT_OK" -}}
+{{- $insecureOk = (.value | default "" | toString) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Pepper material (audit FB-07, AF-13). Two env vars domain-separate
+     digests the API stores: AGENTFLOW_KEY_LOOKUP_PEPPER peppers `key_lookup`,
+     an HMAC of the API key itself, and AGENTFLOW_QUERY_FINGERPRINT_PEPPER
+     peppers query-analytics fingerprints. Both fall back to constants
+     committed to this repository, which makes those digests reproducible by
+     anyone -- a leaked api_keys.yaml then confirms a guessed key without
+     paying for an argon2id verify. The API refuses to boot on
+     profile=production with either unset or left at its default, so a render
+     that omits them installs a workload that cannot start. Checking it here
+     turns that into a render error with a name on it.
+
+     The chart deliberately grows no `secrets.keyLookupPepper` value: pepper
+     material in Helm values persists in release metadata and shell history,
+     which is exactly why secrets.create=true is refused above. extraEnv is
+     where this chart already takes operator-supplied env, and a literal
+     `value:` there is refused for the same reason. */ -}}
+{{- $peppers := dict "AGENTFLOW_KEY_LOOKUP_PEPPER" "stored key_lookup digests (an HMAC of the API key itself)" "AGENTFLOW_QUERY_FINGERPRINT_PEPPER" "query-analytics fingerprints" -}}
+{{- range $pepperName, $protects := $peppers -}}
+{{- $entry := dict -}}
+{{- range $.Values.extraEnv -}}
+{{- if eq (.name | default "") $pepperName -}}
+{{- $entry = . -}}
+{{- end -}}
+{{- end -}}
+{{- if not $entry -}}
+{{- $problems = append $problems (printf "extraEnv does not set %s: without it the API peppers %s with a constant committed to this repository, and refuses to boot on profile=production. Supply it as a valueFrom.secretKeyRef into the Secret named by secrets.existingSecret" $pepperName $protects) -}}
+{{- else if hasKey $entry "value" -}}
+{{- $problems = append $problems (printf "extraEnv sets %s with a literal `value`: pepper material written into Helm values persists in release metadata and shell history, which is why secrets.create=true is refused. Use valueFrom.secretKeyRef" $pepperName) -}}
+{{- else -}}
+{{- $valueFrom := dict -}}
+{{- if hasKey $entry "valueFrom" -}}
+{{- $valueFrom = (index $entry "valueFrom") -}}
+{{- end -}}
+{{- if not (and (kindIs "map" $valueFrom) (hasKey $valueFrom "secretKeyRef")) -}}
+{{- $problems = append $problems (printf "extraEnv sets %s without a valueFrom.secretKeyRef: production pepper material must be projected from the operator-managed Secret, not from a fieldRef, configMapKeyRef or an empty valueFrom" $pepperName) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- if not .Values.networkPolicy.enabled -}}
+{{- $problems = append $problems "networkPolicy.enabled=false: production requires the default-deny baseline (set networkPolicy.enabled=true; the cluster needs a NetworkPolicy controller)" -}}
+{{- else -}}
+{{- /* /metrics is unauthenticated so in-cluster Prometheus can scrape the
+     ClusterIP Service. The NetworkPolicy is the allow-list. An empty list
+     renders ingress: [] (deny all). An empty-map entry matches every
+     namespace. A list whose every kubernetes.io/metadata.name is
+     ingress-nginx (and no non-empty entry lacks that key) is the chart
+     default and blocks scrape from a dedicated monitoring namespace unless
+     scrapeFromIngressNamespace records co-location. */ -}}
+{{- $fromNs := .Values.networkPolicy.ingressFromNamespaces | default list -}}
+{{- $prometheusInIngress := .Values.networkPolicy.scrapeFromIngressNamespace -}}
+{{- if eq (len $fromNs) 0 -}}
+{{- $problems = append $problems "networkPolicy.ingressFromNamespaces is empty: the chart renders `ingress: []` (deny all), so neither the ingress controller nor in-cluster Prometheus can reach the service port. Enumerate the ingress-controller namespace and the scrape namespace." -}}
+{{- else -}}
+{{- range $fromNs -}}
+{{- if and (kindIs "map" .) (eq (len .) 0) -}}
+{{- $problems = append $problems "networkPolicy.ingressFromNamespaces contains an empty selector {}: an empty namespaceSelector matches every namespace and publishes the service port (/metrics included) cluster-wide. Name the namespace label." -}}
+{{- end -}}
+{{- end -}}
+{{- if not $prometheusInIngress -}}
+{{- $ingressOnly := true -}}
+{{- range $fromNs -}}
+{{- if kindIs "map" . -}}
+{{- if gt (len .) 0 -}}
+{{- if hasKey . "kubernetes.io/metadata.name" -}}
+{{- $nsName := index . "kubernetes.io/metadata.name" | toString -}}
+{{- if ne $nsName "ingress-nginx" -}}
+{{- $ingressOnly = false -}}
+{{- end -}}
+{{- else -}}
+{{- $ingressOnly = false -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- $ingressOnly = false -}}
+{{- end -}}
+{{- end -}}
+{{- if $ingressOnly -}}
+{{- $problems = append $problems "networkPolicy.ingressFromNamespaces enumerates only kubernetes.io/metadata.name=ingress-nginx: that is the chart default and it blocks in-cluster Prometheus scrape of unauthenticated /metrics from a dedicated monitoring namespace. Add the scrape namespace (values-production.yaml comments a monitoring placeholder to replace). If Prometheus deliberately runs in the ingress-controller namespace, keep this selector and set networkPolicy.scrapeFromIngressNamespace=true." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Egress destinations (audit FB-09). A Kubernetes egress rule with
+     `ports:` and no `to:` allows those ports to every address, cluster and
+     internet alike -- so the default-deny baseline was denying nothing on
+     6379/9092/8123/4317/5432. Each rule this chart renders must name its
+     peers. The condition list mirrors networkpolicy.yaml exactly: a rule that
+     does not render is not asked for, which is why turning a feature off is
+     also a way to answer this. */ -}}
+{{- if .Values.networkPolicy.enabled -}}
+{{- $egressTo := .Values.networkPolicy.egressTo | default dict -}}
+{{- $required := list (dict "key" "kafka" "what" "the Kafka brokers") -}}
+{{- if .Values.config.redisUrl -}}
+{{- $required = append $required (dict "key" "redis" "what" "Redis") -}}
+{{- end -}}
+{{- if eq .Values.serving.backend "clickhouse" -}}
+{{- $required = append $required (dict "key" "clickhouse" "what" "the ClickHouse serving backend") -}}
+{{- end -}}
+{{- if .Values.config.otlpEndpoint -}}
+{{- $required = append $required (dict "key" "otlp" "what" "the OTLP collector") -}}
+{{- end -}}
+{{- if eq .Values.controlPlane.store "postgres" -}}
+{{- $required = append $required (dict "key" "postgres" "what" "the control-plane PostgreSQL") -}}
+{{- end -}}
+{{- if .Values.lakeMaterializer.enabled -}}
+{{- $required = append $required (dict "key" "icebergCatalog" "what" "the Iceberg REST catalog") -}}
+{{- $required = append $required (dict "key" "objectStore" "what" "the S3-compatible object store") -}}
+{{- end -}}
+{{- range $required -}}
+{{- $peers := index $egressTo .key | default list -}}
+{{- if not $peers -}}
+{{- $problems = append $problems (printf "networkPolicy.egressTo.%s is empty while the policy opens port %v for %s: an egress rule with no `to:` allows that port to every address in the cluster and on the internet, so the default-deny baseline denies nothing there. Name the peers (podSelector / namespaceSelector / ipBlock)" .key (index $.Values.networkPolicy.egressPorts .key) .what) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- if .Values.serviceAccount.name -}}
+{{- $problems = append $problems (printf "serviceAccount.name=%q: that legacy escape hatch collapses the API/worker/provision/Flink identities back onto one privileged account (audit F-05). Leave it empty and use serviceAccount.apiName/workerName/provisionName" .Values.serviceAccount.name) -}}
+{{- end -}}
+
+{{- if .Values.secrets.create -}}
+{{- $problems = append $problems "secrets.create=true: production key material must come from an operator- or CSI-managed Secret, not from Helm values (they persist in release metadata and shell history). Set secrets.create=false and secrets.existingSecret" -}}
+{{- else if not .Values.secrets.existingSecret -}}
+{{- $problems = append $problems "secrets.existingSecret is empty: production must name the externally managed Secret holding admin-key and api_keys.yaml" -}}
+{{- end -}}
+{{- if .Values.secrets.adminKey -}}
+{{- $problems = append $problems "secrets.adminKey is set: inline admin keys are dev-only" -}}
+{{- end -}}
+{{- if .Values.secrets.apiKeys.keys -}}
+{{- $problems = append $problems "secrets.apiKeys.keys is non-empty: inline API key material is dev-only" -}}
+{{- end -}}
+
+{{- /* Outside the ingress.enabled block: NodePort/LoadBalancer publish the
+     service port (/metrics included) with no Ingress rule involved, and
+     ExternalName voids the routing contract. ingress.enabled=false stays a
+     sanctioned external-gateway shape and does not relax this clause. */ -}}
+{{- $serviceType := .Values.service.type | default "" | toString -}}
+{{- if ne $serviceType "ClusterIP" -}}
+{{- $problems = append $problems (printf "service.type=%s: production must keep the API on a ClusterIP Service — NodePort/LoadBalancer publish the service port (/metrics included) without any Ingress rule, ExternalName turns the Service into a CNAME and voids the routing contract" $serviceType) -}}
+{{- end -}}
+
+{{- /* The failed-auth throttle, and every client_ip the API logs, are only as
+     truthful as the address the pod observes. Behind ANY proxy -- this chart's
+     Ingress or a gateway outside it -- that address belongs to the proxy unless
+     the deployment names its proxy peers. ingress.enabled=false used to make
+     this clause disappear rather than answer it, which is how the sanctioned
+     external-gateway shape ended up with a throttle keyed on one shared
+     address (audit FB-06). Production must answer one of the two questions. */ -}}
+{{- $gateway := .Values.config.gateway | default dict -}}
+{{- if and (not .Values.config.trustedProxies) (not $gateway.preservesClientIp) -}}
+{{- if .Values.ingress.enabled -}}
+{{- $problems = append $problems "config.trustedProxies is empty while ingress is enabled: behind the controller every caller shares its address, so the failed-auth limiter keys on it. Name the proxy peers allowed to set X-Forwarded-For" -}}
+{{- else -}}
+{{- $problems = append $problems "config.trustedProxies is empty and config.gateway.preservesClientIp is not set: with ingress.enabled=false the API is reached through a gateway this chart cannot see, and the release says nothing about whose address the pod will observe. Either name the gateway peers in config.trustedProxies, or declare config.gateway.preservesClientIp=true if the path preserves the caller source address" -}}
+{{- end -}}
+{{- end -}}
+
+{{- if .Values.ingress.enabled -}}
+{{- /* ingress-nginx interprets these annotations after Helm has checked the
+     literal host/path. Refuse exact routing-control keys for this chart's
+     production Ingress; unrelated annotations remain available. */ -}}
+{{- $ingressAnnotations := .Values.ingress.annotations | default dict -}}
+{{- range $prefix := (list "nginx.ingress.kubernetes.io/" "ingress.kubernetes.io/") -}}
+{{- range $name := (list "rewrite-target" "use-regex" "app-root" "configuration-snippet" "server-snippet") -}}
+{{- $annotation := printf "%s%s" $prefix $name -}}
+{{- if hasKey $ingressAnnotations $annotation -}}
+{{- $problems = append $problems (printf "ingress.annotations contains %q: production refuses ingress-nginx routing-control annotations because they can change controller matching or upstream URI after Helm validates the literal host/path; remove the annotation, or set ingress.enabled=false and enforce routing outside this chart" $annotation) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if not .Values.ingress.hosts -}}
+{{- $problems = append $problems "ingress.enabled=true with no ingress.hosts: the rendered Ingress would carry no rules and route nothing" -}}
+{{- end -}}
+{{- if not .Values.ingress.tls -}}
+{{- $problems = append $problems "ingress.enabled=true with an empty ingress.tls: production must terminate TLS (or expose the API through a gateway outside this chart and set ingress.enabled=false)" -}}
+{{- end -}}
+{{- $ingressIdentityPattern := "^[A-Za-z0-9*]([A-Za-z0-9.-]*[A-Za-z0-9])?$" }}
+{{- $className := .Values.ingress.className | default "" | toString }}
+{{- if not (regexMatch $ingressIdentityPattern $className) }}
+{{- $problems = append $problems (printf "ingress.className=%q is not a canonical single-line value matching %s, so this render cannot prove it is one ingress class rather than injected YAML. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; use a canonical class name (or route metrics on a separate internal-only host/ingress)" $className $ingressIdentityPattern) }}
+{{- end }}
+{{- range .Values.ingress.hosts }}
+{{- $host := .host | default "" | toString }}
+{{- if not (regexMatch $ingressIdentityPattern $host) }}
+{{- $problems = append $problems (printf "ingress.host=%q is not a canonical single-line value matching %s, so this render cannot prove /metrics stays off one public Ingress rule. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; use a canonical host and enumerate the public path prefixes (or route metrics on a separate internal-only host/ingress)" $host $ingressIdentityPattern) }}
+{{- end }}
+{{- if not .paths }}
+{{- $problems = append $problems (printf "ingress host %q has no paths: the rendered Ingress rule would be invalid and route nothing; enumerate the public path prefixes" $host) }}
+{{- end }}
+{{- range .paths }}
+{{- $path := .path | default "" }}
+{{- $pathType := .pathType | default "" }}
+{{- $pathPattern := "^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$" }}
+{{- if not (regexMatch $pathPattern $path) }}
+{{- $problems = append $problems (printf "ingress host %q path %q is not a canonical single-line absolute path matching %s, so this render cannot prove /metrics stays off the public Ingress. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; enumerate canonical public path prefixes (or route metrics on a separate internal-only host/ingress)" $host $path $pathPattern) }}
+{{- end }}
+{{- $trimmed := $path | trimSuffix "/" }}
+{{- if eq $trimmed "" }}
+{{- $trimmed = "/" }}
+{{- end }}
+{{- if eq $pathType "Prefix" }}
+{{- /* Prefix /, /metrics, and any /metrics/... descendant all serve the Prometheus mount. /metricsfoo does not. Exact / matches only / and cannot reach /metrics. */ -}}
+{{- if or (eq $trimmed "/") (eq $trimmed "/metrics") (hasPrefix "/metrics/" $trimmed) }}
+{{- $problems = append $problems (printf "ingress host %q path %q (pathType %s) would route /metrics: that endpoint is unauthenticated by design for in-cluster scrape through the ClusterIP Service. Enumerate the public path prefixes instead of / (or route metrics on a separate internal-only host/ingress)" $host $path $pathType) }}
+{{- end }}
+{{- else if eq $pathType "Exact" }}
+{{- if or (eq $trimmed "/metrics") (hasPrefix "/metrics/" $trimmed) }}
+{{- $problems = append $problems (printf "ingress host %q path %q (pathType %s) would route /metrics: that endpoint is unauthenticated by design for in-cluster scrape through the ClusterIP Service. Enumerate the public path prefixes instead of / (or route metrics on a separate internal-only host/ingress)" $host $path $pathType) }}
+{{- end }}
+{{- else }}
+{{- $problems = append $problems (printf "ingress host %q path %q uses pathType %q: only Prefix and Exact are proven here, so this render cannot prove /metrics stays off the public Ingress. /metrics is unauthenticated by design for in-cluster scrape through the ClusterIP Service; enumerate the public path prefixes instead of / (or route metrics on a separate internal-only host/ingress)" $host $path $pathType) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{- $cors := .Values.config.corsOrigins | toString -}}
+{{- if not $cors -}}
+{{- $problems = append $problems "config.corsOrigins is empty: list the origins allowed to call the API" -}}
+{{- else if contains "*" $cors -}}
+{{- $problems = append $problems (printf "config.corsOrigins=%q: CORS runs with credentials, so a wildcard lets any site read authenticated responses. It is demo-only and the app refuses it at boot" $cors) -}}
+{{- else if or (contains "localhost" $cors) (contains "127.0.0.1" $cors) -}}
+{{- $problems = append $problems (printf "config.corsOrigins=%q is still the chart's dev default: set the real production origins" $cors) -}}
+{{- end -}}
+
+{{- if eq .Values.serving.backend "clickhouse" -}}
+{{- if and (not .Values.serving.clickhouse.secure) (not (contains "clickhouse" $insecureOk)) -}}
+{{- $problems = append $problems "serving.clickhouse.secure=false: production refuses a plaintext hop to an external ClickHouse. Set serving.clickhouse.secure=true (plus tls.caSecret for a private CA), or name the deliberate exemption in AGENTFLOW_INSECURE_TRANSPORT_OK via extraEnv" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $redis := .Values.config.redisUrl | toString -}}
+{{- if and $redis (not (contains "redis" $insecureOk)) -}}
+{{- if and (not (hasPrefix "rediss://" $redis)) (not (or (contains "localhost" $redis) (contains "127.0.0.1" $redis) (contains "::1" $redis))) -}}
+{{- $problems = append $problems (printf "config.redisUrl=%q is plaintext: use rediss:// or name the deliberate exemption in AGENTFLOW_INSECURE_TRANSPORT_OK via extraEnv" $redis) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* The mounted security policy must not be weaker than canonical config/security.yaml. */ -}}
+{{- $security := (.Values.config.security | toString | fromYaml) -}}
+{{- $policy := (get $security "security") | default dict -}}
+{{- $hashing := (get $policy "key_hashing") | default "" -}}
+{{- if ne $hashing "argon2id" -}}
+{{- $problems = append $problems (printf "config.security key_hashing=%q: production must hash new key material with argon2id, matching config/security.yaml" $hashing) -}}
+{{- end -}}
+{{- $redact := (get $policy "sensitive_headers_to_redact") | default list -}}
+{{- /* The runtime matches header names case-insensitively; so does this. */ -}}
+{{- $redactLower := list -}}
+{{- range $redact -}}
+{{- $redactLower = append $redactLower (. | toString | lower) -}}
+{{- end -}}
+{{- range (list "Authorization" "X-API-Key" "X-Admin-Key" "Cookie" "Set-Cookie") -}}
+{{- if not (has (lower .) $redactLower) -}}
+{{- $problems = append $problems (printf "config.security sensitive_headers_to_redact is missing %q: failed-auth logging records the whole header map after this denylist" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- if $problems -}}
+{{- fail (printf "profile=production values contract failed (audit F-11):\n- %s\n\nhelm/agentflow/values-production.yaml carries the compliant posture; layer your environment values on top of it. Drop config.profile=production only if this really is not a production release." (join "\n- " $problems)) -}}
+{{- end -}}
+{{- end -}}

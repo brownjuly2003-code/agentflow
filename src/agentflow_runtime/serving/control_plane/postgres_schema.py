@@ -194,6 +194,11 @@ _MIGRATIONS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
         "webhook_delivery_queue.last_outcome_id — idempotent outcome write (P3)",
         ("ALTER TABLE webhook_delivery_queue ADD COLUMN IF NOT EXISTS last_outcome_id TEXT",),
     ),
+    (
+        3,
+        "api_sessions.query_fingerprint — analytics without the prompt (audit F-18)",
+        ("ALTER TABLE api_sessions ADD COLUMN IF NOT EXISTS query_fingerprint TEXT",),
+    ),
 )
 
 if tuple(version for version, _, _ in _MIGRATIONS) != tuple(range(1, len(_MIGRATIONS) + 1)):

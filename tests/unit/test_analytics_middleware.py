@@ -13,6 +13,7 @@ from agentflow_runtime.serving.api.analytics import (
     build_analytics_middleware,
     ensure_analytics_table,
 )
+from agentflow_runtime.serving.api.query_analytics_policy import QueryAnalyticsPolicy
 
 
 @pytest.mark.anyio
@@ -190,7 +191,28 @@ async def test_analytics_middleware_records_authenticated_request(tmp_path: Path
     assert len(getattr(response.background, "tasks", [])) == 1
 
 
-def test_build_session_record_caps_query_text(tmp_path: Path):
+def test_build_session_record_keeps_no_question_text_by_default(tmp_path: Path):
+    # Audit F-18: the default policy keeps a fingerprint, not the question.
+    # The storage-amplification bound from audit_30_06_26.md S1 still holds --
+    # a fingerprint is 64 hex characters whatever the question was.
+    app = FastAPI()
+    body = json.dumps({"question": "x" * 5000}).encode()
+    request = _v1_request(app, method="POST", path="/v1/query", body=body)
+
+    record = analytics_module._build_session_record(
+        request=request,
+        request_id="req-1",
+        status_code=200,
+        duration_ms=1.0,
+        cache_hit=False,
+        body=body,
+    )
+
+    assert record["query_text"] is None
+    assert len(record["query_fingerprint"]) == 64
+
+
+def test_build_session_record_caps_query_text_when_storage_is_opted_into(tmp_path: Path):
     # An oversized /v1/query body is truncated before it is persisted, so it
     # can't be used to amplify storage. (audit_30_06_26.md S1)
     app = FastAPI()
@@ -204,6 +226,7 @@ def test_build_session_record_caps_query_text(tmp_path: Path):
         duration_ms=1.0,
         cache_hit=False,
         body=body,
+        policy=QueryAnalyticsPolicy(store_query_text=True),
     )
 
     assert len(record["query_text"]) == 1000

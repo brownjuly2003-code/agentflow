@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -20,6 +21,7 @@ from pydantic import BaseModel, Field, model_validator
 from agentflow_runtime.constants import (
     DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
     DEFAULT_ROTATION_GRACE_PERIOD_SECONDS,
+    FAILED_AUTH_SCOPE_API,
     FAILED_AUTH_WINDOW_SECONDS,
     HASHED_KEY_SOFT_LIMIT,
 )
@@ -84,6 +86,81 @@ class KeyCreateRequest(BaseModel):
     tenant: str
     rate_limit_rpm: int = Field(default=DEFAULT_RATE_LIMIT_RPM, ge=1)
     allowed_entity_types: list[str] | None = None
+
+
+KEY_STORE_READONLY_DETAIL = "API key store is read-only; key lifecycle mutations are disabled."
+
+_PERMISSION_ERRNOS = {errno.EACCES, errno.EPERM}
+if hasattr(errno, "EROFS"):
+    _PERMISSION_ERRNOS.add(errno.EROFS)
+# Windows: ERROR_ACCESS_DENIED, ERROR_WRITE_PROTECT
+_WINDOWS_ACCESS_DENIED = {5, 19}
+
+
+class KeyStoreReadOnlyError(RuntimeError):
+    """Raised when a key-lifecycle mutation cannot persist to the store."""
+
+    def __init__(self, path: Path | str | None = None) -> None:
+        self.path = path
+        super().__init__(KEY_STORE_READONLY_DETAIL)
+
+
+def is_permission_denied(exc: BaseException) -> bool:
+    if isinstance(exc, PermissionError):
+        return True
+    if not isinstance(exc, OSError):
+        return False
+    if exc.errno in _PERMISSION_ERRNOS:
+        return True
+    winerror = getattr(exc, "winerror", None)
+    return winerror in _WINDOWS_ACCESS_DENIED
+
+
+def probe_key_store_writable(path: Path | str | None) -> bool:
+    # Probe the real mount; an operator flag would drift from it.
+    if path is None:
+        return False
+    candidate = Path(path)
+    try:
+        if candidate.exists():
+            return _file_is_writable(candidate)
+        return _parent_is_writable(candidate)
+    except OSError as exc:
+        if is_permission_denied(exc):
+            return False
+        raise
+
+
+def _file_is_writable(path: Path) -> bool:
+    try:
+        with path.open("a", encoding="utf-8"):
+            return True
+    except OSError as exc:
+        if is_permission_denied(exc):
+            return False
+        raise
+
+
+def _parent_is_writable(path: Path) -> bool:
+    parent = path.parent
+    while not parent.exists() and parent.parent != parent:
+        parent = parent.parent
+    if not parent.exists():
+        return False
+    probe = parent / f".agentflow-key-store-write-probe-{os.getpid()}-{secrets.token_hex(4)}"
+    try:
+        with probe.open("x", encoding="utf-8"):
+            pass
+        return True
+    except OSError as exc:
+        if is_permission_denied(exc):
+            return False
+        raise
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def get_current_tenant_id(default: str | None = None) -> str | None:
@@ -160,9 +237,12 @@ class AuthManager:
         self._loaded_keys: list[TenantKey] = []
         self._runtime_plaintext_by_hash: dict[str, str] = {}
         self._rate_windows: dict[str, list[float]] = defaultdict(list)
-        self._failed_auth_windows: dict[str, list[float]] = defaultdict(list)
+        # Keyed by (scope, client address) -- see FAILED_AUTH_SCOPE_* (FB-06).
+        self._failed_auth_windows: dict[tuple[str, str], list[float]] = defaultdict(list)
         self._config_lock = threading.RLock()
         self._rotation_cleanup_timers: dict[str, threading.Timer] = {}
+        self._key_store_writable: bool | None = None
+        self._key_store_readonly_skip_logged = False
         try:
             self.rotation_grace_period_seconds = max(
                 1,
@@ -200,12 +280,26 @@ class AuthManager:
         self._usage_writer = UsageWriter(self.store, self.audit_publisher)
 
     def load(self) -> None:
+        skipped_readonly_write = False
         with self._config_lock:
+            self._key_store_writable = probe_key_store_writable(self.api_keys_path)
             config = self._load_config()
             config_changed = self._key_rotator.ensure_key_ids(config)
             config_changed = self._key_rotator.cleanup_expired_rotations(config) or config_changed
             if config_changed and self.api_keys_path is not None:
-                self._key_rotator.write_config(config)
+                if self._key_store_writable:
+                    try:
+                        self._key_rotator.write_config(config)
+                    except KeyStoreReadOnlyError:
+                        skipped_readonly_write = True
+                    except OSError as exc:
+                        if is_permission_denied(exc):
+                            self._key_store_writable = False
+                            skipped_readonly_write = True
+                        else:
+                            raise
+                else:
+                    skipped_readonly_write = True
             self.security_policy = load_security_policy(self.security_config_path)
             self._loaded_keys = config.keys
             self.keys_by_value = {}
@@ -252,6 +346,8 @@ class AuthManager:
             self._sweep_expired_windows()
         from agentflow_runtime.serving.api import auth as auth_package
 
+        if skipped_readonly_write:
+            self._warn_key_store_write_skipped()
         auth_package.logger.info(
             "api_keys_loaded",
             path=str(self.api_keys_path) if self.api_keys_path else "env_only",
@@ -289,13 +385,13 @@ class AuthManager:
             else:
                 self._rate_windows.pop(key, None)
         failed_cutoff = now - FAILED_AUTH_WINDOW_SECONDS
-        for client_ip in list(self._failed_auth_windows):
-            stamps = self._failed_auth_windows[client_ip]
+        for window_key in list(self._failed_auth_windows):
+            stamps = self._failed_auth_windows[window_key]
             window = [stamp for stamp in stamps if stamp > failed_cutoff]
             if window:
-                self._failed_auth_windows[client_ip] = window
+                self._failed_auth_windows[window_key] = window
             else:
-                self._failed_auth_windows.pop(client_ip, None)
+                self._failed_auth_windows.pop(window_key, None)
 
     def reload(self, *_: object) -> None:
         self.load()
@@ -322,7 +418,19 @@ class AuthManager:
 
         ensure_usage_table(self)
 
-    def authenticate(self, api_key: str) -> TenantKey | None:
+    def authenticate(self, api_key: str, *, allow_legacy_scan: bool = True) -> TenantKey | None:
+        """Resolve a presented key to its tenant, or return ``None``.
+
+        ``allow_legacy_scan=False`` keeps the constant-work paths -- the runtime
+        plaintext cache and the O(1) peppered-lookup resolution of the current
+        and previous slots -- and skips the two O(n) verify scans that exist only
+        for pre-M-C4 entries carrying no ``key_lookup``. The middleware passes it
+        when the caller's address is already throttled: a key issued since M-C4
+        still authenticates for exactly one hash, while a scanner cannot make the
+        pod spend N bcrypt verifications per guess (audit FB-06). A legacy
+        bcrypt-only key is not resolvable under throttle -- rotating it onto an
+        argon2id+lookup entry is the documented fix.
+        """
         for item in self.keys_by_value.values():
             runtime_key = item.key
             if runtime_key is None:
@@ -341,13 +449,14 @@ class AuthManager:
                 return matched
         # Legacy fallback: only entries WITHOUT a lookup digest (pre-M-C4
         # bcrypt config) still pay the O(n) verify scan.
-        for item in self._hashed_keys:
-            if item.key_hash is None or item.key_lookup is not None:
-                continue
-            if verify_api_key(api_key, item.key_hash):
-                matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
-                self._remember_runtime_key(api_key, matched)
-                return matched
+        if allow_legacy_scan:
+            for item in self._hashed_keys:
+                if item.key_hash is None or item.key_lookup is not None:
+                    continue
+                if verify_api_key(api_key, item.key_hash):
+                    matched = item.model_copy(update={"key": api_key, "matched_slot": "current"})
+                    self._remember_runtime_key(api_key, matched)
+                    return matched
         indexed_previous = self._previous_keys_by_lookup.get(lookup)
         if (
             indexed_previous is not None
@@ -356,13 +465,17 @@ class AuthManager:
             and verify_api_key(api_key, indexed_previous.previous_key_hash)
         ):
             return indexed_previous.model_copy(update={"key": api_key, "matched_slot": "previous"})
-        for item in self._loaded_keys:
-            if not self._key_rotator.is_previous_key_active(item) or item.previous_key_hash is None:
-                continue
-            if item.previous_key_lookup is not None:
-                continue
-            if verify_api_key(api_key, item.previous_key_hash):
-                return item.model_copy(update={"key": api_key, "matched_slot": "previous"})
+        if allow_legacy_scan:
+            for item in self._loaded_keys:
+                if (
+                    not self._key_rotator.is_previous_key_active(item)
+                    or item.previous_key_hash is None
+                ):
+                    continue
+                if item.previous_key_lookup is not None:
+                    continue
+                if verify_api_key(api_key, item.previous_key_hash):
+                    return item.model_copy(update={"key": api_key, "matched_slot": "previous"})
         return None
 
     def _remember_runtime_key(self, api_key: str, matched: TenantKey) -> None:
@@ -382,6 +495,23 @@ class AuthManager:
     @property
     def configured_key_count(self) -> int:
         return len(self._loaded_keys) if self._loaded_keys else len(self.keys_by_value)
+
+    @property
+    def key_store_writable(self) -> bool:
+        if self._key_store_writable is None:
+            self._key_store_writable = probe_key_store_writable(self.api_keys_path)
+        return self._key_store_writable
+
+    def _warn_key_store_write_skipped(self) -> None:
+        if self._key_store_readonly_skip_logged:
+            return
+        self._key_store_readonly_skip_logged = True
+        from agentflow_runtime.serving.api import auth as auth_package
+
+        auth_package.logger.warning(
+            "api_key_store_write_skipped_readonly",
+            path=str(self.api_keys_path) if self.api_keys_path else "env_only",
+        )
 
     def has_configured_keys(self) -> bool:
         return bool(self.keys_by_value or self._hashed_keys)
@@ -439,7 +569,7 @@ class AuthManager:
             allowed = allowed and ok
         return allowed
 
-    def is_failed_auth_limited(self, client_ip: str) -> bool:
+    def is_failed_auth_limited(self, client_ip: str, scope: str = FAILED_AUTH_SCOPE_API) -> bool:
         # Per-process on purpose (unlike the Redis-shared request rate limiter):
         # on N replicas an attacker spreading guesses gets N x the failed-auth
         # budget, which is an accepted risk while API keys are 256-bit random
@@ -449,20 +579,28 @@ class AuthManager:
         # failed-auth alerting starts keying off this counter. (audit S-7)
         now = self.time_source()
         cutoff = now - FAILED_AUTH_WINDOW_SECONDS
-        window = [stamp for stamp in self._failed_auth_windows[client_ip] if stamp > cutoff]
-        self._failed_auth_windows[client_ip] = window
+        window_key = (scope, client_ip)
+        window = [stamp for stamp in self._failed_auth_windows[window_key] if stamp > cutoff]
+        self._failed_auth_windows[window_key] = window
         return len(window) > self.security_policy.max_failed_auth_per_ip_per_hour
 
-    def record_failed_auth(self, client_ip: str) -> bool:
+    def record_failed_auth(self, client_ip: str, scope: str = FAILED_AUTH_SCOPE_API) -> bool:
         now = self.time_source()
         cutoff = now - FAILED_AUTH_WINDOW_SECONDS
-        window = [stamp for stamp in self._failed_auth_windows[client_ip] if stamp > cutoff]
-        window.append(now)
-        self._failed_auth_windows[client_ip] = window
+        window_key = (scope, client_ip)
+        window = [stamp for stamp in self._failed_auth_windows[window_key] if stamp > cutoff]
+        # Stop recording once the window is already over the limit. The
+        # middleware now records every failed attempt, including the ones it
+        # answers with 429, so an unbounded list would let a scanner turn one
+        # address into a stamp per request for an hour. Capping at limit + 1
+        # keeps the verdict identical and the memory constant (FB-06).
+        if len(window) <= self.security_policy.max_failed_auth_per_ip_per_hour:
+            window.append(now)
+        self._failed_auth_windows[window_key] = window
         return len(window) > self.security_policy.max_failed_auth_per_ip_per_hour
 
-    def clear_failed_auth(self, client_ip: str) -> None:
-        self._failed_auth_windows.pop(client_ip, None)
+    def clear_failed_auth(self, client_ip: str, scope: str = FAILED_AUTH_SCOPE_API) -> None:
+        self._failed_auth_windows.pop((scope, client_ip), None)
         # H-C4: piggy-back an opportunistic sweep on every successful auth.
         # Successful auth is on the hot path but cheap, and it bounds growth
         # of the per-IP dict between explicit reloads.
@@ -517,6 +655,9 @@ class AuthManager:
 
     def revoke_key(self, api_key: str) -> bool:
         return self._key_rotator.revoke_key(api_key)
+
+    def revoke_key_by_id(self, key_id: str) -> bool:
+        return self._key_rotator.revoke_key_by_id(key_id)
 
     def rotate_key(self, key_id: str) -> tuple[TenantKey, datetime]:
         return self._key_rotator.rotate_key(key_id)

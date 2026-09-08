@@ -80,7 +80,7 @@ def derive_fields(spec: AttemptSpec) -> dict[str, str]:
 
     The marker hash is SHA-256 over the bare marker text with no trailing
     newline — the exact convention the r12 evidence recorded
-    (ci-soak-r12-preflight-fail-20260821-01.md).
+    (docs/evidence/records/ci-soak-r12-preflight-fail-20260821-01.md).
     """
     short = spec.head[:7]
     rnd = f"r{spec.round_number}"

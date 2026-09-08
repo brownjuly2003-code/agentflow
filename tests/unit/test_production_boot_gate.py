@@ -47,6 +47,13 @@ def test_production_boots_on_local_transport(monkeypatch: pytest.MonkeyPatch) ->
     # conftest pins SERVING_BACKEND=duckdb and REDIS_URL defaults to
     # loopback: nothing external, nothing plaintext, the gate stays quiet.
     monkeypatch.setenv("AGENTFLOW_PROFILE", "production")
+    # Both peppers are now part of what a production boot requires (audit
+    # FB-07): their built-in defaults are constants committed to this
+    # repository, so a production process must be handed values that are not.
+    # tests/unit/test_key_lookup_pepper_gate.py owns that refusal; here they
+    # are supplied so the transport clause is what this test is about.
+    monkeypatch.setenv("AGENTFLOW_KEY_LOOKUP_PEPPER", "operator-lookup-pepper")
+    monkeypatch.setenv("AGENTFLOW_QUERY_FINGERPRINT_PEPPER", "operator-fingerprint-pepper")
 
     with TestClient(app):
         assert app.state.profile == "production"

@@ -1,48 +1,64 @@
 # Codecov setup
 
-This guide connects the AgentFlow repository to Codecov so the coverage
-badge in `README.md` resolves and coverage reports flow in on every CI
-run.
+`codecov.yml` in the repository root is retained policy, not a live pipeline.
+No workflow uploads coverage to Codecov, no README badge points at it, and the
+blocking coverage gates are repository-owned. This page says what the tracked
+config is for today and what reintroducing external reporting would take.
 
-## How uploads work today
+**Audience:** repository maintainer deciding whether to reintroduce external coverage reporting
 
-- `ci.yml` calls pinned `codecov/codecov-action` v7.0.0 with
-  `use_oidc: true` during the `test-unit` job.
-- OIDC uploads do not require a long-lived `CODECOV_TOKEN`; the action
-  exchanges the GitHub OIDC token for a short-lived Codecov credential.
-- `fail_ci_if_error: false` keeps CI green even if Codecov is temporarily
-  unreachable or the repository has not yet been enabled there.
-- Coverage still fails closed inside CI: the full suite enforces a 60%
-  line/branch floor, `diff-cover` enforces 80% on changed code, and
-  security-critical modules have separate 90% gates.
+**Prerequisites:** GitHub access as the repository owner; only a reintroduction additionally needs a Codecov account that can enable the repository
 
-## Current external status
+**Upload status:** no workflow uploads coverage to Codecov (audit F-06 removed it).
+
+## Why there is no upload
 
 On 2026-07-30, CI run
 [`30575838038`](https://github.com/brownjuly2003-code/agentflow/actions/runs/30575838038)
-completed every test and local coverage gate successfully. Codecov OIDC token
-exchange and upload queueing also succeeded, but Codecov returned
-`Repository not found` while processing the report. This is an external
-repository-activation gap, not a test or coverage failure. Complete the
-one-time setup below before treating the Codecov dashboard or badge as current.
+completed every test and every local coverage gate. The Codecov OIDC token
+exchange and the upload queueing also succeeded — and then Codecov returned
+`Repository not found` while processing the report, because the repository had
+never been enabled in the external service.
 
-## One-time setup
+Audit F-06 removed the upload step and the README badge rather than keep a step
+that could not work. `.github/workflows/ci.yml` records the decision on the
+`test-unit` job, which also gave up the `id-token: write` permission it held
+only for that upload. [Release readiness](../release-readiness.md) states the
+same, and `tests/unit/test_repository_coverage_artifact.py` fails if a Codecov
+action reappears in any job.
 
-1. Sign in to https://codecov.io with the GitHub account that owns the
-   repository.
-2. Open the organization page and enable the repository.
-3. In the repository settings on Codecov, confirm tokenless uploads are
-   allowed (Settings -> General -> "Allow tokenless uploads from GitHub
-   Actions" or the equivalent OIDC toggle).
-4. Nothing to add in GitHub secrets — the OIDC upload path does not need
-   a `CODECOV_TOKEN`.
+## What holds the coverage line instead
 
-Optional: if tokenless uploads are disabled by policy, create a project
-upload token and store it as the `CODECOV_TOKEN` repository secret, then
-drop `use_oidc: true` and add `token: ${{ secrets.CODECOV_TOKEN }}` to
-the workflow step.
+These run inside CI with no external service involved, and they block:
 
-## Validate the config
+- a 60% line+branch floor across `src/agentflow_runtime` and `sdk` on the full
+  unit and property suites;
+- `diff-cover` at 80% on changed code, from
+  `.artifacts/coverage/coverage.xml`;
+- separate 90% floors for security-critical modules (validators, freshness
+  monitor, event producer, SQL guard, rate limiter, auth manager).
+
+Codecov was only ever reporting on top of these.
+
+## Why `codecov.yml` is still tracked
+
+`scripts/validate_project_claims.py` reads it and fails the required `lint` job
+when `coverage.status.patch.default.target` disagrees with the changed-code
+floor in [`config/project_claims.toml`](../../config/project_claims.toml). The
+file is therefore the machine-checked record of the patch-coverage policy, and
+it is the configuration a reintroduced upload would consume unchanged. Deleting
+it breaks `lint`.
+
+Its policy:
+
+- project coverage must not drop by more than 2 percentage points
+  (`project.default.threshold: 2%`);
+- new code in a pull request must be at least 80% covered
+  (`patch.default.target: 80%`) — the value the claims validator pins;
+- `tests/`, `scripts/`, `examples/`, `sdk-ts/`, and `notebooks/` are ignored,
+  because they are not the production surface.
+
+Validate the file against the service without uploading anything:
 
 ```bash
 curl --data-binary @codecov.yml https://codecov.io/validate
@@ -50,29 +66,24 @@ curl --data-binary @codecov.yml https://codecov.io/validate
 
 Expected response: `Valid!`.
 
-## Verify the pipeline
+## Reintroducing external reporting (not done)
 
-1. Push a commit to `main` or open a pull request.
-2. After the repository is enabled in Codecov, confirm the `Upload coverage`
-   step reports a successful external upload.
-3. Open the Codecov dashboard and confirm a new report appears for the
-   commit SHA.
-4. Reload `README.md` on GitHub — the `codecov` badge should resolve to
-   the current coverage number (usually within a minute of the upload).
-
-## Policy summary
-
-`codecov.yml` in the repository root enforces:
-
-- Project coverage must not drop by more than 2 percentage points
-  (`project.default.threshold: 2%`).
-- New code in a pull request must be at least 80% covered
-  (`patch.default.target: 80%`).
-- Coverage for `tests/`, `scripts/`, `examples/`, `sdk-ts/`, and
-  `notebooks/` is ignored because those directories are not part of the
-  production surface.
-
-These Codecov policies are additional reporting/status checks once the
-external repository is enabled. The blocking repository-owned coverage floors
-remain the `pytest-cov`, `diff-cover`, and module-specific commands in
-`.github/workflows/ci.yml`.
+1. Sign in to https://codecov.io with the GitHub account that owns the
+   repository and enable the repository. Until this is done, any upload
+   repeats the 2026-07-30 `Repository not found` result.
+2. Publish the coverage report as an artifact first: the `test-unit` job writes
+   `.artifacts/coverage/coverage.xml` but does not upload it, and only
+   `coverage-control-plane.xml` from `test-integration` is published today.
+3. Add the Codecov step in a **separate** job that consumes that artifact. F-06
+   removed it from `test-unit` so that the job executing repository-owned test
+   code does not carry a token-exchange capability; putting it back there
+   reverses that decision.
+4. Grant `id-token: write` on that new job alone for a tokenless OIDC upload
+   (`use_oidc: true`). If policy forbids tokenless uploads, store a project
+   upload token as the `CODECOV_TOKEN` secret and pass `token:` instead.
+5. Keep `fail_ci_if_error: false` so an unreachable service cannot fail a build
+   whose blocking gates already passed.
+6. Update the **Upload status** line above and the Codecov sentence in
+   [PROJECT_CLOSURE.md](../PROJECT_CLOSURE.md).
+   `tests/unit/test_codecov_reporting_docs.py` fails while the pages and the
+   workflows disagree.

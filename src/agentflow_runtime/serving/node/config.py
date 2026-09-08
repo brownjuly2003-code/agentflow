@@ -2,9 +2,9 @@
 
 The node role is pure environment on top of the existing demo image. This
 module is the single place that reads that environment, so a misconfigured
-node fails fast at boot (``docs/three-node-demo-topology.md`` §2: "boot must
-fail fast if an edge has role=edge but no center URL or no token") instead of
-coming up half-wired.
+node fails fast at boot (``docs/architecture/three-node-demo-topology.md`` §2:
+"boot must fail fast if an edge has role=edge but no center URL or no token")
+instead of coming up half-wired.
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ def resolve_node_config(env: Mapping[str, str] | None = None) -> NodeConfig:
     if demo_key and token == demo_key:
         raise NodeConfigError(
             "AGENTFLOW_NODE_TOKEN must not equal the public demo API key "
-            f"(DEMO_API_KEY={demo_key!r}) — that key is published in the demo "
+            "(DEMO_API_KEY) — that key is published in the demo "
             "docs, so reusing it as the node token would let any public demo "
             "caller authenticate as node-to-node federation."
         )

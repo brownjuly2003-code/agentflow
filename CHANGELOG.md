@@ -2,7 +2,769 @@
 
 All notable changes to AgentFlow are documented in this file.
 
-## [2.1.0] - 2026-08-23
+## [Unreleased]
+
+### Quality — the key-rotation coverage gate was passing on a rounding margin
+
+* **89.6% rounds to 90.** The gate on `serving/api/auth/key_rotation.py` ran
+  `tests/unit/test_key_rotation.py` alone and compared against
+  `--fail-under=90`; coverage rounds before it compares, so the module was one
+  defensive line away from turning the gate red without anyone touching its
+  behaviour. It now measures **100%**.
+* **What the happy-path file never reached.** `test_key_rotation.py` pins the
+  create/rotate/revoke lifecycle. The new
+  `tests/unit/test_key_rotation_revoke_and_failures.py` covers the rest:
+  `revoke_key_by_id` — the only revoke path the admin router has called since
+  F-02 A stopped accepting a plaintext key in a URL, and until now named by no
+  test in the repo — plus the three failures the rotator has to tell apart
+  instead of crashing on.
+* **A read-only store is not a broken store.** `write_config` maps
+  `PermissionError` to `KeyStoreReadOnlyError` and downgrades
+  `key_store_writable` so the next admin mutation answers 409 instead of
+  probing the mount again; any other `OSError` re-raises with the flag
+  untouched, because a failing disk must not be reported as a read-only
+  Secret mount. Both directions are now pinned.
+* **A grace-period cleanup failure leaves a record.** `expire_previous_key`
+  runs on a timer thread with no caller left to catch anything: a `KeyError`
+  is the expected race (the key was revoked before its timer fired) and stays
+  silent, while any other failure logs `api_key_rotation_cleanup_failed`
+  rather than being swallowed by `threading`.
+
+### Security — the Flink image stops shipping pip's vendored packages
+
+* **pip's vendored dependency set was the image's last two unwaived HIGH
+  findings.** Trivy reads `pip/_vendor/vendor.txt` as installed packages, so
+  msgpack 1.1.2 (GHSA-6v7p-g79w-8964) and setuptools 70.3.0 (CVE-2025-47273)
+  were reported against `agentflow-flink` even though no code imports either.
+  Neither is fixable in place: no pin changes what pip vendors, and both
+  advisories are fixed upstream, so neither qualifies for a waiver — the rule
+  `security/trivy-waivers.json` enforces is *upstream has published no fix*
+  (FB-02).
+* **Nothing installs at runtime, so the build removes pip** once the venv is
+  complete; the API image has shipped without it since P1-3. The job's
+  dependencies are the hash-locked `flink-requirements.lock` set, and PyFlink
+  shells out to pip only when `python.requirements` is configured, which no
+  job here sets.
+* **The removal is proven, not assumed.** It runs in the same layer that
+  installed the requirements — a later `RUN` would leave pip's files in an
+  earlier layer, where an image pulled at that layer still carries them — and
+  an `apache_beam`/`pyflink` import immediately after it fails the *build* if
+  the venv no longer starts, instead of failing the smoke job or production.
+* **A shell in the container now has no `pip install`.**
+  `docs/operations/flink-operators.md` says so, and says what to do instead:
+  change the lock and rebuild.
+
+### Quality — the auth-manager coverage gate was measuring 82%, not 94%
+
+* **The file list *is* the gate.** `Run auth manager coverage gate` runs the
+  unit files it names, so a dedicated file that is not named buys the module
+  nothing. `tests/unit/test_key_store_readonly.py` arrived with the read-only
+  Secret mount work (F-02 B, 2026-08-23) and was never added to the list, so
+  the ~50 statements of write-probe logic that landed with it counted as
+  uncovered: the module measured 82% against its 90% gate, not the 94% the
+  step's own comment claimed.
+* **It stayed invisible for two weeks** because an earlier step in the same
+  job was failing, and a job step that fails means every later step never
+  runs. One red gate hides every gate behind it — this one only surfaced once
+  the earlier failure was fixed.
+* **The uncovered branches were the fail-closed ones.** Whether an `OSError`
+  means "read-only mount" decides between a 409 and a propagated error, and a
+  non-permission failure must propagate — answering 409 tells an operator
+  whose disk is broken that their key store is merely read-only. Also
+  untested: the parent-directory probe for a key store that does not exist
+  yet (a first-boot Secret mount), and the `load()` path that downgrades the
+  store in place when the write is denied between probe and write instead of
+  crashing the pod at startup.
+* **Two new unit files cover them** — `test_auth_key_store_probe.py` and
+  `test_auth_manager_key_resolution.py`, both free of TestClient and Redis so
+  the gate can run them — together with the legacy rotation-grace scan, the
+  batch rate-limit debit, and the `_rate_limit_key` fallbacks that keep a
+  plaintext key out of a Redis key name. The module is at 97%; the remaining
+  gap is the platform-divergent SIGHUP handler and thin delegations.
+
+### Security — the admin surface now leaves an audit trail (FB-10)
+
+* **`require_admin_key` counted its refusals and wrote nothing else.** It
+  guards the routes that issue, rotate and revoke every tenant API key, so
+  the highest-privilege credential in the system was the one surface with no
+  audit line — the tenant path has logged `api_auth_failed` since F-11. A
+  counter cannot say from which address, against which route, or whether the
+  503 that woke someone at 03:00 was a Secret the Deployment never picked up.
+* **All three refusals now emit `admin_auth_failed`** with `reason`
+  (`admin_invalid`, `rate_limited`, `admin_unconfigured`), `client_ip`, `path`
+  and the redacted headers. It is a separate event from `api_auth_failed` so a
+  scan against `/v1` and someone guessing the operator key stay
+  distinguishable at query time.
+* **The line never carries the key that was tried.** Headers go through
+  `security.sensitive_headers_to_redact` and then lose `X-Admin-Key`
+  unconditionally — that list belongs to the operator, and F-11 already had to
+  repair a built-in default that omitted it.
+* **`docs/runbooks/auth-401-spike.md` § Detection was wrong in both
+  directions**: it listed `disabled_key`, which no call site emits, and
+  neither admin reason. `metrics.py` points at that section for the label
+  vocabulary, so it is now pinned against the emitted labels by test.
+* **New: `docs/operations/admin-key-rotation.md`.** The admin key is one
+  shared value with no dual-key window, so rotation is a Secret change plus a
+  rolling restart during which admin calls are unreliable. The page owns the
+  triggers, the ordering that keeps the analytics-retention CronJob from
+  failing mid-run, and how to confirm the old value is dead.
+
+### Security — the NetworkPolicy egress rules now say where they may go (FB-09)
+
+* **A rule with `ports:` and no `to:` allows that port to every address.** The
+  chart rendered exactly that for Redis, Kafka, Iceberg, the object store,
+  ClickHouse, OTLP and PostgreSQL — DNS was the only rule carrying a selector.
+  So `policyTypes: [Ingress, Egress]` bought a default-deny baseline that denied
+  nothing on 6379/9092/8181/9000/8123/4317/5432, and a compromised pod could
+  dial any of them anywhere, cluster or internet.
+* **Each rule now takes its peers from `networkPolicy.egressTo.<service>`** as
+  raw `NetworkPolicyPeer` entries (podSelector / namespaceSelector / ipBlock),
+  and `templates/production-contract.yaml` refuses a `profile=production` render
+  that leaves one empty, naming the service and the port it would have opened.
+* **Rules render only when their feature is configured.** Redis follows
+  `config.redisUrl`, ClickHouse follows `serving.backend`, OTLP follows
+  `config.otlpEndpoint`; PostgreSQL and the Iceberg/object-store pair were
+  already gated. A DuckDB install with no Redis previously still opened 6379 and
+  8123 to every address for a topology it did not have — and the contract asks
+  only for the rules that render, so on the chart defaults that is Kafka alone.
+* DNS stays the chart-owned exception: it selects kube-dns by label, in whichever
+  namespace kube-dns runs.
+
+### Security — the key-lookup pepper is no longer allowed to be the public one (FB-07)
+
+* **`AGENTFLOW_PROFILE=production` now refuses to boot without
+  `AGENTFLOW_KEY_LOOKUP_PEPPER`,** or with it set to the built-in
+  `agentflow-key-lookup-v1`. That constant lives in `security.py`, and it
+  peppers `key_lookup` — an HMAC-SHA256 of the API key itself, stored beside
+  the argon2id hash so authentication resolves a key in O(1). Left at the
+  default, the digest is reproducible by anyone: hold a leaked
+  `api_keys.yaml`, HMAC a guessed key with the published pepper, and a match
+  confirms the guess without paying for a single argon2id verify. The same
+  constant also makes two deployments' digests joinable into one identity.
+  The query-analytics fingerprint pepper has had this gate since AF-13; the
+  more sensitive of the two peppers did not.
+* **The AF-13 fingerprint-pepper check moved to the same boot gate.** It lived
+  in `QueryAnalyticsPolicy.from_env`, which nothing called at startup, so a
+  production pod came up and only failed once a request reached the analytics
+  path. Both refusals now happen in the API lifespan, next to the transport
+  gate.
+* **Neither pepper was wired into the Helm chart at all.** Production values
+  must now supply both through `extraEnv` as `valueFrom.secretKeyRef`, and
+  `templates/production-contract.yaml` refuses a `profile=production` render
+  that omits either — or that writes one as a literal `value:`, which would
+  park pepper material in Helm release metadata and shell history for the
+  same reason `secrets.create=true` is refused.
+* Dev and demo boots keep the built-in defaults, so a fresh checkout still
+  starts with no configuration. An operator-supplied pepper is used byte for
+  byte: whitespace decides only whether the variable counts as set, because
+  normalising the value would change digests a padded pepper had already
+  produced. A pepper that is empty or only whitespace now falls back to the
+  default on dev instead of being used as an empty HMAC key.
+
+### Fixed — the version numbers now mean the same thing (FB-05, FB-08, FB-14)
+
+* **The Helm default image no longer points at a namespace nobody owns.**
+  `image.repository` was `agentflow/api` — an unclaimed Docker Hub namespace —
+  with `pullPolicy: IfNotPresent`, so any dev or staging install without a
+  pre-loaded image would have pulled whatever a third party had since pushed
+  there. The default is now `ghcr.io/brownjuly2003-code/agentflow-api`, the
+  registry this project actually publishes to. Note that GHCR carries
+  commit-SHA and `audit-<run-id>` tags rather than semver ones, so the default
+  tag is a shape: a dev install loads a local image or overrides
+  repository/tag, and production sets `image.digest`, which wins outright.
+* **`image.tag` tracks `Chart.appVersion`** instead of naming 2.0.0 beside an
+  appVersion of 2.1.0, and **`Chart.yaml version` leaves the `helm create`
+  default of 0.1.0**, which had not moved across any app release — two charts
+  were indistinguishable to a consumer. It now tracks the app's major.minor,
+  leaving the patch digit free for chart-only fixes.
+* **`## [2.1.0] - 2026-08-23` said released.** No `v2.1.0` tag exists; that
+  date is when the release script staged the section. The heading now says
+  unreleased and carries the note, matching what `docs/STATUS.md` has said all
+  along.
+* **`agentflow-integrations` stays at 2.0.0, and now says why.** It is not in
+  the `scripts/release.py` lockstep and is published to no index, so its
+  version moving separately is intent rather than drift. The invariant the
+  number was standing in for is the dependency range, and that is what is now
+  tested: `agentflow-client>=2,<3` must admit the client version the lockstep
+  ships.
+* `docs/STATUS.md` carries a current stamp and says what landed since
+  2026-08-26; its open-items entry for the non-fixable Flink advisories now
+  covers the nltk waiver too.
+
+`tests/unit/test_release_version_coherence.py` pins the shape rather than the
+numbers; four of its six tests fail against the tree as it stood this morning.
+
+### Security — an advisory upstream has not fixed can now be waived (FB-02)
+
+`nltk 3.10.3` carries `PYSEC-2026-3740` (`GHSA-8mgp-746c-j5xp`) and upstream has
+published no fix, so no version bump can close it. The repository had nowhere to
+record that: `validate_waiver` required a `fixed_version`, which made an unfixed
+finding unwaivable by construction, and the `pip-audit` job had no waiver
+mechanism at all — it simply stayed red on a scheduled scan with no place to
+argue.
+
+* `fixed_version: null` is now a statable claim, "upstream has published no fix".
+  The key must still be present, so silence stays a typo rather than a claim.
+* `scripts/run_pip_audit_scan.py` audits the full locked profile export with
+  **no** `--ignore-vuln` and evaluates pip-audit's JSON against
+  `security/trivy-waivers.json` (new scope `python-profiles`) itself. Unwaived
+  findings, expired waivers, and waivers matching nothing each fail the job, the
+  same three properties the Trivy and Safety gates already have. pip-audit's own
+  exit code is not consulted; the verdict comes from the report.
+* The fix state is part of the match, so the waiver revokes itself: the day
+  pip-audit reports a fix version, the "no fix exists" premise is false, the
+  finding returns to unwaived, and the gate goes red on the release that is now
+  available.
+* `requirements-docker.lock` is deliberately excluded. The one inventory that
+  ships is audited bare, with no waiver path reachable at all.
+
+The nltk waiver expires 2026-11-01. Its argument is narrow: the affected APIs
+are nltk's model-persistence helpers, exploitable only by a caller that enables
+nltk's `pathsec` sandbox and lets untrusted input choose model paths. AgentFlow
+does neither — nltk arrives only through `llama-index-core` under the
+`integrations` extra, no source file references `nltk` or `pathsec` (asserted by
+a test), and it is absent from the API image lock.
+
+`scripts/run_pip_audit_scan.py` and `security/trivy-waivers.json` join
+`scripts/evaluate_trivy_policy.py` as owner-reviewed surfaces in `CODEOWNERS`:
+they decide what a suppression covers.
+
+### Fixed — S3 lifecycle no longer puts an age clock on Iceberg objects (FB-11)
+
+The reference Terraform for the lake bucket shipped two lifecycle rules that
+deleted by age under `warehouse/`: `raw-data-lifecycle` (GLACIER after 90 days,
+expiration after 365, on `warehouse/raw/`) and `iceberg-metadata` (expiration
+after 30 days on `warehouse/metadata/`, under a comment claiming it kept 30 days
+of snapshots).
+
+Neither prefix matched anything — Iceberg lays tables out as
+`<warehouse>/<namespace>/<table>/{metadata,data}/…` and the configured namespace
+is `agentflow` — so both were no-ops wearing the language of a retention policy.
+That is the trap rather than the bug: the next person to notice they delete
+nothing reaches for the prefix the Flink sink actually writes (`warehouse/`), and
+the no-op becomes a job that removes manifest lists and data files that current
+snapshots still reference. `terraform-apply.yml` has been disabled since
+2026-04-23, so nothing was ever destroyed; this is reference topology someone is
+expected to switch on.
+
+Both rules are gone. What is left is what S3 alone owns — scratch state under
+`checkpoints/`, and a new `noncurrent-version-cleanup` rule for the noncurrent
+versions this versioned bucket accrues, which no snapshot can reference. Table
+retention belongs to the catalog (`iceberg_snapshot_expiry` in
+`orchestration/dags/daily_batch.py`, `docs/runbook.md` monthly maintenance).
+
+The retired knobs `storage_glacier_after_days` and `storage_expire_after_days`
+are replaced by `storage_noncurrent_version_expire_days` (default 30) in
+`variables.tf` and all three tfvars files.
+`tests/unit/test_terraform_lake_lifecycle.py` fails if an `expiration` or
+`transition` block ever reappears under `warehouse/`.
+
+### Security — the failed-auth throttle stops being a denial-of-service tool (FB-06)
+
+The per-address throttle for repeated failed authentication rejected with 429
+*before* the presented key was looked at. Behind a proxy without
+`AGENTFLOW_TRUSTED_PROXIES` every caller shares one address, and
+`values-production.yaml` sanctions exactly that shape (`ingress.enabled=false`,
+gateway outside the chart) — so eleven requests per hour carrying any junk key
+took every tenant, and the admin API, off that pod for an hour.
+
+* The middleware now resolves the key first. A valid key is always served; only
+  a failed attempt is counted and only a failed attempt is answered with 429.
+  While an address is throttled the resolution is capped to the constant-work
+  paths (runtime cache, O(1) peppered lookup), so a scanner still cannot buy N
+  bcrypt verifications per guess. **A pre-M-C4 bcrypt entry carrying no
+  `key_lookup` is not resolvable while its address is throttled** — rotate it
+  onto an argon2id entry.
+* `X-Forwarded-For` is read right to left, skipping hops that are themselves
+  trusted proxies and stopping at the first hop no proxy vouches for. The
+  leftmost element is written by the client, and reading it let an attacker
+  rotate the window on every request.
+* Admin-key failures count in their own window, so a scan against `/v1` can no
+  longer throttle `/v1/admin`, and a wrong admin key is refused rather than
+  raising on a non-ASCII header value.
+* `profile=production` now refuses a release that says nothing about whose
+  address the pod observes: set `config.trustedProxies`, or declare
+  `config.gateway.preservesClientIp=true` when the path preserves the caller's
+  source address. `ingress.enabled=false` used to make the clause disappear
+  rather than answer it.
+
+Behaviour to expect on a shared address: the throttle is best-effort there — it
+will not lock anyone out, but any legitimate request clears the window. Naming
+the proxies is what makes it meaningful (`docs/security-audit.md` §6.1).
+
+### Security — production must keep the API on a ClusterIP Service (T-34, F-T-32-22)
+
+The production contract refuses `service.type` other than `ClusterIP`.
+`NodePort`/`LoadBalancer` publish the service port (`/metrics` included)
+without any Ingress rule; `ExternalName` turns the Service into a CNAME
+and voids the routing contract. `values-production.yaml` pins
+`service.type: ClusterIP`. `ingress.enabled=false` remains the sanctioned
+external-gateway shape and moves routing (and the `/metrics` exposure
+question) outside the chart.
+
+### Security — production NetworkPolicy must name the Prometheus scrape namespace (T-33, F-T-32-4)
+
+The production contract refuses `networkPolicy.ingressFromNamespaces` when
+the list is empty or every `kubernetes.io/metadata.name` selector is
+`ingress-nginx`, unless `networkPolicy.scrapeFromIngressNamespace=true`
+records that Prometheus shares the ingress-controller namespace. An empty
+list renders `ingress: []` (deny all) on every profile. An empty-map
+selector (`{}`) matches every namespace and is refused by the schema
+(`minProperties: 1`) and by the production contract.
+`values-production.yaml` ships no guessed scrape namespace.
+`values.schema.json` requires each `ingressFromNamespaces` item to be a
+non-empty string-to-string label map; a string, null, or empty-map
+element is refused. Environment values must repeat both the
+ingress-controller selector and the scrape namespace: Helm replaces lists
+instead of merging them.
+
+### Security — production chart Ingress rejects /metrics routes and nginx routing-control annotations (T-35, audit 2026-09-02 F-10)
+
+`/metrics` is mounted without API-key auth so Prometheus can scrape it
+in-cluster through the ClusterIP Service; the liveness and readiness probe
+paths are exempt for the same reason. A production values file whose Ingress
+rules would send `/metrics` to the API no longer renders. The production
+contract refuses a `/` Prefix path, `/metrics` under Prefix or Exact, a
+`path` that is not a canonical single-line absolute path (unquoted, a CR, LF
+or tab used to inject a second Ingress rule for `/metrics`), a
+`className` that is not a canonical single line (unquoted, it used to inject
+`spec.defaultBackend` and send unmatched requests, `/metrics` included, to
+the API), a `host` that is not a canonical single line (`.host` has always
+been quoted, but a multi-line host makes the rendered Ingress unprovable, so
+the contract refuses it defensively), or a `pathType` other than
+`Prefix`/`Exact`. It also refuses the exact `ingress.annotations` keys
+`rewrite-target`, `use-regex`, `app-root`, `configuration-snippet`, and
+`server-snippet` under both `nginx.ingress.kubernetes.io/` and the legacy
+`ingress.kubernetes.io/` prefix because ingress-nginx interprets them after
+Helm checks the literal host/path. The path clauses are a denylist: a
+production host with an empty `paths` list satisfies them vacuously — the
+render then carries a rule with no paths, which routes nothing and is rejected
+on apply. `helm/agentflow/templates/ingress.yaml` quotes or
+`toYaml`-serialises every user-controlled interpolation so an injected value
+stays a scalar.
+Production already requires `networkPolicy.enabled=true`, and the
+NetworkPolicy limits pod ingress to the namespaces in
+`networkPolicy.ingressFromNamespaces` on the service port. The production
+contract refuses an empty or ingress-controller-only list unless
+`networkPolicy.scrapeFromIngressNamespace=true`, and an empty list renders
+`ingress: []` (deny all).
+
+The 2026-09-02 audit's F-10 acceptance criteria are only partially met:
+
+- this is a values-contract check at `helm template` time, not a runtime
+  network control, and it binds the production profile only — a `/` path still
+  renders green on the chart's deliberately dev-shaped defaults;
+- the endpoint remains unauthenticated to anything that can already reach the
+  pod port; no monitoring identity (mTLS, auth proxy, or IP allowlist) is
+  implemented;
+- the exact annotation denylist binds only the Ingress object rendered by this
+  chart; it cannot constrain the ingress-nginx controller ConfigMap or
+  separately managed Ingress objects, which remain platform routing inputs;
+- production binds `service.type` to `ClusterIP`, so `NodePort`/`LoadBalancer`
+  no longer publish the service port (`/metrics` included) on a green render;
+  `ingress.enabled=false` remains the sanctioned external-gateway shape and
+  moves routing (and the `/metrics` exposure question) outside the chart.
+
+### Security — Safety ignores are scoped per requirements bucket
+
+`scripts/run_safety_scan.py` runs `safety check` once per inventory bucket and
+applies `--ignore` only for `safety_id` values whose waiver scope matches that
+bucket. Expired waivers stop suppressing findings. A waiver whose scope is not
+scanned, or a duplicate `safety_id`, fails closed.
+
+### Documentation — root records archived (2026-09-02–2026-09-04)
+
+Twenty-one immutable tracked Markdown records moved from the repository root
+to `docs/evidence/records/` with unchanged filenames and SHA-256 digests.
+Living citations now use those paths. After all eight documentation-cleanup
+items closed, `plan_26_08_2026.md` moved to `docs/archive/plans/` with its
+closure evidence intact. The retired local 2026-04-17 benchmark baseline moved
+from the standalone `docs/benchmark-baseline-archive/` directory into the
+performance archive.
+
+### Security — nltk 3.10.0 -> 3.10.3 in uv.lock (Dependabot GHSA-m4rf-3fr8-xwx3, GHSA-6hwm-xvph-95vm)
+
+- `uv lock --upgrade-package nltk` only; nltk is a transitive dependency of `llama-index-core` and is not part of the `cloud`/`postgres` export, so `requirements-docker.lock` is unchanged. Closes the critical (JVM argument injection in the Stanford wrappers) and high (uncontrolled `dot` search path) advisories GitHub reported on the default branch on 2026-09-01.
+- **This did not leave nltk clean.** On 2026-09-02 GitHub opened `GHSA-8mgp-746c-j5xp` / `PYSEC-2026-3740` against 3.10.3 itself, and upstream has published no fix, so no bump can close it. The advisory is unreachable from AgentFlow and is waived under `security/trivy-waivers.json` scope `python-profiles` until 2026-11-01 — see the FB-02 entry under Unreleased and `docs/security-audit.md` §8.1. Read this bump as preventive, not as a closure.
+
+### Security — production boot requires a query-fingerprint pepper (AF-13)
+
+`QueryAnalyticsPolicy.from_env` now fails closed on `AGENTFLOW_PROFILE=production`
+when `AGENTFLOW_QUERY_FINGERPRINT_PEPPER` is unset or equals the built-in
+constant. The default pepper is committed to the repository, so it never
+protected a leaked production analytics table from offline joins; demo and dev
+profiles keep the default so a fresh checkout still starts. The check runs at
+API import time through `build_analytics_middleware`, so a misconfigured
+production process dies before it serves a request.
+
+### Fixed — id-less dead-letters get distinct journal identities (AF-10)
+
+Id-less rejects used to share the literal journal id `unknown` in
+`pipeline_events`, so a later real event whose id was the string `unknown` was
+treated as an already-seen duplicate by the unchanged ingest and ClickHouse
+idempotency guards. Each id-less dead-letter now journals under a fresh
+`missing-id:<uuid4>` identity. Iceberg `dead_letter` rows still store the raw
+payload id (null when the event had none).
+
+### Documentation — release-readiness rollback state aligned with STATUS (AF-08)
+
+`docs/release-readiness.md` reported in two places that the corrected Helm
+rollback was **not started**, with no date attached, so a historical fact about
+the 2026-08-08 soak-05 attempt read as the current state and contradicted
+`docs/STATUS.md`. Both sites now scope that clause to 2026-08-08 and carry the
+current split: corrected rollback *mechanics* **PASS**ed on 2026-08-23 without
+traffic (probe revision 5, rollback to revision 6, byte-identical to revision
+3), while rollback after sustained soak traffic remains
+**`BLOCKED_HOST_CAPACITY`**. The mechanics PASS does not close this gate; the
+combined soak/rollback acceptance gate is still open.
+
+### Documentation — benchmark runs are separated from immutable evidence
+
+The demo freshness and real-path throughput drivers now write their default
+Markdown and JSON outputs only under ignored `.artifacts/freshness/` and
+`.artifacts/throughput/` directories. The former undated tracked reports are
+stable lifecycle pages; their last generated contents are preserved as the
+immutable [2026-06-06 demo freshness](docs/archive/performance/freshness-benchmark-2026-06-06.md)
+and [2026-07-09 S10 throughput](docs/archive/performance/throughput-realpath-2026-07-09.md)
+snapshots. Current documentation cites those snapshots for measured values and
+uses the [demo](docs/perf/freshness-benchmark.md) and
+[real-path](docs/perf/throughput-realpath.md) lifecycle pages only for command,
+output, and evidence-promotion ownership. Both drivers fail closed when asked
+to overwrite tracked lifecycle or archived evidence paths.
+
+The same ownership boundary now covers three more real-path benchmark
+families. S8 end-to-end freshness writes
+`.artifacts/freshness/e2e-realpath.md` and
+`.artifacts/freshness/e2e-realpath-current.json`; its
+[lifecycle page](docs/perf/freshness-e2e-realpath.md) protects both itself and
+the immutable [2026-07-09 snapshot](docs/archive/performance/freshness-e2e-realpath-2026-07-09.md).
+Streaming-hop freshness writes `.artifacts/freshness/realpath-current.json`
+and protects the immutable
+[2026-06-30 record](docs/perf/freshness-realpath-2026-06-30.md). S13 own-data
+scale writes `.artifacts/scale/own-data-current.md` and
+`.artifacts/scale/own-data-current.json` and protects the immutable
+[2026-07-11 record](docs/perf/scale-own-data-2026-07-11.md). All runtime-heavy
+benchmark verification remains on `deproject-mac`, not the Windows development
+host.
+
+The authentication microbenchmark now writes
+`.artifacts/perf/auth-bench-current.md`, protects its lifecycle page and the
+immutable [2026-05-26 record](docs/perf/auth-bench-2026-05-26.md), and requests
+legacy bcrypt explicitly. This keeps the reproduction aligned with the
+historical M-C4 measurement after the project default moved to Argon2id; it does
+not present the legacy O(n) loop as the current O(1) authentication path or as
+a production SLA.
+
+The performance-history recorder and plotter now default to ignored
+`.artifacts/perf-history/` outputs and reject tracked history/documentation
+targets. The four-entry `.github/perf-history.json` log is preserved byte for
+byte as the [2026-04-27 archive](docs/archive/performance/perf-history-2026-04-27.json).
+Current documentation no longer claims that CI appends a cross-run trend: the
+bot writer was removed when its self-push conflicted with branch protection.
+
+### Documentation — archive provenance is now a CI ratchet (item 8)
+
+`scripts/check_archive_provenance.py` fails closed when a tracked
+`docs/archive/**/*.md` page (except `README.md` indexes) is missing any of the
+five provenance facts from its first 40 lines. `tests/unit/test_archive_provenance.py`
+covers the live tree plus negative fixtures. Item 8 stays open for the remaining
+hygiene ratchets.
+
+### Documentation — living-status vocabulary is banned from historical pages (item 8)
+
+`scripts/check_historical_claims.py` fails closed when a tracked point-in-time
+page under `docs/archive/`, `docs/decisions/`, `docs/evidence/` (except
+`INDEX.md`), `docs/migration/` or `docs/perf/` uses living-status vocabulary
+owned by `docs/STATUS.md`: `Updated:`, `production accepted`,
+`production-accepted`, `closure candidate`, `release line`. It covers 95 pages
+today; `tests/unit/test_historical_claims.py` pins the live tree plus negative
+fixtures. Item 8 stays open for the canonical-owner and orphan-link ratchets.
+
+### Documentation — orphan pages are now a CI ratchet (item 8)
+
+`scripts/check_docs_orphans.py` fails closed when a living `docs/**/*.md` page
+(outside archive, decisions, dv2-multi-branch, evidence, migration, and perf;
+hubs `docs/README.md` and `docs/index.md` exempt) has no inbound Markdown or
+MkDocs nav link. `tests/unit/test_docs_orphans.py` pins the live tree plus
+negative fixtures. The seven previously unlinked pages are now linked from the
+corpus map. Item 8 stays open for the canonical-owner ratchet.
+
+### Documentation — generated-reference owners are now a CI ratchet (item 8 closed)
+
+`scripts/check_generated_reference_owners.py` pins the `docs/README.md`
+generated-reference ownership table to the tree: untracked paths, tracked
+`.artifacts/` runtime paths, `--check` rows with no tracked output, and unowned
+`--check` generators all fail. The new `Data contracts` row closes the
+`scripts/generate_contracts.py` gap, so the table now covers 23 families and 4
+`--check` generators; `tests/unit/test_generated_reference_owners.py` pins the
+live tree plus negative fixtures. Item 8 is closed.
+
+### Documentation — anchors and replacement characters are now a CI ratchet (item 7)
+
+`scripts/check_docs_anchors.py` fails closed when a tracked Markdown file is not
+strict UTF-8 or contains U+FFFD, and when a living page's `](target#fragment)`
+link does not resolve to a MkDocs heading id (`markdown.extensions.toc`
+slugify/unique). `tests/unit/test_docs_anchors.py` pins the live tree plus
+negative fixtures. Item 7 stays open for the remaining style/language content
+slices.
+
+### Documentation — Updated stamps follow a dated-page allowlist (item 7)
+
+An `Updated` stamp now appears only on a living page whose date is part of the
+claim: the engineering status snapshot, the security audit, and the five dated
+operations records. `scripts/check_docs_updated_stamps.py` fails closed when a
+page outside that allowlist carries any stamp, when a dated page has none before
+its first section heading, and when a stamp is not exactly the canonical
+`**Updated:** YYYY-MM-DD` line with a real, non-future date. The two hubs and the
+six on-call runbooks lost stamps nobody maintained, so Git history is now their
+date. `docs/engineering-standards.md` records the convention once and
+`tests/unit/test_docs_updated_stamps.py` pins the allowlist.
+
+### Documentation — root pages and on-call runbooks open with purpose, audience, prerequisites (item 7)
+
+A living page now opens with its H1 and one paragraph of purpose; operator and runbook
+pages then carry `**Audience:**` and `**Prerequisites:**` lines. The nine pages that
+had a blank opening — `docs/product.md`, `docs/clickhouse-migration.md`,
+`docs/engineering-standards.md`, `docs/runbook.md`, and the five `docs/runbooks/*.md`
+on-call pages — received that header in this slice, and `docs/archive/README.md` now
+names the anchor and Updated-stamp ratchets beside the other enforcements. Five
+`docs/operations/` pages and the fail-closed opening checker remain; item 7 stays open.
+
+### Documentation — operations pages open with purpose, audience, prerequisites (item 7)
+
+The five `docs/operations/` pages that still opened on their first section —
+`docs/operations/aws-oidc-setup.md`, `docs/operations/cdc-production-onboarding.md`,
+`docs/operations/disaster-recovery.md`, `docs/operations/helm-deployment.md`, and
+`docs/operations/third-party-pen-test-intake.md` — now open with a purpose
+paragraph plus `**Audience:**` and `**Prerequisites:**` lines. Every living page now
+opens per the documentation convention by inspection; the fail-closed opening
+checker remains the next slice, and item 7 stays open.
+
+### Documentation — page openings are now a CI ratchet (item 7)
+
+`scripts/check_docs_page_openings.py` now fail-closes living-page openings:
+exactly one unfenced H1, a purpose paragraph before the first section heading,
+and `**Audience:**` then `**Prerequisites:**` on operator pages outside a
+fourteen-page pending allowlist that may only shrink. The contract lives in
+`tests/unit/test_docs_page_openings.py`; item 7 stays open until that allowlist
+is empty.
+
+### Documentation — every operator page carries audience and prerequisites; plan item 7 closed
+
+The fourteen pending operator pages in `docs/operations/` now carry one
+`**Audience:**` line and one `**Prerequisites:**` line; `chaos-runbook.md` also
+gains a purpose paragraph. `PENDING_OPERATOR_PAGES` is empty, and
+`scripts/check_docs_page_openings.py` reports `61 living pages, 25 operator pages, 0 pending`.
+Plan item 7 is closed; `docs/glossary.md` and `docs/PROJECT_CLOSURE.md` language
+and historical wording were left untouched.
+
+## [2.1.0] - unreleased (prepared 2026-08-23)
+
+> No `v2.1.0` tag exists and nothing under this heading has been published.
+> The date is when the release script staged the section, not a release date
+> (audit FB-05). `docs/STATUS.md` says the same thing, and a test keeps the two
+> from drifting apart.
+
+### Deployment — staging promotes the verified workflow digest (audit F-19c)
+
+`staging-deploy.yml` now accepts one explicit successful
+`container-attestation` run ID and its exact main-branch source SHA. Before it
+creates a kind cluster, it verifies the run and build job through the Actions
+API, validates the three-file promotion packet and manifest checksum, and
+checks both the keyless cosign signature and GitHub SLSA build provenance for
+the same `repository@digest` subject.
+
+The staging script no longer builds or loads a separate API image. Helm pulls
+the packet's digest, while the existing smoke and E2E suites remain required.
+After successful teardown, the workflow uploads checksummed staging evidence.
+That evidence proves only this staging gate; it does not claim a production
+rollout, production acceptance, or complete F-19 closure.
+
+### Deployment — the workflow-built digest now has Helm promotion evidence (audit F-19b)
+
+The protected container build job now turns its own
+`steps.build.outputs.digest` into a machine-readable artifact after cosign and
+build provenance succeed. The packet contains digest-only Helm values, the
+rendered API Deployment, Git SHA/run identity, tool versions, and a SHA-256 of
+that manifest. Invalid image references, digests, Git object IDs, or run IDs
+fail before any evidence file is written.
+
+The external-digest signing job cannot emit this build/promotion artifact. A
+packet by itself proves that Helm rendered the workflow-built image; it does
+not prove a staging rollout or production acceptance. The separate F-19c
+consumer verifies and deploys the packet to staging.
+
+### Deployment — production Helm renders require an immutable image (audit F-19 slice)
+
+The chart now accepts `image.digest` and renders every API-derived Deployment
+and provision Job as `repository@sha256:...`; the developer default remains
+tag-based. `config.profile=production` fails closed when the digest is empty,
+and the values schema rejects anything except an empty dev value or a lowercase
+SHA-256 digest. Flink image values use the same digest-aware renderer.
+
+This is the Helm consumption contract only. Building, scanning, attesting and
+promoting that one digest between staging and release remains the rest of
+F-19; this change does not claim that pipeline is complete.
+
+### BREAKING — query analytics keeps a fingerprint, not the question (audit F-18)
+
+The analytics middleware persisted the first 1000 characters of every
+`/v1/query` question verbatim, with no expiry, and the admin top-queries
+surface read it back. Truncation bounds size; it says nothing about
+sensitivity or lifetime, and callers type PII, commercial figures and the
+occasional pasted credential.
+
+Default behaviour changes: a session record now carries
+`query_fingerprint` — a peppered HMAC of the normalised question — and
+`query_text` is `NULL`. Set `AGENTFLOW_QUERY_ANALYTICS_STORE_TEXT=true` to keep
+the text, and it is stored **redacted** (emails, credential-shaped tokens, JWTs
+and long digit runs replaced) and truncated. There is deliberately no setting
+that stores a raw prompt.
+
+`GET /v1/admin/analytics/top-queries` items gain a `fingerprint` field and
+`query` is null unless text storage is on; frequency counts are unchanged,
+because the fingerprint groups the same questions the text used to.
+
+Retention is finite and enforceable: `AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS`
+(default 30) plus `scripts/prune_query_analytics.py`, which deletes expired
+`api_sessions` rows from whichever store the API writes to. Nothing prunes
+automatically — schedule the job. `api_usage` counters are deliberately out of
+scope: no user content, different lifetime.
+
+Erasure is separate from retention:
+`scripts/prune_query_analytics.py --erase-tenant <tenant>` deletes every
+`api_sessions` row for one tenant regardless of age (`api_usage` counters stay,
+same reasoning). The control-plane port gains `prune_api_sessions` and
+`delete_tenant_api_sessions`, implemented by both the embedded and PostgreSQL
+adapters.
+
+Schema: `api_sessions.query_fingerprint` is added by embedded-store column
+migration and PostgreSQL control-plane migration 3.
+
+### Fixed — node ingest always stamps the origin branch (audit F-12 follow-up)
+
+The center's `POST /v1/node/events` tagged `source_metadata.branch` only when
+`source_metadata` was already a mapping. The canonical event schemas
+(`BaseEvent`) do not declare that field, so an event carrying something else
+there still applied — but its `pipeline_events` row had no branch and the
+cross-branch view never counted it. The stamp (`serving/node/stamp.py`, now
+shared by the center's ingest and the edge's local apply) replaces a
+non-mapping value and overwrites any sender-supplied `branch`; it is the
+node's attribution, not the sender's claim. The one exception is a CDC-shaped
+event, whose `source_metadata` is provenance owned by `CdcEvent`: a non-mapping
+there is left for the validator to dead-letter rather than healed. Found while
+giving
+`serving/node/ingest.py` its coverage floor (95 — the ninth and last of the
+modules F-12 named): its 30% was the same accounting artifact as the others —
+the node-topology integration file already exercised 98% of it and nothing
+counted that file — plus `tests/unit/test_node_ingest.py` for the bearer
+ladder, dead-letter accounting and the idempotency filter's scope.
+
+### Fixed — `AGENTFLOW_SRC_SHIM_SILENT` is parsed as a boolean (audit F-15)
+
+The deprecated `src` shim documented `AGENTFLOW_SRC_SHIM_SILENT=1` and tested
+the variable for mere presence, so `AGENTFLOW_SRC_SHIM_SILENT=0` silenced the
+deprecation warning it reads as asking to keep. It now accepts `1`, `true`,
+`yes` or `on` (case-insensitive, whitespace trimmed); anything else — including
+`0`, `false` and an unrecognised value — keeps the warning, because a
+deprecation notice is the safe default when the intent is unclear. The removal
+gate is unchanged: the shim goes in the next major release.
+
+### Fixed — telemetry can no longer disable itself silently (audit F-13)
+
+`serving/api/main.py` wrapped the `setup_telemetry` import in a blanket
+`except ModuleNotFoundError` and substituted a no-op. OpenTelemetry is a
+mandatory runtime dependency, so nothing that catch could reach was a
+legitimate "telemetry is optional here" case — only a packaging defect or a
+broken transitive import inside the telemetry module, traded silently for an
+API that boots with no tracing and says nothing. The import is now
+unconditional. Running without tracing keeps its own switch,
+`OTEL_SDK_DISABLED=true`, which `setup_telemetry` honours at call time.
+
+### Deployment — the prod-shaped compose stack now says what it is (audit F-09)
+
+`docker-compose.prod.yml` models a realistic topology and has no production
+security posture; the file said so in a comment while everything around it said
+otherwise. The Make target `stack-prod` is now `stack-prod-shaped-local`, the
+old target refuses with a pointer instead of silently starting the stack, and
+the compose project is named `agentflow-prod-shaped-local` — which also stops
+this stack sharing containers and volumes with the dev `docker-compose.yml`
+stack, as both used to inherit the directory-derived default name. **Existing
+local volumes from the old project name are orphaned; run
+`docker compose -f docker-compose.prod.yml down -v` under the old name first if
+you want them cleaned up.**
+
+The API container had no auth settings at all, so every `/v1` route fail-closed
+with 503 and the only thing ever smoked was `/health/ready`. It now loads
+`config/api_keys.yaml` and runs `AGENTFLOW_DEMO_MODE=true` with the published
+`demo-key` — which is also what makes the stack structurally unable to claim
+production, since the runtime refuses demo mode together with
+`AGENTFLOW_PROFILE=production`. New `scripts/compose_prod_shaped_smoke.py`
+(`make stack-prod-shaped-local-smoke`) asserts readiness, a **401** for an
+anonymous read — a 503 there is a failure, not a passing fail-closed check —
+and a 200 for an authenticated one.
+
+Alerting is wired end to end instead of on paper. Prometheus no longer writes
+its own scrape-only config from a start-up heredoc: it mounts tracked
+`monitoring/prometheus/prometheus.prod-shaped-local.yml` plus the repository's
+`monitoring/alerting/rules.yml`, and delivers to a new local Alertmanager on
+`127.0.0.1:9093` whose config notifies nobody and says so. Rules written for the
+full pipeline stay loaded and stay at "no data" in this stack, because nothing
+here produces those series.
+
+### Security — Helm production values contract (audit F-11)
+
+The chart's defaults are dev posture (no NetworkPolicy, no ingress TLS,
+plaintext ClickHouse, an inline Secret) and stay that way, but
+`config.profile=production` is now a contract rather than a label.
+`templates/production-contract.yaml` fails any production render that keeps dev
+posture and reports every violation at once: NetworkPolicy off, inline key
+material, an enabled ingress missing hosts, TLS or `config.trustedProxies`,
+wildcard or still-default CORS origins, plaintext external ClickHouse/Redis,
+the shared `serviceAccount.name` escape hatch, or a mounted `config.security` weaker than
+`config/security.yaml`. Deliberate exceptions stay possible and greppable: a
+named store in `AGENTFLOW_INSECURE_TRANSPORT_OK` (the same opt-out the runtime
+honours at boot), or `ingress.enabled=false` when TLS terminates in a gateway
+ahead of the chart.
+
+New versioned `helm/agentflow/values-production.yaml` carries that posture and
+leaves empty only what an environment must supply; layer environment values on
+top of it.
+
+Chart defaults realigned with canonical `config/security.yaml`: `key_hashing`
+`bcrypt` → `argon2id`, and the redaction denylist regains `X-Admin-Key`,
+`Cookie` and `Set-Cookie`. The same three were missing from
+`SecurityPolicy.sensitive_headers_to_redact`'s in-code default, so a policy file
+omitting the key logged session cookies and the admin key in the header map
+recorded on failed authentication. New `config.trustedProxies` value wires
+`AGENTFLOW_TRUSTED_PROXIES` from the chart instead of `extraEnv`.
+
+### Docs — living claims, rollback/soak gate split, docs-link checker (audit 2026-08-23 F-10)
+
+Living STATUS/CLOSURE and `config/project_claims.toml` now match the 2026-08-23
+evidence: corrected rollback mechanics **PASS**
+(`docs/evidence/records/corrected-rollback-pair-runtime-20260823-01.md`); the full 4h soak plus
+rollback-after-traffic remains **`BLOCKED_HOST_CAPACITY`**
+(`docs/evidence/records/ci-soak-f02-capacity-decision-20260823-01.md`). The consumer string in
+`pending_acceptance` is unchanged. Namespace-migration dead `src/...` paths
+and broken glossary links are repaired. `scripts/check_docs_links.py` fails
+closed on missing local Markdown targets and backticked repo paths in living
+docs (historical evidence excluded).
+
+Stage A of `audit_sol_23_08_2026.md` §7 is closed in local `main` (not
+pushed): F-02 A `1629452` + `372957e`; F-02 B `a363984`; F-05 `6222cba`;
+F-06 `87ead56`; F-03 `42814f1`; F-17 `eec8c27`; F-10 this slice. Still open:
+audit Stages B/C/D, external pentest, full F-02 soak
+(`BLOCKED_HOST_CAPACITY`). `production.status` stays `candidate`.
+
+### BREAKING — admin key revoke is by `key_id`, not plaintext (audit F-02 A)
+
+`DELETE /v1/admin/keys/{api_key}` is now `DELETE /v1/admin/keys/{key_id}`: a
+credential must never appear in a request path. Callers must pass `key_id`,
+obtainable from `GET /v1/admin/keys` or the `key_id` field returned by
+`POST /v1/admin/keys`. A 404 no longer echoes the supplied path value.
+`AGENTFLOW_NODE_TOKEN` collision errors name the `DEMO_API_KEY` environment
+variable without embedding its value.
 
 ### Changed — runtime import namespace: `src.*` → `agentflow_runtime.*` (audit F-09 / P2-6 Phase 1-2)
 
@@ -653,7 +1415,7 @@ first boot (Compose and Helm now do it for you — see below).
 DuckDB fixtures on an ephemeral GitHub runner, tarred them, and uploaded a
 7-day Actions artifact — a real check that the backup/restore code path
 still works, but no evidence a live environment can be recovered. Calling it
-"Nightly Backup" and citing an RPO/RTO in `docs/disaster-recovery.md` on the
+"Nightly Backup" and citing an RPO/RTO in `docs/operations/disaster-recovery.md` on the
 strength of it was a false claim.
 
 - The workflow is renamed **`Backup/Restore Regression Test`**
@@ -664,7 +1426,7 @@ strength of it was a false claim.
   unchanged — `pyproject.toml`'s
   `[[tool.agentflow.dependency-profiles.targets]]` registry references it by
   `path` + `job`.
-- `docs/disaster-recovery.md` no longer states a flat RPO/RTO. It says
+- `docs/operations/disaster-recovery.md` no longer states a flat RPO/RTO. It says
   plainly what exists today — a DuckDB file/config backup+restore code path,
   exercised nightly against synthetic fixtures — and what does not:
   no ClickHouse backup, no PostgreSQL control-plane backup, and no restore
@@ -759,7 +1521,7 @@ strength of it was a false claim.
   re-captured at seed scale with an explicit host-contention caveat; the
   live 2-pod ClickHouse cutover stage is documented as blocked by stand
   contention, with the re-run recipe pinned
-  (`docs/clickhouse-cutover-plan.md` Phase 3, ADR 0010).
+  (`docs/plans/clickhouse-cutover-plan.md` Phase 3, ADR 0010).
 - **Delta re-audit followups (S8)**: stale factual claims corrected (probe
   counts, node-label narration, done-status notes), residual USD tails
   re-pinned to ₽, the retired dataset's name dropped from provenance
@@ -1225,7 +1987,7 @@ strength of it was a false claim.
   serving default moves DuckDB → ClickHouse, with DuckDB demoted to the
   local-dev / test and compatibility store. This unblocks engine-native bounded
   PII (ClickHouse row/column policies) and real Kubernetes horizontal API
-  scaling. Recorded as a decision and staged in `docs/clickhouse-cutover-plan.md`;
+  scaling. Recorded as a decision and staged in `docs/plans/clickhouse-cutover-plan.md`;
   the config/compose/Helm cutover itself is **not yet executed**.
 
 ### Added
@@ -2056,7 +2818,7 @@ wave 2 dependency bumps that landed in sessions 11–19.
 - `helm/agentflow` chart aligned to current release line:
   `Chart.yaml` `appVersion` bumped `1.0.0` → `1.3.0`, default
   `values.yaml` `image.tag` bumped `1.1.0` → `1.3.0`, and
-  `docs/helm-deployment.md` examples follow. Helm contract tests +
+  `docs/operations/helm-deployment.md` examples follow. Helm contract tests +
   helm lint pass; operators who pin their own registry/tag via
   `image.repository` / `image.tag` overrides are unaffected.
 

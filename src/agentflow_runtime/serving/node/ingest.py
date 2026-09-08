@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from agentflow_runtime.processing.local_pipeline import _process_event
+from agentflow_runtime.serving.node.stamp import stamp_origin_branch
 from agentflow_runtime.serving.node.view import CROSS_BRANCH_HINT, cross_branch_summary
 from agentflow_runtime.serving.write_lock import SERVING_WRITE_LOCK
 
@@ -134,10 +135,11 @@ async def ingest_node_events(request: Request) -> JSONResponse:
                     # re-applies or re-journals; count it, do not double-count.
                     duplicates += 1
                     continue
-                # Tag origin so the journal/lineage carry the branch (N4).
-                metadata = event.setdefault("source_metadata", {})
-                if isinstance(metadata, dict):
-                    metadata["branch"] = origin
+                # Tag origin so the journal/lineage carry the branch (N4). The
+                # center's stamp is authoritative (overwrites a sender-supplied
+                # branch) and lands on every event that can apply -- see
+                # stamp_origin_branch for the non-mapping and CDC cases.
+                stamp_origin_branch(event, origin)
                 # No new serving logic — the center reuses the exact event->metric
                 # path the in-process pipeline uses. clickhouse_sink is None: the
                 # HF three-node demo serves from DuckDB.

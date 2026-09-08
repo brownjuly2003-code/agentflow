@@ -13,6 +13,14 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHART_PATH = PROJECT_ROOT / "helm" / "agentflow"
+_API_IMAGE_DIGEST = "sha256:" + "a" * 64
+# Read from the chart rather than repeated here: the default moved off the
+# unclaimed Docker Hub namespace `agentflow/api` (audit FB-08), and a test
+# that hardcodes a registry has to be edited every time that judgement is
+# revisited.
+_DEFAULT_API_REPOSITORY = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))[
+    "image"
+]["repository"]
 
 
 def _load_yaml(path: Path) -> dict:
@@ -34,6 +42,71 @@ def _run_helm_template(*args: str) -> subprocess.CompletedProcess[str]:
 
 def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part for part in (result.stdout, result.stderr) if part)
+
+
+def _schema_path_reported(output: str, *segments: str) -> bool:
+    """Helm's JSON Schema printer names a values path as dotted (`a.b`) or as a
+    JSON pointer (`/a/b`), depending on the Helm release. CI installs unpinned
+    Helm; both forms are live.
+    """
+    dotted = ".".join(segments)
+    pointer = "/" + "/".join(segments)
+    return dotted in output or pointer in output
+
+
+# The chart's defaults are dev posture, and `config.profile=production` now
+# refuses to render on them (audit F-11, templates/production-contract.yaml).
+# Tests that need the production *profile* for something else -- the Kafka
+# fail-closed gate, ClickHouse TLS wiring, the Flink runtime -- borrow the rest
+# of the contract from here instead of restating it four times. Ingress stays
+# off, so the TLS and trusted-proxy clauses do not apply.
+_PRODUCTION_POSTURE: tuple[str, ...] = (
+    "--set",
+    f"image.digest={_API_IMAGE_DIGEST}",
+    "--set",
+    "networkPolicy.enabled=true",
+    "--set",
+    r"networkPolicy.ingressFromNamespaces[0].kubernetes\.io/metadata\.name=ingress-nginx",
+    "--set",
+    r"networkPolicy.ingressFromNamespaces[1].kubernetes\.io/metadata\.name=monitoring",
+    "--set",
+    "secrets.create=false",
+    "--set",
+    "secrets.existingSecret=agentflow-prod-secret",
+    "--set",
+    "config.corsOrigins=https://app.example.com",
+    # Part of the posture since FB-06: a production release has to say whose
+    # address the pod observes, ingress or no ingress.
+    "--set",
+    "config.trustedProxies=10.0.0.0/8",
+    "--set",
+    "analyticsRetention.enabled=true",
+    "--set",
+    "analyticsRetention.dryRun=false",
+    "--set",
+    "analyticsRetention.concurrencyPolicy=Forbid",
+    # Part of the posture since FB-07: both peppers fall back to constants
+    # committed to this repository, so production must project real ones from
+    # the operator-managed Secret. A literal `value:` is refused -- that would
+    # park the pepper in Helm release metadata.
+    "--set",
+    "extraEnv[0].name=AGENTFLOW_KEY_LOOKUP_PEPPER",
+    "--set",
+    "extraEnv[0].valueFrom.secretKeyRef.name=agentflow-prod-secret",
+    "--set",
+    "extraEnv[0].valueFrom.secretKeyRef.key=key-lookup-pepper",
+    "--set",
+    "extraEnv[1].name=AGENTFLOW_QUERY_FINGERPRINT_PEPPER",
+    "--set",
+    "extraEnv[1].valueFrom.secretKeyRef.name=agentflow-prod-secret",
+    "--set",
+    "extraEnv[1].valueFrom.secretKeyRef.key=query-fingerprint-pepper",
+    # Part of the posture since FB-09: an egress rule with no `to:` allows its
+    # port to every address, so production names peers for each rule that
+    # renders. Tests that switch on ClickHouse or PostgreSQL add their own.
+    "--set",
+    "networkPolicy.egressTo.kafka[0].ipBlock.cidr=10.30.0.0/16",
+)
 
 
 def test_chart_declares_values_schema_for_runtime_contracts():
@@ -100,6 +173,74 @@ def test_chart_defaults_use_structured_api_keys_and_tenants():
         assert tenant["max_api_keys"] >= 1
         # The chart must not ship an example of a field the runtime ignores.
         assert "duckdb_schema" not in tenant
+
+
+def test_api_image_digest_overrides_the_dev_tag_for_every_runtime_workload():
+    result = _run_helm_template(
+        "--set",
+        f"image.digest={_API_IMAGE_DIGEST}",
+        "--set",
+        "worker.enabled=true",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "controlPlane.postgres.existingSecret=agentflow-controlplane-pg",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "lakeMaterializer.enabled=true",
+        "--set",
+        "lakeMaterializer.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
+        "--set",
+        "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "servingBridge.enabled=true",
+        "--set",
+        "servingBridge.kafkaBootstrapServers=kafka.data.svc:9092",
+    )
+    output = _combined_output(result)
+
+    assert result.returncode == 0, output
+    expected = f"{_DEFAULT_API_REPOSITORY}@{_API_IMAGE_DIGEST}"
+    runtime_images: list[str] = []
+    for document in yaml.safe_load_all(result.stdout):
+        if not document or document.get("kind") not in {"Deployment", "Job"}:
+            continue
+        runtime_images.extend(
+            container["image"]
+            for container in document["spec"]["template"]["spec"]["containers"]
+            if container["image"].startswith(_DEFAULT_API_REPOSITORY)
+        )
+
+    assert len(runtime_images) == 5
+    assert set(runtime_images) == {expected}
+    # The tag is never rendered once a digest is set, whatever the tag says.
+    default_tag = yaml.safe_load((CHART_PATH / "values.yaml").read_text(encoding="utf-8"))["image"][
+        "tag"
+    ]
+    assert f"{_DEFAULT_API_REPOSITORY}:{default_tag}" not in result.stdout
+
+
+def test_api_image_digest_schema_rejects_non_sha256_values():
+    result = _run_helm_template("--set", "image.digest=latest")
+    output = _combined_output(result)
+
+    assert result.returncode != 0
+    assert _schema_path_reported(output, "image", "digest")
+    assert "sha256" in output
+
+
+def test_schema_path_reported_accepts_both_printers_and_rejects_unrelated_output():
+    """Negative control: the helper must not match an unrelated refusal string."""
+    pointer = "- at '/image/digest': 'latest' does not match pattern '^(sha256:[0-9a-f]{64})?$'"
+    dotted = "image.digest: 'latest' does not match pattern '^(sha256:[0-9a-f]{64})?$'"
+    assert _schema_path_reported(pointer, "image", "digest")
+    assert _schema_path_reported(dotted, "image", "digest")
+    assert not _schema_path_reported("nothing here", "image", "digest")
 
 
 def test_chart_defaults_do_not_embed_production_shaped_api_key_hashes():
@@ -402,6 +543,94 @@ def test_postgres_store_still_gated_without_clickhouse_backend():
     assert "Multi-replica requires BOTH" in output
 
 
+def test_rendered_workloads_use_distinct_service_accounts_and_flink_binding():
+    rendered = _run_helm_template(
+        "--set",
+        "persistence.enabled=false",
+        "--set",
+        "serving.backend=clickhouse",
+        "--set",
+        "serving.clickhouse.host=clickhouse.data.svc",
+        "--set",
+        "serving.clickhouse.existingSecret=agentflow-clickhouse",
+        "--set",
+        "controlPlane.store=postgres",
+        "--set",
+        "controlPlane.postgres.existingSecret=agentflow-controlplane-pg",
+        "--set",
+        "worker.enabled=true",
+        "--set",
+        "provision.enabled=true",
+        "--set",
+        "flinkJob.enabled=true",
+        "--set",
+        "flinkJob.kafkaBootstrapServers=kafka.data.svc:9092",
+        "--set",
+        "flinkJob.checkpointStorage=s3://agentflow-state/checkpoints",
+        "--set",
+        "flinkJob.savepointStorage=s3://agentflow-state/savepoints",
+    )
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+
+    documents = [document for document in yaml.safe_load_all(rendered.stdout) if document]
+    service_accounts = {
+        document["metadata"]["name"]: document
+        for document in documents
+        if document.get("kind") == "ServiceAccount"
+    }
+    deployments = {
+        document["metadata"]["labels"].get("app.kubernetes.io/component"): document
+        for document in documents
+        if document.get("kind") == "Deployment"
+    }
+    provision_job = next(
+        document
+        for document in documents
+        if document.get("kind") == "Job"
+        and str(document.get("metadata", {}).get("name", "")).endswith("-provision")
+    )
+    flink_deployment = next(
+        document for document in documents if document.get("kind") == "FlinkDeployment"
+    )
+    flink_binding = next(
+        document
+        for document in documents
+        if document.get("kind") == "RoleBinding"
+        and str(document.get("metadata", {}).get("name", "")).endswith("-flink")
+    )
+
+    names = {
+        "api": deployments["api"]["spec"]["template"]["spec"]["serviceAccountName"],
+        "worker": deployments["worker"]["spec"]["template"]["spec"]["serviceAccountName"],
+        "provision": provision_job["spec"]["template"]["spec"]["serviceAccountName"],
+        "flink": flink_deployment["spec"]["serviceAccount"],
+    }
+    assert len(set(names.values())) == 4, names
+    assert set(names.values()) <= set(service_accounts)
+    assert flink_binding["subjects"][0]["name"] == names["flink"]
+    assert flink_binding["subjects"][0]["name"] != names["api"]
+    for role in ("api", "worker", "flink"):
+        annotations = service_accounts[names[role]]["metadata"].get("annotations", {})
+        assert "helm.sh/hook" not in annotations
+        assert "helm.sh/hook-delete-policy" not in annotations
+
+
+def test_rendered_api_disables_service_account_token_automount():
+    rendered = _run_helm_template()
+    output = _combined_output(rendered)
+    assert rendered.returncode == 0, output
+
+    api_deployment = next(
+        document
+        for document in yaml.safe_load_all(rendered.stdout)
+        if document
+        and document.get("kind") == "Deployment"
+        and document["metadata"]["labels"].get("app.kubernetes.io/component") == "api"
+    )
+    assert api_deployment["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
+
+
 def test_serviceaccount_is_pre_hook_before_provision_job():
     """Live E4 stand (2026-07-16): first helm install hung in pending-install
     because the provision Job (hook weight -5) referenced SA `agentflow` while
@@ -436,10 +665,16 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
         and d.get("kind") == "Job"
         and str(d.get("metadata", {}).get("name", "")).endswith("-provision")
     ]
-    assert len(sa_docs) == 1, "expected exactly one ServiceAccount"
+    assert len(sa_docs) >= 1, "expected chart-managed ServiceAccounts"
     assert len(job_docs) == 1, "expected provision Job when clickhouse backend"
 
-    sa_ann = sa_docs[0]["metadata"]["annotations"]
+    provision_sa_name = job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"]
+    provision_sa = next(
+        service_account
+        for service_account in sa_docs
+        if service_account["metadata"]["name"] == provision_sa_name
+    )
+    sa_ann = provision_sa["metadata"]["annotations"]
     job_ann = job_docs[0]["metadata"]["annotations"]
     # SA: pre-install only — must survive upgrade without hook replacement.
     assert sa_ann["helm.sh/hook"] == "pre-install"
@@ -449,11 +684,8 @@ def test_serviceaccount_is_pre_hook_before_provision_job():
     assert int(sa_ann["helm.sh/hook-weight"]) < int(job_ann["helm.sh/hook-weight"])
     # before-hook-creation keeps pre-install retry safe without orphaning SA.
     assert sa_ann["helm.sh/hook-delete-policy"] == "before-hook-creation"
-    # Job must still bind the chart SA (not default).
-    assert (
-        job_docs[0]["spec"]["template"]["spec"]["serviceAccountName"]
-        == sa_docs[0]["metadata"]["name"]
-    )
+    # Job must still bind its chart-managed SA (not default).
+    assert provision_sa_name == provision_sa["metadata"]["name"]
 
 
 def test_serving_clickhouse_tls_render_is_first_class():
@@ -473,6 +705,9 @@ def test_serving_clickhouse_tls_render_is_first_class():
         "serving.clickhouse.tls.caSecret=agentflow-clickhouse-ca",
         "--set",
         "config.profile=production",
+        "--set",
+        "networkPolicy.egressTo.clickhouse[0].ipBlock.cidr=10.30.1.0/24",
+        *_PRODUCTION_POSTURE,
     )
     output = _combined_output(rendered)
     assert rendered.returncode == 0, output
@@ -544,7 +779,7 @@ def test_staging_values_render_host_loopback_relay_command():
     assert container["command"] == ["/bin/sh", "-lc"]
     assert len(container.get("args") or []) == 1
     relay_arg = container["args"][0]
-    assert "host_loopback_proxy.py" in relay_arg
+    assert "python -m agentflow_runtime.serving.api.host_loopback_proxy" in relay_arg
     assert (
         "exec uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8000"
         in relay_arg
@@ -567,7 +802,7 @@ def test_default_chart_render_keeps_uvicorn_command_without_staging_relay():
         "8000",
     ]
     assert not container.get("args")
-    assert "host_loopback_proxy.py" not in result.stdout
+    assert "agentflow_runtime.serving.api.host_loopback_proxy" not in result.stdout
 
 
 def test_worker_defaults_off_and_omits_process_role():
@@ -580,8 +815,14 @@ def test_worker_defaults_off_and_omits_process_role():
     output = _combined_output(result)
     assert result.returncode == 0, output
     assert "AGENTFLOW_PROCESS_ROLE" not in output
-    assert "agentflow-worker" not in output
-    assert "app.kubernetes.io/component: worker" not in output
+    worker_deployments = [
+        document
+        for document in yaml.safe_load_all(result.stdout)
+        if document
+        and document.get("kind") == "Deployment"
+        and document["metadata"]["labels"].get("app.kubernetes.io/component") == "worker"
+    ]
+    assert worker_deployments == []
 
 
 def test_worker_enabled_requires_postgres_control_plane():
@@ -719,6 +960,7 @@ def test_serving_bridge_rejects_duckdb_backend():
 
 def test_production_materializer_requires_kafka_auth():
     result = _run_helm_template(
+        *_PRODUCTION_POSTURE,
         "--set",
         "config.profile=production",
         "--set",
@@ -729,6 +971,10 @@ def test_production_materializer_requires_kafka_auth():
         "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
         "--set",
         "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "networkPolicy.egressTo.icebergCatalog[0].ipBlock.cidr=10.30.3.0/24",
+        "--set",
+        "networkPolicy.egressTo.objectStore[0].ipBlock.cidr=10.30.3.0/24",
     )
     output = _combined_output(result)
 
@@ -738,6 +984,7 @@ def test_production_materializer_requires_kafka_auth():
 
 def test_kafka_auth_credentials_are_secret_references():
     result = _run_helm_template(
+        *_PRODUCTION_POSTURE,
         "--set",
         "config.profile=production",
         "--set",
@@ -754,6 +1001,10 @@ def test_kafka_auth_credentials_are_secret_references():
         "lakeMaterializer.catalogUri=https://iceberg.data.svc:8181",
         "--set",
         "lakeMaterializer.warehouse=s3://agentflow-lake/warehouse",
+        "--set",
+        "networkPolicy.egressTo.icebergCatalog[0].ipBlock.cidr=10.30.3.0/24",
+        "--set",
+        "networkPolicy.egressTo.objectStore[0].ipBlock.cidr=10.30.3.0/24",
     )
     output = _combined_output(result)
 
@@ -766,6 +1017,7 @@ def test_kafka_auth_credentials_are_secret_references():
 
 def test_flink_operator_workload_renders_golden_runtime():
     result = _run_helm_template(
+        *_PRODUCTION_POSTURE,
         "--set",
         "config.profile=production",
         "--set",

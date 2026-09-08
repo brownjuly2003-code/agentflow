@@ -7,6 +7,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_INPUT_PATH = PROJECT_ROOT / ".artifacts" / "chaos" / "chaos-report.json"
+
+
+def resolve_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+
+
+def write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8", newline="\n")
+
 
 def _load_report(input_path: Path) -> dict[str, Any]:
     if not input_path.exists():
@@ -145,8 +158,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input",
-        default="chaos-report.json",
-        help="Path to the pytest JSON report produced by pytest-json-report.",
+        type=Path,
+        default=DEFAULT_INPUT_PATH,
+        help="Path to the pytest JSON report (default: .artifacts/chaos/chaos-report.json).",
     )
     parser.add_argument(
         "--output",
@@ -163,17 +177,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    input_path = Path(args.input)
+    input_path = resolve_path(args.input)
     report = build_report(_load_report(input_path), input_path)
     markdown = build_markdown(report)
     if args.output:
-        Path(args.output).write_text(
-            json.dumps(report, indent=2) + "\n",
-            encoding="utf-8",
-            newline="\n",
-        )
+        write_text(resolve_path(args.output), json.dumps(report, indent=2) + "\n")
     if args.markdown:
-        Path(args.markdown).write_text(markdown, encoding="utf-8", newline="\n")
+        write_text(resolve_path(args.markdown), markdown)
     else:
         sys.stdout.write(markdown)
     return 0 if report["status"] == "ok" else 1

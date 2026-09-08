@@ -213,10 +213,15 @@ def test_analytics_top_queries_and_entities_return_ranked_results(client: TestCl
     )
 
     assert top_queries.status_code == 200
-    assert top_queries.json()["queries"][0] == {
-        "query": "revenue today",
-        "count": 2,
-    }
+    # Default F-18 policy stores a fingerprint, not the question; identical
+    # questions still collapse to one ranked row.
+    top_query = top_queries.json()["queries"][0]
+    assert top_query["query"] is None
+    assert top_query["count"] == 2
+    fingerprint = top_query["fingerprint"]
+    assert isinstance(fingerprint, str)
+    assert fingerprint
+    assert "revenue today" not in fingerprint.casefold()
     assert top_entities.status_code == 200
     assert top_entities.json()["entities"][0] == {
         "entity_type": "order",

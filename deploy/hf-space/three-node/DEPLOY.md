@@ -1,6 +1,7 @@
 # Three-node demo — deploy runbook (owner-gated)
 
-Publishes the three-node topology (ADR 0012 / `docs/three-node-demo-topology.md`)
+Publishes the three-node topology (ADR 0012 /
+`docs/architecture/three-node-demo-topology.md`)
 as **three** Hugging Face Docker Spaces under the `liovina` account:
 
 | Node   | Space                        | Role env       | Branch |
@@ -85,6 +86,11 @@ curl -fsS -H "X-API-Key: demo-key" $CENTER/v1/node/branches
 
 ## Refresh after a repo change
 
-Each Space tracks `main` (`ARG AGENTFLOW_REF=main`). Trigger a **Factory
-rebuild** from the Space UI after a merge, or bump `AGENTFLOW_REF` to a tag for a
-pinned demo.
+All three Spaces share `deploy/hf-space/Dockerfile`, which builds a pinned ref
+rather than a moving branch: `ARG AGENTFLOW_REF=v2.0.0` (audit FB-13). A
+**Factory rebuild** reproduces the same code line on every node instead of
+whatever `main` held when each Space happened to build.
+
+To publish newer work, bump `AGENTFLOW_REF` in that Dockerfile to the new tag,
+re-push it to all three Space repos with the copy step above, then Factory
+rebuild each. Rebuilding one node alone puts the topology on mixed code.

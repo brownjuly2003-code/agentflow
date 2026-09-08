@@ -20,7 +20,9 @@ def test_required_ci_quality_gates_are_local_and_fail_closed() -> None:
 
     assert checkout["with"]["fetch-depth"] == 0
     assert "--cov-fail-under=60" in workflow
-    assert "diff-cover coverage.xml --compare-branch=origin/main --fail-under=80" in workflow
+    assert (
+        "diff-cover .artifacts/coverage/coverage.xml --compare-branch=origin/main --fail-under=80"
+    ) in workflow
     assert "--fail-under=90" in workflow
     assert "mkdocs build --strict" in workflow
     assert "python scripts/validate_project_claims.py" in workflow

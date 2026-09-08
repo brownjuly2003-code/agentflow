@@ -13,7 +13,6 @@ DEFAULT_CURRENT_PATH = PROJECT_ROOT / ".artifacts" / "benchmark" / "current.json
 CURRENT_PATH_CANDIDATES = (
     DEFAULT_CURRENT_PATH,
     PROJECT_ROOT / ".artifacts" / "load" / "results.json",
-    PROJECT_ROOT / "tests" / "load" / "results.json",
 )
 REGRESSION_LIMIT = 0.20
 DEFAULT_MAX_REGRESS_PERCENT = REGRESSION_LIMIT * 100

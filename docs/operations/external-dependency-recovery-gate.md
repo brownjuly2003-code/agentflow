@@ -10,6 +10,10 @@ Docker restart policy was `no`. It does not remediate the independent API
 DuckDB WAL failure, verify workloads, change Kubernetes objects, or establish
 clock, idle-I/O, traffic, soak, or production readiness.
 
+**Audience:** operator running the external-dependency recovery gate
+
+**Prerequisites:** `scripts/recover_external_dependencies.py`, the recorded ClickHouse, MinIO, Iceberg REST, and kind-node owners on this page, and the remote Colima Docker socket named there; live recovery also requires `--execute` with acknowledgement `COLIMA_RESTART_DEPENDENCY_LIFECYCLE_GAP`
+
 ## Safety contract
 
 [`scripts/recover_external_dependencies.py`](../../scripts/recover_external_dependencies.py)

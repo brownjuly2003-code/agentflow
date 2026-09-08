@@ -1,5 +1,17 @@
 # Benchmark Split Decision
 
+> **Lifecycle update (2026-08-29):** the mutable tracked
+> `docs/perf/load-benchmark-latest.md` output described below is retired. That
+> path now documents ownership; `scripts/run_benchmark.py` writes ignored
+> `.artifacts/benchmark/` outputs, and the former report is preserved as the
+> [2026-04-17 historical snapshot](../archive/performance/load-benchmark-2026-04-17.md).
+> The former `docs/perf/ci-smoke-latest.json` CI output is also retired:
+> `scripts/profile_entity.py` and the PR smoke workflow now write ignored
+> `.artifacts/perf-smoke/entity-profile.json`. Existing tracked entity profiles,
+> latency JSON, and flamegraphs remain point-in-time evidence and are not
+> mutable runtime destinations.
+> The dated decision text below is otherwise unchanged.
+
 **Date:** 2026-04-24
 **Context:** A03 entity latency re-baseline
 
@@ -10,7 +22,13 @@ We currently have **one benchmark script** (`scripts/run_benchmark.py`) that tri
 1. **CI smoke gate** -- fast feedback on PRs (should run in < 2 minutes).
 2. **Release baseline** -- canonical evidence for SLO compliance and optimization tracking (needs minutes of stable load).
 
-The old artifacts (`docs/benchmark.md`, `benchmark_pool16.md`, etc.) reflect this confusion: some runs use 20 users / 30 s, others 50 users / 60 s, producing p99 values that differ by 2-3x (160 ms vs 460 ms) on the same host. This made it impossible to agree on whether the `< 200 ms` target was met.
+The old artifacts (the report formerly at `docs/benchmark.md` and the archived
+[`benchmark_pool16.md`](../archive/performance/benchmark_pool16.md),
+[`benchmark_pool16_60s.md`](../archive/performance/benchmark_pool16_60s.md), and
+[`benchmark_pool24_60s.md`](../archive/performance/benchmark_pool24_60s.md))
+reflect this confusion: some runs use 20 users / 30 s, others 50 users / 60 s,
+producing p99 values that differ by 2-3x (160 ms vs 460 ms) on the same host.
+This made it impossible to agree on whether the `< 200 ms` target was met.
 
 ## 2. Decision
 
@@ -44,11 +62,14 @@ Split into **two distinct benchmarks** with separate thresholds.
 | **Load** | 50 users, spawn rate 10/s, 60 s duration, mixed traffic |
 | **Purpose** | Track progress toward the `< 200 ms` SLO; produce release-readiness evidence. |
 | **Threshold** | p99 **< 200 ms** for entity endpoints (optimization target) |
-| **Artifact** | `.artifacts/benchmark/<date>.json` + `docs/benchmark.md` (date-stamped, not overwritten) |
+| **Artifact** | `.artifacts/benchmark/<date>.json` + `docs/perf/load-benchmark-latest.md` (latest generated report; release copies are date-stamped) |
 
 **Why 60 seconds minimum:**
 - The 20 s and 30 s runs under-report tail latency because the warmup period dominates.
-- The 60 s run is the first duration where p99 stabilised across repeated trials (see `benchmark_pool16_60s.md` vs shorter runs).
+- The 60 s run is the first duration where p99 stabilised across repeated trials
+  (see the archived
+  [`benchmark_pool16_60s.md`](../archive/performance/benchmark_pool16_60s.md)
+  versus the shorter runs).
 - Mixed traffic is realistic but dilutes entity-specific p99; therefore the **quick profile** remains the canonical source for entity-only changes.
 
 ## 3. Threshold Mapping
@@ -93,9 +114,9 @@ not a stable latency signal for the API endpoints under test.
 | `docs/perf/entity-latency-baseline-*.json` | Canonical before/after for a perf PR | Permanent, linked from PR description |
 | `docs/perf/flamegraph-*.svg` | Visual evidence for hot frames | Permanent |
 | `docs/perf/ci-smoke-latest.json` | Latest CI smoke result | Overwritten each CI run |
-| `.artifacts/benchmark/<date>.json` | Nightly/release long-run snapshot | Keep last 30 days in CI artifacts; promote to `docs/benchmark-<date>.md` for releases |
-| `docs/benchmark.md` | Human-readable latest long-run report | Overwritten by `run_benchmark.py`; date-stamped copies for releases |
-| `docs/benchmark_pool*.md` | **Historical drift artifacts** | Mark as `ARCHIVED` in header; do not use for comparison |
+| `.artifacts/benchmark/<date>.json` | Nightly/release long-run snapshot | Keep last 30 days in CI artifacts; promote release evidence under `docs/perf/` with a date-stamped name |
+| `docs/perf/load-benchmark-latest.md` | Human-readable latest long-run report | Overwritten by `run_benchmark.py`; date-stamped copies for releases |
+| `docs/archive/performance/benchmark_pool*.md` | **Historical drift artifacts** | Archived with provenance; do not use for comparison |
 
 ## 5. Recommended CI Changes
 
@@ -111,7 +132,7 @@ not a stable latency signal for the API endpoints under test.
 
 2. Add a scheduled nightly job `perf-baseline` that runs `python scripts/run_benchmark.py` with canonical parameters and uploads `.artifacts/benchmark/<date>.json` as an artifact.
 
-3. Update `docs/benchmark.md` header to state:
+3. Keep the `docs/perf/load-benchmark-latest.md` header stating:
    > "This file is overwritten by the latest long-running benchmark. For entity-specific optimization evidence, see `docs/perf/entity-benchmark-contract.md`."
 
 ## 6. Acceptance

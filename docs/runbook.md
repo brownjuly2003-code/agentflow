@@ -1,5 +1,16 @@
 # Operational Runbook
 
+This page owns the exact local commands, supported runtime settings, and
+recurring maintenance for the compose stack, local Flink, and DuckDB paths. It
+is for the local and demo operator who is bringing those services up,
+inspecting them, or recovering a local incident. Production-incident response
+lives in the [on-call runbooks](runbooks/README.md); controlled gates and
+specialized procedures live in the [operations index](operations/README.md).
+
+**Audience:** local/demo operator for the compose stack, local Flink, and DuckDB paths
+
+**Prerequisites:** Docker Compose, DuckDB CLI, Kafka CLI tools; kind staging also requires docker, kubectl, helm, and kind as named by `scripts/k8s_staging_up.sh`
+
 ## Quick Reference
 
 | Service | Local URL | Health check |
@@ -13,7 +24,121 @@
 | Jaeger | http://localhost:16686 | `curl -I http://localhost:16686` |
 | Toxiproxy API | http://localhost:8474 | `curl http://localhost:8474/proxies` |
 
+The [troubleshooting walkthrough](troubleshooting.md) helps classify a symptom
+and select its owning procedure. The
+[observability walkthrough](observability.md) explains how to combine these
+signals. This runbook owns their exact local commands, supported runtime
+settings, and recurring maintenance.
+
+## Observability Operations
+
+### Inspect metrics and dashboards
+
+Scrape the API metrics directly:
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+The production-shaped compose stack wires those metrics to Prometheus and
+Grafana at the URLs in the quick-reference table. Use Jaeger from the same
+table to inspect traces for a failing or slow request.
+
+### Configure tracing
+
+The supported OpenTelemetry settings are:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+OTEL_SERVICE_NAME=agentflow-api
+OTEL_SDK_DISABLED=true   # supported way to run without tracing
+```
+
+OpenTelemetry is a mandatory runtime dependency and the API imports its
+telemetry setup outright. Disabling tracing is an explicit configuration
+choice through `OTEL_SDK_DISABLED=true`; an unimportable telemetry module
+fails boot instead of silently degrading to no tracing (audit F-13).
+
+### Maintain query analytics retention
+
+Query analytics keeps a peppered fingerprint of each query question, not the
+question, unless an operator opts in to a redacted copy. Retention defaults to
+30 days. The Helm chart provides a disabled-by-default CronJob that calls the
+authenticated API; it never opens DuckDB directly or mounts the API PVC. Enable
+it with an operator-managed Secret containing `admin-key`:
+
+```yaml
+analyticsRetention:
+  enabled: true
+  schedule: "0 3 * * *"
+  retentionDays: ""  # use AGENTFLOW_QUERY_ANALYTICS_RETENTION_DAYS, default 30
+  dryRun: false
+  concurrencyPolicy: Forbid
+```
+
+The production values contract requires the job to be enabled with
+`dryRun: false` and `concurrencyPolicy: Forbid`. Validate a new schedule in a
+non-production values file with `dryRun: true`, then switch to the final mode.
+For a manual preview, call the same API; a dry run does not call the store's
+prune operation:
+
+```bash
+curl -X POST \
+  -H "X-Admin-Key: <admin-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"retention_days":30,"dry_run":true}' \
+  http://localhost:8000/v1/admin/analytics/retention
+```
+
+`scripts/prune_query_analytics.py` is retained for offline maintenance only;
+do not schedule it beside a live API process against the same DuckDB/PVC. See the
+[security policy](https://github.com/brownjuly2003-code/agentflow/blob/main/SECURITY.md)
+before retention or tenant-erasure work.
+
 ## Local Pipeline Operations
+
+### Diagnose local walkthrough prerequisites
+
+For an optional service-backed path, verify the engine and inspect the default
+stack before changing data or ports:
+
+```bash
+docker version
+docker compose version
+docker compose ps
+docker compose logs kafka flink-jobmanager
+```
+
+If the expected local store is missing or surprising, confirm the selected
+path and visible files:
+
+=== "macOS / Linux"
+
+    ```bash
+    echo "$DUCKDB_PATH"
+    ls *.duckdb*
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Write-Output $env:DUCKDB_PATH
+    Get-ChildItem -Filter "*.duckdb*"
+    ```
+
+When the default API address is already owned, keep the existing process and
+start the walkthrough API on another port:
+
+```bash
+uvicorn agentflow_runtime.serving.api.main:app --host 0.0.0.0 --port 8001
+```
+
+Only after stale named volumes are the confirmed cause and their data is
+disposable, reset the default stack. This deletes those local volumes:
+
+```bash
+docker compose down -v
+```
 
 ### Start the local demo (Docker Redis + ClickHouse)
 
@@ -81,6 +206,10 @@ make flink-local
 ```
 
 This builds the local Python 3.11 Flink image, starts the required Kafka, MinIO, and Flink services, and submits `src/agentflow_runtime/processing/flink_jobs/stream_processor.py` to the local cluster.
+
+For session aggregation behavior, checkpoint tuning, Kubernetes Operator
+compatibility, and the isolated PyFlink environment, use the
+[Flink operator reference](operations/flink-operators.md).
 
 Verify the run here:
 - Flink Web UI: http://localhost:8081
@@ -168,12 +297,25 @@ kafka-console-consumer --bootstrap-server localhost:9092 \
 
 ### Launch kind staging
 
+The supported promotion path is the manual `Staging Deploy` workflow. Supply
+the successful `Container Attestation` build run ID, its exact 40-character
+main-branch source SHA, and confirmation `PROMOTE`. The workflow validates the
+run, packet, cosign signature, and GitHub build provenance before it creates a
+kind cluster.
+
+For an isolated rehearsal on a Docker/kind host, first complete those same
+verification checks and download the selected packet. Then pass its verified
+digest-only values file explicitly:
+
 ```bash
-bash scripts/k8s_staging_up.sh
+PROMOTION_VALUES_FILE=/absolute/path/to/image-values.yaml bash scripts/k8s_staging_up.sh
 bash scripts/k8s_staging_down.sh
 ```
 
-`scripts/k8s_staging_up.sh` expects `docker`, `kubectl`, `helm`, and `kind` on the path. It builds the API image, loads it into kind, installs the Helm chart, and runs a smoke test.
+`scripts/k8s_staging_up.sh` expects `docker`, `kubectl`, `helm`, and `kind` on
+the path. It refuses a missing or non-regular promotion values file, pulls the
+immutable API subject through Helm, and runs the smoke test. It does not build
+or load an API image.
 
 ## Incident Response
 
@@ -184,7 +326,7 @@ bash scripts/k8s_staging_down.sh
 3. Read the latest API logs: `docker compose -f docker-compose.prod.yml logs agentflow-api --tail 50`.
 4. Open Jaeger at `http://localhost:16686` and look for hanging `http.request`, `nl_to_sql`, or `duckdb.query` spans.
 5. Restart only the API first: `docker compose -f docker-compose.prod.yml restart agentflow-api`.
-6. If the API still cannot become healthy, switch to the recovery steps in `docs/disaster-recovery.md`.
+6. If the API still cannot become healthy, switch to the recovery steps in `docs/operations/disaster-recovery.md`.
 
 ### Pipeline lag > 60s
 
@@ -243,7 +385,8 @@ bash scripts/k8s_staging_down.sh
 
 ## Disaster Recovery
 
-For restore drills, backup verification, or host loss scenarios, use [docs/disaster-recovery.md](disaster-recovery.md).
+For restore drills, backup verification, or host loss scenarios, use
+[docs/operations/disaster-recovery.md](operations/disaster-recovery.md).
 
 ## Maintenance
 
@@ -259,3 +402,11 @@ For restore drills, backup verification, or host loss scenarios, use [docs/disas
 - Review and rotate API keys
 - Run `pytest tests/chaos/ -v --tb=short` against the current compose stack
 - Cost review: compare actual vs projected spend
+
+The two Iceberg lines above are the *only* retention for table data. S3
+lifecycle in `infrastructure/terraform/modules/storage/main.tf` deliberately
+expires nothing under the warehouse prefix: object age says nothing about
+which manifests still reference a file, so an S3 rule there deletes files out
+from under live snapshots instead of cleaning the table. If table storage is
+growing, the answer is `expire_snapshots` and `rewrite_data_files`, never a
+new lifecycle rule.

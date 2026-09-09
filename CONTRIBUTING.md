@@ -148,6 +148,43 @@ replaceable runtime artifacts, not reviewed evidence or production acceptance.
 Promote a reviewed snapshot only under a new date-stamped identity with
 provenance.
 
+`python scripts/mutation_local.py --module <target>` measures one module of
+that same gate on this machine, so a mutation score is available before you
+push instead of only after the weekly workflow. `--list-modules` prints the
+targets; the score, the mutant population and the surviving mutant names match
+the CI run for the same commit — up to pytest's internal-error exits, which
+`scripts/mutation_report.py` counts as kills (exit 3) while this driver refuses
+to score them at all — because the driver reads its targets from
+`scripts/mutation_report.MODULE_TARGETS`, builds its workspace with
+`prepare_workspace`, and generates mutants with mutmut's own engine
+(`mutmut.mutation.file_mutation`). It needs `mutmut` installed (it is in the
+`dev` extra) but never invokes the `mutmut` CLI: mutants are executed as plain
+`pytest` subprocesses selected through `MUTANT_UNDER_TEST`, which is what makes
+this work on native Windows, where `mutmut run` exits at import time. Expect
+minutes, not seconds — one pytest process per mutant, `--jobs` in parallel.
+The driver exits 1 when the module is below its threshold or when any mutant
+got no verdict (only pytest exit 0 = survived and 1 = killed are verdicts;
+anything else is a harness failure, never a kill). A mutant that comes back
+without a verdict — usually a timeout from running `--jobs` of them at once —
+is retried once serially with a longer timeout before it is reported that way,
+so the score does not move with the machine's load. Its workspace and JSON
+report live under the OS temp directory, outside the repository; the workspace
+is reused across runs only when it is stamped with the same root, module,
+module source, materialized top-level package tree, target tests and
+`pyproject.toml` (which `prepare_workspace` always renders into the workspace as
+a real file, carrying pytest addopts, filterwarnings and `[tool.mutmut]`), and
+is rebuilt otherwise, so a second run never reports the first one's copy of
+those sources. The stamp does not cover the trees `prepare_workspace` normally
+symlinks — `src/`, `sdk/`, `config/`, `scripts/` and the rest of `tests/`
+beyond the target's own test files — which it copies instead where the OS
+refuses symlinks; on such a machine, pass a fresh `--workspace` after editing
+them. A `--workspace` is emptied on rebuild,
+so one that is a checkout — this repository, anything inside the tree the
+sources come from, or any directory holding a `.git` — is refused instead, and
+only a directory carrying the driver's own marker is ever cleared. `--root`
+points it at another checkout; `--only` re-runs named mutants, written either
+bare or exactly as the report prints them (`<module>.<mutant>`).
+
 `python scripts/evaluate_trivy_policy.py` writes ignored Trivy policy
 summaries under `.artifacts/trivy/`. Relative `--report`, `--waivers`, and
 `--output` paths resolve from the project root, not the caller CWD, and every

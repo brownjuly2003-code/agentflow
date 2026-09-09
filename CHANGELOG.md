@@ -54,6 +54,37 @@ All notable changes to AgentFlow are documented in this file.
   failing at import. The stale-shim hazard is now written into the test's own
   design rules, since the next rename will ripple the same way.
 
+* **The gate is measurable on this machine now, not only on Sundays.**
+  `python scripts/mutation_local.py --module <target>` runs one module of the
+  same gate locally in about two minutes. It exists because `mutmut run` calls
+  `sys.exit(1)` at import time on native Windows, so between weekly runs nobody
+  here could see a score at all — which is part of why nine consecutive red
+  Sundays went unnoticed. The driver never invokes the `mutmut` CLI: it reads
+  its targets from `scripts/mutation_report.MODULE_TARGETS`, builds the
+  workspace with `prepare_workspace`, generates mutants with mutmut's own
+  `mutate_file_contents`, and runs each one as a plain `pytest` subprocess
+  selected through `MUTANT_UNDER_TEST`. The gate's definition of a target is
+  still declared in exactly one place.
+* **It reproduces CI rather than approximating it.** Measured against run
+  34266462154 on `serving/semantic_layer/query/sql_builder.py`: 141 mutants,
+  the same population, down to the surviving mutant names. At `10e20a5` the
+  module scores 90.8% (128 killed, 13 survived) — the 88.7% CI last reported
+  plus the three mutants `2cda8da` and `10e20a5` killed since. Only pytest exit
+  0 (survived) and 1 (killed) count as verdicts; anything else is reported as a
+  harness failure and fails the run, where `mutation_report.py` counts exit 3
+  as a kill. That is the one deliberate divergence, and `CONTRIBUTING.md` says
+  so rather than claiming exact parity.
+* **A score you can trust to be about your own tree.** Three failure modes are
+  closed by construction: the workspace is stamped with the root, the module,
+  its source, the materialized package tree, the target's tests and
+  `pyproject.toml`, and is rebuilt whenever any of those move, so a second run
+  never reports the first one's sources; a mutant that comes back without a
+  verdict is retried once serially before it is called a harness failure, so
+  the number does not drift with machine load; and a `--workspace` that is a
+  checkout — this repository, anything inside it, or any directory holding a
+  `.git` — is refused instead of emptied. The mutated module never leaves the
+  temp workspace: the working tree is clean after a run.
+
 ### Terraform — an exact core pin took the provider update channel down with it
 
 * **`required_version = "= 1.15.4"` broke Dependabot's terraform ecosystem the

@@ -597,9 +597,14 @@ def test_qualify_table_refuses_an_unscoped_read_of_a_multi_tenant_table(monkeypa
     # so `_holds_foreign_tenant_rows` always short-circuited to False and the
     # guard was never taken in a test.
     monkeypatch.setattr(sql_builder_module, "get_current_tenant_id", lambda default=None: None)
-    host = _host(tenant_router=_TenantRouter(has_config=True), backend=_Backend(rows=[(1,)]))
+    backend = _Backend(rows=[(1,)])
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=backend)
     with pytest.raises(ValueError, match="Tenant context is required"):
         host._qualify_table("orders", None)
+    # And it refused because of *this* table. A mutant that probes something
+    # else still finds a row and still raises, so the exception alone does not
+    # prove the guard asked the right question.
+    assert backend.queries == [FOREIGN_TENANT_PROBE]
 
 
 def test_qualify_table_allows_an_unscoped_read_of_a_single_tenant_table(monkeypatch):
@@ -672,12 +677,31 @@ def test_scope_sql_fails_closed_on_a_recursive_cte_shadowing_a_table():
     # genuinely ambiguous with the recursion), and no legitimate query names one
     # after a physical table. Fail closed rather than leak.
     host = _host(catalog=_Catalog("orders"), tenant_router=_TenantRouter(has_config=True))
-    with pytest.raises(ValueError, match="Recursive CTE shadows tenant-scoped table"):
+    # The message names the table it refused over: an operator reading the 503
+    # needs to know which one, and pinning the rendered name is also what stops a
+    # mutant from reporting `['ORDERS']` while the check itself still works.
+    with pytest.raises(
+        ValueError, match=r"Recursive CTE shadows tenant-scoped table\(s\): \['orders'\]"
+    ):
         host._scope_sql(
             "WITH RECURSIVE orders AS (SELECT 1 AS id UNION ALL SELECT id FROM orders) "
             "SELECT id FROM orders",
             "acme",
         )
+
+
+def test_scope_sql_allows_a_recursive_cte_that_shadows_nothing():
+    # The rule above is about *shadowing*, not about recursion. A recursive CTE
+    # whose name collides with no serving table is an ordinary query and has to
+    # keep working — without this, a guard that refused every `WITH RECURSIVE`
+    # would look identical to one that refused only the dangerous ones.
+    host = _host(catalog=_Catalog("orders"), tenant_router=_TenantRouter(has_config=True))
+    scoped = host._scope_sql(
+        "WITH RECURSIVE counter AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM counter) "
+        "SELECT n FROM counter",
+        "acme",
+    )
+    assert "counter" in scoped
 
 
 def test_scope_sql_unscoped_still_hides_the_tenant_column(monkeypatch):

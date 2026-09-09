@@ -40,7 +40,66 @@ def test_is_retryable_method_only_idempotent():
     assert is_retryable_method("HEAD") is True
     assert is_retryable_method("PUT") is True
     assert is_retryable_method("DELETE") is True
+    assert is_retryable_method("OPTIONS") is True
     assert is_retryable_method("POST") is False
+
+
+def test_is_retryable_method_normalizes_the_verb():
+    # Both SDK clients hand this whatever the caller wrote.
+    assert is_retryable_method("get") is True
+    assert is_retryable_method("post") is False
+
+
+# --------------------------------------------------------------------------- #
+# POST with an Idempotency-Key. This branch decides whether a write is replayed
+# after a 429/502/503/504, so getting it wrong duplicates the write — and it had
+# no tests at all, which is why retry.py sat at exactly its 75% mutation
+# threshold (run 34265359911: 5 survivors, all in is_retryable_method).
+# --------------------------------------------------------------------------- #
+
+
+def test_post_is_retryable_when_a_mapping_carries_an_idempotency_key():
+    assert is_retryable_method("POST", headers={"Idempotency-Key": "abc"}) is True
+
+
+def test_post_idempotency_key_is_matched_case_insensitively():
+    # HTTP header names are case-insensitive and every client spells this one
+    # differently; a case-sensitive match would silently stop retrying.
+    assert is_retryable_method("POST", headers={"IDEMPOTENCY-KEY": "abc"}) is True
+    assert is_retryable_method("POST", headers={"idempotency-key": "abc"}) is True
+
+
+def test_post_idempotency_key_is_found_among_other_headers():
+    # One matching header is enough — the check is `any`, not `all`.
+    headers = {"Content-Type": "application/json", "Idempotency-Key": "abc"}
+    assert is_retryable_method("POST", headers=headers) is True
+
+
+def test_post_is_not_retryable_on_a_merely_similar_header():
+    assert is_retryable_method("POST", headers={"Idempotency": "abc"}) is False
+    assert is_retryable_method("POST", headers={"X-Request-Id": "abc"}) is False
+
+
+def test_post_is_not_retryable_without_usable_headers():
+    assert is_retryable_method("POST", headers=None) is False
+    assert is_retryable_method("POST", headers={}) is False
+
+
+def test_post_accepts_the_idempotency_key_from_a_header_sequence():
+    # httpx hands headers over as pairs, not a mapping.
+    headers = [("Content-Type", "application/json"), ("Idempotency-Key", "abc")]
+    assert is_retryable_method("POST", headers=headers) is True
+
+
+def test_header_sequence_matches_on_the_name_not_the_value():
+    # A pair whose *value* is the key name must not count.
+    assert is_retryable_method("POST", headers=[("X-Header", "Idempotency-Key")]) is False
+    assert is_retryable_method("POST", headers=[("Content-Type", "application/json")]) is False
+
+
+def test_a_non_idempotent_verb_other_than_post_ignores_the_key():
+    # The header rescues POST only; PATCH is not made safe by announcing one.
+    assert is_retryable_method("PATCH", headers={"Idempotency-Key": "abc"}) is False
 
 
 def test_retryable_statuses():

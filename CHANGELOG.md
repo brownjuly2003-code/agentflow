@@ -85,6 +85,35 @@ All notable changes to AgentFlow are documented in this file.
   `.git` — is refused instead of emptied. The mutated module never leaves the
   temp workspace: the working tree is clean after a run.
 
+* **`sql_builder.py` is off the threshold line, and its residue is honest.**
+  It cleared 90% by a single mutant (90.8%, 128 killed of 141), which is not a
+  margin worth keeping: the next covered line added to the module would have
+  put the gate back in the red for reasons unrelated to the change. Nine of the
+  thirteen survivors could never have been killed. Eight mutated a
+  `typing.cast` type argument — a cast returns its second argument untouched
+  and never evaluates the first — so both casts are plain annotations now and
+  the mutants stop existing; the ninth turned `rows = []` into `rows = None` in
+  a branch whose next statement is `bool(rows)`, and carries a
+  `# pragma: no mutate` with the reason above it. The remaining four were the
+  `dialect="duckdb"` argument, and two of them are now dead: DuckDB list
+  indexing is 1-based where sqlglot's default dialect is not, so
+  `list_value(1, 2)[1]` read without the dialect comes back out of the scoper
+  as `[2]` — the tenant scoper would have changed which element the query asked
+  for while it added a WHERE clause. The module measures 98.4% (124 killed of
+  126) with `scripts/mutation_local.py` on py3.13.
+* **The two mutants still alive are named in the test file, not suppressed.**
+  `_scope_sql__mutmut_41` and `_43` drop the dialect from the parse of the
+  relation `_qualify_table` generated itself, and that string has one fixed
+  shape which — parsed with the dialect or without it — renders identically
+  under the `sql(dialect="duckdb")` `_scope_sql` applies on the way out, so no
+  input reaches them with a difference to observe. Not the same as neutral: the
+  *default-dialect render* of that shape rewrites `EXCLUDE` to `EXCEPT`, which
+  is why the mutants on the render itself stay killable and dead.
+  They are not equivalent — a `_qualify_table` that ever emitted
+  DuckDB-specific syntax would make them killable — so they get a written
+  record of what was tried and came out identical rather than a pragma that
+  would outlive its reason.
+
 ### Terraform — an exact core pin took the provider update channel down with it
 
 * **`required_version = "= 1.15.4"` broke Dependabot's terraform ecosystem the

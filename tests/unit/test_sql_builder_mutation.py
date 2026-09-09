@@ -60,10 +60,37 @@ did not test at all. So the old paragraph was not merely out of date: it was
 describing a mutant population that no longer existed, and it read as
 reassurance while a tenant-isolation guard sat unpinned.
 
-The CI gate (mutation.yml on py3.11) is the only source of truth for this score;
-mutant *counts* differ per interpreter, because ``mutate_only_covered_lines``
-makes the population depend on coverage attribution. Do not restate a number
-here that was not read off a mutation.yml run, and record the run id with it.
+The CI gate (mutation.yml on py3.11) is the source of truth for the score CI
+enforces, but since ``25769d7`` the same population is measurable here too:
+``python scripts/mutation_local.py --module
+serving/semantic_layer/query/sql_builder.py``, about two minutes. Mutant
+*counts* still differ per interpreter, because ``mutate_only_covered_lines``
+makes the population depend on coverage attribution, so a number written down
+here has to carry where it was measured.
+
+Two measurements, both py3.13 in ``.venv`` on 2026-09-09. At ``25769d7``: 141
+mutants, 128 killed, 13 survived, 90.8% -- the same population CI run
+34266462154 generated, down to the surviving mutant names. After this file and
+``sql_builder.py`` were changed to take the module off the threshold line: 126
+mutants, 124 killed, 2 survived, 98.4%.
+
+Fifteen mutants left the denominator, and which ones matters more than the
+count. Eight were mutants of a ``typing.cast`` type argument -- a cast returns
+its second argument untouched and never evaluates the first, so no test can
+ever tell them from the original. Six more were mutants of the ``cast(...)``
+*call itself* (its argument count, its second argument); they were killable,
+and they stopped existing along with the two casts, which are now plain
+annotations. The last one is the equivalent ``rows = []`` -> ``rows = None`` in
+``_holds_foreign_tenant_rows``, marked ``# pragma: no mutate`` in place. The
+casts were not pragma'd instead, because mutmut's pragma is recorded against a
+whole *statement*, at its first line. On the one-line cast it would have taken
+the eleven killable mutants on that line (the ``getattr``'s own seven, the
+assignment, and the cast call's argument mutants) out of the denominator as
+well -- the opposite of the point -- and on the four-line one in
+``_qualify_table`` it would not have reached the type string at all, only the
+``cache = ...`` on the opening line. Two further mutants were killed rather
+than removed, by
+``test_scope_sql_does_not_change_which_list_element_the_query_asks_for``.
 """
 
 from __future__ import annotations
@@ -770,3 +797,62 @@ def test_scope_sql_forwards_the_tenant_id_to_qualify_table():
     )
     host._scope_sql("SELECT * FROM widgets JOIN orders ON widgets.id = orders.id", "acme")
     assert calls == [("orders", "acme")]
+
+
+# --------------------------------------------------------------------------- #
+# The dialect the incoming SQL is read in. Scoping a query must not change what
+# the query means.
+# --------------------------------------------------------------------------- #
+
+
+def test_scope_sql_does_not_change_which_list_element_the_query_asks_for():
+    # `dialect="duckdb"` on the parse of the *incoming* SQL is not decoration.
+    # DuckDB's list indexing is 1-based; sqlglot's default dialect reads the
+    # same `[1]` as 0-based and re-renders it as `[2]` on the way out. So a
+    # caller that asked for the first element of `list_value(1, 2)` would get a
+    # scoped query asking for the second one -- the tenant scoper would have
+    # silently changed the answer while adding a WHERE clause. Kills the
+    # `dialect=None` and dropped-`dialect` mutants on the parse of the incoming
+    # SQL (`_scope_sql__mutmut_8` and `_10`).
+    host = _host(catalog=_Catalog("orders"), tenant_router=_TenantRouter(has_config=True))
+    out = host._scope_sql("SELECT list_value(1, 2)[1] AS x FROM orders", "acme")
+    assert out == f"SELECT [1, 2][1] AS x FROM {SCOPED_ORDERS_ACME}"
+
+
+# --------------------------------------------------------------------------- #
+# Two mutants of this module are left alive on purpose. This is the record of
+# why, so the next reader does not mistake them for a gap (measured 2026-09-09
+# with `python scripts/mutation_local.py --module
+# serving/semantic_layer/query/sql_builder.py`, sqlglot 30.12.0):
+#
+#     _scope_sql__mutmut_41   parse_one(scoped, dialect=None)
+#     _scope_sql__mutmut_43   parse_one(scoped)
+#
+# Both mutate the *second* parse in `_scope_sql` -- the one that reads `scoped`,
+# the relation `_qualify_table` built a line earlier, not anything a caller
+# supplied. That string has one fixed shape,
+#
+#     (SELECT * EXCLUDE (tenant_id) FROM <table> WHERE tenant_id = '<id>')
+#         AS "<table>"
+#
+# and whichever dialect parses it -- `duckdb` or sqlglot's default -- the AST
+# that comes back renders identically under the `sql(dialect="duckdb")`
+# `_scope_sql` always applies on the way out. That is the invariant that makes
+# the two mutants unreachable, and it is narrower than "dialect-neutral": the
+# *default-dialect render* of that same AST is not identical, it rewrites
+# `EXCLUDE (tenant_id)` to `EXCEPT (tenant_id)`. Which is exactly why the
+# mutants on the render (`parsed.sql(dialect="duckdb")`, line 240) are dead and
+# pinned -- do not weaken that argument on the strength of this note. Tried on
+# the parse side, and identical under the duckdb render either way: that exact
+# sub-select, a bare `SELECT * EXCLUDE (col)`, a struct literal, and FROM-first
+# syntax. The one construct that does differ is the list indexing the test
+# above uses, and it cannot appear here -- this module writes the string
+# itself, and never writes that.
+#
+# They are deliberately NOT marked `# pragma: no mutate`, unlike the `rows = []`
+# mutant in sql_builder.py. That one is unkillable by construction; these two are
+# merely unreachable through the generator as it stands today, and a
+# `_qualify_table` that ever emitted DuckDB-specific syntax would make them
+# killable again. A suppression would outlive the reason for it; this note does
+# not.
+# --------------------------------------------------------------------------- #

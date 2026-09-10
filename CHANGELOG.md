@@ -4,6 +4,41 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Quality — the auth-manager mutation lane pins what its survivors changed
+
+* **`serving/api/auth/manager.py` sat two points above its 0.80 threshold.**
+  CI run 34464697021 on 6231b73 scored it 82.1% (430 killed of 524). Most of
+  the 94 survivors changed something a behaviour test can see, including the
+  logging and Redis-URL mutants that `scripts/mutation_report.py` calls
+  equivalents: a log event is the operator's interface, and the Redis URL
+  decides which server holds the rate-limit budget.
+  `tests/unit/test_auth_manager_mutation.py` now pins the key-store
+  writability probe, read-only file included; the construction wiring (the
+  injected store and audit publisher, usage rows flowing through the real
+  `UsageWriter`, the default store following `db_path`, the security config
+  path at construction and on `load()`, the grace-period fallback and its
+  warning, the Redis server the limiter targets); the `load()` log events
+  `api_keys_loaded`, `api_key_store_write_skipped_readonly` and
+  `hashed_key_count_exceeds_guidance` (strictly above the soft limit,
+  unindexed entries only); what `load()` writes back, and the key file it
+  leaves byte-for-byte alone; that a match's slot comes from the material that
+  matched, never from the stored entry; that `load()` carries rate-limit
+  windows over by bucket; scan order in `authenticate()`; when
+  `check_rate_limit()` trusts Redis; and `AGENTFLOW_API_KEYS` parsing.
+* **Two simplifications remove mutants no test could kill.** The writability
+  probe opens the key file in binary append mode: the text layer and its
+  `encoding="utf-8"` did nothing for an open-and-close probe, and three
+  mutants changed only them. `_legacy_env_keys()` stops passing
+  `allowed_entity_types` at `TenantKey`'s own default (`None`);
+  `rate_limit_rpm=DEFAULT_RATE_LIMIT_RPM` stays because `TenantKey`'s Field
+  default is evaluated at import, while a monkeypatch of the module global
+  is a load-time read.
+* **The residue is named, not suppressed.** Nine equivalent mutants stay
+  alive, each on a line that also carries killable mutants, so a line-level
+  `# pragma: no mutate` would silence those too; the test file's docstring
+  lists them with their reasons. The threshold is unchanged here: it is set
+  from the CI measurement of this tree.
+
 ### Fixed — a key configured without a key_id keeps the same id on every load
 
 A key whose configuration carries no `key_id` — every key from

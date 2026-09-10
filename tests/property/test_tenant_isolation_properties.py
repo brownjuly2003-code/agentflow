@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
 from agentflow_runtime.serving.semantic_layer.catalog import DataCatalog
@@ -170,6 +170,7 @@ def test_the_tenant_column_never_reaches_the_payload(
 
 @settings(max_examples=40)
 @given(tenant=_TENANT_IDS, order_id=_ENTITY_IDS, amount=st.floats(1.0, 10_000.0, width=32))
+@example(tenant="0", order_id="ORD-0", amount=8.125)
 def test_an_aggregate_sums_only_the_readers_rows(
     engine: QueryEngine, tenant: str, order_id: str, amount: float
 ) -> None:
@@ -184,7 +185,9 @@ def test_an_aggregate_sums_only_the_readers_rows(
 
     metric = engine.get_metric("revenue", window="24h", tenant_id=scoped_tenant)
 
-    assert metric["value"] == pytest.approx(round(amount, 2), abs=0.01)
+    # total_amount is DECIMAL(10,2), which DuckDB fills half away from zero while Python's round()
+    # is half-even on the binary value: the reader's own amount to the cent, a leaked row adds >= 1.0.
+    assert metric["value"] == pytest.approx(amount, abs=0.006)
 
 
 @given(hostile=_HOSTILE_TENANT_IDS)

@@ -20,7 +20,10 @@ id, and no bucket name SHALL contain a plaintext API key.
 Reloading the key configuration — `load()`, a SIGHUP reload, or the reload that
 ends every key create, rotate and revoke — SHALL keep the in-memory rate-limit
 window of every key that is still configured, and SHALL drop the window of a
-key the reload removed.
+key the reload removed. A key whose id changes on every load, a legacy
+hash-only entry in a key file the process cannot write (see
+[API key identity](api-key-identity.md)), gets a new bucket on every reload, so
+its window starts empty.
 
 ### Scenario: a full window survives a reload
 - **GIVEN** a key with `rate_limit_rpm: 1` that has already made its one request in the current window

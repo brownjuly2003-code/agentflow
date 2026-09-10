@@ -330,7 +330,7 @@ class AuthManager:
                     self._key_rotator.schedule_rotation_cleanup(item)
             # Carry windows over by bucket name (`_rate_limit_key`), never by the
             # plaintext `keys_by_value` index: a still-configured key keeps its
-            # window across the reload, a removed key's window is dropped. (T-46)
+            # window across the reload, a removed key's window is dropped.
             live_buckets = {self._rate_limit_key(item) for item in config.keys}
             self._rate_windows = defaultdict(
                 list,
@@ -704,7 +704,6 @@ class AuthManager:
                 key, name = pair, "unnamed"
             items.append(
                 TenantKey(
-                    key_id=self._key_rotator.generate_key_id("default", name.strip(), set()),
                     key=key.strip(),
                     name=name.strip(),
                     tenant="default",
@@ -713,7 +712,12 @@ class AuthManager:
                     created_at=datetime.now(UTC).date(),
                 )
             )
-        return items
+        # The same derivation as an id-less key-file entry: from the key's
+        # lookup digest, so the key keeps its id -- and its rate-limit bucket --
+        # across reloads, restarts and replicas.
+        config = ApiKeysConfig(keys=items)
+        self._key_rotator.ensure_key_ids(config)
+        return config.keys
 
     def _rate_limit_key(self, tenant_key: TenantKey) -> str:
         # This string becomes a Redis sorted-set key NAME (``rate_limiter`` calls

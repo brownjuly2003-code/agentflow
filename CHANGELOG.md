@@ -4,6 +4,17 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — mutation_local no longer scores a missing pytest temp directory as a kill
+
+* **`scripts/mutation_local.py` recorded every mutant that reached a
+  `tmp_path` test as killed.** `measure_module()` handed pytest a `--basetemp`
+  under a scratch directory it never created, and pytest `mkdir`s that path
+  without parents, so the first `tmp_path` fixture failed at setup and pytest
+  exited 1. Under `-x` that false kill covered every mutant that survived the
+  tests before it. `run_mutant()` now creates the `--basetemp` parent before it
+  starts pytest, so a mutant that reaches a passing `tmp_path` test is scored
+  survived, and a real failure is still a kill.
+
 ### Quality — the auth-manager mutation lane pins what its survivors changed
 
 * **`serving/api/auth/manager.py` sat two points above its 0.80 threshold.**

@@ -134,9 +134,9 @@ See [Architecture Decision Records](decisions/) for detailed trade-off analysis.
 ## Security
 
 ### Implemented
-- **API authentication**: API key via `X-API-Key` header (set `AGENTFLOW_API_KEYS` env var)
+- **API authentication**: API key via `X-API-Key` header (set `AGENTFLOW_API_KEYS` env var). Requirements for a key's id: [API key identity](specs/api-key-identity.md)
 - **Transport gate (audit P2-3)**: `AGENTFLOW_PROFILE=production` refuses to boot over plaintext transport to an external ClickHouse/Redis/PostgreSQL (loopback exempt; deliberate exceptions named in `AGENTFLOW_INSECURE_TRANSPORT_OK`), and refuses a wildcard CORS origin outside demo mode. The ClickHouse client supports HTTPS with hostname verification and a private-CA bundle (`CLICKHOUSE_SECURE`, `CLICKHOUSE_CA_CERT`)
-- **Rate limiting**: Per-key sliding window with Redis backing when available and in-memory fallback for local/test, configurable via `AGENTFLOW_RATE_LIMIT_RPM` (default: 120/min)
+- **Rate limiting**: Per-key sliding window with Redis backing when available and in-memory fallback for local/test, configurable via `AGENTFLOW_RATE_LIMIT_RPM` (default: 120/min). Requirements: [API key rate limiting](specs/api-key-rate-limiting.md)
 - **Health/docs exempt**: `/v1/health`, `/docs`, `/metrics` don't require auth
 - **No secrets in code**: All credentials via environment variables
 - **Terraform state**: Encrypted S3 backend with DynamoDB locking

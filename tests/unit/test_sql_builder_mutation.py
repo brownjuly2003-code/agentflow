@@ -49,13 +49,48 @@ test_sql_guard_mutation.py (see fable_handoff.md cont.16-19):
    scored it ``n/a``, and the weekly mutation gate went red on 2026-07-12 and
    stayed red. Anything added to sql_builder's imports belongs here too.
 
-Reproduced at 96.0% (killed 167, survived 7) via the WSL/mutmut harness (py3.10);
-the CI gate (mutation.yml on py3.11) is the source of truth. The 7 survivors are
-genuine equivalent mutants, not gaps: four mutate the *string* inside
-``cast("dict[...]", value)`` -- the runtime ``typing.cast`` ignores its first
-argument, so any text change there is a no-op -- and three flip
-``parse_one(..., dialect="duckdb")`` / ``parsed.sql(dialect=...)`` to
-``dialect=None``, which renders the plain SELECTs this builder handles identically.
+A note on the score, because the number here was wrong for two months. This
+docstring used to record "96.0% (killed 167, survived 7), the 7 are equivalent
+mutants, not gaps", measured on a WSL/py3.10 harness. ``1096e2e`` then broke the
+import shim above, the module scored ``n/a`` for nine weeks, and nobody could
+have noticed the figure going stale. The first run after the shim was repaired
+(``3820a2f``) measured 80.3% -- killed 106, survived 26, against a 90% threshold
+-- and 14 of those 26 were in ``_holds_foreign_tenant_rows``, a method this file
+did not test at all. So the old paragraph was not merely out of date: it was
+describing a mutant population that no longer existed, and it read as
+reassurance while a tenant-isolation guard sat unpinned.
+
+The CI gate (mutation.yml on py3.11) is the source of truth for the score CI
+enforces, but since ``25769d7`` the same population is measurable here too:
+``python scripts/mutation_local.py --module
+serving/semantic_layer/query/sql_builder.py``, about two minutes. Mutant
+*counts* still differ per interpreter, because ``mutate_only_covered_lines``
+makes the population depend on coverage attribution, so a number written down
+here has to carry where it was measured.
+
+Two measurements, both py3.13 in ``.venv`` on 2026-09-09. At ``25769d7``: 141
+mutants, 128 killed, 13 survived, 90.8% -- the same population CI run
+34266462154 generated, down to the surviving mutant names. After this file and
+``sql_builder.py`` were changed to take the module off the threshold line: 126
+mutants, 124 killed, 2 survived, 98.4%.
+
+Fifteen mutants left the denominator, and which ones matters more than the
+count. Eight were mutants of a ``typing.cast`` type argument -- a cast returns
+its second argument untouched and never evaluates the first, so no test can
+ever tell them from the original. Six more were mutants of the ``cast(...)``
+*call itself* (its argument count, its second argument); they were killable,
+and they stopped existing along with the two casts, which are now plain
+annotations. The last one is the equivalent ``rows = []`` -> ``rows = None`` in
+``_holds_foreign_tenant_rows``, marked ``# pragma: no mutate`` in place. The
+casts were not pragma'd instead, because mutmut's pragma is recorded against a
+whole *statement*, at its first line. On the one-line cast it would have taken
+the eleven killable mutants on that line (the ``getattr``'s own seven, the
+assignment, and the cast call's argument mutants) out of the denominator as
+well -- the opposite of the point -- and on the four-line one in
+``_qualify_table`` it would not have reached the type string at all, only the
+``cache = ...`` on the opening line. Two further mutants were killed rather
+than removed, by
+``test_scope_sql_does_not_change_which_list_element_the_query_asks_for``.
 """
 
 from __future__ import annotations
@@ -201,6 +236,27 @@ class _TenantRouter:
         return _TenantsConfig(self._tenants)
 
 
+class _Backend:
+    """Answers the one question `_holds_foreign_tenant_rows` asks a store.
+
+    It records the SQL rather than only replaying a verdict: the probe text *is*
+    the check. A mutant that widens `<>` to `=`, drops the `LIMIT 1`, or asks
+    about some tenant other than the default still returns a truthy row and
+    would pass a test that only looked at the boolean.
+    """
+
+    def __init__(self, rows: object = (), error: BaseException | None = None) -> None:
+        self._rows = rows
+        self._error = error
+        self.queries: list[str] = []
+
+    def execute(self, sql: str) -> object:
+        self.queries.append(sql)
+        if self._error is not None:
+            raise self._error
+        return self._rows
+
+
 class _Host(SQLBuilderMixin):
     def __init__(
         self,
@@ -209,12 +265,22 @@ class _Host(SQLBuilderMixin):
         tenant_router: _TenantRouter,
         table_columns: dict[str, set[str]] | None = None,
         cache: dict | None = None,
+        backend: _Backend | None = None,
+        foreign_tenant_cache: dict[str, bool] | None = None,
     ) -> None:
         self.catalog = catalog
         self._tenant_router = tenant_router
         self._table_columns_map = dict(table_columns or {})
         if cache is not None:
             self._qualified_table_cache = cache
+        # Absent, not None, when no store is supplied: the production host always
+        # has `_backend`, and `_holds_foreign_tenant_rows` reads both attributes
+        # through `getattr(..., None)`, so a double that never sets them exercises
+        # the same defaulted reads the mixin performs.
+        if backend is not None:
+            self._backend = backend
+        if foreign_tenant_cache is not None:
+            self._foreign_tenant_cache = foreign_tenant_cache
 
     def _table_columns(self, table_name: str) -> set[str]:
         return self._table_columns_map.get(table_name, set())
@@ -380,6 +446,102 @@ def test_quote_literal_string_is_quoted_and_escaped():
 
 
 # --------------------------------------------------------------------------- #
+# _holds_foreign_tenant_rows: the fail-closed probe behind an unscoped read.
+# A request that carries no tenant context is answered only when the table has
+# nothing to leak — every row in it belongs to DEFAULT_TENANT. Both directions
+# have teeth: a false negative hands an anonymous caller every tenant's rows, a
+# false positive 503s the single-tenant demo that never sets a tenant at all.
+# (audit p2_1 #5)
+#
+# The method had no tests. Its only exercised path was the `_backend is None`
+# early return the host doubles fell into, so the probe, the cache and the
+# fail-closed branch it feeds were all unpinned — 14 of the 26 mutants that
+# survived the 2026-09-08 gate run (score 80.3%, threshold 90%) live here.
+# --------------------------------------------------------------------------- #
+
+FOREIGN_TENANT_PROBE = "SELECT 1 FROM orders WHERE tenant_id <> 'default' LIMIT 1"
+
+
+def test_holds_foreign_tenant_rows_is_true_when_the_store_returns_a_row():
+    host = _host(backend=_Backend(rows=[(1,)]))
+    assert host._holds_foreign_tenant_rows("orders") is True
+
+
+def test_holds_foreign_tenant_rows_is_false_when_the_store_returns_nothing():
+    host = _host(backend=_Backend(rows=[]))
+    assert host._holds_foreign_tenant_rows("orders") is False
+
+
+def test_holds_foreign_tenant_rows_asks_only_about_non_default_tenants():
+    # The probe text *is* the check, so it is pinned whole. A mutant that widens
+    # `<>` to `=`, drops the `LIMIT 1`, or names a tenant other than the default
+    # still returns a truthy row, and a test that only read the boolean would
+    # call every one of those correct.
+    backend = _Backend(rows=[])
+    host = _host(backend=backend)
+    host._holds_foreign_tenant_rows("orders")
+    assert backend.queries == [FOREIGN_TENANT_PROBE]
+
+
+def test_holds_foreign_tenant_rows_probes_the_table_it_was_given():
+    backend = _Backend(rows=[])
+    host = _host(backend=backend)
+    host._holds_foreign_tenant_rows("customers")
+    assert backend.queries == ["SELECT 1 FROM customers WHERE tenant_id <> 'default' LIMIT 1"]
+
+
+def test_holds_foreign_tenant_rows_treats_an_unreadable_table_as_empty():
+    # Not materialized yet, or no tenant column: there are no foreign rows in it
+    # to leak, so the unscoped read stays allowed.
+    error = sql_builder_module.BackendExecutionError("no such table: orders")
+    host = _host(backend=_Backend(error=error))
+    assert host._holds_foreign_tenant_rows("orders") is False
+
+
+def test_holds_foreign_tenant_rows_lets_an_unexpected_failure_through():
+    # Only the store's own "cannot read that" is benign. A connection fault is
+    # not evidence of an empty table, and must not be laundered into permission.
+    host = _host(backend=_Backend(error=RuntimeError("connection reset")))
+    with pytest.raises(RuntimeError):
+        host._holds_foreign_tenant_rows("orders")
+
+
+def test_holds_foreign_tenant_rows_serves_a_cached_verdict_without_probing():
+    backend = _Backend(rows=[(1,)])
+    host = _host(backend=backend, foreign_tenant_cache={"orders": False})
+    assert host._holds_foreign_tenant_rows("orders") is False
+    assert backend.queries == []
+
+
+def test_holds_foreign_tenant_rows_caches_what_it_learned():
+    # One probe per table per process, not one per read.
+    backend = _Backend(rows=[(1,)])
+    cache: dict[str, bool] = {}
+    host = _host(backend=backend, foreign_tenant_cache=cache)
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert cache == {"orders": True}
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert len(backend.queries) == 1
+
+
+def test_holds_foreign_tenant_rows_caches_per_table():
+    # Keyed by table: one table's emptiness must never vouch for another's.
+    backend = _Backend(rows=[(1,)])
+    host = _host(backend=backend, foreign_tenant_cache={"orders": False})
+    assert host._holds_foreign_tenant_rows("customers") is True
+    assert backend.queries == ["SELECT 1 FROM customers WHERE tenant_id <> 'default' LIMIT 1"]
+
+
+def test_holds_foreign_tenant_rows_still_answers_without_a_cache():
+    # The cache is an optimisation the host may not offer; the verdict is not.
+    backend = _Backend(rows=[(1,)])
+    host = _host(backend=backend)
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert host._holds_foreign_tenant_rows("orders") is True
+    assert len(backend.queries) == 2
+
+
+# --------------------------------------------------------------------------- #
 # _qualify_table: the scoped relation every entity read goes through, plus its
 # cache. This is the chokepoint — a surviving mutant here is a cross-tenant read.
 # --------------------------------------------------------------------------- #
@@ -455,6 +617,42 @@ def test_qualify_table_propagates_an_invalid_tenant_id():
         host._qualify_table("orders", "acme'; DROP TABLE orders--")
 
 
+def test_qualify_table_refuses_an_unscoped_read_of_a_multi_tenant_table(monkeypatch):
+    # No tenant context *and* the table holds somebody else's rows: the caller
+    # gets a refusal, not everyone's data. This is the branch the probe exists
+    # to feed, and until now nothing reached it — the host doubles had no store,
+    # so `_holds_foreign_tenant_rows` always short-circuited to False and the
+    # guard was never taken in a test.
+    monkeypatch.setattr(sql_builder_module, "get_current_tenant_id", lambda default=None: None)
+    backend = _Backend(rows=[(1,)])
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=backend)
+    with pytest.raises(ValueError, match="Tenant context is required"):
+        host._qualify_table("orders", None)
+    # And it refused because of *this* table. A mutant that probes something
+    # else still finds a row and still raises, so the exception alone does not
+    # prove the guard asked the right question.
+    assert backend.queries == [FOREIGN_TENANT_PROBE]
+
+
+def test_qualify_table_allows_an_unscoped_read_of_a_single_tenant_table(monkeypatch):
+    # The other half of the same branch: a store whose rows all belong to the
+    # default tenant has nothing to leak, so the deployment that never sets a
+    # tenant keeps reading.
+    monkeypatch.setattr(sql_builder_module, "get_current_tenant_id", lambda default=None: None)
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=_Backend(rows=[]))
+    assert host._qualify_table("orders", None) == SCOPED_ORDERS_UNSCOPED
+
+
+def test_qualify_table_does_not_probe_when_a_tenant_is_in_context():
+    # The probe only means anything for an unscoped read. Running it on the
+    # scoped path would add a query per table per request, and a mutant that
+    # loosens the `predicate is None` guard into `or` does exactly that.
+    backend = _Backend(rows=[(1,)])
+    host = _host(tenant_router=_TenantRouter(has_config=True), backend=backend)
+    assert host._qualify_table("orders", "acme") == SCOPED_ORDERS_ACME
+    assert backend.queries == []
+
+
 # --------------------------------------------------------------------------- #
 # _scope_sql: the same boundary, applied to SQL the engine did not build itself
 # (metric templates, NL-generated SQL).
@@ -506,12 +704,31 @@ def test_scope_sql_fails_closed_on_a_recursive_cte_shadowing_a_table():
     # genuinely ambiguous with the recursion), and no legitimate query names one
     # after a physical table. Fail closed rather than leak.
     host = _host(catalog=_Catalog("orders"), tenant_router=_TenantRouter(has_config=True))
-    with pytest.raises(ValueError, match="Recursive CTE shadows tenant-scoped table"):
+    # The message names the table it refused over: an operator reading the 503
+    # needs to know which one, and pinning the rendered name is also what stops a
+    # mutant from reporting `['ORDERS']` while the check itself still works.
+    with pytest.raises(
+        ValueError, match=r"Recursive CTE shadows tenant-scoped table\(s\): \['orders'\]"
+    ):
         host._scope_sql(
             "WITH RECURSIVE orders AS (SELECT 1 AS id UNION ALL SELECT id FROM orders) "
             "SELECT id FROM orders",
             "acme",
         )
+
+
+def test_scope_sql_allows_a_recursive_cte_that_shadows_nothing():
+    # The rule above is about *shadowing*, not about recursion. A recursive CTE
+    # whose name collides with no serving table is an ordinary query and has to
+    # keep working — without this, a guard that refused every `WITH RECURSIVE`
+    # would look identical to one that refused only the dangerous ones.
+    host = _host(catalog=_Catalog("orders"), tenant_router=_TenantRouter(has_config=True))
+    scoped = host._scope_sql(
+        "WITH RECURSIVE counter AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM counter) "
+        "SELECT n FROM counter",
+        "acme",
+    )
+    assert "counter" in scoped
 
 
 def test_scope_sql_unscoped_still_hides_the_tenant_column(monkeypatch):
@@ -580,3 +797,62 @@ def test_scope_sql_forwards_the_tenant_id_to_qualify_table():
     )
     host._scope_sql("SELECT * FROM widgets JOIN orders ON widgets.id = orders.id", "acme")
     assert calls == [("orders", "acme")]
+
+
+# --------------------------------------------------------------------------- #
+# The dialect the incoming SQL is read in. Scoping a query must not change what
+# the query means.
+# --------------------------------------------------------------------------- #
+
+
+def test_scope_sql_does_not_change_which_list_element_the_query_asks_for():
+    # `dialect="duckdb"` on the parse of the *incoming* SQL is not decoration.
+    # DuckDB's list indexing is 1-based; sqlglot's default dialect reads the
+    # same `[1]` as 0-based and re-renders it as `[2]` on the way out. So a
+    # caller that asked for the first element of `list_value(1, 2)` would get a
+    # scoped query asking for the second one -- the tenant scoper would have
+    # silently changed the answer while adding a WHERE clause. Kills the
+    # `dialect=None` and dropped-`dialect` mutants on the parse of the incoming
+    # SQL (`_scope_sql__mutmut_8` and `_10`).
+    host = _host(catalog=_Catalog("orders"), tenant_router=_TenantRouter(has_config=True))
+    out = host._scope_sql("SELECT list_value(1, 2)[1] AS x FROM orders", "acme")
+    assert out == f"SELECT [1, 2][1] AS x FROM {SCOPED_ORDERS_ACME}"
+
+
+# --------------------------------------------------------------------------- #
+# Two mutants of this module are left alive on purpose. This is the record of
+# why, so the next reader does not mistake them for a gap (measured 2026-09-09
+# with `python scripts/mutation_local.py --module
+# serving/semantic_layer/query/sql_builder.py`, sqlglot 30.12.0):
+#
+#     _scope_sql__mutmut_41   parse_one(scoped, dialect=None)
+#     _scope_sql__mutmut_43   parse_one(scoped)
+#
+# Both mutate the *second* parse in `_scope_sql` -- the one that reads `scoped`,
+# the relation `_qualify_table` built a line earlier, not anything a caller
+# supplied. That string has one fixed shape,
+#
+#     (SELECT * EXCLUDE (tenant_id) FROM <table> WHERE tenant_id = '<id>')
+#         AS "<table>"
+#
+# and whichever dialect parses it -- `duckdb` or sqlglot's default -- the AST
+# that comes back renders identically under the `sql(dialect="duckdb")`
+# `_scope_sql` always applies on the way out. That is the invariant that makes
+# the two mutants unreachable, and it is narrower than "dialect-neutral": the
+# *default-dialect render* of that same AST is not identical, it rewrites
+# `EXCLUDE (tenant_id)` to `EXCEPT (tenant_id)`. Which is exactly why the
+# mutants on the render (`parsed.sql(dialect="duckdb")`, line 240) are dead and
+# pinned -- do not weaken that argument on the strength of this note. Tried on
+# the parse side, and identical under the duckdb render either way: that exact
+# sub-select, a bare `SELECT * EXCLUDE (col)`, a struct literal, and FROM-first
+# syntax. The one construct that does differ is the list indexing the test
+# above uses, and it cannot appear here -- this module writes the string
+# itself, and never writes that.
+#
+# They are deliberately NOT marked `# pragma: no mutate`, unlike the `rows = []`
+# mutant in sql_builder.py. That one is unkillable by construction; these two are
+# merely unreachable through the generator as it stands today, and a
+# `_qualify_table` that ever emitted DuckDB-specific syntax would make them
+# killable again. A suppression would outlive the reason for it; this note does
+# not.
+# --------------------------------------------------------------------------- #

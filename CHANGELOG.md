@@ -4,6 +4,20 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — reloading the key store no longer resets rate-limit windows (T-46)
+
+`AuthManager.load()` carried the in-memory rate-limit windows over by the
+plaintext key index (`keys_by_value`), but since audit S-6 every window is
+named by its bucket (`kid:<key_id>`), so no window ever matched: every reload
+— SIGHUP, and the reload that ends every key create, rotate and revoke —
+emptied them all. `is_rate_limited()` and the in-memory secondary check in
+`check_rate_limit()` then handed every tenant a fresh budget, which during a
+Redis outage is the whole limit. Windows are now carried over by bucket name:
+a still-configured key keeps its window, a removed key loses it, and no
+plaintext key names a window at any point of the reload. Keys from
+`AGENTFLOW_API_KEYS` still get a new random `key_id` on every load, so their
+windows keep resetting until T-47.
+
 ### Docs — the pre-push hedges outlived the push
 
 * **Several notes described work the owner "still has to do" that has since

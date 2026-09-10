@@ -328,9 +328,17 @@ class AuthManager:
                     if item.previous_key_lookup is not None:
                         self._previous_keys_by_lookup[item.previous_key_lookup] = item
                     self._key_rotator.schedule_rotation_cleanup(item)
+            # Carry windows over by bucket name (`_rate_limit_key`), never by the
+            # plaintext `keys_by_value` index: a still-configured key keeps its
+            # window across the reload, a removed key's window is dropped. (T-46)
+            live_buckets = {self._rate_limit_key(item) for item in config.keys}
             self._rate_windows = defaultdict(
                 list,
-                {key: self._rate_windows.get(key, []) for key in self.keys_by_value},
+                {
+                    bucket: window
+                    for bucket, window in self._rate_windows.items()
+                    if bucket in live_buckets
+                },
             )
             # H-C4: drop cached plaintext entries for hashes that no longer
             # exist after this reload (revoked/rotated keys). Without this the

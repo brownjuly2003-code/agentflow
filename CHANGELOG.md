@@ -4,6 +4,208 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — a key configured without a key_id keeps the same id on every load
+
+A key whose configuration carries no `key_id` — every key from
+`AGENTFLOW_API_KEYS`, and a key-file entry without one — drew a random id on
+every `AuthManager.load()`. A key-file entry kept its id only when the id could
+be written back, and `docker-compose.prod.yml` mounts the key file read-only.
+The id names the key's Redis bucket (`kid:<key_id>`), its `api_usage` rows and
+the admin views keyed by id, so replicas sharing Redis each kept their own
+bucket for the same key — N replicas, N times its rpm — and every restart and
+reload started a fresh bucket and split the key's usage history. Such a key now
+gets `<tenant>-<name>-<first 8 hex of its key-lookup digest>`: the stored
+`key_lookup`, else the peppered `compute_key_lookup` of its plaintext, never
+the plaintext or an unpeppered hash of it. The same key gets the same id on
+every load, restart and replica that shares the pepper. Changing the pepper
+changes only an id derived from a plaintext key and never written back: every
+environment key, and a plaintext key-file entry in a file the process cannot
+write. A writable key file keeps the id written to it on the first load, and an
+entry with a stored `key_lookup` keeps the id derived from that digest. An id
+already taken lengthens the digest prefix. A legacy hash-only entry, with
+neither a plaintext key nor a `key_lookup`, still gets a random id.
+
+### Fixed — reloading the key store no longer resets rate-limit windows
+
+`AuthManager.load()` carried the in-memory rate-limit windows over by the
+plaintext key index (`keys_by_value`), but since audit S-6 every window is
+named by its bucket (`kid:<key_id>`), so no window ever matched: every reload
+— SIGHUP, and the reload that ends every key create, rotate and revoke —
+emptied them all. `is_rate_limited()` and the in-memory secondary check in
+`check_rate_limit()` then handed every tenant a fresh budget, which during a
+Redis outage is the whole limit. Windows are now carried over by bucket name:
+a still-configured key keeps its window, a removed key loses it, and no
+plaintext key names a window at any point of the reload. A window survives
+only while its key keeps its `key_id`, which a key configured without one —
+from `AGENTFLOW_API_KEYS`, or in a key file the process cannot write — now does
+too (entry above), with one exception: a legacy hash-only entry, with neither a
+plaintext key nor a `key_lookup`, in a key file the process cannot write still
+gets a new id, and so an emptied window, on every reload.
+
+### Docs — the pre-push hedges outlived the push
+
+* **Several notes described work the owner "still has to do" that has since
+  been done**, and a hedge that has stopped being true reads as a live task.
+  The provider-lock guard in `terraform-validate` was annotated "has not been
+  observed on a GitHub runner"; it has, on `ubuntu-latest`, regenerating all
+  three platforms to an empty diff. `ASSUMPTION-T-36-CI-LOCK` in the OIDC
+  runbook is marked discharged with that evidence, and narrowed to what is
+  still genuinely unobserved: the macOS and Windows entries are regenerated
+  identically, never actually consumed, because CI has no runner on either.
+* **`sdk-ts` is a required status check now**, not a wiring change waiting to
+  happen, so the comment above the job says what that costs: renaming the job
+  silently removes a gate, because a required context that never reports blocks
+  merges rather than failing them. Rename it and branch protection together.
+* **Two closure documents called a pushed evidence commit local-only.**
+  `cf247ba` has been in `origin/main` since the 2026-09-08 push;
+  `PROJECT_CLOSURE.md` and `release-readiness.md` say so now. Dated evidence
+  records under `docs/evidence/` and `docs/perf/` keep their original wording —
+  they are chronology of a moment, not claims about the present.
+
+### Mutation gate — nine weeks red from a rename ripple and two untested one-liners
+
+* **The weekly Mutation Testing workflow last passed on 2026-07-05** and failed
+  every Sunday since (2026-07-12 through 2026-09-06). Nothing watched it: it is
+  a scheduled workflow, not a required check, so no pull request ever went red
+  and the failure was only visible in the Actions tab.
+* **`sql_builder.py` scored `n/a` because its harness shim went stale.**
+  `1096e2e` renamed the runtime from `src.*` to `agentflow_runtime.*`, which
+  moved `BackendExecutionError`, `quote_sql_literal` and `DEFAULT_TENANT` onto
+  import paths `_install_harness_stubs` did not cover. Inside mutmut's
+  workspace — which copies `src/agentflow_runtime/serving` to a *top-level*
+  `serving` package and deliberately omits `src` — the module stopped importing
+  (`No module named 'agentflow_runtime.serving.semantic_layer'`), mutmut exited
+  1, and the run reported "no scored mutants found". The shim now aliases the
+  workspace's real `BackendExecutionError` and `quote_sql_literal` rather than
+  standing in for them: a fake quoter would change the very SQL strings the
+  mutants are supposed to be judged against.
+* **`manager.py` failed at a 91.8% score** because two mutants came back "no
+  tests" (`flush_usage` and `close_usage_writer`), and a problem status fails
+  the gate exactly like a survivor does. Both are one-line forwards to the
+  off-path usage writer whose only decision is the 5.0-second timeout default,
+  and no test had ever called either. Four direct tests now pin the forwarded
+  value against a recording double — no thread, no duckdb, so the lane stays
+  duckdb-free.
+* **Verified in a rebuilt mutmut workspace, not just under pytest.** Both
+  targets' tests were re-run through the same `prepare_workspace` the gate
+  builds: `sql_builder` 41 passed, `manager` 96 passed, where the first had been
+  failing at import. The stale-shim hazard is now written into the test's own
+  design rules, since the next rename will ripple the same way.
+
+* **The gate is measurable on this machine now, not only on Sundays.**
+  `python scripts/mutation_local.py --module <target>` runs one module of the
+  same gate locally in about two minutes. It exists because `mutmut run` calls
+  `sys.exit(1)` at import time on native Windows, so between weekly runs nobody
+  here could see a score at all — which is part of why nine consecutive red
+  Sundays went unnoticed. The driver never invokes the `mutmut` CLI: it reads
+  its targets from `scripts/mutation_report.MODULE_TARGETS`, builds the
+  workspace with `prepare_workspace`, generates mutants with mutmut's own
+  `mutate_file_contents`, and runs each one as a plain `pytest` subprocess
+  selected through `MUTANT_UNDER_TEST`. The gate's definition of a target is
+  still declared in exactly one place.
+* **It reproduces CI rather than approximating it.** Measured against run
+  34266462154 on `serving/semantic_layer/query/sql_builder.py`: 141 mutants,
+  the same population, down to the surviving mutant names. At `10e20a5` the
+  module scores 90.8% (128 killed, 13 survived) — the 88.7% CI last reported
+  plus the three mutants `2cda8da` and `10e20a5` killed since. Only pytest exit
+  0 (survived) and 1 (killed) count as verdicts; anything else is reported as a
+  harness failure and fails the run, where `mutation_report.py` counts exit 3
+  as a kill. That is the one deliberate divergence, and `CONTRIBUTING.md` says
+  so rather than claiming exact parity.
+* **A score you can trust to be about your own tree.** Three failure modes are
+  closed by construction: the workspace is stamped with the root, the module,
+  its source, the materialized package tree, the target's tests and
+  `pyproject.toml`, and is rebuilt whenever any of those move, so a second run
+  never reports the first one's sources; a mutant that comes back without a
+  verdict is retried once serially before it is called a harness failure, so
+  the number does not drift with machine load; and a `--workspace` that is a
+  checkout — this repository, anything inside it, or any directory holding a
+  `.git` — is refused instead of emptied. The mutated module never leaves the
+  temp workspace: the working tree is clean after a run.
+
+* **`sql_builder.py` is off the threshold line, and its residue is honest.**
+  It cleared 90% by a single mutant (90.8%, 128 killed of 141), which is not a
+  margin worth keeping: the next covered line added to the module would have
+  put the gate back in the red for reasons unrelated to the change. Nine of the
+  thirteen survivors could never have been killed. Eight mutated a
+  `typing.cast` type argument — a cast returns its second argument untouched
+  and never evaluates the first — so both casts are plain annotations now and
+  the mutants stop existing; the ninth turned `rows = []` into `rows = None` in
+  a branch whose next statement is `bool(rows)`, and carries a
+  `# pragma: no mutate` with the reason above it. The remaining four were the
+  `dialect="duckdb"` argument, and two of them are now dead: DuckDB list
+  indexing is 1-based where sqlglot's default dialect is not, so
+  `list_value(1, 2)[1]` read without the dialect comes back out of the scoper
+  as `[2]` — the tenant scoper would have changed which element the query asked
+  for while it added a WHERE clause. The module measures 98.4% (124 killed of
+  126) with `scripts/mutation_local.py` on py3.13.
+* **The two mutants still alive are named in the test file, not suppressed.**
+  `_scope_sql__mutmut_41` and `_43` drop the dialect from the parse of the
+  relation `_qualify_table` generated itself, and that string has one fixed
+  shape which — parsed with the dialect or without it — renders identically
+  under the `sql(dialect="duckdb")` `_scope_sql` applies on the way out, so no
+  input reaches them with a difference to observe. Not the same as neutral: the
+  *default-dialect render* of that shape rewrites `EXCLUDE` to `EXCEPT`, which
+  is why the mutants on the render itself stay killable and dead.
+  They are not equivalent — a `_qualify_table` that ever emitted
+  DuckDB-specific syntax would make them killable — so they get a written
+  record of what was tried and came out identical rather than a pragma that
+  would outlive its reason.
+
+### Terraform — an exact core pin took the provider update channel down with it
+
+* **`required_version = "= 1.15.4"` broke Dependabot's terraform ecosystem the
+  day it reached `origin`.** The updater runs `terraform init` and
+  `terraform providers lock` in its own image, that image is on 1.15.9, and an
+  unsatisfied core constraint aborts the run before it looks at a provider
+  version. Every weekly terraform run had been green until then and every one
+  since died on `Unsupported Terraform Core version` — a failure visible only
+  as a red job in Dependabot Updates, which nothing watches. Meanwhile
+  `hashicorp/aws` was pinned at `= 6.46.0` with no automated path to a
+  security bump.
+* **The constraint becomes `~> 1.15.4`.** Measured against the 1.15.4 CLI:
+  `~> 1.15.0` and `~> 1.15.4` are accepted, `~> 1.14.4` and `~> 1.15.9` are
+  refused — the operator means `>= 1.15.4, < 1.16.0`. So the floor is still the
+  exact version CI installs, no client can be older than what CI tests, and
+  1.16 (where Terraform's state format can move) is still refused. What changes
+  is that a 1.15 patch release no longer bricks a client nobody here controls.
+* **CI reproducibility is untouched.** `hashicorp/setup-terraform` still
+  installs exactly 1.15.4 in both workflows, the AWS provider stays `= 6.46.0`,
+  and `.terraform.lock.hcl` stays tracked with its three platforms. Only the
+  configuration's own core constraint moved, and
+  `test_terraform_state_contract.py` now pins it to `~> ` + the CI version, so
+  tightening it back to `=` fails the suite.
+* **A provider PR from Dependabot will arrive with a one-platform lock.** It
+  runs `terraform providers lock -platform=linux_amd64`; the `terraform-validate`
+  guard re-runs all three platforms and diffs, so such a PR fails loudly and is
+  regenerated by hand rather than merging a lock that breaks macOS and Windows
+  clients.
+
+### SDK — the required Node lane was testing on a runtime its own toolchain rejects
+
+* **Vitest 5 declares `engines.node` `^22.12.0 || ^24.0.0 || >=26.0.0`** and the
+  required `sdk-ts` job installed Node 20. Dependabot's PR #252 went fully green
+  on that pairing: npm prints `EBADENGINE` as a warning, the 50 tests ran, and
+  every check reported success. Node 20 itself reached end-of-life on
+  2026-04-30, so the floor the package published (`>=20`) had stopped being a
+  version anyone should be handed.
+* **The floor moves to `>=22`** — the same move the `>=18` → `>=20` raise made
+  three weeks earlier, for the same reason: a declared floor has to be one the
+  toolchain can execute. The required `sdk-ts` job now pins 22, `sdk-ts-compat`
+  covers the next LTS (24), and security.yml's `npm-audit`, which also runs
+  `npm ci` from `sdk-ts/`, moves off 20 with them.
+* **`sdk-ts/.npmrc` sets `engine-strict=true`**, so npm fails the install
+  instead of warning past it. Measured, not assumed: with the floor mutated to
+  `>=99`, `npm ci` exits 1 on `EBADENGINE`; restored, the whole gate — `npm ci`,
+  typecheck, 50 tests, build, `npm pack --dry-run` — passes on Node 22.20.0.
+* **`test_sdk_ts_node_floor.py` holds the declared floor, the four lanes that
+  run `npm ci`, and the lockfile's own `engines` copy in step.** That last one
+  had already drifted: `0988a0d` raised package.json to `>=20` and left the
+  lockfile claiming `>=18` until a Dependabot bump happened to rewrite it. Five
+  mutants — required lane back on 20, compat lane duplicating the floor,
+  `npm-audit` back on 20, stale lockfile engines, `.npmrc` neutered — each fail
+  the new tests.
+
 ### CI — a red coverage gate no longer hides the gates behind it
 
 * **Steps in a job stop at the first failure**, and `test-unit` runs nine

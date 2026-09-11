@@ -606,7 +606,9 @@ jobs:
       # same three-platform command the module README documents (re-run
       # 2026-09-05: no lock rewrite). Three provider zips (~0.7 GB) plus
       # terraform init is why this job's timeout-minutes is 20, not 10.
-      # It has not been observed on a GitHub runner until the owner pushes.
+      # Observed green on ubuntu-latest 2026-09-08 (run 34213482386): the step
+      # regenerates all three platforms and the diff comes back empty, so the
+      # tracked lock genuinely covers the runner it is used on.
       - name: Provider lock covers linux_amd64
         run: |
           cd infrastructure/terraform
@@ -619,8 +621,11 @@ jobs:
     # only in publish-npm.yml (tag pushes) and mutation.yml; every PR only got
     # `npm audit` (security.yml). This job gives PRs the same build-shaped
     # gate the publish workflow already trusts, so a broken SDK cannot merge.
-    # Branch protection required-context wiring is a repo-settings change the
-    # owner still has to make (gh api repos/{owner}/{repo}/branches/main/protection).
+    # `sdk-ts` is one of the 15 required status checks on `main` (confirmed
+    # 2026-09-08 via gh api repos/{owner}/{repo}/branches/main/protection), so
+    # renaming this job silently removes a gate: the context stops reporting,
+    # and a required check that never reports blocks merges instead of failing
+    # them. Rename here and in branch protection together, or not at all.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -630,7 +635,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install dependencies from lockfile
         run: npm ci
       - name: Typecheck
@@ -642,19 +647,25 @@ jobs:
       - name: Verify package is publishable
         run: npm pack --dry-run
 
-  # Audit F-11: CI must exercise every Node version the package claims. The
-  # first run of this lane proved the old ">=18" engines floor untestable
-  # (Vitest 4 needs util.styleText, absent on Node 18), so the floor was
-  # honestly raised to ">=20": the required "sdk-ts" job covers 20, this lane
-  # covers the next LTS. A matrix inside the required job would rename its
-  # check context and break branch protection.
+  # Audit F-11: CI must exercise every Node version the package claims, and the
+  # claimed floor has to be one the toolchain can actually run. That has bitten
+  # twice now. First: Vitest 4 imports util.styleText, absent on Node 18, so the
+  # ">=18" floor was untestable and rose to ">=20". Now: Node 20 reached
+  # end-of-life on 2026-04-30 and Vitest 5 declares engines
+  # "^22.12.0 || ^24.0.0 || >=26.0.0", which the Node 20 this lane pinned does
+  # not satisfy -- npm downgraded that to a warning and PR #252 went green
+  # anyway. The floor is ">=22": the required "sdk-ts" job covers 22, this lane
+  # covers the next LTS (24), sdk-ts/.npmrc turns the warning back into a
+  # failure, and tests/unit/test_sdk_ts_node_floor.py keeps the three in step.
+  # A matrix inside the required job would rename its check context and break
+  # branch protection.
   sdk-ts-compat:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["22"]
+        node-version: ["24"]
     defaults:
       run:
         working-directory: sdk-ts

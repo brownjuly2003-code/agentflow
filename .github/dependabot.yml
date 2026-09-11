@@ -56,14 +56,29 @@ updates:
       # manual major bump (the whole reason their majors are gated). Do NOT
       # "fix" by dropping the ignore — that re-introduces the unwanted
       # major-version PR churn these floors exist to prevent.
+      #
+      # NOTE (2026-09-08): every condition below states an explicit version
+      # range. `update-types: ["version-update:semver-major"]` looks equivalent
+      # and is not: the update type is derived from the CURRENT version, and in
+      # these pip ecosystems there is no current version to derive it from —
+      # every requirement is a range and Dependabot has no pip lockfile to
+      # resolve it against. The updater says so in as many words (root pip run
+      # 34213488343): "Checking if mcp  needs updating", then "Ignored
+      # versions:" with nothing after it, then "Updating mcp from  to 2.1.1".
+      # All six conditions reached that job and all six ignored-version lists
+      # came back empty, which is how PR #254 re-proposed #244's exact widening
+      # hours after the mcp ignore landed. A version range needs no current
+      # version, so it matches. Each ceiling mirrors the upper bound declared
+      # in pyproject.toml / integrations/pyproject.toml;
+      # tests/unit/test_dependabot_ignore_contract.py keeps the two in step.
       - dependency-name: "langchain-core"
-        update-types: ["version-update:semver-major"]
+        versions: [">=2"]
       - dependency-name: "langchain-text-splitters"
-        update-types: ["version-update:semver-major"]
+        versions: [">=2"]
       - dependency-name: "langsmith"
-        update-types: ["version-update:semver-major"]
+        versions: [">=1"]
       - dependency-name: "dagster"
-        update-types: ["version-update:semver-major"]
+        versions: [">=2"]
       # mcp 2.x's lowlevel Server drops the list_tools/call_tool decorators
       # integrations/agentflow_integrations/mcp/server.py is built on (checked
       # against 2.2.0), so a major bump is a port, not an update. PR #244
@@ -71,7 +86,7 @@ updates:
       # back weekly. Same NOTE above applies: the safety/pip-audit jobs still
       # scan mcp and fail on a CVE that only a major fixes.
       - dependency-name: "mcp"
-        update-types: ["version-update:semver-major"]
+        versions: [">=2"]
       # pyiceberg-core is pinned to the release PyIceberg pairs with, not to
       # the newest one. PyIceberg 0.11.1 declares pyiceberg-core>=0.5.1,<0.9.0;
       # the only step up inside that window is 0.8.0, published as
@@ -80,7 +95,7 @@ updates:
       # its own range, and that arrives as a pyiceberg PR. PR #245 proposed
       # <0.11 and was closed on that basis.
       - dependency-name: "pyiceberg-core"
-        update-types: ["version-update:semver-minor"]
+        versions: [">=0.8"]
 
   # ── Python: Flink runtime image manifest ───────────────────────────
   # Not an extra of the root project (its beam chain can never co-install
@@ -141,8 +156,11 @@ updates:
       # The other half of the mirrored mcp pin (see the root pip entry): the
       # ceiling is what the integration's decorators need, so leaving this
       # ecosystem unignored just reopens the same PR from the other directory.
+      # `versions:`, not `update-types:`, for the reason recorded in the root
+      # pip entry: without a resolved current version an update-type condition
+      # never matches.
       - dependency-name: "mcp"
-        update-types: ["version-update:semver-major"]
+        versions: [">=2"]
 
   # ── npm: TypeScript SDK ────────────────────────────────────────────
   - package-ecosystem: npm
@@ -232,6 +250,17 @@ updates:
           - "version-update:semver-major"
 
   # ── Terraform: infrastructure modules ──────────────────────────────
+  # This ecosystem only works while `required_version` in
+  # infrastructure/terraform/main.tf admits the Terraform version Dependabot's
+  # updater image happens to ship: it runs `terraform init` and
+  # `terraform providers lock` itself, and an unsatisfied core constraint kills
+  # the run before it reads a single provider version. An exact `= 1.15.4` pin
+  # did exactly that from 2026-09-08 -- the image was on 1.15.9 -- so the
+  # constraint is pessimistic (`~> 1.15.4`). Keep it that way, or provider
+  # updates, security ones included, silently stop arriving. The symptom is a
+  # failed "terraform in /infrastructure/terraform" job under Dependabot
+  # Updates reading `Unsupported Terraform Core version`; the fix is a
+  # deliberate toolchain bump, not a wider constraint.
   - package-ecosystem: terraform
     directory: "/infrastructure/terraform"
     schedule:

@@ -126,7 +126,7 @@ Push, PR mutations and release actions require explicit owner authorization.
   [perf/live-iceberg-materialization-2026-08-01.md](perf/live-iceberg-materialization-2026-08-01.md).
   Full one-event lake-to-serving smoke is also **PASS** — see
   [perf/full-lake-to-serving-e2e-2026-08-01.md](perf/full-lake-to-serving-e2e-2026-08-01.md)
-  (local evidence commit `cf247ba`, unpushed).
+  (evidence commit `cf247ba`, in `origin/main` since the 2026-09-08 push).
   Isolated checkpoint restore/replay is **PASS** with distinct J1/J2,
   savepoint restore linkage, exact-once E1/E2 counts across Kafka, Iceberg,
   ClickHouse, and API, DLQ `0`, and source lag `0` — see

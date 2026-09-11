@@ -25,7 +25,7 @@ WORKFLOWS_DIR = PROJECT_ROOT / ".github" / "workflows"
 WORKFLOW_FILES = sorted([*WORKFLOWS_DIR.glob("*.yml"), *WORKFLOWS_DIR.glob("*.yaml")])
 
 TERRAFORM_VERSION = "1.15.4"
-AWS_PROVIDER_VERSION = "6.46.0"
+AWS_PROVIDER_VERSION = "6.63.0"
 WORKFLOW_ENVIRONMENT_EXPRESSION = "${{ inputs.environment }}"
 STATE_KEY_INIT_LINE = re.compile(r'^terraform init -backend-config="key=(?P<key>[^"]+)"$')
 STATE_KEY_SHAPE = re.compile(r"^env/[^/]+/terraform\.tfstate$")
@@ -357,7 +357,7 @@ def test_workflow_cli_and_provider_versions_are_reproducibly_pinned() -> None:
     required_version = re.search(r'required_version\s*=\s*"([^"]+)"', terraform_main)
     aws_provider = re.search(r"aws\s*=\s*\{(?P<body>.*?)\n\s*\}", terraform_main, re.DOTALL)
     assert required_version is not None
-    assert required_version.group(1) == f"= {TERRAFORM_VERSION}"
+    assert required_version.group(1) == f"~> {TERRAFORM_VERSION}"
     assert aws_provider is not None
     assert f'version = "= {AWS_PROVIDER_VERSION}"' in aws_provider.group("body")
 
@@ -465,7 +465,7 @@ def test_oidc_docs_record_shared_role_and_account_global_provider() -> None:
 
     assert "`hashicorp/terraform:1.13.5`" in runbook
     assert "superseded" in runbook
-    assert 'required_version = "= 1.15.4"' in runbook
+    assert 'required_version = "~> 1.15.4"' in runbook
     assert "2026-09-05" in runbook
     assert "`hashicorp/terraform:1.15.4`" in runbook
     assert "has not been performed" in runbook

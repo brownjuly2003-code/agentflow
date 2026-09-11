@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from typing import cast
 
 import sqlglot
 from sqlglot import exp
@@ -97,7 +96,14 @@ class SQLBuilderMixin:
         One probe per table per process (cached), like the ``_table_columns``
         probe the old guard used.
         """
-        cache = cast("dict[str, bool] | None", getattr(self, "_foreign_tenant_cache", None))
+        # Declared rather than `cast(...)`. `typing.cast` returns its second
+        # argument untouched and never evaluates the first, so every mutant of a
+        # cast's type argument is equivalent by construction: no test can tell
+        # `cast("dict[str, bool] | None", x)` from `cast(None, x)`. Eight such
+        # mutants — four here, four in `_qualify_table` — sat in the mutation
+        # gate's denominator (CI run 34266462154) pretending to be gaps. An
+        # annotation says the same thing to mypy and leaves nothing to mutate.
+        cache: dict[str, bool] | None = getattr(self, "_foreign_tenant_cache", None)
         if cache is not None and physical in cache:
             return cache[physical]
 
@@ -112,7 +118,13 @@ class SQLBuilderMixin:
             )
         except BackendExecutionError:
             # Not materialized yet, or no tenant column: nothing to leak.
-            rows = []
+            #
+            # `rows = None` is the only mutant of this line and it is equivalent:
+            # `rows` is read exactly once, by the `bool(rows)` below, and
+            # `bool([]) == bool(None) == False`. Marked so it stops being
+            # generated — the gate's denominator should hold only mutants a test
+            # could kill.
+            rows = []  # pragma: no mutate
         found = bool(rows)
         if cache is not None:
             cache[physical] = found
@@ -141,9 +153,11 @@ class SQLBuilderMixin:
         promises and the two stores stay column-identical.
         """
         predicate = self._tenant_predicate(tenant_id)
-        cache = cast(
-            "dict[tuple[str, str | None], str] | None",
-            getattr(self, "_qualified_table_cache", None),
+        # Declared, not `cast(...)`, for the reason spelled out in
+        # `_holds_foreign_tenant_rows`: a cast's type argument is erased at
+        # runtime, so its mutants are unkillable by construction.
+        cache: dict[tuple[str, str | None], str] | None = getattr(
+            self, "_qualified_table_cache", None
         )
         cache_key = (table_name, predicate)
         if cache is not None and cache_key in cache:

@@ -473,7 +473,7 @@ def test_backend_retains_dynamodb_table_on_purpose() -> None:
     assert BACKEND_TABLE in backend, "dynamodb_table must remain; retention is deliberate"
     assert "use_lockfile" not in backend
     # The parameter is present on purpose, not because the file merely parses.
-    assert 'required_version = "= 1.15.4"' in terraform_main
+    assert 'required_version = "~> 1.15.4"' in terraform_main
 
 
 def test_ci_terraform_validate_guards_linux_amd64_provider_lock() -> None:

@@ -14,10 +14,13 @@ Deprecation policy:
 ## [Unreleased]
 
 ### Changed
-- `engines.node` floor raised from `>=18` to `>=20` (audit F-11). Node 18 is
-  end-of-life and the SDK toolchain (Vitest 4) needs `util.styleText`, which
-  Node 18 lacks — CI proved the declared 18 floor was untestable. CI now
-  exercises Node 20 (required lane) and 22 (compat lane).
+- `engines.node` floor raised from `>=18` to `>=22` (audit F-11). Neither
+  dropped release could still be tested: Node 18 lacks `util.styleText`, which
+  Vitest 4 imports, and Node 20 reached end-of-life on 2026-04-30 while
+  Vitest 5 declares `engines.node` `^22.12.0 || ^24.0.0 || >=26.0.0`. The floor
+  is now a version CI actually exercises — Node 22 in the required lane, 24 in
+  the compat lane — and `sdk-ts/.npmrc` sets `engine-strict=true` so a future
+  mismatch fails `npm ci` instead of printing a warning under a green check.
 
 ### Added
 - `RetryPolicy` with exponential backoff, jitter, and `Retry-After` support for transient SDK failures

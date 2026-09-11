@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 import threading
+from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 
 try:
@@ -21,6 +22,42 @@ from .manager import (
     TenantKey,
     is_permission_denied,
 )
+
+# A derived key_id ends in this many characters of the key's lookup digest: the
+# same shape as the 8 hex characters `generate_key_id` draws at random.
+KEY_ID_DIGEST_CHARS = 8
+
+
+def key_id_slug(value: str, fallback: str) -> str:
+    return "-".join(re.findall(r"[a-z0-9]+", value.lower())) or fallback
+
+
+def derived_key_id(item: TenantKey, existing_ids: Collection[str]) -> str | None:
+    """A stable key_id for an entry configured without one, or None.
+
+    The suffix is a prefix of the entry's peppered lookup digest -- its stored
+    `key_lookup`, else `compute_key_lookup` over its plaintext key -- so the
+    same key gets the same id on every load, restart and replica that shares
+    the pepper. Never the plaintext or an unpeppered hash of it: the id lands in
+    logs, Redis key names, usage rows and admin responses, and must not let a
+    guessed key be confirmed offline (audit FB-07).
+
+    An id already taken lengthens the prefix, so the later entry of a clashing
+    pair still gets the same id on every load. None when there is nothing to
+    derive from (a legacy hash-only entry) or the whole digest is taken.
+    """
+    if item.key_lookup is not None:
+        lookup = item.key_lookup
+    elif item.key is not None:
+        lookup = compute_key_lookup(item.key)
+    else:
+        return None
+    stem = f"{key_id_slug(item.tenant, 'tenant')}-{key_id_slug(item.name, 'agent')}-"
+    for size in range(KEY_ID_DIGEST_CHARS, len(lookup) + 1):
+        candidate = stem + lookup[:size]
+        if candidate not in existing_ids:
+            return candidate
+    return None
 
 
 class KeyRotator:
@@ -274,8 +311,8 @@ class KeyRotator:
         name: str,
         existing_ids: set[str] | None = None,
     ) -> str:
-        tenant_slug = re.sub(r"[^a-z0-9]+", "-", tenant.lower()).strip("-") or "tenant"
-        name_slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
+        tenant_slug = key_id_slug(tenant, "tenant")
+        name_slug = key_id_slug(name, "agent")
         seen_ids = set(existing_ids or ())
         while True:
             candidate = f"{tenant_slug}-{name_slug}-{secrets.token_hex(4)}"
@@ -288,7 +325,13 @@ class KeyRotator:
         for index, item in enumerate(config.keys):
             if item.key_id is not None:
                 continue
-            key_id = self.generate_key_id(item.tenant, item.name, existing_ids)
+            # Derived, not drawn: an id that never reaches the file (a read-only
+            # key store, or AGENTFLOW_API_KEYS) must come out the same on the next
+            # load and in every replica. Only a legacy hash-only entry, with
+            # nothing to derive from, still gets a random one.
+            key_id = derived_key_id(item, existing_ids) or self.generate_key_id(
+                item.tenant, item.name, existing_ids
+            )
             existing_ids.add(key_id)
             config.keys[index] = item.model_copy(update={"key_id": key_id})
             changed = True

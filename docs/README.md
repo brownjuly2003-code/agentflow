@@ -154,6 +154,7 @@ the former mutable pre-Q1.2 report is preserved as the
 | Current engineering gates | [Engineering status](STATUS.md) | Dated acceptance/evidence records |
 | Lifecycle and non-goals | [Project closure](PROJECT_CLOSURE.md) | Audit and planning records |
 | Runtime design | [Architecture reference](architecture.md) | [Walkthrough](architecture/index.md) and ADRs |
+| Required behaviour | One file per capability in `specs/`: [API key rate limiting](specs/api-key-rate-limiting.md), [API key identity](specs/api-key-identity.md) | The tests that exercise each scenario |
 | API contract | [`openapi.json`](openapi.json) and running FastAPI schema | API guide/reference and SDKs |
 | Security policy | [`SECURITY.md`](../SECURITY.md) | Security audit and dated remediation evidence |
 | Release history | [Changelog](../CHANGELOG.md) | [Archived narrative](archive/release-history-v1-v2.md) |
@@ -166,7 +167,9 @@ the former mutable pre-Q1.2 report is preserved as the
   `scripts/check_docs_root_placement.py`; update it only for an intentional
   stable entrypoint or current reference.
 - Put immutable measurements in `perf/` or `evidence/`, operational procedures
-  in `operations/` or `runbooks/`, and decisions in `decisions/`.
+  in `operations/` or `runbooks/`, decisions in `decisions/`, and the required
+  behaviour of a capability (requirements with scenarios) in `specs/`, one
+  file per capability.
 - Do not delete documentation. Move superseded or duplicate narrative to
   `archive/` with its original path, archive date, reason, and replacement.
 - Update every inbound link in the same commit as a move. Use `git mv` so file

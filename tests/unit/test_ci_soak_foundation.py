@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -166,6 +168,11 @@ def test_soak_overlay_wires_consumer_groups_and_ready_api() -> None:
     assert "/health/ready" in " ".join(str(value) for value in api["healthcheck"]["test"])
 
 
+@pytest.mark.requires_docker
+@pytest.mark.skipif(
+    shutil.which("docker") is None,
+    reason="merging the soak compose files needs the docker CLI; CI has it, a dev box need not",
+)
 def test_merged_soak_compose_overrides_api_healthcheck_for_background_consumers() -> None:
     services = _merged_compose()["services"]
 

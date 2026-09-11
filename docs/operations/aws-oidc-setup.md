@@ -35,7 +35,7 @@ Confirmed local/repository evidence:
 - No AWS credentials are configured on the verification workstation.
 - The `hashicorp/terraform:1.13.5` container evidence for config sanity
   (`init -backend=false` and `validate`) is superseded by the
-  `required_version = "= 1.15.4"` pin and can no longer be reproduced:
+  `required_version = "~> 1.15.4"` pin and can no longer be reproduced:
   `terraform init` on 1.13.5 evaluates the constraint and fails with
   `Unsupported Terraform Core version`. Config sanity was re-verified on 2026-09-05 with a local
   Terraform CLI 1.15.4 running `terraform init -backend=false` and
@@ -122,7 +122,7 @@ the missing input list back to the operator.
 - AWS account with administrator credentials available for the initial bootstrap only.
 - Existing S3 backend bucket `agentflow-terraform-state` and DynamoDB lock table `agentflow-terraform-locks`.
 - GitHub repository admin access for repository variables and environment protection rules.
-- Terraform CLI 1.15.4 (matching `required_version` in `infrastructure/terraform/main.tf` and the `hashicorp/setup-terraform` pins in `.github/workflows/terraform-apply.yml` and `.github/workflows/ci.yml`), or an equivalent container image of that version, available on the bootstrap machine.
+- Terraform CLI 1.15.4 (the floor of `required_version` in `infrastructure/terraform/main.tf` and the exact version the `hashicorp/setup-terraform` pins in `.github/workflows/terraform-apply.yml` and `.github/workflows/ci.yml` install), or an equivalent container image of that version, available on the bootstrap machine. `~> 1.15.4` also admits later 1.15 patch releases; 1.16 and newer are refused.
 
 ## State locking
 
@@ -148,9 +148,9 @@ been executed: there is no AWS access on the development hosts, and `plan` /
 
 - Every client that runs `terraform init` against `env/staging` or
   `env/production` must be on a Terraform that supports `use_lockfile` (1.10 or
-  newer). `required_version = "= 1.15.4"` and the `hashicorp/setup-terraform`
-  pins already hold CI to one version; an operator's local CLI is the only
-  unpinned client.
+  newer). `required_version = "~> 1.15.4"` holds every client to the 1.15
+  patch line, and the `hashicorp/setup-terraform` pins hold CI to exactly
+  1.15.4; an operator's local CLI may be any 1.15.x at or above that.
 - No `plan` or `apply` may be in flight. The dual-lock phase below exists so
   that migrated and unmigrated clients still block each other; starting it
   mid-run defeats that.
@@ -197,13 +197,17 @@ contract is honest, the live delivery path is not claimed):
   `plan`, or `apply` ran against the real S3 backend. DynamoDB locking is
   retained on the tracked configuration; a live-backend migration to
   `use_lockfile` still needs AWS access.
-- **ASSUMPTION-T-36-CI-LOCK**: the provider-lock step in
-  `.github/workflows/ci.yml` `terraform-validate` runs
+- **ASSUMPTION-T-36-CI-LOCK** — discharged 2026-09-08. The provider-lock
+  step in `.github/workflows/ci.yml` `terraform-validate` runs
   `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
-  -platform=windows_amd64` and `git diff --exit-code .terraform.lock.hcl`.
-  It is a tracked guard for `linux_amd64` on `ubuntu-latest` (and the other
-  two documented platforms), not observed evidence. It cannot have passed
-  on a GitHub runner until the owner pushes.
+  -platform=windows_amd64` followed by `git diff --exit-code
+  .terraform.lock.hcl`. It was a tracked guard with no runner behind it until
+  the work reached `origin`; it has since passed on `ubuntu-latest` (run
+  34213482386, `terraform-validate` success, step "Provider lock covers
+  linux_amd64"), which is the evidence that the tracked lock covers the
+  platform CI actually runs on. What remains unobserved is only the
+  `darwin_arm64` / `windows_amd64` halves being *used*, as opposed to being
+  regenerated identically — CI has no runner on either.
 
 ## State-key and role scope
 

@@ -4,6 +4,21 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Quality — the auth-manager mutation threshold ratchets to 0.90
+
+* **`serving/api/auth/manager.py` now gates at 0.90.** CI run 34542418689 on
+  77825f6 scored it 98.4% (553 killed of 562). The nine survivors are the
+  named residue in `tests/unit/test_auth_manager_mutation.py`. The old
+  comment above its `ModuleTarget` in `scripts/mutation_report.py` called
+  the structured-logging and Redis-URL survivors equivalents. T-48's
+  behaviour tests killed all of them except the upper-cased Redis URL
+  default, which is one of the nine. The comment now gives the measured
+  score and names the nine equivalent survivors, pointing to the test
+  file's docstring for their reasons. 0.90 is the bar the other serving
+  modules hold, and it sits 8.4 points under the measured 98.4%, so the
+  nine named equivalents cannot fail the gate while a real loss of killed
+  mutants still does.
+
 ### Fixed — mutation_local no longer scores a missing pytest temp directory as a kill
 
 * **`scripts/mutation_local.py` recorded every mutant that reached a

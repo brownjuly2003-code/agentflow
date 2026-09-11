@@ -76,23 +76,22 @@ MODULE_TARGETS = {
         threshold=0.90,
         tests=("tests/unit/test_nl_queries_mutation.py",),
     ),
-    # manager.py runs at 0.80, not the 0.90 the pure-function guards (sql_guard,
-    # sql_builder, ...) hold. It is a ~400-line stateful auth class whose
-    # surviving mutants are dominated by EQUIVALENTS that no behaviour-level test
-    # can kill: structured-logging arguments (the auth logger event names / kwargs),
-    # `model_copy(update=...)` dicts whose mutated field equals its default
-    # ("matched_slot" already defaults to "current"; "key"==api_key on a plaintext
-    # match), the redis-url strings masked by the `_redis = None` override under the
-    # duckdb-free harness, and the config-file write path that is dead under the
-    # env-only test. Every BEHAVIOUR-reachable mutant is killed -- crucially every
-    # auth bypass (the verify_api_key argument-swap mutants on the indexed / legacy
-    # / previous-key paths and in _matches_key_material) and every rate-limit /
-    # failed-auth throttle off-by-one. Local mutmut (py3.10) scores 405/483 = 83.9%;
-    # 0.80 leaves headroom for equivalent-mutant noise while still enforcing a real
-    # floor (the do-nothing baseline was 76.5%). key_rotation is the next target and
-    # stays declared-only until it gets its own duckdb-free test.
+    # manager.py scored 553/562 killed (98.4%) on CI run 34542418689 against
+    # commit 77825f6. The nine survivors are the named residue in the module
+    # docstring of tests/unit/test_auth_manager_mutation.py, grouped:
+    # __init__ 55 and 93 -- _key_store_readonly_skip_logged flag and the
+    # upper-cased Redis URL default;
+    # _load_config 3 and 5 -- encoding="utf-8" case / None;
+    # _sweep_expired_windows 10 and 20 -- pop(key, None) race guard;
+    # authenticate 10 and 11 -- model_copy of a just-proven-equal key;
+    # load 1 -- skipped_readonly_write truthiness. The docstring has the
+    # one-line reason for each. Every behaviour-reachable mutant is killed.
+    # The threshold is 0.90 because that is the bar the other serving modules
+    # hold; it sits 8.4 points under the measured 98.4%, so the nine named
+    # equivalents cannot fail the gate while a real loss of killed mutants
+    # still does.
     Path("serving/api/auth/manager.py"): ModuleTarget(
-        threshold=0.80,
+        threshold=0.90,
         tests=("tests/unit/test_auth_manager_mutation.py",),
     ),
     # key_rotation runs at 0.90. Its residual survivors (local mutmut: 21 of 365)

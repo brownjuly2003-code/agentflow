@@ -36,13 +36,39 @@ cont.16-21):
    on ``find_spec("serving")`` -- NOT ``import src``, which stays importable via
    the editable install even inside the workspace (cont.21 duckdb-crash root
    cause). Under ordinary pytest no stub is installed and the real modules load.
+
+4. **Named residue.** The mutants below stay alive on purpose. Each is
+   equivalent, and each sits on a line that also carries killable mutants, so a
+   line-level ``# pragma: no mutate`` would silence those too.
+
+   * ``authenticate`` plaintext path, ``update={"key": api_key, ...}`` ->
+     ``"XXkeyXX"`` / ``"KEY"``: ``compare_digest`` has just proved
+     ``item.key == api_key``, so the copy carries the same key either way.
+   * ``load`` ``skipped_readonly_write = False`` -> ``None``, and ``__init__``
+     ``_key_store_readonly_skip_logged = False`` -> ``None``: both flags are
+     read only for truthiness.
+   * ``_sweep_expired_windows`` ``pop(key, None)`` -> ``pop(key)``, in both
+     loops: the key comes from a snapshot of the same dict, so the default
+     matters only if a concurrent sweep removed it in between -- a race guard
+     no deterministic test can reproduce.
+   * ``_load_config`` ``read_text(encoding="utf-8")`` -> ``"UTF-8"`` (codec
+     names are case-insensitive) and -> ``encoding=None`` (the locale encoding
+     is UTF-8 on the Linux CI host; the non-ASCII key-file test kills it on a
+     cp1252 Windows host).
+   * ``__init__`` default ``"redis://localhost:6379"`` -> upper case:
+     ``urlparse`` lower-cases the scheme and the host.
 """
 
 from __future__ import annotations
 
+import importlib
+import os
+import stat
 import sys
 import types
-from datetime import date
+from datetime import UTC, date, datetime, tzinfo
+from pathlib import Path
+from typing import Any, Self
 
 
 def _in_mutation_workspace() -> bool:
@@ -101,6 +127,7 @@ except ImportError:  # ordinary pytest sees it under the src package
     from agentflow_runtime.serving.api.auth import manager as manager_module
 
 import pytest
+import yaml
 
 AuthManager = manager_module.AuthManager
 TenantKey = manager_module.TenantKey
@@ -1172,3 +1199,664 @@ class TestUsageWriterDelegation:
         m._usage_writer = writer  # type: ignore[assignment]
         m.close_usage_writer(0.5)
         assert writer.close_calls == [0.5]
+
+
+# --------------------------------------------------------------------------- #
+# Doubles and key-file helpers for the wiring, log-contract and load tests.
+# --------------------------------------------------------------------------- #
+
+LogRecord = tuple[str, str, dict[str, object]]
+
+
+class _RecordingLogger:
+    """Stands in for the auth package logger. manager.py imports that logger
+    inside its functions from ``agentflow_runtime.serving.api.auth`` -- the
+    installed package, even in the mutation workspace -- so it is swapped on
+    that module, which is the same object in both environments. A log event is
+    the operator's interface: its name and fields are the contract pinned here."""
+
+    def __init__(self) -> None:
+        self.records: list[LogRecord] = []
+
+    def info(self, event: str, **fields: object) -> None:
+        self.records.append(("info", event, fields))
+
+    def warning(self, event: str, **fields: object) -> None:
+        self.records.append(("warning", event, fields))
+
+    def named(self, event: str) -> list[LogRecord]:
+        return [record for record in self.records if record[1] == event]
+
+
+def _record_auth_logs(monkeypatch: pytest.MonkeyPatch) -> _RecordingLogger:
+    recorder = _RecordingLogger()
+    auth_package = importlib.import_module("agentflow_runtime.serving.api.auth")
+    monkeypatch.setattr(auth_package, "logger", recorder)
+    return recorder
+
+
+class _RecordingStore:
+    """The one store method the UsageWriter calls."""
+
+    def __init__(self) -> None:
+        self.batches: list[list[Any]] = []
+
+    def record_api_usage_batch(self, rows: list[Any]) -> None:
+        self.batches.append(list(rows))
+
+
+class _RecordingPublisher:
+    def __init__(self) -> None:
+        self.payloads: list[dict] = []
+
+    def publish(self, payload: dict) -> None:
+        self.payloads.append(payload)
+
+
+class _ScriptedLimiter:
+    """A limiter that gives a fixed verdict and records the bucket it was asked
+    about. ``with_redis=False`` leaves out the ``_redis`` attribute entirely."""
+
+    def __init__(self, verdict: tuple[bool, int, int], *, with_redis: bool = True) -> None:
+        self.verdict = verdict
+        self.asked: list[tuple[str, int]] = []
+        if with_redis:
+            self._redis = object()
+
+    async def check(self, key: str, rpm: int) -> tuple[bool, int, int]:
+        self.asked.append((key, rpm))
+        return self.verdict
+
+
+def _entry(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {"name": "support", "tenant": "acme", "created_at": date(2026, 1, 1)}
+    base.update(overrides)
+    return base
+
+
+def _write_key_file(path: Path, entries: list[dict[str, object]]) -> Path:
+    path.write_text(yaml.safe_dump({"keys": entries}, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _skip_if_root() -> None:
+    geteuid = getattr(os, "geteuid", None)
+    if geteuid is not None and geteuid() == 0:
+        pytest.skip("root writes a read-only file regardless of its mode")
+
+
+def _make_read_only(path: Path) -> None:
+    os.chmod(path, stat.S_IREAD)
+
+
+def _make_writable(path: Path) -> None:
+    # Restored before tmp_path cleanup: Windows refuses to delete a read-only file.
+    os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+
+
+def _redis_target(m: AuthManager) -> tuple[object, object]:
+    # redis-py's from_url does not connect, so no server is needed to read this.
+    kwargs = m.rate_limiter._redis.connection_pool.connection_kwargs  # type: ignore[union-attr]
+    return kwargs["host"], kwargs["port"]
+
+
+# --------------------------------------------------------------------------- #
+# Key-store writability probe.
+# --------------------------------------------------------------------------- #
+
+
+class TestKeyStoreWritableProbe:
+    def test_no_path_is_not_writable(self) -> None:
+        assert manager_module.probe_key_store_writable(None) is False
+
+    def test_existing_writable_file_probes_writable_and_is_left_unchanged(
+        self, tmp_path: Path
+    ) -> None:
+        keys_file = tmp_path / "api_keys.yaml"
+        keys_file.write_bytes(b"keys: []\n")
+        assert manager_module.probe_key_store_writable(keys_file) is True
+        assert keys_file.read_bytes() == b"keys: []\n"
+
+    def test_existing_read_only_file_probes_not_writable(self, tmp_path: Path) -> None:
+        # Opening for reading would succeed; only an attempt to open for writing
+        # tells a read-only mount from a writable one.
+        _skip_if_root()
+        keys_file = tmp_path / "api_keys.yaml"
+        keys_file.write_bytes(b"keys: []\n")
+        _make_read_only(keys_file)
+        try:
+            assert manager_module.probe_key_store_writable(keys_file) is False
+            # The file check answers on its own; it does not lean on the probe's
+            # outer handler to turn a permission error into a verdict.
+            assert manager_module._file_is_writable(keys_file) is False
+        finally:
+            _make_writable(keys_file)
+
+
+# --------------------------------------------------------------------------- #
+# __init__ wiring: store, usage writer, security policy, grace period, Redis.
+# --------------------------------------------------------------------------- #
+
+
+class TestConstructionWiring:
+    def test_injected_store_is_the_store_the_manager_uses(self) -> None:
+        store = _RecordingStore()
+        m = _build_manager(store=store)
+        assert m.store is store
+
+    def test_default_store_resolves_usage_db_from_the_managers_db_path(
+        self, tmp_path: Path
+    ) -> None:
+        m = _build_manager(db_path=tmp_path / "usage.duckdb")
+        store = m.store
+        assert store._usage_db_path == tmp_path / "usage.duckdb"  # type: ignore[attr-defined]
+        # The provider reads the manager's attribute at call time, so a manager
+        # whose db_path moves takes its usage database with it.
+        m.db_path = tmp_path / "moved.duckdb"
+        assert store._usage_db_path == tmp_path / "moved.duckdb"  # type: ignore[attr-defined]
+
+    def test_submitted_usage_reaches_the_injected_store_and_publisher(self) -> None:
+        from agentflow_runtime.serving.control_plane.store import UsageRow
+
+        store = _RecordingStore()
+        publisher = _RecordingPublisher()
+        m = _build_manager(store=store, audit_publisher=publisher)
+        tenant_key = _key(key_id="kid-1", name="support", tenant="acme", matched_slot="previous")
+        try:
+            assert m.submit_usage(tenant_key, "/v1/entity/order/1") is True
+            assert m.flush_usage(timeout=5.0) is True
+        finally:
+            m.close_usage_writer()
+        expected = UsageRow(
+            tenant="acme",
+            key_name="support",
+            endpoint="/v1/entity/order/1",
+            key_id="kid-1",
+            key_slot="previous",
+        )
+        assert store.batches == [[expected]]
+        assert publisher.payloads == [
+            {
+                "event_type": "api_usage",
+                "tenant": "acme",
+                "key_name": "support",
+                "endpoint": "/v1/entity/order/1",
+                "key_id": "kid-1",
+                "key_slot": "previous",
+            }
+        ]
+
+    def test_security_config_path_is_honoured_at_construction_and_by_load(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_API_KEYS", raising=False)
+        security_file = tmp_path / "security.yaml"
+        security_file.write_text(
+            "security:\n  max_failed_auth_per_ip_per_hour: 3\n", encoding="utf-8"
+        )
+        # The default path's policy must differ, or reading it instead would pass.
+        assert manager_module.load_security_policy(None).max_failed_auth_per_ip_per_hour != 3
+        m = _build_manager(security_config_path=security_file)
+        assert [m.record_failed_auth("10.0.0.1") for _ in range(4)] == [False, False, False, True]
+        m.load()
+        assert [m.record_failed_auth("10.0.0.2") for _ in range(4)] == [False, False, False, True]
+
+    def test_key_store_writable_probes_lazily_before_any_load(self, tmp_path: Path) -> None:
+        keys_file = tmp_path / "api_keys.yaml"
+        keys_file.write_bytes(b"keys: []\n")
+        m = _build_manager(api_keys_path=keys_file)
+        assert m.key_store_writable is True
+
+    def test_unset_rotation_grace_period_uses_the_default_without_a_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AGENTFLOW_ROTATION_GRACE_PERIOD_SECONDS", raising=False)
+        logs = _record_auth_logs(monkeypatch)
+        m = _build_manager()
+        assert m.rotation_grace_period_seconds == DEFAULT_ROTATION_GRACE_PERIOD_SECONDS
+        assert logs.named("invalid_rotation_grace_period_seconds") == []
+
+    def test_invalid_rotation_grace_period_logs_one_warning_with_the_raw_value(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTFLOW_ROTATION_GRACE_PERIOD_SECONDS", "ten-minutes")
+        logs = _record_auth_logs(monkeypatch)
+        _build_manager()
+        assert logs.records == [
+            (
+                "warning",
+                "invalid_rotation_grace_period_seconds",
+                {"value": "ten-minutes", "fallback": DEFAULT_ROTATION_GRACE_PERIOD_SECONDS},
+            )
+        ]
+
+    def test_redis_url_argument_targets_that_server(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        m = _build_manager(redis_url="redis://cache.internal:6380/0")
+        assert _redis_target(m) == ("cache.internal", 6380)
+
+    def test_redis_url_env_is_used_without_an_argument(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REDIS_URL", "redis://env-cache.internal:6381/0")
+        m = _build_manager()
+        assert _redis_target(m) == ("env-cache.internal", 6381)
+
+    def test_redis_url_argument_wins_over_the_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("REDIS_URL", "redis://env-cache.internal:6381/0")
+        m = _build_manager(redis_url="redis://cache.internal:6380/0")
+        assert _redis_target(m) == ("cache.internal", 6380)
+
+
+# --------------------------------------------------------------------------- #
+# load(): the log contract.
+# --------------------------------------------------------------------------- #
+
+
+class TestLoadLogContract:
+    def test_env_only_load_logs_env_only_and_the_configured_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "k1:alpha,k2:beta")
+        logs = _record_auth_logs(monkeypatch)
+        m = _build_manager()
+        m.load()
+        assert logs.named("api_keys_loaded") == [
+            ("info", "api_keys_loaded", {"path": "env_only", "keys": 2})
+        ]
+        # Environment keys have nothing to write back, so nothing was skipped.
+        assert logs.named("api_key_store_write_skipped_readonly") == []
+
+    def test_key_file_load_logs_the_file_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        keys_file = _write_key_file(
+            tmp_path / "api_keys.yaml", [_entry(key_id="kid-a", key="plain-a")]
+        )
+        logs = _record_auth_logs(monkeypatch)
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        assert logs.named("api_keys_loaded") == [
+            ("info", "api_keys_loaded", {"path": str(keys_file), "keys": 1})
+        ]
+
+    def test_unwritable_changed_config_warns_once_across_loads(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        _skip_if_root()
+        # No key_id -> load() derives one and wants to write it back.
+        keys_file = _write_key_file(tmp_path / "api_keys.yaml", [_entry(key="plain-a")])
+        before = keys_file.read_bytes()
+        logs = _record_auth_logs(monkeypatch)
+        _make_read_only(keys_file)
+        try:
+            m = _build_manager(api_keys_path=keys_file)
+            m.load()
+            m.load()
+        finally:
+            _make_writable(keys_file)
+        assert logs.named("api_key_store_write_skipped_readonly") == [
+            ("warning", "api_key_store_write_skipped_readonly", {"path": str(keys_file)})
+        ]
+        assert keys_file.read_bytes() == before
+        assert m.key_store_writable is False
+
+    def test_write_skip_warning_names_env_only_without_a_key_file(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        logs = _record_auth_logs(monkeypatch)
+        m = _build_manager()
+        m._warn_key_store_write_skipped()
+        assert logs.records == [
+            ("warning", "api_key_store_write_skipped_readonly", {"path": "env_only"})
+        ]
+
+
+def _hashed_entries(count: int, *, indexed: bool) -> list[dict[str, object]]:
+    entries = []
+    for index in range(count):
+        entry = _entry(key_id=f"kid-{index}", name=f"agent-{index}", key_hash=f"hash-{index}")
+        if indexed:
+            entry["key_lookup"] = f"lookup-{index}"
+        entries.append(entry)
+    return entries
+
+
+class TestHashedKeyGuidance:
+    """``hashed_key_count_exceeds_guidance`` is documented in
+    docs/runbooks/auth-401-spike.md with its ``hashed_keys`` and ``soft_limit``
+    fields. Only entries without a ``key_lookup`` pay the O(n) verify scan, so
+    only they count, and the warning fires strictly above the soft limit."""
+
+    def _load_logs(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entries: list[dict[str, object]]
+    ) -> list[LogRecord]:
+        keys_file = _write_key_file(tmp_path / "api_keys.yaml", entries)
+        logs = _record_auth_logs(monkeypatch)
+        _build_manager(api_keys_path=keys_file).load()
+        return logs.named("hashed_key_count_exceeds_guidance")
+
+    def test_exactly_the_soft_limit_is_silent(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        limit = manager_module.HASHED_KEY_SOFT_LIMIT
+        assert self._load_logs(monkeypatch, tmp_path, _hashed_entries(limit, indexed=False)) == []
+
+    def test_one_unindexed_key_over_the_soft_limit_warns_with_the_count(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        limit = manager_module.HASHED_KEY_SOFT_LIMIT
+        entries = _hashed_entries(limit + 1, indexed=False)
+        assert self._load_logs(monkeypatch, tmp_path, entries) == [
+            (
+                "warning",
+                "hashed_key_count_exceeds_guidance",
+                {
+                    "hashed_keys": limit + 1,
+                    "soft_limit": limit,
+                    "reason": "cold_cache_bcrypt_latency",
+                    "guidance": "docs/runbooks/auth-401-spike.md",
+                },
+            )
+        ]
+
+    def test_indexed_keys_do_not_count(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        limit = manager_module.HASHED_KEY_SOFT_LIMIT
+        entries = _hashed_entries(limit + 5, indexed=True)
+        assert self._load_logs(monkeypatch, tmp_path, entries) == []
+
+
+# --------------------------------------------------------------------------- #
+# load(): what it writes back, and what it leaves alone.
+# --------------------------------------------------------------------------- #
+
+
+class TestLoadWriteBack:
+    def test_writable_key_file_gains_the_key_ids_it_lacked(self, tmp_path: Path) -> None:
+        keys_file = _write_key_file(tmp_path / "api_keys.yaml", [_entry(key="plain-alpha")])
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        [loaded] = m._loaded_keys
+        assert loaded.key_id is not None
+        assert loaded.key_id.startswith("acme-support-")
+        [stored] = yaml.safe_load(keys_file.read_text(encoding="utf-8"))["keys"]
+        assert stored["key_id"] == loaded.key_id
+
+    def test_key_file_that_needs_no_change_is_left_byte_for_byte(self, tmp_path: Path) -> None:
+        raw = (
+            b"# hand-maintained -- keep the comments\n"
+            b"keys:\n"
+            b"  - key_id: kid-alpha  # pinned id\n"
+            b"    key: plain-alpha\n"
+            b"    name: support\n"
+            b"    tenant: acme\n"
+            b"    created_at: 2026-01-01\n"
+        )
+        keys_file = tmp_path / "api_keys.yaml"
+        keys_file.write_bytes(raw)
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        assert m.configured_key_count == 1
+        assert keys_file.read_bytes() == raw
+
+    def test_key_file_is_read_as_utf8(self, tmp_path: Path) -> None:
+        keys_file = tmp_path / "api_keys.yaml"
+        keys_file.write_bytes(
+            "keys:\n"
+            "  - key_id: kid-alpha\n"
+            "    key: plain-alpha\n"
+            "    name: Zoë Müller\n"
+            "    tenant: acme\n"
+            "    created_at: 2026-01-01\n".encode()
+        )
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        assert [key.name for key in m._loaded_keys] == ["Zoë Müller"]
+
+
+# --------------------------------------------------------------------------- #
+# The slot a match reports is decided by the material that matched.
+# --------------------------------------------------------------------------- #
+
+
+class TestSlotComesFromTheMatchedMaterial:
+    """``matched_slot`` is excluded from serialisation but accepted on input, so
+    a key-file entry can say ``matched_slot: previous``. Usage rows carry the
+    slot and rotation decisions read it, so a match on current material must
+    say "current" whatever the stored entry says."""
+
+    def test_load_labels_the_plaintext_index_current(self, tmp_path: Path) -> None:
+        keys_file = _write_key_file(
+            tmp_path / "api_keys.yaml",
+            [_entry(key_id="kid-a", key="plain-a", matched_slot="previous")],
+        )
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        assert m._loaded_keys[0].matched_slot == "previous"  # what the file says
+        assert m.keys_by_value["plain-a"].matched_slot == "current"
+
+    def test_load_labels_a_runtime_cached_hashed_entry_current(self, tmp_path: Path) -> None:
+        keys_file = _write_key_file(
+            tmp_path / "api_keys.yaml",
+            [_entry(key_id="kid-h", key_hash="hash-h", key_lookup="lk-h", matched_slot="previous")],
+        )
+        m = _build_manager(api_keys_path=keys_file)
+        m._runtime_plaintext_by_hash = {"hash-h": "runtime-plain"}
+        m.load()
+        assert m.keys_by_value["runtime-plain"].matched_slot == "current"
+
+    def test_plaintext_match_is_current(self) -> None:
+        m = _build_manager()
+        m.keys_by_value = {"plain-a": _key(key="plain-a", matched_slot="previous")}
+        out = m.authenticate("plain-a")
+        assert out is not None
+        assert out.matched_slot == "current"
+
+    def test_indexed_match_is_current(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        m = _build_manager()
+        m._keys_by_lookup = {
+            "lk": _key(key=None, key_hash="idx-hash", key_lookup="lk", matched_slot="previous")
+        }
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "lk")
+        monkeypatch.setattr(
+            manager_module, "verify_api_key", lambda value, h: (value, h) == ("k", "idx-hash")
+        )
+        out = m.authenticate("k")
+        assert out is not None
+        assert out.matched_slot == "current"
+
+    def test_legacy_hashed_match_is_current(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        m = _build_manager()
+        m._hashed_keys = [_key(key=None, key_hash="legacy-hash", matched_slot="previous")]
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
+        monkeypatch.setattr(
+            manager_module, "verify_api_key", lambda value, h: (value, h) == ("k", "legacy-hash")
+        )
+        out = m.authenticate("k")
+        assert out is not None
+        assert out.matched_slot == "current"
+
+
+# --------------------------------------------------------------------------- #
+# load(): rate-limit windows are carried over by bucket name.
+# --------------------------------------------------------------------------- #
+
+
+class TestLoadCarriesRateWindowsByBucket:
+    def test_still_configured_key_keeps_its_full_window_across_load(self, tmp_path: Path) -> None:
+        keys_file = _write_key_file(
+            tmp_path / "api_keys.yaml", [_entry(key_id="kid-a", key="plain-a", rate_limit_rpm=2)]
+        )
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        tenant_key = m.authenticate("plain-a")
+        assert tenant_key is not None
+        assert [m.is_rate_limited(tenant_key) for _ in range(2)] == [False, False]
+        m.load()
+        assert m.is_rate_limited(tenant_key) is True
+
+    def test_removed_key_loses_its_window(self, tmp_path: Path) -> None:
+        keys_file = _write_key_file(
+            tmp_path / "api_keys.yaml",
+            [_entry(key_id="kid-a", key="plain-a"), _entry(key_id="kid-b", key="plain-b")],
+        )
+        m = _build_manager(api_keys_path=keys_file)
+        m.load()
+        m._rate_windows["kid:kid-a"] = [1_000.0]
+        m._rate_windows["kid:kid-b"] = [1_000.0]
+        _write_key_file(keys_file, [_entry(key_id="kid-a", key="plain-a")])
+        m.load()
+        assert dict(m._rate_windows) == {"kid:kid-a": [1_000.0]}
+
+    def test_no_window_is_named_by_a_plaintext_key(self, tmp_path: Path) -> None:
+        keys_file = _write_key_file(
+            tmp_path / "api_keys.yaml", [_entry(key_id="kid-a", key="plain-a")]
+        )
+        m = _build_manager(api_keys_path=keys_file)
+        m._rate_windows["plain-a"] = [1_000.0]
+        m._rate_windows["kid:kid-a"] = [1_000.0]
+        m.load()
+        assert dict(m._rate_windows) == {"kid:kid-a": [1_000.0]}
+
+
+# --------------------------------------------------------------------------- #
+# authenticate(): a skipped entry never ends a scan.
+# --------------------------------------------------------------------------- #
+
+
+class TestAuthenticateScanOrder:
+    def test_plaintext_scan_steps_over_an_entry_without_a_runtime_key(self) -> None:
+        m = _build_manager()
+        m.keys_by_value = {
+            "hash-only": _key(key=None, key_hash="h"),
+            "plain-a": _key(key="plain-a", tenant="acme"),
+        }
+        out = m.authenticate("plain-a")
+        assert out is not None
+        assert out.tenant == "acme"
+
+    def _rotating(self, index: int, **previous: object) -> TenantKey:
+        entry = _key(key=None, key_hash=f"cur-{index}", tenant=f"t{index}")
+        return entry.model_copy(update={"previous_key_hash": f"prev-{index}", **previous})
+
+    def test_legacy_previous_scan_steps_over_an_inactive_entry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        m = _build_manager()
+        inactive, match = self._rotating(0), self._rotating(1)
+        m._loaded_keys = [inactive, match]
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: item is match)
+        monkeypatch.setattr(
+            manager_module, "verify_api_key", lambda value, h: (value, h) == ("old", "prev-1")
+        )
+        out = m.authenticate("old")
+        assert out is not None
+        assert (out.tenant, out.matched_slot) == ("t1", "previous")
+
+    def test_legacy_previous_scan_steps_over_an_indexed_entry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        m = _build_manager()
+        m._loaded_keys = [self._rotating(0, previous_key_lookup="lk-0"), self._rotating(1)]
+        monkeypatch.setattr(manager_module, "compute_key_lookup", lambda value: "no-hit")
+        monkeypatch.setattr(m._key_rotator, "is_previous_key_active", lambda item: True)
+        monkeypatch.setattr(
+            manager_module, "verify_api_key", lambda value, h: (value, h) == ("old", "prev-1")
+        )
+        out = m.authenticate("old")
+        assert out is not None
+        assert (out.tenant, out.matched_slot) == ("t1", "previous")
+
+
+# --------------------------------------------------------------------------- #
+# check_rate_limit(): what the Redis limiter is asked, and when it is trusted.
+# --------------------------------------------------------------------------- #
+
+
+class TestCheckRateLimitDecisions:
+    @pytest.mark.asyncio
+    async def test_limiter_is_asked_about_the_key_id_bucket(self) -> None:
+        limiter = _ScriptedLimiter((True, 4, 77))
+        m = _build_manager(rate_limiter=limiter)
+        await m.check_rate_limit(_key(key_id="kid-7", rate_limit_rpm=5))
+        assert limiter.asked == [("kid:kid-7", 5)]
+
+    @pytest.mark.asyncio
+    async def test_partial_quota_answer_passes_through_verbatim(self) -> None:
+        m = _build_manager(rate_limiter=_ScriptedLimiter((True, 4, 77)))
+        assert await m.check_rate_limit(_key(rate_limit_rpm=5)) == (True, 4, 77)
+
+    @pytest.mark.asyncio
+    async def test_refusal_passes_through_verbatim(self) -> None:
+        m = _build_manager(rate_limiter=_ScriptedLimiter((False, 0, 77)))
+        assert await m.check_rate_limit(_key(rate_limit_rpm=5)) == (False, 0, 77)
+
+    @pytest.mark.asyncio
+    async def test_limiter_without_a_redis_handle_passes_through(self) -> None:
+        m = _build_manager(rate_limiter=_ScriptedLimiter((True, 5, 77), with_redis=False))
+        assert await m.check_rate_limit(_key(rate_limit_rpm=5)) == (True, 5, 77)
+
+    @pytest.mark.asyncio
+    async def test_secondary_window_is_per_bucket(self) -> None:
+        m = _build_manager(rate_limiter=_FullRemainingLimiter())
+        first = await m.check_rate_limit(_key(key_id="kid-a", rate_limit_rpm=1))
+        second = await m.check_rate_limit(_key(key_id="kid-b", rate_limit_rpm=1))
+        assert (first, second) == ((True, 0, 1_060), (True, 0, 1_060))
+
+    @pytest.mark.asyncio
+    async def test_secondary_window_drops_a_stamp_exactly_at_the_cutoff(self) -> None:
+        clock = FrozenClock(1_000.0)
+        m = _build_manager(time_source=clock, rate_limiter=_FullRemainingLimiter())
+        tenant_key = _key(key_id="kid-a", rate_limit_rpm=1)
+        assert await m.check_rate_limit(tenant_key) == (True, 0, 1_060)
+        clock.now = 1_000.0 + DEFAULT_RATE_LIMIT_WINDOW_SECONDS  # cutoff == first stamp
+        assert await m.check_rate_limit(tenant_key) == (True, 0, 1_120)
+
+
+# --------------------------------------------------------------------------- #
+# _legacy_env_keys(): AGENTFLOW_API_KEYS parsing.
+# --------------------------------------------------------------------------- #
+
+
+class TestLegacyEnvKeyParsing:
+    def test_empty_middle_segment_is_skipped_and_later_keys_still_load(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "k1:a, ,k2:b")
+        keys = _build_manager()._legacy_env_keys()
+        assert [(k.key, k.name) for k in keys] == [("k1", "a"), ("k2", "b")]
+
+    def test_first_colon_separates_key_from_a_name_that_has_colons(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "k1:team:alpha")
+        keys = _build_manager()._legacy_env_keys()
+        assert [(k.key, k.name) for k in keys] == [("k1", "team:alpha")]
+
+    def test_created_at_is_the_utc_calendar_date(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _JustAfterUtcMidnight(datetime):
+            # 00:00:05 UTC on 2 March is still 1 March on a wall clock west of UTC.
+            @classmethod
+            def now(cls, tz: tzinfo | None = None) -> Self:
+                if tz is None:
+                    return cls(2026, 3, 1, 19, 0, 5)
+                return cls(2026, 3, 2, 0, 0, 5, tzinfo=UTC)
+
+        monkeypatch.setattr(manager_module, "datetime", _JustAfterUtcMidnight)
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "k1:a")
+        [k] = _build_manager()._legacy_env_keys()
+        assert k.created_at == date(2026, 3, 2)
+
+    def test_env_key_reads_rate_limit_rpm_from_the_module_global(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # TenantKey's Field default is the import-time value; the call in
+        # _legacy_env_keys reads the module global at load time.
+        monkeypatch.setattr(manager_module, "DEFAULT_RATE_LIMIT_RPM", 7)
+        monkeypatch.setenv("AGENTFLOW_API_KEYS", "k1:bot")
+        m = _build_manager()
+        m.load()
+        assert m.keys_by_value["k1"].rate_limit_rpm == 7

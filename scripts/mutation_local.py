@@ -495,8 +495,12 @@ def run_mutant(
 
     Each mutant gets its own `--basetemp`: pytest wipes and recreates that
     directory at startup, so concurrent runs sharing one abort each other and
-    exit 2.
+    exit 2. pytest creates `--basetemp` itself with a non-recursive mkdir, so
+    the parent has to exist before pytest starts -- otherwise the first
+    `tmp_path` fixture errors at setup, pytest exits 1, and the mutant is
+    scored killed.
     """
+    basetemp.parent.mkdir(parents=True, exist_ok=True)
     command = [
         python,
         "-m",

@@ -133,7 +133,8 @@ def probe_key_store_writable(path: Path | str | None) -> bool:
 
 def _file_is_writable(path: Path) -> bool:
     try:
-        with path.open("a", encoding="utf-8"):
+        # Binary: an open-and-close probe has no text to encode.
+        with path.open("ab"):
             return True
     except OSError as exc:
         if is_permission_denied(exc):
@@ -708,7 +709,6 @@ class AuthManager:
                     name=name.strip(),
                     tenant="default",
                     rate_limit_rpm=DEFAULT_RATE_LIMIT_RPM,
-                    allowed_entity_types=None,
                     created_at=datetime.now(UTC).date(),
                 )
             )

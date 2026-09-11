@@ -9,8 +9,8 @@ and handed every tenant a fresh budget. One test per spec scenario, against
 both readers of the window: ``is_rate_limited()`` and the secondary check in
 ``check_rate_limit()``.
 
-Keys live in a tmp key file with an explicit ``key_id``: environment keys get
-a random key_id on every load (until T-47), so they cannot pin a bucket here.
+Keys live in a tmp key file with an explicit ``key_id``, so each test names its
+bucket directly.
 """
 
 from __future__ import annotations

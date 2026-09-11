@@ -60,12 +60,12 @@ class TestRateWindowSweepOnLoad:
         manager._rate_windows["fresh-key"] = [now - 5]
         manager.load()  # triggers _sweep_expired_windows under config lock
         assert "stale-key" not in manager._rate_windows
-        # 'fresh-key' is also removed because load() rebuilds _rate_windows
-        # from keys_by_value (none configured in this fixture) — that
-        # rebuild is documented behaviour from session 17 and is independent
-        # of the H-C4 sweep, but the assertion below pins it so a future
-        # refactor that reuses the old `defaultdict` cannot reintroduce
-        # the unbounded-growth path silently.
+        # 'fresh-key' is also removed: load() keeps only the windows whose
+        # bucket belongs to a still-configured key, and no configured key
+        # names 'fresh-key' (the fixture configures none). That carry-over is
+        # independent of the H-C4 sweep, but the assertion below pins it so a
+        # future refactor that keeps every window cannot reintroduce the
+        # unbounded-growth path silently.
         assert "fresh-key" not in manager._rate_windows
 
 

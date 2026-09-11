@@ -345,13 +345,9 @@ asyncio_mode = "auto"
 # starting with `src.`, which (not duckdb) was the real blocker. (The gate runner
 # keeps mutmut workspaces free of relative pytest --basetemp overrides because
 # under py3.11 they break coverage->mutant mapping for file-I/O targets like
-# key_rotation; see scripts/mutation_report.py.) manager.py runs at an honest 0.80
-# threshold (not 0.90): it is a
-# large stateful auth class whose residual survivors are equivalent mutants
-# (structured-logging args, model_copy updates equal to their defaults, redis-url
-# strings masked by the `_redis = None` override, the env-only-dead write path) --
-# every behaviour-reachable mutant, including every auth-bypass and throttle
-# off-by-one, is killed. See scripts/mutation_report.py.
+# key_rotation; see scripts/mutation_report.py.) manager.py gates at 0.90 like
+# the other serving modules; scripts/mutation_report.py gives its measured
+# score and names its nine equivalent survivors.
 paths_to_mutate = [
     "src/agentflow_runtime/serving/api/auth/manager.py",
     "src/agentflow_runtime/serving/api/auth/key_rotation.py",

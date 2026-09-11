@@ -4,6 +4,44 @@ All notable changes to AgentFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — a key configured without a key_id keeps the same id on every load
+
+A key whose configuration carries no `key_id` — every key from
+`AGENTFLOW_API_KEYS`, and a key-file entry without one — drew a random id on
+every `AuthManager.load()`. A key-file entry kept its id only when the id could
+be written back, and `docker-compose.prod.yml` mounts the key file read-only.
+The id names the key's Redis bucket (`kid:<key_id>`), its `api_usage` rows and
+the admin views keyed by id, so replicas sharing Redis each kept their own
+bucket for the same key — N replicas, N times its rpm — and every restart and
+reload started a fresh bucket and split the key's usage history. Such a key now
+gets `<tenant>-<name>-<first 8 hex of its key-lookup digest>`: the stored
+`key_lookup`, else the peppered `compute_key_lookup` of its plaintext, never
+the plaintext or an unpeppered hash of it. The same key gets the same id on
+every load, restart and replica that shares the pepper. Changing the pepper
+changes only an id derived from a plaintext key and never written back: every
+environment key, and a plaintext key-file entry in a file the process cannot
+write. A writable key file keeps the id written to it on the first load, and an
+entry with a stored `key_lookup` keeps the id derived from that digest. An id
+already taken lengthens the digest prefix. A legacy hash-only entry, with
+neither a plaintext key nor a `key_lookup`, still gets a random id.
+
+### Fixed — reloading the key store no longer resets rate-limit windows
+
+`AuthManager.load()` carried the in-memory rate-limit windows over by the
+plaintext key index (`keys_by_value`), but since audit S-6 every window is
+named by its bucket (`kid:<key_id>`), so no window ever matched: every reload
+— SIGHUP, and the reload that ends every key create, rotate and revoke —
+emptied them all. `is_rate_limited()` and the in-memory secondary check in
+`check_rate_limit()` then handed every tenant a fresh budget, which during a
+Redis outage is the whole limit. Windows are now carried over by bucket name:
+a still-configured key keeps its window, a removed key loses it, and no
+plaintext key names a window at any point of the reload. A window survives
+only while its key keeps its `key_id`, which a key configured without one —
+from `AGENTFLOW_API_KEYS`, or in a key file the process cannot write — now does
+too (entry above), with one exception: a legacy hash-only entry, with neither a
+plaintext key nor a `key_lookup`, in a key file the process cannot write still
+gets a new id, and so an emptied window, on every reload.
+
 ### Docs — the pre-push hedges outlived the push
 
 * **Several notes described work the owner "still has to do" that has since

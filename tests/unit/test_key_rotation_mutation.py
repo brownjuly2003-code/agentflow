@@ -787,8 +787,8 @@ class TestEnsureKeyIds:
             manager._key_rotator, "generate_key_id", _rec_gen_id(id_calls, ["gen-1", "gen-2"])
         )
         keyed = _tk(key_id="keep-id", key_hash="h0")
-        first = _tk(key_id=None, key_hash="h1", tenant="t1", name="n1")
-        second = _tk(key_id=None, key_hash="h2", tenant="t2", name="n2")
+        first = _tk(key_id=None, key=None, key_hash="h1", tenant="t1", name="n1")
+        second = _tk(key_id=None, key=None, key_hash="h2", tenant="t2", name="n2")
         config = ApiKeysConfig(keys=[keyed, first, second])
 
         changed = manager._key_rotator.ensure_key_ids(config)
@@ -816,6 +816,108 @@ class TestEnsureKeyIds:
         config = ApiKeysConfig(keys=[_tk(key_id="a", key_hash="h"), _tk(key_id="b", key_hash="h")])
         assert manager._key_rotator.ensure_key_ids(config) is False
         assert called["n"] == 0  # no id generated when every entry has one
+
+    def test_derives_ids_for_entries_it_can_and_keeps_them_unique(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = _build_manager(tmp_path, monkeypatch)
+        id_calls: list = []
+        monkeypatch.setattr(
+            manager._key_rotator, "generate_key_id", _rec_gen_id(id_calls, ["gen-1"])
+        )
+        # The persisted id comes AFTER the id-less entries and still takes the
+        # 8-char id first; the same key configured twice lengthens again.
+        derivable = _tk(key_id=None, key=None, key_hash="h1", key_lookup=_DIGEST)
+        again = _tk(key_id=None, key=None, key_hash="h2", key_lookup=_DIGEST)
+        legacy = _tk(key_id=None, key=None, key_hash="h3", tenant="t3", name="n3")
+        persisted = _tk(key_id=f"acme-n-{_DIGEST[:8]}", key_hash="h0")
+        config = ApiKeysConfig(keys=[derivable, again, legacy, persisted])
+
+        assert manager._key_rotator.ensure_key_ids(config) is True
+
+        assert [item.key_id for item in config.keys] == [
+            f"acme-n-{_DIGEST[:9]}",
+            f"acme-n-{_DIGEST[:10]}",
+            "gen-1",
+            f"acme-n-{_DIGEST[:8]}",
+        ]
+        # Only the hash-only entry drew a random id, against every id taken so far.
+        assert id_calls == [
+            (
+                "t3",
+                "n3",
+                {f"acme-n-{_DIGEST[:8]}", f"acme-n-{_DIGEST[:9]}", f"acme-n-{_DIGEST[:10]}"},
+            )
+        ]
+
+
+# --------------------------------------------------------------------------- #
+# derived_key_id / key_id_slug  (module-level; no manager needed)
+# --------------------------------------------------------------------------- #
+
+_DIGEST = "0123456789abcdef" * 4
+
+
+class _ProbedIds(set):
+    # Records every membership test, so the prefix search order is observable.
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        self.probes: list = []
+
+    def __contains__(self, value: object) -> bool:
+        self.probes.append(value)
+        return super().__contains__(value)
+
+
+def _no_lookup(value: str) -> str:
+    raise AssertionError(f"compute_key_lookup must not be called (got {value!r})")
+
+
+class TestDerivedKeyId:
+    def test_stored_lookup_is_used_as_it_is(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A stored key_lookup wins even when a plaintext key is present too.
+        monkeypatch.setattr(kr, "compute_key_lookup", _no_lookup)
+        item = _tk(key="plain-key", key_lookup=_DIGEST)
+        assert kr.derived_key_id(item, set()) == f"acme-n-{_DIGEST[:8]}"
+
+    def test_plaintext_key_goes_through_the_peppered_lookup(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list = []
+        monkeypatch.setattr(kr, "compute_key_lookup", lambda value: calls.append(value) or _DIGEST)
+        item = _tk(key="plain-key", key_lookup=None)
+        assert kr.derived_key_id(item, set()) == f"acme-n-{_DIGEST[:8]}"
+        assert calls == ["plain-key"]
+
+    def test_hash_only_entry_has_nothing_to_derive_from(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(kr, "compute_key_lookup", _no_lookup)
+        item = _tk(key=None, key_hash="h", key_lookup=None)
+        assert kr.derived_key_id(item, set()) is None
+
+    def test_slugs_follow_generate_key_id_rules(self) -> None:
+        item = _tk(key_lookup=_DIGEST, tenant="  Acme Corp!", name="Support  Agent 2 ")
+        assert kr.derived_key_id(item, set()) == f"acme-corp-support-agent-2-{_DIGEST[:8]}"
+        empty = _tk(key_lookup=_DIGEST, tenant="!!!", name="***")
+        assert kr.derived_key_id(empty, set()) == f"tenant-agent-{_DIGEST[:8]}"
+
+    def test_a_taken_id_lengthens_the_prefix(self) -> None:
+        item = _tk(key_lookup=_DIGEST)
+        taken = {f"acme-n-{_DIGEST[:8]}", f"acme-n-{_DIGEST[:9]}"}
+        assert kr.derived_key_id(item, taken) == f"acme-n-{_DIGEST[:10]}"
+
+    def test_prefixes_are_tried_once_each_up_to_the_whole_digest(self) -> None:
+        item = _tk(key_lookup="0123456789")
+        candidates = ["acme-n-01234567", "acme-n-012345678", "acme-n-0123456789"]
+        # Only the whole digest is free: it is the last candidate.
+        free_at_end = _ProbedIds(candidates[:2])
+        assert kr.derived_key_id(item, free_at_end) == candidates[2]
+        assert free_at_end.probes == candidates
+        # Every prefix taken: nothing left to derive, and no prefix probed twice.
+        exhausted = _ProbedIds(candidates)
+        assert kr.derived_key_id(item, exhausted) is None
+        assert exhausted.probes == candidates
 
 
 class TestFindKeyIndex:

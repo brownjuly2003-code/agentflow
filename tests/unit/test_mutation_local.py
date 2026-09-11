@@ -1,8 +1,10 @@
 """Unit tests for the local mutation driver's own logic.
 
-Everything that costs minutes -- the mutmut engine and the pytest subprocesses
--- is stubbed here. A real mutation run belongs on the command line
-(`python scripts/mutation_local.py --module ...`), not in the unit suite.
+Everything that costs minutes -- the mutmut engine and a full mutation run --
+is stubbed here. `run_mutant` is exercised against a one-test file so the
+`--basetemp` parent is a real pytest mkdir, not a stub. A real mutation run
+belongs on the command line (`python scripts/mutation_local.py --module ...`),
+not in the unit suite.
 """
 
 from __future__ import annotations
@@ -323,6 +325,57 @@ def test_two_invocations_sharing_a_workspace_get_separate_basetemps(
     assert workspace.prepared == [workspace.path]  # the second run reused it
     assert len(_basetemps(first)) == len(_basetemps(second)) == 2
     assert not set(_basetemps(first)) & set(_basetemps(second))
+
+
+def _run_mutant_against_tmp_path_test(tmp_path: Path, body: str) -> tuple[str, int | None]:
+    """Call `run_mutant` the way `measure_module` does: the basetemp parent is missing."""
+    test_file = tmp_path / "test_tmp_path_probe.py"
+    test_file.write_text(
+        f"from pathlib import Path\n\ndef test_uses_tmp_path(tmp_path):\n{body}",
+        encoding="utf-8",
+    )
+    basetemp = tmp_path / "scratch" / "run-missing" / "mutant0"
+    assert not basetemp.parent.exists()
+    return mutation_local.run_mutant(
+        tmp_path,
+        (test_file.name,),
+        "pkg.thing.x__mutmut_1",
+        python=sys.executable,
+        shim_dir=tmp_path / "shim",
+        basetemp=basetemp,
+        timeout=20.0,
+    )
+
+
+def test_run_mutant_survives_a_passing_tmp_path_test_when_the_basetemp_parent_is_missing(
+    tmp_path: Path,
+):
+    """pytest mkdir()s --basetemp without parents; a missing parent is not a kill."""
+    name, exit_code = _run_mutant_against_tmp_path_test(
+        tmp_path,
+        "    (tmp_path / 'marker').write_text('ok')\n",
+    )
+
+    assert name == "pkg.thing.x__mutmut_1"
+    assert exit_code == 0
+    assert mutation_local.classify_exit_code(exit_code) == "survived"
+
+
+def test_run_mutant_still_kills_a_failing_tmp_path_test_when_the_basetemp_parent_is_missing(
+    tmp_path: Path,
+):
+    """Creating the parent must not turn a real failure into a survival."""
+    name, exit_code = _run_mutant_against_tmp_path_test(
+        tmp_path,
+        "    Path('ran').write_text('yes')\n"
+        "    (tmp_path / 'marker').write_text('ok')\n"
+        "    assert False\n",
+    )
+
+    assert name == "pkg.thing.x__mutmut_1"
+    assert (tmp_path / "ran").read_text(encoding="utf-8") == "yes"
+    assert exit_code == 1
+    assert mutation_local.classify_exit_code(exit_code) == "killed"
 
 
 def test_measure_module_scores_verdicts_and_never_counts_an_error_as_a_kill(

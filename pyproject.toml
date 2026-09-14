@@ -91,7 +91,7 @@ integrations = [
     "mcp>=1.0,<2",
 ]
 contract = [
-    "schemathesis==4.25.2",
+    "schemathesis==4.26.1",
 ]
 dev = [
     "bandit>=1.9,<2",

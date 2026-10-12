@@ -364,7 +364,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
       - name: Install TS SDK deps from lockfile
@@ -416,7 +416,7 @@ jobs:
           format: cyclonedx
           output: .artifacts/trivy/agentflow-api.cdx.json
       - name: Upload CycloneDX SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: agentflow-api-sbom-cyclonedx
           path: .artifacts/trivy/agentflow-api.cdx.json
@@ -428,7 +428,7 @@ jobs:
           format: cyclonedx
           output: .artifacts/trivy/agentflow-flink.cdx.json
       - name: Upload Flink CycloneDX SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: agentflow-flink-sbom-cyclonedx
           path: .artifacts/trivy/agentflow-flink.cdx.json
@@ -479,13 +479,13 @@ jobs:
           limit-severities-for-sarif: true
       - name: Upload Trivy API SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: .artifacts/trivy/trivy-api.sarif
           category: trivy-api-image
       - name: Upload Trivy Flink SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: .artifacts/trivy/trivy-flink.sarif
           category: trivy-flink-image
@@ -516,7 +516,7 @@ jobs:
           limit-severities-for-sarif: true
       - name: Upload Trivy IaC scan results
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: .artifacts/trivy/trivy-iac.sarif
           # Distinct category so these alerts do not collide with the image
